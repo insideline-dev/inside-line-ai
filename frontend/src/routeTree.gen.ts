@@ -12,11 +12,33 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ProtectedRouteImport } from './routes/_protected'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as ProtectedLayoutRouteImport } from './routes/_protected/_layout'
-import { Route as ProtectedLayoutSettingsRouteImport } from './routes/_protected/_layout/settings'
-import { Route as ProtectedLayoutDoneRouteImport } from './routes/_protected/_layout/done'
-import { Route as ProtectedLayoutTodosIndexRouteImport } from './routes/_protected/_layout/todos.index'
-import { Route as ProtectedLayoutTodosTodoIdRouteImport } from './routes/_protected/_layout/todos.$todoId'
+import { Route as ApplySlugRouteImport } from './routes/apply.$slug'
+import { Route as ProtectedScoutRouteImport } from './routes/_protected/scout'
+import { Route as ProtectedRoleSelectRouteImport } from './routes/_protected/role-select'
+import { Route as ProtectedProfileRouteImport } from './routes/_protected/profile'
+import { Route as ProtectedInvestorRouteImport } from './routes/_protected/investor'
+import { Route as ProtectedFounderRouteImport } from './routes/_protected/founder'
+import { Route as ProtectedAdminRouteImport } from './routes/_protected/admin'
+import { Route as ProtectedScoutIndexRouteImport } from './routes/_protected/scout/index'
+import { Route as ProtectedInvestorIndexRouteImport } from './routes/_protected/investor/index'
+import { Route as ProtectedFounderIndexRouteImport } from './routes/_protected/founder/index'
+import { Route as ProtectedAdminIndexRouteImport } from './routes/_protected/admin/index'
+import { Route as ProtectedScoutSubmitRouteImport } from './routes/_protected/scout/submit'
+import { Route as ProtectedScoutApplyRouteImport } from './routes/_protected/scout/apply'
+import { Route as ProtectedInvestorThesisRouteImport } from './routes/_protected/investor/thesis'
+import { Route as ProtectedInvestorSubmitRouteImport } from './routes/_protected/investor/submit'
+import { Route as ProtectedInvestorScoringRouteImport } from './routes/_protected/investor/scoring'
+import { Route as ProtectedInvestorPortalRouteImport } from './routes/_protected/investor/portal'
+import { Route as ProtectedFounderSubmitRouteImport } from './routes/_protected/founder/submit'
+import { Route as ProtectedAdminUsersRouteImport } from './routes/_protected/admin/users'
+import { Route as ProtectedAdminScoutsRouteImport } from './routes/_protected/admin/scouts'
+import { Route as ProtectedAdminScoringRouteImport } from './routes/_protected/admin/scoring'
+import { Route as ProtectedAdminConversationsRouteImport } from './routes/_protected/admin/conversations'
+import { Route as ProtectedAdminAnalyticsRouteImport } from './routes/_protected/admin/analytics'
+import { Route as ProtectedAdminAgentsRouteImport } from './routes/_protected/admin/agents'
+import { Route as ProtectedInvestorStartupIdRouteImport } from './routes/_protected/investor/startup.$id'
+import { Route as ProtectedFounderStartupIdRouteImport } from './routes/_protected/founder/startup.$id'
+import { Route as ProtectedAdminStartupIdRouteImport } from './routes/_protected/admin/startup.$id'
 
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
@@ -32,87 +54,335 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ProtectedLayoutRoute = ProtectedLayoutRouteImport.update({
-  id: '/_layout',
+const ApplySlugRoute = ApplySlugRouteImport.update({
+  id: '/apply/$slug',
+  path: '/apply/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProtectedScoutRoute = ProtectedScoutRouteImport.update({
+  id: '/scout',
+  path: '/scout',
   getParentRoute: () => ProtectedRoute,
 } as any)
-const ProtectedLayoutSettingsRoute = ProtectedLayoutSettingsRouteImport.update({
-  id: '/settings',
-  path: '/settings',
-  getParentRoute: () => ProtectedLayoutRoute,
+const ProtectedRoleSelectRoute = ProtectedRoleSelectRouteImport.update({
+  id: '/role-select',
+  path: '/role-select',
+  getParentRoute: () => ProtectedRoute,
 } as any)
-const ProtectedLayoutDoneRoute = ProtectedLayoutDoneRouteImport.update({
-  id: '/done',
-  path: '/done',
-  getParentRoute: () => ProtectedLayoutRoute,
+const ProtectedProfileRoute = ProtectedProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => ProtectedRoute,
 } as any)
-const ProtectedLayoutTodosIndexRoute =
-  ProtectedLayoutTodosIndexRouteImport.update({
-    id: '/todos/',
-    path: '/todos/',
-    getParentRoute: () => ProtectedLayoutRoute,
+const ProtectedInvestorRoute = ProtectedInvestorRouteImport.update({
+  id: '/investor',
+  path: '/investor',
+  getParentRoute: () => ProtectedRoute,
+} as any)
+const ProtectedFounderRoute = ProtectedFounderRouteImport.update({
+  id: '/founder',
+  path: '/founder',
+  getParentRoute: () => ProtectedRoute,
+} as any)
+const ProtectedAdminRoute = ProtectedAdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => ProtectedRoute,
+} as any)
+const ProtectedScoutIndexRoute = ProtectedScoutIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => ProtectedScoutRoute,
+} as any)
+const ProtectedInvestorIndexRoute = ProtectedInvestorIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => ProtectedInvestorRoute,
+} as any)
+const ProtectedFounderIndexRoute = ProtectedFounderIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => ProtectedFounderRoute,
+} as any)
+const ProtectedAdminIndexRoute = ProtectedAdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => ProtectedAdminRoute,
+} as any)
+const ProtectedScoutSubmitRoute = ProtectedScoutSubmitRouteImport.update({
+  id: '/submit',
+  path: '/submit',
+  getParentRoute: () => ProtectedScoutRoute,
+} as any)
+const ProtectedScoutApplyRoute = ProtectedScoutApplyRouteImport.update({
+  id: '/apply',
+  path: '/apply',
+  getParentRoute: () => ProtectedScoutRoute,
+} as any)
+const ProtectedInvestorThesisRoute = ProtectedInvestorThesisRouteImport.update({
+  id: '/thesis',
+  path: '/thesis',
+  getParentRoute: () => ProtectedInvestorRoute,
+} as any)
+const ProtectedInvestorSubmitRoute = ProtectedInvestorSubmitRouteImport.update({
+  id: '/submit',
+  path: '/submit',
+  getParentRoute: () => ProtectedInvestorRoute,
+} as any)
+const ProtectedInvestorScoringRoute =
+  ProtectedInvestorScoringRouteImport.update({
+    id: '/scoring',
+    path: '/scoring',
+    getParentRoute: () => ProtectedInvestorRoute,
   } as any)
-const ProtectedLayoutTodosTodoIdRoute =
-  ProtectedLayoutTodosTodoIdRouteImport.update({
-    id: '/todos/$todoId',
-    path: '/todos/$todoId',
-    getParentRoute: () => ProtectedLayoutRoute,
+const ProtectedInvestorPortalRoute = ProtectedInvestorPortalRouteImport.update({
+  id: '/portal',
+  path: '/portal',
+  getParentRoute: () => ProtectedInvestorRoute,
+} as any)
+const ProtectedFounderSubmitRoute = ProtectedFounderSubmitRouteImport.update({
+  id: '/submit',
+  path: '/submit',
+  getParentRoute: () => ProtectedFounderRoute,
+} as any)
+const ProtectedAdminUsersRoute = ProtectedAdminUsersRouteImport.update({
+  id: '/users',
+  path: '/users',
+  getParentRoute: () => ProtectedAdminRoute,
+} as any)
+const ProtectedAdminScoutsRoute = ProtectedAdminScoutsRouteImport.update({
+  id: '/scouts',
+  path: '/scouts',
+  getParentRoute: () => ProtectedAdminRoute,
+} as any)
+const ProtectedAdminScoringRoute = ProtectedAdminScoringRouteImport.update({
+  id: '/scoring',
+  path: '/scoring',
+  getParentRoute: () => ProtectedAdminRoute,
+} as any)
+const ProtectedAdminConversationsRoute =
+  ProtectedAdminConversationsRouteImport.update({
+    id: '/conversations',
+    path: '/conversations',
+    getParentRoute: () => ProtectedAdminRoute,
   } as any)
+const ProtectedAdminAnalyticsRoute = ProtectedAdminAnalyticsRouteImport.update({
+  id: '/analytics',
+  path: '/analytics',
+  getParentRoute: () => ProtectedAdminRoute,
+} as any)
+const ProtectedAdminAgentsRoute = ProtectedAdminAgentsRouteImport.update({
+  id: '/agents',
+  path: '/agents',
+  getParentRoute: () => ProtectedAdminRoute,
+} as any)
+const ProtectedInvestorStartupIdRoute =
+  ProtectedInvestorStartupIdRouteImport.update({
+    id: '/startup/$id',
+    path: '/startup/$id',
+    getParentRoute: () => ProtectedInvestorRoute,
+  } as any)
+const ProtectedFounderStartupIdRoute =
+  ProtectedFounderStartupIdRouteImport.update({
+    id: '/startup/$id',
+    path: '/startup/$id',
+    getParentRoute: () => ProtectedFounderRoute,
+  } as any)
+const ProtectedAdminStartupIdRoute = ProtectedAdminStartupIdRouteImport.update({
+  id: '/startup/$id',
+  path: '/startup/$id',
+  getParentRoute: () => ProtectedAdminRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
-  '/done': typeof ProtectedLayoutDoneRoute
-  '/settings': typeof ProtectedLayoutSettingsRoute
-  '/todos/$todoId': typeof ProtectedLayoutTodosTodoIdRoute
-  '/todos/': typeof ProtectedLayoutTodosIndexRoute
+  '/admin': typeof ProtectedAdminRouteWithChildren
+  '/founder': typeof ProtectedFounderRouteWithChildren
+  '/investor': typeof ProtectedInvestorRouteWithChildren
+  '/profile': typeof ProtectedProfileRoute
+  '/role-select': typeof ProtectedRoleSelectRoute
+  '/scout': typeof ProtectedScoutRouteWithChildren
+  '/apply/$slug': typeof ApplySlugRoute
+  '/admin/agents': typeof ProtectedAdminAgentsRoute
+  '/admin/analytics': typeof ProtectedAdminAnalyticsRoute
+  '/admin/conversations': typeof ProtectedAdminConversationsRoute
+  '/admin/scoring': typeof ProtectedAdminScoringRoute
+  '/admin/scouts': typeof ProtectedAdminScoutsRoute
+  '/admin/users': typeof ProtectedAdminUsersRoute
+  '/founder/submit': typeof ProtectedFounderSubmitRoute
+  '/investor/portal': typeof ProtectedInvestorPortalRoute
+  '/investor/scoring': typeof ProtectedInvestorScoringRoute
+  '/investor/submit': typeof ProtectedInvestorSubmitRoute
+  '/investor/thesis': typeof ProtectedInvestorThesisRoute
+  '/scout/apply': typeof ProtectedScoutApplyRoute
+  '/scout/submit': typeof ProtectedScoutSubmitRoute
+  '/admin/': typeof ProtectedAdminIndexRoute
+  '/founder/': typeof ProtectedFounderIndexRoute
+  '/investor/': typeof ProtectedInvestorIndexRoute
+  '/scout/': typeof ProtectedScoutIndexRoute
+  '/admin/startup/$id': typeof ProtectedAdminStartupIdRoute
+  '/founder/startup/$id': typeof ProtectedFounderStartupIdRoute
+  '/investor/startup/$id': typeof ProtectedInvestorStartupIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
-  '/done': typeof ProtectedLayoutDoneRoute
-  '/settings': typeof ProtectedLayoutSettingsRoute
-  '/todos/$todoId': typeof ProtectedLayoutTodosTodoIdRoute
-  '/todos': typeof ProtectedLayoutTodosIndexRoute
+  '/profile': typeof ProtectedProfileRoute
+  '/role-select': typeof ProtectedRoleSelectRoute
+  '/apply/$slug': typeof ApplySlugRoute
+  '/admin/agents': typeof ProtectedAdminAgentsRoute
+  '/admin/analytics': typeof ProtectedAdminAnalyticsRoute
+  '/admin/conversations': typeof ProtectedAdminConversationsRoute
+  '/admin/scoring': typeof ProtectedAdminScoringRoute
+  '/admin/scouts': typeof ProtectedAdminScoutsRoute
+  '/admin/users': typeof ProtectedAdminUsersRoute
+  '/founder/submit': typeof ProtectedFounderSubmitRoute
+  '/investor/portal': typeof ProtectedInvestorPortalRoute
+  '/investor/scoring': typeof ProtectedInvestorScoringRoute
+  '/investor/submit': typeof ProtectedInvestorSubmitRoute
+  '/investor/thesis': typeof ProtectedInvestorThesisRoute
+  '/scout/apply': typeof ProtectedScoutApplyRoute
+  '/scout/submit': typeof ProtectedScoutSubmitRoute
+  '/admin': typeof ProtectedAdminIndexRoute
+  '/founder': typeof ProtectedFounderIndexRoute
+  '/investor': typeof ProtectedInvestorIndexRoute
+  '/scout': typeof ProtectedScoutIndexRoute
+  '/admin/startup/$id': typeof ProtectedAdminStartupIdRoute
+  '/founder/startup/$id': typeof ProtectedFounderStartupIdRoute
+  '/investor/startup/$id': typeof ProtectedInvestorStartupIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_protected': typeof ProtectedRouteWithChildren
   '/login': typeof LoginRoute
-  '/_protected/_layout': typeof ProtectedLayoutRouteWithChildren
-  '/_protected/_layout/done': typeof ProtectedLayoutDoneRoute
-  '/_protected/_layout/settings': typeof ProtectedLayoutSettingsRoute
-  '/_protected/_layout/todos/$todoId': typeof ProtectedLayoutTodosTodoIdRoute
-  '/_protected/_layout/todos/': typeof ProtectedLayoutTodosIndexRoute
+  '/_protected/admin': typeof ProtectedAdminRouteWithChildren
+  '/_protected/founder': typeof ProtectedFounderRouteWithChildren
+  '/_protected/investor': typeof ProtectedInvestorRouteWithChildren
+  '/_protected/profile': typeof ProtectedProfileRoute
+  '/_protected/role-select': typeof ProtectedRoleSelectRoute
+  '/_protected/scout': typeof ProtectedScoutRouteWithChildren
+  '/apply/$slug': typeof ApplySlugRoute
+  '/_protected/admin/agents': typeof ProtectedAdminAgentsRoute
+  '/_protected/admin/analytics': typeof ProtectedAdminAnalyticsRoute
+  '/_protected/admin/conversations': typeof ProtectedAdminConversationsRoute
+  '/_protected/admin/scoring': typeof ProtectedAdminScoringRoute
+  '/_protected/admin/scouts': typeof ProtectedAdminScoutsRoute
+  '/_protected/admin/users': typeof ProtectedAdminUsersRoute
+  '/_protected/founder/submit': typeof ProtectedFounderSubmitRoute
+  '/_protected/investor/portal': typeof ProtectedInvestorPortalRoute
+  '/_protected/investor/scoring': typeof ProtectedInvestorScoringRoute
+  '/_protected/investor/submit': typeof ProtectedInvestorSubmitRoute
+  '/_protected/investor/thesis': typeof ProtectedInvestorThesisRoute
+  '/_protected/scout/apply': typeof ProtectedScoutApplyRoute
+  '/_protected/scout/submit': typeof ProtectedScoutSubmitRoute
+  '/_protected/admin/': typeof ProtectedAdminIndexRoute
+  '/_protected/founder/': typeof ProtectedFounderIndexRoute
+  '/_protected/investor/': typeof ProtectedInvestorIndexRoute
+  '/_protected/scout/': typeof ProtectedScoutIndexRoute
+  '/_protected/admin/startup/$id': typeof ProtectedAdminStartupIdRoute
+  '/_protected/founder/startup/$id': typeof ProtectedFounderStartupIdRoute
+  '/_protected/investor/startup/$id': typeof ProtectedInvestorStartupIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
     | '/login'
-    | '/done'
-    | '/settings'
-    | '/todos/$todoId'
-    | '/todos/'
+    | '/admin'
+    | '/founder'
+    | '/investor'
+    | '/profile'
+    | '/role-select'
+    | '/scout'
+    | '/apply/$slug'
+    | '/admin/agents'
+    | '/admin/analytics'
+    | '/admin/conversations'
+    | '/admin/scoring'
+    | '/admin/scouts'
+    | '/admin/users'
+    | '/founder/submit'
+    | '/investor/portal'
+    | '/investor/scoring'
+    | '/investor/submit'
+    | '/investor/thesis'
+    | '/scout/apply'
+    | '/scout/submit'
+    | '/admin/'
+    | '/founder/'
+    | '/investor/'
+    | '/scout/'
+    | '/admin/startup/$id'
+    | '/founder/startup/$id'
+    | '/investor/startup/$id'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/done' | '/settings' | '/todos/$todoId' | '/todos'
+  to:
+    | '/'
+    | '/login'
+    | '/profile'
+    | '/role-select'
+    | '/apply/$slug'
+    | '/admin/agents'
+    | '/admin/analytics'
+    | '/admin/conversations'
+    | '/admin/scoring'
+    | '/admin/scouts'
+    | '/admin/users'
+    | '/founder/submit'
+    | '/investor/portal'
+    | '/investor/scoring'
+    | '/investor/submit'
+    | '/investor/thesis'
+    | '/scout/apply'
+    | '/scout/submit'
+    | '/admin'
+    | '/founder'
+    | '/investor'
+    | '/scout'
+    | '/admin/startup/$id'
+    | '/founder/startup/$id'
+    | '/investor/startup/$id'
   id:
     | '__root__'
     | '/'
     | '/_protected'
     | '/login'
-    | '/_protected/_layout'
-    | '/_protected/_layout/done'
-    | '/_protected/_layout/settings'
-    | '/_protected/_layout/todos/$todoId'
-    | '/_protected/_layout/todos/'
+    | '/_protected/admin'
+    | '/_protected/founder'
+    | '/_protected/investor'
+    | '/_protected/profile'
+    | '/_protected/role-select'
+    | '/_protected/scout'
+    | '/apply/$slug'
+    | '/_protected/admin/agents'
+    | '/_protected/admin/analytics'
+    | '/_protected/admin/conversations'
+    | '/_protected/admin/scoring'
+    | '/_protected/admin/scouts'
+    | '/_protected/admin/users'
+    | '/_protected/founder/submit'
+    | '/_protected/investor/portal'
+    | '/_protected/investor/scoring'
+    | '/_protected/investor/submit'
+    | '/_protected/investor/thesis'
+    | '/_protected/scout/apply'
+    | '/_protected/scout/submit'
+    | '/_protected/admin/'
+    | '/_protected/founder/'
+    | '/_protected/investor/'
+    | '/_protected/scout/'
+    | '/_protected/admin/startup/$id'
+    | '/_protected/founder/startup/$id'
+    | '/_protected/investor/startup/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ProtectedRoute: typeof ProtectedRouteWithChildren
   LoginRoute: typeof LoginRoute
+  ApplySlugRoute: typeof ApplySlugRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -138,68 +408,292 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_protected/_layout': {
-      id: '/_protected/_layout'
-      path: ''
-      fullPath: '/'
-      preLoaderRoute: typeof ProtectedLayoutRouteImport
+    '/apply/$slug': {
+      id: '/apply/$slug'
+      path: '/apply/$slug'
+      fullPath: '/apply/$slug'
+      preLoaderRoute: typeof ApplySlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_protected/scout': {
+      id: '/_protected/scout'
+      path: '/scout'
+      fullPath: '/scout'
+      preLoaderRoute: typeof ProtectedScoutRouteImport
       parentRoute: typeof ProtectedRoute
     }
-    '/_protected/_layout/settings': {
-      id: '/_protected/_layout/settings'
-      path: '/settings'
-      fullPath: '/settings'
-      preLoaderRoute: typeof ProtectedLayoutSettingsRouteImport
-      parentRoute: typeof ProtectedLayoutRoute
+    '/_protected/role-select': {
+      id: '/_protected/role-select'
+      path: '/role-select'
+      fullPath: '/role-select'
+      preLoaderRoute: typeof ProtectedRoleSelectRouteImport
+      parentRoute: typeof ProtectedRoute
     }
-    '/_protected/_layout/done': {
-      id: '/_protected/_layout/done'
-      path: '/done'
-      fullPath: '/done'
-      preLoaderRoute: typeof ProtectedLayoutDoneRouteImport
-      parentRoute: typeof ProtectedLayoutRoute
+    '/_protected/profile': {
+      id: '/_protected/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof ProtectedProfileRouteImport
+      parentRoute: typeof ProtectedRoute
     }
-    '/_protected/_layout/todos/': {
-      id: '/_protected/_layout/todos/'
-      path: '/todos'
-      fullPath: '/todos/'
-      preLoaderRoute: typeof ProtectedLayoutTodosIndexRouteImport
-      parentRoute: typeof ProtectedLayoutRoute
+    '/_protected/investor': {
+      id: '/_protected/investor'
+      path: '/investor'
+      fullPath: '/investor'
+      preLoaderRoute: typeof ProtectedInvestorRouteImport
+      parentRoute: typeof ProtectedRoute
     }
-    '/_protected/_layout/todos/$todoId': {
-      id: '/_protected/_layout/todos/$todoId'
-      path: '/todos/$todoId'
-      fullPath: '/todos/$todoId'
-      preLoaderRoute: typeof ProtectedLayoutTodosTodoIdRouteImport
-      parentRoute: typeof ProtectedLayoutRoute
+    '/_protected/founder': {
+      id: '/_protected/founder'
+      path: '/founder'
+      fullPath: '/founder'
+      preLoaderRoute: typeof ProtectedFounderRouteImport
+      parentRoute: typeof ProtectedRoute
+    }
+    '/_protected/admin': {
+      id: '/_protected/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof ProtectedAdminRouteImport
+      parentRoute: typeof ProtectedRoute
+    }
+    '/_protected/scout/': {
+      id: '/_protected/scout/'
+      path: '/'
+      fullPath: '/scout/'
+      preLoaderRoute: typeof ProtectedScoutIndexRouteImport
+      parentRoute: typeof ProtectedScoutRoute
+    }
+    '/_protected/investor/': {
+      id: '/_protected/investor/'
+      path: '/'
+      fullPath: '/investor/'
+      preLoaderRoute: typeof ProtectedInvestorIndexRouteImport
+      parentRoute: typeof ProtectedInvestorRoute
+    }
+    '/_protected/founder/': {
+      id: '/_protected/founder/'
+      path: '/'
+      fullPath: '/founder/'
+      preLoaderRoute: typeof ProtectedFounderIndexRouteImport
+      parentRoute: typeof ProtectedFounderRoute
+    }
+    '/_protected/admin/': {
+      id: '/_protected/admin/'
+      path: '/'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof ProtectedAdminIndexRouteImport
+      parentRoute: typeof ProtectedAdminRoute
+    }
+    '/_protected/scout/submit': {
+      id: '/_protected/scout/submit'
+      path: '/submit'
+      fullPath: '/scout/submit'
+      preLoaderRoute: typeof ProtectedScoutSubmitRouteImport
+      parentRoute: typeof ProtectedScoutRoute
+    }
+    '/_protected/scout/apply': {
+      id: '/_protected/scout/apply'
+      path: '/apply'
+      fullPath: '/scout/apply'
+      preLoaderRoute: typeof ProtectedScoutApplyRouteImport
+      parentRoute: typeof ProtectedScoutRoute
+    }
+    '/_protected/investor/thesis': {
+      id: '/_protected/investor/thesis'
+      path: '/thesis'
+      fullPath: '/investor/thesis'
+      preLoaderRoute: typeof ProtectedInvestorThesisRouteImport
+      parentRoute: typeof ProtectedInvestorRoute
+    }
+    '/_protected/investor/submit': {
+      id: '/_protected/investor/submit'
+      path: '/submit'
+      fullPath: '/investor/submit'
+      preLoaderRoute: typeof ProtectedInvestorSubmitRouteImport
+      parentRoute: typeof ProtectedInvestorRoute
+    }
+    '/_protected/investor/scoring': {
+      id: '/_protected/investor/scoring'
+      path: '/scoring'
+      fullPath: '/investor/scoring'
+      preLoaderRoute: typeof ProtectedInvestorScoringRouteImport
+      parentRoute: typeof ProtectedInvestorRoute
+    }
+    '/_protected/investor/portal': {
+      id: '/_protected/investor/portal'
+      path: '/portal'
+      fullPath: '/investor/portal'
+      preLoaderRoute: typeof ProtectedInvestorPortalRouteImport
+      parentRoute: typeof ProtectedInvestorRoute
+    }
+    '/_protected/founder/submit': {
+      id: '/_protected/founder/submit'
+      path: '/submit'
+      fullPath: '/founder/submit'
+      preLoaderRoute: typeof ProtectedFounderSubmitRouteImport
+      parentRoute: typeof ProtectedFounderRoute
+    }
+    '/_protected/admin/users': {
+      id: '/_protected/admin/users'
+      path: '/users'
+      fullPath: '/admin/users'
+      preLoaderRoute: typeof ProtectedAdminUsersRouteImport
+      parentRoute: typeof ProtectedAdminRoute
+    }
+    '/_protected/admin/scouts': {
+      id: '/_protected/admin/scouts'
+      path: '/scouts'
+      fullPath: '/admin/scouts'
+      preLoaderRoute: typeof ProtectedAdminScoutsRouteImport
+      parentRoute: typeof ProtectedAdminRoute
+    }
+    '/_protected/admin/scoring': {
+      id: '/_protected/admin/scoring'
+      path: '/scoring'
+      fullPath: '/admin/scoring'
+      preLoaderRoute: typeof ProtectedAdminScoringRouteImport
+      parentRoute: typeof ProtectedAdminRoute
+    }
+    '/_protected/admin/conversations': {
+      id: '/_protected/admin/conversations'
+      path: '/conversations'
+      fullPath: '/admin/conversations'
+      preLoaderRoute: typeof ProtectedAdminConversationsRouteImport
+      parentRoute: typeof ProtectedAdminRoute
+    }
+    '/_protected/admin/analytics': {
+      id: '/_protected/admin/analytics'
+      path: '/analytics'
+      fullPath: '/admin/analytics'
+      preLoaderRoute: typeof ProtectedAdminAnalyticsRouteImport
+      parentRoute: typeof ProtectedAdminRoute
+    }
+    '/_protected/admin/agents': {
+      id: '/_protected/admin/agents'
+      path: '/agents'
+      fullPath: '/admin/agents'
+      preLoaderRoute: typeof ProtectedAdminAgentsRouteImport
+      parentRoute: typeof ProtectedAdminRoute
+    }
+    '/_protected/investor/startup/$id': {
+      id: '/_protected/investor/startup/$id'
+      path: '/startup/$id'
+      fullPath: '/investor/startup/$id'
+      preLoaderRoute: typeof ProtectedInvestorStartupIdRouteImport
+      parentRoute: typeof ProtectedInvestorRoute
+    }
+    '/_protected/founder/startup/$id': {
+      id: '/_protected/founder/startup/$id'
+      path: '/startup/$id'
+      fullPath: '/founder/startup/$id'
+      preLoaderRoute: typeof ProtectedFounderStartupIdRouteImport
+      parentRoute: typeof ProtectedFounderRoute
+    }
+    '/_protected/admin/startup/$id': {
+      id: '/_protected/admin/startup/$id'
+      path: '/startup/$id'
+      fullPath: '/admin/startup/$id'
+      preLoaderRoute: typeof ProtectedAdminStartupIdRouteImport
+      parentRoute: typeof ProtectedAdminRoute
     }
   }
 }
 
-interface ProtectedLayoutRouteChildren {
-  ProtectedLayoutDoneRoute: typeof ProtectedLayoutDoneRoute
-  ProtectedLayoutSettingsRoute: typeof ProtectedLayoutSettingsRoute
-  ProtectedLayoutTodosTodoIdRoute: typeof ProtectedLayoutTodosTodoIdRoute
-  ProtectedLayoutTodosIndexRoute: typeof ProtectedLayoutTodosIndexRoute
+interface ProtectedAdminRouteChildren {
+  ProtectedAdminAgentsRoute: typeof ProtectedAdminAgentsRoute
+  ProtectedAdminAnalyticsRoute: typeof ProtectedAdminAnalyticsRoute
+  ProtectedAdminConversationsRoute: typeof ProtectedAdminConversationsRoute
+  ProtectedAdminScoringRoute: typeof ProtectedAdminScoringRoute
+  ProtectedAdminScoutsRoute: typeof ProtectedAdminScoutsRoute
+  ProtectedAdminUsersRoute: typeof ProtectedAdminUsersRoute
+  ProtectedAdminIndexRoute: typeof ProtectedAdminIndexRoute
+  ProtectedAdminStartupIdRoute: typeof ProtectedAdminStartupIdRoute
 }
 
-const ProtectedLayoutRouteChildren: ProtectedLayoutRouteChildren = {
-  ProtectedLayoutDoneRoute: ProtectedLayoutDoneRoute,
-  ProtectedLayoutSettingsRoute: ProtectedLayoutSettingsRoute,
-  ProtectedLayoutTodosTodoIdRoute: ProtectedLayoutTodosTodoIdRoute,
-  ProtectedLayoutTodosIndexRoute: ProtectedLayoutTodosIndexRoute,
+const ProtectedAdminRouteChildren: ProtectedAdminRouteChildren = {
+  ProtectedAdminAgentsRoute: ProtectedAdminAgentsRoute,
+  ProtectedAdminAnalyticsRoute: ProtectedAdminAnalyticsRoute,
+  ProtectedAdminConversationsRoute: ProtectedAdminConversationsRoute,
+  ProtectedAdminScoringRoute: ProtectedAdminScoringRoute,
+  ProtectedAdminScoutsRoute: ProtectedAdminScoutsRoute,
+  ProtectedAdminUsersRoute: ProtectedAdminUsersRoute,
+  ProtectedAdminIndexRoute: ProtectedAdminIndexRoute,
+  ProtectedAdminStartupIdRoute: ProtectedAdminStartupIdRoute,
 }
 
-const ProtectedLayoutRouteWithChildren = ProtectedLayoutRoute._addFileChildren(
-  ProtectedLayoutRouteChildren,
+const ProtectedAdminRouteWithChildren = ProtectedAdminRoute._addFileChildren(
+  ProtectedAdminRouteChildren,
+)
+
+interface ProtectedFounderRouteChildren {
+  ProtectedFounderSubmitRoute: typeof ProtectedFounderSubmitRoute
+  ProtectedFounderIndexRoute: typeof ProtectedFounderIndexRoute
+  ProtectedFounderStartupIdRoute: typeof ProtectedFounderStartupIdRoute
+}
+
+const ProtectedFounderRouteChildren: ProtectedFounderRouteChildren = {
+  ProtectedFounderSubmitRoute: ProtectedFounderSubmitRoute,
+  ProtectedFounderIndexRoute: ProtectedFounderIndexRoute,
+  ProtectedFounderStartupIdRoute: ProtectedFounderStartupIdRoute,
+}
+
+const ProtectedFounderRouteWithChildren =
+  ProtectedFounderRoute._addFileChildren(ProtectedFounderRouteChildren)
+
+interface ProtectedInvestorRouteChildren {
+  ProtectedInvestorPortalRoute: typeof ProtectedInvestorPortalRoute
+  ProtectedInvestorScoringRoute: typeof ProtectedInvestorScoringRoute
+  ProtectedInvestorSubmitRoute: typeof ProtectedInvestorSubmitRoute
+  ProtectedInvestorThesisRoute: typeof ProtectedInvestorThesisRoute
+  ProtectedInvestorIndexRoute: typeof ProtectedInvestorIndexRoute
+  ProtectedInvestorStartupIdRoute: typeof ProtectedInvestorStartupIdRoute
+}
+
+const ProtectedInvestorRouteChildren: ProtectedInvestorRouteChildren = {
+  ProtectedInvestorPortalRoute: ProtectedInvestorPortalRoute,
+  ProtectedInvestorScoringRoute: ProtectedInvestorScoringRoute,
+  ProtectedInvestorSubmitRoute: ProtectedInvestorSubmitRoute,
+  ProtectedInvestorThesisRoute: ProtectedInvestorThesisRoute,
+  ProtectedInvestorIndexRoute: ProtectedInvestorIndexRoute,
+  ProtectedInvestorStartupIdRoute: ProtectedInvestorStartupIdRoute,
+}
+
+const ProtectedInvestorRouteWithChildren =
+  ProtectedInvestorRoute._addFileChildren(ProtectedInvestorRouteChildren)
+
+interface ProtectedScoutRouteChildren {
+  ProtectedScoutApplyRoute: typeof ProtectedScoutApplyRoute
+  ProtectedScoutSubmitRoute: typeof ProtectedScoutSubmitRoute
+  ProtectedScoutIndexRoute: typeof ProtectedScoutIndexRoute
+}
+
+const ProtectedScoutRouteChildren: ProtectedScoutRouteChildren = {
+  ProtectedScoutApplyRoute: ProtectedScoutApplyRoute,
+  ProtectedScoutSubmitRoute: ProtectedScoutSubmitRoute,
+  ProtectedScoutIndexRoute: ProtectedScoutIndexRoute,
+}
+
+const ProtectedScoutRouteWithChildren = ProtectedScoutRoute._addFileChildren(
+  ProtectedScoutRouteChildren,
 )
 
 interface ProtectedRouteChildren {
-  ProtectedLayoutRoute: typeof ProtectedLayoutRouteWithChildren
+  ProtectedAdminRoute: typeof ProtectedAdminRouteWithChildren
+  ProtectedFounderRoute: typeof ProtectedFounderRouteWithChildren
+  ProtectedInvestorRoute: typeof ProtectedInvestorRouteWithChildren
+  ProtectedProfileRoute: typeof ProtectedProfileRoute
+  ProtectedRoleSelectRoute: typeof ProtectedRoleSelectRoute
+  ProtectedScoutRoute: typeof ProtectedScoutRouteWithChildren
 }
 
 const ProtectedRouteChildren: ProtectedRouteChildren = {
-  ProtectedLayoutRoute: ProtectedLayoutRouteWithChildren,
+  ProtectedAdminRoute: ProtectedAdminRouteWithChildren,
+  ProtectedFounderRoute: ProtectedFounderRouteWithChildren,
+  ProtectedInvestorRoute: ProtectedInvestorRouteWithChildren,
+  ProtectedProfileRoute: ProtectedProfileRoute,
+  ProtectedRoleSelectRoute: ProtectedRoleSelectRoute,
+  ProtectedScoutRoute: ProtectedScoutRouteWithChildren,
 }
 
 const ProtectedRouteWithChildren = ProtectedRoute._addFileChildren(
@@ -210,6 +704,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ProtectedRoute: ProtectedRouteWithChildren,
   LoginRoute: LoginRoute,
+  ApplySlugRoute: ApplySlugRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

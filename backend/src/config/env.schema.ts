@@ -13,6 +13,7 @@ export const envSchema = z.object({
   ),
 
   // Redis Configuration
+  REDIS_URL: z.string().default('localhost'),
   REDIS_HOST: z.string().default('localhost'),
   REDIS_PORT: z.coerce.number().default(6379),
   REDIS_PASSWORD: z.string().optional(),
@@ -50,6 +51,15 @@ export const envSchema = z.object({
   // Email Configuration (Resend)
   RESEND_API_KEY: z.string().optional(), // Optional in dev mode
   EMAIL_FROM: z.string().default('Clipaf <noreply@clipaf.com>'),
+
+  // Twilio Configuration
+  TWILIO_ACCOUNT_SID: z.string().optional(),
+  TWILIO_AUTH_TOKEN: z.string().optional(),
+  TWILIO_WHATSAPP_NUMBER: z.string().optional(),
+
+  // AgentMail Integration
+  AGENTMAIL_WEBHOOK_SECRET: z.string().optional(),
+  AGENTMAIL_API_KEY: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

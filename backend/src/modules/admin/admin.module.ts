@@ -1,0 +1,47 @@
+import { Module } from '@nestjs/common';
+import { JwtModule } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
+import { MulterModule } from '@nestjs/platform-express';
+import { AdminController } from './admin.controller';
+import { AnalyticsService } from './analytics.service';
+import { UserManagementService } from './user-management.service';
+import { ScoringConfigService } from './scoring-config.service';
+import { DataImportService } from './data-import.service';
+import { QueueManagementService } from './queue-management.service';
+import { CacheService } from './cache.service';
+import { StartupModule } from '../startup';
+import { DatabaseModule } from '../../database';
+import { QueueModule } from '../../queue';
+
+@Module({
+  imports: [
+    DatabaseModule,
+    QueueModule,
+    StartupModule,
+    MulterModule.register({
+      limits: {
+        fileSize: 10 * 1024 * 1024, // 10MB limit
+      },
+    }),
+    JwtModule.registerAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        secret: config.get('JWT_SECRET'),
+        signOptions: {
+          expiresIn: config.get('JWT_ACCESS_EXPIRES', '7d'),
+        },
+      }),
+    }),
+  ],
+  controllers: [AdminController],
+  providers: [
+    CacheService,
+    AnalyticsService,
+    UserManagementService,
+    ScoringConfigService,
+    DataImportService,
+    QueueManagementService,
+  ],
+  exports: [AnalyticsService, UserManagementService],
+})
+export class AdminModule {}

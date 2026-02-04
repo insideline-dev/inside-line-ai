@@ -1,0 +1,22 @@
+# Development Dockerfile with hot-reload
+
+FROM oven/bun:1.2-alpine
+
+WORKDIR /app
+
+# Install dependencies for native modules
+RUN apk add --no-cache python3 make g++
+
+# Copy package files
+COPY package.json bun.lock* ./
+
+# Install all dependencies (including dev)
+RUN bun install
+
+# Source code mounted as volume for hot-reload
+# See docker-compose.dev.yml volumes
+
+EXPOSE 8080
+
+# Run in watch mode
+CMD ["bun", "run", "dev"]

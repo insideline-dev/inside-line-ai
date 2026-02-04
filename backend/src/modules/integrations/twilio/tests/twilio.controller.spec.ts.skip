@@ -1,0 +1,244 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { TwilioController } from '../twilio.controller';
+import { TwilioService } from '../twilio.service';
+import { UserRole } from '../../../../auth/entities/auth.schema';
+
+describe('TwilioController', () => {
+  let controller: TwilioController;
+  let service: jest.Mocked<TwilioService>;
+
+  const mockUser = {
+    id: '123e4567-e89b-12d3-a456-426614174000',
+    email: 'test@example.com',
+    name: 'Test User',
+    role: UserRole.USER,
+    emailVerified: true,
+    image: null,
+  };
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      controllers: [TwilioController],
+      providers: [
+        {
+          provide: TwilioService,
+          useValue: {
+            handleWebhook: jest.fn(),
+            sendMessage: jest.fn(),
+            getMessages: jest.fn(),
+            getConversation: jest.fn(),
+            getConfig: jest.fn(),
+            saveConfig: jest.fn(),
+          },
+        },
+      ],
+    }).compile();
+
+    controller = module.get<TwilioController>(TwilioController);
+    service = module.get(TwilioService);
+  });
+
+  describe('handleWebhook', () => {
+    it('should process webhook payload', async () => {
+      const webhookDto = {
+        MessageSid: 'SM123456',
+        AccountSid: 'AC123456',
+        From: 'whatsapp:+15559876543',
+        To: 'whatsapp:+15551234567',
+        Body: 'Hello',
+        NumMedia: '0',
+        Timestamp: '2024-01-01T00:00:00Z',
+      };
+
+      const mockReq = {
+        protocol: 'https',
+        get: jest.fn(() => 'example.com'),
+        originalUrl: '/integrations/twilio/webhook',
+      } as any;
+
+      const mockResult = {
+        success: true,
+        webhookId: 'webhook_123',
+      };
+
+      service.handleWebhook.mockResolvedValue(mockResult);
+
+      const result = await controller.handleWebhook(
+        webhookDto,
+        'signature123',
+        mockReq,
+      );
+
+      expect(service.handleWebhook).toHaveBeenCalledWith(
+        webhookDto,
+        'signature123',
+        'https://example.com/integrations/twilio/webhook',
+      );
+
+      expect(result).toEqual(mockResult);
+    });
+  });
+
+  describe('sendMessage', () => {
+    it('should send WhatsApp message', async () => {
+      const sendMessageDto = {
+        to: '+15559876543',
+        body: 'Hello from API',
+      };
+
+      const mockResult = {
+        messageSid: 'SM123456',
+        status: 'queued',
+        to: '+15559876543',
+        body: 'Hello from API',
+      };
+
+      service.sendMessage.mockResolvedValue(mockResult);
+
+      const result = await controller.sendMessage(mockUser, sendMessageDto);
+
+      expect(service.sendMessage).toHaveBeenCalledWith(mockUser.id, sendMessageDto);
+      expect(result).toEqual(mockResult);
+    });
+  });
+
+  describe('getMessages', () => {
+    it('should return messages list', async () => {
+      const query = {
+        page: 1,
+        limit: 20,
+      };
+
+      const mockResult = {
+        data: [
+          {
+            conversationId: '+15551234567:+15559876543',
+            participants: ['+15551234567', '+15559876543'],
+            lastMessage: 'Hello',
+            lastMessageAt: new Date('2024-01-01T00:00:00Z'),
+            messageCount: 5,
+          },
+        ],
+        meta: {
+          total: 1,
+          page: 1,
+          limit: 20,
+          totalPages: 1,
+        },
+      };
+
+      service.getMessages.mockResolvedValue(mockResult);
+
+      const result = await controller.getMessages(mockUser, query);
+
+      expect(service.getMessages).toHaveBeenCalledWith(mockUser.id, query);
+      expect(result).toEqual(mockResult);
+    });
+
+    it('should filter by conversationId if provided', async () => {
+      const query = {
+        page: 1,
+        limit: 20,
+        conversationId: '+15551234567:+15559876543',
+      };
+
+      const mockResult = {
+        data: [],
+        meta: {
+          total: 0,
+          page: 1,
+          limit: 20,
+          totalPages: 0,
+        },
+      };
+
+      service.getMessages.mockResolvedValue(mockResult);
+
+      await controller.getMessages(mockUser, query);
+
+      expect(service.getMessages).toHaveBeenCalledWith(mockUser.id, query);
+    });
+  });
+
+  describe('getConversation', () => {
+    it('should return conversation history', async () => {
+      const conversationId = '+15551234567:+15559876543';
+      const query = {
+        page: 1,
+        limit: 50,
+      };
+
+      const mockResult = {
+        data: [
+          {
+            id: '1',
+            messageSid: 'SM1',
+            from: '+15559876543',
+            to: '+15551234567',
+            body: 'Hello',
+            timestamp: '2024-01-01T00:00:00Z',
+            direction: 'incoming' as const,
+            createdAt: new Date('2024-01-01T00:00:00Z'),
+          },
+        ],
+        meta: {
+          total: 1,
+          page: 1,
+          limit: 50,
+          totalPages: 1,
+        },
+      };
+
+      service.getConversation.mockResolvedValue(mockResult);
+
+      const result = await controller.getConversation(mockUser, conversationId, query);
+
+      expect(service.getConversation).toHaveBeenCalledWith(
+        mockUser.id,
+        conversationId,
+        query.page,
+        query.limit,
+      );
+
+      expect(result).toEqual(mockResult);
+    });
+  });
+
+  describe('getConfig', () => {
+    it('should return Twilio configuration', async () => {
+      const mockConfig = {
+        whatsappNumber: '+15551234567',
+        configured: true,
+      };
+
+      service.getConfig.mockResolvedValue(mockConfig);
+
+      const result = await controller.getConfig(mockUser);
+
+      expect(service.getConfig).toHaveBeenCalledWith(mockUser.id);
+      expect(result).toEqual(mockConfig);
+    });
+  });
+
+  describe('saveConfig', () => {
+    it('should save Twilio configuration', async () => {
+      const configDto = {
+        accountSid: 'AC123456',
+        authToken: 'token123',
+        whatsappNumber: '+15551234567',
+      };
+
+      const mockResult = {
+        success: true,
+        message: 'Config saved',
+      };
+
+      service.saveConfig.mockResolvedValue(mockResult);
+
+      const result = await controller.saveConfig(mockUser, configDto);
+
+      expect(service.saveConfig).toHaveBeenCalledWith(mockUser.id, configDto);
+      expect(result).toEqual(mockResult);
+    });
+  });
+});

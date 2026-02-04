@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { signInWithEmail, signUpWithEmail, signInWithGoogle } from "@/hooks/useAuth";
 import { useSession } from "@/lib/auth-client";
+import { env } from "@/env";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const authFormSchema = z.object({
@@ -37,8 +38,13 @@ function LoginPage() {
   const { redirect } = Route.useSearch();
 
   useEffect(() => {
+    if (env.VITE_MOCK_AUTH) {
+      // Redirect to intended destination or role select
+      navigate({ to: redirect || "/role-select", replace: true });
+      return;
+    }
     if (!isPending && data?.user && data?.session) {
-      navigate({ to: redirect || "/todos", replace: true });
+      navigate({ to: redirect || "/role-select", replace: true });
     }
   }, [isPending, data, redirect, navigate]);
 
@@ -84,8 +90,11 @@ function LoginPage() {
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
       {/* Logo */}
       <div className="mb-8 text-center">
-        <h1 className="text-4xl font-bold tracking-tight text-foreground">Tandem</h1>
-        <p className="text-muted-foreground mt-2">Your starter framework</p>
+        <div className="flex flex-wrap items-center justify-center gap-1.5">
+          <span className="text-4xl font-bold tracking-tight text-foreground">Inside Line</span>
+          <span className="text-primary font-semibold text-2xl">.AI</span>
+        </div>
+        <p className="text-muted-foreground mt-2">AI-Powered Venture Decision Intelligence</p>
       </div>
 
       <Card className="w-full max-w-md">

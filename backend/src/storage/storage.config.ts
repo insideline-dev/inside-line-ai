@@ -4,6 +4,7 @@ export const ASSET_TYPES = {
   IMAGE: 'images',
   VIDEO: 'videos',
   TRANSCRIPT: 'transcripts',
+  DOCUMENT: 'documents',
   TEMP: 'temp',
 } as const;
 

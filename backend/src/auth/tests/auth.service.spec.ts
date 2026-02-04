@@ -92,7 +92,7 @@ describe('AuthService', () => {
       expect(result).toBe('mock-jwt-token');
       expect(jwtService.sign).toHaveBeenCalledWith(
         { sub: mockDbUser.id, email: mockDbUser.email },
-        expect.objectContaining({ expiresIn: '15m' }),
+        expect.objectContaining({ expiresIn: '7d' }),
       );
     });
 

@@ -1,6 +1,7 @@
 import { Job, Worker, ConnectionOptions, UnrecoverableError } from 'bullmq';
 import { Logger, BadRequestException } from '@nestjs/common';
-import type { JobData, JobResult } from '../interfaces';
+import type { BaseJobData } from '../interfaces/job-data.interface';
+import type { BaseJobResult } from '../interfaces/job-result.interface';
 
 // Patterns that indicate a validation/input error (should not retry)
 const NON_RETRYABLE_PATTERNS = [
@@ -22,8 +23,8 @@ const NON_RETRYABLE_PATTERNS = [
  * Handles error wrapping and retry logic automatically
  */
 export abstract class BaseProcessor<
-  TData extends JobData,
-  TResult extends JobResult,
+  TData extends BaseJobData,
+  TResult extends BaseJobResult,
 > {
   protected abstract readonly logger: Logger;
   protected worker!: Worker;

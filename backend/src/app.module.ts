@@ -6,6 +6,14 @@ import { AuthModule } from './auth';
 import { QueueModule } from './queue';
 import { StorageModule } from './storage';
 import { EmailModule } from './email';
+import { NotificationModule } from './notification/notification.module';
+import { StartupModule } from './modules/startup';
+import { PortalModule } from './modules/portal';
+import { ScoutModule } from './modules/scout';
+import { AdminModule } from './modules/admin';
+import { AnalysisModule } from './modules/analysis';
+import { TwilioModule } from './modules/integrations/twilio/twilio.module';
+import { AgentMailModule } from './modules/integrations/agentmail/agentmail.module';
 import { RlsMiddleware } from './common';
 
 @Module({
@@ -16,6 +24,14 @@ import { RlsMiddleware } from './common';
     StorageModule,
     EmailModule,
     AuthModule,
+    NotificationModule,
+    StartupModule,
+    PortalModule,
+    ScoutModule,
+    AdminModule,
+    AnalysisModule,
+    TwilioModule,
+    AgentMailModule,
     HealthModule,
   ],
   controllers: [],

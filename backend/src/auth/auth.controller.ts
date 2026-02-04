@@ -1,0 +1,336 @@
+import {
+  Body,
+  Controller,
+  Get,
+  Post,
+  Req,
+  Res,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
+  UnauthorizedException,
+  BadRequestException,
+} from '@nestjs/common';
+import {
+  ApiBody,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+  ApiBearerAuth,
+  ApiTooManyRequestsResponse,
+  ApiUnauthorizedResponse,
+} from '@nestjs/swagger';
+import { Throttle, SkipThrottle } from '@nestjs/throttler';
+import type { Request, Response } from 'express';
+import { AuthService } from './auth.service';
+import { UserAuthService, type DbUser } from './user-auth.service';
+import { EmailService } from '../email';
+import { GoogleAuthGuard } from './guards';
+import { Public, CurrentUser } from './decorators';
+import { JWT_COOKIE_NAME, REFRESH_COOKIE_NAME } from './auth.constants';
+import { UserRole } from './entities/auth.schema';
+import {
+  LoginDto,
+  RegisterDto,
+  MagicLinkRequestDto,
+  MagicLinkVerifyDto,
+  AuthResponseDto,
+  UserResponseDto,
+  EmailVerifyDto,
+  ResendVerificationDto,
+} from './dto';
+
+// Rate limit configs (requests per TTL window in seconds)
+const AUTH_RATE_LIMIT = { limit: 5, ttl: 60000 }; // 5 requests per minute
+const MAGIC_LINK_RATE_LIMIT = { limit: 3, ttl: 300000 }; // 3 requests per 5 minutes
+
+@ApiTags('auth')
+@Controller('auth')
+@ApiTooManyRequestsResponse({ description: 'Rate limit exceeded' })
+export class AuthController {
+  constructor(
+    private authService: AuthService,
+    private userAuthService: UserAuthService,
+    private emailService: EmailService,
+  ) {}
+
+  // ============ EMAIL/PASSWORD ============
+
+  @Public()
+  @Post('register')
+  @Throttle({ default: AUTH_RATE_LIMIT })
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Register with email and password' })
+  @ApiBody({ type: RegisterDto })
+  @ApiResponse({ status: 201, type: AuthResponseDto })
+  async register(
+    @Body() dto: RegisterDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const newUser = await this.authService.registerWithPassword(
+      dto.email,
+      dto.password,
+      dto.name,
+    );
+
+    // Send verification email
+    const token = await this.userAuthService.createEmailVerificationToken(
+      dto.email,
+    );
+    await this.emailService.sendVerificationEmail(dto.email, token, dto.name);
+
+    return this.setTokensAndRespond(res, newUser);
+  }
+
+  @Public()
+  @Post('login')
+  @Throttle({ default: AUTH_RATE_LIMIT })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Login with email and password' })
+  @ApiBody({ type: LoginDto })
+  @ApiResponse({ status: 200, type: AuthResponseDto })
+  @ApiUnauthorizedResponse({ description: 'Invalid credentials' })
+  async login(
+    @Body() dto: LoginDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const foundUser = await this.authService.validatePassword(
+      dto.email,
+      dto.password,
+    );
+    if (!foundUser) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+    return this.setTokensAndRespond(res, foundUser);
+  }
+
+  // ============ EMAIL VERIFICATION ============
+
+  @Public()
+  @Post('verify-email')
+  @Throttle({ default: AUTH_RATE_LIMIT })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Verify email address' })
+  @ApiBody({ type: EmailVerifyDto })
+  @ApiResponse({ status: 200, type: AuthResponseDto })
+  @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
+  async verifyEmail(
+    @Body() dto: EmailVerifyDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const foundUser = await this.userAuthService.verifyEmail(dto.token);
+    if (!foundUser) {
+      throw new UnauthorizedException('Invalid or expired verification token');
+    }
+
+    // Send welcome email after verification
+    await this.emailService.sendWelcomeEmail(foundUser.email, foundUser.name);
+
+    return this.setTokensAndRespond(res, foundUser);
+  }
+
+  @Public()
+  @Post('resend-verification')
+  @Throttle({ default: MAGIC_LINK_RATE_LIMIT })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Resend verification email' })
+  @ApiBody({ type: ResendVerificationDto })
+  @ApiResponse({ status: 200, description: 'Verification email sent' })
+  async resendVerification(@Body() dto: ResendVerificationDto) {
+    const token = await this.userAuthService.resendVerificationEmail(dto.email);
+
+    if (token) {
+      await this.emailService.sendVerificationEmail(dto.email, token);
+    }
+
+    // Always return success to prevent email enumeration
+    return {
+      message:
+        'If the email exists and is unverified, a new link has been sent',
+    };
+  }
+
+  // ============ MAGIC LINK ============
+
+  @Public()
+  @Post('magic-link/request')
+  @Throttle({ default: MAGIC_LINK_RATE_LIMIT })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Request magic link (sends email)' })
+  @ApiBody({ type: MagicLinkRequestDto })
+  @ApiResponse({ status: 200, description: 'Magic link sent' })
+  async requestMagicLink(@Body() dto: MagicLinkRequestDto) {
+    const token = await this.authService.createMagicLink(dto.email);
+
+    // Send magic link email
+    await this.emailService.sendMagicLinkEmail(dto.email, token);
+
+    return {
+      message: 'Magic link sent to your email',
+      _devToken: process.env.NODE_ENV !== 'production' ? token : undefined,
+    };
+  }
+
+  @Public()
+  @Post('magic-link/verify')
+  @Throttle({ default: AUTH_RATE_LIMIT })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Verify magic link token' })
+  @ApiBody({ type: MagicLinkVerifyDto })
+  @ApiResponse({ status: 200, type: AuthResponseDto })
+  @ApiUnauthorizedResponse({ description: 'Invalid or expired magic link' })
+  async verifyMagicLink(
+    @Body() dto: MagicLinkVerifyDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const foundUser = await this.authService.validateMagicLink(dto.token);
+    if (!foundUser) {
+      throw new UnauthorizedException('Invalid or expired magic link');
+    }
+    return this.setTokensAndRespond(res, foundUser);
+  }
+
+  // ============ GOOGLE OAUTH ============
+
+  @Public()
+  @Get('google')
+  @UseGuards(GoogleAuthGuard)
+  @ApiOperation({ summary: 'Initiate Google OAuth flow' })
+  googleAuth() {
+    // Guard redirects to Google
+  }
+
+  @Public()
+  @Get('google/callback')
+  @UseGuards(GoogleAuthGuard)
+  @ApiOperation({ summary: 'Google OAuth callback' })
+  async googleCallback(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const foundUser = req.user as DbUser;
+    const tokens = await this.authService.generateTokens(foundUser);
+    this.setTokenCookies(res, tokens.accessToken, tokens.refreshToken);
+
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    return res.redirect(`${frontendUrl}/auth/callback?success=true`);
+  }
+
+  // ============ TOKEN MANAGEMENT ============
+
+  @Public()
+  @Post('refresh')
+  @Throttle({ default: { limit: 10, ttl: 60000 } }) // 10 refreshes per minute
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Refresh access token' })
+  @ApiResponse({ status: 200, type: AuthResponseDto })
+  @ApiUnauthorizedResponse({ description: 'No refresh token or invalid token' })
+  async refresh(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const refreshToken = (req.cookies as Record<string, string> | undefined)?.[
+      REFRESH_COOKIE_NAME
+    ];
+    if (!refreshToken) {
+      throw new UnauthorizedException('No refresh token');
+    }
+
+    const result = await this.authService.refreshTokens(refreshToken);
+
+    this.setTokenCookies(res, result.accessToken, result.refreshToken);
+
+    return {
+      user: this.sanitizeUser(result.user),
+      accessToken: result.accessToken,
+    };
+  }
+
+  @Post('logout')
+  @ApiBearerAuth('JWT')
+  @ApiOperation({ summary: 'Logout and clear tokens' })
+  @ApiResponse({ status: 200, description: 'Logged out successfully' })
+  async logout(
+    @CurrentUser() currentUser: DbUser,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    // Revoke all refresh tokens for this user
+    await this.authService.revokeAllUserTokens(currentUser.id);
+
+    res.clearCookie(JWT_COOKIE_NAME);
+    res.clearCookie(REFRESH_COOKIE_NAME);
+    return { message: 'Logged out successfully' };
+  }
+
+  @Post('logout-all')
+  @ApiBearerAuth('JWT')
+  @ApiOperation({ summary: 'Logout from all devices' })
+  @ApiResponse({ status: 200, description: 'Logged out from all devices' })
+  async logoutAll(
+    @CurrentUser() currentUser: DbUser,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    await this.authService.revokeAllUserTokens(currentUser.id);
+
+    res.clearCookie(JWT_COOKIE_NAME);
+    res.clearCookie(REFRESH_COOKIE_NAME);
+    return { message: 'Logged out from all devices' };
+  }
+
+  // ============ CURRENT USER ============
+
+  @Get('me')
+  @SkipThrottle()
+  @ApiBearerAuth('JWT')
+  @ApiOperation({ summary: 'Get current authenticated user' })
+  @ApiResponse({ status: 200, type: UserResponseDto })
+  getMe(@CurrentUser() currentUser: DbUser): UserResponseDto {
+    return this.sanitizeUser(currentUser);
+  }
+
+  // ============ HELPERS ============
+
+  private setTokenCookies(
+    res: Response,
+    accessToken: string,
+    refreshToken: string,
+  ) {
+    const isProduction = process.env.NODE_ENV === 'production';
+
+    res.cookie(JWT_COOKIE_NAME, accessToken, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: 'lax',
+      maxAge: 15 * 60 * 1000,
+    });
+
+    res.cookie(REFRESH_COOKIE_NAME, refreshToken, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+  }
+
+  private sanitizeUser(u: DbUser): UserResponseDto {
+    return {
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      emailVerified: u.emailVerified,
+      image: u.image,
+      role: u.role as UserRole,
+      createdAt: u.createdAt.toISOString(),
+    };
+  }
+
+  private async setTokensAndRespond(res: Response, u: DbUser) {
+    const tokens = await this.authService.generateTokens(u);
+    this.setTokenCookies(res, tokens.accessToken, tokens.refreshToken);
+
+    return {
+      user: this.sanitizeUser(u),
+      accessToken: tokens.accessToken,
+    };
+  }
+}

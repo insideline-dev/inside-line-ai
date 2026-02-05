@@ -1,5 +1,8 @@
-import { useState } from "react";
-import { Bell, Check, Sparkles, CheckCheck } from "lucide-react";
+import { useState, useCallback } from "react";
+import { Bell, Check, Sparkles, AlertCircle, AlertTriangle, Loader2 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -9,69 +12,82 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
+import {
+  useNotificationControllerGetNotifications,
+  useNotificationControllerMarkAsRead,
+  getNotificationControllerGetNotificationsQueryKey,
+} from "@/api/generated/notifications/notifications";
+import { useNotificationSocket } from "@/lib/auth";
 
 interface Notification {
-  id: number;
-  type: "analysis_complete" | "startup_approved" | "startup_rejected" | "new_match" | "system";
+  id: string;
+  type: "info" | "success" | "warning" | "error" | "match";
   title: string;
   message: string;
-  startupId: number | null;
-  isRead: boolean;
+  link?: string;
+  read: boolean;
   createdAt: string;
 }
 
-// Mock notifications for demo
-const mockNotifications: Notification[] = [
-  {
-    id: 1,
-    type: "analysis_complete",
-    title: "Analysis Complete",
-    message: "Your startup analysis is ready to review",
-    startupId: 1,
-    isRead: false,
-    createdAt: new Date(Date.now() - 3600000).toISOString(),
-  },
-  {
-    id: 2,
-    type: "new_match",
-    title: "New Investor Match",
-    message: "3 new investors match your profile",
-    startupId: null,
-    isRead: false,
-    createdAt: new Date(Date.now() - 7200000).toISOString(),
-  },
-];
-
 export function NotificationCenter() {
   const [open, setOpen] = useState(false);
-  const [notifications, setNotifications] = useState(mockNotifications);
+  const [socketCount, setSocketCount] = useState<number | null>(null);
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const { data: response, isLoading } = useNotificationControllerGetNotifications();
+  const notifications = (response?.data as Notification[] | undefined) ?? [];
 
-  const unreadCount = notifications.filter((n) => !n.isRead).length;
+  const { mutate: markRead } = useNotificationControllerMarkAsRead({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getNotificationControllerGetNotificationsQueryKey() });
+      },
+    },
+  });
 
-  const markRead = (id: number) => {
-    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)));
-  };
+  const handleNewNotification = useCallback(
+    (notification: Notification) => {
+      queryClient.setQueryData(
+        getNotificationControllerGetNotificationsQueryKey(),
+        (old: { data?: Notification[] } | undefined) => ({
+          ...old,
+          data: [notification, ...(old?.data || [])],
+        })
+      );
+      toast(notification.title, { description: notification.message });
+    },
+    [queryClient]
+  );
 
-  const markAllRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
-  };
+  const handleCountUpdate = useCallback((count: number) => {
+    setSocketCount(count);
+  }, []);
+
+  useNotificationSocket(handleNewNotification, handleCountUpdate);
+
+  const unreadCount = socketCount ?? notifications.filter((n) => !n.read).length;
 
   const getNotificationIcon = (type: Notification["type"]) => {
     switch (type) {
-      case "analysis_complete":
-        return <Sparkles className="w-4 h-4 text-primary" />;
-      case "startup_approved":
+      case "success":
         return <Check className="w-4 h-4 text-green-500" />;
-      case "startup_rejected":
-        return <Check className="w-4 h-4 text-red-500" />;
+      case "error":
+        return <AlertCircle className="w-4 h-4 text-red-500" />;
+      case "warning":
+        return <AlertTriangle className="w-4 h-4 text-yellow-500" />;
+      case "match":
+        return <Sparkles className="w-4 h-4 text-primary" />;
       default:
         return <Bell className="w-4 h-4" />;
     }
   };
 
   const handleNotificationClick = (notification: Notification) => {
-    if (!notification.isRead) {
-      markRead(notification.id);
+    if (!notification.read) {
+      markRead({ id: notification.id });
+    }
+    if (notification.link) {
+      navigate({ to: notification.link });
     }
     setOpen(false);
   };
@@ -102,16 +118,14 @@ export function NotificationCenter() {
       <DropdownMenuContent align="end" className="w-80">
         <div className="flex items-center justify-between px-3 py-2">
           <span className="font-semibold text-sm">Notifications</span>
-          {unreadCount > 0 && (
-            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={markAllRead}>
-              <CheckCheck className="w-3 h-3 mr-1" />
-              Mark all read
-            </Button>
-          )}
         </div>
         <DropdownMenuSeparator />
         <div className="max-h-[400px] overflow-y-auto">
-          {notifications.length === 0 ? (
+          {isLoading ? (
+            <div className="px-3 py-8 text-center">
+              <Loader2 className="w-6 h-6 mx-auto animate-spin" />
+            </div>
+          ) : notifications.length === 0 ? (
             <div className="px-3 py-8 text-center text-sm text-muted-foreground">
               <Bell className="w-8 h-8 mx-auto mb-2 opacity-50" />
               No notifications yet
@@ -121,14 +135,14 @@ export function NotificationCenter() {
               <DropdownMenuItem
                 key={notification.id}
                 className={`flex items-start gap-3 px-3 py-3 cursor-pointer ${
-                  !notification.isRead ? "bg-muted/50" : ""
+                  !notification.read ? "bg-muted/50" : ""
                 }`}
                 onClick={() => handleNotificationClick(notification)}
               >
                 <div className="flex items-start gap-3 w-full">
                   <div className="mt-0.5">{getNotificationIcon(notification.type)}</div>
                   <div className="flex-1 min-w-0">
-                    <p className={`text-sm ${!notification.isRead ? "font-medium" : ""}`}>
+                    <p className={`text-sm ${!notification.read ? "font-medium" : ""}`}>
                       {notification.title}
                     </p>
                     <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
@@ -138,7 +152,7 @@ export function NotificationCenter() {
                       {getRelativeTime(notification.createdAt)}
                     </p>
                   </div>
-                  {!notification.isRead && (
+                  {!notification.read && (
                     <div className="w-2 h-2 bg-primary rounded-full mt-1.5" />
                   )}
                 </div>

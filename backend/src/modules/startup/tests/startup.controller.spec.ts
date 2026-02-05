@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { StartupController } from '../startup.controller';
 import { StartupService } from '../startup.service';
 import { DraftService } from '../draft.service';
+import { PdfService } from '../pdf.service';
 import { UserRole } from '../../../auth/entities/auth.schema';
 import { StartupStatus, StartupStage } from '../entities/startup.schema';
 
@@ -24,7 +25,7 @@ describe('StartupController', () => {
     id: '123e4567-e89b-12d3-a456-426614174000',
     email: 'test@example.com',
     name: 'Test User',
-    role: UserRole.USER,
+    role: UserRole.FOUNDER,
     emailVerified: true,
     image: null,
     createdAt: '2024-01-01T00:00:00.000Z',
@@ -80,6 +81,7 @@ describe('StartupController', () => {
             adminUpdate: jest.fn(),
             adminDelete: jest.fn(),
             findBySlug: jest.fn(),
+            getProgress: jest.fn(),
           },
         },
         {
@@ -88,6 +90,13 @@ describe('StartupController', () => {
             save: jest.fn(),
             get: jest.fn(),
             delete: jest.fn(),
+          },
+        },
+        {
+          provide: PdfService,
+          useValue: {
+            generateMemo: jest.fn(),
+            generateReport: jest.fn(),
           },
         },
       ],
@@ -305,6 +314,46 @@ describe('StartupController', () => {
 
       expect(result).toEqual(draft);
       expect(draftService.get).toHaveBeenCalledWith(mockStartup.id, mockUser.id);
+    });
+  });
+
+  describe('getProgress', () => {
+    it('should return progress for draft status', async () => {
+      const progressResponse = {
+        status: StartupStatus.DRAFT,
+        progress: null,
+      };
+
+      startupService.getProgress.mockResolvedValueOnce(progressResponse);
+
+      const result = await controller.getProgress(mockUser, mockStartup.id);
+
+      expect(result).toEqual(progressResponse);
+      expect(startupService.getProgress).toHaveBeenCalledWith(mockStartup.id, mockUser.id);
+    });
+
+    it('should return progress with analysis data for analyzing status', async () => {
+      const progressResponse = {
+        status: 'analyzing',
+        progress: {
+          overallProgress: 65,
+          currentPhase: 'market-analysis',
+          phasesCompleted: ['document-review', 'team-analysis'],
+          phases: {
+            'document-review': { status: 'completed', progress: 100 },
+            'team-analysis': { status: 'completed', progress: 100 },
+            'market-analysis': { status: 'in-progress', progress: 65 },
+            'financial-analysis': { status: 'pending', progress: 0 },
+          },
+        },
+      };
+
+      startupService.getProgress.mockResolvedValueOnce(progressResponse);
+
+      const result = await controller.getProgress(mockUser, mockStartup.id);
+
+      expect(result).toEqual(progressResponse);
+      expect(startupService.getProgress).toHaveBeenCalledWith(mockStartup.id, mockUser.id);
     });
   });
 

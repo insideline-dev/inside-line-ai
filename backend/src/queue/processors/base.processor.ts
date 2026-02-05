@@ -19,6 +19,25 @@ const NON_RETRYABLE_PATTERNS = [
 ];
 
 /**
+ * Parse REDIS_URL into ConnectionOptions
+ */
+export function parseRedisUrl(redisUrl: string): ConnectionOptions {
+  try {
+    const url = new URL(redisUrl);
+    return {
+      host: url.hostname,
+      port: parseInt(url.port || '6379', 10),
+      password: url.password || undefined,
+      username: url.username || undefined,
+      tls: url.protocol === 'rediss:' ? {} : undefined,
+    };
+  } catch {
+    // Fallback to localhost if URL parsing fails
+    return { host: 'localhost', port: 6379 };
+  }
+}
+
+/**
  * Abstract base processor for all job workers
  * Handles error wrapping and retry logic automatically
  */
@@ -27,7 +46,8 @@ export abstract class BaseProcessor<
   TResult extends BaseJobResult,
 > {
   protected abstract readonly logger: Logger;
-  protected worker!: Worker;
+  protected worker?: Worker;
+  private initialized = false;
 
   constructor(
     protected readonly queueName: string,
@@ -37,32 +57,51 @@ export abstract class BaseProcessor<
 
   /**
    * Initialize the worker - call this in the concrete processor's onModuleInit
+   * Gracefully skips if Redis is unavailable
    */
   protected initialize() {
-    this.worker = new Worker(
-      this.queueName,
-      async (job: Job<TData>) => this.processJob(job),
-      {
-        connection: this.redisConnection,
-        concurrency: this.concurrency,
-      },
-    );
+    if (this.initialized) return;
 
-    this.worker.on('completed', (job) => {
-      this.logger.log(`Job ${job.id} completed`);
-    });
+    try {
+      this.worker = new Worker(
+        this.queueName,
+        async (job: Job<TData>) => this.processJob(job),
+        {
+          connection: this.redisConnection,
+          concurrency: this.concurrency,
+          // Don't auto-run if connection fails - wait for manual retry
+          autorun: true,
+        },
+      );
 
-    this.worker.on('failed', (job, err) => {
-      this.logger.error(`Job ${job?.id} failed: ${err.message}`);
-    });
+      this.worker.on('completed', (job) => {
+        this.logger.log(`Job ${job.id} completed`);
+      });
 
-    this.worker.on('error', (err) => {
-      this.logger.error(`Worker error: ${err.message}`);
-    });
+      this.worker.on('failed', (job, err) => {
+        this.logger.error(`Job ${job?.id} failed: ${err.message}`);
+      });
 
-    this.logger.log(
-      `Worker initialized for queue ${this.queueName} with concurrency ${this.concurrency}`,
-    );
+      // Only log connection errors once, not continuously
+      let errorLogged = false;
+      this.worker.on('error', (err) => {
+        if (!errorLogged) {
+          this.logger.warn(
+            `Worker for ${this.queueName} cannot connect to Redis: ${err.message}. Queue processing disabled.`,
+          );
+          errorLogged = true;
+        }
+      });
+
+      this.initialized = true;
+      this.logger.log(
+        `Worker initialized for queue ${this.queueName} with concurrency ${this.concurrency}`,
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Failed to initialize worker for ${this.queueName}: Redis unavailable. Queue processing disabled.`,
+      );
+    }
   }
 
   /**
@@ -130,7 +169,9 @@ export abstract class BaseProcessor<
    * Close the worker gracefully
    */
   async close() {
-    await this.worker.close();
-    this.logger.log(`Worker closed for queue ${this.queueName}`);
+    if (this.worker) {
+      await this.worker.close();
+      this.logger.log(`Worker closed for queue ${this.queueName}`);
+    }
   }
 }

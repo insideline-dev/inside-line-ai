@@ -15,7 +15,7 @@ import {
   ScoutSubmission,
 } from './entities/scout.schema';
 import { startup, StartupStatus } from '../startup/entities/startup.schema';
-import type { SubmitStartup, GetSubmissionsQuery } from './dto';
+import type { ScoutSubmitStartup, GetSubmissionsQuery } from './dto';
 
 export type PaginatedSubmissions = {
   data: ScoutSubmission[];
@@ -47,7 +47,7 @@ export class SubmissionService {
 
   async submit(
     scoutId: string,
-    dto: SubmitStartup,
+    dto: ScoutSubmitStartup,
   ): Promise<{ startup: typeof startup.$inferSelect; submission: ScoutSubmission }> {
     const [scoutApp] = await this.drizzle.db
       .select()

@@ -85,7 +85,7 @@ export class DataImportService {
         await this.drizzle.db.insert(user).values({
           email: row.email.toLowerCase(),
           name: row.name.trim(),
-          role: (role as UserRole) || UserRole.USER,
+          role: (role as UserRole) || UserRole.FOUNDER,
           emailVerified: false,
         });
 

@@ -4,14 +4,14 @@ import {
   ConflictException,
   InternalServerErrorException,
   Logger,
-} from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
-import { ConfigService } from '@nestjs/config';
-import { eq, and, lt } from 'drizzle-orm';
-import { randomBytes } from 'node:crypto';
-import { DrizzleService } from '../database';
-import { account, refreshToken as refreshTokenTable } from '../database/schema';
-import { UserAuthService, DbUser } from './user-auth.service';
+} from "@nestjs/common";
+import { JwtService } from "@nestjs/jwt";
+import { ConfigService } from "@nestjs/config";
+import { eq, and, lt } from "drizzle-orm";
+import { randomBytes } from "node:crypto";
+import { DrizzleService } from "../database";
+import { account, refreshToken as refreshTokenTable } from "../database/schema";
+import { UserAuthService, DbUser } from "./user-auth.service";
 
 export type JwtPayload = {
   sub: string;
@@ -85,7 +85,7 @@ export class AuthService {
         const user = await this.userAuth.findUserById(existingAccount.userId);
         if (!user) {
           throw new InternalServerErrorException(
-            'User not found for existing account',
+            "User not found for existing account",
           );
         }
         return user;
@@ -118,15 +118,15 @@ export class AuthService {
       // Handle unique constraint violation (duplicate account)
       if (
         error instanceof Error &&
-        error.message.includes('unique constraint')
+        error.message.includes("unique constraint")
       ) {
         this.logger.warn(
           `Duplicate OAuth account attempted: ${profile.providerType}/${profile.providerAccountId}`,
         );
-        throw new ConflictException('OAuth account already linked');
+        throw new ConflictException("OAuth account already linked");
       }
 
-      this.logger.error('Failed to create/find OAuth user', error);
+      this.logger.error("Failed to create/find OAuth user", error);
       throw error;
     }
   }
@@ -138,7 +138,7 @@ export class AuthService {
    */
   generateAccessToken(foundUser: DbUser): string {
     const payload: JwtPayload = { sub: foundUser.id, email: foundUser.email };
-    const accessExpiresIn = this.config.get('JWT_ACCESS_EXPIRES', '7d');
+    const accessExpiresIn = this.config.get("JWT_ACCESS_EXPIRES", "7d");
     return this.jwt.sign(payload, { expiresIn: accessExpiresIn });
   }
 
@@ -150,8 +150,8 @@ export class AuthService {
     const accessToken = this.generateAccessToken(foundUser);
 
     // Generate opaque refresh token (not JWT)
-    const refreshTokenValue = randomBytes(32).toString('hex');
-    const family = randomBytes(16).toString('hex');
+    const refreshTokenValue = randomBytes(32).toString("hex");
+    const family = randomBytes(16).toString("hex");
     const expiresAt = new Date(
       Date.now() + REFRESH_TOKEN_EXPIRY_DAYS * 24 * 60 * 60 * 1000,
     );
@@ -187,7 +187,7 @@ export class AuthService {
       .limit(1);
 
     if (!storedToken) {
-      throw new UnauthorizedException('Invalid refresh token');
+      throw new UnauthorizedException("Invalid refresh token");
     }
 
     // Check if token is expired
@@ -196,7 +196,7 @@ export class AuthService {
       await this.drizzle.db
         .delete(refreshTokenTable)
         .where(eq(refreshTokenTable.id, storedToken.id));
-      throw new UnauthorizedException('Refresh token expired');
+      throw new UnauthorizedException("Refresh token expired");
     }
 
     // SECURITY: Detect token reuse attack
@@ -208,13 +208,13 @@ export class AuthService {
       await this.drizzle.db
         .delete(refreshTokenTable)
         .where(eq(refreshTokenTable.family, storedToken.family));
-      throw new UnauthorizedException('Token reuse detected');
+      throw new UnauthorizedException("Token reuse detected");
     }
 
     // Get user
     const foundUser = await this.userAuth.findUserById(storedToken.userId);
     if (!foundUser) {
-      throw new UnauthorizedException('User not found');
+      throw new UnauthorizedException("User not found");
     }
 
     // Mark current token as used
@@ -225,7 +225,7 @@ export class AuthService {
 
     // Generate new tokens in same family
     const accessToken = this.generateAccessToken(foundUser);
-    const newRefreshTokenValue = randomBytes(32).toString('hex');
+    const newRefreshTokenValue = randomBytes(32).toString("hex");
     const expiresAt = new Date(
       Date.now() + REFRESH_TOKEN_EXPIRY_DAYS * 24 * 60 * 60 * 1000,
     );

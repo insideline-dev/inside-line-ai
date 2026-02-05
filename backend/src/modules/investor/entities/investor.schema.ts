@@ -8,10 +8,84 @@ import {
   index,
   uuid,
   check,
+  jsonb,
+  real,
+  doublePrecision,
 } from 'drizzle-orm/pg-core';
 import { user } from '../../../auth/entities/auth.schema';
-import { startup } from '../../startup/entities/startup.schema';
-import { crudOwnPolicy, appRole, isOwnerOrAdmin } from '../../../common/rls';
+import {
+  startup,
+  StartupStage,
+  startupStageEnum,
+} from '../../startup/entities/startup.schema';
+
+// ============================================================================
+// TYPES
+// ============================================================================
+
+export type ScoringWeights = {
+  team: number;
+  market: number;
+  product: number;
+  traction: number;
+  businessModel: number;
+  gtm: number;
+  financials: number;
+  competitiveAdvantage: number;
+  legal: number;
+  dealTerms: number;
+  exitPotential: number;
+};
+
+export type ScoringRationale = {
+  team: string;
+  market: string;
+  product: string;
+  traction: string;
+  businessModel: string;
+  gtm: string;
+  financials: string;
+  competitiveAdvantage: string;
+  legal: string;
+  dealTerms: string;
+  exitPotential: string;
+};
+
+// ============================================================================
+// INVESTOR PROFILE TABLE
+// ============================================================================
+
+/**
+ * Fund metadata for an investor (separate from thesis)
+ *
+ * One profile per investor
+ */
+export const investorProfile = pgTable(
+  'investor_profile',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .unique()
+      .references(() => user.id, { onDelete: 'cascade' }),
+
+    fundName: text('fund_name').notNull(),
+    fundDescription: text('fund_description'),
+    aum: text('aum'), // Assets under management as text (e.g., "$50M-100M")
+    teamSize: integer('team_size'),
+    website: text('website'),
+    logoUrl: text('logo_url'),
+
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at')
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index('investor_profile_user_idx').on(table.userId),
+  ],
+);
 
 // ============================================================================
 // INVESTOR THESIS TABLE
@@ -44,6 +118,27 @@ export const investorThesis = pgTable(
     dealBreakers: text('deal_breakers').array(),
     notes: text('notes'),
 
+    // Business model preferences
+    businessModels: text('business_models').array(),
+
+    // Metric thresholds
+    minRevenue: integer('min_revenue'),
+    minGrowthRate: real('min_growth_rate'),
+    minTeamSize: integer('min_team_size'),
+
+    // Unstructured narrative
+    thesisNarrative: text('thesis_narrative'),
+    antiPortfolio: text('anti_portfolio'),
+
+    // Fund info
+    website: text('website'),
+    fundSize: doublePrecision('fund_size'),
+
+    // AI-generated summary
+    thesisSummary: text('thesis_summary'),
+    portfolioCompanies: jsonb('portfolio_companies'),
+    thesisSummaryGeneratedAt: timestamp('thesis_summary_generated_at'),
+
     // Active status
     isActive: boolean('is_active').default(true).notNull(),
 
@@ -55,11 +150,8 @@ export const investorThesis = pgTable(
   },
   (table) => [
     index('investor_thesis_user_idx').on(table.userId),
-
-    // RLS: Only owner can access their thesis
-    ...crudOwnPolicy(table.userId),
   ],
-).enableRLS();
+);
 
 // ============================================================================
 // SCORING WEIGHTS TABLE
@@ -101,11 +193,8 @@ export const scoringWeight = pgTable(
       'weights_sum_100',
       sql`${table.marketWeight} + ${table.teamWeight} + ${table.productWeight} + ${table.tractionWeight} + ${table.financialsWeight} = 100`,
     ),
-
-    // RLS: Only owner can access their weights
-    ...crudOwnPolicy(table.userId),
   ],
-).enableRLS();
+);
 
 // ============================================================================
 // STARTUP MATCHES TABLE
@@ -152,15 +241,86 @@ export const startupMatch = pgTable(
     index('match_investor_score_idx').on(table.investorId, table.overallScore),
     index('match_startup_idx').on(table.startupId),
     index('match_investor_saved_idx').on(table.investorId, table.isSaved),
-
-    // RLS: Investors see only their matches (investorId is the owner column)
-    ...crudOwnPolicy(table.investorId),
   ],
-).enableRLS();
+);
+
+// ============================================================================
+// STAGE SCORING WEIGHT TABLE
+// ============================================================================
+
+/**
+ * Default scoring weights per startup stage (admin-managed)
+ *
+ * These are system-wide defaults that investors can override
+ */
+export const stageScoringWeight = pgTable(
+  'stage_scoring_weight',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    stage: startupStageEnum('stage').notNull().unique(),
+    weights: jsonb('weights').$type<ScoringWeights>().notNull(),
+    rationale: jsonb('rationale').$type<ScoringRationale>().notNull(),
+    overallRationale: text('overall_rationale'),
+    lastModifiedBy: uuid('last_modified_by').references(() => user.id),
+
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at')
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index('stage_scoring_weight_stage_idx').on(table.stage),
+  ],
+);
+
+// ============================================================================
+// INVESTOR SCORING PREFERENCE TABLE
+// ============================================================================
+
+/**
+ * Custom scoring weights per investor per stage
+ *
+ * Allows investors to override default stage weights
+ */
+export const investorScoringPreference = pgTable(
+  'investor_scoring_preference',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    investorId: uuid('investor_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    stage: startupStageEnum('stage').notNull(),
+    useCustomWeights: boolean('use_custom_weights').default(false).notNull(),
+    customWeights: jsonb('custom_weights').$type<ScoringWeights>(),
+
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at')
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index('investor_scoring_preference_investor_stage_idx').on(
+      table.investorId,
+      table.stage,
+    ),
+  ],
+);
 
 // ============================================================================
 // RELATIONS
 // ============================================================================
+
+export const investorProfileRelations = relations(
+  investorProfile,
+  ({ one }) => ({
+    user: one(user, {
+      fields: [investorProfile.userId],
+      references: [user.id],
+    }),
+  }),
+);
 
 export const investorThesisRelations = relations(investorThesis, ({ one }) => ({
   user: one(user, {
@@ -187,13 +347,41 @@ export const startupMatchRelations = relations(startupMatch, ({ one }) => ({
   }),
 }));
 
+export const stageScoringWeightRelations = relations(
+  stageScoringWeight,
+  ({ one }) => ({
+    modifier: one(user, {
+      fields: [stageScoringWeight.lastModifiedBy],
+      references: [user.id],
+    }),
+  }),
+);
+
+export const investorScoringPreferenceRelations = relations(
+  investorScoringPreference,
+  ({ one }) => ({
+    investor: one(user, {
+      fields: [investorScoringPreference.investorId],
+      references: [user.id],
+    }),
+  }),
+);
+
 // ============================================================================
 // TYPE EXPORTS
 // ============================================================================
 
+export type InvestorProfile = typeof investorProfile.$inferSelect;
+export type NewInvestorProfile = typeof investorProfile.$inferInsert;
 export type InvestorThesis = typeof investorThesis.$inferSelect;
 export type NewInvestorThesis = typeof investorThesis.$inferInsert;
 export type ScoringWeight = typeof scoringWeight.$inferSelect;
 export type NewScoringWeight = typeof scoringWeight.$inferInsert;
 export type StartupMatch = typeof startupMatch.$inferSelect;
 export type NewStartupMatch = typeof startupMatch.$inferInsert;
+export type StageScoringWeight = typeof stageScoringWeight.$inferSelect;
+export type NewStageScoringWeight = typeof stageScoringWeight.$inferInsert;
+export type InvestorScoringPreference =
+  typeof investorScoringPreference.$inferSelect;
+export type NewInvestorScoringPreference =
+  typeof investorScoringPreference.$inferInsert;

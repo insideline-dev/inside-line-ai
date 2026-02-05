@@ -1,0 +1,1331 @@
+
+ ▐▛███▜▌   Claude Code v2.1.31
+▝▜█████▛▘  Sonnet 4.5 · Claude Max
+  ▘▘ ▝▝    ~/Developer/inside-line
+
+╭──────────────────────────────────────────────────────────────────────────────╮
+│ Plan to implement                                                            │
+│                                                                              │
+│ Non-AI Feature Implementation Plan - All Roles Parallel Execution            │
+│                                                                              │
+│ Overview                                                                     │
+│                                                                              │
+│ This plan implements all non-AI features across 4 user roles (Admin,         │
+│ Investor, Scout, Founder) with parallel execution by 4 developers. Includes  │
+│ third-party integrations: web scraping (cheerio), LinkedIn (Unipile), and    │
+│ PDF generation.                                                              │
+│                                                                              │
+│ Strategy: Phase 0 (shared foundation) → Phases 1-4 (parallel role            │
+│ implementations)                                                             │
+│                                                                              │
+│ ---                                                                          │
+│ Phase 0: Shared Foundation (REQUIRED FIRST - 2-3 days)                       │
+│                                                                              │
+│ Purpose: Unlock all parallel workstreams                                     │
+│                                                                              │
+│ 0.1 Install Dependencies & Configure Integrations                            │
+│                                                                              │
+│ Backend:                                                                     │
+│ cd backend                                                                   │
+│ bun add cheerio                                                              │
+│ bun add -D @types/cheerio                                                    │
+│                                                                              │
+│ Environment Variables (add to .env.example):                                 │
+│ # Unipile (LinkedIn scraping)                                                │
+│ UNIPILE_DSN=your-dsn.unipile.app                                             │
+│ UNIPILE_API_KEY=your_api_key                                                 │
+│ UNIPILE_ACCOUNT_ID=your_account_id                                           │
+│                                                                              │
+│ Files to modify:                                                             │
+│ - backend/package.json - add cheerio                                         │
+│ - backend/.env.example - add Unipile vars                                    │
+│                                                                              │
+│ 0.2 Complete PDF Generation Templates                                        │
+│                                                                              │
+│ Create these template files:                                                 │
+│                                                                              │
+│ backend/src/modules/startup/templates/memo.template.ts:                      │
+│ import PDFDocument from 'pdfkit';                                            │
+│ import type { Startup, StartupScores } from '../entities';                   │
+│                                                                              │
+│ export function generateMemoTemplate(                                        │
+│   doc: PDFDocument,                                                          │
+│   startup: Startup,                                                          │
+│   scores?: StartupScores                                                     │
+│ ) {                                                                          │
+│   // Header                                                                  │
+│   doc.fontSize(24).text('INVESTMENT MEMO', { align: 'center' });             │
+│   doc.moveDown();                                                            │
+│                                                                              │
+│   // Company Overview                                                        │
+│   doc.fontSize(18).text('Company Overview');                                 │
+│   doc.fontSize(12).text(`Name: ${startup.name}`);                            │
+│   doc.text(`Industry: ${startup.industry}`);                                 │
+│   doc.text(`Stage: ${startup.stage}`);                                       │
+│   doc.moveDown();                                                            │
+│                                                                              │
+│   // Scoring (if available)                                                  │
+│   if (scores) {                                                              │
+│     doc.fontSize(18).text('Investment Scores');                              │
+│     doc.fontSize(12)                                                         │
+│       .text(`Market: ${scores.marketScore}/100`)                             │
+│       .text(`Team: ${scores.teamScore}/100`)                                 │
+│       .text(`Product: ${scores.productScore}/100`)                           │
+│       .text(`Traction: ${scores.tractionScore}/100`)                         │
+│       .text(`Financials: ${scores.financialsScore}/100`);                    │
+│   }                                                                          │
+│                                                                              │
+│   // Add more sections: Description, Team, Market Analysis, etc.             │
+│ }                                                                            │
+│                                                                              │
+│ backend/src/modules/startup/templates/report.template.ts:                    │
+│ import PDFDocument from 'pdfkit';                                            │
+│ import type { Startup, MarketAnalysis } from '../entities';                  │
+│                                                                              │
+│ export function generateReportTemplate(                                      │
+│   doc: PDFDocument,                                                          │
+│   startup: Startup,                                                          │
+│   analysis?: MarketAnalysis                                                  │
+│ ) {                                                                          │
+│   // Title                                                                   │
+│   doc.fontSize(24).text('STARTUP ANALYSIS REPORT', { align: 'center' });     │
+│   doc.moveDown();                                                            │
+│                                                                              │
+│   // Executive Summary                                                       │
+│   doc.fontSize(18).text('Executive Summary');                                │
+│   doc.fontSize(12).text(startup.description || 'No description provided');   │
+│   doc.moveDown();                                                            │
+│                                                                              │
+│   // Market Analysis                                                         │
+│   if (analysis) {                                                            │
+│     doc.fontSize(18).text('Market Analysis');                                │
+│     doc.fontSize(12).text(`TAM: ${analysis.marketSize.tam}`);                │
+│     // Add competitors, trends, risks, opportunities                         │
+│   }                                                                          │
+│                                                                              │
+│   // Add more sections: Financials, Competitive Landscape, etc.              │
+│ }                                                                            │
+│                                                                              │
+│ Update PdfProcessor                                                          │
+│ (backend/src/modules/analysis/processors/pdf.processor.ts):                  │
+│ import { generateMemoTemplate } from                                         │
+│ '../../startup/templates/memo.template';                                     │
+│ import PDFDocument from 'pdfkit';                                            │
+│                                                                              │
+│ private async generateAndUploadPdf(                                          │
+│   startupData: Startup,                                                      │
+│   scores: StartupScores | null,                                              │
+│   userId: string,                                                            │
+│ ): Promise<{ pdfUrl: string; pdfKey: string }> {                             │
+│   // Create PDF document                                                     │
+│   const doc = new PDFDocument();                                             │
+│   const chunks: Buffer[] = [];                                               │
+│                                                                              │
+│   doc.on('data', (chunk) => chunks.push(chunk));                             │
+│                                                                              │
+│   // Use template                                                            │
+│   generateMemoTemplate(doc, startupData, scores);                            │
+│                                                                              │
+│   doc.end();                                                                 │
+│                                                                              │
+│   // Wait for PDF to finish                                                  │
+│   const pdfBuffer = await new Promise<Buffer>((resolve) => {                 │
+│     doc.on('end', () => resolve(Buffer.concat(chunks)));                     │
+│   });                                                                        │
+│                                                                              │
+│   // Upload to storage                                                       │
+│   const result = await this.storageService.uploadGeneratedContent(           │
+│     userId,                                                                  │
+│     'documents',                                                             │
+│     pdfBuffer,                                                               │
+│     'application/pdf',                                                       │
+│     startupData.id,                                                          │
+│     {                                                                        │
+│       startupId: startupData.id,                                             │
+│       startupName: startupData.name,                                         │
+│       generatedAt: new Date().toISOString(),                                 │
+│     },                                                                       │
+│   );                                                                         │
+│                                                                              │
+│   return { pdfUrl: result.url, pdfKey: result.key };                         │
+│ }                                                                            │
+│                                                                              │
+│ 0.3 Create Shared Database Schemas                                           │
+│                                                                              │
+│ New Schema Files:                                                            │
+│                                                                              │
+│ backend/src/modules/investor/entities/investor-note.schema.ts:               │
+│ import { pgTable, uuid, text, timestamp, boolean } from                      │
+│ 'drizzle-orm/pg-core';                                                       │
+│ import { user } from '../../../auth/entities/auth.schema';                   │
+│ import { startup } from '../../startup/entities/startup.schema';             │
+│                                                                              │
+│ export const investorNote = pgTable('investor_note', {                       │
+│   id: uuid('id').primaryKey().defaultRandom(),                               │
+│   investorId: uuid('investor_id').notNull().references(() => user.id, {      │
+│ onDelete: 'cascade' }),                                                      │
+│   startupId: uuid('startup_id').notNull().references(() => startup.id, {     │
+│ onDelete: 'cascade' }),                                                      │
+│   content: text('content').notNull(),                                        │
+│   category: text('category'),                                                │
+│   isPinned: boolean('is_pinned').default(false).notNull(),                   │
+│   createdAt: timestamp('created_at').defaultNow().notNull(),                 │
+│   updatedAt: timestamp('updated_at').defaultNow().$onUpdate(() => new        │
+│ Date()).notNull(),                                                           │
+│ });                                                                          │
+│                                                                              │
+│ export type InvestorNote = typeof investorNote.$inferSelect;                 │
+│ export type NewInvestorNote = typeof investorNote.$inferInsert;              │
+│                                                                              │
+│ backend/src/modules/investor/entities/investor-portfolio.schema.ts:          │
+│ import { pgTable, uuid, text, timestamp, integer } from                      │
+│ 'drizzle-orm/pg-core';                                                       │
+│ import { user } from '../../../auth/entities/auth.schema';                   │
+│ import { startup } from '../../startup/entities/startup.schema';             │
+│                                                                              │
+│ export const investorPortfolio = pgTable('investor_portfolio', {             │
+│   id: uuid('id').primaryKey().defaultRandom(),                               │
+│   investorId: uuid('investor_id').notNull().references(() => user.id, {      │
+│ onDelete: 'cascade' }),                                                      │
+│   startupId: uuid('startup_id').notNull().references(() => startup.id, {     │
+│ onDelete: 'cascade' }),                                                      │
+│   dealSize: integer('deal_size'),                                            │
+│   dealStage: text('deal_stage'),                                             │
+│   investedAt: timestamp('invested_at').notNull(),                            │
+│   exitedAt: timestamp('exited_at'),                                          │
+│   notes: text('notes'),                                                      │
+│   createdAt: timestamp('created_at').defaultNow().notNull(),                 │
+│   updatedAt: timestamp('updated_at').defaultNow().$onUpdate(() => new        │
+│ Date()).notNull(),                                                           │
+│ });                                                                          │
+│                                                                              │
+│ export type InvestorPortfolio = typeof investorPortfolio.$inferSelect;       │
+│ export type NewInvestorPortfolio = typeof investorPortfolio.$inferInsert;    │
+│                                                                              │
+│ backend/src/modules/scout/entities/scout-commission.schema.ts:               │
+│ import { pgTable, uuid, integer, text, timestamp } from                      │
+│ 'drizzle-orm/pg-core';                                                       │
+│ import { user } from '../../../auth/entities/auth.schema';                   │
+│ import { scoutSubmission } from './scout.schema';                            │
+│                                                                              │
+│ export const scoutCommission = pgTable('scout_commission', {                 │
+│   id: uuid('id').primaryKey().defaultRandom(),                               │
+│   scoutId: uuid('scout_id').notNull().references(() => user.id, { onDelete:  │
+│ 'cascade' }),                                                                │
+│   submissionId: uuid('submission_id').notNull().references(() =>             │
+│ scoutSubmission.id),                                                         │
+│   dealSize: integer('deal_size').notNull(),                                  │
+│   commissionRate: integer('commission_rate').notNull(), // in basis points   │
+│ (e.g., 500 = 5%)                                                             │
+│   commissionAmount: integer('commission_amount').notNull(),                  │
+│   status: text('status').notNull().default('pending'), // pending, paid      │
+│   paidAt: timestamp('paid_at'),                                              │
+│   createdAt: timestamp('created_at').defaultNow().notNull(),                 │
+│ });                                                                          │
+│                                                                              │
+│ export type ScoutCommission = typeof scoutCommission.$inferSelect;           │
+│ export type NewScoutCommission = typeof scoutCommission.$inferInsert;        │
+│                                                                              │
+│ backend/src/modules/startup/entities/data-room.schema.ts:                    │
+│ import { pgTable, uuid, text, timestamp, jsonb } from 'drizzle-orm/pg-core'; │
+│ import { startup } from './startup.schema';                                  │
+│ import { asset } from '../../../storage/entities/asset.schema';              │
+│                                                                              │
+│ export const dataRoom = pgTable('data_room', {                               │
+│   id: uuid('id').primaryKey().defaultRandom(),                               │
+│   startupId: uuid('startup_id').notNull().references(() => startup.id, {     │
+│ onDelete: 'cascade' }),                                                      │
+│   assetId: uuid('asset_id').notNull().references(() => asset.id),            │
+│   category: text('category').notNull(), // 'pitch_deck', 'financials',       │
+│ 'legal', 'product'                                                           │
+│   visibleToInvestors:                                                        │
+│ jsonb('visible_to_investors').$type<string[]>().default([]),                 │
+│   uploadedAt: timestamp('uploaded_at').defaultNow().notNull(),               │
+│ });                                                                          │
+│                                                                              │
+│ export type DataRoom = typeof dataRoom.$inferSelect;                         │
+│ export type NewDataRoom = typeof dataRoom.$inferInsert;                      │
+│                                                                              │
+│ backend/src/modules/startup/entities/investor-interest.schema.ts:            │
+│ import { pgTable, uuid, text, timestamp } from 'drizzle-orm/pg-core';        │
+│ import { user } from '../../../auth/entities/auth.schema';                   │
+│ import { startup } from './startup.schema';                                  │
+│                                                                              │
+│ export const investorInterest = pgTable('investor_interest', {               │
+│   id: uuid('id').primaryKey().defaultRandom(),                               │
+│   investorId: uuid('investor_id').notNull().references(() => user.id, {      │
+│ onDelete: 'cascade' }),                                                      │
+│   startupId: uuid('startup_id').notNull().references(() => startup.id, {     │
+│ onDelete: 'cascade' }),                                                      │
+│   status: text('status').notNull().default('interested'), // interested,     │
+│ passed, meeting_scheduled                                                    │
+│   notes: text('notes'),                                                      │
+│   createdAt: timestamp('created_at').defaultNow().notNull(),                 │
+│   updatedAt: timestamp('updated_at').defaultNow().$onUpdate(() => new        │
+│ Date()).notNull(),                                                           │
+│ });                                                                          │
+│                                                                              │
+│ export type InvestorInterest = typeof investorInterest.$inferSelect;         │
+│ export type NewInvestorInterest = typeof investorInterest.$inferInsert;      │
+│                                                                              │
+│ backend/src/modules/startup/entities/meeting.schema.ts:                      │
+│ import { pgTable, uuid, text, timestamp, integer } from                      │
+│ 'drizzle-orm/pg-core';                                                       │
+│ import { user } from '../../../auth/entities/auth.schema';                   │
+│ import { startup } from './startup.schema';                                  │
+│                                                                              │
+│ export const meeting = pgTable('meeting', {                                  │
+│   id: uuid('id').primaryKey().defaultRandom(),                               │
+│   startupId: uuid('startup_id').notNull().references(() => startup.id, {     │
+│ onDelete: 'cascade' }),                                                      │
+│   investorId: uuid('investor_id').notNull().references(() => user.id, {      │
+│ onDelete: 'cascade' }),                                                      │
+│   scheduledAt: timestamp('scheduled_at').notNull(),                          │
+│   duration: integer('duration').notNull().default(30), // minutes            │
+│   location: text('location'),                                                │
+│   notes: text('notes'),                                                      │
+│   status: text('status').notNull().default('scheduled'), // scheduled,       │
+│ completed, cancelled                                                         │
+│   createdAt: timestamp('created_at').defaultNow().notNull(),                 │
+│   updatedAt: timestamp('updated_at').defaultNow().$onUpdate(() => new        │
+│ Date()).notNull(),                                                           │
+│ });                                                                          │
+│                                                                              │
+│ export type Meeting = typeof meeting.$inferSelect;                           │
+│ export type NewMeeting = typeof meeting.$inferInsert;                        │
+│                                                                              │
+│ Export all schemas (backend/src/database/schema.ts):                         │
+│ // Add to existing exports:                                                  │
+│ export * from '../modules/investor/entities/investor-note.schema';           │
+│ export * from '../modules/investor/entities/investor-portfolio.schema';      │
+│ export * from '../modules/scout/entities/scout-commission.schema';           │
+│ export * from '../modules/startup/entities/data-room.schema';                │
+│ export * from '../modules/startup/entities/investor-interest.schema';        │
+│ export * from '../modules/startup/entities/meeting.schema';                  │
+│                                                                              │
+│ 0.4 Create Shared Utilities                                                  │
+│                                                                              │
+│ backend/src/common/utils/web-scraper.util.ts:                                │
+│ import * as cheerio from 'cheerio';                                          │
+│                                                                              │
+│ export interface WebsiteMetadata {                                           │
+│   title: string;                                                             │
+│   description: string;                                                       │
+│   logo?: string;                                                             │
+│   industry?: string;                                                         │
+│   teamSize?: number;                                                         │
+│ }                                                                            │
+│                                                                              │
+│ export async function scrapeWebsiteMetadata(url: string):                    │
+│ Promise<WebsiteMetadata> {                                                   │
+│   try {                                                                      │
+│     if (!url.startsWith('http://') && !url.startsWith('https://')) {         │
+│       url = 'https://' + url;                                                │
+│     }                                                                        │
+│                                                                              │
+│     const response = await fetch(url, {                                      │
+│       headers: {                                                             │
+│         'User-Agent': 'Mozilla/5.0 (compatible; InsideLine/1.0)',            │
+│       },                                                                     │
+│     });                                                                      │
+│                                                                              │
+│     const html = await response.text();                                      │
+│     const $ = cheerio.load(html);                                            │
+│                                                                              │
+│     return {                                                                 │
+│       title: $('title').text() ||                                            │
+│ $('meta[property="og:title"]').attr('content') || '',                        │
+│       description: $('meta[name="description"]').attr('content') ||          │
+│ $('meta[property="og:description"]').attr('content') || '',                  │
+│       logo: $('meta[property="og:image"]').attr('content') ||                │
+│ $('link[rel="icon"]').attr('href'),                                          │
+│     };                                                                       │
+│   } catch (error) {                                                          │
+│     console.error(`Failed to scrape ${url}:`, error);                        │
+│     return {                                                                 │
+│       title: '',                                                             │
+│       description: '',                                                       │
+│     };                                                                       │
+│   }                                                                          │
+│ }                                                                            │
+│                                                                              │
+│ export function sanitizeHtml(html: string): string {                         │
+│   const $ = cheerio.load(html);                                              │
+│   $('script, style, iframe').remove();                                       │
+│   return $.text().trim();                                                    │
+│ }                                                                            │
+│                                                                              │
+│ frontend/src/components/DataTable.tsx:                                       │
+│ import { useReactTable, getCoreRowModel, getSortedRowModel, flexRender }     │
+│ from '@tanstack/react-table';                                                │
+│                                                                              │
+│ export function DataTable<T>({ data, columns }: { data: T[], columns: any[]  │
+│ }) {                                                                         │
+│   const table = useReactTable({                                              │
+│     data,                                                                    │
+│     columns,                                                                 │
+│     getCoreRowModel: getCoreRowModel(),                                      │
+│     getSortedRowModel: getSortedRowModel(),                                  │
+│   });                                                                        │
+│                                                                              │
+│   return (                                                                   │
+│     <table className="min-w-full divide-y divide-gray-200">                  │
+│       <thead>                                                                │
+│         {table.getHeaderGroups().map(headerGroup => (                        │
+│           <tr key={headerGroup.id}>                                          │
+│             {headerGroup.headers.map(header => (                             │
+│               <th                                                            │
+│ key={header.id}>{flexRender(header.column.columnDef.header,                  │
+│ header.getContext())}</th>                                                   │
+│             ))}                                                              │
+│           </tr>                                                              │
+│         ))}                                                                  │
+│       </thead>                                                               │
+│       <tbody>                                                                │
+│         {table.getRowModel().rows.map(row => (                               │
+│           <tr key={row.id}>                                                  │
+│             {row.getVisibleCells().map(cell => (                             │
+│               <td key={cell.id}>{flexRender(cell.column.columnDef.cell,      │
+│ cell.getContext())}</td>                                                     │
+│             ))}                                                              │
+│           </tr>                                                              │
+│         ))}                                                                  │
+│       </tbody>                                                               │
+│     </table>                                                                 │
+│   );                                                                         │
+│ }                                                                            │
+│                                                                              │
+│ frontend/src/components/FileUploadDropzone.tsx:                              │
+│ import { useCallback } from 'react';                                         │
+│ import { useDropzone } from 'react-dropzone';                                │
+│                                                                              │
+│ export function FileUploadDropzone({ onUpload }: { onUpload: (file: File) => │
+│  void }) {                                                                   │
+│   const onDrop = useCallback((acceptedFiles: File[]) => {                    │
+│     if (acceptedFiles.length > 0) {                                          │
+│       onUpload(acceptedFiles[0]);                                            │
+│     }                                                                        │
+│   }, [onUpload]);                                                            │
+│                                                                              │
+│   const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop │
+│  });                                                                         │
+│                                                                              │
+│   return (                                                                   │
+│     <div {...getRootProps()} className="border-2 border-dashed               │
+│ border-gray-300 rounded-lg p-8 text-center cursor-pointer">                  │
+│       <input {...getInputProps()} />                                         │
+│       {isDragActive ? (                                                      │
+│         <p>Drop the file here...</p>                                         │
+│       ) : (                                                                  │
+│         <p>Drag and drop a file here, or click to select</p>                 │
+│       )}                                                                     │
+│     </div>                                                                   │
+│   );                                                                         │
+│ }                                                                            │
+│                                                                              │
+│ Run database migration:                                                      │
+│ cd backend                                                                   │
+│ bun run db:generate                                                          │
+│ bun run db:migrate                                                           │
+│                                                                              │
+│ ---                                                                          │
+│ Phase 1: Admin Workstream (5-7 days) - Developer A                           │
+│                                                                              │
+│ Backend Services                                                             │
+│                                                                              │
+│ backend/src/modules/admin/integration-health.service.ts:                     │
+│ import { Injectable } from '@nestjs/common';                                 │
+│ import { ConfigService } from '@nestjs/config';                              │
+│ import { UnipileService } from '../integrations/unipile/unipile.service';    │
+│                                                                              │
+│ @Injectable()                                                                │
+│ export class IntegrationHealthService {                                      │
+│   constructor(                                                               │
+│     private config: ConfigService,                                           │
+│     private unipile: UnipileService,                                         │
+│   ) {}                                                                       │
+│                                                                              │
+│   async getHealth() {                                                        │
+│     return {                                                                 │
+│       unipile: await this.checkUnipile(),                                    │
+│       twilio: await this.checkTwilio(),                                      │
+│       storage: await this.checkStorage(),                                    │
+│       redis: await this.checkRedis(),                                        │
+│     };                                                                       │
+│   }                                                                          │
+│                                                                              │
+│   private async checkUnipile() {                                             │
+│     return {                                                                 │
+│       status: this.unipile.isConfigured() ? 'healthy' : 'not_configured',    │
+│       lastChecked: new Date(),                                               │
+│     };                                                                       │
+│   }                                                                          │
+│                                                                              │
+│   // Implement other health checks...                                        │
+│ }                                                                            │
+│                                                                              │
+│ backend/src/modules/admin/system-config.service.ts:                          │
+│ import { Injectable } from '@nestjs/common';                                 │
+│ import { DrizzleService } from '../../database';                             │
+│                                                                              │
+│ @Injectable()                                                                │
+│ export class SystemConfigService {                                           │
+│   constructor(private drizzle: DrizzleService) {}                            │
+│                                                                              │
+│   async getConfig() {                                                        │
+│     // Return non-secret config                                              │
+│     return {                                                                 │
+│       featureFlags: {                                                        │
+│         aiAnalysis: false, // AI_PLACEHOLDER                                 │
+│         messaging: false,  // AI_PLACEHOLDER                                 │
+│         webScraping: true,                                                   │
+│       },                                                                     │
+│     };                                                                       │
+│   }                                                                          │
+│ }                                                                            │
+│                                                                              │
+│ backend/src/modules/admin/bulk-data.service.ts:                              │
+│ import { Injectable } from '@nestjs/common';                                 │
+│ import { parse } from 'csv-parse/sync';                                      │
+│                                                                              │
+│ @Injectable()                                                                │
+│ export class BulkDataService {                                               │
+│   async importStartups(csvBuffer: Buffer) {                                  │
+│     const records = parse(csvBuffer, { columns: true, skip_empty_lines: true │
+│  });                                                                         │
+│     // Process and insert startups                                           │
+│     return { imported: records.length };                                     │
+│   }                                                                          │
+│                                                                              │
+│   async exportStartups(filters: any) {                                       │
+│     // Query startups and format as CSV                                      │
+│     return Buffer.from('name,industry,stage\nExample,Tech,Seed');            │
+│   }                                                                          │
+│ }                                                                            │
+│                                                                              │
+│ Backend Controller Extensions                                                │
+│                                                                              │
+│ backend/src/modules/admin/admin.controller.ts (add endpoints):               │
+│ @Get('integrations/health')                                                  │
+│ async getIntegrationHealth() {                                               │
+│   return this.integrationHealthService.getHealth();                          │
+│ }                                                                            │
+│                                                                              │
+│ @Get('config')                                                               │
+│ async getSystemConfig() {                                                    │
+│   return this.systemConfigService.getConfig();                               │
+│ }                                                                            │
+│                                                                              │
+│ @Post('bulk/import-startups')                                                │
+│ @UseInterceptors(FileInterceptor('file'))                                    │
+│ async importStartups(@UploadedFile() file: Express.Multer.File) {            │
+│   return this.bulkDataService.importStartups(file.buffer);                   │
+│ }                                                                            │
+│                                                                              │
+│ @Get('bulk/export-startups')                                                 │
+│ async exportStartups(@Res() res: Response, @Query() filters: any) {          │
+│   const csv = await this.bulkDataService.exportStartups(filters);            │
+│   res.setHeader('Content-Type', 'text/csv');                                 │
+│   res.setHeader('Content-Disposition', 'attachment; filename=startups.csv'); │
+│   res.send(csv);                                                             │
+│ }                                                                            │
+│                                                                              │
+│ // AI_PLACEHOLDER                                                            │
+│ @Get('agent/conversations')                                                  │
+│ async getConversations() {                                                   │
+│   return { data: [], total: 0, message: 'AI feature coming soon' };          │
+│ }                                                                            │
+│                                                                              │
+│ Frontend Pages                                                               │
+│                                                                              │
+│ frontend/src/routes/_protected/admin/integrations.tsx:                       │
+│ import { useQuery } from '@tanstack/react-query';                            │
+│ import { adminApi } from '@/api';                                            │
+│                                                                              │
+│ export default function IntegrationsPage() {                                 │
+│   const { data } = useQuery({                                                │
+│     queryKey: ['admin', 'integrations'],                                     │
+│     queryFn: () => adminApi.getIntegrationHealth(),                          │
+│   });                                                                        │
+│                                                                              │
+│   return (                                                                   │
+│     <div>                                                                    │
+│       <h1>Integration Health</h1>                                            │
+│       <div className="grid grid-cols-2 gap-4">                               │
+│         {Object.entries(data || {}).map(([key, health]) => (                 │
+│           <div key={key} className="border p-4 rounded">                     │
+│             <h3>{key}</h3>                                                   │
+│             <div className={health.status === 'healthy' ? 'text-green-600' : │
+│  'text-red-600'}>                                                            │
+│               {health.status}                                                │
+│             </div>                                                           │
+│           </div>                                                             │
+│         ))}                                                                  │
+│       </div>                                                                 │
+│     </div>                                                                   │
+│   );                                                                         │
+│ }                                                                            │
+│                                                                              │
+│ frontend/src/routes/_protected/admin/config.tsx:                             │
+│ import { useQuery, useMutation } from '@tanstack/react-query';               │
+│                                                                              │
+│ export default function ConfigPage() {                                       │
+│   const { data } = useQuery({                                                │
+│     queryKey: ['admin', 'config'],                                           │
+│     queryFn: () => adminApi.getConfig(),                                     │
+│   });                                                                        │
+│                                                                              │
+│   return (                                                                   │
+│     <div>                                                                    │
+│       <h1>System Configuration</h1>                                          │
+│       <div>                                                                  │
+│         <h2>Feature Flags</h2>                                               │
+│         {/* Toggle switches for feature flags */}                            │
+│       </div>                                                                 │
+│       <div>                                                                  │
+│         <h2>Scoring Weights</h2>                                             │
+│         {/* Weight sliders */}                                               │
+│       </div>                                                                 │
+│     </div>                                                                   │
+│   );                                                                         │
+│ }                                                                            │
+│                                                                              │
+│ frontend/src/routes/_protected/admin/queue.tsx:                              │
+│ export default function QueuePage() {                                        │
+│   const { data } = useQuery({                                                │
+│     queryKey: ['admin', 'queue'],                                            │
+│     queryFn: () => adminApi.getQueueStatus(),                                │
+│   });                                                                        │
+│                                                                              │
+│   return (                                                                   │
+│     <div>                                                                    │
+│       <h1>Job Queue</h1>                                                     │
+│       <DataTable data={data?.active || []} columns={jobColumns} />           │
+│     </div>                                                                   │
+│   );                                                                         │
+│ }                                                                            │
+│                                                                              │
+│ frontend/src/routes/_protected/admin/bulk-data.tsx:                          │
+│ import { FileUploadDropzone } from '@/components/FileUploadDropzone';        │
+│                                                                              │
+│ export default function BulkDataPage() {                                     │
+│   const importMutation = useMutation({                                       │
+│     mutationFn: (file: File) => adminApi.importStartups(file),               │
+│   });                                                                        │
+│                                                                              │
+│   return (                                                                   │
+│     <div>                                                                    │
+│       <h1>Bulk Data Management</h1>                                          │
+│       <section>                                                              │
+│         <h2>Import Startups</h2>                                             │
+│         <FileUploadDropzone onUpload={(file) => importMutation.mutate(file)} │
+│  />                                                                          │
+│       </section>                                                             │
+│       <section>                                                              │
+│         <h2>Export Data</h2>                                                 │
+│         <button onClick={() => adminApi.exportStartups()}>Export Startups    │
+│ CSV</button>                                                                 │
+│       </section>                                                             │
+│     </div>                                                                   │
+│   );                                                                         │
+│ }                                                                            │
+│                                                                              │
+│ ---                                                                          │
+│ Phase 2: Investor Workstream (6-8 days) - Developer B                        │
+│                                                                              │
+│ Backend Services                                                             │
+│                                                                              │
+│ backend/src/modules/investor/investor-note.service.ts:                       │
+│ import { Injectable } from '@nestjs/common';                                 │
+│ import { DrizzleService } from '../../database';                             │
+│ import { investorNote } from './entities/investor-note.schema';              │
+│ import { eq, and } from 'drizzle-orm';                                       │
+│                                                                              │
+│ @Injectable()                                                                │
+│ export class InvestorNoteService {                                           │
+│   constructor(private drizzle: DrizzleService) {}                            │
+│                                                                              │
+│   async create(investorId: string, startupId: string, content: string) {     │
+│     const [note] = await this.drizzle.db                                     │
+│       .insert(investorNote)                                                  │
+│       .values({ investorId, startupId, content })                            │
+│       .returning();                                                          │
+│     return note;                                                             │
+│   }                                                                          │
+│                                                                              │
+│   async getNotes(investorId: string, startupId: string) {                    │
+│     return this.drizzle.db                                                   │
+│       .select()                                                              │
+│       .from(investorNote)                                                    │
+│       .where(and(                                                            │
+│         eq(investorNote.investorId, investorId),                             │
+│         eq(investorNote.startupId, startupId)                                │
+│       ));                                                                    │
+│   }                                                                          │
+│                                                                              │
+│   async update(noteId: string, content: string) {                            │
+│     const [note] = await this.drizzle.db                                     │
+│       .update(investorNote)                                                  │
+│       .set({ content, updatedAt: new Date() })                               │
+│       .where(eq(investorNote.id, noteId))                                    │
+│       .returning();                                                          │
+│     return note;                                                             │
+│   }                                                                          │
+│                                                                              │
+│   async delete(noteId: string) {                                             │
+│     await this.drizzle.db                                                    │
+│       .delete(investorNote)                                                  │
+│       .where(eq(investorNote.id, noteId));                                   │
+│   }                                                                          │
+│ }                                                                            │
+│                                                                              │
+│ backend/src/modules/investor/portfolio.service.ts:                           │
+│ import { Injectable } from '@nestjs/common';                                 │
+│ import { DrizzleService } from '../../database';                             │
+│ import { investorPortfolio } from './entities/investor-portfolio.schema';    │
+│ import { eq } from 'drizzle-orm';                                            │
+│                                                                              │
+│ @Injectable()                                                                │
+│ export class PortfolioService {                                              │
+│   constructor(private drizzle: DrizzleService) {}                            │
+│                                                                              │
+│   async addToPortfolio(investorId: string, startupId: string, dto: any) {    │
+│     const [item] = await this.drizzle.db                                     │
+│       .insert(investorPortfolio)                                             │
+│       .values({ investorId, startupId, ...dto, investedAt: new Date() })     │
+│       .returning();                                                          │
+│     return item;                                                             │
+│   }                                                                          │
+│                                                                              │
+│   async getPortfolio(investorId: string) {                                   │
+│     return this.drizzle.db                                                   │
+│       .select()                                                              │
+│       .from(investorPortfolio)                                               │
+│       .where(eq(investorPortfolio.investorId, investorId));                  │
+│   }                                                                          │
+│ }                                                                            │
+│                                                                              │
+│ backend/src/modules/investor/deal-pipeline.service.ts:                       │
+│ import { Injectable } from '@nestjs/common';                                 │
+│ import { DrizzleService } from '../../database';                             │
+│ import { startupMatch } from './entities/investor.schema';                   │
+│ import { eq, sql } from 'drizzle-orm';                                       │
+│                                                                              │
+│ @Injectable()                                                                │
+│ export class DealPipelineService {                                           │
+│   constructor(private drizzle: DrizzleService) {}                            │
+│                                                                              │
+│   async getPipeline(investorId: string) {                                    │
+│     const matches = await this.drizzle.db                                    │
+│       .select()                                                              │
+│       .from(startupMatch)                                                    │
+│       .where(eq(startupMatch.investorId, investorId));                       │
+│                                                                              │
+│     // Group by stage (add stage field to schema first)                      │
+│     return {                                                                 │
+│       leads: matches.filter(m => !m.isSaved),                                │
+│       reviewing: matches.filter(m => m.isSaved),                             │
+│       // Add more stages as needed                                           │
+│     };                                                                       │
+│   }                                                                          │
+│                                                                              │
+│   async moveStage(matchId: string, newStage: string) {                       │
+│     // Update match stage                                                    │
+│     return { success: true };                                                │
+│   }                                                                          │
+│ }                                                                            │
+│                                                                              │
+│ backend/src/modules/investor/messaging.service.ts:                           │
+│ // AI_PLACEHOLDER                                                            │
+│ import { Injectable } from '@nestjs/common';                                 │
+│                                                                              │
+│ @Injectable()                                                                │
+│ export class MessagingService {                                              │
+│   async getConversations() {                                                 │
+│     return { data: [], message: 'AI messaging feature coming soon' };        │
+│   }                                                                          │
+│                                                                              │
+│   async sendMessage() {                                                      │
+│     return { success: false, message: 'AI feature not yet implemented' };    │
+│   }                                                                          │
+│ }                                                                            │
+│                                                                              │
+│ Backend Controller Extensions                                                │
+│                                                                              │
+│ backend/src/modules/investor/investor.controller.ts (add endpoints):         │
+│ @Post('notes')                                                               │
+│ async createNote(@CurrentUser() user, @Body() dto: CreateNoteDto) {          │
+│   return this.noteService.create(user.id, dto.startupId, dto.content);       │
+│ }                                                                            │
+│                                                                              │
+│ @Get('notes/:startupId')                                                     │
+│ async getNotes(@CurrentUser() user, @Param('startupId') startupId: string) { │
+│   return this.noteService.getNotes(user.id, startupId);                      │
+│ }                                                                            │
+│                                                                              │
+│ @Post('portfolio')                                                           │
+│ async addToPortfolio(@CurrentUser() user, @Body() dto: AddPortfolioDto) {    │
+│   return this.portfolioService.addToPortfolio(user.id, dto.startupId, dto);  │
+│ }                                                                            │
+│                                                                              │
+│ @Get('portfolio')                                                            │
+│ async getPortfolio(@CurrentUser() user) {                                    │
+│   return this.portfolioService.getPortfolio(user.id);                        │
+│ }                                                                            │
+│                                                                              │
+│ @Get('pipeline')                                                             │
+│ async getPipeline(@CurrentUser() user) {                                     │
+│   return this.pipelineService.getPipeline(user.id);                          │
+│ }                                                                            │
+│                                                                              │
+│ // AI_PLACEHOLDER                                                            │
+│ @Get('messaging/conversations')                                              │
+│ async getConversations() {                                                   │
+│   return this.messagingService.getConversations();                           │
+│ }                                                                            │
+│                                                                              │
+│ Frontend Pages                                                               │
+│                                                                              │
+│ frontend/src/routes/_protected/investor/portfolio.tsx:                       │
+│ export default function PortfolioPage() {                                    │
+│   const { data } = useQuery({                                                │
+│     queryKey: ['investor', 'portfolio'],                                     │
+│     queryFn: () => investorApi.getPortfolio(),                               │
+│   });                                                                        │
+│                                                                              │
+│   return (                                                                   │
+│     <div>                                                                    │
+│       <h1>Portfolio Companies</h1>                                           │
+│       <DataTable data={data || []} columns={portfolioColumns} />             │
+│     </div>                                                                   │
+│   );                                                                         │
+│ }                                                                            │
+│                                                                              │
+│ frontend/src/routes/_protected/investor/pipeline.tsx:                        │
+│ export default function PipelinePage() {                                     │
+│   const { data } = useQuery({                                                │
+│     queryKey: ['investor', 'pipeline'],                                      │
+│     queryFn: () => investorApi.getPipeline(),                                │
+│   });                                                                        │
+│                                                                              │
+│   return (                                                                   │
+│     <div>                                                                    │
+│       <h1>Deal Pipeline</h1>                                                 │
+│       <div className="grid grid-cols-5 gap-4">                               │
+│         {/* Kanban columns for each stage */}                                │
+│       </div>                                                                 │
+│     </div>                                                                   │
+│   );                                                                         │
+│ }                                                                            │
+│                                                                              │
+│ frontend/src/routes/_protected/investor/notes.tsx:                           │
+│ export default function NotesPage() {                                        │
+│   const { data } = useQuery({                                                │
+│     queryKey: ['investor', 'notes'],                                         │
+│     queryFn: () => investorApi.getAllNotes(),                                │
+│   });                                                                        │
+│                                                                              │
+│   return (                                                                   │
+│     <div>                                                                    │
+│       <h1>Startup Notes</h1>                                                 │
+│       <DataTable data={data || []} columns={noteColumns} />                  │
+│     </div>                                                                   │
+│   );                                                                         │
+│ }                                                                            │
+│                                                                              │
+│ frontend/src/routes/_protected/investor/messaging.tsx:                       │
+│ // AI_PLACEHOLDER                                                            │
+│ export default function MessagingPage() {                                    │
+│   return (                                                                   │
+│     <div className="text-center py-12">                                      │
+│       <h1>Direct Messaging</h1>                                              │
+│       <p className="text-gray-500 mt-4">AI-powered messaging feature coming  │
+│ soon</p>                                                                     │
+│     </div>                                                                   │
+│   );                                                                         │
+│ }                                                                            │
+│                                                                              │
+│ ---                                                                          │
+│ Phase 3: Scout Workstream (4-5 days) - Developer C                           │
+│                                                                              │
+│ Backend Services                                                             │
+│                                                                              │
+│ backend/src/modules/scout/commission.service.ts:                             │
+│ import { Injectable } from '@nestjs/common';                                 │
+│ import { DrizzleService } from '../../database';                             │
+│ import { scoutCommission } from './entities/scout-commission.schema';        │
+│ import { eq } from 'drizzle-orm';                                            │
+│                                                                              │
+│ @Injectable()                                                                │
+│ export class CommissionService {                                             │
+│   constructor(private drizzle: DrizzleService) {}                            │
+│                                                                              │
+│   async calculateCommission(submissionId: string, dealSize: number) {        │
+│     const rate = 500; // 5% in basis points                                  │
+│     const amount = Math.floor(dealSize * (rate / 10000));                    │
+│                                                                              │
+│     const [commission] = await this.drizzle.db                               │
+│       .insert(scoutCommission)                                               │
+│       .values({                                                              │
+│         submissionId,                                                        │
+│         dealSize,                                                            │
+│         commissionRate: rate,                                                │
+│         commissionAmount: amount,                                            │
+│         status: 'pending',                                                   │
+│       })                                                                     │
+│       .returning();                                                          │
+│                                                                              │
+│     return commission;                                                       │
+│   }                                                                          │
+│                                                                              │
+│   async getCommissions(scoutId: string) {                                    │
+│     return this.drizzle.db                                                   │
+│       .select()                                                              │
+│       .from(scoutCommission)                                                 │
+│       .where(eq(scoutCommission.scoutId, scoutId));                          │
+│   }                                                                          │
+│                                                                              │
+│   async getTotalEarnings(scoutId: string) {                                  │
+│     const commissions = await this.getCommissions(scoutId);                  │
+│     return {                                                                 │
+│       total: commissions.reduce((sum, c) => sum + c.commissionAmount, 0),    │
+│       pending: commissions.filter(c => c.status === 'pending').reduce((sum,  │
+│ c) => sum + c.commissionAmount, 0),                                          │
+│       paid: commissions.filter(c => c.status === 'paid').reduce((sum, c) =>  │
+│ sum + c.commissionAmount, 0),                                                │
+│     };                                                                       │
+│   }                                                                          │
+│ }                                                                            │
+│                                                                              │
+│ backend/src/modules/scout/scout-metrics.service.ts:                          │
+│ import { Injectable } from '@nestjs/common';                                 │
+│ import { DrizzleService } from '../../database';                             │
+│ import { scoutSubmission } from './entities/scout.schema';                   │
+│ import { eq } from 'drizzle-orm';                                            │
+│                                                                              │
+│ @Injectable()                                                                │
+│ export class ScoutMetricsService {                                           │
+│   constructor(private drizzle: DrizzleService) {}                            │
+│                                                                              │
+│   async getMetrics(scoutId: string) {                                        │
+│     const submissions = await this.drizzle.db                                │
+│       .select()                                                              │
+│       .from(scoutSubmission)                                                 │
+│       .where(eq(scoutSubmission.scoutId, scoutId));                          │
+│                                                                              │
+│     return {                                                                 │
+│       totalSubmissions: submissions.length,                                  │
+│       // Add conversion rate, earnings, etc.                                 │
+│     };                                                                       │
+│   }                                                                          │
+│                                                                              │
+│   async getLeaderboard() {                                                   │
+│     // Query all scouts and rank by submissions/conversions                  │
+│     return [];                                                               │
+│   }                                                                          │
+│ }                                                                            │
+│                                                                              │
+│ Backend Controller Extensions                                                │
+│                                                                              │
+│ backend/src/modules/scout/scout.controller.ts:                               │
+│ @Get('commissions')                                                          │
+│ async getCommissions(@CurrentUser() user) {                                  │
+│   return this.commissionService.getCommissions(user.id);                     │
+│ }                                                                            │
+│                                                                              │
+│ @Get('commissions/total')                                                    │
+│ async getTotalEarnings(@CurrentUser() user) {                                │
+│   return this.commissionService.getTotalEarnings(user.id);                   │
+│ }                                                                            │
+│                                                                              │
+│ @Get('metrics')                                                              │
+│ async getMetrics(@CurrentUser() user) {                                      │
+│   return this.metricsService.getMetrics(user.id);                            │
+│ }                                                                            │
+│                                                                              │
+│ @Get('leaderboard')                                                          │
+│ async getLeaderboard() {                                                     │
+│   return this.metricsService.getLeaderboard();                               │
+│ }                                                                            │
+│                                                                              │
+│ Frontend Pages                                                               │
+│                                                                              │
+│ frontend/src/routes/_protected/scout/commissions.tsx:                        │
+│ export default function CommissionsPage() {                                  │
+│   const { data } = useQuery({                                                │
+│     queryKey: ['scout', 'commissions'],                                      │
+│     queryFn: () => scoutApi.getCommissions(),                                │
+│   });                                                                        │
+│                                                                              │
+│   const { data: totals } = useQuery({                                        │
+│     queryKey: ['scout', 'commissions', 'total'],                             │
+│     queryFn: () => scoutApi.getTotalEarnings(),                              │
+│   });                                                                        │
+│                                                                              │
+│   return (                                                                   │
+│     <div>                                                                    │
+│       <h1>Commission Tracking</h1>                                           │
+│       <div className="grid grid-cols-3 gap-4 mb-6">                          │
+│         <div className="border p-4 rounded">                                 │
+│           <div className="text-3xl font-bold">${totals?.total || 0}</div>    │
+│           <div className="text-gray-500">Total Earned</div>                  │
+│         </div>                                                               │
+│         <div className="border p-4 rounded">                                 │
+│           <div className="text-3xl font-bold                                 │
+│ text-yellow-600">${totals?.pending || 0}</div>                               │
+│           <div className="text-gray-500">Pending</div>                       │
+│         </div>                                                               │
+│         <div className="border p-4 rounded">                                 │
+│           <div className="text-3xl font-bold text-green-600">${totals?.paid  │
+│ || 0}</div>                                                                  │
+│           <div className="text-gray-500">Paid</div>                          │
+│         </div>                                                               │
+│       </div>                                                                 │
+│       <DataTable data={data || []} columns={commissionColumns} />            │
+│     </div>                                                                   │
+│   );                                                                         │
+│ }                                                                            │
+│                                                                              │
+│ frontend/src/routes/_protected/scout/leaderboard.tsx:                        │
+│ export default function LeaderboardPage() {                                  │
+│   const { data } = useQuery({                                                │
+│     queryKey: ['scout', 'leaderboard'],                                      │
+│     queryFn: () => scoutApi.getLeaderboard(),                                │
+│   });                                                                        │
+│                                                                              │
+│   return (                                                                   │
+│     <div>                                                                    │
+│       <h1>Scout Leaderboard</h1>                                             │
+│       <table className="min-w-full">                                         │
+│         <thead>                                                              │
+│           <tr>                                                               │
+│             <th>Rank</th>                                                    │
+│             <th>Scout</th>                                                   │
+│             <th>Submissions</th>                                             │
+│             <th>Conversions</th>                                             │
+│             <th>Earnings</th>                                                │
+│           </tr>                                                              │
+│         </thead>                                                             │
+│         <tbody>                                                              │
+│           {data?.map((scout, idx) => (                                       │
+│             <tr key={scout.id}>                                              │
+│               <td>{idx + 1}</td>                                             │
+│               <td>{scout.name}</td>                                          │
+│               <td>{scout.submissions}</td>                                   │
+│               <td>{scout.conversions}</td>                                   │
+│               <td>${scout.earnings}</td>                                     │
+│             </tr>                                                            │
+│           ))}                                                                │
+│         </tbody>                                                             │
+│       </table>                                                               │
+│     </div>                                                                   │
+│   );                                                                         │
+│ }                                                                            │
+│                                                                              │
+│ frontend/src/routes/_protected/scout/metrics.tsx:                            │
+│ export default function MetricsPage() {                                      │
+│   const { data } = useQuery({                                                │
+│     queryKey: ['scout', 'metrics'],                                          │
+│     queryFn: () => scoutApi.getMetrics(),                                    │
+│   });                                                                        │
+│                                                                              │
+│   return (                                                                   │
+│     <div>                                                                    │
+│       <h1>Performance Metrics</h1>                                           │
+│       <div className="grid grid-cols-4 gap-4">                               │
+│         <div className="border p-4 rounded">                                 │
+│           <div className="text-3xl font-bold">{data?.totalSubmissions ||     │
+│ 0}</div>                                                                     │
+│           <div className="text-gray-500">Total Submissions</div>             │
+│         </div>                                                               │
+│         {/* Add more KPI cards */}                                           │
+│       </div>                                                                 │
+│       {/* Add charts */}                                                     │
+│     </div>                                                                   │
+│   );                                                                         │
+│ }                                                                            │
+│                                                                              │
+│ ---                                                                          │
+│ Phase 4: Founder Workstream (5-6 days) - Developer D                         │
+│                                                                              │
+│ Backend Services                                                             │
+│                                                                              │
+│ backend/src/modules/startup/data-room.service.ts:                            │
+│ import { Injectable } from '@nestjs/common';                                 │
+│ import { DrizzleService } from '../../database';                             │
+│ import { dataRoom } from './entities/data-room.schema';                      │
+│ import { eq } from 'drizzle-orm';                                            │
+│                                                                              │
+│ @Injectable()                                                                │
+│ export class DataRoomService {                                               │
+│   constructor(private drizzle: DrizzleService) {}                            │
+│                                                                              │
+│   async uploadDocument(startupId: string, assetId: string, category: string) │
+│  {                                                                           │
+│     const [doc] = await this.drizzle.db                                      │
+│       .insert(dataRoom)                                                      │
+│       .values({ startupId, assetId, category })                              │
+│       .returning();                                                          │
+│     return doc;                                                              │
+│   }                                                                          │
+│                                                                              │
+│   async getDocuments(startupId: string) {                                    │
+│     return this.drizzle.db                                                   │
+│       .select()                                                              │
+│       .from(dataRoom)                                                        │
+│       .where(eq(dataRoom.startupId, startupId));                             │
+│   }                                                                          │
+│                                                                              │
+│   async updatePermissions(docId: string, investorIds: string[]) {            │
+│     const [doc] = await this.drizzle.db                                      │
+│       .update(dataRoom)                                                      │
+│       .set({ visibleToInvestors: investorIds })                              │
+│       .where(eq(dataRoom.id, docId))                                         │
+│       .returning();                                                          │
+│     return doc;                                                              │
+│   }                                                                          │
+│                                                                              │
+│   async deleteDocument(docId: string) {                                      │
+│     await this.drizzle.db                                                    │
+│       .delete(dataRoom)                                                      │
+│       .where(eq(dataRoom.id, docId));                                        │
+│   }                                                                          │
+│ }                                                                            │
+│                                                                              │
+│ backend/src/modules/startup/investor-interest.service.ts:                    │
+│ import { Injectable } from '@nestjs/common';                                 │
+│ import { DrizzleService } from '../../database';                             │
+│ import { investorInterest } from './entities/investor-interest.schema';      │
+│ import { eq } from 'drizzle-orm';                                            │
+│                                                                              │
+│ @Injectable()                                                                │
+│ export class InvestorInterestService {                                       │
+│   constructor(private drizzle: DrizzleService) {}                            │
+│                                                                              │
+│   async getInterest(startupId: string) {                                     │
+│     return this.drizzle.db                                                   │
+│       .select()                                                              │
+│       .from(investorInterest)                                                │
+│       .where(eq(investorInterest.startupId, startupId));                     │
+│   }                                                                          │
+│                                                                              │
+│   async respondToInterest(interestId: string, response: string) {            │
+│     const [interest] = await this.drizzle.db                                 │
+│       .update(investorInterest)                                              │
+│       .set({ status: response })                                             │
+│       .where(eq(investorInterest.id, interestId))                            │
+│       .returning();                                                          │
+│     return interest;                                                         │
+│   }                                                                          │
+│ }                                                                            │
+│                                                                              │
+│ backend/src/modules/startup/meeting.service.ts:                              │
+│ import { Injectable } from '@nestjs/common';                                 │
+│ import { DrizzleService } from '../../database';                             │
+│ import { meeting } from './entities/meeting.schema';                         │
+│ import { eq } from 'drizzle-orm';                                            │
+│                                                                              │
+│ @Injectable()                                                                │
+│ export class MeetingService {                                                │
+│   constructor(private drizzle: DrizzleService) {}                            │
+│                                                                              │
+│   async scheduleMeeting(dto: any) {                                          │
+│     const [mtg] = await this.drizzle.db                                      │
+│       .insert(meeting)                                                       │
+│       .values(dto)                                                           │
+│       .returning();                                                          │
+│     return mtg;                                                              │
+│   }                                                                          │
+│                                                                              │
+│   async getMeetings(startupId: string) {                                     │
+│     return this.drizzle.db                                                   │
+│       .select()                                                              │
+│       .from(meeting)                                                         │
+│       .where(eq(meeting.startupId, startupId));                              │
+│   }                                                                          │
+│                                                                              │
+│   async updateMeeting(meetingId: string, dto: any) {                         │
+│     const [mtg] = await this.drizzle.db                                      │
+│       .update(meeting)                                                       │
+│       .set(dto)                                                              │
+│       .where(eq(meeting.id, meetingId))                                      │
+│       .returning();                                                          │
+│     return mtg;                                                              │
+│   }                                                                          │
+│                                                                              │
+│   async cancelMeeting(meetingId: string) {                                   │
+│     const [mtg] = await this.drizzle.db                                      │
+│       .update(meeting)                                                       │
+│       .set({ status: 'cancelled' })                                          │
+│       .where(eq(meeting.id, meetingId))                                      │
+│       .returning();                                                          │
+│     return mtg;                                                              │
+│   }                                                                          │
+│ }                                                                            │
+│                                                                              │
+│ Backend Controller Extensions                                                │
+│                                                                              │
+│ backend/src/modules/startup/startup.controller.ts:                           │
+│ @Post(':id/data-room')                                                       │
+│ async uploadToDataRoom(                                                      │
+│   @Param('id') startupId: string,                                            │
+│   @Body() dto: UploadDataRoomDto                                             │
+│ ) {                                                                          │
+│   return this.dataRoomService.uploadDocument(startupId, dto.assetId,         │
+│ dto.category);                                                               │
+│ }                                                                            │
+│                                                                              │
+│ @Get(':id/data-room')                                                        │
+│ async getDataRoom(@Param('id') startupId: string) {                          │
+│   return this.dataRoomService.getDocuments(startupId);                       │
+│ }                                                                            │
+│                                                                              │
+│ @Get(':id/interest')                                                         │
+│ async getInvestorInterest(@Param('id') startupId: string) {                  │
+│   return this.interestService.getInterest(startupId);                        │
+│ }                                                                            │
+│                                                                              │
+│ @Post(':id/interest/:interestId/respond')                                    │
+│ async respondToInterest(                                                     │
+│   @Param('interestId') interestId: string,                                   │
+│   @Body() dto: RespondInterestDto                                            │
+│ ) {                                                                          │
+│   return this.interestService.respondToInterest(interestId, dto.response);   │
+│ }                                                                            │
+│                                                                              │
+│ @Post(':id/meetings')                                                        │
+│ async scheduleMeeting(@Body() dto: ScheduleMeetingDto) {                     │
+│   return this.meetingService.scheduleMeeting(dto);                           │
+│ }                                                                            │
+│                                                                              │
+│ @Get(':id/meetings')                                                         │
+│ async getMeetings(@Param('id') startupId: string) {                          │
+│   return this.meetingService.getMeetings(startupId);                         │
+│ }                                                                            │
+│                                                                              │
+│ Frontend Pages                                                               │
+│                                                                              │
+│ frontend/src/routes/_protected/founder/data-room.tsx:                        │
+│ import { FileUploadDropzone } from '@/components/FileUploadDropzone';        │
+│                                                                              │
+│ export default function DataRoomPage() {                                     │
+│   const { startupId } = useParams();                                         │
+│   const { data } = useQuery({                                                │
+│     queryKey: ['startup', startupId, 'data-room'],                           │
+│     queryFn: () => startupApi.getDataRoom(startupId),                        │
+│   });                                                                        │
+│                                                                              │
+│   const uploadMutation = useMutation({                                       │
+│     mutationFn: (file: File) => startupApi.uploadToDataRoom(startupId,       │
+│ file),                                                                       │
+│   });                                                                        │
+│                                                                              │
+│   return (                                                                   │
+│     <div>                                                                    │
+│       <h1>Data Room</h1>                                                     │
+│       <FileUploadDropzone onUpload={(file) => uploadMutation.mutate(file)}   │
+│ />                                                                           │
+│       <DataTable data={data || []} columns={documentColumns} />              │
+│     </div>                                                                   │
+│   );                                                                         │
+│ }                                                                            │
+│                                                                              │
+│ frontend/src/routes/_protected/founder/investor-interest.tsx:                │
+│ export default function InvestorInterestPage() {                             │
+│   const { startupId } = useParams();                                         │
+│   const { data } = useQuery({                                                │
+│     queryKey: ['startup', startupId, 'interest'],                            │
+│     queryFn: () => startupApi.getInvestorInterest(startupId),                │
+│   });                                                                        │
+│                                                                              │
+│   return (                                                                   │
+│     <div>                                                                    │
+│       <h1>Investor Interest</h1>                                             │
+│       <div className="grid grid-cols-3 gap-4">                               │
+│         {data?.map((interest) => (                                           │
+│           <div key={interest.id} className="border p-4 rounded">             │
+│             <h3>{interest.investorName}</h3>                                 │
+│             <div className="text-sm text-gray-500">{interest.status}</div>   │
+│             <button>Accept Meeting</button>                                  │
+│             <button>Decline</button>                                         │
+│           </div>                                                             │
+│         ))}                                                                  │
+│       </div>                                                                 │
+│     </div>                                                                   │
+│   );                                                                         │
+│ }                                                                            │
+│                                                                              │
+│ frontend/src/routes/_protected/founder/meetings.tsx:                         │
+│ export default function MeetingsPage() {                                     │
+│   const { startupId } = useParams();                                         │
+│   const { data } = useQuery({                                                │
+│     queryKey: ['startup', startupId, 'meetings'],                            │
+│     queryFn: () => startupApi.getMeetings(startupId),                        │
+│   });                                                                        │
+│                                                                              │
+│   return (                                                                   │
+│     <div>                                                                    │
+│       <h1>Meetings</h1>                                                      │
+│       {/* Calendar view or list view */}                                     │
+│       <DataTable data={data || []} columns={meetingColumns} />               │
+│     </div>                                                                   │
+│   );                                                                         │
+│ }                                                                            │
+│                                                                              │
+│ ---                                                                          │
+│ Verification Checklist                                                       │
+│                                                                              │
+│ Backend                                                                      │
+│                                                                              │
+│ - All dependencies installed (cheerio, env vars added)                       │
+│ - Database schemas created and migrated                                      │
+│ - All services implemented with proper error handling                        │
+│ - Controllers have proper validation and guards                              │
+│ - Unit tests written for all services (80% coverage)                         │
+│                                                                              │
+│ Frontend                                                                     │
+│                                                                              │
+│ - All pages created and routes configured                                    │
+│ - API client regenerated (bun run generate:api)                              │
+│ - Components use proper loading/error states                                 │
+│ - Forms have validation                                                      │
+│ - Tables have sorting/filtering                                              │
+│                                                                              │
+│ Integration                                                                  │
+│                                                                              │
+│ - Web scraping works for startup websites                                    │
+│ - Unipile LinkedIn integration functional                                    │
+│ - PDF generation produces formatted documents                                │
+│ - WebSocket events deliver in real-time                                      │
+│ - All role-specific features accessible                                      │
+│                                                                              │
+│ Testing                                                                      │
+│                                                                              │
+│ - Backend tests pass: cd backend && bun test                                 │
+│ - Frontend builds: cd frontend && bun run build                              │
+│ - E2E flows tested manually per role                                         │
+│                                                                              │
+│ ---                                                                          │
+│ Critical Path                                                                │
+│                                                                              │
+│ Blocking Sequence:                                                           │
+│ 1. Phase 0 (2-3 days) - MUST complete first                                  │
+│ 2. Phases 1-4 run in parallel (5-8 days each)                                │
+│ 3. Integration testing (2 days)                                              │
+│                                                                              │
+│ Total Timeline: ~10-13 days with 4 developers working in parallel            │
+│                                                                              │
+│ ---                                                                          │
+│ AI Placeholder Summary                                                       │
+│                                                                              │
+│ Do NOT implement logic for:                                                  │
+│ - Admin: Agent conversations (/admin/conversations, /admin/agents)           │
+│ - Investor: Direct messaging (/investor/messaging)                           │
+│ - Any AI-based analysis/scoring (already handled by existing processors)     │
+│                                                                              │
+│ Implementation:                                                              │
+│ - Backend: Return { message: 'AI feature coming soon' }                      │
+│ - Frontend: Show placeholder UI with "Coming Soon" message                   │
+│ - Mark with // AI_PLACEHOLDER comments                                       │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  ⎿  Interrupted · What should Claude do instead?

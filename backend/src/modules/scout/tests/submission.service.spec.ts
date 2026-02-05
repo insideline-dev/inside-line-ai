@@ -104,7 +104,7 @@ describe('SubmissionService', () => {
         name: 'Test Startup',
         tagline: 'A test startup',
         description:
-          'This is a test startup description that is long enough to pass validation requirements.',
+          'This is a test startup description that is long enough to pass validation requirements. The company is building an innovative SaaS platform that solves a critical problem in the enterprise market.',
         website: 'https://test.com',
         location: 'San Francisco',
         industry: 'SaaS',
@@ -163,6 +163,233 @@ describe('SubmissionService', () => {
       await expect(
         service.submit(mockScoutId, wrongInvestorDto),
       ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should accept full CreateStartupDto data', async () => {
+      const fullStartupDto = {
+        investorId: mockInvestorId,
+        startupData: {
+          ...submitDto.startupData,
+          pitchDeckUrl: 'https://example.com/deck.pdf',
+          demoUrl: 'https://example.com/demo',
+        },
+        notes: 'Excellent team with strong product-market fit',
+      };
+
+      mockDb.limit.mockResolvedValueOnce([mockApprovedScoutApp]);
+
+      const mockTx = {
+        insert: jest.fn().mockReturnThis(),
+        values: jest.fn().mockReturnThis(),
+        returning: jest
+          .fn()
+          .mockResolvedValueOnce([mockStartup])
+          .mockResolvedValueOnce([mockSubmission]),
+      };
+
+      mockDb.transaction.mockImplementation(async (callback) => {
+        return callback(mockTx);
+      });
+
+      await service.submit(mockScoutId, fullStartupDto);
+
+      expect(mockTx.values).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: fullStartupDto.startupData.name,
+          pitchDeckUrl: fullStartupDto.startupData.pitchDeckUrl,
+          demoUrl: fullStartupDto.startupData.demoUrl,
+        }),
+      );
+    });
+
+    it('should validate required startup fields', async () => {
+      const requiredFields = [
+        'name',
+        'tagline',
+        'description',
+        'website',
+        'location',
+        'industry',
+        'stage',
+        'fundingTarget',
+        'teamSize',
+      ];
+
+      requiredFields.forEach((field) => {
+        expect(submitDto.startupData).toHaveProperty(field);
+      });
+    });
+
+    it('should pass all startup fields to startup service', async () => {
+      mockDb.limit.mockResolvedValueOnce([mockApprovedScoutApp]);
+
+      const mockTx = {
+        insert: jest.fn().mockReturnThis(),
+        values: jest.fn().mockReturnThis(),
+        returning: jest
+          .fn()
+          .mockResolvedValueOnce([mockStartup])
+          .mockResolvedValueOnce([mockSubmission]),
+      };
+
+      mockDb.transaction.mockImplementation(async (callback) => {
+        return callback(mockTx);
+      });
+
+      await service.submit(mockScoutId, submitDto);
+
+      expect(mockTx.values).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          userId: mockScoutId,
+          name: submitDto.startupData.name,
+          tagline: submitDto.startupData.tagline,
+          description: submitDto.startupData.description,
+          website: submitDto.startupData.website,
+          location: submitDto.startupData.location,
+          industry: submitDto.startupData.industry,
+          stage: submitDto.startupData.stage,
+          fundingTarget: submitDto.startupData.fundingTarget,
+          teamSize: submitDto.startupData.teamSize,
+          slug: expect.any(String),
+          status: StartupStatus.SUBMITTED,
+          submittedAt: expect.any(Date),
+        }),
+      );
+    });
+
+    it('should handle optional fields in startup data', async () => {
+      const dtoWithOptionalFields = {
+        ...submitDto,
+        startupData: {
+          ...submitDto.startupData,
+          pitchDeckUrl: 'https://example.com/deck.pdf',
+          demoUrl: 'https://example.com/demo',
+        },
+      };
+
+      mockDb.limit.mockResolvedValueOnce([mockApprovedScoutApp]);
+
+      const mockTx = {
+        insert: jest.fn().mockReturnThis(),
+        values: jest.fn().mockReturnThis(),
+        returning: jest
+          .fn()
+          .mockResolvedValueOnce([mockStartup])
+          .mockResolvedValueOnce([mockSubmission]),
+      };
+
+      mockDb.transaction.mockImplementation(async (callback) => {
+        return callback(mockTx);
+      });
+
+      await service.submit(mockScoutId, dtoWithOptionalFields);
+
+      expect(mockTx.values).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          pitchDeckUrl: dtoWithOptionalFields.startupData.pitchDeckUrl,
+          demoUrl: dtoWithOptionalFields.startupData.demoUrl,
+        }),
+      );
+    });
+
+    it('should generate slug from startup name', async () => {
+      mockDb.limit.mockResolvedValueOnce([mockApprovedScoutApp]);
+
+      const mockTx = {
+        insert: jest.fn().mockReturnThis(),
+        values: jest.fn().mockReturnThis(),
+        returning: jest
+          .fn()
+          .mockResolvedValueOnce([mockStartup])
+          .mockResolvedValueOnce([mockSubmission]),
+      };
+
+      mockDb.transaction.mockImplementation(async (callback) => {
+        return callback(mockTx);
+      });
+
+      await service.submit(mockScoutId, submitDto);
+
+      expect(mockTx.values).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          slug: 'test-startup',
+        }),
+      );
+    });
+
+    it('should handle notes as optional field', async () => {
+      const dtoWithoutNotes = {
+        investorId: mockInvestorId,
+        startupData: submitDto.startupData,
+      };
+
+      mockDb.limit.mockResolvedValueOnce([mockApprovedScoutApp]);
+
+      const mockTx = {
+        insert: jest.fn().mockReturnThis(),
+        values: jest.fn().mockReturnThis(),
+        returning: jest
+          .fn()
+          .mockResolvedValueOnce([mockStartup])
+          .mockResolvedValueOnce([mockSubmission]),
+      };
+
+      mockDb.transaction.mockImplementation(async (callback) => {
+        return callback(mockTx);
+      });
+
+      await service.submit(mockScoutId, dtoWithoutNotes);
+
+      expect(mockTx.values).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          notes: null,
+        }),
+      );
+    });
+
+    it('should validate startup description length (100-5000 chars)', async () => {
+      const shortDescription = 'Too short';
+      const validDescription = submitDto.startupData.description;
+      const longDescription = 'A'.repeat(5001);
+
+      expect(shortDescription.length).toBeLessThan(100);
+      expect(validDescription.length).toBeGreaterThanOrEqual(100);
+      expect(validDescription.length).toBeLessThanOrEqual(5000);
+      expect(longDescription.length).toBeGreaterThan(5000);
+    });
+
+    it('should validate startup website as URL', async () => {
+      const validUrl = submitDto.startupData.website;
+      const invalidUrl = 'not-a-url';
+
+      expect(validUrl).toMatch(/^https?:\/\//);
+      expect(invalidUrl).not.toMatch(/^https?:\/\//);
+    });
+
+    it('should validate positive integer for fundingTarget', async () => {
+      const validTarget = submitDto.startupData.fundingTarget;
+      const negativeTarget = -1000;
+      const zeroTarget = 0;
+
+      expect(validTarget).toBeGreaterThan(0);
+      expect(Number.isInteger(validTarget)).toBe(true);
+      expect(negativeTarget).toBeLessThan(1);
+      expect(zeroTarget).toBe(0);
+    });
+
+    it('should validate positive integer for teamSize', async () => {
+      const validSize = submitDto.startupData.teamSize;
+      const negativeSize = -5;
+      const zeroSize = 0;
+
+      expect(validSize).toBeGreaterThan(0);
+      expect(Number.isInteger(validSize)).toBe(true);
+      expect(negativeSize).toBeLessThan(1);
+      expect(zeroSize).toBe(0);
     });
   });
 

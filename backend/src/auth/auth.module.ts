@@ -1,27 +1,26 @@
-import { Global, Module } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
-import { JwtModule } from '@nestjs/jwt';
-import { PassportModule } from '@nestjs/passport';
-import { ConfigModule, ConfigService } from '@nestjs/config';
-import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
-import { AuthService } from './auth.service';
-import { UserAuthService } from './user-auth.service';
-import { AdminUserService } from './admin-user.service';
-import { AuthController } from './auth.controller';
-import { AdminController } from './admin.controller';
-import { JwtStrategy, GoogleStrategy } from './strategies';
-import { JwtAuthGuard } from './guards';
+import { Global, Module } from "@nestjs/common";
+import { APP_GUARD } from "@nestjs/core";
+import { JwtModule } from "@nestjs/jwt";
+import { PassportModule } from "@nestjs/passport";
+import { ConfigModule, ConfigService } from "@nestjs/config";
+import { ThrottlerModule, ThrottlerGuard } from "@nestjs/throttler";
+import { AuthService } from "./auth.service";
+import { UserAuthService } from "./user-auth.service";
+import { ProfileService } from "./profile.service";
+import { AuthController } from "./auth.controller";
+import { JwtStrategy, GoogleStrategy } from "./strategies";
+import { JwtAuthGuard } from "./guards";
 
 @Global()
 @Module({
   imports: [
-    PassportModule.register({ defaultStrategy: 'jwt' }),
+    PassportModule.register({ defaultStrategy: "jwt" }),
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (config: ConfigService) => ({
-        secret: config.get<string>('JWT_SECRET'),
+        secret: config.get<string>("JWT_SECRET"),
         signOptions: {
-          expiresIn: config.get('JWT_ACCESS_EXPIRES', '15m'),
+          expiresIn: config.get("JWT_ACCESS_EXPIRES", "15m"),
         },
       }),
       inject: [ConfigService],
@@ -29,17 +28,17 @@ import { JwtAuthGuard } from './guards';
     // Rate limiting: 100 requests per minute by default
     ThrottlerModule.forRoot([
       {
-        name: 'default',
+        name: "default",
         ttl: 60000,
         limit: 100,
       },
     ]),
   ],
-  controllers: [AuthController, AdminController],
+  controllers: [AuthController],
   providers: [
     AuthService,
     UserAuthService,
-    AdminUserService,
+    ProfileService,
     JwtStrategy,
     GoogleStrategy,
     {
@@ -51,6 +50,11 @@ import { JwtAuthGuard } from './guards';
       useClass: ThrottlerGuard,
     },
   ],
-  exports: [AuthService, UserAuthService, AdminUserService, JwtModule],
+  exports: [
+    AuthService,
+    UserAuthService,
+    ProfileService,
+    JwtModule,
+  ],
 })
 export class AuthModule {}

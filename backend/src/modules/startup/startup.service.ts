@@ -19,8 +19,10 @@ import {
   GetStartupsQuery,
   GetApprovedStartupsQuery,
   PresignedUrl,
+  GetProgressResponse,
 } from './dto';
 import { DraftService } from './draft.service';
+import { analysisJob, startupEvaluation } from '../analysis/entities/analysis.schema';
 
 @Injectable()
 export class StartupService {
@@ -545,5 +547,60 @@ export class StartupService {
       jobs: [],
       message: 'Job tracking not implemented yet',
     };
+  }
+
+  async getProgress(id: string, userId: string): Promise<GetProgressResponse> {
+    return this.drizzle.withRLS(userId, async (db) => {
+      const [found] = await db
+        .select()
+        .from(startup)
+        .where(and(eq(startup.id, id), eq(startup.userId, userId)))
+        .limit(1);
+
+      if (!found) {
+        throw new NotFoundException(`Startup with ID ${id} not found`);
+      }
+
+      const response: GetProgressResponse = {
+        status: found.status,
+        progress: null,
+      };
+
+      if (found.status === StartupStatus.SUBMITTED || found.status === 'analyzing' as any) {
+        const [job] = await db
+          .select()
+          .from(analysisJob)
+          .where(eq(analysisJob.startupId, id))
+          .orderBy(desc(analysisJob.createdAt))
+          .limit(1);
+
+        if (job && job.result) {
+          const jobResult = job.result as Record<string, unknown>;
+          response.progress = {
+            overallProgress:
+              (jobResult.overallProgress as number) || 0,
+            currentPhase: (jobResult.currentPhase as string) || 'queued',
+            phasesCompleted: (jobResult.phasesCompleted as string[]) || [],
+            phases: (jobResult.phases as Record<string, { status: string; progress: number }>) || {},
+          };
+        }
+      }
+
+      return response;
+    });
+  }
+
+  async getEvaluation(startupId: string) {
+    const [evaluation] = await this.drizzle.db
+      .select()
+      .from(startupEvaluation)
+      .where(eq(startupEvaluation.startupId, startupId))
+      .limit(1);
+
+    if (!evaluation) {
+      throw new NotFoundException('Evaluation not found');
+    }
+
+    return evaluation;
   }
 }

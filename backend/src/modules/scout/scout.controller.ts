@@ -18,7 +18,7 @@ import { ScoutGuard } from './guards';
 import {
   ApplyScoutDto,
   RejectScoutDto,
-  SubmitStartupDto,
+  ScoutSubmitStartupDto,
   GetApplicationsQueryDto,
   GetSubmissionsQueryDto,
 } from './dto';
@@ -43,13 +43,13 @@ export class ScoutController {
   // ============ SCOUT APPLICATION ENDPOINTS ============
 
   @Post('scout/apply')
-  @Roles(UserRole.USER, UserRole.ADMIN)
+  @Roles(UserRole.FOUNDER, UserRole.ADMIN)
   async apply(@CurrentUser() user: User, @Body() dto: ApplyScoutDto) {
     return this.scoutService.apply(user.id, dto);
   }
 
   @Get('scout/applications')
-  @Roles(UserRole.USER, UserRole.ADMIN)
+  @Roles(UserRole.SCOUT, UserRole.ADMIN)
   async getMyApplications(
     @CurrentUser() user: User,
     @Query() query: GetApplicationsQueryDto,
@@ -60,14 +60,14 @@ export class ScoutController {
   // ============ SCOUT SUBMISSION ENDPOINTS ============
 
   @Post('scout/submit')
-  @Roles(UserRole.USER, UserRole.ADMIN)
+  @Roles(UserRole.SCOUT, UserRole.ADMIN)
   @UseGuards(ScoutGuard)
-  async submit(@CurrentUser() user: User, @Body() dto: SubmitStartupDto) {
+  async submit(@CurrentUser() user: User, @Body() dto: ScoutSubmitStartupDto) {
     return this.submissionService.submit(user.id, dto);
   }
 
   @Get('scout/submissions')
-  @Roles(UserRole.USER, UserRole.ADMIN)
+  @Roles(UserRole.SCOUT, UserRole.ADMIN)
   async getMySubmissions(
     @CurrentUser() user: User,
     @Query() query: GetSubmissionsQueryDto,
@@ -78,7 +78,7 @@ export class ScoutController {
   // ============ INVESTOR ENDPOINTS ============
 
   @Get('investor/scout-applications')
-  @Roles(UserRole.USER, UserRole.ADMIN)
+  @Roles(UserRole.INVESTOR, UserRole.ADMIN)
   async getScoutApplications(
     @CurrentUser() user: User,
     @Query() query: GetApplicationsQueryDto,
@@ -87,7 +87,7 @@ export class ScoutController {
   }
 
   @Post('investor/scout-applications/:id/approve')
-  @Roles(UserRole.USER, UserRole.ADMIN)
+  @Roles(UserRole.INVESTOR, UserRole.ADMIN)
   async approveApplication(
     @CurrentUser() user: User,
     @Param('id') id: string,
@@ -96,7 +96,7 @@ export class ScoutController {
   }
 
   @Post('investor/scout-applications/:id/reject')
-  @Roles(UserRole.USER, UserRole.ADMIN)
+  @Roles(UserRole.INVESTOR, UserRole.ADMIN)
   async rejectApplication(
     @CurrentUser() user: User,
     @Param('id') id: string,
@@ -106,7 +106,7 @@ export class ScoutController {
   }
 
   @Get('investor/scout-submissions')
-  @Roles(UserRole.USER, UserRole.ADMIN)
+  @Roles(UserRole.INVESTOR, UserRole.ADMIN)
   async getScoutSubmissions(
     @CurrentUser() user: User,
     @Query() query: GetSubmissionsQueryDto,

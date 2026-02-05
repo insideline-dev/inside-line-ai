@@ -9,10 +9,8 @@ import {
   index,
   uuid,
   pgEnum,
-  pgPolicy,
 } from 'drizzle-orm/pg-core';
 import { user } from '../../../auth/entities/auth.schema';
-import { appRole, isAdmin, crudOwnPolicy } from '../../../common/rls';
 
 // ============================================================================
 // ENUMS
@@ -64,30 +62,8 @@ export const integrationWebhook = pgTable(
       table.processed,
       table.createdAt,
     ),
-
-    // RLS: Admin only
-    pgPolicy('webhook_admin_select', {
-      for: 'select',
-      to: appRole,
-      using: isAdmin,
-    }),
-    pgPolicy('webhook_admin_insert', {
-      for: 'insert',
-      to: appRole,
-      withCheck: isAdmin,
-    }),
-    pgPolicy('webhook_admin_update', {
-      for: 'update',
-      to: appRole,
-      using: isAdmin,
-    }),
-    pgPolicy('webhook_admin_delete', {
-      for: 'delete',
-      to: appRole,
-      using: isAdmin,
-    }),
   ],
-).enableRLS();
+);
 
 // ============================================================================
 // EMAIL THREADS TABLE
@@ -126,11 +102,8 @@ export const emailThread = pgTable(
       table.userId,
       table.lastMessageAt,
     ),
-
-    // RLS: User sees only their threads
-    ...crudOwnPolicy(table.userId),
   ],
-).enableRLS();
+);
 
 // ============================================================================
 // RELATIONS

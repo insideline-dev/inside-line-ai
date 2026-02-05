@@ -2,11 +2,12 @@ import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/commo
 import { ConfigService } from '@nestjs/config';
 import { Job } from 'bullmq';
 import { eq } from 'drizzle-orm';
-import { BaseProcessor } from '../../../queue/processors/base.processor';
+import { BaseProcessor, parseRedisUrl } from '../../../queue/processors/base.processor';
 import { ANALYSIS_QUEUE_NAME, ANALYSIS_QUEUE_CONFIG } from '../analysis.config';
 import { DrizzleService } from '../../../database';
 import { AnalysisService } from '../analysis.service';
 import { AnalysisJobStatus } from '../entities';
+import { NotificationGateway } from '../../../notification/notification.gateway';
 import { startup, Startup } from '../../startup/entities';
 import type {
   MarketAnalysisJobData,
@@ -25,17 +26,10 @@ export class MarketAnalysisProcessor
     private config: ConfigService,
     private drizzle: DrizzleService,
     private analysisService: AnalysisService,
+    private notificationGateway: NotificationGateway,
   ) {
-    super(
-      ANALYSIS_QUEUE_NAME,
-      {
-        host: config.get('REDIS_HOST'),
-        port: config.get('REDIS_PORT'),
-        password: config.get('REDIS_PASSWORD'),
-        tls: config.get('REDIS_TLS') ? {} : undefined,
-      },
-      ANALYSIS_QUEUE_CONFIG.concurrency,
-    );
+    const redisUrl = config.get<string>('REDIS_URL', 'redis://localhost:6379');
+    super(ANALYSIS_QUEUE_NAME, parseRedisUrl(redisUrl), ANALYSIS_QUEUE_CONFIG.concurrency);
   }
 
   onModuleInit() {
@@ -49,7 +43,7 @@ export class MarketAnalysisProcessor
   protected async process(
     job: Job<MarketAnalysisJobData>,
   ): Promise<Omit<MarketAnalysisJobResult, 'jobId' | 'duration' | 'success'>> {
-    const { startupId, analysisJobId } = job.data;
+    const { startupId, analysisJobId, userId } = job.data;
 
     if (job.data.type !== 'market_analysis') {
       return { type: 'market_analysis', analysis: this.getEmptyAnalysis() };
@@ -60,6 +54,12 @@ export class MarketAnalysisProcessor
         analysisJobId,
         AnalysisJobStatus.PROCESSING,
       );
+
+      this.notificationGateway.sendJobStatus(userId, {
+        jobId: analysisJobId,
+        jobType: 'market_analysis',
+        status: 'processing',
+      });
 
       const startupData = await this.getStartup(startupId);
       if (!startupData) {
@@ -76,6 +76,13 @@ export class MarketAnalysisProcessor
         { analysis },
       );
 
+      this.notificationGateway.sendJobStatus(userId, {
+        jobId: analysisJobId,
+        jobType: 'market_analysis',
+        status: 'completed',
+        result: { analysis },
+      });
+
       this.logger.log(`Market analysis completed for startup ${startupId}`);
 
       return { type: 'market_analysis', analysis };
@@ -87,6 +94,14 @@ export class MarketAnalysisProcessor
         undefined,
         errorMessage,
       );
+
+      this.notificationGateway.sendJobStatus(userId, {
+        jobId: analysisJobId,
+        jobType: 'market_analysis',
+        status: 'failed',
+        error: errorMessage,
+      });
+
       throw error;
     }
   }

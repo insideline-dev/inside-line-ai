@@ -18,11 +18,13 @@ import { Roles } from '../startup/decorators/roles.decorator';
 import { ThesisService } from './thesis.service';
 import { ScoringService } from './scoring.service';
 import { MatchService } from './match.service';
+import { TeamService } from './team.service';
 import {
   CreateThesisDto,
   UpdateThesisDto,
   UpdateScoringWeightsDto,
   GetMatchesQueryDto,
+  CreateTeamInviteDto,
 } from './dto';
 
 type User = {
@@ -36,12 +38,13 @@ type User = {
 
 @Controller('investor')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(UserRole.USER, UserRole.ADMIN)
+@Roles(UserRole.INVESTOR, UserRole.ADMIN)
 export class InvestorController {
   constructor(
     private thesisService: ThesisService,
     private scoringService: ScoringService,
     private matchService: MatchService,
+    private teamService: TeamService,
   ) {}
 
   // ============ THESIS ENDPOINTS ============
@@ -110,5 +113,50 @@ export class InvestorController {
     @Param('startupId') startupId: string,
   ) {
     return this.matchService.toggleSaved(user.id, startupId);
+  }
+
+  // ============ TEAM ENDPOINTS ============
+
+  @Get('team')
+  async getTeam(@CurrentUser() user: User) {
+    return this.teamService.getTeam(user.id);
+  }
+
+  @Post('team/invite')
+  async createTeamInvite(
+    @CurrentUser() user: User,
+    @Body() dto: CreateTeamInviteDto,
+  ) {
+    return this.teamService.createInvite(user.id, dto);
+  }
+
+  @Delete('team/invite/:id')
+  async cancelInvite(@CurrentUser() user: User, @Param('id') inviteId: string) {
+    await this.teamService.cancelInvite(user.id, inviteId);
+    return { success: true, message: 'Invite cancelled' };
+  }
+
+  @Delete('team/member/:id')
+  async removeMember(@CurrentUser() user: User, @Param('id') memberId: string) {
+    await this.teamService.removeMember(user.id, memberId);
+    return { success: true, message: 'Member removed' };
+  }
+}
+
+// ============================================================================
+// PUBLIC ENDPOINTS (No RolesGuard)
+// ============================================================================
+
+@Controller('investor/team')
+@UseGuards(JwtAuthGuard)
+export class InvestorTeamPublicController {
+  constructor(private teamService: TeamService) {}
+
+  @Post('join/:inviteCode')
+  async acceptInvite(
+    @CurrentUser() user: User,
+    @Param('inviteCode') inviteCode: string,
+  ) {
+    return this.teamService.acceptInvite(user.id, inviteCode);
   }
 }

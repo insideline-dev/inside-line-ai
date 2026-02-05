@@ -7,8 +7,11 @@ import {
   Body,
   Param,
   Query,
+  Res,
+  Header,
   UseGuards,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { JwtAuthGuard } from '../../auth/guards';
 import { CurrentUser } from '../../auth/decorators';
 import { UserRole } from '../../auth/entities/auth.schema';
@@ -23,6 +26,7 @@ type User = {
 };
 import { StartupService } from './startup.service';
 import { DraftService } from './draft.service';
+import { PdfService } from './pdf.service';
 import { RolesGuard } from './guards';
 import { Roles } from './decorators/roles.decorator';
 import {
@@ -44,30 +48,31 @@ export class StartupController {
   constructor(
     private startupService: StartupService,
     private draftService: DraftService,
+    private pdfService: PdfService,
   ) {}
 
   // ============ FOUNDER ENDPOINTS ============
 
   @Post()
-  @Roles(UserRole.USER, UserRole.ADMIN)
+  @Roles(UserRole.FOUNDER, UserRole.ADMIN)
   async create(@CurrentUser() user: User, @Body() dto: CreateStartupDto) {
     return this.startupService.create(user.id, dto);
   }
 
   @Get()
-  @Roles(UserRole.USER, UserRole.ADMIN)
+  @Roles(UserRole.FOUNDER, UserRole.ADMIN)
   async findAll(@CurrentUser() user: User, @Query() query: GetStartupsQueryDto) {
     return this.startupService.findAll(user.id, query);
   }
 
   @Get(':id')
-  @Roles(UserRole.USER, UserRole.ADMIN)
+  @Roles(UserRole.FOUNDER, UserRole.ADMIN)
   async findOne(@CurrentUser() user: User, @Param('id') id: string) {
     return this.startupService.findOne(id, user.id);
   }
 
   @Patch(':id')
-  @Roles(UserRole.USER, UserRole.ADMIN)
+  @Roles(UserRole.FOUNDER, UserRole.ADMIN)
   async update(
     @CurrentUser() user: User,
     @Param('id') id: string,
@@ -77,14 +82,14 @@ export class StartupController {
   }
 
   @Delete(':id')
-  @Roles(UserRole.USER, UserRole.ADMIN)
+  @Roles(UserRole.FOUNDER, UserRole.ADMIN)
   async delete(@CurrentUser() user: User, @Param('id') id: string) {
     await this.startupService.delete(id, user.id);
     return { success: true, message: 'Startup deleted' };
   }
 
   @Post(':id/submit')
-  @Roles(UserRole.USER, UserRole.ADMIN)
+  @Roles(UserRole.FOUNDER, UserRole.ADMIN)
   async submit(
     @CurrentUser() user: User,
     @Param('id') id: string,
@@ -94,7 +99,7 @@ export class StartupController {
   }
 
   @Post(':id/resubmit')
-  @Roles(UserRole.USER, UserRole.ADMIN)
+  @Roles(UserRole.FOUNDER, UserRole.ADMIN)
   async resubmit(
     @CurrentUser() user: User,
     @Param('id') id: string,
@@ -104,13 +109,13 @@ export class StartupController {
   }
 
   @Get(':id/jobs')
-  @Roles(UserRole.USER, UserRole.ADMIN)
+  @Roles(UserRole.FOUNDER, UserRole.ADMIN)
   async getJobs(@CurrentUser() user: User, @Param('id') id: string) {
     return this.startupService.getJobs(id, user.id);
   }
 
   @Post(':id/upload-url')
-  @Roles(UserRole.USER, UserRole.ADMIN)
+  @Roles(UserRole.FOUNDER, UserRole.ADMIN)
   async getUploadUrl(
     @CurrentUser() user: User,
     @Param('id') id: string,
@@ -120,7 +125,7 @@ export class StartupController {
   }
 
   @Post(':id/draft')
-  @Roles(UserRole.USER, UserRole.ADMIN)
+  @Roles(UserRole.FOUNDER, UserRole.ADMIN)
   async saveDraft(
     @CurrentUser() user: User,
     @Param('id') id: string,
@@ -130,15 +135,53 @@ export class StartupController {
   }
 
   @Get(':id/draft')
-  @Roles(UserRole.USER, UserRole.ADMIN)
+  @Roles(UserRole.FOUNDER, UserRole.ADMIN)
   async getDraft(@CurrentUser() user: User, @Param('id') id: string) {
     return this.draftService.get(id, user.id);
+  }
+
+  @Get(':id/progress')
+  @Roles(UserRole.FOUNDER, UserRole.ADMIN)
+  async getProgress(@CurrentUser() user: User, @Param('id') id: string) {
+    return this.startupService.getProgress(id, user.id);
+  }
+
+  @Get(':id/memo.pdf')
+  @Roles(UserRole.FOUNDER, UserRole.ADMIN)
+  @Header('Content-Type', 'application/pdf')
+  async downloadMemo(
+    @Param('id') id: string,
+    @CurrentUser() user: User,
+    @Res() res: Response,
+  ) {
+    const buffer = await this.pdfService.generateMemo(id, user.id);
+    res.set({
+      'Content-Disposition': `attachment; filename="${id}-memo.pdf"`,
+      'Content-Length': buffer.length,
+    });
+    res.end(buffer);
+  }
+
+  @Get(':id/report.pdf')
+  @Roles(UserRole.FOUNDER, UserRole.ADMIN)
+  @Header('Content-Type', 'application/pdf')
+  async downloadReport(
+    @Param('id') id: string,
+    @CurrentUser() user: User,
+    @Res() res: Response,
+  ) {
+    const buffer = await this.pdfService.generateReport(id, user.id);
+    res.set({
+      'Content-Disposition': `attachment; filename="${id}-report.pdf"`,
+      'Content-Length': buffer.length,
+    });
+    res.end(buffer);
   }
 
   // ============ INVESTOR ENDPOINTS ============
 
   @Get('approved/list')
-  @Roles(UserRole.USER, UserRole.ADMIN)
+  @Roles(UserRole.INVESTOR, UserRole.ADMIN)
   async findApproved(
     @CurrentUser() _user: User,
     @Query() query: GetApprovedStartupsQueryDto,
@@ -147,9 +190,15 @@ export class StartupController {
   }
 
   @Get('approved/:id')
-  @Roles(UserRole.USER, UserRole.ADMIN)
+  @Roles(UserRole.INVESTOR, UserRole.ADMIN)
   async findApprovedById(@CurrentUser() _user: User, @Param('id') id: string) {
     return this.startupService.findApprovedById(id);
+  }
+
+  @Get('approved/:id/evaluation')
+  @Roles(UserRole.INVESTOR, UserRole.ADMIN)
+  async getEvaluation(@CurrentUser() _user: User, @Param('id') id: string) {
+    return this.startupService.getEvaluation(id);
   }
 
   // ============ ADMIN ENDPOINTS ============

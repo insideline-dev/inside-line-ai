@@ -1,7 +1,6 @@
 import { Outlet, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
-import { useSession } from "@/lib/auth-client";
-import { AuthProvider } from "@/contexts/AuthContext";
+import { useCurrentUser, AuthProvider } from "@/lib/auth";
 import { env } from "@/env";
 
 export const Route = createFileRoute("/_protected")({
@@ -10,13 +9,13 @@ export const Route = createFileRoute("/_protected")({
 
 function ProtectedContent() {
   const navigate = useNavigate();
-  const { data, isPending } = useSession();
-  const isAuthed = !!data?.user && !!data?.session;
+  const { data: user, isLoading } = useCurrentUser();
+  const isAuthed = !!user;
   const isMockAuth = env.VITE_MOCK_AUTH;
 
   useEffect(() => {
     if (isMockAuth) return;
-    if (!isPending && !isAuthed) {
+    if (!isLoading && !isAuthed) {
       const redirectPath = `${window.location.pathname}${window.location.search}`;
       navigate({
         to: "/login",
@@ -24,7 +23,7 @@ function ProtectedContent() {
         replace: true,
       });
     }
-  }, [isPending, isAuthed, isMockAuth, navigate]);
+  }, [isLoading, isAuthed, isMockAuth, navigate]);
 
   // Mock auth bypass - skip all auth checks
   if (isMockAuth) {
@@ -36,7 +35,7 @@ function ProtectedContent() {
   }
 
   // Block dashboard flash until session resolves
-  if (isPending || !isAuthed) {
+  if (isLoading || !isAuthed) {
     return null;
   }
 
@@ -46,4 +45,3 @@ function ProtectedContent() {
     </AuthProvider>
   );
 }
-

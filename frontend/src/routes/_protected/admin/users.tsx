@@ -1,11 +1,24 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { mockUsers } from "@/mocks/data/users";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useAdminControllerGetUsers } from "@/api/generated/admin/admin";
 
 export const Route = createFileRoute("/_protected/admin/users")({
   component: UserManagement,
 });
+
+interface User {
+  id: string;
+  name: string;
+  email: string;
+  image?: string;
+  role?: string;
+  profile: {
+    companyName?: string;
+  };
+  createdAt: string;
+}
 
 const roleColors: Record<string, string> = {
   admin: "bg-red-100 text-red-800",
@@ -23,6 +36,46 @@ function formatDate(date: string): string {
 }
 
 function UserManagement() {
+  const { data: response, isLoading, error } = useAdminControllerGetUsers();
+  const users = (response?.data as User[] | undefined) ?? [];
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold">User Management</h1>
+          <p className="text-muted-foreground">Manage platform users and roles</p>
+        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>All Users</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {[1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-12 w-full" />)}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold">User Management</h1>
+          <p className="text-muted-foreground">Manage platform users and roles</p>
+        </div>
+        <Card>
+          <CardContent className="py-12 text-center text-destructive">
+            Failed to load users: {(error as Error).message}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -57,7 +110,7 @@ function UserManagement() {
                 </tr>
               </thead>
               <tbody>
-                {mockUsers.map((user) => (
+                {users.map((user) => (
                   <tr key={user.id} className="border-b hover:bg-muted/50">
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-3">

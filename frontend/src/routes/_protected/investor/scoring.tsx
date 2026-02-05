@@ -2,7 +2,8 @@ import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { mockStageScoringWeights } from "@/mocks/data/scoring-weights";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useInvestorControllerGetScoringWeights } from "@/api/generated/investor/investor";
 import type { FundingStage } from "@/types";
 
 export const Route = createFileRoute("/_protected/investor/scoring")({
@@ -33,6 +34,35 @@ const weightLabels: Record<string, string> = {
 
 function InvestorScoringPage() {
   const [activeStage, setActiveStage] = useState<FundingStage>("seed");
+  const { data: response, isLoading, error } = useInvestorControllerGetScoringWeights();
+  const scoringWeights = (response?.data as Array<{ stage: string; weights: Record<string, number>; rationale: Record<string, string>; overallRationale?: string }> | undefined) ?? [];
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold">Scoring Preferences</h1>
+          <p className="text-muted-foreground">View how startups are scored at each stage</p>
+        </div>
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-96 w-full" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold">Scoring Preferences</h1>
+          <p className="text-muted-foreground">View how startups are scored at each stage</p>
+        </div>
+        <div className="text-center py-12 text-destructive">
+          Failed to load scoring weights: {(error as Error).message}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -43,14 +73,14 @@ function InvestorScoringPage() {
 
       <Tabs value={activeStage} onValueChange={(v) => setActiveStage(v as FundingStage)}>
         <TabsList>
-          {mockStageScoringWeights.map((sw) => (
+          {scoringWeights.map((sw) => (
             <TabsTrigger key={sw.stage} value={sw.stage}>
               {stageLabels[sw.stage] || sw.stage}
             </TabsTrigger>
           ))}
         </TabsList>
 
-        {mockStageScoringWeights.map((sw) => (
+        {scoringWeights.map((sw) => (
           <TabsContent key={sw.stage} value={sw.stage} className="mt-6">
             <div className="grid gap-6 lg:grid-cols-2">
               <Card>

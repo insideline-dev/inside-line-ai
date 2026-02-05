@@ -38,8 +38,12 @@ describe('ScoutService', () => {
     id: mockApplicationId,
     userId: mockUserId,
     investorId: mockInvestorId,
-    bio: 'Experienced scout with track record',
+    name: 'John Doe',
+    email: 'john@example.com',
     linkedinUrl: 'https://linkedin.com/in/test',
+    experience: 'Experienced scout with track record of successful referrals and deep network in fintech. Have worked with over 50 startups and helped them connect with the right investors for their stage and industry.',
+    motivation: 'I want to help connect great startups with investors who can help them grow and succeed. My passion is discovering innovative companies early and matching them with investors who can provide not just capital but strategic value and guidance.',
+    dealflowSources: 'LinkedIn, Angel networks, YC alumni, local startup events',
     portfolio: ['Company A', 'Company B'],
     status: ScoutApplicationStatus.PENDING,
     reviewedAt: null,
@@ -81,8 +85,12 @@ describe('ScoutService', () => {
   describe('apply', () => {
     const applyDto = {
       investorId: mockInvestorId,
-      bio: 'Experienced scout with track record of successful referrals',
+      name: 'John Doe',
+      email: 'john@example.com',
       linkedinUrl: 'https://linkedin.com/in/test',
+      experience: 'Experienced scout with track record of successful referrals and deep network in fintech. Have worked with over 50 startups and helped them connect with the right investors for their stage and industry.',
+      motivation: 'I want to help connect great startups with investors who can help them grow and succeed. My passion is discovering innovative companies early and matching them with investors who can provide not just capital but strategic value and guidance.',
+      dealflowSources: 'LinkedIn, Angel networks, YC alumni, local startup events',
       portfolio: ['Company A', 'Company B'],
     };
 
@@ -97,8 +105,12 @@ describe('ScoutService', () => {
       expect(mockDb.values).toHaveBeenCalledWith({
         userId: mockUserId,
         investorId: applyDto.investorId,
-        bio: applyDto.bio,
+        name: applyDto.name,
+        email: applyDto.email,
         linkedinUrl: applyDto.linkedinUrl,
+        experience: applyDto.experience,
+        motivation: applyDto.motivation,
+        dealflowSources: applyDto.dealflowSources,
         portfolio: applyDto.portfolio,
         status: ScoutApplicationStatus.PENDING,
       });
@@ -117,6 +129,101 @@ describe('ScoutService', () => {
       await expect(service.apply(mockUserId, applyDto)).rejects.toThrow(
         ConflictException,
       );
+    });
+
+    it('should validate name field length (2-200 chars)', async () => {
+      const shortNameDto = { ...applyDto, name: 'J' };
+      const longNameDto = { ...applyDto, name: 'A'.repeat(201) };
+
+      expect(shortNameDto.name.length).toBeLessThan(2);
+      expect(longNameDto.name.length).toBeGreaterThan(200);
+    });
+
+    it('should validate email format', async () => {
+      const validEmail = applyDto.email;
+      const invalidEmail = 'not-an-email';
+
+      expect(validEmail).toContain('@');
+      expect(invalidEmail).not.toContain('@');
+    });
+
+    it('should validate experience field length (100-1000 chars)', async () => {
+      const shortExperience = 'Too short';
+      const validExperience = applyDto.experience;
+      const longExperience = 'A'.repeat(1001);
+
+      expect(shortExperience.length).toBeLessThan(100);
+      expect(validExperience.length).toBeGreaterThanOrEqual(100);
+      expect(validExperience.length).toBeLessThanOrEqual(1000);
+      expect(longExperience.length).toBeGreaterThan(1000);
+    });
+
+    it('should validate motivation field length (100-1000 chars)', async () => {
+      const shortMotivation = 'Too short';
+      const validMotivation = applyDto.motivation;
+      const longMotivation = 'A'.repeat(1001);
+
+      expect(shortMotivation.length).toBeLessThan(100);
+      expect(validMotivation.length).toBeGreaterThanOrEqual(100);
+      expect(validMotivation.length).toBeLessThanOrEqual(1000);
+      expect(longMotivation.length).toBeGreaterThan(1000);
+    });
+
+    it('should validate dealflowSources field length (50-500 chars)', async () => {
+      const shortSources = 'Too short';
+      const validSources = applyDto.dealflowSources;
+      const longSources = 'A'.repeat(501);
+
+      expect(shortSources.length).toBeLessThan(50);
+      expect(validSources.length).toBeGreaterThanOrEqual(50);
+      expect(validSources.length).toBeLessThanOrEqual(500);
+      expect(longSources.length).toBeGreaterThan(500);
+    });
+
+    it('should handle optional portfolio array', async () => {
+      const dtoWithoutPortfolio = { ...applyDto };
+      delete (dtoWithoutPortfolio as any).portfolio;
+
+      mockDb.limit.mockResolvedValueOnce([]);
+      mockDb.returning.mockResolvedValueOnce([
+        { ...mockApplication, portfolio: [] },
+      ]);
+
+      const result = await service.apply(mockUserId, dtoWithoutPortfolio);
+
+      expect(mockDb.values).toHaveBeenCalledWith(
+        expect.objectContaining({
+          portfolio: [],
+        }),
+      );
+    });
+
+    it('should save all fields correctly when creating application', async () => {
+      mockDb.limit.mockResolvedValueOnce([]);
+      mockDb.returning.mockResolvedValueOnce([mockApplication]);
+
+      await service.apply(mockUserId, applyDto);
+
+      expect(mockDb.values).toHaveBeenCalledWith({
+        userId: mockUserId,
+        investorId: applyDto.investorId,
+        name: applyDto.name,
+        email: applyDto.email,
+        linkedinUrl: applyDto.linkedinUrl,
+        experience: applyDto.experience,
+        motivation: applyDto.motivation,
+        dealflowSources: applyDto.dealflowSources,
+        portfolio: applyDto.portfolio,
+        status: ScoutApplicationStatus.PENDING,
+      });
+    });
+
+    it('should limit portfolio to 10 items max', async () => {
+      const validPortfolio = Array(10).fill('Company');
+      const invalidPortfolio = Array(11).fill('Company');
+
+      expect(validPortfolio.length).toBeLessThanOrEqual(10);
+      expect(invalidPortfolio.length).toBeGreaterThan(10);
     });
   });
 

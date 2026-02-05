@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Req,
   Res,
   UseGuards,
@@ -10,7 +11,7 @@ import {
   HttpStatus,
   UnauthorizedException,
   BadRequestException,
-} from '@nestjs/common';
+} from "@nestjs/common";
 import {
   ApiBody,
   ApiOperation,
@@ -19,16 +20,17 @@ import {
   ApiBearerAuth,
   ApiTooManyRequestsResponse,
   ApiUnauthorizedResponse,
-} from '@nestjs/swagger';
-import { Throttle, SkipThrottle } from '@nestjs/throttler';
-import type { Request, Response } from 'express';
-import { AuthService } from './auth.service';
-import { UserAuthService, type DbUser } from './user-auth.service';
-import { EmailService } from '../email';
-import { GoogleAuthGuard } from './guards';
-import { Public, CurrentUser } from './decorators';
-import { JWT_COOKIE_NAME, REFRESH_COOKIE_NAME } from './auth.constants';
-import { UserRole } from './entities/auth.schema';
+} from "@nestjs/swagger";
+import { Throttle, SkipThrottle } from "@nestjs/throttler";
+import type { Request, Response } from "express";
+import { AuthService } from "./auth.service";
+import { UserAuthService, type DbUser } from "./user-auth.service";
+import { ProfileService } from "./profile.service";
+import { EmailService } from "../email";
+import { GoogleAuthGuard } from "./guards";
+import { Public, CurrentUser } from "./decorators";
+import { JWT_COOKIE_NAME, REFRESH_COOKIE_NAME } from "./auth.constants";
+import { UserRole } from "./entities/auth.schema";
 import {
   LoginDto,
   RegisterDto,
@@ -38,29 +40,32 @@ import {
   UserResponseDto,
   EmailVerifyDto,
   ResendVerificationDto,
-} from './dto';
+  UpdateUserProfileDetailsDto,
+  UserProfileDto,
+} from "./dto";
 
 // Rate limit configs (requests per TTL window in seconds)
 const AUTH_RATE_LIMIT = { limit: 5, ttl: 60000 }; // 5 requests per minute
 const MAGIC_LINK_RATE_LIMIT = { limit: 3, ttl: 300000 }; // 3 requests per 5 minutes
 
-@ApiTags('auth')
-@Controller('auth')
-@ApiTooManyRequestsResponse({ description: 'Rate limit exceeded' })
+@ApiTags("auth")
+@Controller("auth")
+@ApiTooManyRequestsResponse({ description: "Rate limit exceeded" })
 export class AuthController {
   constructor(
     private authService: AuthService,
     private userAuthService: UserAuthService,
+    private profileService: ProfileService,
     private emailService: EmailService,
   ) {}
 
   // ============ EMAIL/PASSWORD ============
 
   @Public()
-  @Post('register')
+  @Post("register")
   @Throttle({ default: AUTH_RATE_LIMIT })
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Register with email and password' })
+  @ApiOperation({ summary: "Register with email and password" })
   @ApiBody({ type: RegisterDto })
   @ApiResponse({ status: 201, type: AuthResponseDto })
   async register(
@@ -83,13 +88,13 @@ export class AuthController {
   }
 
   @Public()
-  @Post('login')
+  @Post("login")
   @Throttle({ default: AUTH_RATE_LIMIT })
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Login with email and password' })
+  @ApiOperation({ summary: "Login with email and password" })
   @ApiBody({ type: LoginDto })
   @ApiResponse({ status: 200, type: AuthResponseDto })
-  @ApiUnauthorizedResponse({ description: 'Invalid credentials' })
+  @ApiUnauthorizedResponse({ description: "Invalid credentials" })
   async login(
     @Body() dto: LoginDto,
     @Res({ passthrough: true }) res: Response,
@@ -99,7 +104,7 @@ export class AuthController {
       dto.password,
     );
     if (!foundUser) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException("Invalid credentials");
     }
     return this.setTokensAndRespond(res, foundUser);
   }
@@ -107,20 +112,20 @@ export class AuthController {
   // ============ EMAIL VERIFICATION ============
 
   @Public()
-  @Post('verify-email')
+  @Post("verify-email")
   @Throttle({ default: AUTH_RATE_LIMIT })
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Verify email address' })
+  @ApiOperation({ summary: "Verify email address" })
   @ApiBody({ type: EmailVerifyDto })
   @ApiResponse({ status: 200, type: AuthResponseDto })
-  @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
+  @ApiUnauthorizedResponse({ description: "Invalid or expired token" })
   async verifyEmail(
     @Body() dto: EmailVerifyDto,
     @Res({ passthrough: true }) res: Response,
   ) {
     const foundUser = await this.userAuthService.verifyEmail(dto.token);
     if (!foundUser) {
-      throw new UnauthorizedException('Invalid or expired verification token');
+      throw new UnauthorizedException("Invalid or expired verification token");
     }
 
     // Send welcome email after verification
@@ -130,12 +135,12 @@ export class AuthController {
   }
 
   @Public()
-  @Post('resend-verification')
+  @Post("resend-verification")
   @Throttle({ default: MAGIC_LINK_RATE_LIMIT })
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Resend verification email' })
+  @ApiOperation({ summary: "Resend verification email" })
   @ApiBody({ type: ResendVerificationDto })
-  @ApiResponse({ status: 200, description: 'Verification email sent' })
+  @ApiResponse({ status: 200, description: "Verification email sent" })
   async resendVerification(@Body() dto: ResendVerificationDto) {
     const token = await this.userAuthService.resendVerificationEmail(dto.email);
 
@@ -146,19 +151,19 @@ export class AuthController {
     // Always return success to prevent email enumeration
     return {
       message:
-        'If the email exists and is unverified, a new link has been sent',
+        "If the email exists and is unverified, a new link has been sent",
     };
   }
 
   // ============ MAGIC LINK ============
 
   @Public()
-  @Post('magic-link/request')
+  @Post("magic-link/request")
   @Throttle({ default: MAGIC_LINK_RATE_LIMIT })
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Request magic link (sends email)' })
+  @ApiOperation({ summary: "Request magic link (sends email)" })
   @ApiBody({ type: MagicLinkRequestDto })
-  @ApiResponse({ status: 200, description: 'Magic link sent' })
+  @ApiResponse({ status: 200, description: "Magic link sent" })
   async requestMagicLink(@Body() dto: MagicLinkRequestDto) {
     const token = await this.authService.createMagicLink(dto.email);
 
@@ -166,26 +171,26 @@ export class AuthController {
     await this.emailService.sendMagicLinkEmail(dto.email, token);
 
     return {
-      message: 'Magic link sent to your email',
-      _devToken: process.env.NODE_ENV !== 'production' ? token : undefined,
+      message: "Magic link sent to your email",
+      _devToken: process.env.NODE_ENV !== "production" ? token : undefined,
     };
   }
 
   @Public()
-  @Post('magic-link/verify')
+  @Post("magic-link/verify")
   @Throttle({ default: AUTH_RATE_LIMIT })
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Verify magic link token' })
+  @ApiOperation({ summary: "Verify magic link token" })
   @ApiBody({ type: MagicLinkVerifyDto })
   @ApiResponse({ status: 200, type: AuthResponseDto })
-  @ApiUnauthorizedResponse({ description: 'Invalid or expired magic link' })
+  @ApiUnauthorizedResponse({ description: "Invalid or expired magic link" })
   async verifyMagicLink(
     @Body() dto: MagicLinkVerifyDto,
     @Res({ passthrough: true }) res: Response,
   ) {
     const foundUser = await this.authService.validateMagicLink(dto.token);
     if (!foundUser) {
-      throw new UnauthorizedException('Invalid or expired magic link');
+      throw new UnauthorizedException("Invalid or expired magic link");
     }
     return this.setTokensAndRespond(res, foundUser);
   }
@@ -193,17 +198,17 @@ export class AuthController {
   // ============ GOOGLE OAUTH ============
 
   @Public()
-  @Get('google')
+  @Get("google")
   @UseGuards(GoogleAuthGuard)
-  @ApiOperation({ summary: 'Initiate Google OAuth flow' })
+  @ApiOperation({ summary: "Initiate Google OAuth flow" })
   googleAuth() {
     // Guard redirects to Google
   }
 
   @Public()
-  @Get('google/callback')
+  @Get("google/callback")
   @UseGuards(GoogleAuthGuard)
-  @ApiOperation({ summary: 'Google OAuth callback' })
+  @ApiOperation({ summary: "Google OAuth callback" })
   async googleCallback(
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
@@ -212,19 +217,19 @@ export class AuthController {
     const tokens = await this.authService.generateTokens(foundUser);
     this.setTokenCookies(res, tokens.accessToken, tokens.refreshToken);
 
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
     return res.redirect(`${frontendUrl}/auth/callback?success=true`);
   }
 
   // ============ TOKEN MANAGEMENT ============
 
   @Public()
-  @Post('refresh')
+  @Post("refresh")
   @Throttle({ default: { limit: 10, ttl: 60000 } }) // 10 refreshes per minute
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Refresh access token' })
+  @ApiOperation({ summary: "Refresh access token" })
   @ApiResponse({ status: 200, type: AuthResponseDto })
-  @ApiUnauthorizedResponse({ description: 'No refresh token or invalid token' })
+  @ApiUnauthorizedResponse({ description: "No refresh token or invalid token" })
   async refresh(
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
@@ -233,7 +238,7 @@ export class AuthController {
       REFRESH_COOKIE_NAME
     ];
     if (!refreshToken) {
-      throw new UnauthorizedException('No refresh token');
+      throw new UnauthorizedException("No refresh token");
     }
 
     const result = await this.authService.refreshTokens(refreshToken);
@@ -246,10 +251,10 @@ export class AuthController {
     };
   }
 
-  @Post('logout')
-  @ApiBearerAuth('JWT')
-  @ApiOperation({ summary: 'Logout and clear tokens' })
-  @ApiResponse({ status: 200, description: 'Logged out successfully' })
+  @Post("logout")
+  @ApiBearerAuth("JWT")
+  @ApiOperation({ summary: "Logout and clear tokens" })
+  @ApiResponse({ status: 200, description: "Logged out successfully" })
   async logout(
     @CurrentUser() currentUser: DbUser,
     @Res({ passthrough: true }) res: Response,
@@ -259,13 +264,13 @@ export class AuthController {
 
     res.clearCookie(JWT_COOKIE_NAME);
     res.clearCookie(REFRESH_COOKIE_NAME);
-    return { message: 'Logged out successfully' };
+    return { message: "Logged out successfully" };
   }
 
-  @Post('logout-all')
-  @ApiBearerAuth('JWT')
-  @ApiOperation({ summary: 'Logout from all devices' })
-  @ApiResponse({ status: 200, description: 'Logged out from all devices' })
+  @Post("logout-all")
+  @ApiBearerAuth("JWT")
+  @ApiOperation({ summary: "Logout from all devices" })
+  @ApiResponse({ status: 200, description: "Logged out from all devices" })
   async logoutAll(
     @CurrentUser() currentUser: DbUser,
     @Res({ passthrough: true }) res: Response,
@@ -274,18 +279,65 @@ export class AuthController {
 
     res.clearCookie(JWT_COOKIE_NAME);
     res.clearCookie(REFRESH_COOKIE_NAME);
-    return { message: 'Logged out from all devices' };
+    return { message: "Logged out from all devices" };
   }
 
   // ============ CURRENT USER ============
 
-  @Get('me')
+  @Get("me")
   @SkipThrottle()
-  @ApiBearerAuth('JWT')
-  @ApiOperation({ summary: 'Get current authenticated user' })
+  @ApiBearerAuth("JWT")
+  @ApiOperation({ summary: "Get current authenticated user" })
   @ApiResponse({ status: 200, type: UserResponseDto })
   getMe(@CurrentUser() currentUser: DbUser): UserResponseDto {
     return this.sanitizeUser(currentUser);
+  }
+
+  // ============ PROFILE MANAGEMENT ============
+
+  @Get("profile")
+  @SkipThrottle()
+  @ApiBearerAuth("JWT")
+  @ApiOperation({ summary: "Get current user profile" })
+  @ApiResponse({ status: 200, type: UserProfileDto })
+  async getProfile(@CurrentUser() currentUser: DbUser) {
+    const profile = await this.profileService.getProfile(currentUser.id);
+    return {
+      id: profile.id,
+      userId: profile.userId,
+      companyName: profile.companyName,
+      title: profile.title,
+      linkedinUrl: profile.linkedinUrl,
+      bio: profile.bio,
+      createdAt: profile.createdAt.toISOString(),
+      updatedAt: profile.updatedAt.toISOString(),
+    };
+  }
+
+  @Patch("profile")
+  @Throttle({ default: { limit: 10, ttl: 60000 } }) // 10 updates per minute
+  @ApiBearerAuth("JWT")
+  @ApiOperation({ summary: "Update user profile" })
+  @ApiBody({ type: UpdateUserProfileDetailsDto })
+  @ApiResponse({ status: 200, type: UserProfileDto })
+  async updateProfile(
+    @CurrentUser() currentUser: DbUser,
+    @Body() dto: UpdateUserProfileDetailsDto,
+  ) {
+    const profile = await this.profileService.updateProfile(
+      currentUser.id,
+      dto,
+    );
+    return {
+      id: profile.id,
+      userId: profile.userId,
+      companyName: profile.companyName,
+      title: profile.title,
+      linkedinUrl: profile.linkedinUrl,
+      bio: profile.bio,
+      createdAt: profile.createdAt.toISOString(),
+      updatedAt: profile.updatedAt.toISOString(),
+    };
   }
 
   // ============ HELPERS ============
@@ -295,19 +347,19 @@ export class AuthController {
     accessToken: string,
     refreshToken: string,
   ) {
-    const isProduction = process.env.NODE_ENV === 'production';
+    const isProduction = process.env.NODE_ENV === "production";
 
     res.cookie(JWT_COOKIE_NAME, accessToken, {
       httpOnly: true,
       secure: isProduction,
-      sameSite: 'lax',
+      sameSite: "lax",
       maxAge: 15 * 60 * 1000,
     });
 
     res.cookie(REFRESH_COOKIE_NAME, refreshToken, {
       httpOnly: true,
       secure: isProduction,
-      sameSite: 'lax',
+      sameSite: "lax",
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
   }

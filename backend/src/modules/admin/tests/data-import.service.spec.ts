@@ -46,7 +46,7 @@ describe('DataImportService', () => {
 
   describe('importUsers', () => {
     const validCsv = `email,name,role
-john@example.com,John Doe,user
+john@example.com,John Doe,founder
 jane@example.com,Jane Smith,admin`;
 
     it('should import valid users from CSV', async () => {
@@ -205,7 +205,7 @@ john@example.com,Acme`;
         id: 'user-1',
         name: 'John Doe',
         email: 'john@example.com',
-        role: UserRole.USER,
+        role: UserRole.FOUNDER,
         emailVerified: true,
         createdAt: new Date('2024-01-01'),
       },
@@ -223,7 +223,7 @@ john@example.com,Acme`;
     it('should filter by role when provided', async () => {
       mockDb.where.mockResolvedValueOnce(mockUsers);
 
-      await service.exportUsers({ role: UserRole.USER });
+      await service.exportUsers({ role: UserRole.FOUNDER });
 
       expect(mockDb.where).toHaveBeenCalled();
     });

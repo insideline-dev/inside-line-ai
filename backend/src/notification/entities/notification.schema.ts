@@ -9,7 +9,6 @@ import {
   pgEnum,
 } from 'drizzle-orm/pg-core';
 import { user } from '../../auth/entities/auth.schema';
-import { crudOwnPolicy } from '../../common/rls';
 
 // ============================================================================
 // ENUMS
@@ -70,11 +69,8 @@ export const notification = pgTable(
       table.read,
       table.createdAt,
     ),
-
-    // RLS: Users see only their notifications
-    ...crudOwnPolicy(table.userId),
   ],
-).enableRLS();
+);
 
 // ============================================================================
 // RELATIONS

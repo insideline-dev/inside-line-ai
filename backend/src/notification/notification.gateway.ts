@@ -9,7 +9,7 @@ import { Logger, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { NotificationService } from './notification.service';
 import type { JwtPayload } from '../auth/auth.service';
-import type { NotificationPayload, NotificationCount } from './dto';
+import type { NotificationPayload, NotificationCount, JobStatusEvent } from './dto';
 
 @WebSocketGateway({
   cors: {
@@ -34,7 +34,9 @@ export class NotificationGateway
   async handleConnection(client: Socket) {
     try {
       const token =
-        client.handshake.auth?.token || client.handshake.headers?.authorization?.split(' ')[1];
+        client.handshake.auth?.token ||
+        client.handshake.headers?.authorization?.split(' ')[1] ||
+        (client.request as any)?.cookies?.['access_token'];
 
       if (!token) {
         throw new UnauthorizedException('No token provided');
@@ -72,5 +74,10 @@ export class NotificationGateway
     const payload: NotificationCount = { count };
     this.server.to(`user:${userId}`).emit('notification:count', payload);
     this.logger.debug(`Sent unread count to user ${userId}: ${count}`);
+  }
+
+  sendJobStatus(userId: string, event: JobStatusEvent) {
+    this.server.to(`user:${userId}`).emit('job:status', event);
+    this.logger.debug(`Sent job status to user ${userId}: ${event.jobType} → ${event.status}`);
   }
 }

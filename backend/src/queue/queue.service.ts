@@ -28,9 +28,28 @@ export class QueueService implements OnModuleDestroy {
   }
 
   get redisConnection(): ConnectionOptions {
+    const redisUrl = this.config.get<string>('REDIS_URL');
+
+    if (redisUrl) {
+      // Parse REDIS_URL (e.g., redis://localhost:6379 or redis://user:pass@host:port)
+      try {
+        const url = new URL(redisUrl);
+        return {
+          host: url.hostname,
+          port: parseInt(url.port || '6379', 10),
+          password: url.password || undefined,
+          username: url.username || undefined,
+          tls: url.protocol === 'rediss:' ? {} : undefined,
+        };
+      } catch (error) {
+        this.logger.error(`Failed to parse REDIS_URL: ${error}`);
+      }
+    }
+
+    // Fallback to individual env vars (legacy)
     return {
-      host: this.config.get('REDIS_HOST'),
-      port: this.config.get('REDIS_PORT'),
+      host: this.config.get('REDIS_HOST', 'localhost'),
+      port: this.config.get('REDIS_PORT', 6379),
       password: this.config.get('REDIS_PASSWORD'),
       tls: this.config.get('REDIS_TLS') ? {} : undefined,
     };

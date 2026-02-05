@@ -12,12 +12,12 @@ export const envSchema = z.object({
     'DATABASE_URL must be a valid PostgreSQL connection string',
   ),
 
-  // Redis Configuration
-  REDIS_URL: z.string().default('localhost'),
-  REDIS_HOST: z.string().default('localhost'),
-  REDIS_PORT: z.coerce.number().default(6379),
+  // Redis Configuration (use REDIS_URL, or fallback to individual vars)
+  REDIS_URL: z.string().default('redis://localhost:6379'),
+  REDIS_HOST: z.string().optional(),
+  REDIS_PORT: z.coerce.number().optional(),
   REDIS_PASSWORD: z.string().optional(),
-  REDIS_TLS: z.coerce.boolean().default(false),
+  REDIS_TLS: z.coerce.boolean().optional(),
 
   // Queue Configuration
   QUEUE_DEFAULT_ATTEMPTS: z.coerce.number().default(3),
@@ -60,6 +60,11 @@ export const envSchema = z.object({
   // AgentMail Integration
   AGENTMAIL_WEBHOOK_SECRET: z.string().optional(),
   AGENTMAIL_API_KEY: z.string().optional(),
+
+  // Unipile Integration (LinkedIn)
+  UNIPILE_DSN: z.string().optional(),
+  UNIPILE_API_KEY: z.string().optional(),
+  UNIPILE_ACCOUNT_ID: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { AuthController } from '../auth.controller';
 import { AuthService } from '../auth.service';
 import { UserAuthService } from '../user-auth.service';
+import { ProfileService } from '../profile.service';
 import { EmailService } from '../../email/email.service';
 import { UnauthorizedException } from '@nestjs/common';
 import { ThrottlerModule } from '@nestjs/throttler';
@@ -14,6 +15,7 @@ import {
   createMockAuthService,
   createMockUserAuthService,
   createMockEmailService,
+  createMockProfileService,
 } from './auth.test-utils';
 
 describe('AuthController User Management', () => {
@@ -21,11 +23,13 @@ describe('AuthController User Management', () => {
   let authService: any;
   let userAuthService: any;
   let emailService: any;
+  let profileService: any;
 
   beforeEach(async () => {
     authService = createMockAuthService();
     userAuthService = createMockUserAuthService();
     emailService = createMockEmailService();
+    profileService = createMockProfileService();
 
     const module: TestingModule = await Test.createTestingModule({
       imports: [
@@ -35,6 +39,7 @@ describe('AuthController User Management', () => {
       providers: [
         { provide: AuthService, useValue: authService },
         { provide: UserAuthService, useValue: userAuthService },
+        { provide: ProfileService, useValue: profileService },
         { provide: EmailService, useValue: emailService },
       ],
     }).compile();

@@ -4,6 +4,7 @@ import { InvestorController } from '../investor.controller';
 import { ThesisService } from '../thesis.service';
 import { ScoringService } from '../scoring.service';
 import { MatchService } from '../match.service';
+import { TeamService } from '../team.service';
 import { UserRole } from '../../../auth/entities/auth.schema';
 
 describe('InvestorController', () => {
@@ -16,7 +17,7 @@ describe('InvestorController', () => {
     id: '123e4567-e89b-12d3-a456-426614174000',
     email: 'investor@test.com',
     name: 'Test Investor',
-    role: UserRole.USER,
+    role: UserRole.INVESTOR,
     emailVerified: true,
     image: null,
   };
@@ -93,6 +94,16 @@ describe('InvestorController', () => {
             toggleSaved: jest.fn(),
             updateViewedAt: jest.fn(),
             regenerateMatches: jest.fn(),
+          },
+        },
+        {
+          provide: TeamService,
+          useValue: {
+            getTeam: jest.fn(),
+            createInvite: jest.fn(),
+            cancelInvite: jest.fn(),
+            removeMember: jest.fn(),
+            acceptInvite: jest.fn(),
           },
         },
       ],

@@ -1,0 +1,63 @@
+import { customFetch } from "@/api/client";
+import { env } from "@/env";
+import type {
+  AuthResponse,
+  LoginRequest,
+  RegisterRequest,
+  MagicLinkRequest,
+  EmailVerifyRequest,
+  ResendVerificationRequest,
+  User,
+  MessageResponse,
+} from "./types";
+
+export const authApi = {
+  // Email/Password
+  login: (data: LoginRequest) =>
+    customFetch<AuthResponse>("/auth/login", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  register: (data: RegisterRequest) =>
+    customFetch<AuthResponse>("/auth/register", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  // Magic Link
+  requestMagicLink: (data: MagicLinkRequest) =>
+    customFetch<MessageResponse>("/auth/magic-link/request", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  verifyMagicLink: (token: string) =>
+    customFetch<AuthResponse>("/auth/magic-link/verify", {
+      method: "POST",
+      body: JSON.stringify({ token }),
+    }),
+
+  // Google OAuth (redirect-based)
+  getGoogleAuthUrl: () => `${env.VITE_API_BASE_URL}/auth/google`,
+
+  // Session
+  getCurrentUser: () => customFetch<User>("/auth/me"),
+  logout: () => customFetch<MessageResponse>("/auth/logout", { method: "POST" }),
+  logoutAll: () =>
+    customFetch<MessageResponse>("/auth/logout-all", { method: "POST" }),
+  refresh: () =>
+    customFetch<AuthResponse>("/auth/refresh", { method: "POST" }),
+
+  // Email verification
+  verifyEmail: (data: EmailVerifyRequest) =>
+    customFetch<AuthResponse>("/auth/verify-email", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  resendVerification: (data: ResendVerificationRequest) =>
+    customFetch<MessageResponse>("/auth/resend-verification", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+};

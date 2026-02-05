@@ -17,7 +17,7 @@ describe('GoogleStrategy', () => {
     name: 'Google User',
     image: 'https://example.com/avatar.jpg',
     emailVerified: true,
-    role: UserRole.USER,
+    role: UserRole.FOUNDER,
     createdAt: new Date(),
     updatedAt: new Date(),
   };

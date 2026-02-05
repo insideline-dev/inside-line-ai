@@ -38,6 +38,7 @@ describe('AdminController', () => {
             getOverview: jest.fn(),
             getStartupStats: jest.fn(),
             getInvestorStats: jest.fn(),
+            normalizeLocations: jest.fn(),
           },
         },
         {
@@ -207,7 +208,7 @@ describe('AdminController', () => {
         const mockResponse = {
           accessToken: 'token',
           expiresIn: 900,
-          targetUser: { id: 'user-1', name: 'Test', email: 'test@example.com', role: UserRole.USER },
+          targetUser: { id: 'user-1', name: 'Test', email: 'test@example.com', role: UserRole.FOUNDER },
         };
 
         userManagementService.impersonate.mockResolvedValueOnce(mockResponse);
@@ -464,6 +465,37 @@ describe('AdminController', () => {
           'task-queue',
           'job-1',
         );
+      });
+    });
+  });
+
+  describe('Location Normalization Endpoints', () => {
+    describe('POST /admin/normalize-locations', () => {
+      it('should return count of startups to normalize', async () => {
+        const mockResult = {
+          message: 'Found 42 startups with location data to normalize',
+          startupsToNormalize: 42,
+        };
+
+        analyticsService.normalizeLocations.mockResolvedValueOnce(mockResult);
+
+        const result = await controller.normalizeLocations();
+
+        expect(result).toEqual(mockResult);
+        expect(analyticsService.normalizeLocations).toHaveBeenCalled();
+      });
+
+      it('should return 0 when all locations are normalized', async () => {
+        const mockResult = {
+          message: 'Found 0 startups with location data to normalize',
+          startupsToNormalize: 0,
+        };
+
+        analyticsService.normalizeLocations.mockResolvedValueOnce(mockResult);
+
+        const result = await controller.normalizeLocations();
+
+        expect(result).toEqual(mockResult);
       });
     });
   });

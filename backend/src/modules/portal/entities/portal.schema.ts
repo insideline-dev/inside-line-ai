@@ -1,4 +1,4 @@
-import { relations, sql } from 'drizzle-orm';
+import { relations } from 'drizzle-orm';
 import {
   pgTable,
   text,
@@ -8,16 +8,9 @@ import {
   uuid,
   uniqueIndex,
   pgEnum,
-  pgPolicy,
 } from 'drizzle-orm/pg-core';
 import { user } from '../../../auth/entities/auth.schema';
 import { startup } from '../../startup/entities/startup.schema';
-import {
-  appRole,
-  currentUserId,
-  isAdmin,
-  crudOwnPolicy,
-} from '../../../common/rls';
 
 // ============================================================================
 // ENUMS
@@ -76,18 +69,8 @@ export const portal = pgTable(
   (table) => [
     uniqueIndex('portal_slug_idx').on(table.slug),
     index('portal_user_idx').on(table.userId),
-
-    // RLS: Owner CRUD
-    ...crudOwnPolicy(table.userId),
-
-    // RLS: Public can view active portals
-    pgPolicy('portal_public_view', {
-      for: 'select',
-      to: appRole,
-      using: sql`${table.isActive} = true`,
-    }),
   ],
-).enableRLS();
+);
 
 // ============================================================================
 // PORTAL SUBMISSIONS TABLE
@@ -126,48 +109,8 @@ export const portalSubmission = pgTable(
       table.submittedAt,
     ),
     index('portal_submission_startup_idx').on(table.startupId),
-
-    // RLS: Portal owners can view submissions
-    pgPolicy('submission_portal_owner_select', {
-      for: 'select',
-      to: appRole,
-      using: sql`EXISTS (
-        SELECT 1 FROM portal
-        WHERE portal.id = ${table.portalId}
-        AND (portal.user_id = ${currentUserId} OR ${isAdmin})
-      )`,
-    }),
-    pgPolicy('submission_portal_owner_update', {
-      for: 'update',
-      to: appRole,
-      using: sql`EXISTS (
-        SELECT 1 FROM portal
-        WHERE portal.id = ${table.portalId}
-        AND (portal.user_id = ${currentUserId} OR ${isAdmin})
-      )`,
-    }),
-    // Startups can submit to portals
-    pgPolicy('submission_startup_insert', {
-      for: 'insert',
-      to: appRole,
-      withCheck: sql`EXISTS (
-        SELECT 1 FROM startup
-        WHERE startup.id = ${table.startupId}
-        AND (startup.user_id = ${currentUserId} OR ${isAdmin})
-      )`,
-    }),
-    // Startup owners can view their submissions
-    pgPolicy('submission_startup_owner_select', {
-      for: 'select',
-      to: appRole,
-      using: sql`EXISTS (
-        SELECT 1 FROM startup
-        WHERE startup.id = ${table.startupId}
-        AND (startup.user_id = ${currentUserId} OR ${isAdmin})
-      )`,
-    }),
   ],
-).enableRLS();
+);
 
 // ============================================================================
 // RELATIONS

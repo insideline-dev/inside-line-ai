@@ -1,6 +1,5 @@
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { NotificationCenter } from "@/components/NotificationCenter";
 import {
@@ -10,7 +9,22 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription, SheetHeader } from "@/components/ui/sheet";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarTrigger,
+  useSidebar,
+} from "@/components/ui/sidebar";
 import {
   Building2,
   FileText,
@@ -27,12 +41,10 @@ import {
   MessageSquare,
   Binoculars,
   Plus,
-  Menu,
+  ChevronsUpDown,
   type LucideIcon,
 } from "lucide-react";
-import { useState } from "react";
-import { useAuth } from "@/contexts/AuthContext";
-import { signOut } from "@/hooks/useAuth";
+import { useAuth, useLogout } from "@/lib/auth";
 import type { UserRole } from "@/types";
 import { useMockAuthStore } from "@/stores";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -81,39 +93,41 @@ interface RoleSidebarProps {
   children: React.ReactNode;
 }
 
-function NavContent({ role, onItemClick }: { role: UserRole; onItemClick?: () => void }) {
+function NavContent({ role }: { role: UserRole }) {
   const location = useLocation();
   const items = roleNavItems[role];
+  const { setOpenMobile } = useSidebar();
 
   return (
-    <nav className="space-y-1 px-2">
-      <div className="mb-4 px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-        {roleLabels[role]}
-      </div>
-      {items.map((item) => {
-        // Index routes (role home pages) need exact match to avoid highlighting when on sub-routes
-        const isRoleIndex = ["/investor", "/founder", "/admin", "/scout"].includes(item.url);
-        const isActive = isRoleIndex
-          ? location.pathname === item.url
-          : location.pathname === item.url || location.pathname.startsWith(item.url + "/");
-        return (
-          <Link
-            key={item.url}
-            to={item.url}
-            onClick={onItemClick}
-            className={cn(
-              "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
-              isActive
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-            )}
-          >
-            <item.icon className="h-4 w-4" />
-            {item.title}
-          </Link>
-        );
-      })}
-    </nav>
+    <SidebarGroup>
+      <SidebarGroupLabel>{roleLabels[role]}</SidebarGroupLabel>
+      <SidebarGroupContent>
+        <SidebarMenu>
+          {items.map((item) => {
+            const isRoleIndex = ["/investor", "/founder", "/admin", "/scout"].includes(item.url);
+            const isActive = isRoleIndex
+              ? location.pathname === item.url
+              : location.pathname === item.url || location.pathname.startsWith(item.url + "/");
+
+            return (
+              <SidebarMenuItem key={item.url}>
+                <SidebarMenuButton
+                  asChild
+                  isActive={isActive}
+                  tooltip={item.title}
+                  onClick={() => setOpenMobile(false)}
+                >
+                  <Link to={item.url}>
+                    <item.icon />
+                    <span>{item.title}</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            );
+          })}
+        </SidebarMenu>
+      </SidebarGroupContent>
+    </SidebarGroup>
   );
 }
 
@@ -121,10 +135,11 @@ function UserMenu() {
   const { user } = useAuth();
   const { currentRole, setRole } = useMockAuthStore();
   const navigate = useNavigate();
+  const logoutMutation = useLogout();
   const allRoles: UserRole[] = ["founder", "investor", "admin", "scout"];
 
-  const handleSignOut = async () => {
-    await signOut();
+  const handleSignOut = () => {
+    logoutMutation.mutate();
   };
 
   const handleRoleSwitch = (role: UserRole) => {
@@ -135,17 +150,29 @@ function UserMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="gap-2 px-2">
-          <Avatar className="h-7 w-7">
+        <SidebarMenuButton
+          size="lg"
+          className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+        >
+          <Avatar className="h-8 w-8 rounded-lg">
             <AvatarImage src={user?.image || undefined} />
-            <AvatarFallback>{user?.name?.charAt(0).toUpperCase() || "U"}</AvatarFallback>
+            <AvatarFallback className="rounded-lg">
+              {user?.name?.charAt(0).toUpperCase() || "U"}
+            </AvatarFallback>
           </Avatar>
-          <span className="hidden md:inline text-sm truncate max-w-[100px]">{user?.name || "User"}</span>
-        </Button>
+          <div className="grid flex-1 text-left text-sm leading-tight">
+            <span className="truncate font-semibold">{user?.name || "User"}</span>
+            <span className="truncate text-xs text-muted-foreground">{user?.email}</span>
+          </div>
+          <ChevronsUpDown className="ml-auto size-4" />
+        </SidebarMenuButton>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56">
-        <div className="px-2 py-1.5 text-sm font-medium">{user?.email}</div>
-        <DropdownMenuSeparator />
+      <DropdownMenuContent
+        className="w-[--radix-dropdown-menu-trigger-width] min-w-56 rounded-lg"
+        side="bottom"
+        align="end"
+        sideOffset={4}
+      >
         <DropdownMenuItem asChild>
           <Link to="/profile" className="flex items-center gap-2">
             <User className="h-4 w-4" />
@@ -173,66 +200,54 @@ function UserMenu() {
   );
 }
 
-export function RoleSidebar({ role, children }: RoleSidebarProps) {
-  const [mobileOpen, setMobileOpen] = useState(false);
-
+function AppSidebar({ role }: { role: UserRole }) {
   return (
-    <div className="flex min-h-screen w-full">
-      {/* Desktop Sidebar */}
-      <aside className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 bg-background border-r">
-        <div className="flex h-14 items-center border-b px-4">
-          <Link to="/" className="flex items-center gap-2 font-semibold">
-            <Shield className="h-6 w-6 text-primary" />
-            <span>Inside Line</span>
-          </Link>
-        </div>
-        <div className="flex-1 overflow-auto py-4">
-          <NavContent role={role} />
-        </div>
-      </aside>
+    <Sidebar collapsible="icon">
+      <SidebarHeader>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton size="lg" asChild>
+              <Link to="/">
+                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                  <Shield className="size-4" />
+                </div>
+                <div className="grid flex-1 text-left text-sm leading-tight">
+                  <span className="truncate font-semibold">Inside Line</span>
+                </div>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarHeader>
+      <SidebarContent>
+        <NavContent role={role} />
+      </SidebarContent>
+      <SidebarFooter>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <UserMenu />
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarFooter>
+    </Sidebar>
+  );
+}
 
-      {/* Main Content */}
-      <div className="flex flex-1 flex-col md:pl-64">
-        {/* Header */}
-        <header className="sticky top-0 z-40 flex h-14 items-center gap-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4">
-          {/* Mobile Menu */}
-          <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-            <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="md:hidden">
-                <Menu className="h-5 w-5" />
-                <span className="sr-only">Toggle menu</span>
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="left" className="w-64 p-0">
-              <SheetHeader className="sr-only">
-                <SheetTitle>Navigation</SheetTitle>
-                <SheetDescription>Navigation menu</SheetDescription>
-              </SheetHeader>
-              <div className="flex h-14 items-center border-b px-4">
-                <Link to="/" className="flex items-center gap-2 font-semibold">
-                  <Shield className="h-6 w-6 text-primary" />
-                  <span>Inside Line</span>
-                </Link>
-              </div>
-              <div className="py-4">
-                <NavContent role={role} onItemClick={() => setMobileOpen(false)} />
-              </div>
-            </SheetContent>
-          </Sheet>
-
+export function RoleSidebar({ role, children }: RoleSidebarProps) {
+  return (
+    <SidebarProvider>
+      <AppSidebar role={role} />
+      <SidebarInset>
+        <header className="sticky top-0 z-40 flex h-14 items-center gap-2 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4">
+          <SidebarTrigger className="-ml-1" />
           <div className="flex-1" />
-
-          {/* Right side header items */}
           <div className="flex items-center gap-2">
             <NotificationCenter />
             <ThemeToggle />
-            <UserMenu />
           </div>
         </header>
-
-        {/* Page Content */}
         <main className="flex-1 overflow-auto p-6">{children}</main>
-      </div>
-    </div>
+      </SidebarInset>
+    </SidebarProvider>
   );
 }

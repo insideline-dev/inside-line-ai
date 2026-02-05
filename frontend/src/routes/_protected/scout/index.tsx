@@ -2,15 +2,25 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StartupCard } from "@/components/startup/StartupCard";
-import { getMockStartupsByScout } from "@/mocks/data/startups";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useScoutControllerGetMySubmissions } from "@/api/generated/scout/scout";
 import { Plus, CheckCircle2, Clock, FileCheck } from "lucide-react";
+import type { Startup } from "@/types";
+
+interface StartupItem {
+  id: string;
+  name: string;
+  status: string;
+  [key: string]: unknown;
+}
 
 export const Route = createFileRoute("/_protected/scout/")({
   component: ScoutDashboard,
 });
 
 function ScoutDashboard() {
-  const startups = getMockStartupsByScout("user-scout-1");
+  const { data: response, isLoading, error } = useScoutControllerGetMySubmissions();
+  const startups = (response?.data as StartupItem[] | undefined) ?? [];
 
   const stats = {
     total: startups.length,
@@ -65,7 +75,15 @@ function ScoutDashboard() {
         </Card>
       </div>
 
-      {startups.length === 0 ? (
+      {isLoading ? (
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {[1, 2, 3].map((i) => <Skeleton key={i} className="h-48 rounded-lg" />)}
+        </div>
+      ) : error ? (
+        <div className="text-center py-12 text-destructive">
+          Failed to load submissions: {(error as Error).message}
+        </div>
+      ) : startups.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
           <div className="rounded-full bg-muted p-6 mb-4">
             <Plus className="h-12 w-12 text-muted-foreground" />
@@ -84,7 +102,7 @@ function ScoutDashboard() {
       ) : (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {startups.map((startup) => (
-            <StartupCard key={startup.id} startup={startup} basePath="/scout" />
+            <StartupCard key={startup.id} startup={startup as unknown as Startup} basePath="/scout" />
           ))}
         </div>
       )}

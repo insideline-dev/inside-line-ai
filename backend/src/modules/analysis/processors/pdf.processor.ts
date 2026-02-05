@@ -2,12 +2,13 @@ import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/commo
 import { ConfigService } from '@nestjs/config';
 import { Job } from 'bullmq';
 import { eq } from 'drizzle-orm';
-import { BaseProcessor } from '../../../queue/processors/base.processor';
+import { BaseProcessor, parseRedisUrl } from '../../../queue/processors/base.processor';
 import { ANALYSIS_QUEUE_NAME, ANALYSIS_QUEUE_CONFIG } from '../analysis.config';
 import { DrizzleService } from '../../../database';
 import { AnalysisService } from '../analysis.service';
 import { AnalysisJobStatus } from '../entities';
 import { NotificationService } from '../../../notification/notification.service';
+import { NotificationGateway } from '../../../notification/notification.gateway';
 import { NotificationType } from '../../../notification/entities';
 import { StorageService } from '../../../storage/storage.service';
 import { startup, Startup } from '../../startup/entities';
@@ -25,18 +26,11 @@ export class PdfProcessor
     private drizzle: DrizzleService,
     private analysisService: AnalysisService,
     private notificationService: NotificationService,
+    private notificationGateway: NotificationGateway,
     private storageService: StorageService,
   ) {
-    super(
-      ANALYSIS_QUEUE_NAME,
-      {
-        host: config.get('REDIS_HOST'),
-        port: config.get('REDIS_PORT'),
-        password: config.get('REDIS_PASSWORD'),
-        tls: config.get('REDIS_TLS') ? {} : undefined,
-      },
-      ANALYSIS_QUEUE_CONFIG.concurrency,
-    );
+    const redisUrl = config.get<string>('REDIS_URL', 'redis://localhost:6379');
+    super(ANALYSIS_QUEUE_NAME, parseRedisUrl(redisUrl), ANALYSIS_QUEUE_CONFIG.concurrency);
   }
 
   onModuleInit() {
@@ -50,7 +44,7 @@ export class PdfProcessor
   protected async process(
     job: Job<PdfJobData>,
   ): Promise<Omit<PdfJobResult, 'jobId' | 'duration' | 'success'>> {
-    const { startupId, analysisJobId, requestedBy } = job.data;
+    const { startupId, analysisJobId, requestedBy, userId } = job.data;
 
     if (job.data.type !== 'pdf') {
       return { type: 'pdf', pdfUrl: '', pdfKey: '' };
@@ -61,6 +55,12 @@ export class PdfProcessor
         analysisJobId,
         AnalysisJobStatus.PROCESSING,
       );
+
+      this.notificationGateway.sendJobStatus(userId, {
+        jobId: analysisJobId,
+        jobType: 'pdf',
+        status: 'processing',
+      });
 
       const startupData = await this.getStartup(startupId);
       if (!startupData) {
@@ -84,6 +84,13 @@ export class PdfProcessor
         { pdfUrl, pdfKey },
       );
 
+      this.notificationGateway.sendJobStatus(userId, {
+        jobId: analysisJobId,
+        jobType: 'pdf',
+        status: 'completed',
+        result: { pdfUrl, pdfKey },
+      });
+
       await this.notificationService.create(
         requestedBy,
         'Investment Memo Ready',
@@ -103,6 +110,14 @@ export class PdfProcessor
         undefined,
         errorMessage,
       );
+
+      this.notificationGateway.sendJobStatus(userId, {
+        jobId: analysisJobId,
+        jobType: 'pdf',
+        status: 'failed',
+        error: errorMessage,
+      });
+
       throw error;
     }
   }

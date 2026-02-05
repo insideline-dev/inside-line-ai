@@ -107,7 +107,7 @@ export class UserManagementService {
 
     // Prevent removing the last admin
     if (
-      dto.role === UserRole.USER &&
+      dto.role === UserRole.FOUNDER &&
       existing.role === UserRole.ADMIN
     ) {
       const adminCount = await this.drizzle.db

@@ -1,44 +1,77 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { toast } from "sonner";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useToast } from "@/hooks/use-toast";
+import { Button } from "@/components/ui/button";
+import { useScoutControllerApply } from "@/api/generated/scout/scout";
 
 export const Route = createFileRoute("/_protected/scout/apply")({
   component: ScoutApplication,
 });
 
+const applyScoutSchema = z.object({
+  name: z.string().min(2, "Name must be at least 2 characters").max(200),
+  email: z.string().email("Invalid email address"),
+  linkedinUrl: z.string().url("Must be a valid URL"),
+  experience: z.string().min(100, "Experience must be at least 100 characters").max(1000),
+  motivation: z.string().min(100, "Motivation must be at least 100 characters").max(1000),
+  dealflowSources: z.string().min(50, "Dealflow sources must be at least 50 characters").max(500),
+  portfolio: z.string().optional(),
+});
+
+type ApplyScoutForm = z.infer<typeof applyScoutSchema>;
+
 function ScoutApplication() {
-  const { toast } = useToast();
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formData, setFormData] = useState({
-    name: "",
-    email: "",
-    linkedinUrl: "",
-    experience: "",
-    motivation: "",
-    dealflowSources: "",
+  const form = useForm({
+    resolver: zodResolver(applyScoutSchema) as any,
+    defaultValues: {
+      name: "",
+      email: "",
+      linkedinUrl: "",
+      experience: "",
+      motivation: "",
+      dealflowSources: "",
+      portfolio: "",
+    },
   });
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
+  const { mutate, isPending } = useScoutControllerApply({
+    mutation: {
+      onSuccess: () => {
+        toast.success("Application submitted successfully");
+        form.reset();
+      },
+      onError: (error) => {
+        toast.error((error as Error).message || "Failed to submit application");
+      },
+    },
+  });
 
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+  const onSubmit = (values: ApplyScoutForm) => {
+    // TODO: Get investorId from route params or user context when available
+    const investorId = "00000000-0000-0000-0000-000000000001";
 
-    toast.success("Application submitted", {
-      description: "We'll review your application and get back to you soon.",
+    const portfolio = values.portfolio
+      ? values.portfolio.split("\n").map((url) => url.trim()).filter(Boolean)
+      : [];
+
+    mutate({
+      data: {
+        investorId,
+        name: values.name,
+        email: values.email,
+        linkedinUrl: values.linkedinUrl,
+        experience: values.experience,
+        motivation: values.motivation,
+        dealflowSources: values.dealflowSources,
+        portfolio,
+      } as any, // Type mismatch due to outdated OpenAPI spec
     });
-
-    setIsSubmitting(false);
-  };
-
-  const handleChange = (field: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
   return (
@@ -52,84 +85,143 @@ function ScoutApplication() {
         <CardHeader>
           <CardTitle>Scout Application</CardTitle>
           <CardDescription>
-            Tell us about yourself and why you'd be a great scout for Inside Line
+            Tell us about your background and why you'd be a great scout
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Full Name</Label>
-              <Input
-                id="name"
-                value={formData.name}
-                onChange={(e) => handleChange("name", e.target.value)}
-                required
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Full Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="John Doe" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
-            </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                value={formData.email}
-                onChange={(e) => handleChange("email", e.target.value)}
-                required
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl>
+                      <Input type="email" placeholder="john@example.com" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
-            </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="linkedinUrl">LinkedIn Profile</Label>
-              <Input
-                id="linkedinUrl"
-                type="url"
-                placeholder="https://linkedin.com/in/..."
-                value={formData.linkedinUrl}
-                onChange={(e) => handleChange("linkedinUrl", e.target.value)}
-                required
+              <FormField
+                control={form.control}
+                name="linkedinUrl"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>LinkedIn URL</FormLabel>
+                    <FormControl>
+                      <Input placeholder="https://linkedin.com/in/..." {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
-            </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="experience">Relevant Experience</Label>
-              <Textarea
-                id="experience"
-                placeholder="Describe your experience in the startup ecosystem, investment, or technology..."
-                value={formData.experience}
-                onChange={(e) => handleChange("experience", e.target.value)}
-                rows={4}
-                required
+              <FormField
+                control={form.control}
+                name="experience"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Experience</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Describe your relevant experience in the startup ecosystem..."
+                        className="min-h-32"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      {field.value.length}/1000 characters (min 100)
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
-            </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="motivation">Why do you want to be a scout?</Label>
-              <Textarea
-                id="motivation"
-                placeholder="Share your motivation for becoming a scout..."
-                value={formData.motivation}
-                onChange={(e) => handleChange("motivation", e.target.value)}
-                rows={4}
-                required
+              <FormField
+                control={form.control}
+                name="motivation"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Motivation</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Why do you want to become a scout?"
+                        className="min-h-32"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      {field.value.length}/1000 characters (min 100)
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
-            </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="dealflowSources">Deal Flow Sources</Label>
-              <Textarea
-                id="dealflowSources"
-                placeholder="Describe how you'll source promising startups (networks, communities, events, etc.)"
-                value={formData.dealflowSources}
-                onChange={(e) => handleChange("dealflowSources", e.target.value)}
-                rows={4}
-                required
+              <FormField
+                control={form.control}
+                name="dealflowSources"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Dealflow Sources</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Where do you discover promising startups?"
+                        className="min-h-24"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      {field.value.length}/500 characters (min 50)
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
-            </div>
 
-            <Button type="submit" className="w-full" disabled={isSubmitting}>
-              {isSubmitting ? "Submitting..." : "Submit Application"}
-            </Button>
-          </form>
+              <FormField
+                control={form.control}
+                name="portfolio"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Portfolio (Optional)</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="List URLs of startups you've worked with (one per line)"
+                        className="min-h-24"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      One URL per line, max 10
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <Button type="submit" disabled={isPending} className="w-full">
+                {isPending ? "Submitting..." : "Submit Application"}
+              </Button>
+            </form>
+          </Form>
         </CardContent>
       </Card>
     </div>

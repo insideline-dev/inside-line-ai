@@ -9,7 +9,7 @@ export const mockUser: DbUser = {
   name: 'Test User',
   image: null,
   emailVerified: true,
-  role: UserRole.USER,
+  role: UserRole.FOUNDER,
   createdAt: new Date(),
   updatedAt: new Date(),
 };
@@ -51,4 +51,20 @@ export const createMockEmailService = () => ({
   sendVerificationEmail: mock(() => Promise.resolve()),
   sendWelcomeEmail: mock(() => Promise.resolve()),
   sendMagicLinkEmail: mock(() => Promise.resolve()),
+});
+
+export const mockUserProfile = {
+  id: 'profile-1',
+  userId: mockUser.id,
+  companyName: null,
+  title: null,
+  linkedinUrl: null,
+  bio: null,
+  createdAt: new Date(),
+  updatedAt: new Date(),
+};
+
+export const createMockProfileService = () => ({
+  getProfile: mock(() => Promise.resolve(mockUserProfile)),
+  updateProfile: mock(() => Promise.resolve(mockUserProfile)),
 });

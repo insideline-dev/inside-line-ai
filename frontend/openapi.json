@@ -1,0 +1,4762 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/storage/presigned-url": {
+      "post": {
+        "operationId": "StorageController_getUploadUrl",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GetUploadUrlDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadUrlResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Get presigned URL for client-side upload",
+        "tags": [
+          "Storage"
+        ]
+      }
+    },
+    "/storage/assets": {
+      "get": {
+        "operationId": "StorageController_listAssets",
+        "parameters": [
+          {
+            "name": "projectId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "List user assets",
+        "tags": [
+          "Storage"
+        ]
+      }
+    },
+    "/storage/assets/{id}": {
+      "get": {
+        "operationId": "StorageController_getAsset",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Get asset details",
+        "tags": [
+          "Storage"
+        ]
+      },
+      "delete": {
+        "operationId": "StorageController_deleteAsset",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Delete an asset from DB and R2",
+        "tags": [
+          "Storage"
+        ]
+      }
+    },
+    "/storage/{key}/download-url": {
+      "get": {
+        "operationId": "StorageController_getDownloadUrl",
+        "parameters": [
+          {
+            "name": "key",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DownloadUrlResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Get presigned download URL",
+        "tags": [
+          "Storage"
+        ]
+      }
+    },
+    "/storage/{key}": {
+      "delete": {
+        "operationId": "StorageController_deleteFile",
+        "parameters": [
+          {
+            "name": "key",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Delete a raw file from R2",
+        "tags": [
+          "Storage"
+        ]
+      }
+    },
+    "/auth/register": {
+      "post": {
+        "operationId": "AuthController_register",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponseDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        },
+        "summary": "Register with email and password",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "operationId": "AuthController_login",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid credentials"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        },
+        "summary": "Login with email and password",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/verify-email": {
+      "post": {
+        "operationId": "AuthController_verifyEmail",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailVerifyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or expired token"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        },
+        "summary": "Verify email address",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/resend-verification": {
+      "post": {
+        "operationId": "AuthController_resendVerification",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResendVerificationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Verification email sent"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        },
+        "summary": "Resend verification email",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/magic-link/request": {
+      "post": {
+        "operationId": "AuthController_requestMagicLink",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MagicLinkRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Magic link sent"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        },
+        "summary": "Request magic link (sends email)",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/magic-link/verify": {
+      "post": {
+        "operationId": "AuthController_verifyMagicLink",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MagicLinkVerifyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or expired magic link"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        },
+        "summary": "Verify magic link token",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/google": {
+      "get": {
+        "operationId": "AuthController_googleAuth",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        },
+        "summary": "Initiate Google OAuth flow",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/google/callback": {
+      "get": {
+        "operationId": "AuthController_googleCallback",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        },
+        "summary": "Google OAuth callback",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/refresh": {
+      "post": {
+        "operationId": "AuthController_refresh",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No refresh token or invalid token"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        },
+        "summary": "Refresh access token",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "operationId": "AuthController_logout",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Logged out successfully"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Logout and clear tokens",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/logout-all": {
+      "post": {
+        "operationId": "AuthController_logoutAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Logged out from all devices"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Logout from all devices",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "operationId": "AuthController_getMe",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponseDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Get current authenticated user",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/profile": {
+      "get": {
+        "operationId": "AuthController_getProfile",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserProfileDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Get current user profile",
+        "tags": [
+          "auth"
+        ]
+      },
+      "patch": {
+        "operationId": "AuthController_updateProfile",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserProfileDetailsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserProfileDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Update user profile",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/notifications": {
+      "get": {
+        "operationId": "NotificationController_getNotifications",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "List of notifications"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Get my notifications (paginated)",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/notifications/{id}/read": {
+      "patch": {
+        "operationId": "NotificationController_markAsRead",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Notification marked as read"
+          },
+          "404": {
+            "description": "Notification not found"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Mark notification as read",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/notifications/{id}": {
+      "delete": {
+        "operationId": "NotificationController_deleteNotification",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Notification deleted"
+          },
+          "404": {
+            "description": "Notification not found"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Delete notification",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/startups": {
+      "post": {
+        "operationId": "StartupController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateStartupDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Startup"
+        ]
+      },
+      "get": {
+        "operationId": "StartupController_findAll",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maximum": 9007199254740991,
+              "exclusiveMinimum": true,
+              "default": 1,
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maximum": 100,
+              "exclusiveMinimum": true,
+              "default": 20,
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "draft",
+                "submitted",
+                "analyzing",
+                "pending_review",
+                "approved",
+                "rejected"
+              ]
+            }
+          },
+          {
+            "name": "industry",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "stage",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pre_seed",
+                "seed",
+                "series_a",
+                "series_b",
+                "series_c",
+                "series_d",
+                "series_e",
+                "series_f_plus"
+              ]
+            }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Startup"
+        ]
+      }
+    },
+    "/startups/{id}": {
+      "get": {
+        "operationId": "StartupController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Startup"
+        ]
+      },
+      "patch": {
+        "operationId": "StartupController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateStartupDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Startup"
+        ]
+      },
+      "delete": {
+        "operationId": "StartupController_delete",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Startup"
+        ]
+      }
+    },
+    "/startups/{id}/submit": {
+      "post": {
+        "operationId": "StartupController_submit",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitStartupDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Startup"
+        ]
+      }
+    },
+    "/startups/{id}/resubmit": {
+      "post": {
+        "operationId": "StartupController_resubmit",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitStartupDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Startup"
+        ]
+      }
+    },
+    "/startups/{id}/jobs": {
+      "get": {
+        "operationId": "StartupController_getJobs",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Startup"
+        ]
+      }
+    },
+    "/startups/{id}/upload-url": {
+      "post": {
+        "operationId": "StartupController_getUploadUrl",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PresignedUrlDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Startup"
+        ]
+      }
+    },
+    "/startups/{id}/draft": {
+      "post": {
+        "operationId": "StartupController_saveDraft",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveDraftDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Startup"
+        ]
+      },
+      "get": {
+        "operationId": "StartupController_getDraft",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Startup"
+        ]
+      }
+    },
+    "/startups/{id}/progress": {
+      "get": {
+        "operationId": "StartupController_getProgress",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Startup"
+        ]
+      }
+    },
+    "/startups/{id}/memo.pdf": {
+      "get": {
+        "operationId": "StartupController_downloadMemo",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Startup"
+        ]
+      }
+    },
+    "/startups/{id}/report.pdf": {
+      "get": {
+        "operationId": "StartupController_downloadReport",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Startup"
+        ]
+      }
+    },
+    "/startups/approved/list": {
+      "get": {
+        "operationId": "StartupController_findApproved",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maximum": 9007199254740991,
+              "exclusiveMinimum": true,
+              "default": 1,
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maximum": 100,
+              "exclusiveMinimum": true,
+              "default": 20,
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "industry",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "stage",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pre_seed",
+                "seed",
+                "series_a",
+                "series_b",
+                "series_c",
+                "series_d",
+                "series_e",
+                "series_f_plus"
+              ]
+            }
+          },
+          {
+            "name": "location",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Startup"
+        ]
+      }
+    },
+    "/startups/approved/{id}": {
+      "get": {
+        "operationId": "StartupController_findApprovedById",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Startup"
+        ]
+      }
+    },
+    "/startups/approved/{id}/evaluation": {
+      "get": {
+        "operationId": "StartupController_getEvaluation",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Startup"
+        ]
+      }
+    },
+    "/startups/admin/all": {
+      "get": {
+        "operationId": "StartupController_adminFindAll",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maximum": 9007199254740991,
+              "exclusiveMinimum": true,
+              "default": 1,
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maximum": 100,
+              "exclusiveMinimum": true,
+              "default": 20,
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "draft",
+                "submitted",
+                "analyzing",
+                "pending_review",
+                "approved",
+                "rejected"
+              ]
+            }
+          },
+          {
+            "name": "industry",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "stage",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pre_seed",
+                "seed",
+                "series_a",
+                "series_b",
+                "series_c",
+                "series_d",
+                "series_e",
+                "series_f_plus"
+              ]
+            }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Startup"
+        ]
+      }
+    },
+    "/startups/admin/pending": {
+      "get": {
+        "operationId": "StartupController_adminFindPending",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maximum": 9007199254740991,
+              "exclusiveMinimum": true,
+              "default": 1,
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maximum": 100,
+              "exclusiveMinimum": true,
+              "default": 20,
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "draft",
+                "submitted",
+                "analyzing",
+                "pending_review",
+                "approved",
+                "rejected"
+              ]
+            }
+          },
+          {
+            "name": "industry",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "stage",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pre_seed",
+                "seed",
+                "series_a",
+                "series_b",
+                "series_c",
+                "series_d",
+                "series_e",
+                "series_f_plus"
+              ]
+            }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Startup"
+        ]
+      }
+    },
+    "/startups/admin/{id}/approve": {
+      "post": {
+        "operationId": "StartupController_approve",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApproveStartupDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Startup"
+        ]
+      }
+    },
+    "/startups/admin/{id}/reject": {
+      "post": {
+        "operationId": "StartupController_reject",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectStartupDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Startup"
+        ]
+      }
+    },
+    "/startups/admin/{id}/reanalyze": {
+      "post": {
+        "operationId": "StartupController_reanalyze",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Startup"
+        ]
+      }
+    },
+    "/startups/admin/{id}": {
+      "patch": {
+        "operationId": "StartupController_adminUpdate",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateStartupDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Startup"
+        ]
+      },
+      "delete": {
+        "operationId": "StartupController_adminDelete",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Startup"
+        ]
+      }
+    },
+    "/startups/public/{slug}": {
+      "get": {
+        "operationId": "StartupController_findBySlug",
+        "parameters": [
+          {
+            "name": "slug",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Startup"
+        ]
+      }
+    },
+    "/portals": {
+      "post": {
+        "operationId": "PortalController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePortalDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Portal"
+        ]
+      },
+      "get": {
+        "operationId": "PortalController_findAll",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maximum": 9007199254740991,
+              "exclusiveMinimum": true,
+              "default": 1,
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maximum": 100,
+              "exclusiveMinimum": true,
+              "default": 10,
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Portal"
+        ]
+      }
+    },
+    "/portals/{id}": {
+      "get": {
+        "operationId": "PortalController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Portal"
+        ]
+      },
+      "patch": {
+        "operationId": "PortalController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePortalDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Portal"
+        ]
+      },
+      "delete": {
+        "operationId": "PortalController_delete",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Portal"
+        ]
+      }
+    },
+    "/portals/{id}/submissions": {
+      "get": {
+        "operationId": "PortalController_getSubmissions",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maximum": 9007199254740991,
+              "exclusiveMinimum": true,
+              "default": 1,
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maximum": 100,
+              "exclusiveMinimum": true,
+              "default": 10,
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "approved",
+                "rejected"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Portal"
+        ]
+      }
+    },
+    "/portals/{id}/submissions/{submissionId}/approve": {
+      "post": {
+        "operationId": "PortalController_approveSubmission",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "submissionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Portal"
+        ]
+      }
+    },
+    "/portals/{id}/submissions/{submissionId}/reject": {
+      "post": {
+        "operationId": "PortalController_rejectSubmission",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "submissionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Portal"
+        ]
+      }
+    },
+    "/portals/apply/{slug}": {
+      "get": {
+        "operationId": "PortalController_getPortalBySlug",
+        "parameters": [
+          {
+            "name": "slug",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Portal"
+        ]
+      },
+      "post": {
+        "operationId": "PortalController_submitToPortal",
+        "parameters": [
+          {
+            "name": "slug",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitToPortalDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Portal"
+        ]
+      }
+    },
+    "/scout/apply": {
+      "post": {
+        "operationId": "ScoutController_apply",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplyScoutDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Scout"
+        ]
+      }
+    },
+    "/scout/applications": {
+      "get": {
+        "operationId": "ScoutController_getMyApplications",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maximum": 9007199254740991,
+              "exclusiveMinimum": true,
+              "default": 1,
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maximum": 100,
+              "exclusiveMinimum": true,
+              "default": 10,
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "approved",
+                "rejected"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Scout"
+        ]
+      }
+    },
+    "/scout/submit": {
+      "post": {
+        "operationId": "ScoutController_submit",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScoutSubmitStartupDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Scout"
+        ]
+      }
+    },
+    "/scout/submissions": {
+      "get": {
+        "operationId": "ScoutController_getMySubmissions",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maximum": 9007199254740991,
+              "exclusiveMinimum": true,
+              "default": 1,
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maximum": 100,
+              "exclusiveMinimum": true,
+              "default": 10,
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "investorId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Scout"
+        ]
+      }
+    },
+    "/investor/scout-applications": {
+      "get": {
+        "operationId": "ScoutController_getScoutApplications",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maximum": 9007199254740991,
+              "exclusiveMinimum": true,
+              "default": 1,
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maximum": 100,
+              "exclusiveMinimum": true,
+              "default": 10,
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "approved",
+                "rejected"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Scout"
+        ]
+      }
+    },
+    "/investor/scout-applications/{id}/approve": {
+      "post": {
+        "operationId": "ScoutController_approveApplication",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Scout"
+        ]
+      }
+    },
+    "/investor/scout-applications/{id}/reject": {
+      "post": {
+        "operationId": "ScoutController_rejectApplication",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectScoutDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Scout"
+        ]
+      }
+    },
+    "/investor/scout-submissions": {
+      "get": {
+        "operationId": "ScoutController_getScoutSubmissions",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maximum": 9007199254740991,
+              "exclusiveMinimum": true,
+              "default": 1,
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maximum": 100,
+              "exclusiveMinimum": true,
+              "default": 10,
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "investorId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Scout"
+        ]
+      }
+    },
+    "/admin/stats": {
+      "get": {
+        "operationId": "AdminController_getStats",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/stats/startups": {
+      "get": {
+        "operationId": "AdminController_getStartupStats",
+        "parameters": [
+          {
+            "name": "days",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maximum": 365,
+              "exclusiveMinimum": true,
+              "default": 30,
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/stats/investors": {
+      "get": {
+        "operationId": "AdminController_getInvestorStats",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/users": {
+      "get": {
+        "operationId": "AdminController_getUsers",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maximum": 9007199254740991,
+              "exclusiveMinimum": true,
+              "default": 1,
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maximum": 100,
+              "exclusiveMinimum": true,
+              "default": 20,
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "role",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "founder",
+                "investor",
+                "admin",
+                "scout"
+              ]
+            }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/users/{id}": {
+      "get": {
+        "operationId": "AdminController_getUser",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ]
+      },
+      "patch": {
+        "operationId": "AdminController_updateUser",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ]
+      },
+      "delete": {
+        "operationId": "AdminController_deleteUser",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/users/{id}/impersonate": {
+      "post": {
+        "operationId": "AdminController_impersonateUser",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/startups/pending": {
+      "get": {
+        "operationId": "AdminController_getPendingStartups",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maximum": 9007199254740991,
+              "exclusiveMinimum": true,
+              "default": 1,
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maximum": 100,
+              "exclusiveMinimum": true,
+              "default": 20,
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "draft",
+                "submitted",
+                "analyzing",
+                "pending_review",
+                "approved",
+                "rejected"
+              ]
+            }
+          },
+          {
+            "name": "industry",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "stage",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pre_seed",
+                "seed",
+                "series_a",
+                "series_b",
+                "series_c",
+                "series_d",
+                "series_e",
+                "series_f_plus"
+              ]
+            }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/startups/{id}/approve": {
+      "post": {
+        "operationId": "AdminController_approveStartup",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/startups/{id}/reject": {
+      "post": {
+        "operationId": "AdminController_rejectStartup",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/scoring/defaults": {
+      "get": {
+        "operationId": "AdminController_getScoringDefaults",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ]
+      },
+      "put": {
+        "operationId": "AdminController_updateScoringDefaults",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateDefaultWeightsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/data/import/users": {
+      "post": {
+        "operationId": "AdminController_importUsers",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/data/import/startups": {
+      "post": {
+        "operationId": "AdminController_importStartups",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/data/export/users": {
+      "get": {
+        "operationId": "AdminController_exportUsers",
+        "parameters": [
+          {
+            "name": "role",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "founder",
+                "investor",
+                "admin",
+                "scout"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/data/export/startups": {
+      "get": {
+        "operationId": "AdminController_exportStartups",
+        "parameters": [
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "draft",
+                "submitted",
+                "analyzing",
+                "pending_review",
+                "approved",
+                "rejected"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/queue/status": {
+      "get": {
+        "operationId": "AdminController_getQueueStatus",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/queue/retry/{jobId}": {
+      "post": {
+        "operationId": "AdminController_retryJob",
+        "parameters": [
+          {
+            "name": "jobId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "queue",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/normalize-locations": {
+      "post": {
+        "operationId": "AdminController_normalizeLocations",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/investor/thesis": {
+      "get": {
+        "operationId": "InvestorController_getThesis",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Investor"
+        ]
+      },
+      "post": {
+        "operationId": "InvestorController_createOrUpdateThesis",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateThesisDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Investor"
+        ]
+      },
+      "delete": {
+        "operationId": "InvestorController_deleteThesis",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Investor"
+        ]
+      }
+    },
+    "/investor/scoring": {
+      "get": {
+        "operationId": "InvestorController_getScoringWeights",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Investor"
+        ]
+      },
+      "put": {
+        "operationId": "InvestorController_updateScoringWeights",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateScoringWeightsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Investor"
+        ]
+      }
+    },
+    "/investor/matches": {
+      "get": {
+        "operationId": "InvestorController_getMatches",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maximum": 9007199254740991,
+              "exclusiveMinimum": true,
+              "default": 1,
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maximum": 100,
+              "exclusiveMinimum": true,
+              "default": 20,
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "minScore",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 0,
+              "maximum": 100,
+              "type": "integer"
+            }
+          },
+          {
+            "name": "isSaved",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Investor"
+        ]
+      }
+    },
+    "/investor/matches/{startupId}": {
+      "get": {
+        "operationId": "InvestorController_getMatchDetails",
+        "parameters": [
+          {
+            "name": "startupId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Investor"
+        ]
+      }
+    },
+    "/investor/matches/{startupId}/save": {
+      "patch": {
+        "operationId": "InvestorController_toggleSaved",
+        "parameters": [
+          {
+            "name": "startupId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Investor"
+        ]
+      }
+    },
+    "/investor/team": {
+      "get": {
+        "operationId": "InvestorController_getTeam",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Investor"
+        ]
+      }
+    },
+    "/investor/team/invite": {
+      "post": {
+        "operationId": "InvestorController_createTeamInvite",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTeamInviteDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Investor"
+        ]
+      }
+    },
+    "/investor/team/invite/{id}": {
+      "delete": {
+        "operationId": "InvestorController_cancelInvite",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Investor"
+        ]
+      }
+    },
+    "/investor/team/member/{id}": {
+      "delete": {
+        "operationId": "InvestorController_removeMember",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Investor"
+        ]
+      }
+    },
+    "/investor/team/join/{inviteCode}": {
+      "post": {
+        "operationId": "InvestorTeamPublicController_acceptInvite",
+        "parameters": [
+          {
+            "name": "inviteCode",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "InvestorTeamPublic"
+        ]
+      }
+    },
+    "/integrations/twilio/webhook": {
+      "post": {
+        "operationId": "TwilioController_handleWebhook",
+        "parameters": [
+          {
+            "name": "x-twilio-signature",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TwilioWebhookDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Twilio"
+        ]
+      }
+    },
+    "/integrations/twilio/messages": {
+      "get": {
+        "operationId": "TwilioController_getMessages",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 9007199254740991,
+              "default": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "integer"
+            }
+          },
+          {
+            "name": "conversationId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Twilio"
+        ]
+      },
+      "post": {
+        "operationId": "TwilioController_sendMessage",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendMessageDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Twilio"
+        ]
+      }
+    },
+    "/integrations/twilio/messages/{conversationId}": {
+      "get": {
+        "operationId": "TwilioController_getConversation",
+        "parameters": [
+          {
+            "name": "conversationId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 9007199254740991,
+              "default": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "integer"
+            }
+          },
+          {
+            "name": "conversationId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Twilio"
+        ]
+      }
+    },
+    "/integrations/twilio/config": {
+      "get": {
+        "operationId": "TwilioController_getConfig",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Twilio"
+        ]
+      },
+      "post": {
+        "operationId": "TwilioController_saveConfig",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TwilioConfigDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Twilio"
+        ]
+      }
+    },
+    "/integrations/agentmail/webhook": {
+      "post": {
+        "operationId": "AgentMailController_handleWebhook",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Function"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Webhook processed"
+          },
+          "401": {
+            "description": "Invalid signature"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        },
+        "summary": "Receive AgentMail webhook events",
+        "tags": [
+          "integrations/agentmail"
+        ]
+      }
+    },
+    "/integrations/agentmail/threads": {
+      "get": {
+        "operationId": "AgentMailController_getThreads",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "List of threads"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Get my email threads (paginated)",
+        "tags": [
+          "integrations/agentmail"
+        ]
+      }
+    },
+    "/integrations/agentmail/threads/{id}": {
+      "get": {
+        "operationId": "AgentMailController_getThread",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Thread details"
+          },
+          "404": {
+            "description": "Thread not found"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Get thread details",
+        "tags": [
+          "integrations/agentmail"
+        ]
+      },
+      "delete": {
+        "operationId": "AgentMailController_deleteThread",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Thread deleted"
+          },
+          "404": {
+            "description": "Thread not found"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Delete thread",
+        "tags": [
+          "integrations/agentmail"
+        ]
+      }
+    },
+    "/integrations/agentmail/threads/{id}/archive": {
+      "post": {
+        "operationId": "AgentMailController_archiveThread",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Thread archived"
+          },
+          "404": {
+            "description": "Thread not found"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Archive thread",
+        "tags": [
+          "integrations/agentmail"
+        ]
+      }
+    },
+    "/integrations/agentmail/config": {
+      "get": {
+        "operationId": "AgentMailController_getConfig",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Config retrieved"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Get my AgentMail config",
+        "tags": [
+          "integrations/agentmail"
+        ]
+      },
+      "post": {
+        "operationId": "AgentMailController_saveConfig",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Function"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Config saved"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Save AgentMail config",
+        "tags": [
+          "integrations/agentmail"
+        ]
+      }
+    },
+    "/integrations/linkedin/profile": {
+      "get": {
+        "operationId": "UnipileController_getProfile",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Profile retrieved"
+          },
+          "404": {
+            "description": "Profile not found"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          },
+          "503": {
+            "description": "LinkedIn integration not configured"
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Fetch LinkedIn profile by URL",
+        "tags": [
+          "integrations/linkedin"
+        ]
+      }
+    },
+    "/integrations/linkedin/search": {
+      "get": {
+        "operationId": "UnipileController_searchProfiles",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Search results"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          },
+          "503": {
+            "description": "LinkedIn integration not configured"
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Search LinkedIn profiles by name and optional company",
+        "tags": [
+          "integrations/linkedin"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "HealthController_check",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Health check endpoint",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/health/redis": {
+      "get": {
+        "operationId": "HealthController_checkRedis",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RedisHealthResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Redis health check endpoint",
+        "tags": [
+          "health"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "NestJS Boilerplate API",
+    "description": "Production-ready NestJS boilerplate with auth, queues, storage, and email",
+    "version": "2.0",
+    "contact": {}
+  },
+  "tags": [],
+  "servers": [],
+  "components": {
+    "securitySchemes": {
+      "JWT": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http",
+        "description": "Enter your JWT token"
+      }
+    },
+    "schemas": {
+      "GetUploadUrlDto": {
+        "type": "object",
+        "properties": {
+          "assetType": {
+            "type": "string",
+            "enum": [
+              "audio",
+              "images",
+              "videos",
+              "transcripts"
+            ]
+          },
+          "contentType": {
+            "type": "string",
+            "enum": [
+              "audio/mpeg",
+              "audio/wav",
+              "audio/ogg",
+              "audio/webm",
+              "image/png",
+              "image/jpeg",
+              "image/webp",
+              "image/gif",
+              "video/mp4",
+              "video/webm",
+              "application/json"
+            ]
+          },
+          "projectId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        },
+        "required": [
+          "assetType",
+          "contentType"
+        ]
+      },
+      "UploadUrlResponseDto": {
+        "type": "object",
+        "properties": {
+          "uploadUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "key": {
+            "type": "string"
+          },
+          "publicUrl": {
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "required": [
+          "uploadUrl",
+          "key",
+          "publicUrl"
+        ]
+      },
+      "DownloadUrlResponseDto": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "required": [
+          "url"
+        ]
+      },
+      "RegisterDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          },
+          "password": {
+            "minLength": 8,
+            "maxLength": 128,
+            "allOf": [
+              {
+                "pattern": "[a-zA-Z]"
+              },
+              {
+                "pattern": "[0-9]"
+              }
+            ]
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          }
+        },
+        "required": [
+          "email",
+          "password",
+          "name"
+        ]
+      },
+      "AuthResponseDto": {
+        "type": "object",
+        "properties": {
+          "user": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "name": {
+                "type": "string"
+              },
+              "email": {
+                "type": "string",
+                "format": "email",
+                "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+              },
+              "emailVerified": {
+                "type": "boolean"
+              },
+              "image": {
+                "type": "string",
+                "nullable": true
+              },
+              "role": {
+                "type": "string",
+                "enum": [
+                  "founder",
+                  "investor",
+                  "admin",
+                  "scout"
+                ]
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "email",
+              "emailVerified",
+              "image",
+              "role",
+              "createdAt"
+            ]
+          },
+          "accessToken": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "user",
+          "accessToken"
+        ]
+      },
+      "LoginDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          },
+          "password": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ]
+      },
+      "EmailVerifyDto": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "minLength": 32,
+            "maxLength": 32,
+            "pattern": "^[a-f0-9]+$"
+          }
+        },
+        "required": [
+          "token"
+        ]
+      },
+      "ResendVerificationDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          }
+        },
+        "required": [
+          "email"
+        ]
+      },
+      "MagicLinkRequestDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          }
+        },
+        "required": [
+          "email"
+        ]
+      },
+      "MagicLinkVerifyDto": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "minLength": 32,
+            "maxLength": 32,
+            "pattern": "^[a-f0-9]+$"
+          }
+        },
+        "required": [
+          "token"
+        ]
+      },
+      "UserResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          },
+          "emailVerified": {
+            "type": "boolean"
+          },
+          "image": {
+            "type": "string",
+            "nullable": true
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "founder",
+              "investor",
+              "admin",
+              "scout"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "email",
+          "emailVerified",
+          "image",
+          "role",
+          "createdAt"
+        ]
+      },
+      "UserProfileDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "userId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "companyName": {
+            "type": "string",
+            "nullable": true
+          },
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "linkedinUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "bio": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+          }
+        },
+        "required": [
+          "id",
+          "userId",
+          "companyName",
+          "title",
+          "linkedinUrl",
+          "bio",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "UpdateUserProfileDetailsDto": {
+        "type": "object",
+        "properties": {
+          "companyName": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "linkedinUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "bio": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        }
+      },
+      "CreateStartupDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "tagline": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "description": {
+            "type": "string",
+            "minLength": 100,
+            "maxLength": 5000
+          },
+          "website": {
+            "type": "string",
+            "format": "uri"
+          },
+          "location": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "industry": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "stage": {
+            "type": "string",
+            "enum": [
+              "pre_seed",
+              "seed",
+              "series_a",
+              "series_b",
+              "series_c",
+              "series_d",
+              "series_e",
+              "series_f_plus"
+            ]
+          },
+          "fundingTarget": {
+            "type": "integer",
+            "exclusiveMinimum": true,
+            "maximum": 9007199254740991,
+            "minimum": 0
+          },
+          "teamSize": {
+            "type": "integer",
+            "exclusiveMinimum": true,
+            "maximum": 9007199254740991,
+            "minimum": 0
+          },
+          "pitchDeckUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "demoUrl": {
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "required": [
+          "name",
+          "tagline",
+          "description",
+          "website",
+          "location",
+          "industry",
+          "stage",
+          "fundingTarget",
+          "teamSize"
+        ]
+      },
+      "UpdateStartupDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "tagline": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "description": {
+            "type": "string",
+            "minLength": 100,
+            "maxLength": 5000
+          },
+          "website": {
+            "type": "string",
+            "format": "uri"
+          },
+          "location": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "industry": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "stage": {
+            "type": "string",
+            "enum": [
+              "pre_seed",
+              "seed",
+              "series_a",
+              "series_b",
+              "series_c",
+              "series_d",
+              "series_e",
+              "series_f_plus"
+            ]
+          },
+          "fundingTarget": {
+            "type": "integer",
+            "exclusiveMinimum": true,
+            "maximum": 9007199254740991,
+            "minimum": 0
+          },
+          "teamSize": {
+            "type": "integer",
+            "exclusiveMinimum": true,
+            "maximum": 9007199254740991,
+            "minimum": 0
+          },
+          "pitchDeckUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "demoUrl": {
+            "type": "string",
+            "format": "uri"
+          }
+        }
+      },
+      "SubmitStartupDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "PresignedUrlDto": {
+        "type": "object",
+        "properties": {
+          "fileName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "fileType": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "fileSize": {
+            "type": "integer",
+            "exclusiveMinimum": true,
+            "maximum": 52428800,
+            "minimum": 0
+          }
+        },
+        "required": [
+          "fileName",
+          "fileType",
+          "fileSize"
+        ]
+      },
+      "SaveDraftDto": {
+        "type": "object",
+        "properties": {
+          "draftData": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "draftData"
+        ]
+      },
+      "ApproveStartupDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "RejectStartupDto": {
+        "type": "object",
+        "properties": {
+          "rejectionReason": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 1000
+          }
+        },
+        "required": [
+          "rejectionReason"
+        ]
+      },
+      "CreatePortalDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "slug": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 50,
+            "pattern": "^[a-z0-9-]+$"
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "logoUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "brandColor": {
+            "type": "string",
+            "pattern": "^#[0-9A-Fa-f]{6}$"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "brandColor"
+        ]
+      },
+      "UpdatePortalDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "logoUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "brandColor": {
+            "type": "string",
+            "pattern": "^#[0-9A-Fa-f]{6}$"
+          },
+          "isActive": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SubmitToPortalDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "tagline": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "description": {
+            "type": "string",
+            "minLength": 100,
+            "maxLength": 5000
+          },
+          "website": {
+            "type": "string",
+            "format": "uri"
+          },
+          "location": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "industry": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "stage": {
+            "type": "string",
+            "enum": [
+              "pre_seed",
+              "seed",
+              "series_a",
+              "series_b",
+              "series_c",
+              "series_d",
+              "series_e",
+              "series_f_plus"
+            ]
+          },
+          "fundingTarget": {
+            "type": "integer",
+            "exclusiveMinimum": true,
+            "maximum": 9007199254740991,
+            "minimum": 0
+          },
+          "teamSize": {
+            "type": "integer",
+            "exclusiveMinimum": true,
+            "maximum": 9007199254740991,
+            "minimum": 0
+          },
+          "pitchDeckUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "demoUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "founderEmail": {
+            "type": "string",
+            "format": "email",
+            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          },
+          "founderName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "name",
+          "tagline",
+          "description",
+          "website",
+          "location",
+          "industry",
+          "stage",
+          "fundingTarget",
+          "teamSize"
+        ]
+      },
+      "ApplyScoutDto": {
+        "type": "object",
+        "properties": {
+          "investorId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 200
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          },
+          "linkedinUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "experience": {
+            "type": "string",
+            "minLength": 100,
+            "maxLength": 1000
+          },
+          "motivation": {
+            "type": "string",
+            "minLength": 100,
+            "maxLength": 1000
+          },
+          "dealflowSources": {
+            "type": "string",
+            "minLength": 50,
+            "maxLength": 500
+          },
+          "portfolio": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "investorId",
+          "name",
+          "email",
+          "linkedinUrl",
+          "experience",
+          "motivation",
+          "dealflowSources"
+        ]
+      },
+      "ScoutSubmitStartupDto": {
+        "type": "object",
+        "properties": {
+          "investorId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "startupData": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "tagline": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "description": {
+                "type": "string",
+                "minLength": 100,
+                "maxLength": 5000
+              },
+              "website": {
+                "type": "string",
+                "format": "uri"
+              },
+              "location": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "industry": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "stage": {
+                "type": "string",
+                "enum": [
+                  "pre_seed",
+                  "seed",
+                  "series_a",
+                  "series_b",
+                  "series_c",
+                  "series_d",
+                  "series_e",
+                  "series_f_plus"
+                ]
+              },
+              "fundingTarget": {
+                "type": "integer",
+                "exclusiveMinimum": true,
+                "maximum": 9007199254740991,
+                "minimum": 0
+              },
+              "teamSize": {
+                "type": "integer",
+                "exclusiveMinimum": true,
+                "maximum": 9007199254740991,
+                "minimum": 0
+              },
+              "pitchDeckUrl": {
+                "type": "string",
+                "format": "uri"
+              },
+              "demoUrl": {
+                "type": "string",
+                "format": "uri"
+              }
+            },
+            "required": [
+              "name",
+              "tagline",
+              "description",
+              "website",
+              "location",
+              "industry",
+              "stage",
+              "fundingTarget",
+              "teamSize"
+            ]
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "investorId",
+          "startupData"
+        ]
+      },
+      "RejectScoutDto": {
+        "type": "object",
+        "properties": {
+          "rejectionReason": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "rejectionReason"
+        ]
+      },
+      "UpdateUserDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "founder",
+              "investor",
+              "admin",
+              "scout"
+            ]
+          }
+        }
+      },
+      "UpdateDefaultWeightsDto": {
+        "type": "object",
+        "properties": {
+          "marketWeight": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "teamWeight": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "productWeight": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "tractionWeight": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "financialsWeight": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          }
+        },
+        "required": [
+          "marketWeight",
+          "teamWeight",
+          "productWeight",
+          "tractionWeight",
+          "financialsWeight"
+        ]
+      },
+      "CreateThesisDto": {
+        "type": "object",
+        "properties": {
+          "industries": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "stages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "checkSizeMin": {
+            "type": "integer",
+            "exclusiveMinimum": true,
+            "maximum": 9007199254740991,
+            "minimum": 0
+          },
+          "checkSizeMax": {
+            "type": "integer",
+            "exclusiveMinimum": true,
+            "maximum": 9007199254740991,
+            "minimum": 0
+          },
+          "geographicFocus": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "mustHaveFeatures": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "dealBreakers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 5000
+          }
+        }
+      },
+      "UpdateScoringWeightsDto": {
+        "type": "object",
+        "properties": {
+          "marketWeight": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "teamWeight": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "productWeight": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "tractionWeight": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "financialsWeight": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          }
+        },
+        "required": [
+          "marketWeight",
+          "teamWeight",
+          "productWeight",
+          "tractionWeight",
+          "financialsWeight"
+        ]
+      },
+      "CreateTeamInviteDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "member",
+              "admin"
+            ]
+          }
+        },
+        "required": [
+          "email",
+          "role"
+        ]
+      },
+      "TwilioWebhookDto": {
+        "type": "object",
+        "properties": {
+          "MessageSid": {
+            "type": "string"
+          },
+          "AccountSid": {
+            "type": "string"
+          },
+          "MessagingServiceSid": {
+            "type": "string"
+          },
+          "From": {
+            "type": "string"
+          },
+          "To": {
+            "type": "string"
+          },
+          "Body": {
+            "default": "",
+            "type": "string"
+          },
+          "NumMedia": {
+            "type": "string"
+          },
+          "MediaUrl0": {
+            "type": "string",
+            "format": "uri"
+          },
+          "MediaContentType0": {
+            "type": "string"
+          },
+          "Timestamp": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "MessageSid",
+          "AccountSid",
+          "From",
+          "To"
+        ]
+      },
+      "SendMessageDto": {
+        "type": "object",
+        "properties": {
+          "to": {
+            "type": "string",
+            "pattern": "^\\+\\d{10,15}$"
+          },
+          "body": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1600
+          },
+          "mediaUrl": {
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "required": [
+          "to",
+          "body"
+        ]
+      },
+      "TwilioConfigDto": {
+        "type": "object",
+        "properties": {
+          "accountSid": {
+            "type": "string",
+            "minLength": 1
+          },
+          "authToken": {
+            "type": "string",
+            "minLength": 1
+          },
+          "whatsappNumber": {
+            "type": "string",
+            "pattern": "^\\+\\d{10,15}$"
+          }
+        },
+        "required": [
+          "accountSid",
+          "authToken",
+          "whatsappNumber"
+        ]
+      },
+      "Function": {
+        "type": "object",
+        "properties": {}
+      },
+      "HealthResponseDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok"
+            ]
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+          },
+          "uptime": {
+            "type": "number",
+            "description": "Uptime in seconds"
+          }
+        },
+        "required": [
+          "status",
+          "timestamp",
+          "uptime"
+        ]
+      },
+      "RedisHealthResponseDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "error"
+            ]
+          },
+          "latency": {
+            "description": "Redis ping latency in ms",
+            "type": "number"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      }
+    }
+  }
+}

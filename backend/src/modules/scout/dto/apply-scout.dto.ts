@@ -3,9 +3,13 @@ import { z } from 'zod';
 
 export const ApplyScoutSchema = z.object({
   investorId: z.string().uuid(),
-  bio: z.string().min(100).max(1000),
+  name: z.string().min(2).max(200),
+  email: z.string().email(),
   linkedinUrl: z.string().url(),
-  portfolio: z.array(z.string()).min(0).max(10),
+  experience: z.string().min(100).max(1000),
+  motivation: z.string().min(100).max(1000),
+  dealflowSources: z.string().min(50).max(500),
+  portfolio: z.array(z.string()).max(10).optional(),
 });
 
 export type ApplyScout = z.infer<typeof ApplyScoutSchema>;

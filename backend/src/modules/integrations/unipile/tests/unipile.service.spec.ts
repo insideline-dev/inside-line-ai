@@ -1,0 +1,282 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { ConfigService } from '@nestjs/config';
+import { ServiceUnavailableException, BadRequestException } from '@nestjs/common';
+import { UnipileService } from '../unipile.service';
+import { LinkedInCacheService } from '../linkedin-cache.service';
+import type { LinkedInProfile } from '../entities';
+
+describe('UnipileService', () => {
+  let service: UnipileService;
+  let configService: any;
+  let cacheService: any;
+
+  const mockProfile: LinkedInProfile = {
+    id: 'profile-123',
+    firstName: 'John',
+    lastName: 'Doe',
+    headline: 'Software Engineer at TechCorp',
+    location: 'San Francisco, CA',
+    profileUrl: 'https://linkedin.com/in/john-doe-123',
+    profileImageUrl: 'https://example.com/photo.jpg',
+    summary: 'Experienced software engineer...',
+    currentCompany: {
+      name: 'TechCorp',
+      title: 'Senior Engineer',
+    },
+    experience: [
+      {
+        company: 'TechCorp',
+        title: 'Senior Engineer',
+        startDate: '2020-01',
+        endDate: null,
+        current: true,
+      },
+    ],
+    education: [
+      {
+        school: 'MIT',
+        degree: 'BS',
+        fieldOfStudy: 'Computer Science',
+        startYear: 2012,
+        endYear: 2016,
+      },
+    ],
+  };
+
+  beforeEach(async () => {
+    configService = {
+      get: jest.fn((key: string) => {
+        const config: Record<string, string> = {
+          UNIPILE_DSN: 'api.unipile.com',
+          UNIPILE_API_KEY: 'test-api-key',
+          UNIPILE_ACCOUNT_ID: 'test-account-id',
+        };
+        return config[key];
+      }),
+    };
+
+    cacheService = {
+      getCached: jest.fn().mockResolvedValue(null),
+      setCache: jest.fn().mockResolvedValue(undefined),
+      clearExpired: jest.fn().mockResolvedValue(0),
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        UnipileService,
+        { provide: ConfigService, useValue: configService },
+        { provide: LinkedInCacheService, useValue: cacheService },
+      ],
+    }).compile();
+
+    service = module.get<UnipileService>(UnipileService);
+
+    // Mock global fetch
+    global.fetch = jest.fn();
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should be defined', () => {
+    expect(service).toBeDefined();
+  });
+
+  // ============ CONFIGURATION ============
+
+  describe('isConfigured', () => {
+    it('should return true when all env vars are set', () => {
+      expect(service.isConfigured()).toBe(true);
+    });
+
+    it('should return false when env vars are missing', () => {
+      configService.get = jest.fn().mockReturnValue(undefined);
+      const unconfiguredService = new UnipileService(configService, cacheService);
+      expect(unconfiguredService.isConfigured()).toBe(false);
+    });
+  });
+
+  // ============ GET PROFILE ============
+
+  describe('getProfile', () => {
+    it('should throw ServiceUnavailableException if not configured', async () => {
+      configService.get = jest.fn().mockReturnValue(undefined);
+      const unconfiguredService = new UnipileService(configService, cacheService);
+
+      await expect(
+        unconfiguredService.getProfile('user-1', 'https://linkedin.com/in/john-doe'),
+      ).rejects.toThrow(ServiceUnavailableException);
+    });
+
+    it('should return cached profile if available', async () => {
+      cacheService.getCached.mockResolvedValueOnce(mockProfile);
+
+      const result = await service.getProfile('user-1', 'https://linkedin.com/in/john-doe-123');
+
+      expect(result).toEqual(mockProfile);
+      expect(cacheService.getCached).toHaveBeenCalledWith('https://linkedin.com/in/john-doe-123');
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it('should fetch from API if cache miss', async () => {
+      cacheService.getCached.mockResolvedValueOnce(null);
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          id: 'profile-123',
+          first_name: 'John',
+          last_name: 'Doe',
+          headline: 'Software Engineer at TechCorp',
+          location: 'San Francisco, CA',
+          profile_url: 'https://linkedin.com/in/john-doe-123',
+          profile_image_url: 'https://example.com/photo.jpg',
+          summary: 'Experienced software engineer...',
+          current_company: {
+            name: 'TechCorp',
+            title: 'Senior Engineer',
+          },
+          experience: [
+            {
+              company: 'TechCorp',
+              title: 'Senior Engineer',
+              start_date: '2020-01',
+              end_date: null,
+              current: true,
+            },
+          ],
+          education: [
+            {
+              school: 'MIT',
+              degree: 'BS',
+              field_of_study: 'Computer Science',
+              start_year: 2012,
+              end_year: 2016,
+            },
+          ],
+        }),
+      });
+
+      const result = await service.getProfile('user-1', 'https://linkedin.com/in/john-doe-123');
+
+      expect(result).toEqual(mockProfile);
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('api.unipile.com/api/v1/users/test-account-id/linkedin/profile'),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'X-API-KEY': 'test-api-key',
+          }),
+        }),
+      );
+      expect(cacheService.setCache).toHaveBeenCalledWith(
+        'user-1',
+        'https://linkedin.com/in/john-doe-123',
+        'john-doe-123',
+        mockProfile,
+      );
+    });
+
+    it('should return null if profile not found (404)', async () => {
+      cacheService.getCached.mockResolvedValueOnce(null);
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+      });
+
+      const result = await service.getProfile('user-1', 'https://linkedin.com/in/not-found');
+
+      expect(result).toBeNull();
+      expect(cacheService.setCache).not.toHaveBeenCalled();
+    });
+
+    it('should throw BadRequestException on API error', async () => {
+      cacheService.getCached.mockResolvedValueOnce(null);
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+        text: async () => 'Invalid request',
+      });
+
+      await expect(
+        service.getProfile('user-1', 'https://linkedin.com/in/john-doe'),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  // ============ SEARCH PROFILES ============
+
+  describe('searchProfiles', () => {
+    it('should throw ServiceUnavailableException if not configured', async () => {
+      configService.get = jest.fn().mockReturnValue(undefined);
+      const unconfiguredService = new UnipileService(configService, cacheService);
+
+      await expect(unconfiguredService.searchProfiles('John Doe')).rejects.toThrow(
+        ServiceUnavailableException,
+      );
+    });
+
+    it('should search profiles by name only', async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          results: [
+            {
+              id: 'profile-123',
+              first_name: 'John',
+              last_name: 'Doe',
+              headline: 'Software Engineer',
+              location: 'SF',
+              profile_url: 'https://linkedin.com/in/john-doe-123',
+              experience: [],
+              education: [],
+            },
+          ],
+        }),
+      });
+
+      const result = await service.searchProfiles('John Doe');
+
+      expect(result).toHaveLength(1);
+      expect(result[0].firstName).toBe('John');
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('keywords=John+Doe'),
+        expect.any(Object),
+      );
+    });
+
+    it('should search profiles by name and company', async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ results: [] }),
+      });
+
+      await service.searchProfiles('John Doe', 'TechCorp');
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('keywords=John+Doe&company=TechCorp'),
+        expect.any(Object),
+      );
+    });
+
+    it('should throw BadRequestException on API error', async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        text: async () => 'Internal server error',
+      });
+
+      await expect(service.searchProfiles('John Doe')).rejects.toThrow(BadRequestException);
+    });
+
+    it('should return empty array if no results', async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ results: [] }),
+      });
+
+      const result = await service.searchProfiles('Unknown Person');
+
+      expect(result).toEqual([]);
+    });
+  });
+});

@@ -5,11 +5,12 @@ import { StorageModule } from '../../storage';
 import { StartupController } from './startup.controller';
 import { StartupService } from './startup.service';
 import { DraftService } from './draft.service';
+import { PdfService } from './pdf.service';
 
 @Module({
   imports: [DatabaseModule, QueueModule, StorageModule],
   controllers: [StartupController],
-  providers: [StartupService, DraftService],
-  exports: [StartupService, DraftService],
+  providers: [StartupService, DraftService, PdfService],
+  exports: [StartupService, DraftService, PdfService],
 })
 export class StartupModule {}

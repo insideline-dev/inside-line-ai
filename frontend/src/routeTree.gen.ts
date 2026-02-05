@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ProtectedRouteImport } from './routes/_protected'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthCallbackRouteImport } from './routes/auth/callback'
 import { Route as ApplySlugRouteImport } from './routes/apply.$slug'
 import { Route as ProtectedScoutRouteImport } from './routes/_protected/scout'
 import { Route as ProtectedRoleSelectRouteImport } from './routes/_protected/role-select'
@@ -52,6 +53,11 @@ const ProtectedRoute = ProtectedRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthCallbackRoute = AuthCallbackRouteImport.update({
+  id: '/auth/callback',
+  path: '/auth/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApplySlugRoute = ApplySlugRouteImport.update({
@@ -204,6 +210,7 @@ export interface FileRoutesByFullPath {
   '/role-select': typeof ProtectedRoleSelectRoute
   '/scout': typeof ProtectedScoutRouteWithChildren
   '/apply/$slug': typeof ApplySlugRoute
+  '/auth/callback': typeof AuthCallbackRoute
   '/admin/agents': typeof ProtectedAdminAgentsRoute
   '/admin/analytics': typeof ProtectedAdminAnalyticsRoute
   '/admin/conversations': typeof ProtectedAdminConversationsRoute
@@ -231,6 +238,7 @@ export interface FileRoutesByTo {
   '/profile': typeof ProtectedProfileRoute
   '/role-select': typeof ProtectedRoleSelectRoute
   '/apply/$slug': typeof ApplySlugRoute
+  '/auth/callback': typeof AuthCallbackRoute
   '/admin/agents': typeof ProtectedAdminAgentsRoute
   '/admin/analytics': typeof ProtectedAdminAnalyticsRoute
   '/admin/conversations': typeof ProtectedAdminConversationsRoute
@@ -264,6 +272,7 @@ export interface FileRoutesById {
   '/_protected/role-select': typeof ProtectedRoleSelectRoute
   '/_protected/scout': typeof ProtectedScoutRouteWithChildren
   '/apply/$slug': typeof ApplySlugRoute
+  '/auth/callback': typeof AuthCallbackRoute
   '/_protected/admin/agents': typeof ProtectedAdminAgentsRoute
   '/_protected/admin/analytics': typeof ProtectedAdminAnalyticsRoute
   '/_protected/admin/conversations': typeof ProtectedAdminConversationsRoute
@@ -297,6 +306,7 @@ export interface FileRouteTypes {
     | '/role-select'
     | '/scout'
     | '/apply/$slug'
+    | '/auth/callback'
     | '/admin/agents'
     | '/admin/analytics'
     | '/admin/conversations'
@@ -324,6 +334,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/role-select'
     | '/apply/$slug'
+    | '/auth/callback'
     | '/admin/agents'
     | '/admin/analytics'
     | '/admin/conversations'
@@ -356,6 +367,7 @@ export interface FileRouteTypes {
     | '/_protected/role-select'
     | '/_protected/scout'
     | '/apply/$slug'
+    | '/auth/callback'
     | '/_protected/admin/agents'
     | '/_protected/admin/analytics'
     | '/_protected/admin/conversations'
@@ -383,6 +395,7 @@ export interface RootRouteChildren {
   ProtectedRoute: typeof ProtectedRouteWithChildren
   LoginRoute: typeof LoginRoute
   ApplySlugRoute: typeof ApplySlugRoute
+  AuthCallbackRoute: typeof AuthCallbackRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -406,6 +419,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth/callback': {
+      id: '/auth/callback'
+      path: '/auth/callback'
+      fullPath: '/auth/callback'
+      preLoaderRoute: typeof AuthCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/apply/$slug': {
@@ -705,6 +725,7 @@ const rootRouteChildren: RootRouteChildren = {
   ProtectedRoute: ProtectedRouteWithChildren,
   LoginRoute: LoginRoute,
   ApplySlugRoute: ApplySlugRoute,
+  AuthCallbackRoute: AuthCallbackRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

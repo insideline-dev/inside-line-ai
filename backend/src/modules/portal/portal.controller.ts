@@ -45,25 +45,25 @@ export class PortalController {
   // ============ PORTAL MANAGEMENT (Authenticated Users) ============
 
   @Post()
-  @Roles(UserRole.USER, UserRole.ADMIN)
+  @Roles(UserRole.INVESTOR, UserRole.ADMIN)
   async create(@CurrentUser() user: User, @Body() dto: CreatePortalDto) {
     return this.portalService.create(user.id, dto);
   }
 
   @Get()
-  @Roles(UserRole.USER, UserRole.ADMIN)
+  @Roles(UserRole.INVESTOR, UserRole.ADMIN)
   async findAll(@CurrentUser() user: User, @Query() query: GetPortalsQueryDto) {
     return this.portalService.findAll(user.id, query);
   }
 
   @Get(':id')
-  @Roles(UserRole.USER, UserRole.ADMIN)
+  @Roles(UserRole.INVESTOR, UserRole.ADMIN)
   async findOne(@CurrentUser() user: User, @Param('id') id: string) {
     return this.portalService.findOne(id, user.id);
   }
 
   @Patch(':id')
-  @Roles(UserRole.USER, UserRole.ADMIN)
+  @Roles(UserRole.INVESTOR, UserRole.ADMIN)
   async update(
     @CurrentUser() user: User,
     @Param('id') id: string,
@@ -73,14 +73,14 @@ export class PortalController {
   }
 
   @Delete(':id')
-  @Roles(UserRole.USER, UserRole.ADMIN)
+  @Roles(UserRole.INVESTOR, UserRole.ADMIN)
   async delete(@CurrentUser() user: User, @Param('id') id: string) {
     await this.portalService.delete(id, user.id);
     return { success: true, message: 'Portal deleted' };
   }
 
   @Get(':id/submissions')
-  @Roles(UserRole.USER, UserRole.ADMIN)
+  @Roles(UserRole.INVESTOR, UserRole.ADMIN)
   async getSubmissions(
     @CurrentUser() user: User,
     @Param('id') id: string,
@@ -90,18 +90,20 @@ export class PortalController {
   }
 
   @Post(':id/submissions/:submissionId/approve')
-  @Roles(UserRole.USER, UserRole.ADMIN)
+  @Roles(UserRole.INVESTOR, UserRole.ADMIN)
   async approveSubmission(
     @CurrentUser() user: User,
+    @Param('id') _id: string,
     @Param('submissionId') submissionId: string,
   ) {
     return this.submissionService.approve(submissionId, user.id);
   }
 
   @Post(':id/submissions/:submissionId/reject')
-  @Roles(UserRole.USER, UserRole.ADMIN)
+  @Roles(UserRole.INVESTOR, UserRole.ADMIN)
   async rejectSubmission(
     @CurrentUser() user: User,
+    @Param('id') _id: string,
     @Param('submissionId') submissionId: string,
   ) {
     return this.submissionService.reject(submissionId, user.id);

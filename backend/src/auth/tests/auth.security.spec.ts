@@ -24,7 +24,7 @@ describe('Auth Security Tests', () => {
     name: 'Test User',
     image: null,
     emailVerified: true,
-    role: UserRole.USER,
+    role: UserRole.FOUNDER,
     createdAt: new Date(),
     updatedAt: new Date(),
   };

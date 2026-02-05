@@ -26,3 +26,9 @@ export * from '../modules/analysis/entities';
 
 // Integration
 export * from '../modules/integration/entities';
+
+// Unipile Integration
+export * from '../modules/integrations/unipile/entities';
+
+// Agent System
+export * from '../modules/agent/entities';

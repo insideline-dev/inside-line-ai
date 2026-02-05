@@ -1,4 +1,4 @@
-import { relations, sql } from 'drizzle-orm';
+import { relations } from 'drizzle-orm';
 import {
   pgTable,
   text,
@@ -7,11 +7,9 @@ import {
   index,
   uuid,
   pgEnum,
-  pgPolicy,
 } from 'drizzle-orm/pg-core';
 import { user } from '../../../auth/entities/auth.schema';
 import { startup } from '../../startup/entities/startup.schema';
-import { appRole, currentUserId, isAdmin, isOwnerOrAdmin } from '../../../common/rls';
 
 // ============================================================================
 // ENUMS
@@ -56,8 +54,12 @@ export const scoutApplication = pgTable(
       .references(() => user.id, { onDelete: 'cascade' }),
 
     // Application details
-    bio: text('bio'),
+    name: text('name'),
+    email: text('email'),
     linkedinUrl: text('linkedin_url'),
+    experience: text('experience'),
+    motivation: text('motivation'),
+    dealflowSources: text('dealflow_sources'),
     portfolio: text('portfolio').array(),
 
     // Review workflow
@@ -78,37 +80,8 @@ export const scoutApplication = pgTable(
       table.investorId,
       table.status,
     ),
-
-    // RLS: Scout sees own applications
-    pgPolicy('scout_app_owner_select', {
-      for: 'select',
-      to: appRole,
-      using: isOwnerOrAdmin(table.userId),
-    }),
-    pgPolicy('scout_app_owner_insert', {
-      for: 'insert',
-      to: appRole,
-      withCheck: isOwnerOrAdmin(table.userId),
-    }),
-    pgPolicy('scout_app_owner_update', {
-      for: 'update',
-      to: appRole,
-      using: isOwnerOrAdmin(table.userId),
-      withCheck: isOwnerOrAdmin(table.userId),
-    }),
-    // Investor sees applications targeting them
-    pgPolicy('scout_app_investor_select', {
-      for: 'select',
-      to: appRole,
-      using: sql`${table.investorId} = ${currentUserId} OR ${isAdmin}`,
-    }),
-    pgPolicy('scout_app_investor_update', {
-      for: 'update',
-      to: appRole,
-      using: sql`${table.investorId} = ${currentUserId} OR ${isAdmin}`,
-    }),
   ],
-).enableRLS();
+);
 
 // ============================================================================
 // SCOUT SUBMISSIONS TABLE
@@ -149,31 +122,8 @@ export const scoutSubmission = pgTable(
       table.investorId,
       table.createdAt,
     ),
-
-    // RLS: Scout sees own submissions
-    pgPolicy('scout_sub_owner_select', {
-      for: 'select',
-      to: appRole,
-      using: sql`${table.scoutId} = ${currentUserId} OR ${isAdmin}`,
-    }),
-    pgPolicy('scout_sub_owner_insert', {
-      for: 'insert',
-      to: appRole,
-      withCheck: sql`${table.scoutId} = ${currentUserId} OR ${isAdmin}`,
-    }),
-    pgPolicy('scout_sub_owner_update', {
-      for: 'update',
-      to: appRole,
-      using: sql`${table.scoutId} = ${currentUserId} OR ${isAdmin}`,
-    }),
-    // Investor sees submissions targeting them
-    pgPolicy('scout_sub_investor_select', {
-      for: 'select',
-      to: appRole,
-      using: sql`${table.investorId} = ${currentUserId} OR ${isAdmin}`,
-    }),
   ],
-).enableRLS();
+);
 
 // ============================================================================
 // RELATIONS

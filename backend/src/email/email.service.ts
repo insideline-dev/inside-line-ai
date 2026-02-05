@@ -19,7 +19,7 @@ export type TemplateEmailOptions = {
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
-  private readonly resend: Resend;
+  private readonly resend?: Resend;
   private readonly fromEmail: string;
   private readonly frontendUrl: string;
   private readonly isDev: boolean;
@@ -27,7 +27,10 @@ export class EmailService {
 
   constructor(private config: ConfigService) {
     const apiKey = this.config.get<string>('RESEND_API_KEY');
-    this.resend = new Resend(apiKey);
+    // Only initialize Resend if API key is provided
+    if (apiKey) {
+      this.resend = new Resend(apiKey);
+    }
     this.fromEmail =
       this.config.get<string>('EMAIL_FROM') || EMAIL_CONFIG.FROM_EMAIL;
     this.frontendUrl =
@@ -41,8 +44,8 @@ export class EmailService {
    */
   async send(options: SendEmailOptions): Promise<{ id: string } | null> {
     try {
-      // In dev mode, log instead of sending if no API key
-      if (this.isDev && !this.config.get<string>('RESEND_API_KEY')) {
+      // In dev mode or when no Resend client, log instead of sending
+      if (!this.resend || (this.isDev && !this.config.get<string>('RESEND_API_KEY'))) {
         this.logger.debug(`[DEV] Email to ${options.to}: ${options.subject}`);
         this.logger.debug(`[DEV] Content: ${options.html}`);
         return { id: 'dev-mock-id' };

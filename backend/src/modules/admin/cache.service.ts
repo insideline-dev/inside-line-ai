@@ -8,12 +8,20 @@ export class CacheService implements OnModuleDestroy {
   private readonly redis: Redis;
 
   constructor(private config: ConfigService) {
-    this.redis = new Redis({
-      host: this.config.get('REDIS_HOST'),
-      port: this.config.get('REDIS_PORT'),
-      password: this.config.get('REDIS_PASSWORD'),
-      tls: this.config.get('REDIS_TLS') ? {} : undefined,
-    });
+    const redisUrl = this.config.get<string>('REDIS_URL');
+
+    if (redisUrl) {
+      // ioredis can parse Redis URL directly
+      this.redis = new Redis(redisUrl);
+    } else {
+      // Fallback to individual env vars (legacy)
+      this.redis = new Redis({
+        host: this.config.get('REDIS_HOST', 'localhost'),
+        port: this.config.get('REDIS_PORT', 6379),
+        password: this.config.get('REDIS_PASSWORD'),
+        tls: this.config.get('REDIS_TLS') ? {} : undefined,
+      });
+    }
 
     this.redis.on('error', (err) => {
       this.logger.error('Redis connection error', err);

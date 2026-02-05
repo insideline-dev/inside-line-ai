@@ -58,9 +58,13 @@ export class ScoutService {
       .values({
         userId,
         investorId: dto.investorId,
-        bio: dto.bio,
+        name: dto.name,
+        email: dto.email,
         linkedinUrl: dto.linkedinUrl,
-        portfolio: dto.portfolio,
+        experience: dto.experience,
+        motivation: dto.motivation,
+        dealflowSources: dto.dealflowSources,
+        portfolio: dto.portfolio ?? [],
         status: ScoutApplicationStatus.PENDING,
       })
       .returning();

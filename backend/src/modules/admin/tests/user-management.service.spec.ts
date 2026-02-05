@@ -36,7 +36,7 @@ describe('UserManagementService', () => {
     id: mockUserId,
     name: 'Test User',
     email: 'test@example.com',
-    role: UserRole.USER,
+    role: UserRole.FOUNDER,
     emailVerified: true,
     image: null,
     createdAt: new Date(),
@@ -253,13 +253,13 @@ describe('UserManagementService', () => {
   describe('getRoleDistribution', () => {
     it('should return user counts by role', async () => {
       mockDb.groupBy.mockResolvedValueOnce([
-        { role: UserRole.USER, count: 90 },
+        { role: UserRole.FOUNDER, count: 90 },
         { role: UserRole.ADMIN, count: 10 },
       ]);
 
       const result = await service.getRoleDistribution();
 
-      expect(result[UserRole.USER]).toBe(90);
+      expect(result[UserRole.FOUNDER]).toBe(90);
       expect(result[UserRole.ADMIN]).toBe(10);
     });
   });

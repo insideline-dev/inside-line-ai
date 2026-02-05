@@ -235,4 +235,11 @@ export class AdminController {
     const queue = (queueName as QueueName) || QUEUE_NAMES.TASK;
     return this.queueManagementService.retryJob(queue, jobId);
   }
+
+  // ============ LOCATION NORMALIZATION ENDPOINTS ============
+
+  @Post('normalize-locations')
+  async normalizeLocations() {
+    return this.analyticsService.normalizeLocations();
+  }
 }

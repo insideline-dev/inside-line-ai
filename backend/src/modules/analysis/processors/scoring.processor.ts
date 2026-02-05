@@ -2,12 +2,13 @@ import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/commo
 import { ConfigService } from '@nestjs/config';
 import { Job } from 'bullmq';
 import { eq } from 'drizzle-orm';
-import { BaseProcessor } from '../../../queue/processors/base.processor';
+import { BaseProcessor, parseRedisUrl } from '../../../queue/processors/base.processor';
 import { ANALYSIS_QUEUE_NAME, ANALYSIS_QUEUE_CONFIG } from '../analysis.config';
 import { DrizzleService } from '../../../database';
 import { AnalysisService } from '../analysis.service';
 import { AnalysisJobStatus } from '../entities';
-import { startup, Startup } from '../../startup/entities';
+import { NotificationGateway } from '../../../notification/notification.gateway';
+import { startup, Startup, StartupStage } from '../../startup/entities';
 import type { ScoringJobData, ScoringJobResult, StartupScores } from '../interfaces';
 
 @Injectable()
@@ -21,17 +22,10 @@ export class ScoringProcessor
     private config: ConfigService,
     private drizzle: DrizzleService,
     private analysisService: AnalysisService,
+    private notificationGateway: NotificationGateway,
   ) {
-    super(
-      ANALYSIS_QUEUE_NAME,
-      {
-        host: config.get('REDIS_HOST'),
-        port: config.get('REDIS_PORT'),
-        password: config.get('REDIS_PASSWORD'),
-        tls: config.get('REDIS_TLS') ? {} : undefined,
-      },
-      ANALYSIS_QUEUE_CONFIG.concurrency,
-    );
+    const redisUrl = config.get<string>('REDIS_URL', 'redis://localhost:6379');
+    super(ANALYSIS_QUEUE_NAME, parseRedisUrl(redisUrl), ANALYSIS_QUEUE_CONFIG.concurrency);
   }
 
   onModuleInit() {
@@ -45,7 +39,7 @@ export class ScoringProcessor
   protected async process(
     job: Job<ScoringJobData>,
   ): Promise<Omit<ScoringJobResult, 'jobId' | 'duration' | 'success'>> {
-    const { startupId, analysisJobId } = job.data;
+    const { startupId, analysisJobId, userId } = job.data;
 
     if (job.data.type !== 'scoring') {
       return { type: 'scoring', scores: this.getEmptyScores() };
@@ -56,6 +50,12 @@ export class ScoringProcessor
         analysisJobId,
         AnalysisJobStatus.PROCESSING,
       );
+
+      this.notificationGateway.sendJobStatus(userId, {
+        jobId: analysisJobId,
+        jobType: 'scoring',
+        status: 'processing',
+      });
 
       const startupData = await this.getStartup(startupId);
       if (!startupData) {
@@ -70,6 +70,13 @@ export class ScoringProcessor
         { scores },
       );
 
+      this.notificationGateway.sendJobStatus(userId, {
+        jobId: analysisJobId,
+        jobType: 'scoring',
+        status: 'completed',
+        result: { scores },
+      });
+
       this.logger.log(`Scoring completed for startup ${startupId}`);
 
       return { type: 'scoring', scores };
@@ -81,6 +88,14 @@ export class ScoringProcessor
         undefined,
         errorMessage,
       );
+
+      this.notificationGateway.sendJobStatus(userId, {
+        jobId: analysisJobId,
+        jobType: 'scoring',
+        status: 'failed',
+        error: errorMessage,
+      });
+
       throw error;
     }
   }
@@ -116,8 +131,8 @@ export class ScoringProcessor
     if (startupData.fundingTarget > 1000000) score += 10;
     if (startupData.fundingTarget > 5000000) score += 10;
 
-    if (startupData.stage === 'seed') score += 10;
-    if (startupData.stage === 'series-a') score += 15;
+    if (startupData.stage === StartupStage.SEED) score += 10;
+    if (startupData.stage === StartupStage.SERIES_A) score += 15;
 
     return Math.min(Math.max(score, 0), 100);
   }
@@ -149,9 +164,18 @@ export class ScoringProcessor
   private calculateTractionScore(startupData: Startup): number {
     let score = 40;
 
-    if (startupData.stage === 'seed') score += 15;
-    if (startupData.stage === 'series-a') score += 25;
-    if (startupData.stage === 'series-b+') score += 35;
+    if (startupData.stage === StartupStage.SEED) score += 15;
+    if (startupData.stage === StartupStage.SERIES_A) score += 25;
+    if (
+      [
+        StartupStage.SERIES_B,
+        StartupStage.SERIES_C,
+        StartupStage.SERIES_D,
+        StartupStage.SERIES_E,
+        StartupStage.SERIES_F_PLUS,
+      ].includes(startupData.stage)
+    )
+      score += 35;
 
     if (startupData.teamSize > 5) score += 10;
 
@@ -169,7 +193,7 @@ export class ScoringProcessor
       score += 10;
     }
 
-    if (startupData.stage === 'seed' || startupData.stage === 'pre-seed') {
+    if (startupData.stage === StartupStage.SEED || startupData.stage === StartupStage.PRE_SEED) {
       score += 10;
     }
 

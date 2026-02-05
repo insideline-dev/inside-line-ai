@@ -6,3 +6,4 @@ export * from './reject-startup.dto';
 export * from './save-draft.dto';
 export * from './presigned-url.dto';
 export * from './query-startups.dto';
+export * from './get-progress.dto';

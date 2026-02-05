@@ -4,12 +4,16 @@ import { QueueModule } from '../../queue';
 import { ThesisService } from './thesis.service';
 import { ScoringService } from './scoring.service';
 import { MatchService } from './match.service';
-import { InvestorController } from './investor.controller';
+import { TeamService } from './team.service';
+import {
+  InvestorController,
+  InvestorTeamPublicController,
+} from './investor.controller';
 
 @Module({
   imports: [DatabaseModule, QueueModule],
-  controllers: [InvestorController],
-  providers: [ThesisService, ScoringService, MatchService],
-  exports: [ThesisService, ScoringService, MatchService],
+  controllers: [InvestorController, InvestorTeamPublicController],
+  providers: [ThesisService, ScoringService, MatchService, TeamService],
+  exports: [ThesisService, ScoringService, MatchService, TeamService],
 })
 export class InvestorModule {}

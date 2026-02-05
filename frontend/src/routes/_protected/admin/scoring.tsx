@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { mockStageScoringWeights } from "@/mocks/data/scoring-weights";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useAdminControllerGetScoringDefaults } from "@/api/generated/admin/admin";
 import type { ScoringWeights } from "@/types";
 
 export const Route = createFileRoute("/_protected/admin/scoring")({
@@ -15,6 +16,13 @@ const stageLabels: Record<string, string> = {
   series_b: "Series B",
   series_c: "Series C+",
 };
+
+interface StageScoringWeight {
+  stage: string;
+  weights: Record<string, number>;
+  rationale: Record<string, string>;
+  overallRationale?: string;
+}
 
 const categoryLabels: Record<keyof ScoringWeights, string> = {
   team: "Team",
@@ -31,6 +39,40 @@ const categoryLabels: Record<keyof ScoringWeights, string> = {
 };
 
 function ScoringWeightsManagement() {
+  const { data: response, isLoading, error } = useAdminControllerGetScoringDefaults();
+  const stageScoringWeights = (response?.data as StageScoringWeight[] | undefined) ?? [];
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold">Scoring Weights</h1>
+          <p className="text-muted-foreground">
+            Manage evaluation criteria weights for different funding stages
+          </p>
+        </div>
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-96 w-full" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold">Scoring Weights</h1>
+          <p className="text-muted-foreground">
+            Manage evaluation criteria weights for different funding stages
+          </p>
+        </div>
+        <div className="text-center py-12 text-destructive">
+          Failed to load scoring weights: {(error as Error).message}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -42,14 +84,14 @@ function ScoringWeightsManagement() {
 
       <Tabs defaultValue="seed" className="w-full">
         <TabsList className="grid w-full grid-cols-5">
-          {mockStageScoringWeights.map((stage) => (
+          {stageScoringWeights.map((stage) => (
             <TabsTrigger key={stage.stage} value={stage.stage}>
               {stageLabels[stage.stage] || stage.stage}
             </TabsTrigger>
           ))}
         </TabsList>
 
-        {mockStageScoringWeights.map((stage) => (
+        {stageScoringWeights.map((stage) => (
           <TabsContent key={stage.stage} value={stage.stage}>
             <Card>
               <CardHeader>

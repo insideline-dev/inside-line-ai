@@ -8,7 +8,6 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 import { user } from '../../auth/entities/auth.schema';
-import { crudOwnPolicy } from '../../common/rls';
 
 export const asset = pgTable(
   'asset',
@@ -42,9 +41,8 @@ export const asset = pgTable(
     index('asset_user_idx').on(table.userId),
     index('asset_project_idx').on(table.projectId),
     index('asset_type_idx').on(table.type),
-    ...crudOwnPolicy(table.userId),
   ],
-).enableRLS();
+);
 
 export type Asset = typeof asset.$inferSelect;
 export type NewAsset = typeof asset.$inferInsert;

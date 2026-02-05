@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { sql, eq, gte, count, and } from 'drizzle-orm';
+import { sql, eq, gte, count, and, isNull } from 'drizzle-orm';
 import { DrizzleService } from '../../database';
 import { CacheService } from './cache.service';
 import { user, UserRole } from '../../auth/entities/auth.schema';
@@ -363,5 +363,30 @@ export class AnalyticsService {
       industry: r.industry,
       count: Number(r.count),
     }));
+  }
+
+  async normalizeLocations(): Promise<{ message: string; startupsToNormalize: number }> {
+    // Find count of startups where location exists but normalizedRegion is null
+    // For now, just return the count (actual normalization can be async/future)
+    const result = await this.drizzle.db
+      .select({ count: count() })
+      .from(startup)
+      .where(
+        and(
+          // Check if location column exists and is not null
+          sql`${startup.location} IS NOT NULL`,
+          // Check if normalizedRegion is null
+          isNull(startup.normalizedRegion),
+        ),
+      );
+
+    const startupsToNormalize = Number(result[0]?.count ?? 0);
+
+    this.logger.log(`Found ${startupsToNormalize} startups to normalize`);
+
+    return {
+      message: `Found ${startupsToNormalize} startups with location data to normalize`,
+      startupsToNormalize,
+    };
   }
 }

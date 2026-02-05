@@ -1,6 +1,6 @@
-import { createZodDto } from 'nestjs-zod';
-import { z } from 'zod';
-import { UserRole } from '../entities/auth.schema';
+import { createZodDto } from "nestjs-zod";
+import { z } from "zod";
+import { UserRole } from "../entities/auth.schema";
 
 // Explicit User type matching the database schema
 export const UserSchema = z.object({
@@ -25,10 +25,10 @@ export class UserResponseDto extends createZodDto(UserResponseSchema) {}
 // Password schema - simplified for better UX while maintaining security
 const PasswordSchema = z
   .string()
-  .min(8, 'Password must be at least 8 characters')
-  .max(128, 'Password must be at most 128 characters')
-  .regex(/[a-zA-Z]/, 'Password must contain at least one letter')
-  .regex(/[0-9]/, 'Password must contain at least one number');
+  .min(8, "Password must be at least 8 characters")
+  .max(128, "Password must be at most 128 characters")
+  .regex(/[a-zA-Z]/, "Password must contain at least one letter")
+  .regex(/[0-9]/, "Password must contain at least one number");
 
 // Login request (less strict - just check length for existing passwords)
 export const LoginSchema = z.object({

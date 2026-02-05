@@ -41,6 +41,13 @@ export const authApi = {
   // Google OAuth (redirect-based)
   getGoogleAuthUrl: () => `${env.VITE_API_BASE_URL}/auth/google`,
 
+  // Onboarding
+  selectRole: (role: "founder" | "investor") =>
+    customFetch<AuthResponse>("/auth/select-role", {
+      method: "POST",
+      body: JSON.stringify({ role }),
+    }),
+
   // Session
   getCurrentUser: () => customFetch<User>("/auth/me"),
   logout: () => customFetch<MessageResponse>("/auth/logout", { method: "POST" }),

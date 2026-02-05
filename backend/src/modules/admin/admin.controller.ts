@@ -28,6 +28,9 @@ import { UserManagementService } from './user-management.service';
 import { ScoringConfigService } from './scoring-config.service';
 import { DataImportService } from './data-import.service';
 import { QueueManagementService } from './queue-management.service';
+import { IntegrationHealthService } from './integration-health.service';
+import { SystemConfigService } from './system-config.service';
+import { BulkDataService } from './bulk-data.service';
 import { QUEUE_NAMES, QueueName } from '../../queue';
 import {
   GetUsersQueryDto,
@@ -59,6 +62,9 @@ export class AdminController {
     private dataImportService: DataImportService,
     private queueManagementService: QueueManagementService,
     private startupService: StartupService,
+    private integrationHealthService: IntegrationHealthService,
+    private systemConfigService: SystemConfigService,
+    private bulkDataService: BulkDataService,
   ) {}
 
   // ============ ANALYTICS ENDPOINTS ============
@@ -76,6 +82,18 @@ export class AdminController {
   @Get('stats/investors')
   async getInvestorStats() {
     return this.analyticsService.getInvestorStats();
+  }
+
+  // ============ INTEGRATIONS & CONFIG ENDPOINTS ============
+
+  @Get('integrations/health')
+  async getIntegrationHealth() {
+    return this.integrationHealthService.getHealth();
+  }
+
+  @Get('config')
+  async getSystemConfig() {
+    return this.systemConfigService.getConfig();
   }
 
   // ============ USER MANAGEMENT ENDPOINTS ============
@@ -115,6 +133,11 @@ export class AdminController {
   // ============ STARTUP MANAGEMENT ENDPOINTS ============
   // These reuse existing StartupService methods that already have admin logic
 
+  @Get('startups')
+  async getAllStartups(@Query() query: GetStartupsQueryDto) {
+    return this.startupService.adminFindAll(query);
+  }
+
   @Get('startups/pending')
   async getPendingStartups(@Query() query: GetStartupsQueryDto) {
     return this.startupService.adminFindPending(query);
@@ -140,6 +163,14 @@ export class AdminController {
       );
     }
     return this.startupService.reject(id, admin.id, reason);
+  }
+
+  @Post('startups/:id/reanalyze')
+  async reanalyzeStartup(
+    @CurrentUser() admin: User,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.startupService.reanalyze(id, admin.id);
   }
 
   // ============ SCORING CONFIGURATION ENDPOINTS ============
@@ -220,6 +251,36 @@ export class AdminController {
     res.send(csv);
   }
 
+  // ============ BULK DATA ENDPOINTS ============
+
+  @Post('bulk/import-startups')
+  @UseInterceptors(FileInterceptor('file'))
+  async bulkImportStartups(
+    @UploadedFile() file: { buffer: Buffer; mimetype: string; originalname: string },
+  ) {
+    if (!file) {
+      throw new BadRequestException('CSV file is required');
+    }
+
+    if (!file.mimetype.includes('csv') && !file.originalname.endsWith('.csv')) {
+      throw new BadRequestException('File must be a CSV');
+    }
+
+    return this.bulkDataService.importStartups(file.buffer);
+  }
+
+  @Get('bulk/export-startups')
+  async bulkExportStartups(
+    @Query() query: ExportStartupsQueryDto,
+    @Res() res: Response,
+  ) {
+    const csv = await this.bulkDataService.exportStartups(query);
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename=startups.csv');
+    res.send(csv);
+  }
+
   // ============ QUEUE MANAGEMENT ENDPOINTS ============
 
   @Get('queue/status')
@@ -241,5 +302,21 @@ export class AdminController {
   @Post('normalize-locations')
   async normalizeLocations() {
     return this.analyticsService.normalizeLocations();
+  }
+
+  // ============================================================================
+  // AI PLACEHOLDERS
+  // ============================================================================
+
+  // AI_PLACEHOLDER
+  @Get('conversations')
+  async getConversations() {
+    return { data: [], total: 0, message: 'AI feature coming soon' };
+  }
+
+  // AI_PLACEHOLDER
+  @Get('agents')
+  async getAgents() {
+    return { data: [], total: 0, message: 'AI feature coming soon' };
   }
 }

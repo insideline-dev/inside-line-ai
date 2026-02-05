@@ -11,7 +11,12 @@ import { NotificationService } from '../../../notification/notification.service'
 import { NotificationGateway } from '../../../notification/notification.gateway';
 import { NotificationType } from '../../../notification/entities';
 import { StorageService } from '../../../storage/storage.service';
+import { user } from '../../../auth/entities/auth.schema';
 import { startup, Startup } from '../../startup/entities';
+import {
+  generateMemoDocument,
+  StartupWithAnalysis,
+} from '../../startup/templates/memo.template';
 import type { PdfJobData, PdfJobResult, StartupScores } from '../interfaces';
 
 @Injectable()
@@ -137,10 +142,20 @@ export class PdfProcessor
     scores: StartupScores | null,
     userId: string,
   ): Promise<{ pdfUrl: string; pdfKey: string }> {
-    // Stub implementation - generates mock PDF content
-    // In production, this would use a PDF library like PDFKit or Puppeteer
-    const memoContent = this.generateMemoContent(startupData, scores);
-    const pdfBuffer = Buffer.from(memoContent, 'utf-8');
+    const userEmail = await this.getUserEmail(userId);
+    const analysis = scores ? this.mapScores(scores) : undefined;
+    const startupWithAnalysis: StartupWithAnalysis = {
+      ...startupData,
+      analysis,
+    };
+
+    const doc = generateMemoDocument({
+      startup: startupWithAnalysis,
+      userEmail,
+      generatedAt: new Date(),
+    });
+
+    const pdfBuffer = await this.pdfToBuffer(doc);
 
     const result = await this.storageService.uploadGeneratedContent(
       userId,
@@ -161,51 +176,44 @@ export class PdfProcessor
     };
   }
 
-  private generateMemoContent(
-    startupData: Startup,
-    scores: StartupScores | null,
-  ): string {
-    // Stub: In production, this would generate actual PDF content
-    const lines = [
-      `INVESTMENT MEMO - ${startupData.name}`,
-      `Generated: ${new Date().toISOString()}`,
-      '',
-      `== COMPANY OVERVIEW ==`,
-      `Name: ${startupData.name}`,
-      `Tagline: ${startupData.tagline}`,
-      `Industry: ${startupData.industry}`,
-      `Stage: ${startupData.stage}`,
-      `Location: ${startupData.location}`,
-      `Team Size: ${startupData.teamSize}`,
-      `Funding Target: $${startupData.fundingTarget.toLocaleString()}`,
-      '',
-      `== DESCRIPTION ==`,
-      startupData.description,
-      '',
-    ];
+  private mapScores(scores: StartupScores): StartupWithAnalysis['analysis'] {
+    const total =
+      scores.marketScore +
+      scores.teamScore +
+      scores.productScore +
+      scores.tractionScore +
+      scores.financialsScore;
+    const overallScore = Math.round(total / 5);
 
-    if (scores) {
-      lines.push(
-        `== SCORING ANALYSIS ==`,
-        `Market Score: ${scores.marketScore}/100`,
-        `Team Score: ${scores.teamScore}/100`,
-        `Product Score: ${scores.productScore}/100`,
-        `Traction Score: ${scores.tractionScore}/100`,
-        `Financials Score: ${scores.financialsScore}/100`,
-        '',
-      );
-    }
+    return {
+      overallScore,
+      marketScore: scores.marketScore,
+      teamScore: scores.teamScore,
+      productScore: scores.productScore,
+      tractionScore: scores.tractionScore,
+      financialScore: scores.financialsScore,
+    };
+  }
 
-    if (startupData.website) {
-      lines.push(`Website: ${startupData.website}`);
-    }
-    if (startupData.pitchDeckUrl) {
-      lines.push(`Pitch Deck: ${startupData.pitchDeckUrl}`);
-    }
-    if (startupData.demoUrl) {
-      lines.push(`Demo: ${startupData.demoUrl}`);
-    }
+  private async getUserEmail(userId: string): Promise<string> {
+    const [result] = await this.drizzle.db
+      .select({ email: user.email })
+      .from(user)
+      .where(eq(user.id, userId))
+      .limit(1);
 
-    return lines.join('\n');
+    return result?.email ?? 'unknown@inside-line';
+  }
+
+  private pdfToBuffer(doc: PDFKit.PDFDocument): Promise<Buffer> {
+    return new Promise((resolve, reject) => {
+      const chunks: Buffer[] = [];
+
+      doc.on('data', (chunk: Buffer) => chunks.push(chunk));
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+
+      doc.end();
+    });
   }
 }

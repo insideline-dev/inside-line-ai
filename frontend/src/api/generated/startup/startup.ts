@@ -29,13 +29,17 @@ import type {
   CreateStartupDto,
   PresignedUrlDto,
   RejectStartupDto,
+  RespondInterestDto,
   SaveDraftDto,
+  ScheduleMeetingDto,
   StartupControllerAdminFindAllParams,
   StartupControllerAdminFindPendingParams,
   StartupControllerFindAllParams,
   StartupControllerFindApprovedParams,
   SubmitStartupDto,
-  UpdateStartupDto
+  UpdateDataRoomPermissionsDto,
+  UpdateStartupDto,
+  UploadDataRoomDto
 } from '.././model';
 
 import { customFetch } from '../../client';
@@ -1308,6 +1312,707 @@ export function useStartupControllerDownloadReport<TData = Awaited<ReturnType<ty
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getStartupControllerDownloadReportQueryOptions(id,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+export type startupControllerUploadToDataRoomResponse201 = {
+  data: void
+  status: 201
+}
+    
+export type startupControllerUploadToDataRoomResponseSuccess = (startupControllerUploadToDataRoomResponse201) & {
+  headers: Headers;
+};
+;
+
+export type startupControllerUploadToDataRoomResponse = (startupControllerUploadToDataRoomResponseSuccess)
+
+export const getStartupControllerUploadToDataRoomUrl = (id: string,) => {
+
+
+  
+
+  return `/startups/${id}/data-room`
+}
+
+export const startupControllerUploadToDataRoom = async (id: string,
+    uploadDataRoomDto: UploadDataRoomDto, options?: RequestInit): Promise<startupControllerUploadToDataRoomResponse> => {
+  
+  return customFetch<startupControllerUploadToDataRoomResponse>(getStartupControllerUploadToDataRoomUrl(id),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      uploadDataRoomDto,)
+  }
+);}
+
+
+
+
+export const getStartupControllerUploadToDataRoomMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startupControllerUploadToDataRoom>>, TError,{id: string;data: BodyType<UploadDataRoomDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof startupControllerUploadToDataRoom>>, TError,{id: string;data: BodyType<UploadDataRoomDto>}, TContext> => {
+
+const mutationKey = ['startupControllerUploadToDataRoom'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof startupControllerUploadToDataRoom>>, {id: string;data: BodyType<UploadDataRoomDto>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  startupControllerUploadToDataRoom(id,data,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type StartupControllerUploadToDataRoomMutationResult = NonNullable<Awaited<ReturnType<typeof startupControllerUploadToDataRoom>>>
+    export type StartupControllerUploadToDataRoomMutationBody = BodyType<UploadDataRoomDto>
+    export type StartupControllerUploadToDataRoomMutationError = ErrorType<unknown>
+
+    export const useStartupControllerUploadToDataRoom = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startupControllerUploadToDataRoom>>, TError,{id: string;data: BodyType<UploadDataRoomDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof startupControllerUploadToDataRoom>>,
+        TError,
+        {id: string;data: BodyType<UploadDataRoomDto>},
+        TContext
+      > => {
+      return useMutation(getStartupControllerUploadToDataRoomMutationOptions(options), queryClient);
+    }
+    export type startupControllerGetDataRoomResponse200 = {
+  data: void
+  status: 200
+}
+    
+export type startupControllerGetDataRoomResponseSuccess = (startupControllerGetDataRoomResponse200) & {
+  headers: Headers;
+};
+;
+
+export type startupControllerGetDataRoomResponse = (startupControllerGetDataRoomResponseSuccess)
+
+export const getStartupControllerGetDataRoomUrl = (id: string,) => {
+
+
+  
+
+  return `/startups/${id}/data-room`
+}
+
+export const startupControllerGetDataRoom = async (id: string, options?: RequestInit): Promise<startupControllerGetDataRoomResponse> => {
+  
+  return customFetch<startupControllerGetDataRoomResponse>(getStartupControllerGetDataRoomUrl(id),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getStartupControllerGetDataRoomQueryKey = (id: string,) => {
+    return [
+    `/startups/${id}/data-room`
+    ] as const;
+    }
+
+    
+export const getStartupControllerGetDataRoomQueryOptions = <TData = Awaited<ReturnType<typeof startupControllerGetDataRoom>>, TError = ErrorType<unknown>>(id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof startupControllerGetDataRoom>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getStartupControllerGetDataRoomQueryKey(id);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof startupControllerGetDataRoom>>> = ({ signal }) => startupControllerGetDataRoom(id, { signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof startupControllerGetDataRoom>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type StartupControllerGetDataRoomQueryResult = NonNullable<Awaited<ReturnType<typeof startupControllerGetDataRoom>>>
+export type StartupControllerGetDataRoomQueryError = ErrorType<unknown>
+
+
+export function useStartupControllerGetDataRoom<TData = Awaited<ReturnType<typeof startupControllerGetDataRoom>>, TError = ErrorType<unknown>>(
+ id: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof startupControllerGetDataRoom>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof startupControllerGetDataRoom>>,
+          TError,
+          Awaited<ReturnType<typeof startupControllerGetDataRoom>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useStartupControllerGetDataRoom<TData = Awaited<ReturnType<typeof startupControllerGetDataRoom>>, TError = ErrorType<unknown>>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof startupControllerGetDataRoom>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof startupControllerGetDataRoom>>,
+          TError,
+          Awaited<ReturnType<typeof startupControllerGetDataRoom>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useStartupControllerGetDataRoom<TData = Awaited<ReturnType<typeof startupControllerGetDataRoom>>, TError = ErrorType<unknown>>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof startupControllerGetDataRoom>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useStartupControllerGetDataRoom<TData = Awaited<ReturnType<typeof startupControllerGetDataRoom>>, TError = ErrorType<unknown>>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof startupControllerGetDataRoom>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getStartupControllerGetDataRoomQueryOptions(id,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+export type startupControllerUpdateDataRoomPermissionsResponse200 = {
+  data: void
+  status: 200
+}
+    
+export type startupControllerUpdateDataRoomPermissionsResponseSuccess = (startupControllerUpdateDataRoomPermissionsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type startupControllerUpdateDataRoomPermissionsResponse = (startupControllerUpdateDataRoomPermissionsResponseSuccess)
+
+export const getStartupControllerUpdateDataRoomPermissionsUrl = (id: string,
+    docId: string,) => {
+
+
+  
+
+  return `/startups/${id}/data-room/${docId}/permissions`
+}
+
+export const startupControllerUpdateDataRoomPermissions = async (id: string,
+    docId: string,
+    updateDataRoomPermissionsDto: UpdateDataRoomPermissionsDto, options?: RequestInit): Promise<startupControllerUpdateDataRoomPermissionsResponse> => {
+  
+  return customFetch<startupControllerUpdateDataRoomPermissionsResponse>(getStartupControllerUpdateDataRoomPermissionsUrl(id,docId),
+  {      
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateDataRoomPermissionsDto,)
+  }
+);}
+
+
+
+
+export const getStartupControllerUpdateDataRoomPermissionsMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startupControllerUpdateDataRoomPermissions>>, TError,{id: string;docId: string;data: BodyType<UpdateDataRoomPermissionsDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof startupControllerUpdateDataRoomPermissions>>, TError,{id: string;docId: string;data: BodyType<UpdateDataRoomPermissionsDto>}, TContext> => {
+
+const mutationKey = ['startupControllerUpdateDataRoomPermissions'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof startupControllerUpdateDataRoomPermissions>>, {id: string;docId: string;data: BodyType<UpdateDataRoomPermissionsDto>}> = (props) => {
+          const {id,docId,data} = props ?? {};
+
+          return  startupControllerUpdateDataRoomPermissions(id,docId,data,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type StartupControllerUpdateDataRoomPermissionsMutationResult = NonNullable<Awaited<ReturnType<typeof startupControllerUpdateDataRoomPermissions>>>
+    export type StartupControllerUpdateDataRoomPermissionsMutationBody = BodyType<UpdateDataRoomPermissionsDto>
+    export type StartupControllerUpdateDataRoomPermissionsMutationError = ErrorType<unknown>
+
+    export const useStartupControllerUpdateDataRoomPermissions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startupControllerUpdateDataRoomPermissions>>, TError,{id: string;docId: string;data: BodyType<UpdateDataRoomPermissionsDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof startupControllerUpdateDataRoomPermissions>>,
+        TError,
+        {id: string;docId: string;data: BodyType<UpdateDataRoomPermissionsDto>},
+        TContext
+      > => {
+      return useMutation(getStartupControllerUpdateDataRoomPermissionsMutationOptions(options), queryClient);
+    }
+    export type startupControllerDeleteDataRoomDocumentResponse200 = {
+  data: void
+  status: 200
+}
+    
+export type startupControllerDeleteDataRoomDocumentResponseSuccess = (startupControllerDeleteDataRoomDocumentResponse200) & {
+  headers: Headers;
+};
+;
+
+export type startupControllerDeleteDataRoomDocumentResponse = (startupControllerDeleteDataRoomDocumentResponseSuccess)
+
+export const getStartupControllerDeleteDataRoomDocumentUrl = (id: string,
+    docId: string,) => {
+
+
+  
+
+  return `/startups/${id}/data-room/${docId}`
+}
+
+export const startupControllerDeleteDataRoomDocument = async (id: string,
+    docId: string, options?: RequestInit): Promise<startupControllerDeleteDataRoomDocumentResponse> => {
+  
+  return customFetch<startupControllerDeleteDataRoomDocumentResponse>(getStartupControllerDeleteDataRoomDocumentUrl(id,docId),
+  {      
+    ...options,
+    method: 'DELETE'
+    
+    
+  }
+);}
+
+
+
+
+export const getStartupControllerDeleteDataRoomDocumentMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startupControllerDeleteDataRoomDocument>>, TError,{id: string;docId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof startupControllerDeleteDataRoomDocument>>, TError,{id: string;docId: string}, TContext> => {
+
+const mutationKey = ['startupControllerDeleteDataRoomDocument'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof startupControllerDeleteDataRoomDocument>>, {id: string;docId: string}> = (props) => {
+          const {id,docId} = props ?? {};
+
+          return  startupControllerDeleteDataRoomDocument(id,docId,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type StartupControllerDeleteDataRoomDocumentMutationResult = NonNullable<Awaited<ReturnType<typeof startupControllerDeleteDataRoomDocument>>>
+    
+    export type StartupControllerDeleteDataRoomDocumentMutationError = ErrorType<unknown>
+
+    export const useStartupControllerDeleteDataRoomDocument = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startupControllerDeleteDataRoomDocument>>, TError,{id: string;docId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof startupControllerDeleteDataRoomDocument>>,
+        TError,
+        {id: string;docId: string},
+        TContext
+      > => {
+      return useMutation(getStartupControllerDeleteDataRoomDocumentMutationOptions(options), queryClient);
+    }
+    export type startupControllerGetInvestorInterestResponse200 = {
+  data: void
+  status: 200
+}
+    
+export type startupControllerGetInvestorInterestResponseSuccess = (startupControllerGetInvestorInterestResponse200) & {
+  headers: Headers;
+};
+;
+
+export type startupControllerGetInvestorInterestResponse = (startupControllerGetInvestorInterestResponseSuccess)
+
+export const getStartupControllerGetInvestorInterestUrl = (id: string,) => {
+
+
+  
+
+  return `/startups/${id}/interest`
+}
+
+export const startupControllerGetInvestorInterest = async (id: string, options?: RequestInit): Promise<startupControllerGetInvestorInterestResponse> => {
+  
+  return customFetch<startupControllerGetInvestorInterestResponse>(getStartupControllerGetInvestorInterestUrl(id),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getStartupControllerGetInvestorInterestQueryKey = (id: string,) => {
+    return [
+    `/startups/${id}/interest`
+    ] as const;
+    }
+
+    
+export const getStartupControllerGetInvestorInterestQueryOptions = <TData = Awaited<ReturnType<typeof startupControllerGetInvestorInterest>>, TError = ErrorType<unknown>>(id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof startupControllerGetInvestorInterest>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getStartupControllerGetInvestorInterestQueryKey(id);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof startupControllerGetInvestorInterest>>> = ({ signal }) => startupControllerGetInvestorInterest(id, { signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof startupControllerGetInvestorInterest>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type StartupControllerGetInvestorInterestQueryResult = NonNullable<Awaited<ReturnType<typeof startupControllerGetInvestorInterest>>>
+export type StartupControllerGetInvestorInterestQueryError = ErrorType<unknown>
+
+
+export function useStartupControllerGetInvestorInterest<TData = Awaited<ReturnType<typeof startupControllerGetInvestorInterest>>, TError = ErrorType<unknown>>(
+ id: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof startupControllerGetInvestorInterest>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof startupControllerGetInvestorInterest>>,
+          TError,
+          Awaited<ReturnType<typeof startupControllerGetInvestorInterest>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useStartupControllerGetInvestorInterest<TData = Awaited<ReturnType<typeof startupControllerGetInvestorInterest>>, TError = ErrorType<unknown>>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof startupControllerGetInvestorInterest>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof startupControllerGetInvestorInterest>>,
+          TError,
+          Awaited<ReturnType<typeof startupControllerGetInvestorInterest>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useStartupControllerGetInvestorInterest<TData = Awaited<ReturnType<typeof startupControllerGetInvestorInterest>>, TError = ErrorType<unknown>>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof startupControllerGetInvestorInterest>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useStartupControllerGetInvestorInterest<TData = Awaited<ReturnType<typeof startupControllerGetInvestorInterest>>, TError = ErrorType<unknown>>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof startupControllerGetInvestorInterest>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getStartupControllerGetInvestorInterestQueryOptions(id,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+export type startupControllerRespondToInterestResponse201 = {
+  data: void
+  status: 201
+}
+    
+export type startupControllerRespondToInterestResponseSuccess = (startupControllerRespondToInterestResponse201) & {
+  headers: Headers;
+};
+;
+
+export type startupControllerRespondToInterestResponse = (startupControllerRespondToInterestResponseSuccess)
+
+export const getStartupControllerRespondToInterestUrl = (id: string,
+    interestId: string,) => {
+
+
+  
+
+  return `/startups/${id}/interest/${interestId}/respond`
+}
+
+export const startupControllerRespondToInterest = async (id: string,
+    interestId: string,
+    respondInterestDto: RespondInterestDto, options?: RequestInit): Promise<startupControllerRespondToInterestResponse> => {
+  
+  return customFetch<startupControllerRespondToInterestResponse>(getStartupControllerRespondToInterestUrl(id,interestId),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      respondInterestDto,)
+  }
+);}
+
+
+
+
+export const getStartupControllerRespondToInterestMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startupControllerRespondToInterest>>, TError,{id: string;interestId: string;data: BodyType<RespondInterestDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof startupControllerRespondToInterest>>, TError,{id: string;interestId: string;data: BodyType<RespondInterestDto>}, TContext> => {
+
+const mutationKey = ['startupControllerRespondToInterest'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof startupControllerRespondToInterest>>, {id: string;interestId: string;data: BodyType<RespondInterestDto>}> = (props) => {
+          const {id,interestId,data} = props ?? {};
+
+          return  startupControllerRespondToInterest(id,interestId,data,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type StartupControllerRespondToInterestMutationResult = NonNullable<Awaited<ReturnType<typeof startupControllerRespondToInterest>>>
+    export type StartupControllerRespondToInterestMutationBody = BodyType<RespondInterestDto>
+    export type StartupControllerRespondToInterestMutationError = ErrorType<unknown>
+
+    export const useStartupControllerRespondToInterest = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startupControllerRespondToInterest>>, TError,{id: string;interestId: string;data: BodyType<RespondInterestDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof startupControllerRespondToInterest>>,
+        TError,
+        {id: string;interestId: string;data: BodyType<RespondInterestDto>},
+        TContext
+      > => {
+      return useMutation(getStartupControllerRespondToInterestMutationOptions(options), queryClient);
+    }
+    export type startupControllerScheduleMeetingResponse201 = {
+  data: void
+  status: 201
+}
+    
+export type startupControllerScheduleMeetingResponseSuccess = (startupControllerScheduleMeetingResponse201) & {
+  headers: Headers;
+};
+;
+
+export type startupControllerScheduleMeetingResponse = (startupControllerScheduleMeetingResponseSuccess)
+
+export const getStartupControllerScheduleMeetingUrl = (id: string,) => {
+
+
+  
+
+  return `/startups/${id}/meetings`
+}
+
+export const startupControllerScheduleMeeting = async (id: string,
+    scheduleMeetingDto: ScheduleMeetingDto, options?: RequestInit): Promise<startupControllerScheduleMeetingResponse> => {
+  
+  return customFetch<startupControllerScheduleMeetingResponse>(getStartupControllerScheduleMeetingUrl(id),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      scheduleMeetingDto,)
+  }
+);}
+
+
+
+
+export const getStartupControllerScheduleMeetingMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startupControllerScheduleMeeting>>, TError,{id: string;data: BodyType<ScheduleMeetingDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof startupControllerScheduleMeeting>>, TError,{id: string;data: BodyType<ScheduleMeetingDto>}, TContext> => {
+
+const mutationKey = ['startupControllerScheduleMeeting'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof startupControllerScheduleMeeting>>, {id: string;data: BodyType<ScheduleMeetingDto>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  startupControllerScheduleMeeting(id,data,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type StartupControllerScheduleMeetingMutationResult = NonNullable<Awaited<ReturnType<typeof startupControllerScheduleMeeting>>>
+    export type StartupControllerScheduleMeetingMutationBody = BodyType<ScheduleMeetingDto>
+    export type StartupControllerScheduleMeetingMutationError = ErrorType<unknown>
+
+    export const useStartupControllerScheduleMeeting = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startupControllerScheduleMeeting>>, TError,{id: string;data: BodyType<ScheduleMeetingDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof startupControllerScheduleMeeting>>,
+        TError,
+        {id: string;data: BodyType<ScheduleMeetingDto>},
+        TContext
+      > => {
+      return useMutation(getStartupControllerScheduleMeetingMutationOptions(options), queryClient);
+    }
+    export type startupControllerGetMeetingsResponse200 = {
+  data: void
+  status: 200
+}
+    
+export type startupControllerGetMeetingsResponseSuccess = (startupControllerGetMeetingsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type startupControllerGetMeetingsResponse = (startupControllerGetMeetingsResponseSuccess)
+
+export const getStartupControllerGetMeetingsUrl = (id: string,) => {
+
+
+  
+
+  return `/startups/${id}/meetings`
+}
+
+export const startupControllerGetMeetings = async (id: string, options?: RequestInit): Promise<startupControllerGetMeetingsResponse> => {
+  
+  return customFetch<startupControllerGetMeetingsResponse>(getStartupControllerGetMeetingsUrl(id),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getStartupControllerGetMeetingsQueryKey = (id: string,) => {
+    return [
+    `/startups/${id}/meetings`
+    ] as const;
+    }
+
+    
+export const getStartupControllerGetMeetingsQueryOptions = <TData = Awaited<ReturnType<typeof startupControllerGetMeetings>>, TError = ErrorType<unknown>>(id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof startupControllerGetMeetings>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getStartupControllerGetMeetingsQueryKey(id);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof startupControllerGetMeetings>>> = ({ signal }) => startupControllerGetMeetings(id, { signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof startupControllerGetMeetings>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type StartupControllerGetMeetingsQueryResult = NonNullable<Awaited<ReturnType<typeof startupControllerGetMeetings>>>
+export type StartupControllerGetMeetingsQueryError = ErrorType<unknown>
+
+
+export function useStartupControllerGetMeetings<TData = Awaited<ReturnType<typeof startupControllerGetMeetings>>, TError = ErrorType<unknown>>(
+ id: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof startupControllerGetMeetings>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof startupControllerGetMeetings>>,
+          TError,
+          Awaited<ReturnType<typeof startupControllerGetMeetings>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useStartupControllerGetMeetings<TData = Awaited<ReturnType<typeof startupControllerGetMeetings>>, TError = ErrorType<unknown>>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof startupControllerGetMeetings>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof startupControllerGetMeetings>>,
+          TError,
+          Awaited<ReturnType<typeof startupControllerGetMeetings>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useStartupControllerGetMeetings<TData = Awaited<ReturnType<typeof startupControllerGetMeetings>>, TError = ErrorType<unknown>>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof startupControllerGetMeetings>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useStartupControllerGetMeetings<TData = Awaited<ReturnType<typeof startupControllerGetMeetings>>, TError = ErrorType<unknown>>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof startupControllerGetMeetings>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getStartupControllerGetMeetingsQueryOptions(id,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

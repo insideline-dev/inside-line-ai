@@ -2,6 +2,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ScoutController } from '../scout.controller';
 import { ScoutService } from '../scout.service';
 import { SubmissionService } from '../submission.service';
+import { CommissionService } from '../commission.service';
+import { ScoutMetricsService } from '../scout-metrics.service';
 import { ScoutGuard } from '../guards/scout.guard';
 import { DrizzleService } from '../../../database';
 import { UserRole } from '../../../auth/entities/auth.schema';
@@ -81,6 +83,20 @@ describe('ScoutController', () => {
             submit: jest.fn(),
             findAll: jest.fn(),
             findAllForInvestor: jest.fn(),
+          },
+        },
+        {
+          provide: CommissionService,
+          useValue: {
+            getCommissions: jest.fn(),
+            getTotalEarnings: jest.fn(),
+          },
+        },
+        {
+          provide: ScoutMetricsService,
+          useValue: {
+            getMetrics: jest.fn(),
+            getLeaderboard: jest.fn(),
           },
         },
         {

@@ -1,4 +1,3 @@
-import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -6,43 +5,42 @@ import {
   BarChart3,
   Users,
   Building2,
-  CheckCircle,
-  XCircle,
   Clock,
   TrendingUp,
+  Handshake,
+  Globe,
 } from "lucide-react";
-import { OpenAPI } from "@/lib/api-client";
+import { useAdminControllerGetStats } from "@/api/generated/admin/admin";
 
 export const Route = createFileRoute("/_protected/admin/analytics")({
   component: AnalyticsDashboard,
 });
 
-interface AnalyticsData {
-  totalStartups: number;
-  pendingReview: number;
-  approved: number;
-  rejected: number;
-  totalUsers: number;
-  founders: number;
-  investors: number;
-  admins: number;
-  avgScore: number;
-  recentSubmissions: number;
-}
-
-async function fetchAnalytics(): Promise<AnalyticsData> {
-  const response = await fetch(`${OpenAPI.BASE}/api/admin/analytics`, {
-    credentials: "include",
-  });
-  if (!response.ok) throw new Error("Failed to fetch analytics");
-  return response.json();
+// Matches PlatformStats from the backend
+interface PlatformStats {
+  users: {
+    total: number;
+    byRole: Record<string, number>;
+    weeklySignups: Array<{ week: string; count: number }>;
+  };
+  startups: {
+    total: number;
+    byStatus: Record<string, number>;
+    pending: number;
+  };
+  matches: {
+    total: number;
+    highScore: number;
+  };
+  portals: {
+    active: number;
+    totalSubmissions: number;
+  };
+  topIndustries: Array<{ industry: string; count: number }>;
 }
 
 function AnalyticsDashboard() {
-  const { data: analytics, isLoading } = useQuery<AnalyticsData>({
-    queryKey: ["admin", "analytics"],
-    queryFn: fetchAnalytics,
-  });
+  const { data, isLoading } = useAdminControllerGetStats<PlatformStats>();
 
   if (isLoading) {
     return (
@@ -67,23 +65,11 @@ function AnalyticsDashboard() {
     );
   }
 
-  const stats = analytics || {
-    totalStartups: 0,
-    pendingReview: 0,
-    approved: 0,
-    rejected: 0,
-    totalUsers: 0,
-    founders: 0,
-    investors: 0,
-    admins: 0,
-    avgScore: 0,
-    recentSubmissions: 0,
-  };
-
+  const stats = data;
+  const totalStartups = stats?.startups?.total ?? 0;
+  const approved = stats?.startups?.byStatus?.approved ?? 0;
   const approvalRate =
-    stats.totalStartups > 0
-      ? ((stats.approved / stats.totalStartups) * 100).toFixed(0)
-      : 0;
+    totalStartups > 0 ? ((approved / totalStartups) * 100).toFixed(0) : "0";
 
   return (
     <div className="space-y-6">
@@ -99,9 +85,9 @@ function AnalyticsDashboard() {
             <Building2 className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.totalStartups}</div>
+            <div className="text-2xl font-bold">{totalStartups}</div>
             <p className="text-xs text-muted-foreground">
-              {stats.recentSubmissions} submitted this week
+              {stats?.portals?.totalSubmissions ?? 0} portal submissions
             </p>
           </CardContent>
         </Card>
@@ -112,30 +98,32 @@ function AnalyticsDashboard() {
             <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.pendingReview}</div>
+            <div className="text-2xl font-bold">{stats?.startups?.pending ?? 0}</div>
             <p className="text-xs text-muted-foreground">Awaiting admin review</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Approved</CardTitle>
-            <CheckCircle className="h-4 w-4 text-chart-2" />
+            <CardTitle className="text-sm font-medium">Total Matches</CardTitle>
+            <Handshake className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.approved}</div>
-            <p className="text-xs text-muted-foreground">Ready for investors</p>
+            <div className="text-2xl font-bold">{stats?.matches?.total ?? 0}</div>
+            <p className="text-xs text-muted-foreground">
+              {stats?.matches?.highScore ?? 0} high score (&gt;80)
+            </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Rejected</CardTitle>
-            <XCircle className="h-4 w-4 text-destructive" />
+            <CardTitle className="text-sm font-medium">Active Portals</CardTitle>
+            <Globe className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.rejected}</div>
-            <p className="text-xs text-muted-foreground">Did not meet criteria</p>
+            <div className="text-2xl font-bold">{stats?.portals?.active ?? 0}</div>
+            <p className="text-xs text-muted-foreground">Accepting submissions</p>
           </CardContent>
         </Card>
       </div>
@@ -147,34 +135,25 @@ function AnalyticsDashboard() {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.totalUsers}</div>
+            <div className="text-2xl font-bold">{stats?.users?.total ?? 0}</div>
             <div className="mt-2 space-y-1 text-xs text-muted-foreground">
               <div className="flex justify-between">
                 <span>Founders</span>
-                <span>{stats.founders}</span>
+                <span>{stats?.users?.byRole?.founder ?? 0}</span>
               </div>
               <div className="flex justify-between">
                 <span>Investors</span>
-                <span>{stats.investors}</span>
+                <span>{stats?.users?.byRole?.investor ?? 0}</span>
               </div>
               <div className="flex justify-between">
                 <span>Admins</span>
-                <span>{stats.admins}</span>
+                <span>{stats?.users?.byRole?.admin ?? 0}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Scouts</span>
+                <span>{stats?.users?.byRole?.scout ?? 0}</span>
               </div>
             </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Average Score</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.avgScore.toFixed(1)}</div>
-            <p className="text-xs text-muted-foreground">
-              Across all evaluated startups
-            </p>
           </CardContent>
         </Card>
 
@@ -186,6 +165,26 @@ function AnalyticsDashboard() {
           <CardContent>
             <div className="text-2xl font-bold">{approvalRate}%</div>
             <p className="text-xs text-muted-foreground">Of submitted startups</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Top Industries</CardTitle>
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="mt-1 space-y-1 text-xs text-muted-foreground">
+              {(stats?.topIndustries ?? []).slice(0, 5).map((item) => (
+                <div key={item.industry} className="flex justify-between">
+                  <span className="truncate">{item.industry}</span>
+                  <span>{item.count}</span>
+                </div>
+              ))}
+              {(!stats?.topIndustries || stats.topIndustries.length === 0) && (
+                <p>No data yet</p>
+              )}
+            </div>
           </CardContent>
         </Card>
       </div>

@@ -2,12 +2,13 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { eq, and, gte, desc, sql } from 'drizzle-orm';
 import { DrizzleService } from '../../database';
 import { QueueService, QUEUE_NAMES } from '../../queue';
 import { startupMatch, NewStartupMatch } from './entities/investor.schema';
-import { GetMatchesQuery } from './dto';
+import { GetMatchesQuery, UpdateMatchStatus } from './dto';
 import { ScoringService } from './scoring.service';
 
 @Injectable()
@@ -123,6 +124,69 @@ export class MatchService {
         )
         .returning();
 
+      return updated;
+    });
+  }
+
+  async updateMatchStatus(
+    investorId: string,
+    matchId: string,
+    dto: UpdateMatchStatus,
+  ) {
+    return this.drizzle.withRLS(investorId, async (db) => {
+      const [match] = await db
+        .select()
+        .from(startupMatch)
+        .where(eq(startupMatch.id, matchId))
+        .limit(1);
+
+      if (!match) {
+        throw new NotFoundException('Match not found');
+      }
+
+      if (match.investorId !== investorId) {
+        throw new ForbiddenException('Match does not belong to this investor');
+      }
+
+      const updates: Record<string, unknown> = {
+        status: dto.status,
+        statusChangedAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      if (dto.status === 'passed') {
+        updates.passReason = dto.passReason;
+        updates.passNotes = dto.passNotes ?? null;
+      }
+
+      if (dto.status === 'closed') {
+        updates.investmentAmount = dto.investmentAmount;
+        updates.investmentCurrency = dto.investmentCurrency ?? 'USD';
+        updates.investmentDate = dto.investmentDate
+          ? new Date(dto.investmentDate)
+          : null;
+        updates.investmentNotes = dto.investmentNotes ?? null;
+      }
+
+      if (
+        dto.meetingRequested !== undefined &&
+        dto.meetingRequested !== match.meetingRequested
+      ) {
+        updates.meetingRequested = dto.meetingRequested;
+        if (dto.meetingRequested) {
+          updates.meetingRequestedAt = new Date();
+        }
+      }
+
+      const [updated] = await db
+        .update(startupMatch)
+        .set(updates)
+        .where(eq(startupMatch.id, matchId))
+        .returning();
+
+      this.logger.log(
+        `Updated match ${matchId} status to ${dto.status}`,
+      );
       return updated;
     });
   }

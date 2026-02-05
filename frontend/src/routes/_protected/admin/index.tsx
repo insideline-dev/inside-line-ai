@@ -1,11 +1,15 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { StartupCard } from "@/components/startup/StartupCard";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useEffect, useRef } from "react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useAdminControllerGetStats } from "@/api/generated/admin/admin";
-import { useStartupControllerAdminFindPending } from "@/api/generated/startup/startup";
-import { BarChart3, Clock, CheckCircle, XCircle } from "lucide-react";
-import type { Startup } from "@/types";
+import { ScoreRing } from "@/components/analysis/ScoreRing";
+import { useAdminControllerGetStats, useAdminControllerGetAllStartups } from "@/api/generated/admin/admin";
+import { Clock, Sparkles, CheckCircle, XCircle, Users, Target, Building2, Eye } from "lucide-react";
+import { format } from "date-fns";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_protected/admin/")({
   component: AdminDashboard,
@@ -16,93 +20,279 @@ interface StatsData {
   analyzing: number;
   approved: number;
   rejected: number;
+  totalInvestors: number;
+  totalMatches: number;
 }
 
 interface StartupItem {
   id: string;
   name: string;
-  [key: string]: unknown;
+  status: string;
+  description?: string;
+  website?: string;
+  stage?: string;
+  sector?: string;
+  overallScore?: number;
+  createdAt: string;
+  percentileRank?: number;
 }
 
 function AdminDashboard() {
-  const { data: statsResponse, isLoading: isLoadingStats } = useAdminControllerGetStats();
-  const { data: startupsResponse, isLoading: isLoadingStartups } = useStartupControllerAdminFindPending();
+  const prevAnalyzingCountRef = useRef<number>(0);
+
+  const { data: statsResponse, isLoading: isLoadingStats } = useAdminControllerGetStats({
+    query: {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      refetchInterval: (query: any) => {
+        const data = query.state.data as { data: StatsData } | undefined;
+        return (data?.data?.analyzing ?? 0) > 0 ? 5000 : false;
+      },
+    },
+  });
+
+  const { data: startupsResponse, isLoading: isLoadingStartups } = useAdminControllerGetAllStartups(
+    { limit: 200 },
+    {
+      query: {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        refetchInterval: (query: any) => {
+          const data = query.state.data as { data: StartupItem[] } | undefined;
+          const hasAnalyzing = data?.data?.some((s) => s.status === "analyzing");
+          return hasAnalyzing ? 5000 : false;
+        },
+      },
+    }
+  );
 
   const statsData = statsResponse?.data as StatsData | undefined;
-  const reviewQueue = (startupsResponse?.data as StartupItem[] | undefined) ?? [];
+  const startups = (startupsResponse?.data as StartupItem[] | undefined) ?? [];
+
+  // Toast notification when analyzing count drops
+  useEffect(() => {
+    const currentAnalyzingCount = statsData?.analyzing ?? 0;
+    const prevCount = prevAnalyzingCountRef.current;
+
+    if (prevCount > 0 && currentAnalyzingCount < prevCount) {
+      const completed = prevCount - currentAnalyzingCount;
+      toast.success("Analysis Complete", {
+        description: `${completed} startup${completed > 1 ? "s have" : " has"} finished analyzing.`,
+      });
+    }
+    prevAnalyzingCountRef.current = currentAnalyzingCount;
+  }, [statsData?.analyzing]);
+
+  const filterByStatus = (status: string) => {
+    if (status === "all") return startups;
+    if (status === "pending_review") {
+      return startups.filter((s) => s.status === "pending_review" || s.status === "submitted");
+    }
+    return startups.filter((s) => s.status === status);
+  };
+
+  const getStatusBadge = (status: string) => {
+    const variants: Record<string, { label: string; className: string }> = {
+      submitted: { label: "Pending", className: "bg-chart-4/10 text-chart-4 border-chart-4/20" },
+      pending_review: { label: "Pending", className: "bg-chart-4/10 text-chart-4 border-chart-4/20" },
+      analyzing: { label: "Analyzing", className: "bg-chart-5/10 text-chart-5 border-chart-5/20" },
+      approved: { label: "Approved", className: "bg-chart-2/10 text-chart-2 border-chart-2/20" },
+      rejected: { label: "Rejected", className: "bg-destructive/10 text-destructive border-destructive/20" },
+    };
+
+    const variant = variants[status] || { label: status, className: "" };
+    return (
+      <Badge variant="outline" className={variant.className}>
+        {variant.label}
+      </Badge>
+    );
+  };
+
+  const formatStage = (stage: string) => {
+    return stage
+      .split("_")
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(" ");
+  };
 
   const stats = [
     {
-      label: "Pending Review",
+      label: "Pending",
       value: statsData?.pendingReview ?? 0,
       icon: Clock,
-      color: "text-yellow-600",
+      bgColor: "bg-chart-4/10",
+      iconColor: "text-chart-4",
     },
     {
       label: "Analyzing",
       value: statsData?.analyzing ?? 0,
-      icon: BarChart3,
-      color: "text-blue-600",
+      icon: Sparkles,
+      bgColor: "bg-chart-5/10",
+      iconColor: "text-chart-5",
     },
     {
       label: "Approved",
       value: statsData?.approved ?? 0,
       icon: CheckCircle,
-      color: "text-green-600",
+      bgColor: "bg-chart-2/10",
+      iconColor: "text-chart-2",
     },
     {
       label: "Rejected",
       value: statsData?.rejected ?? 0,
       icon: XCircle,
-      color: "text-red-600",
+      bgColor: "bg-destructive/10",
+      iconColor: "text-destructive",
+    },
+    {
+      label: "Investors",
+      value: statsData?.totalInvestors ?? 0,
+      icon: Users,
+      bgColor: "bg-chart-3/10",
+      iconColor: "text-chart-3",
+    },
+    {
+      label: "Matches",
+      value: statsData?.totalMatches ?? 0,
+      icon: Target,
+      bgColor: "bg-chart-1/10",
+      iconColor: "text-chart-1",
     },
   ];
 
+  const tabs = [
+    { value: "pending_review", label: "Pending Review", count: statsData?.pendingReview },
+    { value: "analyzing", label: "Analyzing", count: statsData?.analyzing },
+    { value: "approved", label: "Approved", count: 0 },
+    { value: "rejected", label: "Rejected", count: 0 },
+    { value: "all", label: "All", count: 0 },
+  ];
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-bold">Admin Dashboard</h1>
+        <h1 className="text-2xl font-bold">Admin Dashboard</h1>
         <p className="text-muted-foreground">Review and manage startup submissions</p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {isLoadingStats ? (
-          [1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-24 rounded-lg" />)
-        ) : (
-          stats.map((stat) => (
+      {/* Stats */}
+      {isLoadingStats ? (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <Skeleton key={i} className="h-24 rounded-lg" />
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+          {stats.map((stat) => (
             <Card key={stat.label}>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">{stat.label}</CardTitle>
-                <stat.icon className={`h-4 w-4 ${stat.color}`} />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stat.value}</div>
+              <CardContent className="p-4 text-center">
+                <div className={`w-10 h-10 rounded-full ${stat.bgColor} flex items-center justify-center mx-auto mb-2`}>
+                  <stat.icon className={`w-5 h-5 ${stat.iconColor}`} />
+                </div>
+                <p className="text-2xl font-bold">{stat.value}</p>
+                <p className="text-xs text-muted-foreground">{stat.label}</p>
               </CardContent>
             </Card>
-          ))
-        )}
-      </div>
+          ))}
+        </div>
+      )}
 
-      <div>
-        <h2 className="text-2xl font-semibold mb-4">Review Queue</h2>
-        {isLoadingStartups ? (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {[1, 2, 3].map((i) => <Skeleton key={i} className="h-48 rounded-lg" />)}
-          </div>
-        ) : reviewQueue.length === 0 ? (
-          <Card>
-            <CardContent className="flex items-center justify-center py-12">
-              <p className="text-muted-foreground">No startups in review queue</p>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {reviewQueue.map((startup) => (
-              <StartupCard key={startup.id} startup={startup as unknown as Startup} basePath="/admin" />
-            ))}
-          </div>
-        )}
-      </div>
+      {/* Tabs */}
+      <Tabs defaultValue="pending_review" className="space-y-6">
+        <TabsList>
+          {tabs.map((tab) => (
+            <TabsTrigger key={tab.value} value={tab.value}>
+              {tab.label}
+              {tab.count && tab.count > 0 ? (
+                <Badge variant="secondary" className="ml-2">
+                  {tab.count}
+                </Badge>
+              ) : null}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+
+        {tabs.map((tab) => (
+          <TabsContent key={tab.value} value={tab.value} className="space-y-4">
+            {isLoadingStartups ? (
+              <div className="grid gap-4">
+                {[1, 2, 3].map((i) => (
+                  <Skeleton key={i} className="h-32 rounded-lg" />
+                ))}
+              </div>
+            ) : filterByStatus(tab.value).length > 0 ? (
+              <div className="grid gap-4">
+                {filterByStatus(tab.value).map((startup) => (
+                  <Card key={startup.id} className="hover:shadow-md transition-shadow">
+                    <CardContent className="p-6">
+                      <div className="flex flex-col lg:flex-row items-start gap-6">
+                        {startup.overallScore ? (
+                          <ScoreRing score={startup.overallScore} size="sm" showLabel={false} />
+                        ) : (
+                          <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+                            <Clock className="w-6 h-6 text-muted-foreground" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0 space-y-2">
+                          <div className="flex flex-wrap items-center gap-3">
+                            <h3 className="text-lg font-semibold">{startup.name}</h3>
+                            {getStatusBadge(startup.status)}
+                            {startup.stage && <Badge variant="outline">{formatStage(startup.stage)}</Badge>}
+                            {startup.sector && <Badge variant="secondary">{startup.sector}</Badge>}
+                          </div>
+                          {startup.description && (
+                            <p className="text-muted-foreground line-clamp-2">{startup.description}</p>
+                          )}
+                          <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+                            {startup.website && (
+                              <span className="flex items-center gap-1">
+                                <Building2 className="w-4 h-4" />
+                                {startup.website}
+                              </span>
+                            )}
+                            <span className="flex items-center gap-1">
+                              <Clock className="w-4 h-4" />
+                              Submitted {format(new Date(startup.createdAt), "MMM d, yyyy")}
+                            </span>
+                            {startup.percentileRank && (
+                              <span className="flex items-center gap-1">
+                                Top {Math.round(100 - startup.percentileRank)}%
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button variant="outline" asChild>
+                            <Link to="/admin/startup/$id" params={{ id: startup.id }}>
+                              <Eye className="w-4 h-4 mr-2" />
+                              Review
+                            </Link>
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <Card className="border-dashed">
+                <CardContent className="p-12 text-center">
+                  <div className="w-16 h-16 rounded-full bg-muted mx-auto mb-4 flex items-center justify-center">
+                    <CheckCircle className="w-8 h-8 text-muted-foreground" />
+                  </div>
+                  <h3 className="text-lg font-semibold mb-2">
+                    {tab.value === "pending_review" ? "All caught up!" : "No matching results"}
+                  </h3>
+                  <p className="text-muted-foreground">
+                    {tab.value === "pending_review"
+                      ? "No startups pending review at the moment."
+                      : `There are no startups in ${tab.label.toLowerCase()} status.`}
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
+        ))}
+      </Tabs>
     </div>
   );
 }

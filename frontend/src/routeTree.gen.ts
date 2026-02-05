@@ -25,16 +25,30 @@ import { Route as ProtectedInvestorIndexRouteImport } from './routes/_protected/
 import { Route as ProtectedFounderIndexRouteImport } from './routes/_protected/founder/index'
 import { Route as ProtectedAdminIndexRouteImport } from './routes/_protected/admin/index'
 import { Route as ProtectedScoutSubmitRouteImport } from './routes/_protected/scout/submit'
+import { Route as ProtectedScoutMetricsRouteImport } from './routes/_protected/scout/metrics'
+import { Route as ProtectedScoutLeaderboardRouteImport } from './routes/_protected/scout/leaderboard'
+import { Route as ProtectedScoutCommissionsRouteImport } from './routes/_protected/scout/commissions'
 import { Route as ProtectedScoutApplyRouteImport } from './routes/_protected/scout/apply'
 import { Route as ProtectedInvestorThesisRouteImport } from './routes/_protected/investor/thesis'
 import { Route as ProtectedInvestorSubmitRouteImport } from './routes/_protected/investor/submit'
 import { Route as ProtectedInvestorScoringRouteImport } from './routes/_protected/investor/scoring'
+import { Route as ProtectedInvestorPortfolioRouteImport } from './routes/_protected/investor/portfolio'
 import { Route as ProtectedInvestorPortalRouteImport } from './routes/_protected/investor/portal'
+import { Route as ProtectedInvestorPipelineRouteImport } from './routes/_protected/investor/pipeline'
+import { Route as ProtectedInvestorNotesRouteImport } from './routes/_protected/investor/notes'
+import { Route as ProtectedInvestorMessagingRouteImport } from './routes/_protected/investor/messaging'
 import { Route as ProtectedFounderSubmitRouteImport } from './routes/_protected/founder/submit'
+import { Route as ProtectedFounderMeetingsRouteImport } from './routes/_protected/founder/meetings'
+import { Route as ProtectedFounderInvestorInterestRouteImport } from './routes/_protected/founder/investor-interest'
+import { Route as ProtectedFounderDataRoomRouteImport } from './routes/_protected/founder/data-room'
 import { Route as ProtectedAdminUsersRouteImport } from './routes/_protected/admin/users'
 import { Route as ProtectedAdminScoutsRouteImport } from './routes/_protected/admin/scouts'
 import { Route as ProtectedAdminScoringRouteImport } from './routes/_protected/admin/scoring'
+import { Route as ProtectedAdminQueueRouteImport } from './routes/_protected/admin/queue'
+import { Route as ProtectedAdminIntegrationsRouteImport } from './routes/_protected/admin/integrations'
 import { Route as ProtectedAdminConversationsRouteImport } from './routes/_protected/admin/conversations'
+import { Route as ProtectedAdminConfigRouteImport } from './routes/_protected/admin/config'
+import { Route as ProtectedAdminBulkDataRouteImport } from './routes/_protected/admin/bulk-data'
 import { Route as ProtectedAdminAnalyticsRouteImport } from './routes/_protected/admin/analytics'
 import { Route as ProtectedAdminAgentsRouteImport } from './routes/_protected/admin/agents'
 import { Route as ProtectedInvestorStartupIdRouteImport } from './routes/_protected/investor/startup.$id'
@@ -120,6 +134,23 @@ const ProtectedScoutSubmitRoute = ProtectedScoutSubmitRouteImport.update({
   path: '/submit',
   getParentRoute: () => ProtectedScoutRoute,
 } as any)
+const ProtectedScoutMetricsRoute = ProtectedScoutMetricsRouteImport.update({
+  id: '/metrics',
+  path: '/metrics',
+  getParentRoute: () => ProtectedScoutRoute,
+} as any)
+const ProtectedScoutLeaderboardRoute =
+  ProtectedScoutLeaderboardRouteImport.update({
+    id: '/leaderboard',
+    path: '/leaderboard',
+    getParentRoute: () => ProtectedScoutRoute,
+  } as any)
+const ProtectedScoutCommissionsRoute =
+  ProtectedScoutCommissionsRouteImport.update({
+    id: '/commissions',
+    path: '/commissions',
+    getParentRoute: () => ProtectedScoutRoute,
+  } as any)
 const ProtectedScoutApplyRoute = ProtectedScoutApplyRouteImport.update({
   id: '/apply',
   path: '/apply',
@@ -141,16 +172,57 @@ const ProtectedInvestorScoringRoute =
     path: '/scoring',
     getParentRoute: () => ProtectedInvestorRoute,
   } as any)
+const ProtectedInvestorPortfolioRoute =
+  ProtectedInvestorPortfolioRouteImport.update({
+    id: '/portfolio',
+    path: '/portfolio',
+    getParentRoute: () => ProtectedInvestorRoute,
+  } as any)
 const ProtectedInvestorPortalRoute = ProtectedInvestorPortalRouteImport.update({
   id: '/portal',
   path: '/portal',
   getParentRoute: () => ProtectedInvestorRoute,
 } as any)
+const ProtectedInvestorPipelineRoute =
+  ProtectedInvestorPipelineRouteImport.update({
+    id: '/pipeline',
+    path: '/pipeline',
+    getParentRoute: () => ProtectedInvestorRoute,
+  } as any)
+const ProtectedInvestorNotesRoute = ProtectedInvestorNotesRouteImport.update({
+  id: '/notes',
+  path: '/notes',
+  getParentRoute: () => ProtectedInvestorRoute,
+} as any)
+const ProtectedInvestorMessagingRoute =
+  ProtectedInvestorMessagingRouteImport.update({
+    id: '/messaging',
+    path: '/messaging',
+    getParentRoute: () => ProtectedInvestorRoute,
+  } as any)
 const ProtectedFounderSubmitRoute = ProtectedFounderSubmitRouteImport.update({
   id: '/submit',
   path: '/submit',
   getParentRoute: () => ProtectedFounderRoute,
 } as any)
+const ProtectedFounderMeetingsRoute =
+  ProtectedFounderMeetingsRouteImport.update({
+    id: '/meetings',
+    path: '/meetings',
+    getParentRoute: () => ProtectedFounderRoute,
+  } as any)
+const ProtectedFounderInvestorInterestRoute =
+  ProtectedFounderInvestorInterestRouteImport.update({
+    id: '/investor-interest',
+    path: '/investor-interest',
+    getParentRoute: () => ProtectedFounderRoute,
+  } as any)
+const ProtectedFounderDataRoomRoute =
+  ProtectedFounderDataRoomRouteImport.update({
+    id: '/data-room',
+    path: '/data-room',
+    getParentRoute: () => ProtectedFounderRoute,
+  } as any)
 const ProtectedAdminUsersRoute = ProtectedAdminUsersRouteImport.update({
   id: '/users',
   path: '/users',
@@ -166,12 +238,33 @@ const ProtectedAdminScoringRoute = ProtectedAdminScoringRouteImport.update({
   path: '/scoring',
   getParentRoute: () => ProtectedAdminRoute,
 } as any)
+const ProtectedAdminQueueRoute = ProtectedAdminQueueRouteImport.update({
+  id: '/queue',
+  path: '/queue',
+  getParentRoute: () => ProtectedAdminRoute,
+} as any)
+const ProtectedAdminIntegrationsRoute =
+  ProtectedAdminIntegrationsRouteImport.update({
+    id: '/integrations',
+    path: '/integrations',
+    getParentRoute: () => ProtectedAdminRoute,
+  } as any)
 const ProtectedAdminConversationsRoute =
   ProtectedAdminConversationsRouteImport.update({
     id: '/conversations',
     path: '/conversations',
     getParentRoute: () => ProtectedAdminRoute,
   } as any)
+const ProtectedAdminConfigRoute = ProtectedAdminConfigRouteImport.update({
+  id: '/config',
+  path: '/config',
+  getParentRoute: () => ProtectedAdminRoute,
+} as any)
+const ProtectedAdminBulkDataRoute = ProtectedAdminBulkDataRouteImport.update({
+  id: '/bulk-data',
+  path: '/bulk-data',
+  getParentRoute: () => ProtectedAdminRoute,
+} as any)
 const ProtectedAdminAnalyticsRoute = ProtectedAdminAnalyticsRouteImport.update({
   id: '/analytics',
   path: '/analytics',
@@ -213,16 +306,30 @@ export interface FileRoutesByFullPath {
   '/auth/callback': typeof AuthCallbackRoute
   '/admin/agents': typeof ProtectedAdminAgentsRoute
   '/admin/analytics': typeof ProtectedAdminAnalyticsRoute
+  '/admin/bulk-data': typeof ProtectedAdminBulkDataRoute
+  '/admin/config': typeof ProtectedAdminConfigRoute
   '/admin/conversations': typeof ProtectedAdminConversationsRoute
+  '/admin/integrations': typeof ProtectedAdminIntegrationsRoute
+  '/admin/queue': typeof ProtectedAdminQueueRoute
   '/admin/scoring': typeof ProtectedAdminScoringRoute
   '/admin/scouts': typeof ProtectedAdminScoutsRoute
   '/admin/users': typeof ProtectedAdminUsersRoute
+  '/founder/data-room': typeof ProtectedFounderDataRoomRoute
+  '/founder/investor-interest': typeof ProtectedFounderInvestorInterestRoute
+  '/founder/meetings': typeof ProtectedFounderMeetingsRoute
   '/founder/submit': typeof ProtectedFounderSubmitRoute
+  '/investor/messaging': typeof ProtectedInvestorMessagingRoute
+  '/investor/notes': typeof ProtectedInvestorNotesRoute
+  '/investor/pipeline': typeof ProtectedInvestorPipelineRoute
   '/investor/portal': typeof ProtectedInvestorPortalRoute
+  '/investor/portfolio': typeof ProtectedInvestorPortfolioRoute
   '/investor/scoring': typeof ProtectedInvestorScoringRoute
   '/investor/submit': typeof ProtectedInvestorSubmitRoute
   '/investor/thesis': typeof ProtectedInvestorThesisRoute
   '/scout/apply': typeof ProtectedScoutApplyRoute
+  '/scout/commissions': typeof ProtectedScoutCommissionsRoute
+  '/scout/leaderboard': typeof ProtectedScoutLeaderboardRoute
+  '/scout/metrics': typeof ProtectedScoutMetricsRoute
   '/scout/submit': typeof ProtectedScoutSubmitRoute
   '/admin/': typeof ProtectedAdminIndexRoute
   '/founder/': typeof ProtectedFounderIndexRoute
@@ -241,16 +348,30 @@ export interface FileRoutesByTo {
   '/auth/callback': typeof AuthCallbackRoute
   '/admin/agents': typeof ProtectedAdminAgentsRoute
   '/admin/analytics': typeof ProtectedAdminAnalyticsRoute
+  '/admin/bulk-data': typeof ProtectedAdminBulkDataRoute
+  '/admin/config': typeof ProtectedAdminConfigRoute
   '/admin/conversations': typeof ProtectedAdminConversationsRoute
+  '/admin/integrations': typeof ProtectedAdminIntegrationsRoute
+  '/admin/queue': typeof ProtectedAdminQueueRoute
   '/admin/scoring': typeof ProtectedAdminScoringRoute
   '/admin/scouts': typeof ProtectedAdminScoutsRoute
   '/admin/users': typeof ProtectedAdminUsersRoute
+  '/founder/data-room': typeof ProtectedFounderDataRoomRoute
+  '/founder/investor-interest': typeof ProtectedFounderInvestorInterestRoute
+  '/founder/meetings': typeof ProtectedFounderMeetingsRoute
   '/founder/submit': typeof ProtectedFounderSubmitRoute
+  '/investor/messaging': typeof ProtectedInvestorMessagingRoute
+  '/investor/notes': typeof ProtectedInvestorNotesRoute
+  '/investor/pipeline': typeof ProtectedInvestorPipelineRoute
   '/investor/portal': typeof ProtectedInvestorPortalRoute
+  '/investor/portfolio': typeof ProtectedInvestorPortfolioRoute
   '/investor/scoring': typeof ProtectedInvestorScoringRoute
   '/investor/submit': typeof ProtectedInvestorSubmitRoute
   '/investor/thesis': typeof ProtectedInvestorThesisRoute
   '/scout/apply': typeof ProtectedScoutApplyRoute
+  '/scout/commissions': typeof ProtectedScoutCommissionsRoute
+  '/scout/leaderboard': typeof ProtectedScoutLeaderboardRoute
+  '/scout/metrics': typeof ProtectedScoutMetricsRoute
   '/scout/submit': typeof ProtectedScoutSubmitRoute
   '/admin': typeof ProtectedAdminIndexRoute
   '/founder': typeof ProtectedFounderIndexRoute
@@ -275,16 +396,30 @@ export interface FileRoutesById {
   '/auth/callback': typeof AuthCallbackRoute
   '/_protected/admin/agents': typeof ProtectedAdminAgentsRoute
   '/_protected/admin/analytics': typeof ProtectedAdminAnalyticsRoute
+  '/_protected/admin/bulk-data': typeof ProtectedAdminBulkDataRoute
+  '/_protected/admin/config': typeof ProtectedAdminConfigRoute
   '/_protected/admin/conversations': typeof ProtectedAdminConversationsRoute
+  '/_protected/admin/integrations': typeof ProtectedAdminIntegrationsRoute
+  '/_protected/admin/queue': typeof ProtectedAdminQueueRoute
   '/_protected/admin/scoring': typeof ProtectedAdminScoringRoute
   '/_protected/admin/scouts': typeof ProtectedAdminScoutsRoute
   '/_protected/admin/users': typeof ProtectedAdminUsersRoute
+  '/_protected/founder/data-room': typeof ProtectedFounderDataRoomRoute
+  '/_protected/founder/investor-interest': typeof ProtectedFounderInvestorInterestRoute
+  '/_protected/founder/meetings': typeof ProtectedFounderMeetingsRoute
   '/_protected/founder/submit': typeof ProtectedFounderSubmitRoute
+  '/_protected/investor/messaging': typeof ProtectedInvestorMessagingRoute
+  '/_protected/investor/notes': typeof ProtectedInvestorNotesRoute
+  '/_protected/investor/pipeline': typeof ProtectedInvestorPipelineRoute
   '/_protected/investor/portal': typeof ProtectedInvestorPortalRoute
+  '/_protected/investor/portfolio': typeof ProtectedInvestorPortfolioRoute
   '/_protected/investor/scoring': typeof ProtectedInvestorScoringRoute
   '/_protected/investor/submit': typeof ProtectedInvestorSubmitRoute
   '/_protected/investor/thesis': typeof ProtectedInvestorThesisRoute
   '/_protected/scout/apply': typeof ProtectedScoutApplyRoute
+  '/_protected/scout/commissions': typeof ProtectedScoutCommissionsRoute
+  '/_protected/scout/leaderboard': typeof ProtectedScoutLeaderboardRoute
+  '/_protected/scout/metrics': typeof ProtectedScoutMetricsRoute
   '/_protected/scout/submit': typeof ProtectedScoutSubmitRoute
   '/_protected/admin/': typeof ProtectedAdminIndexRoute
   '/_protected/founder/': typeof ProtectedFounderIndexRoute
@@ -309,16 +444,30 @@ export interface FileRouteTypes {
     | '/auth/callback'
     | '/admin/agents'
     | '/admin/analytics'
+    | '/admin/bulk-data'
+    | '/admin/config'
     | '/admin/conversations'
+    | '/admin/integrations'
+    | '/admin/queue'
     | '/admin/scoring'
     | '/admin/scouts'
     | '/admin/users'
+    | '/founder/data-room'
+    | '/founder/investor-interest'
+    | '/founder/meetings'
     | '/founder/submit'
+    | '/investor/messaging'
+    | '/investor/notes'
+    | '/investor/pipeline'
     | '/investor/portal'
+    | '/investor/portfolio'
     | '/investor/scoring'
     | '/investor/submit'
     | '/investor/thesis'
     | '/scout/apply'
+    | '/scout/commissions'
+    | '/scout/leaderboard'
+    | '/scout/metrics'
     | '/scout/submit'
     | '/admin/'
     | '/founder/'
@@ -337,16 +486,30 @@ export interface FileRouteTypes {
     | '/auth/callback'
     | '/admin/agents'
     | '/admin/analytics'
+    | '/admin/bulk-data'
+    | '/admin/config'
     | '/admin/conversations'
+    | '/admin/integrations'
+    | '/admin/queue'
     | '/admin/scoring'
     | '/admin/scouts'
     | '/admin/users'
+    | '/founder/data-room'
+    | '/founder/investor-interest'
+    | '/founder/meetings'
     | '/founder/submit'
+    | '/investor/messaging'
+    | '/investor/notes'
+    | '/investor/pipeline'
     | '/investor/portal'
+    | '/investor/portfolio'
     | '/investor/scoring'
     | '/investor/submit'
     | '/investor/thesis'
     | '/scout/apply'
+    | '/scout/commissions'
+    | '/scout/leaderboard'
+    | '/scout/metrics'
     | '/scout/submit'
     | '/admin'
     | '/founder'
@@ -370,16 +533,30 @@ export interface FileRouteTypes {
     | '/auth/callback'
     | '/_protected/admin/agents'
     | '/_protected/admin/analytics'
+    | '/_protected/admin/bulk-data'
+    | '/_protected/admin/config'
     | '/_protected/admin/conversations'
+    | '/_protected/admin/integrations'
+    | '/_protected/admin/queue'
     | '/_protected/admin/scoring'
     | '/_protected/admin/scouts'
     | '/_protected/admin/users'
+    | '/_protected/founder/data-room'
+    | '/_protected/founder/investor-interest'
+    | '/_protected/founder/meetings'
     | '/_protected/founder/submit'
+    | '/_protected/investor/messaging'
+    | '/_protected/investor/notes'
+    | '/_protected/investor/pipeline'
     | '/_protected/investor/portal'
+    | '/_protected/investor/portfolio'
     | '/_protected/investor/scoring'
     | '/_protected/investor/submit'
     | '/_protected/investor/thesis'
     | '/_protected/scout/apply'
+    | '/_protected/scout/commissions'
+    | '/_protected/scout/leaderboard'
+    | '/_protected/scout/metrics'
     | '/_protected/scout/submit'
     | '/_protected/admin/'
     | '/_protected/founder/'
@@ -512,6 +689,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProtectedScoutSubmitRouteImport
       parentRoute: typeof ProtectedScoutRoute
     }
+    '/_protected/scout/metrics': {
+      id: '/_protected/scout/metrics'
+      path: '/metrics'
+      fullPath: '/scout/metrics'
+      preLoaderRoute: typeof ProtectedScoutMetricsRouteImport
+      parentRoute: typeof ProtectedScoutRoute
+    }
+    '/_protected/scout/leaderboard': {
+      id: '/_protected/scout/leaderboard'
+      path: '/leaderboard'
+      fullPath: '/scout/leaderboard'
+      preLoaderRoute: typeof ProtectedScoutLeaderboardRouteImport
+      parentRoute: typeof ProtectedScoutRoute
+    }
+    '/_protected/scout/commissions': {
+      id: '/_protected/scout/commissions'
+      path: '/commissions'
+      fullPath: '/scout/commissions'
+      preLoaderRoute: typeof ProtectedScoutCommissionsRouteImport
+      parentRoute: typeof ProtectedScoutRoute
+    }
     '/_protected/scout/apply': {
       id: '/_protected/scout/apply'
       path: '/apply'
@@ -540,6 +738,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProtectedInvestorScoringRouteImport
       parentRoute: typeof ProtectedInvestorRoute
     }
+    '/_protected/investor/portfolio': {
+      id: '/_protected/investor/portfolio'
+      path: '/portfolio'
+      fullPath: '/investor/portfolio'
+      preLoaderRoute: typeof ProtectedInvestorPortfolioRouteImport
+      parentRoute: typeof ProtectedInvestorRoute
+    }
     '/_protected/investor/portal': {
       id: '/_protected/investor/portal'
       path: '/portal'
@@ -547,11 +752,53 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProtectedInvestorPortalRouteImport
       parentRoute: typeof ProtectedInvestorRoute
     }
+    '/_protected/investor/pipeline': {
+      id: '/_protected/investor/pipeline'
+      path: '/pipeline'
+      fullPath: '/investor/pipeline'
+      preLoaderRoute: typeof ProtectedInvestorPipelineRouteImport
+      parentRoute: typeof ProtectedInvestorRoute
+    }
+    '/_protected/investor/notes': {
+      id: '/_protected/investor/notes'
+      path: '/notes'
+      fullPath: '/investor/notes'
+      preLoaderRoute: typeof ProtectedInvestorNotesRouteImport
+      parentRoute: typeof ProtectedInvestorRoute
+    }
+    '/_protected/investor/messaging': {
+      id: '/_protected/investor/messaging'
+      path: '/messaging'
+      fullPath: '/investor/messaging'
+      preLoaderRoute: typeof ProtectedInvestorMessagingRouteImport
+      parentRoute: typeof ProtectedInvestorRoute
+    }
     '/_protected/founder/submit': {
       id: '/_protected/founder/submit'
       path: '/submit'
       fullPath: '/founder/submit'
       preLoaderRoute: typeof ProtectedFounderSubmitRouteImport
+      parentRoute: typeof ProtectedFounderRoute
+    }
+    '/_protected/founder/meetings': {
+      id: '/_protected/founder/meetings'
+      path: '/meetings'
+      fullPath: '/founder/meetings'
+      preLoaderRoute: typeof ProtectedFounderMeetingsRouteImport
+      parentRoute: typeof ProtectedFounderRoute
+    }
+    '/_protected/founder/investor-interest': {
+      id: '/_protected/founder/investor-interest'
+      path: '/investor-interest'
+      fullPath: '/founder/investor-interest'
+      preLoaderRoute: typeof ProtectedFounderInvestorInterestRouteImport
+      parentRoute: typeof ProtectedFounderRoute
+    }
+    '/_protected/founder/data-room': {
+      id: '/_protected/founder/data-room'
+      path: '/data-room'
+      fullPath: '/founder/data-room'
+      preLoaderRoute: typeof ProtectedFounderDataRoomRouteImport
       parentRoute: typeof ProtectedFounderRoute
     }
     '/_protected/admin/users': {
@@ -575,11 +822,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProtectedAdminScoringRouteImport
       parentRoute: typeof ProtectedAdminRoute
     }
+    '/_protected/admin/queue': {
+      id: '/_protected/admin/queue'
+      path: '/queue'
+      fullPath: '/admin/queue'
+      preLoaderRoute: typeof ProtectedAdminQueueRouteImport
+      parentRoute: typeof ProtectedAdminRoute
+    }
+    '/_protected/admin/integrations': {
+      id: '/_protected/admin/integrations'
+      path: '/integrations'
+      fullPath: '/admin/integrations'
+      preLoaderRoute: typeof ProtectedAdminIntegrationsRouteImport
+      parentRoute: typeof ProtectedAdminRoute
+    }
     '/_protected/admin/conversations': {
       id: '/_protected/admin/conversations'
       path: '/conversations'
       fullPath: '/admin/conversations'
       preLoaderRoute: typeof ProtectedAdminConversationsRouteImport
+      parentRoute: typeof ProtectedAdminRoute
+    }
+    '/_protected/admin/config': {
+      id: '/_protected/admin/config'
+      path: '/config'
+      fullPath: '/admin/config'
+      preLoaderRoute: typeof ProtectedAdminConfigRouteImport
+      parentRoute: typeof ProtectedAdminRoute
+    }
+    '/_protected/admin/bulk-data': {
+      id: '/_protected/admin/bulk-data'
+      path: '/bulk-data'
+      fullPath: '/admin/bulk-data'
+      preLoaderRoute: typeof ProtectedAdminBulkDataRouteImport
       parentRoute: typeof ProtectedAdminRoute
     }
     '/_protected/admin/analytics': {
@@ -623,7 +898,11 @@ declare module '@tanstack/react-router' {
 interface ProtectedAdminRouteChildren {
   ProtectedAdminAgentsRoute: typeof ProtectedAdminAgentsRoute
   ProtectedAdminAnalyticsRoute: typeof ProtectedAdminAnalyticsRoute
+  ProtectedAdminBulkDataRoute: typeof ProtectedAdminBulkDataRoute
+  ProtectedAdminConfigRoute: typeof ProtectedAdminConfigRoute
   ProtectedAdminConversationsRoute: typeof ProtectedAdminConversationsRoute
+  ProtectedAdminIntegrationsRoute: typeof ProtectedAdminIntegrationsRoute
+  ProtectedAdminQueueRoute: typeof ProtectedAdminQueueRoute
   ProtectedAdminScoringRoute: typeof ProtectedAdminScoringRoute
   ProtectedAdminScoutsRoute: typeof ProtectedAdminScoutsRoute
   ProtectedAdminUsersRoute: typeof ProtectedAdminUsersRoute
@@ -634,7 +913,11 @@ interface ProtectedAdminRouteChildren {
 const ProtectedAdminRouteChildren: ProtectedAdminRouteChildren = {
   ProtectedAdminAgentsRoute: ProtectedAdminAgentsRoute,
   ProtectedAdminAnalyticsRoute: ProtectedAdminAnalyticsRoute,
+  ProtectedAdminBulkDataRoute: ProtectedAdminBulkDataRoute,
+  ProtectedAdminConfigRoute: ProtectedAdminConfigRoute,
   ProtectedAdminConversationsRoute: ProtectedAdminConversationsRoute,
+  ProtectedAdminIntegrationsRoute: ProtectedAdminIntegrationsRoute,
+  ProtectedAdminQueueRoute: ProtectedAdminQueueRoute,
   ProtectedAdminScoringRoute: ProtectedAdminScoringRoute,
   ProtectedAdminScoutsRoute: ProtectedAdminScoutsRoute,
   ProtectedAdminUsersRoute: ProtectedAdminUsersRoute,
@@ -647,12 +930,18 @@ const ProtectedAdminRouteWithChildren = ProtectedAdminRoute._addFileChildren(
 )
 
 interface ProtectedFounderRouteChildren {
+  ProtectedFounderDataRoomRoute: typeof ProtectedFounderDataRoomRoute
+  ProtectedFounderInvestorInterestRoute: typeof ProtectedFounderInvestorInterestRoute
+  ProtectedFounderMeetingsRoute: typeof ProtectedFounderMeetingsRoute
   ProtectedFounderSubmitRoute: typeof ProtectedFounderSubmitRoute
   ProtectedFounderIndexRoute: typeof ProtectedFounderIndexRoute
   ProtectedFounderStartupIdRoute: typeof ProtectedFounderStartupIdRoute
 }
 
 const ProtectedFounderRouteChildren: ProtectedFounderRouteChildren = {
+  ProtectedFounderDataRoomRoute: ProtectedFounderDataRoomRoute,
+  ProtectedFounderInvestorInterestRoute: ProtectedFounderInvestorInterestRoute,
+  ProtectedFounderMeetingsRoute: ProtectedFounderMeetingsRoute,
   ProtectedFounderSubmitRoute: ProtectedFounderSubmitRoute,
   ProtectedFounderIndexRoute: ProtectedFounderIndexRoute,
   ProtectedFounderStartupIdRoute: ProtectedFounderStartupIdRoute,
@@ -662,7 +951,11 @@ const ProtectedFounderRouteWithChildren =
   ProtectedFounderRoute._addFileChildren(ProtectedFounderRouteChildren)
 
 interface ProtectedInvestorRouteChildren {
+  ProtectedInvestorMessagingRoute: typeof ProtectedInvestorMessagingRoute
+  ProtectedInvestorNotesRoute: typeof ProtectedInvestorNotesRoute
+  ProtectedInvestorPipelineRoute: typeof ProtectedInvestorPipelineRoute
   ProtectedInvestorPortalRoute: typeof ProtectedInvestorPortalRoute
+  ProtectedInvestorPortfolioRoute: typeof ProtectedInvestorPortfolioRoute
   ProtectedInvestorScoringRoute: typeof ProtectedInvestorScoringRoute
   ProtectedInvestorSubmitRoute: typeof ProtectedInvestorSubmitRoute
   ProtectedInvestorThesisRoute: typeof ProtectedInvestorThesisRoute
@@ -671,7 +964,11 @@ interface ProtectedInvestorRouteChildren {
 }
 
 const ProtectedInvestorRouteChildren: ProtectedInvestorRouteChildren = {
+  ProtectedInvestorMessagingRoute: ProtectedInvestorMessagingRoute,
+  ProtectedInvestorNotesRoute: ProtectedInvestorNotesRoute,
+  ProtectedInvestorPipelineRoute: ProtectedInvestorPipelineRoute,
   ProtectedInvestorPortalRoute: ProtectedInvestorPortalRoute,
+  ProtectedInvestorPortfolioRoute: ProtectedInvestorPortfolioRoute,
   ProtectedInvestorScoringRoute: ProtectedInvestorScoringRoute,
   ProtectedInvestorSubmitRoute: ProtectedInvestorSubmitRoute,
   ProtectedInvestorThesisRoute: ProtectedInvestorThesisRoute,
@@ -684,12 +981,18 @@ const ProtectedInvestorRouteWithChildren =
 
 interface ProtectedScoutRouteChildren {
   ProtectedScoutApplyRoute: typeof ProtectedScoutApplyRoute
+  ProtectedScoutCommissionsRoute: typeof ProtectedScoutCommissionsRoute
+  ProtectedScoutLeaderboardRoute: typeof ProtectedScoutLeaderboardRoute
+  ProtectedScoutMetricsRoute: typeof ProtectedScoutMetricsRoute
   ProtectedScoutSubmitRoute: typeof ProtectedScoutSubmitRoute
   ProtectedScoutIndexRoute: typeof ProtectedScoutIndexRoute
 }
 
 const ProtectedScoutRouteChildren: ProtectedScoutRouteChildren = {
   ProtectedScoutApplyRoute: ProtectedScoutApplyRoute,
+  ProtectedScoutCommissionsRoute: ProtectedScoutCommissionsRoute,
+  ProtectedScoutLeaderboardRoute: ProtectedScoutLeaderboardRoute,
+  ProtectedScoutMetricsRoute: ProtectedScoutMetricsRoute,
   ProtectedScoutSubmitRoute: ProtectedScoutSubmitRoute,
   ProtectedScoutIndexRoute: ProtectedScoutIndexRoute,
 }

@@ -171,7 +171,7 @@ function LandingPage() {
             behalf of founders you believe in.
           </p>
           <Button variant="outline" asChild>
-            <Link to="/login" search={{ redirect: "/scout" }}>
+            <Link to="/login" search={{ redirect: "/scout/apply" }}>
               Apply as a scout
             </Link>
           </Button>

@@ -5,6 +5,10 @@ import { ThesisService } from '../thesis.service';
 import { ScoringService } from '../scoring.service';
 import { MatchService } from '../match.service';
 import { TeamService } from '../team.service';
+import { InvestorNoteService } from '../investor-note.service';
+import { PortfolioService } from '../portfolio.service';
+import { DealPipelineService } from '../deal-pipeline.service';
+import { MessagingService } from '../messaging.service';
 import { UserRole } from '../../../auth/entities/auth.schema';
 
 describe('InvestorController', () => {
@@ -104,6 +108,35 @@ describe('InvestorController', () => {
             cancelInvite: jest.fn(),
             removeMember: jest.fn(),
             acceptInvite: jest.fn(),
+          },
+        },
+        {
+          provide: InvestorNoteService,
+          useValue: {
+            create: jest.fn(),
+            getAllNotes: jest.fn(),
+            getNotes: jest.fn(),
+            update: jest.fn(),
+            delete: jest.fn(),
+          },
+        },
+        {
+          provide: PortfolioService,
+          useValue: {
+            addToPortfolio: jest.fn(),
+            getPortfolio: jest.fn(),
+          },
+        },
+        {
+          provide: DealPipelineService,
+          useValue: {
+            getPipeline: jest.fn(),
+          },
+        },
+        {
+          provide: MessagingService,
+          useValue: {
+            getConversations: jest.fn(),
           },
         },
       ],

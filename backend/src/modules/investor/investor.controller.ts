@@ -19,12 +19,20 @@ import { ThesisService } from './thesis.service';
 import { ScoringService } from './scoring.service';
 import { MatchService } from './match.service';
 import { TeamService } from './team.service';
+import { InvestorNoteService } from './investor-note.service';
+import { PortfolioService } from './portfolio.service';
+import { DealPipelineService } from './deal-pipeline.service';
+import { MessagingService } from './messaging.service';
 import {
   CreateThesisDto,
   UpdateThesisDto,
   UpdateScoringWeightsDto,
   GetMatchesQueryDto,
   CreateTeamInviteDto,
+  CreateNoteDto,
+  UpdateNoteDto,
+  AddPortfolioDto,
+  UpdateMatchStatusDto,
 } from './dto';
 
 type User = {
@@ -45,6 +53,10 @@ export class InvestorController {
     private scoringService: ScoringService,
     private matchService: MatchService,
     private teamService: TeamService,
+    private noteService: InvestorNoteService,
+    private portfolioService: PortfolioService,
+    private pipelineService: DealPipelineService,
+    private messagingService: MessagingService,
   ) {}
 
   // ============ THESIS ENDPOINTS ============
@@ -113,6 +125,76 @@ export class InvestorController {
     @Param('startupId') startupId: string,
   ) {
     return this.matchService.toggleSaved(user.id, startupId);
+  }
+
+  @Patch('matches/:matchId/status')
+  async updateMatchStatus(
+    @CurrentUser() user: User,
+    @Param('matchId') matchId: string,
+    @Body() dto: UpdateMatchStatusDto,
+  ) {
+    return this.matchService.updateMatchStatus(user.id, matchId, dto);
+  }
+
+  // ============ NOTES ENDPOINTS ============
+
+  @Post('notes')
+  async createNote(@CurrentUser() user: User, @Body() dto: CreateNoteDto) {
+    return this.noteService.create(user.id, dto);
+  }
+
+  @Get('notes')
+  async getAllNotes(@CurrentUser() user: User) {
+    return this.noteService.getAllNotes(user.id);
+  }
+
+  @Get('notes/:startupId')
+  async getNotes(@CurrentUser() user: User, @Param('startupId') startupId: string) {
+    return this.noteService.getNotes(user.id, startupId);
+  }
+
+  @Patch('notes/:noteId')
+  async updateNote(
+    @CurrentUser() user: User,
+    @Param('noteId') noteId: string,
+    @Body() dto: UpdateNoteDto,
+  ) {
+    return this.noteService.update(noteId, user.id, dto);
+  }
+
+  @Delete('notes/:noteId')
+  async deleteNote(@CurrentUser() user: User, @Param('noteId') noteId: string) {
+    await this.noteService.delete(noteId, user.id);
+    return { success: true, message: 'Note deleted' };
+  }
+
+  // ============ PORTFOLIO ENDPOINTS ============
+
+  @Post('portfolio')
+  async addToPortfolio(@CurrentUser() user: User, @Body() dto: AddPortfolioDto) {
+    return this.portfolioService.addToPortfolio(user.id, dto);
+  }
+
+  @Get('portfolio')
+  async getPortfolio(@CurrentUser() user: User) {
+    return this.portfolioService.getPortfolio(user.id);
+  }
+
+  // ============ PIPELINE ENDPOINTS ============
+
+  @Get('pipeline')
+  async getPipeline(@CurrentUser() user: User) {
+    return this.pipelineService.getPipeline(user.id);
+  }
+
+  // ============================================================================
+  // AI PLACEHOLDERS
+  // ============================================================================
+
+  // AI_PLACEHOLDER
+  @Get('messaging/conversations')
+  async getConversations() {
+    return this.messagingService.getConversations();
   }
 
   // ============ TEAM ENDPOINTS ============

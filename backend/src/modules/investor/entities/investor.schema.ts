@@ -1,6 +1,7 @@
 import { relations, sql } from 'drizzle-orm';
 import {
   pgTable,
+  pgEnum,
   text,
   timestamp,
   integer,
@@ -18,6 +19,20 @@ import {
   StartupStage,
   startupStageEnum,
 } from '../../startup/entities/startup.schema';
+
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+export const matchStatusEnum = pgEnum('match_status', [
+  'new',
+  'reviewing',
+  'engaged',
+  'closed',
+  'passed',
+]);
+
+export type MatchStatus = (typeof matchStatusEnum.enumValues)[number];
 
 // ============================================================================
 // TYPES
@@ -230,6 +245,20 @@ export const startupMatch = pgTable(
     isSaved: boolean('is_saved').default(false).notNull(),
     viewedAt: timestamp('viewed_at'),
 
+    // Pipeline status
+    status: matchStatusEnum('status').default('new').notNull(),
+    statusChangedAt: timestamp('status_changed_at'),
+    passReason: text('pass_reason'),
+    passNotes: text('pass_notes'),
+    investmentAmount: doublePrecision('investment_amount'),
+    investmentCurrency: text('investment_currency').default('USD'),
+    investmentDate: timestamp('investment_date'),
+    investmentNotes: text('investment_notes'),
+    meetingRequested: boolean('meeting_requested').default(false),
+    meetingRequestedAt: timestamp('meeting_requested_at'),
+    thesisFitScore: integer('thesis_fit_score'),
+    fitRationale: text('fit_rationale'),
+
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at')
       .defaultNow()
@@ -241,6 +270,7 @@ export const startupMatch = pgTable(
     index('match_investor_score_idx').on(table.investorId, table.overallScore),
     index('match_startup_idx').on(table.startupId),
     index('match_investor_saved_idx').on(table.investorId, table.isSaved),
+    index('match_investor_status_idx').on(table.investorId, table.status),
   ],
 );
 

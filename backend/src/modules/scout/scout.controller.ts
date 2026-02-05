@@ -14,6 +14,8 @@ import { RolesGuard } from '../startup/guards';
 import { Roles } from '../startup/decorators/roles.decorator';
 import { ScoutService } from './scout.service';
 import { SubmissionService } from './submission.service';
+import { CommissionService } from './commission.service';
+import { ScoutMetricsService } from './scout-metrics.service';
 import { ScoutGuard } from './guards';
 import {
   ApplyScoutDto,
@@ -38,6 +40,8 @@ export class ScoutController {
   constructor(
     private scoutService: ScoutService,
     private submissionService: SubmissionService,
+    private commissionService: CommissionService,
+    private metricsService: ScoutMetricsService,
   ) {}
 
   // ============ SCOUT APPLICATION ENDPOINTS ============
@@ -49,7 +53,7 @@ export class ScoutController {
   }
 
   @Get('scout/applications')
-  @Roles(UserRole.SCOUT, UserRole.ADMIN)
+  @Roles(UserRole.FOUNDER, UserRole.INVESTOR, UserRole.SCOUT, UserRole.ADMIN)
   async getMyApplications(
     @CurrentUser() user: User,
     @Query() query: GetApplicationsQueryDto,
@@ -112,5 +116,31 @@ export class ScoutController {
     @Query() query: GetSubmissionsQueryDto,
   ) {
     return this.submissionService.findAllForInvestor(user.id, query);
+  }
+
+  // ============ SCOUT METRICS ENDPOINTS ============
+
+  @Get('scout/commissions')
+  @Roles(UserRole.SCOUT, UserRole.ADMIN)
+  async getCommissions(@CurrentUser() user: User) {
+    return this.commissionService.getCommissions(user.id);
+  }
+
+  @Get('scout/commissions/total')
+  @Roles(UserRole.SCOUT, UserRole.ADMIN)
+  async getTotalEarnings(@CurrentUser() user: User) {
+    return this.commissionService.getTotalEarnings(user.id);
+  }
+
+  @Get('scout/metrics')
+  @Roles(UserRole.SCOUT, UserRole.ADMIN)
+  async getMetrics(@CurrentUser() user: User) {
+    return this.metricsService.getMetrics(user.id);
+  }
+
+  @Get('scout/leaderboard')
+  @Roles(UserRole.SCOUT, UserRole.ADMIN)
+  async getLeaderboard() {
+    return this.metricsService.getLeaderboard();
   }
 }

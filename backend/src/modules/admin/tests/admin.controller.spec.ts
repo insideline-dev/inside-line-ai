@@ -7,6 +7,9 @@ import { ScoringConfigService } from '../scoring-config.service';
 import { DataImportService } from '../data-import.service';
 import { QueueManagementService } from '../queue-management.service';
 import { StartupService } from '../../startup/startup.service';
+import { IntegrationHealthService } from '../integration-health.service';
+import { SystemConfigService } from '../system-config.service';
+import { BulkDataService } from '../bulk-data.service';
 import { UserRole } from '../../../auth/entities/auth.schema';
 import { StartupStatus } from '../../startup/entities/startup.schema';
 
@@ -80,6 +83,25 @@ describe('AdminController', () => {
             adminFindPending: jest.fn(),
             approve: jest.fn(),
             reject: jest.fn(),
+          },
+        },
+        {
+          provide: IntegrationHealthService,
+          useValue: {
+            getHealth: jest.fn(),
+          },
+        },
+        {
+          provide: SystemConfigService,
+          useValue: {
+            getConfig: jest.fn(),
+          },
+        },
+        {
+          provide: BulkDataService,
+          useValue: {
+            importStartups: jest.fn(),
+            exportStartups: jest.fn(),
           },
         },
       ],

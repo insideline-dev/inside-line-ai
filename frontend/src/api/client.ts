@@ -29,8 +29,8 @@ export async function customFetch<T>(
 
   let response = await fetch(`${API_BASE_URL}${url}`, config);
 
-  // Handle 401 - attempt token refresh
-  if (response.status === 401) {
+  // Handle 401 - attempt token refresh (skip for auth-check endpoints)
+  if (response.status === 401 && url !== "/auth/me") {
     if (!isRefreshing) {
       isRefreshing = true;
       refreshPromise = refreshToken();

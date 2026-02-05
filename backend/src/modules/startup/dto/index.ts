@@ -7,3 +7,7 @@ export * from './save-draft.dto';
 export * from './presigned-url.dto';
 export * from './query-startups.dto';
 export * from './get-progress.dto';
+export * from './upload-data-room.dto';
+export * from './update-data-room-permissions.dto';
+export * from './respond-interest.dto';
+export * from './schedule-meeting.dto';

@@ -200,6 +200,7 @@ describe('PortalController', () => {
 
       const result = await controller.approveSubmission(
         mockUser,
+        mockPortal.id,
         mockSubmission.id,
       );
 
@@ -221,6 +222,7 @@ describe('PortalController', () => {
 
       const result = await controller.rejectSubmission(
         mockUser,
+        mockPortal.id,
         mockSubmission.id,
       );
 

@@ -13,9 +13,17 @@ function ProtectedContent() {
   const isAuthed = !!user;
   const isMockAuth = env.VITE_MOCK_AUTH;
 
+  const onboardingExemptPaths = ["/role-select", "/scout/apply"];
+  const needsOnboarding =
+    !isMockAuth &&
+    isAuthed &&
+    !user.onboardingCompleted &&
+    !onboardingExemptPaths.includes(window.location.pathname);
+
+  const shouldRedirectToLogin = !isMockAuth && !isLoading && !isAuthed;
+
   useEffect(() => {
-    if (isMockAuth) return;
-    if (!isLoading && !isAuthed) {
+    if (shouldRedirectToLogin) {
       const redirectPath = `${window.location.pathname}${window.location.search}`;
       navigate({
         to: "/login",
@@ -23,7 +31,13 @@ function ProtectedContent() {
         replace: true,
       });
     }
-  }, [isLoading, isAuthed, isMockAuth, navigate]);
+  }, [shouldRedirectToLogin, navigate]);
+
+  useEffect(() => {
+    if (needsOnboarding) {
+      navigate({ to: "/role-select", replace: true });
+    }
+  }, [needsOnboarding, navigate]);
 
   // Mock auth bypass - skip all auth checks
   if (isMockAuth) {
@@ -34,8 +48,8 @@ function ProtectedContent() {
     );
   }
 
-  // Block dashboard flash until session resolves
-  if (isLoading || !isAuthed) {
+  // Show nothing while loading, redirecting to login, or redirecting to onboarding
+  if (isLoading || !isAuthed || needsOnboarding) {
     return null;
   }
 

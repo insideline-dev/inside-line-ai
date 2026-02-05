@@ -135,7 +135,7 @@ function UserManagement() {
                         </Badge>
                       )}
                     </td>
-                    <td className="py-3 px-4 text-sm">{user.profile.companyName || "—"}</td>
+                    <td className="py-3 px-4 text-sm">{user.profile?.companyName || "—"}</td>
                     <td className="py-3 px-4 text-sm text-muted-foreground">
                       {formatDate(user.createdAt)}
                     </td>

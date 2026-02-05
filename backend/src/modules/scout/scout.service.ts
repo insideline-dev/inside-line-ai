@@ -14,6 +14,7 @@ import {
   ScoutApplicationStatus,
   ScoutApplication,
 } from './entities/scout.schema';
+import { user as userTable, UserRole } from '../../auth/entities/auth.schema';
 import type { ApplyScout, RejectScout, GetApplicationsQuery } from './dto';
 
 export type PaginatedApplications = {
@@ -196,6 +197,12 @@ export class ScoutService {
       })
       .where(eq(scoutApplication.id, applicationId))
       .returning();
+
+    // Update user role to scout
+    await this.drizzle.db
+      .update(userTable)
+      .set({ role: UserRole.SCOUT })
+      .where(eq(userTable.id, application.userId));
 
     await this.notification.create(
       application.userId,

@@ -3,6 +3,9 @@ import { StartupController } from '../startup.controller';
 import { StartupService } from '../startup.service';
 import { DraftService } from '../draft.service';
 import { PdfService } from '../pdf.service';
+import { DataRoomService } from '../data-room.service';
+import { InvestorInterestService } from '../investor-interest.service';
+import { MeetingService } from '../meeting.service';
 import { UserRole } from '../../../auth/entities/auth.schema';
 import { StartupStatus, StartupStage } from '../entities/startup.schema';
 
@@ -97,6 +100,30 @@ describe('StartupController', () => {
           useValue: {
             generateMemo: jest.fn(),
             generateReport: jest.fn(),
+          },
+        },
+        {
+          provide: DataRoomService,
+          useValue: {
+            uploadFile: jest.fn(),
+            uploadDocument: jest.fn(),
+            getDocuments: jest.fn(),
+            updatePermissions: jest.fn(),
+            deleteDocument: jest.fn(),
+          },
+        },
+        {
+          provide: InvestorInterestService,
+          useValue: {
+            getInterest: jest.fn(),
+            respondToInterest: jest.fn(),
+          },
+        },
+        {
+          provide: MeetingService,
+          useValue: {
+            scheduleMeeting: jest.fn(),
+            getMeetings: jest.fn(),
           },
         },
       ],

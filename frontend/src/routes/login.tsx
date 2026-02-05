@@ -84,15 +84,29 @@ function LoginPage() {
     }
   }, [error]);
 
+  // Persist redirect intent to sessionStorage (survives OAuth full-page redirects)
+  useEffect(() => {
+    if (redirect) {
+      sessionStorage.setItem("redirectAfterAuth", redirect);
+    }
+  }, [redirect]);
+
+  // Only auto-redirect if user was already logged in on page load.
+  // Skip when a mutation just completed — hooks handle their own navigation.
+  const skipAutoRedirect = loginMutation.isSuccess || registerMutation.isSuccess;
+
   useEffect(() => {
     if (env.VITE_MOCK_AUTH) {
       navigate({ to: redirect || "/role-select", replace: true });
       return;
     }
-    if (!isCheckingAuth && user) {
-      navigate({ to: redirect || `/${user.role}`, replace: true });
+    if (!isCheckingAuth && user && !skipAutoRedirect) {
+      const defaultRoute = user.onboardingCompleted
+        ? `/${user.role}`
+        : "/role-select";
+      navigate({ to: redirect || defaultRoute, replace: true });
     }
-  }, [isCheckingAuth, user, redirect, navigate]);
+  }, [isCheckingAuth, user, redirect, navigate, skipAutoRedirect]);
 
   const loginForm = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),

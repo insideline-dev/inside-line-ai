@@ -2,8 +2,8 @@ import { useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Building2, TrendingUp, Loader2, ArrowRight } from "lucide-react";
-import { useMockAuthStore } from "@/stores";
+import { Building2, TrendingUp, Loader2, ArrowRight, Binoculars } from "lucide-react";
+import { useSelectRole } from "@/lib/auth";
 
 export const Route = createFileRoute("/_protected/role-select")({
   component: RoleSelectPage,
@@ -11,19 +11,17 @@ export const Route = createFileRoute("/_protected/role-select")({
 
 function RoleSelectPage() {
   const navigate = useNavigate();
-  const { setRole } = useMockAuthStore();
+  const selectRoleMutation = useSelectRole();
   const [selectedRole, setSelectedRole] = useState<"founder" | "investor" | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSelectRole = async (role: "founder" | "investor") => {
+  const handleSelectRole = (role: "founder" | "investor") => {
     setSelectedRole(role);
-    setIsLoading(true);
+    selectRoleMutation.mutate(role);
+  };
 
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 500));
-
-    setRole(role);
-    navigate({ to: `/${role}` });
+  const handleApplyAsScout = () => {
+    sessionStorage.setItem("redirectAfterAuth", "/scout/apply");
+    navigate({ to: "/scout/apply" });
   };
 
   return (
@@ -31,7 +29,7 @@ function RoleSelectPage() {
       <div className="absolute top-20 left-1/4 w-96 h-96 bg-primary/20 rounded-full blur-3xl opacity-30" />
       <div className="absolute bottom-20 right-1/4 w-80 h-80 bg-primary/10 rounded-full blur-3xl opacity-30" />
 
-      <div className="relative w-full max-w-2xl space-y-10">
+      <div className="relative w-full max-w-3xl space-y-10">
         <div className="text-center space-y-4">
           <div className="flex flex-wrap items-center justify-center gap-1.5">
             <span className="text-2xl font-bold tracking-tight">Inside Line</span>
@@ -41,7 +39,7 @@ function RoleSelectPage() {
           <p className="text-muted-foreground">Choose your role to get started</p>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-6">
+        <div className="grid md:grid-cols-3 gap-6">
           <Card className={selectedRole === "founder" ? "ring-2 ring-primary" : ""}>
             <CardContent className="p-8">
               <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mb-6">
@@ -51,8 +49,8 @@ function RoleSelectPage() {
               <p className="text-muted-foreground text-sm mb-6">
                 Get your startup evaluated by AI and connect with matching investors.
               </p>
-              <Button className="w-full gap-2" disabled={isLoading} onClick={() => handleSelectRole("founder")}>
-                {isLoading && selectedRole === "founder" ? (
+              <Button className="w-full gap-2" disabled={selectRoleMutation.isPending} onClick={() => handleSelectRole("founder")}>
+                {selectRoleMutation.isPending && selectedRole === "founder" ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
                   <>
@@ -76,10 +74,10 @@ function RoleSelectPage() {
               <Button
                 className="w-full gap-2"
                 variant="outline"
-                disabled={isLoading}
+                disabled={selectRoleMutation.isPending}
                 onClick={() => handleSelectRole("investor")}
               >
-                {isLoading && selectedRole === "investor" ? (
+                {selectRoleMutation.isPending && selectedRole === "investor" ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
                   <>
@@ -87,6 +85,27 @@ function RoleSelectPage() {
                     <ArrowRight className="w-4 h-4" />
                   </>
                 )}
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-8">
+              <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mb-6">
+                <Binoculars className="w-7 h-7 text-primary" />
+              </div>
+              <h2 className="text-xl font-semibold mb-2">Become a Scout</h2>
+              <p className="text-muted-foreground text-sm mb-6">
+                Submit startups on behalf of founders you believe in. Requires approval.
+              </p>
+              <Button
+                className="w-full gap-2"
+                variant="outline"
+                disabled={selectRoleMutation.isPending}
+                onClick={handleApplyAsScout}
+              >
+                Apply as Scout
+                <ArrowRight className="w-4 h-4" />
               </Button>
             </CardContent>
           </Card>

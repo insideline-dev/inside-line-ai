@@ -10,6 +10,7 @@ export const mockUser: DbUser = {
   image: null,
   emailVerified: true,
   role: UserRole.FOUNDER,
+  onboardingCompleted: false,
   createdAt: new Date(),
   updatedAt: new Date(),
 };
@@ -45,6 +46,7 @@ export const createMockUserAuthService = () => ({
   createEmailVerificationToken: mock(() => Promise.resolve('verify-token')),
   verifyEmail: mock(() => Promise.resolve(mockUser)),
   resendVerificationEmail: mock(() => Promise.resolve('verify-token')),
+  updateUserRole: mock(() => Promise.resolve({ ...mockUser, onboardingCompleted: true })),
 });
 
 export const createMockEmailService = () => ({

@@ -7,7 +7,7 @@ import { eq, and, gt } from 'drizzle-orm';
 import * as bcrypt from 'bcrypt';
 import { randomBytes } from 'node:crypto';
 import { DrizzleService } from '../database';
-import { user, account, verification } from '../database/schema';
+import { user, account, verification, UserRole } from '../database/schema';
 import { EMAIL_CONFIG } from '../email';
 
 // Use drizzle's inferred type for internal operations
@@ -266,6 +266,15 @@ export class UserAuthService {
     });
 
     return token;
+  }
+
+  async updateUserRole(userId: string, role: UserRole): Promise<DbUser> {
+    const [updated] = await this.drizzle.db
+      .update(user)
+      .set({ role, onboardingCompleted: true })
+      .where(eq(user.id, userId))
+      .returning();
+    return updated;
   }
 
   async validateMagicLink(token: string): Promise<DbUser | null> {

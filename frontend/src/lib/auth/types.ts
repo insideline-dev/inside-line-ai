@@ -6,6 +6,7 @@ export interface User {
   name: string;
   role: UserRole;
   emailVerified: boolean;
+  onboardingCompleted: boolean;
   image: string | null;
   createdAt: string;
 }

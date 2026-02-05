@@ -32,6 +32,7 @@ import type {
   MagicLinkVerifyDto,
   RegisterDto,
   ResendVerificationDto,
+  SelectRoleDto,
   UpdateUserProfileDetailsDto,
   UserProfileDto,
   UserResponseDto
@@ -829,6 +830,95 @@ export function useAuthControllerGoogleCallback<TData = Awaited<ReturnType<typeo
 
 
 /**
+ * @summary Select role during onboarding
+ */
+export type authControllerSelectRoleResponse200 = {
+  data: AuthResponseDto
+  status: 200
+}
+
+export type authControllerSelectRoleResponse429 = {
+  data: void
+  status: 429
+}
+    
+export type authControllerSelectRoleResponseSuccess = (authControllerSelectRoleResponse200) & {
+  headers: Headers;
+};
+export type authControllerSelectRoleResponseError = (authControllerSelectRoleResponse429) & {
+  headers: Headers;
+};
+
+export type authControllerSelectRoleResponse = (authControllerSelectRoleResponseSuccess | authControllerSelectRoleResponseError)
+
+export const getAuthControllerSelectRoleUrl = () => {
+
+
+  
+
+  return `/auth/select-role`
+}
+
+export const authControllerSelectRole = async (selectRoleDto: SelectRoleDto, options?: RequestInit): Promise<authControllerSelectRoleResponse> => {
+  
+  return customFetch<authControllerSelectRoleResponse>(getAuthControllerSelectRoleUrl(),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      selectRoleDto,)
+  }
+);}
+
+
+
+
+export const getAuthControllerSelectRoleMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof authControllerSelectRole>>, TError,{data: BodyType<SelectRoleDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof authControllerSelectRole>>, TError,{data: BodyType<SelectRoleDto>}, TContext> => {
+
+const mutationKey = ['authControllerSelectRole'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof authControllerSelectRole>>, {data: BodyType<SelectRoleDto>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  authControllerSelectRole(data,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AuthControllerSelectRoleMutationResult = NonNullable<Awaited<ReturnType<typeof authControllerSelectRole>>>
+    export type AuthControllerSelectRoleMutationBody = BodyType<SelectRoleDto>
+    export type AuthControllerSelectRoleMutationError = ErrorType<void>
+
+    /**
+ * @summary Select role during onboarding
+ */
+export const useAuthControllerSelectRole = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof authControllerSelectRole>>, TError,{data: BodyType<SelectRoleDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof authControllerSelectRole>>,
+        TError,
+        {data: BodyType<SelectRoleDto>},
+        TContext
+      > => {
+      return useMutation(getAuthControllerSelectRoleMutationOptions(options), queryClient);
+    }
+    /**
  * @summary Refresh access token
  */
 export type authControllerRefreshResponse200 = {

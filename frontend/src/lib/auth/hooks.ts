@@ -7,6 +7,12 @@ export const authKeys = {
   user: ["auth", "user"] as const,
 };
 
+function consumeRedirect(): string | null {
+  const redirect = sessionStorage.getItem("redirectAfterAuth");
+  if (redirect) sessionStorage.removeItem("redirectAfterAuth");
+  return redirect;
+}
+
 // Current user query
 export function useCurrentUser() {
   return useQuery({
@@ -26,7 +32,12 @@ export function useLogin() {
     mutationFn: (data: LoginRequest) => authApi.login(data),
     onSuccess: (data) => {
       queryClient.setQueryData(authKeys.user, data.user);
-      navigate({ to: `/${data.user.role}` });
+      if (data.user.onboardingCompleted) {
+        const redirect = consumeRedirect();
+        navigate({ to: redirect || `/${data.user.role}` });
+      } else {
+        navigate({ to: "/role-select" });
+      }
     },
   });
 }
@@ -40,8 +51,12 @@ export function useRegister() {
     mutationFn: (data: RegisterRequest) => authApi.register(data),
     onSuccess: (data) => {
       queryClient.setQueryData(authKeys.user, data.user);
-      // After registration, user needs to verify email - stay on same page or go to verification prompt
-      navigate({ to: `/${data.user.role}` });
+      if (data.user.onboardingCompleted) {
+        const redirect = consumeRedirect();
+        navigate({ to: redirect || `/${data.user.role}` });
+      } else {
+        navigate({ to: "/role-select" });
+      }
     },
   });
 }
@@ -61,7 +76,12 @@ export function useVerifyMagicLink() {
     mutationFn: (token: string) => authApi.verifyMagicLink(token),
     onSuccess: (data) => {
       queryClient.setQueryData(authKeys.user, data.user);
-      navigate({ to: `/${data.user.role}` });
+      if (data.user.onboardingCompleted) {
+        const redirect = consumeRedirect();
+        navigate({ to: redirect || `/${data.user.role}` });
+      } else {
+        navigate({ to: "/role-select" });
+      }
     },
   });
 }
@@ -93,7 +113,7 @@ export function useLogout() {
     mutationFn: () => authApi.logout(),
     onSuccess: () => {
       queryClient.setQueryData(authKeys.user, null);
-      queryClient.clear();
+      queryClient.removeQueries({ queryKey: authKeys.user });
       navigate({ to: "/login" });
     },
   });
@@ -108,8 +128,23 @@ export function useLogoutAll() {
     mutationFn: () => authApi.logoutAll(),
     onSuccess: () => {
       queryClient.setQueryData(authKeys.user, null);
-      queryClient.clear();
+      queryClient.removeQueries({ queryKey: authKeys.user });
       navigate({ to: "/login" });
+    },
+  });
+}
+
+// Select role during onboarding
+export function useSelectRole() {
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+
+  return useMutation({
+    mutationFn: (role: "founder" | "investor") => authApi.selectRole(role),
+    onSuccess: (data) => {
+      queryClient.setQueryData(authKeys.user, data.user);
+      const redirect = consumeRedirect();
+      navigate({ to: redirect || `/${data.user.role}` });
     },
   });
 }

@@ -25,9 +25,13 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AddPortfolioDto,
+  CreateNoteDto,
   CreateTeamInviteDto,
   CreateThesisDto,
   InvestorControllerGetMatchesParams,
+  UpdateMatchStatusDto,
+  UpdateNoteDto,
   UpdateScoringWeightsDto
 } from '.././model';
 
@@ -764,7 +768,908 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getInvestorControllerToggleSavedMutationOptions(options), queryClient);
     }
-    export type investorControllerGetTeamResponse200 = {
+    export type investorControllerUpdateMatchStatusResponse200 = {
+  data: void
+  status: 200
+}
+    
+export type investorControllerUpdateMatchStatusResponseSuccess = (investorControllerUpdateMatchStatusResponse200) & {
+  headers: Headers;
+};
+;
+
+export type investorControllerUpdateMatchStatusResponse = (investorControllerUpdateMatchStatusResponseSuccess)
+
+export const getInvestorControllerUpdateMatchStatusUrl = (matchId: string,) => {
+
+
+  
+
+  return `/investor/matches/${matchId}/status`
+}
+
+export const investorControllerUpdateMatchStatus = async (matchId: string,
+    updateMatchStatusDto: UpdateMatchStatusDto, options?: RequestInit): Promise<investorControllerUpdateMatchStatusResponse> => {
+  
+  return customFetch<investorControllerUpdateMatchStatusResponse>(getInvestorControllerUpdateMatchStatusUrl(matchId),
+  {      
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateMatchStatusDto,)
+  }
+);}
+
+
+
+
+export const getInvestorControllerUpdateMatchStatusMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof investorControllerUpdateMatchStatus>>, TError,{matchId: string;data: BodyType<UpdateMatchStatusDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof investorControllerUpdateMatchStatus>>, TError,{matchId: string;data: BodyType<UpdateMatchStatusDto>}, TContext> => {
+
+const mutationKey = ['investorControllerUpdateMatchStatus'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof investorControllerUpdateMatchStatus>>, {matchId: string;data: BodyType<UpdateMatchStatusDto>}> = (props) => {
+          const {matchId,data} = props ?? {};
+
+          return  investorControllerUpdateMatchStatus(matchId,data,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type InvestorControllerUpdateMatchStatusMutationResult = NonNullable<Awaited<ReturnType<typeof investorControllerUpdateMatchStatus>>>
+    export type InvestorControllerUpdateMatchStatusMutationBody = BodyType<UpdateMatchStatusDto>
+    export type InvestorControllerUpdateMatchStatusMutationError = ErrorType<unknown>
+
+    export const useInvestorControllerUpdateMatchStatus = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof investorControllerUpdateMatchStatus>>, TError,{matchId: string;data: BodyType<UpdateMatchStatusDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof investorControllerUpdateMatchStatus>>,
+        TError,
+        {matchId: string;data: BodyType<UpdateMatchStatusDto>},
+        TContext
+      > => {
+      return useMutation(getInvestorControllerUpdateMatchStatusMutationOptions(options), queryClient);
+    }
+    export type investorControllerCreateNoteResponse201 = {
+  data: void
+  status: 201
+}
+    
+export type investorControllerCreateNoteResponseSuccess = (investorControllerCreateNoteResponse201) & {
+  headers: Headers;
+};
+;
+
+export type investorControllerCreateNoteResponse = (investorControllerCreateNoteResponseSuccess)
+
+export const getInvestorControllerCreateNoteUrl = () => {
+
+
+  
+
+  return `/investor/notes`
+}
+
+export const investorControllerCreateNote = async (createNoteDto: CreateNoteDto, options?: RequestInit): Promise<investorControllerCreateNoteResponse> => {
+  
+  return customFetch<investorControllerCreateNoteResponse>(getInvestorControllerCreateNoteUrl(),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      createNoteDto,)
+  }
+);}
+
+
+
+
+export const getInvestorControllerCreateNoteMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof investorControllerCreateNote>>, TError,{data: BodyType<CreateNoteDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof investorControllerCreateNote>>, TError,{data: BodyType<CreateNoteDto>}, TContext> => {
+
+const mutationKey = ['investorControllerCreateNote'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof investorControllerCreateNote>>, {data: BodyType<CreateNoteDto>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  investorControllerCreateNote(data,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type InvestorControllerCreateNoteMutationResult = NonNullable<Awaited<ReturnType<typeof investorControllerCreateNote>>>
+    export type InvestorControllerCreateNoteMutationBody = BodyType<CreateNoteDto>
+    export type InvestorControllerCreateNoteMutationError = ErrorType<unknown>
+
+    export const useInvestorControllerCreateNote = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof investorControllerCreateNote>>, TError,{data: BodyType<CreateNoteDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof investorControllerCreateNote>>,
+        TError,
+        {data: BodyType<CreateNoteDto>},
+        TContext
+      > => {
+      return useMutation(getInvestorControllerCreateNoteMutationOptions(options), queryClient);
+    }
+    export type investorControllerGetAllNotesResponse200 = {
+  data: void
+  status: 200
+}
+    
+export type investorControllerGetAllNotesResponseSuccess = (investorControllerGetAllNotesResponse200) & {
+  headers: Headers;
+};
+;
+
+export type investorControllerGetAllNotesResponse = (investorControllerGetAllNotesResponseSuccess)
+
+export const getInvestorControllerGetAllNotesUrl = () => {
+
+
+  
+
+  return `/investor/notes`
+}
+
+export const investorControllerGetAllNotes = async ( options?: RequestInit): Promise<investorControllerGetAllNotesResponse> => {
+  
+  return customFetch<investorControllerGetAllNotesResponse>(getInvestorControllerGetAllNotesUrl(),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getInvestorControllerGetAllNotesQueryKey = () => {
+    return [
+    `/investor/notes`
+    ] as const;
+    }
+
+    
+export const getInvestorControllerGetAllNotesQueryOptions = <TData = Awaited<ReturnType<typeof investorControllerGetAllNotes>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetAllNotes>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getInvestorControllerGetAllNotesQueryKey();
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof investorControllerGetAllNotes>>> = ({ signal }) => investorControllerGetAllNotes({ signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetAllNotes>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type InvestorControllerGetAllNotesQueryResult = NonNullable<Awaited<ReturnType<typeof investorControllerGetAllNotes>>>
+export type InvestorControllerGetAllNotesQueryError = ErrorType<unknown>
+
+
+export function useInvestorControllerGetAllNotes<TData = Awaited<ReturnType<typeof investorControllerGetAllNotes>>, TError = ErrorType<unknown>>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetAllNotes>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof investorControllerGetAllNotes>>,
+          TError,
+          Awaited<ReturnType<typeof investorControllerGetAllNotes>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useInvestorControllerGetAllNotes<TData = Awaited<ReturnType<typeof investorControllerGetAllNotes>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetAllNotes>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof investorControllerGetAllNotes>>,
+          TError,
+          Awaited<ReturnType<typeof investorControllerGetAllNotes>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useInvestorControllerGetAllNotes<TData = Awaited<ReturnType<typeof investorControllerGetAllNotes>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetAllNotes>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useInvestorControllerGetAllNotes<TData = Awaited<ReturnType<typeof investorControllerGetAllNotes>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetAllNotes>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getInvestorControllerGetAllNotesQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+export type investorControllerGetNotesResponse200 = {
+  data: void
+  status: 200
+}
+    
+export type investorControllerGetNotesResponseSuccess = (investorControllerGetNotesResponse200) & {
+  headers: Headers;
+};
+;
+
+export type investorControllerGetNotesResponse = (investorControllerGetNotesResponseSuccess)
+
+export const getInvestorControllerGetNotesUrl = (startupId: string,) => {
+
+
+  
+
+  return `/investor/notes/${startupId}`
+}
+
+export const investorControllerGetNotes = async (startupId: string, options?: RequestInit): Promise<investorControllerGetNotesResponse> => {
+  
+  return customFetch<investorControllerGetNotesResponse>(getInvestorControllerGetNotesUrl(startupId),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getInvestorControllerGetNotesQueryKey = (startupId: string,) => {
+    return [
+    `/investor/notes/${startupId}`
+    ] as const;
+    }
+
+    
+export const getInvestorControllerGetNotesQueryOptions = <TData = Awaited<ReturnType<typeof investorControllerGetNotes>>, TError = ErrorType<unknown>>(startupId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetNotes>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getInvestorControllerGetNotesQueryKey(startupId);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof investorControllerGetNotes>>> = ({ signal }) => investorControllerGetNotes(startupId, { signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(startupId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetNotes>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type InvestorControllerGetNotesQueryResult = NonNullable<Awaited<ReturnType<typeof investorControllerGetNotes>>>
+export type InvestorControllerGetNotesQueryError = ErrorType<unknown>
+
+
+export function useInvestorControllerGetNotes<TData = Awaited<ReturnType<typeof investorControllerGetNotes>>, TError = ErrorType<unknown>>(
+ startupId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetNotes>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof investorControllerGetNotes>>,
+          TError,
+          Awaited<ReturnType<typeof investorControllerGetNotes>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useInvestorControllerGetNotes<TData = Awaited<ReturnType<typeof investorControllerGetNotes>>, TError = ErrorType<unknown>>(
+ startupId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetNotes>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof investorControllerGetNotes>>,
+          TError,
+          Awaited<ReturnType<typeof investorControllerGetNotes>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useInvestorControllerGetNotes<TData = Awaited<ReturnType<typeof investorControllerGetNotes>>, TError = ErrorType<unknown>>(
+ startupId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetNotes>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useInvestorControllerGetNotes<TData = Awaited<ReturnType<typeof investorControllerGetNotes>>, TError = ErrorType<unknown>>(
+ startupId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetNotes>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getInvestorControllerGetNotesQueryOptions(startupId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+export type investorControllerUpdateNoteResponse200 = {
+  data: void
+  status: 200
+}
+    
+export type investorControllerUpdateNoteResponseSuccess = (investorControllerUpdateNoteResponse200) & {
+  headers: Headers;
+};
+;
+
+export type investorControllerUpdateNoteResponse = (investorControllerUpdateNoteResponseSuccess)
+
+export const getInvestorControllerUpdateNoteUrl = (noteId: string,) => {
+
+
+  
+
+  return `/investor/notes/${noteId}`
+}
+
+export const investorControllerUpdateNote = async (noteId: string,
+    updateNoteDto: UpdateNoteDto, options?: RequestInit): Promise<investorControllerUpdateNoteResponse> => {
+  
+  return customFetch<investorControllerUpdateNoteResponse>(getInvestorControllerUpdateNoteUrl(noteId),
+  {      
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateNoteDto,)
+  }
+);}
+
+
+
+
+export const getInvestorControllerUpdateNoteMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof investorControllerUpdateNote>>, TError,{noteId: string;data: BodyType<UpdateNoteDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof investorControllerUpdateNote>>, TError,{noteId: string;data: BodyType<UpdateNoteDto>}, TContext> => {
+
+const mutationKey = ['investorControllerUpdateNote'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof investorControllerUpdateNote>>, {noteId: string;data: BodyType<UpdateNoteDto>}> = (props) => {
+          const {noteId,data} = props ?? {};
+
+          return  investorControllerUpdateNote(noteId,data,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type InvestorControllerUpdateNoteMutationResult = NonNullable<Awaited<ReturnType<typeof investorControllerUpdateNote>>>
+    export type InvestorControllerUpdateNoteMutationBody = BodyType<UpdateNoteDto>
+    export type InvestorControllerUpdateNoteMutationError = ErrorType<unknown>
+
+    export const useInvestorControllerUpdateNote = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof investorControllerUpdateNote>>, TError,{noteId: string;data: BodyType<UpdateNoteDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof investorControllerUpdateNote>>,
+        TError,
+        {noteId: string;data: BodyType<UpdateNoteDto>},
+        TContext
+      > => {
+      return useMutation(getInvestorControllerUpdateNoteMutationOptions(options), queryClient);
+    }
+    export type investorControllerDeleteNoteResponse200 = {
+  data: void
+  status: 200
+}
+    
+export type investorControllerDeleteNoteResponseSuccess = (investorControllerDeleteNoteResponse200) & {
+  headers: Headers;
+};
+;
+
+export type investorControllerDeleteNoteResponse = (investorControllerDeleteNoteResponseSuccess)
+
+export const getInvestorControllerDeleteNoteUrl = (noteId: string,) => {
+
+
+  
+
+  return `/investor/notes/${noteId}`
+}
+
+export const investorControllerDeleteNote = async (noteId: string, options?: RequestInit): Promise<investorControllerDeleteNoteResponse> => {
+  
+  return customFetch<investorControllerDeleteNoteResponse>(getInvestorControllerDeleteNoteUrl(noteId),
+  {      
+    ...options,
+    method: 'DELETE'
+    
+    
+  }
+);}
+
+
+
+
+export const getInvestorControllerDeleteNoteMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof investorControllerDeleteNote>>, TError,{noteId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof investorControllerDeleteNote>>, TError,{noteId: string}, TContext> => {
+
+const mutationKey = ['investorControllerDeleteNote'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof investorControllerDeleteNote>>, {noteId: string}> = (props) => {
+          const {noteId} = props ?? {};
+
+          return  investorControllerDeleteNote(noteId,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type InvestorControllerDeleteNoteMutationResult = NonNullable<Awaited<ReturnType<typeof investorControllerDeleteNote>>>
+    
+    export type InvestorControllerDeleteNoteMutationError = ErrorType<unknown>
+
+    export const useInvestorControllerDeleteNote = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof investorControllerDeleteNote>>, TError,{noteId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof investorControllerDeleteNote>>,
+        TError,
+        {noteId: string},
+        TContext
+      > => {
+      return useMutation(getInvestorControllerDeleteNoteMutationOptions(options), queryClient);
+    }
+    export type investorControllerAddToPortfolioResponse201 = {
+  data: void
+  status: 201
+}
+    
+export type investorControllerAddToPortfolioResponseSuccess = (investorControllerAddToPortfolioResponse201) & {
+  headers: Headers;
+};
+;
+
+export type investorControllerAddToPortfolioResponse = (investorControllerAddToPortfolioResponseSuccess)
+
+export const getInvestorControllerAddToPortfolioUrl = () => {
+
+
+  
+
+  return `/investor/portfolio`
+}
+
+export const investorControllerAddToPortfolio = async (addPortfolioDto: AddPortfolioDto, options?: RequestInit): Promise<investorControllerAddToPortfolioResponse> => {
+  
+  return customFetch<investorControllerAddToPortfolioResponse>(getInvestorControllerAddToPortfolioUrl(),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      addPortfolioDto,)
+  }
+);}
+
+
+
+
+export const getInvestorControllerAddToPortfolioMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof investorControllerAddToPortfolio>>, TError,{data: BodyType<AddPortfolioDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof investorControllerAddToPortfolio>>, TError,{data: BodyType<AddPortfolioDto>}, TContext> => {
+
+const mutationKey = ['investorControllerAddToPortfolio'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof investorControllerAddToPortfolio>>, {data: BodyType<AddPortfolioDto>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  investorControllerAddToPortfolio(data,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type InvestorControllerAddToPortfolioMutationResult = NonNullable<Awaited<ReturnType<typeof investorControllerAddToPortfolio>>>
+    export type InvestorControllerAddToPortfolioMutationBody = BodyType<AddPortfolioDto>
+    export type InvestorControllerAddToPortfolioMutationError = ErrorType<unknown>
+
+    export const useInvestorControllerAddToPortfolio = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof investorControllerAddToPortfolio>>, TError,{data: BodyType<AddPortfolioDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof investorControllerAddToPortfolio>>,
+        TError,
+        {data: BodyType<AddPortfolioDto>},
+        TContext
+      > => {
+      return useMutation(getInvestorControllerAddToPortfolioMutationOptions(options), queryClient);
+    }
+    export type investorControllerGetPortfolioResponse200 = {
+  data: void
+  status: 200
+}
+    
+export type investorControllerGetPortfolioResponseSuccess = (investorControllerGetPortfolioResponse200) & {
+  headers: Headers;
+};
+;
+
+export type investorControllerGetPortfolioResponse = (investorControllerGetPortfolioResponseSuccess)
+
+export const getInvestorControllerGetPortfolioUrl = () => {
+
+
+  
+
+  return `/investor/portfolio`
+}
+
+export const investorControllerGetPortfolio = async ( options?: RequestInit): Promise<investorControllerGetPortfolioResponse> => {
+  
+  return customFetch<investorControllerGetPortfolioResponse>(getInvestorControllerGetPortfolioUrl(),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getInvestorControllerGetPortfolioQueryKey = () => {
+    return [
+    `/investor/portfolio`
+    ] as const;
+    }
+
+    
+export const getInvestorControllerGetPortfolioQueryOptions = <TData = Awaited<ReturnType<typeof investorControllerGetPortfolio>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetPortfolio>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getInvestorControllerGetPortfolioQueryKey();
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof investorControllerGetPortfolio>>> = ({ signal }) => investorControllerGetPortfolio({ signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetPortfolio>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type InvestorControllerGetPortfolioQueryResult = NonNullable<Awaited<ReturnType<typeof investorControllerGetPortfolio>>>
+export type InvestorControllerGetPortfolioQueryError = ErrorType<unknown>
+
+
+export function useInvestorControllerGetPortfolio<TData = Awaited<ReturnType<typeof investorControllerGetPortfolio>>, TError = ErrorType<unknown>>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetPortfolio>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof investorControllerGetPortfolio>>,
+          TError,
+          Awaited<ReturnType<typeof investorControllerGetPortfolio>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useInvestorControllerGetPortfolio<TData = Awaited<ReturnType<typeof investorControllerGetPortfolio>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetPortfolio>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof investorControllerGetPortfolio>>,
+          TError,
+          Awaited<ReturnType<typeof investorControllerGetPortfolio>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useInvestorControllerGetPortfolio<TData = Awaited<ReturnType<typeof investorControllerGetPortfolio>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetPortfolio>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useInvestorControllerGetPortfolio<TData = Awaited<ReturnType<typeof investorControllerGetPortfolio>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetPortfolio>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getInvestorControllerGetPortfolioQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+export type investorControllerGetPipelineResponse200 = {
+  data: void
+  status: 200
+}
+    
+export type investorControllerGetPipelineResponseSuccess = (investorControllerGetPipelineResponse200) & {
+  headers: Headers;
+};
+;
+
+export type investorControllerGetPipelineResponse = (investorControllerGetPipelineResponseSuccess)
+
+export const getInvestorControllerGetPipelineUrl = () => {
+
+
+  
+
+  return `/investor/pipeline`
+}
+
+export const investorControllerGetPipeline = async ( options?: RequestInit): Promise<investorControllerGetPipelineResponse> => {
+  
+  return customFetch<investorControllerGetPipelineResponse>(getInvestorControllerGetPipelineUrl(),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getInvestorControllerGetPipelineQueryKey = () => {
+    return [
+    `/investor/pipeline`
+    ] as const;
+    }
+
+    
+export const getInvestorControllerGetPipelineQueryOptions = <TData = Awaited<ReturnType<typeof investorControllerGetPipeline>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetPipeline>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getInvestorControllerGetPipelineQueryKey();
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof investorControllerGetPipeline>>> = ({ signal }) => investorControllerGetPipeline({ signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetPipeline>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type InvestorControllerGetPipelineQueryResult = NonNullable<Awaited<ReturnType<typeof investorControllerGetPipeline>>>
+export type InvestorControllerGetPipelineQueryError = ErrorType<unknown>
+
+
+export function useInvestorControllerGetPipeline<TData = Awaited<ReturnType<typeof investorControllerGetPipeline>>, TError = ErrorType<unknown>>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetPipeline>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof investorControllerGetPipeline>>,
+          TError,
+          Awaited<ReturnType<typeof investorControllerGetPipeline>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useInvestorControllerGetPipeline<TData = Awaited<ReturnType<typeof investorControllerGetPipeline>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetPipeline>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof investorControllerGetPipeline>>,
+          TError,
+          Awaited<ReturnType<typeof investorControllerGetPipeline>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useInvestorControllerGetPipeline<TData = Awaited<ReturnType<typeof investorControllerGetPipeline>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetPipeline>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useInvestorControllerGetPipeline<TData = Awaited<ReturnType<typeof investorControllerGetPipeline>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetPipeline>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getInvestorControllerGetPipelineQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+export type investorControllerGetConversationsResponse200 = {
+  data: void
+  status: 200
+}
+    
+export type investorControllerGetConversationsResponseSuccess = (investorControllerGetConversationsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type investorControllerGetConversationsResponse = (investorControllerGetConversationsResponseSuccess)
+
+export const getInvestorControllerGetConversationsUrl = () => {
+
+
+  
+
+  return `/investor/messaging/conversations`
+}
+
+export const investorControllerGetConversations = async ( options?: RequestInit): Promise<investorControllerGetConversationsResponse> => {
+  
+  return customFetch<investorControllerGetConversationsResponse>(getInvestorControllerGetConversationsUrl(),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getInvestorControllerGetConversationsQueryKey = () => {
+    return [
+    `/investor/messaging/conversations`
+    ] as const;
+    }
+
+    
+export const getInvestorControllerGetConversationsQueryOptions = <TData = Awaited<ReturnType<typeof investorControllerGetConversations>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetConversations>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getInvestorControllerGetConversationsQueryKey();
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof investorControllerGetConversations>>> = ({ signal }) => investorControllerGetConversations({ signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetConversations>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type InvestorControllerGetConversationsQueryResult = NonNullable<Awaited<ReturnType<typeof investorControllerGetConversations>>>
+export type InvestorControllerGetConversationsQueryError = ErrorType<unknown>
+
+
+export function useInvestorControllerGetConversations<TData = Awaited<ReturnType<typeof investorControllerGetConversations>>, TError = ErrorType<unknown>>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetConversations>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof investorControllerGetConversations>>,
+          TError,
+          Awaited<ReturnType<typeof investorControllerGetConversations>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useInvestorControllerGetConversations<TData = Awaited<ReturnType<typeof investorControllerGetConversations>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetConversations>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof investorControllerGetConversations>>,
+          TError,
+          Awaited<ReturnType<typeof investorControllerGetConversations>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useInvestorControllerGetConversations<TData = Awaited<ReturnType<typeof investorControllerGetConversations>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetConversations>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useInvestorControllerGetConversations<TData = Awaited<ReturnType<typeof investorControllerGetConversations>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetConversations>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getInvestorControllerGetConversationsQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+export type investorControllerGetTeamResponse200 = {
   data: void
   status: 200
 }

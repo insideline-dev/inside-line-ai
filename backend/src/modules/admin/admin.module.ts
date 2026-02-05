@@ -9,7 +9,11 @@ import { ScoringConfigService } from './scoring-config.service';
 import { DataImportService } from './data-import.service';
 import { QueueManagementService } from './queue-management.service';
 import { CacheService } from './cache.service';
+import { IntegrationHealthService } from './integration-health.service';
+import { SystemConfigService } from './system-config.service';
+import { BulkDataService } from './bulk-data.service';
 import { StartupModule } from '../startup';
+import { UnipileModule } from '../integrations/unipile/unipile.module';
 import { DatabaseModule } from '../../database';
 import { QueueModule } from '../../queue';
 
@@ -18,6 +22,7 @@ import { QueueModule } from '../../queue';
     DatabaseModule,
     QueueModule,
     StartupModule,
+    UnipileModule,
     MulterModule.register({
       limits: {
         fileSize: 10 * 1024 * 1024, // 10MB limit
@@ -41,6 +46,9 @@ import { QueueModule } from '../../queue';
     ScoringConfigService,
     DataImportService,
     QueueManagementService,
+    IntegrationHealthService,
+    SystemConfigService,
+    BulkDataService,
   ],
   exports: [AnalyticsService, UserManagementService],
 })

@@ -42,6 +42,7 @@ import {
   ResendVerificationDto,
   UpdateUserProfileDetailsDto,
   UserProfileDto,
+  SelectRoleDto,
 } from "./dto";
 
 // Rate limit configs (requests per TTL window in seconds)
@@ -217,8 +218,32 @@ export class AuthController {
     const tokens = await this.authService.generateTokens(foundUser);
     this.setTokenCookies(res, tokens.accessToken, tokens.refreshToken);
 
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3030";
     return res.redirect(`${frontendUrl}/auth/callback?success=true`);
+  }
+
+  // ============ ONBOARDING ============
+
+  @Post("select-role")
+  @Throttle({ default: AUTH_RATE_LIMIT })
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth("JWT")
+  @ApiOperation({ summary: "Select role during onboarding" })
+  @ApiBody({ type: SelectRoleDto })
+  @ApiResponse({ status: 200, type: AuthResponseDto })
+  async selectRole(
+    @CurrentUser() currentUser: DbUser,
+    @Body() dto: SelectRoleDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    if (currentUser.onboardingCompleted) {
+      throw new BadRequestException("Onboarding already completed");
+    }
+    const updated = await this.userAuthService.updateUserRole(
+      currentUser.id,
+      dto.role,
+    );
+    return this.setTokensAndRespond(res, updated);
   }
 
   // ============ TOKEN MANAGEMENT ============
@@ -372,6 +397,7 @@ export class AuthController {
       emailVerified: u.emailVerified,
       image: u.image,
       role: u.role as UserRole,
+      onboardingCompleted: u.onboardingCompleted,
       createdAt: u.createdAt.toISOString(),
     };
   }

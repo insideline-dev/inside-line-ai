@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,7 @@ import { ProductTabContent } from "@/components/startup-view/ProductTabContent";
 import { MemoTabContent } from "@/components/startup-view/MemoTabContent";
 import { CompetitorsTabContent } from "@/components/startup-view/CompetitorsTabContent";
 import { InsightsTabContent } from "@/components/startup-view/InsightsTabContent";
+import { AnalysisProgress } from "@/components/AnalysisProgress";
 import {
   CheckCircle,
   XCircle,
@@ -36,7 +37,15 @@ import {
   Building2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { OpenAPI } from "@/lib/api-client";
+import { useStartupControllerFindOne } from "@/api/generated/startup/startup";
+import {
+  useAdminControllerApproveStartup,
+  useAdminControllerReanalyzeStartup,
+  useAdminControllerGetScoringDefaults,
+  getAdminControllerRejectStartupUrl,
+} from "@/api/generated/admin/admin";
+import { customFetch } from "@/api/client";
+import type { ScoringWeights } from "@/lib/score-utils";
 
 export const Route = createFileRoute("/_protected/admin/startup/$id")({
   component: AdminReviewPage,
@@ -47,6 +56,11 @@ import type { Evaluation } from "@/types/evaluation";
 
 interface StartupDetail extends Startup {
   evaluation?: Evaluation;
+}
+
+interface StageScoringWeight {
+  stage: string;
+  weights: ScoringWeights;
 }
 
 const stageLabels: Record<string, string> = {
@@ -78,36 +92,6 @@ function formatDate(dateStr: string): string {
   });
 }
 
-async function fetchStartup(id: string): Promise<StartupDetail> {
-  const response = await fetch(`${OpenAPI.BASE}/api/startups/${id}`, {
-    credentials: "include",
-  });
-  if (!response.ok) throw new Error("Failed to fetch startup");
-  return response.json();
-}
-
-async function updateStartupStatus(
-  id: string,
-  status: string,
-  adminNotes?: string
-): Promise<void> {
-  const response = await fetch(`${OpenAPI.BASE}/api/admin/startups/${id}/status`, {
-    method: "PATCH",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ status, adminNotes }),
-  });
-  if (!response.ok) throw new Error("Failed to update status");
-}
-
-async function reanalyzeStartup(id: string): Promise<void> {
-  const response = await fetch(`${OpenAPI.BASE}/api/admin/startups/${id}/reanalyze`, {
-    method: "POST",
-    credentials: "include",
-  });
-  if (!response.ok) throw new Error("Failed to trigger reanalysis");
-}
-
 function AdminReviewPage() {
   const { id } = Route.useParams();
   const queryClient = useQueryClient();
@@ -115,45 +99,71 @@ function AdminReviewPage() {
   const [showApproveDialog, setShowApproveDialog] = useState(false);
   const [showRejectDialog, setShowRejectDialog] = useState(false);
 
-  const { data: startup, isLoading } = useQuery<StartupDetail>({
-    queryKey: ["startup", id],
-    queryFn: () => fetchStartup(id),
+  const { data: startupResponse, isLoading } = useStartupControllerFindOne(id);
+  const startup = startupResponse?.data as StartupDetail | undefined;
+
+  const { data: scoringDefaults } = useAdminControllerGetScoringDefaults();
+  const stageScoringWeights =
+    (scoringDefaults?.data as StageScoringWeight[] | undefined) ?? [];
+
+  const stageWeights = useMemo(() => {
+    if (!startup?.stage) return null;
+    const stageData = stageScoringWeights.find(
+      (stage) => stage.stage === startup.stage
+    );
+    return stageData?.weights ?? null;
+  }, [startup?.stage, stageScoringWeights]);
+
+  const approveMutation = useAdminControllerApproveStartup({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["startup", id] });
+        queryClient.invalidateQueries({ queryKey: ["admin", "analytics"] });
+        toast.success("Startup approved", {
+          description: "The startup is now visible to investors.",
+        });
+        setShowApproveDialog(false);
+        setAdminNotes("");
+      },
+      onError: (error: Error) => {
+        toast.error("Failed to approve startup", { description: error.message });
+      },
+    },
   });
 
-  const statusMutation = useMutation({
-    mutationFn: ({ status }: { status: string }) =>
-      updateStartupStatus(id, status, adminNotes),
-    onSuccess: (_, variables) => {
+  const rejectMutation = useMutation({
+    mutationFn: async (reason: string) => {
+      return customFetch(getAdminControllerRejectStartupUrl(id), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason }),
+      });
+    },
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["startup", id] });
       queryClient.invalidateQueries({ queryKey: ["admin", "analytics"] });
-      toast.success(
-        variables.status === "approved" ? "Startup approved" : "Startup rejected",
-        {
-          description:
-            variables.status === "approved"
-              ? "The startup is now visible to investors."
-              : "The startup has been rejected.",
-        }
-      );
-      setShowApproveDialog(false);
+      toast.success("Startup rejected", {
+        description: "The startup has been rejected.",
+      });
       setShowRejectDialog(false);
       setAdminNotes("");
     },
     onError: (error: Error) => {
-      toast.error("Failed to update status", { description: error.message });
+      toast.error("Failed to reject startup", { description: error.message });
     },
   });
 
-  const reanalyzeMutation = useMutation({
-    mutationFn: () => reanalyzeStartup(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["startup", id] });
-      toast.success("Reanalysis triggered", {
-        description: "The startup evaluation has been queued for reanalysis.",
-      });
-    },
-    onError: (error: Error) => {
-      toast.error("Failed to trigger reanalysis", { description: error.message });
+  const reanalyzeMutation = useAdminControllerReanalyzeStartup({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["startup", id] });
+        toast.success("Reanalysis triggered", {
+          description: "The startup evaluation has been queued for reanalysis.",
+        });
+      },
+      onError: (error: Error) => {
+        toast.error("Failed to trigger reanalysis", { description: error.message });
+      },
     },
   });
 
@@ -177,7 +187,7 @@ function AdminReviewPage() {
     );
   }
 
-  const evaluation = startup.evaluation;
+  const evaluation = startup.evaluation as Evaluation | undefined;
   const canApproveReject = ["pending_review", "analyzing", "analyzed"].includes(
     startup.status
   );
@@ -202,7 +212,7 @@ function AdminReviewPage() {
           <>
             <Button
               onClick={() => setShowApproveDialog(true)}
-              disabled={statusMutation.isPending}
+              disabled={approveMutation.isPending || rejectMutation.isPending}
             >
               <CheckCircle className="w-4 h-4 mr-2" />
               Approve
@@ -210,7 +220,7 @@ function AdminReviewPage() {
             <Button
               variant="destructive"
               onClick={() => setShowRejectDialog(true)}
-              disabled={statusMutation.isPending}
+              disabled={approveMutation.isPending || rejectMutation.isPending}
             >
               <XCircle className="w-4 h-4 mr-2" />
               Reject
@@ -219,7 +229,7 @@ function AdminReviewPage() {
         )}
         <Button
           variant="outline"
-          onClick={() => reanalyzeMutation.mutate()}
+          onClick={() => reanalyzeMutation.mutate({ id })}
           disabled={reanalyzeMutation.isPending}
         >
           {reanalyzeMutation.isPending ? (
@@ -232,6 +242,19 @@ function AdminReviewPage() {
       </div>
 
       <StartupHeader startup={startup} backLink="/admin" />
+
+      {startup.status === "analyzing" && stageWeights && (
+        <Card className="mb-6">
+          <CardContent className="p-6">
+            <AnalysisProgress
+              startupId={startup.id}
+              isAnalyzing={true}
+              weights={stageWeights}
+              progress={evaluation?.analysisProgress as any}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
@@ -314,22 +337,35 @@ function AdminReviewPage() {
           </TabsList>
 
           <TabsContent value="summary" className="mt-6">
-            <SummaryCard startup={startup} evaluation={evaluation} />
+            <SummaryCard
+              startup={startup}
+              evaluation={evaluation}
+              weights={stageWeights}
+            />
           </TabsContent>
 
           <TabsContent value="team" className="mt-6">
             <TeamTabContent
               evaluation={evaluation}
               teamMembers={startup.teamMembers || []}
+              teamWeight={stageWeights?.team}
             />
           </TabsContent>
 
           <TabsContent value="product" className="mt-6">
-            <ProductTabContent startup={startup} evaluation={evaluation} />
+            <ProductTabContent
+              startup={startup}
+              evaluation={evaluation}
+              productWeight={stageWeights?.product}
+            />
           </TabsContent>
 
           <TabsContent value="memo" className="mt-6">
-            <MemoTabContent startup={startup} evaluation={evaluation} />
+            <MemoTabContent
+              startup={startup}
+              evaluation={evaluation}
+              weights={stageWeights}
+            />
           </TabsContent>
 
           <TabsContent value="competitors" className="mt-6">
@@ -361,10 +397,10 @@ function AdminReviewPage() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => statusMutation.mutate({ status: "approved" })}
-              disabled={statusMutation.isPending}
+              onClick={() => approveMutation.mutate({ id })}
+              disabled={approveMutation.isPending}
             >
-              {statusMutation.isPending ? "Approving..." : "Approve"}
+              {approveMutation.isPending ? "Approving..." : "Approve"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -391,11 +427,11 @@ function AdminReviewPage() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => statusMutation.mutate({ status: "rejected" })}
-              disabled={statusMutation.isPending || !adminNotes.trim()}
+              onClick={() => rejectMutation.mutate(adminNotes)}
+              disabled={rejectMutation.isPending || !adminNotes.trim()}
               className="bg-destructive text-destructive-foreground"
             >
-              {statusMutation.isPending ? "Rejecting..." : "Reject"}
+              {rejectMutation.isPending ? "Rejecting..." : "Reject"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

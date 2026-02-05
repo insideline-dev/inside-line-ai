@@ -2,5 +2,8 @@ export * from './startup.module';
 export * from './startup.service';
 export * from './startup.controller';
 export * from './draft.service';
+export * from './data-room.service';
+export * from './investor-interest.service';
+export * from './meeting.service';
 export * from './dto';
 export * from './entities';

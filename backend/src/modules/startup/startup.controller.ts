@@ -10,7 +10,11 @@ import {
   Res,
   Header,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import { JwtAuthGuard } from '../../auth/guards';
 import { CurrentUser } from '../../auth/decorators';
@@ -27,6 +31,9 @@ type User = {
 import { StartupService } from './startup.service';
 import { DraftService } from './draft.service';
 import { PdfService } from './pdf.service';
+import { DataRoomService } from './data-room.service';
+import { InvestorInterestService } from './investor-interest.service';
+import { MeetingService } from './meeting.service';
 import { RolesGuard } from './guards';
 import { Roles } from './decorators/roles.decorator';
 import {
@@ -39,6 +46,10 @@ import {
   PresignedUrlDto,
   GetStartupsQueryDto,
   GetApprovedStartupsQueryDto,
+  UploadDataRoomDto,
+  UpdateDataRoomPermissionsDto,
+  RespondInterestDto,
+  ScheduleMeetingDto,
 } from './dto';
 import { Public } from '../../auth/decorators';
 
@@ -49,6 +60,9 @@ export class StartupController {
     private startupService: StartupService,
     private draftService: DraftService,
     private pdfService: PdfService,
+    private dataRoomService: DataRoomService,
+    private interestService: InvestorInterestService,
+    private meetingService: MeetingService,
   ) {}
 
   // ============ FOUNDER ENDPOINTS ============
@@ -176,6 +190,82 @@ export class StartupController {
       'Content-Length': buffer.length,
     });
     res.end(buffer);
+  }
+
+  // ============ FOUNDER DATA ROOM & MEETINGS ============
+
+  @Post(':id/data-room')
+  @Roles(UserRole.FOUNDER, UserRole.ADMIN)
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadToDataRoom(
+    @CurrentUser() user: User,
+    @Param('id') startupId: string,
+    @Body() dto: UploadDataRoomDto,
+    @UploadedFile() file?: { buffer: Buffer; mimetype: string; originalname: string },
+  ) {
+    if (file) {
+      return this.dataRoomService.uploadFile(startupId, user.id, file, dto.category);
+    }
+
+    if (dto.assetId) {
+      return this.dataRoomService.uploadDocument(startupId, dto.assetId, dto.category);
+    }
+
+    throw new BadRequestException('File or assetId is required');
+  }
+
+  @Get(':id/data-room')
+  @Roles(UserRole.FOUNDER, UserRole.ADMIN)
+  async getDataRoom(@Param('id') startupId: string) {
+    return this.dataRoomService.getDocuments(startupId);
+  }
+
+  @Patch(':id/data-room/:docId/permissions')
+  @Roles(UserRole.FOUNDER, UserRole.ADMIN)
+  async updateDataRoomPermissions(
+    @Param('id') _id: string,
+    @Param('docId') docId: string,
+    @Body() dto: UpdateDataRoomPermissionsDto,
+  ) {
+    return this.dataRoomService.updatePermissions(docId, dto.investorIds);
+  }
+
+  @Delete(':id/data-room/:docId')
+  @Roles(UserRole.FOUNDER, UserRole.ADMIN)
+  async deleteDataRoomDocument(@Param('id') _id: string, @Param('docId') docId: string) {
+    await this.dataRoomService.deleteDocument(docId);
+    return { success: true, message: 'Document deleted' };
+  }
+
+  @Get(':id/interest')
+  @Roles(UserRole.FOUNDER, UserRole.ADMIN)
+  async getInvestorInterest(@Param('id') startupId: string) {
+    return this.interestService.getInterest(startupId);
+  }
+
+  @Post(':id/interest/:interestId/respond')
+  @Roles(UserRole.FOUNDER, UserRole.ADMIN)
+  async respondToInterest(
+    @Param('id') _id: string,
+    @Param('interestId') interestId: string,
+    @Body() dto: RespondInterestDto,
+  ) {
+    return this.interestService.respondToInterest(interestId, dto.response);
+  }
+
+  @Post(':id/meetings')
+  @Roles(UserRole.FOUNDER, UserRole.ADMIN)
+  async scheduleMeeting(
+    @Param('id') startupId: string,
+    @Body() dto: ScheduleMeetingDto,
+  ) {
+    return this.meetingService.scheduleMeeting(startupId, dto);
+  }
+
+  @Get(':id/meetings')
+  @Roles(UserRole.FOUNDER, UserRole.ADMIN)
+  async getMeetings(@Param('id') startupId: string) {
+    return this.meetingService.getMeetings(startupId);
   }
 
   // ============ INVESTOR ENDPOINTS ============

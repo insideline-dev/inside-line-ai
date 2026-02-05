@@ -451,6 +451,46 @@
         ]
       }
     },
+    "/auth/select-role": {
+      "post": {
+        "operationId": "AuthController_selectRole",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SelectRoleDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponseDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Select role during onboarding",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
     "/auth/refresh": {
       "post": {
         "operationId": "AuthController_refresh",
@@ -1127,6 +1167,250 @@
     "/startups/{id}/report.pdf": {
       "get": {
         "operationId": "StartupController_downloadReport",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Startup"
+        ]
+      }
+    },
+    "/startups/{id}/data-room": {
+      "post": {
+        "operationId": "StartupController_uploadToDataRoom",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UploadDataRoomDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Startup"
+        ]
+      },
+      "get": {
+        "operationId": "StartupController_getDataRoom",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Startup"
+        ]
+      }
+    },
+    "/startups/{id}/data-room/{docId}/permissions": {
+      "patch": {
+        "operationId": "StartupController_updateDataRoomPermissions",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "docId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateDataRoomPermissionsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Startup"
+        ]
+      }
+    },
+    "/startups/{id}/data-room/{docId}": {
+      "delete": {
+        "operationId": "StartupController_deleteDataRoomDocument",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "docId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Startup"
+        ]
+      }
+    },
+    "/startups/{id}/interest": {
+      "get": {
+        "operationId": "StartupController_getInvestorInterest",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Startup"
+        ]
+      }
+    },
+    "/startups/{id}/interest/{interestId}/respond": {
+      "post": {
+        "operationId": "StartupController_respondToInterest",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "interestId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RespondInterestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Startup"
+        ]
+      }
+    },
+    "/startups/{id}/meetings": {
+      "post": {
+        "operationId": "StartupController_scheduleMeeting",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScheduleMeetingDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Startup"
+        ]
+      },
+      "get": {
+        "operationId": "StartupController_getMeetings",
         "parameters": [
           {
             "name": "id",
@@ -2236,6 +2520,62 @@
         ]
       }
     },
+    "/scout/commissions": {
+      "get": {
+        "operationId": "ScoutController_getCommissions",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Scout"
+        ]
+      }
+    },
+    "/scout/commissions/total": {
+      "get": {
+        "operationId": "ScoutController_getTotalEarnings",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Scout"
+        ]
+      }
+    },
+    "/scout/metrics": {
+      "get": {
+        "operationId": "ScoutController_getMetrics",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Scout"
+        ]
+      }
+    },
+    "/scout/leaderboard": {
+      "get": {
+        "operationId": "ScoutController_getLeaderboard",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Scout"
+        ]
+      }
+    },
     "/admin/stats": {
       "get": {
         "operationId": "AdminController_getStats",
@@ -2280,6 +2620,34 @@
     "/admin/stats/investors": {
       "get": {
         "operationId": "AdminController_getInvestorStats",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/integrations/health": {
+      "get": {
+        "operationId": "AdminController_getIntegrationHealth",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/config": {
+      "get": {
+        "operationId": "AdminController_getSystemConfig",
         "parameters": [],
         "responses": {
           "200": {
@@ -2450,6 +2818,95 @@
         ]
       }
     },
+    "/admin/startups": {
+      "get": {
+        "operationId": "AdminController_getAllStartups",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maximum": 9007199254740991,
+              "exclusiveMinimum": true,
+              "default": 1,
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maximum": 100,
+              "exclusiveMinimum": true,
+              "default": 20,
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "draft",
+                "submitted",
+                "analyzing",
+                "pending_review",
+                "approved",
+                "rejected"
+              ]
+            }
+          },
+          {
+            "name": "industry",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "stage",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pre_seed",
+                "seed",
+                "series_a",
+                "series_b",
+                "series_c",
+                "series_d",
+                "series_e",
+                "series_f_plus"
+              ]
+            }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
     "/admin/startups/pending": {
       "get": {
         "operationId": "AdminController_getPendingStartups",
@@ -2565,6 +3022,29 @@
     "/admin/startups/{id}/reject": {
       "post": {
         "operationId": "AdminController_rejectStartup",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/startups/{id}/reanalyze": {
+      "post": {
+        "operationId": "AdminController_reanalyzeStartup",
         "parameters": [
           {
             "name": "id",
@@ -2709,6 +3189,51 @@
         ]
       }
     },
+    "/admin/bulk/import-startups": {
+      "post": {
+        "operationId": "AdminController_bulkImportStartups",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/bulk/export-startups": {
+      "get": {
+        "operationId": "AdminController_bulkExportStartups",
+        "parameters": [
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "draft",
+                "submitted",
+                "analyzing",
+                "pending_review",
+                "approved",
+                "rejected"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
     "/admin/queue/status": {
       "get": {
         "operationId": "AdminController_getQueueStatus",
@@ -2765,6 +3290,89 @@
         },
         "tags": [
           "Admin"
+        ]
+      }
+    },
+    "/admin/conversations": {
+      "get": {
+        "operationId": "AdminController_getConversations",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/agents": {
+      "get": {
+        "operationId": "AdminController_getAgents",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/integrations/linkedin/profile": {
+      "get": {
+        "operationId": "UnipileController_getProfile",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Profile retrieved"
+          },
+          "404": {
+            "description": "Profile not found"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          },
+          "503": {
+            "description": "LinkedIn integration not configured"
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Fetch LinkedIn profile by URL",
+        "tags": [
+          "integrations/linkedin"
+        ]
+      }
+    },
+    "/integrations/linkedin/search": {
+      "get": {
+        "operationId": "UnipileController_searchProfiles",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Search results"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          },
+          "503": {
+            "description": "LinkedIn integration not configured"
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Search LinkedIn profiles by name and optional company",
+        "tags": [
+          "integrations/linkedin"
         ]
       }
     },
@@ -2945,6 +3553,216 @@
             }
           }
         ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Investor"
+        ]
+      }
+    },
+    "/investor/matches/{matchId}/status": {
+      "patch": {
+        "operationId": "InvestorController_updateMatchStatus",
+        "parameters": [
+          {
+            "name": "matchId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMatchStatusDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Investor"
+        ]
+      }
+    },
+    "/investor/notes": {
+      "post": {
+        "operationId": "InvestorController_createNote",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateNoteDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Investor"
+        ]
+      },
+      "get": {
+        "operationId": "InvestorController_getAllNotes",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Investor"
+        ]
+      }
+    },
+    "/investor/notes/{startupId}": {
+      "get": {
+        "operationId": "InvestorController_getNotes",
+        "parameters": [
+          {
+            "name": "startupId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Investor"
+        ]
+      }
+    },
+    "/investor/notes/{noteId}": {
+      "patch": {
+        "operationId": "InvestorController_updateNote",
+        "parameters": [
+          {
+            "name": "noteId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateNoteDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Investor"
+        ]
+      },
+      "delete": {
+        "operationId": "InvestorController_deleteNote",
+        "parameters": [
+          {
+            "name": "noteId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Investor"
+        ]
+      }
+    },
+    "/investor/portfolio": {
+      "post": {
+        "operationId": "InvestorController_addToPortfolio",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddPortfolioDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Investor"
+        ]
+      },
+      "get": {
+        "operationId": "InvestorController_getPortfolio",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Investor"
+        ]
+      }
+    },
+    "/investor/pipeline": {
+      "get": {
+        "operationId": "InvestorController_getPipeline",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Investor"
+        ]
+      }
+    },
+    "/investor/messaging/conversations": {
+      "get": {
+        "operationId": "InvestorController_getConversations",
+        "parameters": [],
         "responses": {
           "200": {
             "description": ""
@@ -3462,61 +4280,6 @@
         ]
       }
     },
-    "/integrations/linkedin/profile": {
-      "get": {
-        "operationId": "UnipileController_getProfile",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "Profile retrieved"
-          },
-          "404": {
-            "description": "Profile not found"
-          },
-          "429": {
-            "description": "Rate limit exceeded"
-          },
-          "503": {
-            "description": "LinkedIn integration not configured"
-          }
-        },
-        "security": [
-          {
-            "JWT": []
-          }
-        ],
-        "summary": "Fetch LinkedIn profile by URL",
-        "tags": [
-          "integrations/linkedin"
-        ]
-      }
-    },
-    "/integrations/linkedin/search": {
-      "get": {
-        "operationId": "UnipileController_searchProfiles",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "Search results"
-          },
-          "429": {
-            "description": "Rate limit exceeded"
-          },
-          "503": {
-            "description": "LinkedIn integration not configured"
-          }
-        },
-        "security": [
-          {
-            "JWT": []
-          }
-        ],
-        "summary": "Search LinkedIn profiles by name and optional company",
-        "tags": [
-          "integrations/linkedin"
-        ]
-      }
-    },
     "/health": {
       "get": {
         "operationId": "HealthController_check",
@@ -3719,6 +4482,9 @@
                   "scout"
                 ]
               },
+              "onboardingCompleted": {
+                "type": "boolean"
+              },
               "createdAt": {
                 "type": "string",
                 "format": "date-time",
@@ -3732,6 +4498,7 @@
               "emailVerified",
               "image",
               "role",
+              "onboardingCompleted",
               "createdAt"
             ]
           },
@@ -3816,6 +4583,21 @@
           "token"
         ]
       },
+      "SelectRoleDto": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "founder",
+              "investor"
+            ]
+          }
+        },
+        "required": [
+          "role"
+        ]
+      },
       "UserResponseDto": {
         "type": "object",
         "properties": {
@@ -3848,6 +4630,9 @@
               "scout"
             ]
           },
+          "onboardingCompleted": {
+            "type": "boolean"
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time",
@@ -3861,6 +4646,7 @@
           "emailVerified",
           "image",
           "role",
+          "onboardingCompleted",
           "createdAt"
         ]
       },
@@ -4121,6 +4907,87 @@
         },
         "required": [
           "draftData"
+        ]
+      },
+      "UploadDataRoomDto": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "assetId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        },
+        "required": [
+          "category"
+        ]
+      },
+      "UpdateDataRoomPermissionsDto": {
+        "type": "object",
+        "properties": {
+          "investorIds": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          }
+        }
+      },
+      "RespondInterestDto": {
+        "type": "object",
+        "properties": {
+          "response": {
+            "type": "string",
+            "enum": [
+              "interested",
+              "passed",
+              "meeting_scheduled"
+            ]
+          }
+        },
+        "required": [
+          "response"
+        ]
+      },
+      "ScheduleMeetingDto": {
+        "type": "object",
+        "properties": {
+          "investorId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "scheduledAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+          },
+          "duration": {
+            "type": "integer",
+            "exclusiveMinimum": true,
+            "maximum": 9007199254740991,
+            "minimum": 0
+          },
+          "location": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        },
+        "required": [
+          "investorId",
+          "scheduledAt"
         ]
       },
       "ApproveStartupDto": {
@@ -4599,6 +5466,128 @@
           "productWeight",
           "tractionWeight",
           "financialsWeight"
+        ]
+      },
+      "UpdateMatchStatusDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "new",
+              "reviewing",
+              "engaged",
+              "closed",
+              "passed"
+            ]
+          },
+          "passReason": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "passNotes": {
+            "type": "string",
+            "maxLength": 5000
+          },
+          "investmentAmount": {
+            "type": "number",
+            "exclusiveMinimum": true,
+            "minimum": 0
+          },
+          "investmentCurrency": {
+            "type": "string",
+            "maxLength": 10
+          },
+          "investmentDate": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+          },
+          "investmentNotes": {
+            "type": "string",
+            "maxLength": 5000
+          },
+          "meetingRequested": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "CreateNoteDto": {
+        "type": "object",
+        "properties": {
+          "startupId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "content": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 5000
+          },
+          "category": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "isPinned": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "startupId",
+          "content"
+        ]
+      },
+      "UpdateNoteDto": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 5000
+          },
+          "category": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "isPinned": {
+            "type": "boolean"
+          }
+        }
+      },
+      "AddPortfolioDto": {
+        "type": "object",
+        "properties": {
+          "startupId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "dealSize": {
+            "type": "integer",
+            "exclusiveMinimum": true,
+            "maximum": 9007199254740991,
+            "minimum": 0
+          },
+          "dealStage": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "investedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        },
+        "required": [
+          "startupId"
         ]
       },
       "CreateTeamInviteDto": {

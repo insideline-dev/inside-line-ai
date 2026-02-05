@@ -5,8 +5,8 @@ import { z } from "zod";
 import { authApi, authKeys } from "@/lib/auth";
 
 const searchSchema = z.object({
-  success: z.string().optional(),
-  error: z.string().optional(),
+  success: z.coerce.string().optional(),
+  error: z.coerce.string().optional(),
 });
 
 export const Route = createFileRoute("/auth/callback")({
@@ -32,7 +32,13 @@ function AuthCallbackPage() {
         try {
           const user = await authApi.getCurrentUser();
           queryClient.setQueryData(authKeys.user, user);
-          navigate({ to: `/${user.role}`, replace: true });
+          if (user.onboardingCompleted) {
+            const redirect = sessionStorage.getItem("redirectAfterAuth");
+            if (redirect) sessionStorage.removeItem("redirectAfterAuth");
+            navigate({ to: redirect || `/${user.role}`, replace: true });
+          } else {
+            navigate({ to: "/role-select", replace: true });
+          }
         } catch {
           navigate({ to: "/login", replace: true });
         }

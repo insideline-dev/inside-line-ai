@@ -42,11 +42,21 @@ import {
   Binoculars,
   Plus,
   ChevronsUpDown,
+  Calendar,
+  Folder,
+  Handshake,
+  Briefcase,
+  Kanban,
+  StickyNote,
+  DollarSign,
+  Trophy,
+  ListChecks,
   type LucideIcon,
 } from "lucide-react";
 import { useAuth, useLogout } from "@/lib/auth";
 import type { UserRole } from "@/types";
 import { useMockAuthStore } from "@/stores";
+import { env } from "@/env";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
 interface NavItem {
@@ -59,12 +69,19 @@ const roleNavItems: Record<UserRole, NavItem[]> = {
   founder: [
     { title: "Dashboard", url: "/founder", icon: Building2 },
     { title: "Submit Startup", url: "/founder/submit", icon: FileText },
+    { title: "Data Room", url: "/founder/data-room", icon: Folder },
+    { title: "Investor Interest", url: "/founder/investor-interest", icon: Handshake },
+    { title: "Meetings", url: "/founder/meetings", icon: Calendar },
   ],
   investor: [
     { title: "Deal Flow", url: "/investor", icon: Target },
     { title: "Investment Thesis", url: "/investor/thesis", icon: Settings },
     { title: "Scoring", url: "/investor/scoring", icon: Scale },
     { title: "Submission Portal", url: "/investor/portal", icon: Link2 },
+    { title: "Portfolio", url: "/investor/portfolio", icon: Briefcase },
+    { title: "Deal Pipeline", url: "/investor/pipeline", icon: Kanban },
+    { title: "Notes", url: "/investor/notes", icon: StickyNote },
+    { title: "Messaging", url: "/investor/messaging", icon: MessageSquare },
   ],
   admin: [
     { title: "Review Queue", url: "/admin", icon: Shield },
@@ -74,10 +91,17 @@ const roleNavItems: Record<UserRole, NavItem[]> = {
     { title: "Agents", url: "/admin/agents", icon: Bot },
     { title: "Conversations", url: "/admin/conversations", icon: MessageSquare },
     { title: "Scoring", url: "/admin/scoring", icon: Scale },
+    { title: "Integrations", url: "/admin/integrations", icon: Link2 },
+    { title: "System Config", url: "/admin/config", icon: Settings },
+    { title: "Job Queue", url: "/admin/queue", icon: ListChecks },
+    { title: "Bulk Data", url: "/admin/bulk-data", icon: FileText },
   ],
   scout: [
     { title: "Dashboard", url: "/scout", icon: Binoculars },
     { title: "Submit Startup", url: "/scout/submit", icon: Plus },
+    { title: "Commissions", url: "/scout/commissions", icon: DollarSign },
+    { title: "Metrics", url: "/scout/metrics", icon: BarChart3 },
+    { title: "Leaderboard", url: "/scout/leaderboard", icon: Trophy },
   ],
 };
 
@@ -135,6 +159,7 @@ function UserMenu() {
   const { user } = useAuth();
   const { currentRole, setRole } = useMockAuthStore();
   const navigate = useNavigate();
+  const isMockAuth = env.VITE_MOCK_AUTH;
   const logoutMutation = useLogout();
   const allRoles: UserRole[] = ["founder", "investor", "admin", "scout"];
 
@@ -179,17 +204,21 @@ function UserMenu() {
             Profile
           </Link>
         </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <div className="px-2 py-1.5 text-xs text-muted-foreground">Switch Role (Demo)</div>
-        {allRoles.map((r) => (
-          <DropdownMenuItem
-            key={r}
-            onClick={() => handleRoleSwitch(r)}
-            className={cn(currentRole === r && "bg-accent")}
-          >
-            {r.charAt(0).toUpperCase() + r.slice(1)}
-          </DropdownMenuItem>
-        ))}
+        {isMockAuth && (
+          <>
+            <DropdownMenuSeparator />
+            <div className="px-2 py-1.5 text-xs text-muted-foreground">Switch Role (Demo)</div>
+            {allRoles.map((r) => (
+              <DropdownMenuItem
+                key={r}
+                onClick={() => handleRoleSwitch(r)}
+                className={cn(currentRole === r && "bg-accent")}
+              >
+                {r.charAt(0).toUpperCase() + r.slice(1)}
+              </DropdownMenuItem>
+            ))}
+          </>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
           <LogOut className="mr-2 h-4 w-4" />

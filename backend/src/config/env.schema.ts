@@ -34,7 +34,7 @@ export const envSchema = z.object({
 
   // App URLs
   APP_URL: z.url().default('http://localhost:8080'),
-  FRONTEND_URL: z.url().default('http://localhost:3000'),
+  FRONTEND_URL: z.url().default('http://localhost:3030'),
 
   // Feature Flags
   ENABLE_SWAGGER: z.coerce.boolean().default(true),

@@ -77,7 +77,7 @@ const MOCK_AGENTS: AgentPrompt[] = [
     agentKey: "teamDeepResearch",
     displayName: "Team Deep Research",
     description: "Deep research on founders and team backgrounds",
-    category: "research",
+    category: "research-task",
     systemPrompt: "You are a team research specialist. Research the founders and key team members of {companyName}.\n\nFocus on:\n- Professional backgrounds\n- Previous startups/exits\n- Domain expertise\n- Educational credentials\n- Notable achievements",
     humanPrompt: "Research the team at {companyName}. Known founders: {founders}",
     tools: ["web_search", "linkedin_search"],
@@ -98,7 +98,7 @@ const MOCK_AGENTS: AgentPrompt[] = [
     agentKey: "marketDeepResearch",
     displayName: "Market Deep Research",
     description: "Market analysis and validation research",
-    category: "research",
+    category: "research-task",
     systemPrompt: "You are a market research analyst. Research the market opportunity for {companyName} in the {industry} space.\n\nAnalyze:\n- Total addressable market (TAM)\n- Market growth trends\n- Key competitors\n- Market dynamics\n- Regulatory landscape",
     humanPrompt: "Analyze the market for {companyName} in {industry}",
     tools: ["web_search", "market_data"],
@@ -119,7 +119,7 @@ const MOCK_AGENTS: AgentPrompt[] = [
     agentKey: "productDeepResearch",
     displayName: "Product Deep Research",
     description: "Product/technology research and competitive analysis",
-    category: "research",
+    category: "research-task",
     systemPrompt: "You are a product research specialist. Research {companyName}'s product and technology.\n\nInvestigate:\n- Product features and capabilities\n- Technology stack and innovation\n- Competitive differentiation\n- User reviews and feedback\n- Patents or proprietary tech",
     humanPrompt: "Research {companyName}'s product. Website: {websiteUrl}",
     tools: ["web_search", "product_hunt", "g2_crowd"],
@@ -140,7 +140,7 @@ const MOCK_AGENTS: AgentPrompt[] = [
     agentKey: "newsSearch",
     displayName: "News Search",
     description: "Recent news and press coverage search",
-    category: "research",
+    category: "research-task",
     systemPrompt: "You are a news research agent. Find recent news and press coverage about {companyName}.\n\nSearch for:\n- Funding announcements\n- Product launches\n- Partnerships\n- Executive changes\n- Industry recognition",
     humanPrompt: "Find recent news about {companyName}",
     tools: ["news_api", "web_search"],
@@ -527,17 +527,33 @@ const agentIcons: Record<string, typeof Bot> = {
 
 const categoryColors: Record<string, string> = {
   orchestrator:
-    "bg-purple-100 dark:bg-purple-500/10 border-purple-300 dark:border-purple-500/50 text-purple-900 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-500/20",
+    "bg-purple-50 dark:bg-purple-500/10 border-purple-200 dark:border-purple-500/50 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-500/20",
   analysis:
-    "bg-blue-100 dark:bg-blue-500/10 border-blue-300 dark:border-blue-500/50 text-blue-900 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-500/20",
+    "bg-white dark:bg-gray-500/5 border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-500/10",
   synthesis:
-    "bg-green-100 dark:bg-green-500/10 border-green-300 dark:border-green-500/50 text-green-900 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-500/20",
+    "bg-purple-50 dark:bg-purple-500/10 border-purple-200 dark:border-purple-500/50 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-500/20",
   extraction:
-    "bg-amber-100 dark:bg-amber-500/10 border-amber-300 dark:border-amber-500/50 text-amber-900 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-500/20",
+    "bg-red-50 dark:bg-red-500/10 border-red-200 dark:border-red-500/50 text-red-600 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-500/20",
   research:
-    "bg-orange-100 dark:bg-orange-500/10 border-orange-300 dark:border-orange-500/50 text-orange-900 dark:text-orange-300 hover:bg-orange-200 dark:hover:bg-orange-500/20",
+    "bg-amber-50 dark:bg-amber-500/10 border-amber-300 dark:border-amber-500/50 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-500/20",
+  "research-task":
+    "bg-white dark:bg-red-500/10 border-red-200 dark:border-red-500/50 text-red-600 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-500/20",
   investor:
-    "bg-indigo-100 dark:bg-indigo-500/10 border-indigo-300 dark:border-indigo-500/50 text-indigo-900 dark:text-indigo-300 hover:bg-indigo-200 dark:hover:bg-indigo-500/20",
+    "bg-purple-50 dark:bg-purple-500/10 border-purple-200 dark:border-purple-500/50 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-500/20",
+};
+
+const agentIconColors: Record<string, string> = {
+  team: "text-rose-400 dark:text-rose-400",
+  market: "text-teal-500 dark:text-teal-400",
+  product: "text-violet-500 dark:text-violet-400",
+  traction: "text-emerald-500 dark:text-emerald-400",
+  businessModel: "text-emerald-600 dark:text-emerald-400",
+  gtm: "text-blue-500 dark:text-blue-400",
+  financials: "text-emerald-600 dark:text-emerald-400",
+  competitiveAdvantage: "text-blue-500 dark:text-blue-400",
+  legal: "text-amber-500 dark:text-amber-400",
+  dealTerms: "text-blue-500 dark:text-blue-400",
+  exitPotential: "text-emerald-500 dark:text-emerald-400",
 };
 
 // API functions removed - using mock data
@@ -575,6 +591,7 @@ function AgentBox({
 }) {
   const Icon = agentIcons[agent.agentKey] || Bot;
   const colorClass = categoryColors[agent.category || "analysis"];
+  const iconColor = agentIconColors[agent.agentKey];
 
   return (
     <button
@@ -584,7 +601,7 @@ function AgentBox({
       }`}
     >
       <div className="flex items-center gap-2">
-        <Icon className={size === "large" ? "w-6 h-6" : "w-4 h-4"} />
+        <Icon className={`${size === "large" ? "w-6 h-6" : "w-4 h-4"} ${iconColor || ""}`} />
         <span className={`font-semibold ${size === "large" ? "text-base" : "text-xs"}`}>
           {agent.displayName.replace(" Agent", "").replace(" Analysis", "")}
         </span>
@@ -931,8 +948,8 @@ function AdminAgentsPage() {
                   Stage 1: Data Extraction
                 </div>
                 <div className="flex gap-3 justify-center">
-                  <div className="px-4 py-3 rounded-lg border-2 border-dashed border-amber-400 dark:border-amber-600 bg-amber-100 dark:bg-amber-950/30">
-                    <div className="flex items-center gap-2 text-amber-900 dark:text-amber-400">
+                  <div className="px-4 py-3 rounded-lg border-2 border-dashed border-red-200 dark:border-red-600 bg-white dark:bg-red-950/30">
+                    <div className="flex items-center gap-2 text-red-600 dark:text-red-400">
                       <FileSearch className="w-5 h-5" />
                       <span className="font-medium">Document Parsing</span>
                     </div>
@@ -940,8 +957,8 @@ function AdminAgentsPage() {
                       Extract text from pitch deck
                     </p>
                   </div>
-                  <div className="px-4 py-3 rounded-lg border-2 border-dashed border-amber-400 dark:border-amber-600 bg-amber-100 dark:bg-amber-950/30">
-                    <div className="flex items-center gap-2 text-amber-900 dark:text-amber-400">
+                  <div className="px-4 py-3 rounded-lg border-2 border-dashed border-red-200 dark:border-red-600 bg-white dark:bg-red-950/30">
+                    <div className="flex items-center gap-2 text-red-600 dark:text-red-400">
                       <Globe className="w-5 h-5" />
                       <span className="font-medium">Website Scraping</span>
                     </div>
@@ -962,8 +979,8 @@ function AdminAgentsPage() {
                 <div className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wider">
                   Stage 2: Team LinkedIn Research
                 </div>
-                <div className="px-4 py-3 rounded-lg border-2 border-dashed border-amber-400 dark:border-amber-600 bg-amber-100 dark:bg-amber-950/30">
-                  <div className="flex items-center gap-2 text-amber-900 dark:text-amber-400">
+                <div className="px-4 py-3 rounded-lg border-2 border-dashed border-amber-300 dark:border-amber-600 bg-amber-50 dark:bg-amber-950/30">
+                  <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
                     <Linkedin className="w-5 h-5" />
                     <span className="font-medium">LinkedIn Enrichment</span>
                   </div>

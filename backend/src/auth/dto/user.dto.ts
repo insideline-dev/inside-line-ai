@@ -10,6 +10,7 @@ export const UserSchema = z.object({
   emailVerified: z.boolean(),
   image: z.string().nullable(),
   role: z.nativeEnum(UserRole),
+  onboardingCompleted: z.boolean(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 });
@@ -90,6 +91,13 @@ export const AuthResponseSchema = z.object({
 });
 export type AuthResponse = z.infer<typeof AuthResponseSchema>;
 export class AuthResponseDto extends createZodDto(AuthResponseSchema) {}
+
+// Select role during onboarding
+export const SelectRoleSchema = z.object({
+  role: z.enum([UserRole.FOUNDER, UserRole.INVESTOR]),
+});
+export type SelectRole = z.infer<typeof SelectRoleSchema>;
+export class SelectRoleDto extends createZodDto(SelectRoleSchema) {}
 
 /**
  * SECURITY: Update profile DTO

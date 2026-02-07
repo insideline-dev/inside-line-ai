@@ -35,7 +35,7 @@ import { QUEUE_NAMES, QueueName } from '../../queue';
 import {
   GetUsersQueryDto,
   UpdateUserDto,
-  UpdateDefaultWeightsDto,
+  UpdateStageWeightsDto,
   ExportUsersQueryDto,
   ExportStartupsQueryDto,
   GetStartupStatsQueryDto,
@@ -175,20 +175,34 @@ export class AdminController {
 
   // ============ SCORING CONFIGURATION ENDPOINTS ============
 
-  @Get('scoring/defaults')
-  async getScoringDefaults() {
-    return this.scoringConfigService.getDefaults();
+  @Get('scoring/weights')
+  async getAllScoringWeights() {
+    return this.scoringConfigService.getAll();
   }
 
-  @Put('scoring/defaults')
-  async updateScoringDefaults(@Body() dto: UpdateDefaultWeightsDto) {
-    return this.scoringConfigService.updateDefaults(dto);
+  @Get('scoring/weights/:stage')
+  async getScoringWeightsByStage(@Param('stage') stage: string) {
+    return this.scoringConfigService.getByStage(stage);
+  }
+
+  @Put('scoring/weights/:stage')
+  async updateScoringWeightsByStage(
+    @CurrentUser() admin: User,
+    @Param('stage') stage: string,
+    @Body() dto: UpdateStageWeightsDto,
+  ) {
+    return this.scoringConfigService.updateByStage(stage, dto, admin.id);
+  }
+
+  @Post('scoring/weights/seed')
+  async seedScoringWeights(@CurrentUser() admin: User) {
+    return this.scoringConfigService.seed(admin.id);
   }
 
   // ============ DATA IMPORT/EXPORT ENDPOINTS ============
 
   @Post('data/import/users')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }))
   async importUsers(
     @UploadedFile() file: { buffer: Buffer; mimetype: string; originalname: string },
   ) {
@@ -205,7 +219,7 @@ export class AdminController {
   }
 
   @Post('data/import/startups')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }))
   async importStartups(
     @UploadedFile() file: { buffer: Buffer; mimetype: string; originalname: string },
   ) {
@@ -254,7 +268,7 @@ export class AdminController {
   // ============ BULK DATA ENDPOINTS ============
 
   @Post('bulk/import-startups')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }))
   async bulkImportStartups(
     @UploadedFile() file: { buffer: Buffer; mimetype: string; originalname: string },
   ) {

@@ -37,12 +37,14 @@ import {
   Building2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useStartupControllerFindOne } from "@/api/generated/startup/startup";
+import { useStartupControllerFindOne, getStartupControllerFindOneQueryKey } from "@/api/generated/startup/startup";
 import {
   useAdminControllerApproveStartup,
   useAdminControllerReanalyzeStartup,
-  useAdminControllerGetScoringDefaults,
+  useAdminControllerGetAllScoringWeights,
   getAdminControllerRejectStartupUrl,
+  getAdminControllerGetStatsQueryKey,
+  getAdminControllerGetAllStartupsQueryKey,
 } from "@/api/generated/admin/admin";
 import { customFetch } from "@/api/client";
 import type { ScoringWeights } from "@/lib/score-utils";
@@ -102,9 +104,9 @@ function AdminReviewPage() {
   const { data: startupResponse, isLoading } = useStartupControllerFindOne(id);
   const startup = startupResponse?.data as StartupDetail | undefined;
 
-  const { data: scoringDefaults } = useAdminControllerGetScoringDefaults();
+  const { data: scoringDefaults } = useAdminControllerGetAllScoringWeights();
   const stageScoringWeights =
-    (scoringDefaults?.data as StageScoringWeight[] | undefined) ?? [];
+    (scoringDefaults as unknown as StageScoringWeight[] | undefined) ?? [];
 
   const stageWeights = useMemo(() => {
     if (!startup?.stage) return null;
@@ -117,8 +119,9 @@ function AdminReviewPage() {
   const approveMutation = useAdminControllerApproveStartup({
     mutation: {
       onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ["startup", id] });
-        queryClient.invalidateQueries({ queryKey: ["admin", "analytics"] });
+        queryClient.invalidateQueries({ queryKey: getStartupControllerFindOneQueryKey(id) });
+        queryClient.invalidateQueries({ queryKey: getAdminControllerGetStatsQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getAdminControllerGetAllStartupsQueryKey() });
         toast.success("Startup approved", {
           description: "The startup is now visible to investors.",
         });
@@ -140,8 +143,9 @@ function AdminReviewPage() {
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["startup", id] });
-      queryClient.invalidateQueries({ queryKey: ["admin", "analytics"] });
+      queryClient.invalidateQueries({ queryKey: getStartupControllerFindOneQueryKey(id) });
+      queryClient.invalidateQueries({ queryKey: getAdminControllerGetStatsQueryKey() });
+      queryClient.invalidateQueries({ queryKey: getAdminControllerGetAllStartupsQueryKey() });
       toast.success("Startup rejected", {
         description: "The startup has been rejected.",
       });
@@ -156,7 +160,8 @@ function AdminReviewPage() {
   const reanalyzeMutation = useAdminControllerReanalyzeStartup({
     mutation: {
       onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ["startup", id] });
+        queryClient.invalidateQueries({ queryKey: getStartupControllerFindOneQueryKey(id) });
+        queryClient.invalidateQueries({ queryKey: getAdminControllerGetAllStartupsQueryKey() });
         toast.success("Reanalysis triggered", {
           description: "The startup evaluation has been queued for reanalysis.",
         });

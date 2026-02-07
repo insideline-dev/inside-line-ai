@@ -3065,10 +3065,33 @@
         ]
       }
     },
-    "/admin/scoring/defaults": {
+    "/admin/scoring/weights": {
       "get": {
-        "operationId": "AdminController_getScoringDefaults",
+        "operationId": "AdminController_getAllScoringWeights",
         "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/scoring/weights/{stage}": {
+      "get": {
+        "operationId": "AdminController_getScoringWeightsByStage",
+        "parameters": [
+          {
+            "name": "stage",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": ""
@@ -3079,20 +3102,43 @@
         ]
       },
       "put": {
-        "operationId": "AdminController_updateScoringDefaults",
-        "parameters": [],
+        "operationId": "AdminController_updateScoringWeightsByStage",
+        "parameters": [
+          {
+            "name": "stage",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/UpdateDefaultWeightsDto"
+                "$ref": "#/components/schemas/UpdateStageWeightsDto"
               }
             }
           }
         },
         "responses": {
           "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/scoring/weights/seed": {
+      "post": {
+        "operationId": "AdminController_seedScoringWeights",
+        "parameters": [],
+        "responses": {
+          "201": {
             "description": ""
           }
         },
@@ -4326,8 +4372,8 @@
     }
   },
   "info": {
-    "title": "NestJS Boilerplate API",
-    "description": "Production-ready NestJS boilerplate with auth, queues, storage, and email",
+    "title": "Inside Line API",
+    "description": "Inside Line API Documentation",
     "version": "2.0",
     "contact": {}
   },
@@ -5343,41 +5389,140 @@
           }
         }
       },
-      "UpdateDefaultWeightsDto": {
+      "UpdateStageWeightsDto": {
         "type": "object",
         "properties": {
-          "marketWeight": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 100
+          "weights": {
+            "type": "object",
+            "properties": {
+              "team": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "market": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "product": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "traction": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "businessModel": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "gtm": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "financials": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "competitiveAdvantage": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "legal": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "dealTerms": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "exitPotential": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100
+              }
+            },
+            "required": [
+              "team",
+              "market",
+              "product",
+              "traction",
+              "businessModel",
+              "gtm",
+              "financials",
+              "competitiveAdvantage",
+              "legal",
+              "dealTerms",
+              "exitPotential"
+            ]
           },
-          "teamWeight": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 100
+          "rationale": {
+            "type": "object",
+            "properties": {
+              "team": {
+                "type": "string"
+              },
+              "market": {
+                "type": "string"
+              },
+              "product": {
+                "type": "string"
+              },
+              "traction": {
+                "type": "string"
+              },
+              "businessModel": {
+                "type": "string"
+              },
+              "gtm": {
+                "type": "string"
+              },
+              "financials": {
+                "type": "string"
+              },
+              "competitiveAdvantage": {
+                "type": "string"
+              },
+              "legal": {
+                "type": "string"
+              },
+              "dealTerms": {
+                "type": "string"
+              },
+              "exitPotential": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "team",
+              "market",
+              "product",
+              "traction",
+              "businessModel",
+              "gtm",
+              "financials",
+              "competitiveAdvantage",
+              "legal",
+              "dealTerms",
+              "exitPotential"
+            ]
           },
-          "productWeight": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 100
-          },
-          "tractionWeight": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 100
-          },
-          "financialsWeight": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 100
+          "overallRationale": {
+            "type": "string"
           }
         },
         "required": [
-          "marketWeight",
-          "teamWeight",
-          "productWeight",
-          "tractionWeight",
-          "financialsWeight"
+          "weights",
+          "rationale"
         ]
       },
       "CreateThesisDto": {

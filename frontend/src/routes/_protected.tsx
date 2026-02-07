@@ -13,12 +13,13 @@ function ProtectedContent() {
   const isAuthed = !!user;
   const isMockAuth = env.VITE_MOCK_AUTH;
 
+  const pathname = window.location.pathname;
   const onboardingExemptPaths = ["/role-select", "/scout/apply"];
   const needsOnboarding =
     !isMockAuth &&
     isAuthed &&
     !user.onboardingCompleted &&
-    !onboardingExemptPaths.includes(window.location.pathname);
+    !onboardingExemptPaths.includes(pathname);
 
   const shouldRedirectToLogin = !isMockAuth && !isLoading && !isAuthed;
 
@@ -48,9 +49,12 @@ function ProtectedContent() {
     );
   }
 
-  // Show nothing while loading, redirecting to login, or redirecting to onboarding
   if (isLoading || !isAuthed || needsOnboarding) {
-    return null;
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
+      </div>
+    );
   }
 
   return (

@@ -1,4 +1,4 @@
-import { MiddlewareConsumer, Module, NestModule } from "@nestjs/common";
+import { Module } from "@nestjs/common";
 import { ConfigModule } from "./config";
 import { DatabaseModule } from "./database";
 import { HealthModule } from "./health/health.module";
@@ -15,7 +15,6 @@ import { AnalysisModule } from "./modules/analysis";
 import { TwilioModule } from "./modules/integrations/twilio/twilio.module";
 import { AgentMailModule } from "./modules/integrations/agentmail/agentmail.module";
 import { UnipileModule } from "./modules/integrations/unipile/unipile.module";
-import { RlsMiddleware } from "./common";
 
 @Module({
   imports: [
@@ -39,8 +38,4 @@ import { RlsMiddleware } from "./common";
   controllers: [],
   providers: [],
 })
-export class AppModule implements NestModule {
-  configure(consumer: MiddlewareConsumer) {
-    consumer.apply(RlsMiddleware).forRoutes("*");
-  }
-}
+export class AppModule {}

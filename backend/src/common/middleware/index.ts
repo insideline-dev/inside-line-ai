@@ -1,1 +1,1 @@
-export * from './rls.middleware';
+// Middleware barrel - currently empty (RLS removed for MVP)

@@ -11,7 +11,9 @@ import {
   HttpStatus,
   UnauthorizedException,
   BadRequestException,
+  ServiceUnavailableException,
 } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import {
   ApiBody,
   ApiOperation,
@@ -53,12 +55,20 @@ const MAGIC_LINK_RATE_LIMIT = { limit: 3, ttl: 300000 }; // 3 requests per 5 min
 @Controller("auth")
 @ApiTooManyRequestsResponse({ description: "Rate limit exceeded" })
 export class AuthController {
+  private readonly isGoogleOAuthConfigured: boolean;
+
   constructor(
     private authService: AuthService,
     private userAuthService: UserAuthService,
     private profileService: ProfileService,
     private emailService: EmailService,
-  ) {}
+    config: ConfigService,
+  ) {
+    this.isGoogleOAuthConfigured = !!(
+      config.get<string>("GOOGLE_CLIENT_ID") &&
+      config.get<string>("GOOGLE_CLIENT_SECRET")
+    );
+  }
 
   // ============ EMAIL/PASSWORD ============
 
@@ -173,7 +183,11 @@ export class AuthController {
 
     return {
       message: "Magic link sent to your email",
-      _devToken: process.env.NODE_ENV !== "production" ? token : undefined,
+      _devToken:
+        process.env.NODE_ENV === "development" &&
+        process.env.DEV_EXPOSE_TOKENS === "true"
+          ? token
+          : undefined,
     };
   }
 
@@ -203,6 +217,11 @@ export class AuthController {
   @UseGuards(GoogleAuthGuard)
   @ApiOperation({ summary: "Initiate Google OAuth flow" })
   googleAuth() {
+    if (!this.isGoogleOAuthConfigured) {
+      throw new ServiceUnavailableException(
+        "Google OAuth is not configured on this server",
+      );
+    }
     // Guard redirects to Google
   }
 
@@ -214,6 +233,11 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
+    if (!this.isGoogleOAuthConfigured) {
+      throw new ServiceUnavailableException(
+        "Google OAuth is not configured on this server",
+      );
+    }
     const foundUser = req.user as DbUser;
     const tokens = await this.authService.generateTokens(foundUser);
     this.setTokenCookies(res, tokens.accessToken, tokens.refreshToken);
@@ -250,7 +274,7 @@ export class AuthController {
 
   @Public()
   @Post("refresh")
-  @Throttle({ default: { limit: 10, ttl: 60000 } }) // 10 refreshes per minute
+  @Throttle({ default: { limit: 3, ttl: 60000 } }) // 3 refreshes per minute
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "Refresh access token" })
   @ApiResponse({ status: 200, type: AuthResponseDto })
@@ -372,19 +396,19 @@ export class AuthController {
     accessToken: string,
     refreshToken: string,
   ) {
-    const isProduction = process.env.NODE_ENV === "production";
+    const isDev = process.env.NODE_ENV === "development";
 
     res.cookie(JWT_COOKIE_NAME, accessToken, {
       httpOnly: true,
-      secure: isProduction,
-      sameSite: "lax",
+      secure: !isDev,
+      sameSite: isDev ? "lax" : "strict",
       maxAge: 15 * 60 * 1000,
     });
 
     res.cookie(REFRESH_COOKIE_NAME, refreshToken, {
       httpOnly: true,
-      secure: isProduction,
-      sameSite: "lax",
+      secure: !isDev,
+      sameSite: isDev ? "lax" : "strict",
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
   }

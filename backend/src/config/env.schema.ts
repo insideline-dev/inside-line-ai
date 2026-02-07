@@ -46,7 +46,7 @@ export const envSchema = z.object({
   STORAGE_ACCESS_KEY_ID: z.string(),
   STORAGE_SECRET_ACCESS_KEY: z.string(),
   STORAGE_BUCKET: z.string(),
-  STORAGE_PUBLIC_URL: z.url().optional(), // CDN URL if using custom domain
+  STORAGE_PUBLIC_URL: z.union([z.url(), z.literal('')]).optional(), // CDN URL if using custom domain
 
   // Email Configuration (Resend)
   RESEND_API_KEY: z.string().optional(), // Optional in dev mode

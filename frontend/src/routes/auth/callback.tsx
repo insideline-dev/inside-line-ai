@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { authApi, authKeys } from "@/lib/auth";
+import { safeRedirect } from "@/lib/utils";
 
 const searchSchema = z.object({
   success: z.coerce.string().optional(),
@@ -33,9 +34,9 @@ function AuthCallbackPage() {
           const user = await authApi.getCurrentUser();
           queryClient.setQueryData(authKeys.user, user);
           if (user.onboardingCompleted) {
-            const redirect = sessionStorage.getItem("redirectAfterAuth");
-            if (redirect) sessionStorage.removeItem("redirectAfterAuth");
-            navigate({ to: redirect || `/${user.role}`, replace: true });
+            const rawRedirect = sessionStorage.getItem("redirectAfterAuth");
+            if (rawRedirect) sessionStorage.removeItem("redirectAfterAuth");
+            navigate({ to: safeRedirect(rawRedirect, `/${user.role}`), replace: true });
           } else {
             navigate({ to: "/role-select", replace: true });
           }

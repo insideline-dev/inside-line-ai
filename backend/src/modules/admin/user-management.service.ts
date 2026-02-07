@@ -38,8 +38,9 @@ export class UserManagementService {
     }
 
     if (search) {
+      const escaped = search.replace(/[%_\\]/g, (ch) => `\\${ch}`).slice(0, 200);
       conditions.push(
-        or(ilike(user.name, `%${search}%`), ilike(user.email, `%${search}%`))!,
+        or(ilike(user.name, `%${escaped}%`), ilike(user.email, `%${escaped}%`))!,
       );
     }
 

@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScoreRing } from "@/components/analysis/ScoreRing";
 import { useAdminControllerGetStats, useAdminControllerGetAllStartups } from "@/api/generated/admin/admin";
+import type { AdminControllerGetAllStartupsStatus } from "@/api/generated/model";
 import { Clock, Sparkles, CheckCircle, XCircle, Users, Target, Building2, Eye } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -37,11 +38,25 @@ interface StartupItem {
   percentileRank?: number;
 }
 
+const TAB_TO_STATUS: Record<string, AdminControllerGetAllStartupsStatus | undefined> = {
+  pending_review: "pending_review",
+  analyzing: "analyzing",
+  approved: "approved",
+  rejected: "rejected",
+  all: undefined,
+};
+
 function AdminDashboard() {
   const prevAnalyzingCountRef = useRef<number>(0);
+  const [activeTab, setActiveTab] = useState("pending_review");
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 50;
+
+  const statusFilter = TAB_TO_STATUS[activeTab];
 
   const { data: statsResponse, isLoading: isLoadingStats } = useAdminControllerGetStats({
     query: {
+      staleTime: 30_000,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       refetchInterval: (query: any) => {
         const data = query.state.data as { data: StatsData } | undefined;
@@ -51,9 +66,10 @@ function AdminDashboard() {
   });
 
   const { data: startupsResponse, isLoading: isLoadingStartups } = useAdminControllerGetAllStartups(
-    { limit: 200 },
+    { limit: PAGE_SIZE, page, ...(statusFilter ? { status: statusFilter } : {}) },
     {
       query: {
+        staleTime: 30_000,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         refetchInterval: (query: any) => {
           const data = query.state.data as { data: StartupItem[] } | undefined;
@@ -81,12 +97,9 @@ function AdminDashboard() {
     prevAnalyzingCountRef.current = currentAnalyzingCount;
   }, [statsData?.analyzing]);
 
-  const filterByStatus = (status: string) => {
-    if (status === "all") return startups;
-    if (status === "pending_review") {
-      return startups.filter((s) => s.status === "pending_review" || s.status === "submitted");
-    }
-    return startups.filter((s) => s.status === status);
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    setPage(1);
   };
 
   const getStatusBadge = (status: string) => {
@@ -197,7 +210,7 @@ function AdminDashboard() {
       )}
 
       {/* Tabs */}
-      <Tabs defaultValue="pending_review" className="space-y-6">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
         <TabsList>
           {tabs.map((tab) => (
             <TabsTrigger key={tab.value} value={tab.value}>
@@ -219,9 +232,9 @@ function AdminDashboard() {
                   <Skeleton key={i} className="h-32 rounded-lg" />
                 ))}
               </div>
-            ) : filterByStatus(tab.value).length > 0 ? (
+            ) : startups.length > 0 ? (
               <div className="grid gap-4">
-                {filterByStatus(tab.value).map((startup) => (
+                {startups.map((startup) => (
                   <Card key={startup.id} className="hover:shadow-md transition-shadow">
                     <CardContent className="p-6">
                       <div className="flex flex-col lg:flex-row items-start gap-6">
@@ -272,6 +285,29 @@ function AdminDashboard() {
                     </CardContent>
                   </Card>
                 ))}
+
+                {startups.length >= PAGE_SIZE && (
+                  <div className="flex justify-center gap-2 pt-4">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      disabled={page === 1}
+                    >
+                      Previous
+                    </Button>
+                    <span className="flex items-center text-sm text-muted-foreground px-3">
+                      Page {page}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage((p) => p + 1)}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                )}
               </div>
             ) : (
               <Card className="border-dashed">

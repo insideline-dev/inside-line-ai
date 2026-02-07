@@ -4,6 +4,7 @@ import { AuthService } from '../auth.service';
 import { UserAuthService } from '../user-auth.service';
 import { ProfileService } from '../profile.service';
 import { EmailService } from '../../email/email.service';
+import { ConfigService } from '@nestjs/config';
 import { UnauthorizedException } from '@nestjs/common';
 import { ThrottlerModule } from '@nestjs/throttler';
 import type { Response } from 'express';
@@ -41,6 +42,7 @@ describe('AuthController Magic Link', () => {
         { provide: UserAuthService, useValue: userAuthService },
         { provide: ProfileService, useValue: profileService },
         { provide: EmailService, useValue: emailService },
+        { provide: ConfigService, useValue: { get: () => undefined } },
       ],
     }).compile();
 
@@ -67,7 +69,9 @@ describe('AuthController Magic Link', () => {
 
     it('should include dev token in non-production', async () => {
       const originalEnv = process.env.NODE_ENV;
+      const originalExposeTokens = process.env.DEV_EXPOSE_TOKENS;
       process.env.NODE_ENV = 'development';
+      process.env.DEV_EXPOSE_TOKENS = 'true';
 
       const dto = { email: 'test@example.com' };
       const token = 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4';
@@ -80,6 +84,7 @@ describe('AuthController Magic Link', () => {
       expect(result._devToken).toBe(token);
 
       process.env.NODE_ENV = originalEnv;
+      process.env.DEV_EXPOSE_TOKENS = originalExposeTokens;
     });
   });
 

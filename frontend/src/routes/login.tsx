@@ -30,6 +30,7 @@ import {
   useCurrentUser,
 } from "@/lib/auth";
 import { env } from "@/env";
+import { safeRedirect } from "@/lib/utils";
 
 const loginSchema = z.object({
   email: z.string().min(1, "Email is required").email("Invalid email address"),
@@ -87,7 +88,7 @@ function LoginPage() {
   // Persist redirect intent to sessionStorage (survives OAuth full-page redirects)
   useEffect(() => {
     if (redirect) {
-      sessionStorage.setItem("redirectAfterAuth", redirect);
+      sessionStorage.setItem("redirectAfterAuth", safeRedirect(redirect, "/"));
     }
   }, [redirect]);
 
@@ -97,14 +98,14 @@ function LoginPage() {
 
   useEffect(() => {
     if (env.VITE_MOCK_AUTH) {
-      navigate({ to: redirect || "/role-select", replace: true });
+      navigate({ to: safeRedirect(redirect, "/role-select"), replace: true });
       return;
     }
     if (!isCheckingAuth && user && !skipAutoRedirect) {
       const defaultRoute = user.onboardingCompleted
         ? `/${user.role}`
         : "/role-select";
-      navigate({ to: redirect || defaultRoute, replace: true });
+      navigate({ to: safeRedirect(redirect, defaultRoute), replace: true });
     }
   }, [isCheckingAuth, user, redirect, navigate, skipAutoRedirect]);
 

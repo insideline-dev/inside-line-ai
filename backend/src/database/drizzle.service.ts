@@ -1,7 +1,6 @@
-import { Injectable, OnModuleDestroy, Scope } from '@nestjs/common';
+import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { drizzle, PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import { sql } from 'drizzle-orm';
 import postgres from 'postgres';
 import * as schema from './schema';
 
@@ -16,22 +15,11 @@ export class DrizzleService implements OnModuleDestroy {
     this.db = drizzle(this.client, { schema });
   }
 
-  /**
-   * Execute a callback with RLS context set for a specific user.
-   * This ensures the SET LOCAL and subsequent queries run on the same connection.
-   *
-   * @param userId - The user ID to set as RLS context
-   * @param callback - Function containing your database operations
-   */
   async withRLS<T>(
-    userId: string,
+    _userId: string,
     callback: (db: PostgresJsDatabase<typeof schema>) => Promise<T>,
   ): Promise<T> {
-    return this.db.transaction(async (tx) => {
-      // SET LOCAL only persists within this transaction
-      await tx.execute(sql.raw(`SET LOCAL app.current_user_id = '${userId}'`));
-      return callback(tx as unknown as PostgresJsDatabase<typeof schema>);
-    });
+    return callback(this.db);
   }
 
   async onModuleDestroy() {

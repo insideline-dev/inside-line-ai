@@ -4,6 +4,7 @@ import { AuthService } from '../auth.service';
 import { UserAuthService } from '../user-auth.service';
 import { ProfileService } from '../profile.service';
 import { EmailService } from '../../email/email.service';
+import { ConfigService } from '@nestjs/config';
 import { UnauthorizedException } from '@nestjs/common';
 import { ThrottlerModule } from '@nestjs/throttler';
 import type { Response } from 'express';
@@ -41,6 +42,7 @@ describe('AuthController Login', () => {
         { provide: UserAuthService, useValue: userAuthService },
         { provide: ProfileService, useValue: profileService },
         { provide: EmailService, useValue: emailService },
+        { provide: ConfigService, useValue: { get: () => undefined } },
       ],
     }).compile();
 

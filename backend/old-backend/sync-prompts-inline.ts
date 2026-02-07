@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { agentPrompts } from "../shared/schema";
+import { agentPrompts } from "../shared/old-backend/schema";
 import { eq } from "drizzle-orm";
 
 const devPrompts: Record<string, { systemPrompt: string; humanPrompt: string }> = {

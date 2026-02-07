@@ -36,6 +36,13 @@ export function useNotificationSocket(
 ) {
   const socketRef = useRef<Socket | null>(null);
   const { data: user } = useCurrentUser();
+  const onNewNotificationRef = useRef(onNewNotification);
+  const onCountUpdateRef = useRef(onCountUpdate);
+
+  useEffect(() => {
+    onNewNotificationRef.current = onNewNotification;
+    onCountUpdateRef.current = onCountUpdate;
+  });
 
   useEffect(() => {
     if (!user) return;
@@ -48,20 +55,12 @@ export function useNotificationSocket(
       reconnectionDelay: 1000,
     });
 
-    socket.on("connect", () => {
-      console.log("[Socket] Connected to notifications");
-    });
-
     socket.on("notification:new", (data: NotificationEvent) => {
-      onNewNotification?.(data);
+      onNewNotificationRef.current?.(data);
     });
 
     socket.on("notification:count", (data: NotificationCountEvent) => {
-      onCountUpdate?.(data.count);
-    });
-
-    socket.on("connect_error", (error) => {
-      console.error("[Socket] Connection error:", error.message);
+      onCountUpdateRef.current?.(data.count);
     });
 
     socketRef.current = socket;
@@ -70,7 +69,7 @@ export function useNotificationSocket(
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [user?.id, onNewNotification, onCountUpdate]);
+  }, [user?.id]);
 
   return socketRef.current;
 }
@@ -82,6 +81,11 @@ export function useJobStatus(
   const socketRef = useRef<Socket | null>(null);
   const { data: user } = useCurrentUser();
   const jobIdsKey = useMemo(() => jobIds?.join(",") ?? "", [jobIds]);
+  const onStatusChangeRef = useRef(onStatusChange);
+
+  useEffect(() => {
+    onStatusChangeRef.current = onStatusChange;
+  });
 
   useEffect(() => {
     if (!user) return;
@@ -96,11 +100,7 @@ export function useJobStatus(
 
     socket.on("job:status", (event: JobStatusEvent) => {
       if (jobIds && !jobIds.includes(event.jobId)) return;
-      onStatusChange?.(event);
-    });
-
-    socket.on("connect_error", (error) => {
-      console.error("[Socket] Job status connection error:", error.message);
+      onStatusChangeRef.current?.(event);
     });
 
     socketRef.current = socket;
@@ -109,7 +109,7 @@ export function useJobStatus(
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [user?.id, onStatusChange, jobIdsKey]);
+  }, [user?.id, jobIdsKey]);
 
   return socketRef.current;
 }

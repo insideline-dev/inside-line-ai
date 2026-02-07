@@ -12,13 +12,19 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
     private authService: AuthService,
     config: ConfigService,
   ) {
-    // Note: accessType and prompt are passed to Google OAuth but not typed in passport-google-oauth20
+    const clientID = config.get<string>('GOOGLE_CLIENT_ID');
+    const clientSecret = config.get<string>('GOOGLE_CLIENT_SECRET');
+
     super({
-      clientID: config.get<string>('GOOGLE_CLIENT_ID')!,
-      clientSecret: config.get<string>('GOOGLE_CLIENT_SECRET')!,
+      clientID: clientID || 'placeholder',
+      clientSecret: clientSecret || 'placeholder',
       callbackURL: `${config.get<string>('APP_URL')}/auth/google/callback`,
       scope: ['email', 'profile'],
     } as any);
+
+    if (!clientID) {
+      this.logger.warn('Google OAuth not configured - GOOGLE_CLIENT_ID is missing');
+    }
   }
 
   async validate(

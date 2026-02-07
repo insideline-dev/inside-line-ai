@@ -24,6 +24,10 @@ import {
 import { DraftService } from './draft.service';
 import { analysisJob, startupEvaluation } from '../analysis/entities/analysis.schema';
 
+function escapeIlike(input: string): string {
+  return input.replace(/[%_\\]/g, (ch) => `\\${ch}`).slice(0, 200);
+}
+
 @Injectable()
 export class StartupService {
   private readonly logger = new Logger(StartupService.name);
@@ -78,11 +82,12 @@ export class StartupService {
         conditions.push(eq(startup.stage, stage));
       }
       if (search) {
+        const escaped = escapeIlike(search);
         conditions.push(
           or(
-            ilike(startup.name, `%${search}%`),
-            ilike(startup.tagline, `%${search}%`),
-            ilike(startup.description, `%${search}%`),
+            ilike(startup.name, `%${escaped}%`),
+            ilike(startup.tagline, `%${escaped}%`),
+            ilike(startup.description, `%${escaped}%`),
           )!,
         );
       }
@@ -396,11 +401,12 @@ export class StartupService {
       conditions.push(eq(startup.stage, stage));
     }
     if (search) {
+      const escaped = escapeIlike(search);
       conditions.push(
         or(
-          ilike(startup.name, `%${search}%`),
-          ilike(startup.tagline, `%${search}%`),
-          ilike(startup.description, `%${search}%`),
+          ilike(startup.name, `%${escaped}%`),
+          ilike(startup.tagline, `%${escaped}%`),
+          ilike(startup.description, `%${escaped}%`),
         )!,
       );
     }
@@ -452,14 +458,15 @@ export class StartupService {
       conditions.push(eq(startup.stage, stage));
     }
     if (location) {
-      conditions.push(ilike(startup.location, `%${location}%`));
+      conditions.push(ilike(startup.location, `%${escapeIlike(location)}%`));
     }
     if (search) {
+      const escaped = escapeIlike(search);
       conditions.push(
         or(
-          ilike(startup.name, `%${search}%`),
-          ilike(startup.tagline, `%${search}%`),
-          ilike(startup.description, `%${search}%`),
+          ilike(startup.name, `%${escaped}%`),
+          ilike(startup.tagline, `%${escaped}%`),
+          ilike(startup.description, `%${escaped}%`),
         )!,
       );
     }
@@ -519,11 +526,27 @@ export class StartupService {
     return found;
   }
 
+  private static readonly ALLOWED_UPLOAD_TYPES = new Set([
+    'application/pdf',
+    'image/png',
+    'image/jpeg',
+    'image/webp',
+    'image/gif',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'application/vnd.ms-powerpoint',
+  ]);
+
   async getUploadUrl(
     id: string,
     userId: string,
     dto: PresignedUrl,
   ) {
+    if (!StartupService.ALLOWED_UPLOAD_TYPES.has(dto.fileType)) {
+      throw new BadRequestException(
+        `File type '${dto.fileType}' is not allowed. Accepted: PDF, PNG, JPEG, WebP, GIF, PPTX, PPT`,
+      );
+    }
+
     await this.findOne(id, userId);
 
     const assetType = dto.fileType.startsWith('application/')

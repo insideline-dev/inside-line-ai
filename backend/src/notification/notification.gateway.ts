@@ -8,6 +8,7 @@ import { Server, Socket } from 'socket.io';
 import { Logger, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { NotificationService } from './notification.service';
+import { JWT_COOKIE_NAME } from '../auth/auth.constants';
 import type { JwtPayload } from '../auth/auth.service';
 import type { NotificationPayload, NotificationCount, JobStatusEvent } from './dto';
 
@@ -33,10 +34,13 @@ export class NotificationGateway
 
   async handleConnection(client: Socket) {
     try {
+      const authHeader = client.handshake.headers?.authorization;
+      const bearerToken =
+        authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined;
       const token =
         client.handshake.auth?.token ||
-        client.handshake.headers?.authorization?.split(' ')[1] ||
-        (client.request as any)?.cookies?.['access_token'];
+        bearerToken ||
+        (client.request as any)?.cookies?.[JWT_COOKIE_NAME];
 
       if (!token) {
         throw new UnauthorizedException('No token provided');

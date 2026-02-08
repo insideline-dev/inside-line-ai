@@ -41,8 +41,8 @@ const geographies = ["North America", "Europe", "Asia Pacific", "Latin America",
 
 interface ThesisFormData {
   stages: string[];
-  sectors: string[];
-  geographies: string[];
+  industries: string[];
+  geographicFocus: string[];
   checkSizeMin: number;
   checkSizeMax: number;
   narrative: string;
@@ -56,8 +56,8 @@ function InvestorThesisPage() {
 
   const [formData, setFormData] = useState<ThesisFormData>({
     stages: ["seed", "series_a"],
-    sectors: ["software", "artificial_intelligence"],
-    geographies: ["North America", "Europe"],
+    industries: ["software", "artificial_intelligence"],
+    geographicFocus: ["North America", "Europe"],
     checkSizeMin: 500000,
     checkSizeMax: 3000000,
     narrative: "",
@@ -69,8 +69,8 @@ function InvestorThesisPage() {
       const t = thesis as ThesisFormData & Record<string, unknown>;
       setFormData({
         stages: t.stages ?? ["seed", "series_a"],
-        sectors: t.sectors ?? ["software", "artificial_intelligence"],
-        geographies: t.geographies ?? ["North America", "Europe"],
+        industries: t.industries ?? ["software", "artificial_intelligence"],
+        geographicFocus: t.geographicFocus ?? ["North America", "Europe"],
         checkSizeMin: t.checkSizeMin ?? 500000,
         checkSizeMax: t.checkSizeMax ?? 3000000,
         narrative: t.narrative ?? "",
@@ -102,18 +102,18 @@ function InvestorThesisPage() {
   const handleSectorToggle = (sectorId: string, checked: boolean) => {
     setFormData((prev) => ({
       ...prev,
-      sectors: checked
-        ? [...prev.sectors, sectorId]
-        : prev.sectors.filter((s) => s !== sectorId),
+      industries: checked
+        ? [...prev.industries, sectorId]
+        : prev.industries.filter((s) => s !== sectorId),
     }));
   };
 
   const handleGeoToggle = (geo: string, checked: boolean) => {
     setFormData((prev) => ({
       ...prev,
-      geographies: checked
-        ? [...prev.geographies, geo]
-        : prev.geographies.filter((g) => g !== geo),
+      geographicFocus: checked
+        ? [...prev.geographicFocus, geo]
+        : prev.geographicFocus.filter((g) => g !== geo),
     }));
   };
 
@@ -211,7 +211,7 @@ function InvestorThesisPage() {
               <div key={sector.id} className="flex items-center space-x-2">
                 <Checkbox
                   id={sector.id}
-                  checked={formData.sectors.includes(sector.id)}
+                  checked={formData.industries.includes(sector.id)}
                   onCheckedChange={(checked) => handleSectorToggle(sector.id, !!checked)}
                 />
                 <Label htmlFor={sector.id}>{sector.label}</Label>
@@ -230,7 +230,7 @@ function InvestorThesisPage() {
               <div key={geo} className="flex items-center space-x-2">
                 <Checkbox
                   id={geo}
-                  checked={formData.geographies.includes(geo)}
+                  checked={formData.geographicFocus.includes(geo)}
                   onCheckedChange={(checked) => handleGeoToggle(geo, !!checked)}
                 />
                 <Label htmlFor={geo}>{geo}</Label>

@@ -13,7 +13,7 @@ import { user } from '../../../../auth/entities/auth.schema';
  * RLS: Admin access or user who created the cache entry
  */
 export const linkedinProfileCache = pgTable(
-  'linkedin_profile_cache',
+  'linkedin_profile_caches',
   {
     id: uuid('id').primaryKey().defaultRandom(),
     userId: uuid('user_id')

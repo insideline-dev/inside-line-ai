@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "generate-routes": "tsr generate",
     "watch-routes": "tsr watch",
+    "generate-api": "bun run scripts/generate-api.ts",
     "generate:api": "curl -s http://localhost:8080/docs-json > ./openapi.json && node fix-openapi.cjs && orval",
     "generate:api:watch": "orval --watch"
   },

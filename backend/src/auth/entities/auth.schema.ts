@@ -57,7 +57,7 @@ export const userRoleEnum = pgEnum("user_role", [
  */
 
 export const user = pgTable(
-  "user",
+  "users",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     name: text("name").notNull(),
@@ -78,7 +78,7 @@ export const user = pgTable(
 // NOTE: Session table removed - using stateless JWT tokens instead
 
 export const account = pgTable(
-  "account",
+  "accounts",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     accountId: text("account_id").notNull(),
@@ -109,7 +109,7 @@ export const account = pgTable(
 );
 
 export const verification = pgTable(
-  "verification",
+  "verifications",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     identifier: text("identifier").notNull(),
@@ -130,7 +130,7 @@ export const verification = pgTable(
 
 // Refresh token storage for token rotation
 export const refreshToken = pgTable(
-  "refresh_token",
+  "refresh_tokens",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     token: text("token").notNull().unique(),

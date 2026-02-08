@@ -15,7 +15,7 @@ import { asset } from '../../../storage/entities/asset.schema';
 // ============================================================================
 
 export const dataRoom = pgTable(
-  'data_room',
+  'data_rooms',
   {
     id: uuid('id').primaryKey().defaultRandom(),
     startupId: uuid('startup_id')

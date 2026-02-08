@@ -1,7 +1,7 @@
 import type { FundingStage } from "./startup";
 
 export interface InvestorProfile {
-  id: number;
+  id: string;
   userId: string;
   fundName?: string;
   fundDescription?: string;
@@ -14,13 +14,13 @@ export interface InvestorProfile {
 }
 
 export interface InvestmentThesis {
-  id: number;
-  investorId: number;
+  id: string;
+  userId: string;
   stages?: FundingStage[];
   checkSizeMin?: number;
   checkSizeMax?: number;
-  sectors?: string[];
-  geographies?: string[];
+  industries?: string[];
+  geographicFocus?: string[];
   businessModels?: string[];
   minRevenue?: number;
   minGrowthRate?: number;
@@ -32,30 +32,54 @@ export interface InvestmentThesis {
   thesisSummary?: string;
   portfolioCompanies?: { name: string; description: string }[];
   thesisSummaryGeneratedAt?: string;
+  mustHaveFeatures?: string[];
+  dealBreakers?: string[];
+  notes?: string;
+  isActive: boolean;
   createdAt: string;
   updatedAt?: string;
 }
 
 export interface InvestorMatch {
-  id: number;
-  investorId: number;
-  startupId: number;
+  id: string;
+  investorId: string;
+  startupId: string;
   thesisFitScore?: number;
   fitRationale?: string;
-  matchedAt: string;
-  status: "new" | "viewed" | "interested" | "passed";
-  actionTakenAt?: string;
-  notes?: string;
+  createdAt: string;
+  status: "new" | "reviewing" | "engaged" | "closed" | "passed";
+  statusChangedAt?: string;
+  overallScore: number;
+  marketScore?: number;
+  teamScore?: number;
+  productScore?: number;
+  tractionScore?: number;
+  financialsScore?: number;
+  matchReason?: string;
+  isSaved: boolean;
+  viewedAt?: string;
+  passReason?: string;
+  passNotes?: string;
+  investmentAmount?: number;
+  investmentCurrency?: string;
+  investmentDate?: string;
+  investmentNotes?: string;
+  meetingRequested?: boolean;
+  meetingRequestedAt?: string;
 }
 
 export interface PortalSettings {
-  id: number;
-  investorId: number;
+  id: string;
+  userId: string;
+  name: string;
   slug: string;
+  description?: string;
+  logoUrl?: string;
   welcomeMessage?: string;
   tagline?: string;
   accentColor?: string;
   requiredFields?: string[];
+  isActive: boolean;
   isEnabled: boolean;
   createdAt: string;
   updatedAt?: string;
@@ -90,7 +114,7 @@ export interface ScoringRationale {
 }
 
 export interface StageScoringWeights {
-  id: number;
+  id: string;
   stage: FundingStage;
   weights: ScoringWeights;
   rationale: ScoringRationale;
@@ -101,8 +125,8 @@ export interface StageScoringWeights {
 }
 
 export interface InvestorScoringPreferences {
-  id: number;
-  investorId: number;
+  id: string;
+  investorId: string;
   stage: FundingStage;
   useCustomWeights: boolean;
   customWeights?: ScoringWeights;
@@ -111,8 +135,8 @@ export interface InvestorScoringPreferences {
 }
 
 export interface TeamInvite {
-  id: number;
-  investorProfileId: number;
+  id: string;
+  investorThesisId: string;
   invitedByUserId: string;
   email: string;
   role: string;
@@ -125,9 +149,10 @@ export interface TeamInvite {
 }
 
 export interface InvestorTeamMember {
-  id: number;
-  investorProfileId: number;
+  id: string;
+  investorThesisId: string;
   userId: string;
+  email: string;
   role: string;
   joinedAt: string;
 }

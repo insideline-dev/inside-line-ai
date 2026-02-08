@@ -80,10 +80,10 @@ export function StartupCard({ startup, basePath, showScore = true, showActions =
               {startup.location}
             </span>
           )}
-          {startup.roundSize && (
+          {startup.fundingTarget && (
             <span className="flex items-center gap-1">
               <DollarSign className="h-3.5 w-3.5" />
-              {formatCurrency(startup.roundSize, startup.roundCurrency)}
+              {formatCurrency(startup.fundingTarget, startup.roundCurrency)}
             </span>
           )}
           <span className="flex items-center gap-1">

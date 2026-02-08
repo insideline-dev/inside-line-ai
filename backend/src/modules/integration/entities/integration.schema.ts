@@ -39,7 +39,7 @@ export const webhookSourceEnum = pgEnum('webhook_source', [
  * RLS: Admin only
  */
 export const integrationWebhook = pgTable(
-  'integration_webhook',
+  'integration_webhooks',
   {
     id: uuid('id').primaryKey().defaultRandom(),
 
@@ -77,7 +77,7 @@ export const integrationWebhook = pgTable(
  * RLS: Users see only their threads
  */
 export const emailThread = pgTable(
-  'email_thread',
+  'email_threads',
   {
     id: uuid('id').primaryKey().defaultRandom(),
     userId: uuid('user_id')

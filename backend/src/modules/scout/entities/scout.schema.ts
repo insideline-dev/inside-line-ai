@@ -43,7 +43,7 @@ export const scoutApplicationStatusEnum = pgEnum('scout_application_status', [
  * - Admins see all
  */
 export const scoutApplication = pgTable(
-  'scout_application',
+  'scout_applications',
   {
     id: uuid('id').primaryKey().defaultRandom(),
     userId: uuid('user_id')
@@ -97,7 +97,7 @@ export const scoutApplication = pgTable(
  * - Target investors see submissions to them
  */
 export const scoutSubmission = pgTable(
-  'scout_submission',
+  'scout_submissions',
   {
     id: uuid('id').primaryKey().defaultRandom(),
     scoutId: uuid('scout_id')

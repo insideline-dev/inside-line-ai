@@ -15,7 +15,7 @@ import { startup } from '../../startup/entities/startup.schema';
 // ============================================================================
 
 export const investorNote = pgTable(
-  'investor_note',
+  'investor_notes',
   {
     id: uuid('id').primaryKey().defaultRandom(),
     investorId: uuid('investor_id')

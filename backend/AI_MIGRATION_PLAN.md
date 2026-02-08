@@ -468,6 +468,51 @@ Per-stage concurrency:
   - Returns structured text from the entire document in one call
 - Expected time: 10-30s (down from 5-15 min)
 
+**Mistral OCR Implementation:**
+
+Package: `@mistralai/mistralai`
+
+API key: `MISTRAL_API_KEY` (already configured in env)
+
+```typescript
+import { Mistral } from '@mistralai/mistralai';
+
+const client = new Mistral({ apiKey: process.env.MISTRAL_API_KEY });
+
+// For S3-hosted PDFs (use presigned URL)
+const ocrResponse = await client.ocr.process({
+  model: "mistral-ocr-latest",
+  document: {
+    type: "document_url",
+    documentUrl: s3PresignedUrl
+  },
+  tableFormat: "html",          // Financial tables as HTML
+  includeImageBase64: true       // Embedded images as base64
+});
+
+// For uploaded files (base64-encoded)
+const ocrResponse = await client.ocr.process({
+  model: "mistral-ocr-latest",
+  document: {
+    type: "base64",
+    base64: pdfBase64String
+  },
+  tableFormat: "html",
+  includeImageBase64: true
+});
+
+// Extract text from response
+const extractedText = ocrResponse.text;
+```
+
+Key features:
+- **Document types**: `document_url` for S3 presigned URLs, `base64` for direct uploads
+- **Table extraction**: `tableFormat: "html"` preserves financial table structure (critical for deck parsing)
+- **Image extraction**: `includeImageBase64: true` captures embedded images (logos, charts, diagrams)
+- **Speed**: 1000 pages/min (processes a typical 10-20 page deck in 1-2 seconds)
+- **Cost**: $2 per 1000 pages (typical deck costs ~$0.02-0.04)
+- **Replaces**: All GPT-4o vision OCR (no more sequential page-by-page processing)
+
 **Field Extraction:**
 - Pass extracted text to **GPT-4o-mini** via `generateObject()`
 - Zod schema enforces output shape:
@@ -789,7 +834,7 @@ src/modules/ai/
 +-- providers/
 |   +-- openai.provider.ts               # AI SDK OpenAI client (GPT-4o, GPT-4o-mini, GPT-5.2)
 |   +-- gemini.provider.ts               # AI SDK Google client (Gemini 3 Flash)
-|   +-- mistral.provider.ts              # Mistral OCR client
+|   +-- mistral.provider.ts              # Mistral OCR client (@mistralai/mistralai, NOT @ai-sdk/mistral)
 |   +-- ai.provider.ts                   # Factory: getModel(task) => appropriate client
 |   +-- index.ts
 |
@@ -1072,9 +1117,9 @@ Key differences from the old GPT-5.2 pattern:
 
 ### Phase 1: Foundation (Week 1)
 
-- [ ] Install AI SDK v6 packages: `@ai-sdk/openai`, `@ai-sdk/google`, `ai`, `mistralai` (or `@ai-sdk/mistral`)
+- [ ] Install AI SDK v6 packages: `@ai-sdk/openai`, `@ai-sdk/google`, `ai`, `@mistralai/mistralai`
 - [ ] Create `src/modules/ai/` directory structure
-- [ ] Implement `ai.config.ts` with model names, API key env vars, token budgets
+- [ ] Implement `ai.config.ts` with model names, API key env vars (OPENAI_API_KEY, GOOGLE_API_KEY, MISTRAL_API_KEY), token budgets
 - [ ] Implement `openai.provider.ts` -- AI SDK OpenAI client (GPT-4o, GPT-4o-mini, GPT-5.2)
 - [ ] Implement `gemini.provider.ts` -- AI SDK Google client
 - [ ] Implement `mistral.provider.ts` -- Mistral OCR client

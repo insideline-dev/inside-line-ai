@@ -32,7 +32,7 @@ interface StartupItem {
   description?: string;
   website?: string;
   stage?: string;
-  sector?: string;
+  industry?: string;
   overallScore?: number;
   createdAt: string;
   percentileRank?: number;
@@ -250,7 +250,7 @@ function AdminDashboard() {
                             <h3 className="text-lg font-semibold">{startup.name}</h3>
                             {getStatusBadge(startup.status)}
                             {startup.stage && <Badge variant="outline">{formatStage(startup.stage)}</Badge>}
-                            {startup.sector && <Badge variant="secondary">{startup.sector}</Badge>}
+                            {startup.industry && <Badge variant="secondary">{startup.industry}</Badge>}
                           </div>
                           {startup.description && (
                             <p className="text-muted-foreground line-clamp-2">{startup.description}</p>

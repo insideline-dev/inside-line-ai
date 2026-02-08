@@ -31,7 +31,7 @@ export const investorInterestStatusEnum = pgEnum('investor_interest_status', [
 // ============================================================================
 
 export const investorInterest = pgTable(
-  'investor_interest',
+  'investor_interests',
   {
     id: uuid('id').primaryKey().defaultRandom(),
     investorId: uuid('investor_id')

@@ -5,14 +5,14 @@ import { getMockEvaluationByStartupId } from "../data/evaluations";
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 let startups = [...mockStartups];
-let nextId = Math.max(...startups.map((s) => s.id)) + 1;
+let nextId = Math.max(...startups.map((s) => parseInt(s.id))) + 1;
 
 export const mockStartupService = {
   // List startups
   async list(filters?: {
     status?: StartupStatus;
     stage?: FundingStage;
-    founderId?: string;
+    userId?: string;
     scoutId?: string;
     isPrivate?: boolean;
     investorId?: string;
@@ -27,8 +27,8 @@ export const mockStartupService = {
     if (filters?.stage) {
       results = results.filter((s) => s.stage === filters.stage);
     }
-    if (filters?.founderId) {
-      results = results.filter((s) => s.founderId === filters.founderId);
+    if (filters?.userId) {
+      results = results.filter((s) => s.userId === filters.userId);
     }
     if (filters?.scoutId) {
       results = results.filter((s) => s.scoutId === filters.scoutId);
@@ -37,7 +37,7 @@ export const mockStartupService = {
       results = results.filter((s) => s.isPrivate === filters.isPrivate);
     }
     if (filters?.investorId) {
-      results = results.filter((s) => s.isPrivate && s.founderId === filters.investorId);
+      results = results.filter((s) => s.isPrivate && s.userId === filters.investorId);
     }
     if (filters?.search) {
       const search = filters.search.toLowerCase();
@@ -45,7 +45,7 @@ export const mockStartupService = {
         (s) =>
           s.name.toLowerCase().includes(search) ||
           s.description?.toLowerCase().includes(search) ||
-          s.sector?.toLowerCase().includes(search)
+          s.industry?.toLowerCase().includes(search)
       );
     }
 
@@ -53,7 +53,7 @@ export const mockStartupService = {
   },
 
   // Get single startup with evaluation
-  async getById(id: number): Promise<StartupWithEvaluation | null> {
+  async getById(id: string): Promise<StartupWithEvaluation | null> {
     await delay(150);
     const startup = startups.find((s) => s.id === id);
     if (!startup) return null;
@@ -66,19 +66,21 @@ export const mockStartupService = {
   async create(data: StartupFormData, submittedByRole: "founder" | "investor" | "scout", userId: string): Promise<Startup> {
     await delay(500);
     const newStartup: Startup = {
-      id: nextId++,
-      founderId: userId,
+      id: String(nextId++),
+      userId: userId,
       submittedByRole,
       scoutId: submittedByRole === "scout" ? userId : undefined,
       isPrivate: submittedByRole === "investor",
       name: data.name,
+      slug: data.name.toLowerCase().replace(/\s+/g, '-'),
+      tagline: data.tagline || '',
       website: data.website,
       description: data.description,
       location: data.location,
       stage: data.stage,
       sectorIndustryGroup: data.sectorIndustryGroup,
       sectorIndustry: data.sectorIndustry,
-      roundSize: data.roundSize,
+      fundingTarget: data.fundingTarget,
       roundCurrency: data.roundCurrency,
       valuation: data.valuation,
       valuationKnown: data.valuationKnown,
@@ -107,7 +109,7 @@ export const mockStartupService = {
   },
 
   // Update startup
-  async update(id: number, data: Partial<Startup>): Promise<Startup> {
+  async update(id: string, data: Partial<Startup>): Promise<Startup> {
     await delay(300);
     const index = startups.findIndex((s) => s.id === id);
     if (index === -1) throw new Error("Startup not found");
@@ -121,12 +123,12 @@ export const mockStartupService = {
   },
 
   // Update status (admin action)
-  async updateStatus(id: number, status: StartupStatus): Promise<Startup> {
+  async updateStatus(id: string, status: StartupStatus): Promise<Startup> {
     return this.update(id, { status });
   },
 
   // Delete startup
-  async delete(id: number): Promise<void> {
+  async delete(id: string): Promise<void> {
     await delay(200);
     const index = startups.findIndex((s) => s.id === id);
     if (index === -1) throw new Error("Startup not found");
@@ -134,7 +136,7 @@ export const mockStartupService = {
   },
 
   // Get analysis progress
-  async getProgress(id: number) {
+  async getProgress(id: string) {
     await delay(100);
     const evaluation = getMockEvaluationByStartupId(id);
     return evaluation?.analysisProgress ?? null;

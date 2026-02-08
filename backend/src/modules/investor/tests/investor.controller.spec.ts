@@ -2,19 +2,18 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { InvestorController } from '../investor.controller';
 import { ThesisService } from '../thesis.service';
-import { ScoringService } from '../scoring.service';
 import { MatchService } from '../match.service';
 import { TeamService } from '../team.service';
 import { InvestorNoteService } from '../investor-note.service';
 import { PortfolioService } from '../portfolio.service';
 import { DealPipelineService } from '../deal-pipeline.service';
 import { MessagingService } from '../messaging.service';
+import { ScoringPreferencesService } from '../scoring-preferences.service';
 import { UserRole } from '../../../auth/entities/auth.schema';
 
 describe('InvestorController', () => {
   let controller: InvestorController;
   let thesisService: jest.Mocked<ThesisService>;
-  let scoringService: jest.Mocked<ScoringService>;
   let matchService: jest.Mocked<MatchService>;
 
   const mockUser = {
@@ -37,19 +36,18 @@ describe('InvestorController', () => {
     mustHaveFeatures: ['AI/ML'],
     dealBreakers: ['crypto'],
     notes: 'Test thesis',
+    businessModels: ['B2B SaaS'],
+    minRevenue: null,
+    minGrowthRate: null,
+    minTeamSize: null,
+    thesisNarrative: null,
+    antiPortfolio: null,
+    website: null,
+    fundSize: null,
+    thesisSummary: null,
+    portfolioCompanies: null,
+    thesisSummaryGeneratedAt: null,
     isActive: true,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  };
-
-  const mockWeights = {
-    id: '123e4567-e89b-12d3-a456-426614174002',
-    userId: mockUser.id,
-    marketWeight: 30,
-    teamWeight: 25,
-    productWeight: 20,
-    tractionWeight: 15,
-    financialsWeight: 10,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -67,6 +65,18 @@ describe('InvestorController', () => {
     matchReason: 'Strong market fit',
     isSaved: false,
     viewedAt: null,
+    status: 'new' as const,
+    statusChangedAt: null,
+    passReason: null,
+    passNotes: null,
+    investmentAmount: null,
+    investmentCurrency: 'USD',
+    investmentDate: null,
+    investmentNotes: null,
+    meetingRequested: false,
+    meetingRequestedAt: null,
+    thesisFitScore: null,
+    fitRationale: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -81,13 +91,6 @@ describe('InvestorController', () => {
             findOne: jest.fn(),
             upsert: jest.fn(),
             delete: jest.fn(),
-          },
-        },
-        {
-          provide: ScoringService,
-          useValue: {
-            findOne: jest.fn(),
-            update: jest.fn(),
           },
         },
         {
@@ -139,12 +142,22 @@ describe('InvestorController', () => {
             getConversations: jest.fn(),
           },
         },
+        {
+          provide: ScoringPreferencesService,
+          useValue: {
+            getAll: jest.fn(),
+            getByStage: jest.fn(),
+            getEffectiveWeights: jest.fn(),
+            upsert: jest.fn(),
+            reset: jest.fn(),
+            resetAll: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
     controller = module.get<InvestorController>(InvestorController);
     thesisService = module.get(ThesisService);
-    scoringService = module.get(ScoringService);
     matchService = module.get(MatchService);
   });
 
@@ -223,67 +236,6 @@ describe('InvestorController', () => {
 
         await expect(controller.deleteThesis(mockUser)).rejects.toThrow(
           NotFoundException,
-        );
-      });
-    });
-  });
-
-  describe('Scoring endpoints', () => {
-    describe('GET /investor/scoring', () => {
-      it('should return scoring weights', async () => {
-        scoringService.findOne.mockResolvedValue(mockWeights);
-
-        const result = await controller.getScoringWeights(mockUser);
-
-        expect(result).toEqual(mockWeights);
-        expect(scoringService.findOne).toHaveBeenCalledWith(mockUser.id);
-      });
-
-      it('should return default weights when none exist', async () => {
-        const defaultWeights = {
-          id: '',
-          userId: mockUser.id,
-          marketWeight: 20,
-          teamWeight: 20,
-          productWeight: 20,
-          tractionWeight: 20,
-          financialsWeight: 20,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
-        scoringService.findOne.mockResolvedValue(defaultWeights);
-
-        const result = await controller.getScoringWeights(mockUser);
-
-        expect(result.marketWeight).toBe(20);
-        expect(result.teamWeight).toBe(20);
-      });
-    });
-
-    describe('PUT /investor/scoring', () => {
-      const updateDto = {
-        marketWeight: 30,
-        teamWeight: 25,
-        productWeight: 20,
-        tractionWeight: 15,
-        financialsWeight: 10,
-      };
-
-      it('should update scoring weights and queue match regeneration', async () => {
-        scoringService.update.mockResolvedValue(mockWeights);
-
-        const result = await controller.updateScoringWeights(
-          mockUser,
-          updateDto,
-        );
-
-        expect(result).toEqual(mockWeights);
-        expect(scoringService.update).toHaveBeenCalledWith(
-          mockUser.id,
-          updateDto,
-        );
-        expect(matchService.regenerateMatches).toHaveBeenCalledWith(
-          mockUser.id,
         );
       });
     });

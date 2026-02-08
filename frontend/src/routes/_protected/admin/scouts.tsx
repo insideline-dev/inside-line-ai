@@ -62,11 +62,11 @@ function ScoutApplications() {
     },
   });
 
-  const handleApprove = (id: number) => {
+  const handleApprove = (id: string | number) => {
     approveApplication({ id: id.toString() });
   };
 
-  const handleReject = (id: number) => {
+  const handleReject = (id: string | number) => {
     rejectApplication({ id: id.toString(), data: { rejectionReason: "Does not meet criteria" } });
   };
 

@@ -252,7 +252,7 @@ function AdminReviewPage() {
         <Card className="mb-6">
           <CardContent className="p-6">
             <AnalysisProgress
-              startupId={startup.id}
+              startupId={Number(startup.id)}
               isAnalyzing={true}
               weights={stageWeights}
               progress={evaluation?.analysisProgress as any}
@@ -280,11 +280,11 @@ function AdminReviewPage() {
                   <span>{startup.location}</span>
                 </div>
               )}
-              {startup.roundSize && (
+              {startup.fundingTarget && (
                 <div className="flex items-center gap-2 text-sm">
                   <DollarSign className="h-4 w-4 text-muted-foreground" />
                   <span>
-                    Raising {formatCurrency(startup.roundSize, startup.roundCurrency || "USD")}
+                    Raising {formatCurrency(startup.fundingTarget, startup.roundCurrency || "USD")}
                   </span>
                 </div>
               )}

@@ -53,7 +53,7 @@ import type { AgentPrompt } from "@/types/admin";
 const MOCK_AGENTS: AgentPrompt[] = [
   // Stage 3: Research (5 agents)
   {
-    id: 1,
+    id: "1",
     agentKey: "researchOrchestrator",
     displayName: "Research Orchestrator",
     description: "Orchestrates deep research agents to gather comprehensive data",
@@ -73,7 +73,7 @@ const MOCK_AGENTS: AgentPrompt[] = [
     createdAt: new Date().toISOString(),
   },
   {
-    id: 2,
+    id: "2",
     agentKey: "teamDeepResearch",
     displayName: "Team Deep Research",
     description: "Deep research on founders and team backgrounds",
@@ -94,7 +94,7 @@ const MOCK_AGENTS: AgentPrompt[] = [
     createdAt: new Date().toISOString(),
   },
   {
-    id: 3,
+    id: "3",
     agentKey: "marketDeepResearch",
     displayName: "Market Deep Research",
     description: "Market analysis and validation research",
@@ -115,7 +115,7 @@ const MOCK_AGENTS: AgentPrompt[] = [
     createdAt: new Date().toISOString(),
   },
   {
-    id: 4,
+    id: "4",
     agentKey: "productDeepResearch",
     displayName: "Product Deep Research",
     description: "Product/technology research and competitive analysis",
@@ -136,7 +136,7 @@ const MOCK_AGENTS: AgentPrompt[] = [
     createdAt: new Date().toISOString(),
   },
   {
-    id: 5,
+    id: "5",
     agentKey: "newsSearch",
     displayName: "News Search",
     description: "Recent news and press coverage search",
@@ -158,7 +158,7 @@ const MOCK_AGENTS: AgentPrompt[] = [
 
   // Stage 4: Evaluation Pipeline (13 agents)
   {
-    id: 6,
+    id: "6",
     agentKey: "orchestrator",
     displayName: "Evaluation Orchestrator",
     description: "Main orchestrator for the evaluation pipeline",
@@ -177,7 +177,7 @@ const MOCK_AGENTS: AgentPrompt[] = [
     createdAt: new Date().toISOString(),
   },
   {
-    id: 7,
+    id: "7",
     agentKey: "team",
     displayName: "Team Analysis",
     description: "Evaluate founders and team quality",
@@ -200,7 +200,7 @@ const MOCK_AGENTS: AgentPrompt[] = [
     createdAt: new Date().toISOString(),
   },
   {
-    id: 8,
+    id: "8",
     agentKey: "market",
     displayName: "Market Analysis",
     description: "Evaluate market opportunity and timing",
@@ -223,7 +223,7 @@ const MOCK_AGENTS: AgentPrompt[] = [
     createdAt: new Date().toISOString(),
   },
   {
-    id: 9,
+    id: "9",
     agentKey: "product",
     displayName: "Product Analysis",
     description: "Evaluate product and technology",
@@ -246,7 +246,7 @@ const MOCK_AGENTS: AgentPrompt[] = [
     createdAt: new Date().toISOString(),
   },
   {
-    id: 10,
+    id: "10",
     agentKey: "traction",
     displayName: "Traction Analysis",
     description: "Evaluate traction and metrics",
@@ -269,7 +269,7 @@ const MOCK_AGENTS: AgentPrompt[] = [
     createdAt: new Date().toISOString(),
   },
   {
-    id: 11,
+    id: "11",
     agentKey: "businessModel",
     displayName: "Business Model Analysis",
     description: "Evaluate business model viability",
@@ -292,7 +292,7 @@ const MOCK_AGENTS: AgentPrompt[] = [
     createdAt: new Date().toISOString(),
   },
   {
-    id: 12,
+    id: "12",
     agentKey: "gtm",
     displayName: "GTM Strategy Analysis",
     description: "Evaluate go-to-market strategy",
@@ -315,7 +315,7 @@ const MOCK_AGENTS: AgentPrompt[] = [
     createdAt: new Date().toISOString(),
   },
   {
-    id: 13,
+    id: "13",
     agentKey: "financials",
     displayName: "Financial Analysis",
     description: "Evaluate financial health and projections",
@@ -338,7 +338,7 @@ const MOCK_AGENTS: AgentPrompt[] = [
     createdAt: new Date().toISOString(),
   },
   {
-    id: 14,
+    id: "14",
     agentKey: "competitiveAdvantage",
     displayName: "Competitive Advantage Analysis",
     description: "Evaluate moats and defensibility",
@@ -361,7 +361,7 @@ const MOCK_AGENTS: AgentPrompt[] = [
     createdAt: new Date().toISOString(),
   },
   {
-    id: 15,
+    id: "15",
     agentKey: "legal",
     displayName: "Legal & Regulatory Analysis",
     description: "Evaluate legal and regulatory risks",
@@ -384,7 +384,7 @@ const MOCK_AGENTS: AgentPrompt[] = [
     createdAt: new Date().toISOString(),
   },
   {
-    id: 16,
+    id: "16",
     agentKey: "dealTerms",
     displayName: "Deal Terms Analysis",
     description: "Evaluate deal structure and terms",
@@ -407,7 +407,7 @@ const MOCK_AGENTS: AgentPrompt[] = [
     createdAt: new Date().toISOString(),
   },
   {
-    id: 17,
+    id: "17",
     agentKey: "exitPotential",
     displayName: "Exit Potential Analysis",
     description: "Evaluate exit opportunities",
@@ -430,7 +430,7 @@ const MOCK_AGENTS: AgentPrompt[] = [
     createdAt: new Date().toISOString(),
   },
   {
-    id: 18,
+    id: "18",
     agentKey: "synthesis",
     displayName: "Synthesis Agent",
     description: "Synthesize all analyses into final evaluation",
@@ -454,7 +454,7 @@ const MOCK_AGENTS: AgentPrompt[] = [
 
   // Stage 5: Investor Matching (2 agents)
   {
-    id: 19,
+    id: "19",
     agentKey: "investorThesis",
     displayName: "Investor Thesis Extraction",
     description: "Extract and structure investor thesis",
@@ -473,7 +473,7 @@ const MOCK_AGENTS: AgentPrompt[] = [
     createdAt: new Date().toISOString(),
   },
   {
-    id: 20,
+    id: "20",
     agentKey: "thesisAlignment",
     displayName: "Thesis Alignment Scoring",
     description: "Score startup-investor thesis alignment",

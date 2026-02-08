@@ -58,8 +58,8 @@ const createMemoSections = (name: string): MemoSection[] => [
 
 export const mockEvaluations: Evaluation[] = [
   {
-    id: 1,
-    startupId: 1,
+    id: "1",
+    startupId: "1",
     sectionScores: createSectionScores(82),
     teamScore: 85,
     founderMarketFit: 88,
@@ -160,8 +160,8 @@ export const mockEvaluations: Evaluation[] = [
     updatedAt: "2024-06-15T12:30:00Z",
   },
   {
-    id: 2,
-    startupId: 2,
+    id: "2",
+    startupId: "2",
     analysisProgress: {
       currentStage: 4,
       currentStageLabel: "Market Analysis",
@@ -187,8 +187,8 @@ export const mockEvaluations: Evaluation[] = [
     updatedAt: "2024-07-01T10:45:00Z",
   },
   {
-    id: 3,
-    startupId: 3,
+    id: "3",
+    startupId: "3",
     sectionScores: createSectionScores(75),
     overallScore: 75,
     teamScore: 78,
@@ -209,8 +209,8 @@ export const mockEvaluations: Evaluation[] = [
     updatedAt: "2024-07-02T09:15:00Z",
   },
   {
-    id: 5,
-    startupId: 5,
+    id: "5",
+    startupId: "5",
     sectionScores: createSectionScores(88),
     overallScore: 88,
     percentileRank: 92,
@@ -237,8 +237,8 @@ export const mockEvaluations: Evaluation[] = [
     updatedAt: "2024-06-10T16:45:00Z",
   },
   {
-    id: 7,
-    startupId: 7,
+    id: "7",
+    startupId: "7",
     sectionScores: createSectionScores(78),
     overallScore: 78,
     percentileRank: 80,
@@ -260,8 +260,8 @@ export const mockEvaluations: Evaluation[] = [
     updatedAt: "2024-06-28T13:00:00Z",
   },
   {
-    id: 8,
-    startupId: 8,
+    id: "8",
+    startupId: "8",
     sectionScores: createSectionScores(71),
     overallScore: 71,
     teamScore: 75,
@@ -283,6 +283,6 @@ export const mockEvaluations: Evaluation[] = [
   },
 ];
 
-export function getMockEvaluationByStartupId(startupId: number): Evaluation | undefined {
-  return mockEvaluations.find((e) => e.startupId === startupId);
+export function getMockEvaluationByStartupId(id: string): Evaluation | undefined {
+  return mockEvaluations.find((e) => e.startupId === id);
 }

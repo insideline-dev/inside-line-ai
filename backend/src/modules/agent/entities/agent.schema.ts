@@ -84,7 +84,7 @@ export const agentCategoryEnum = pgEnum('agent_category', [
 // ============================================================================
 
 export const agentPrompt = pgTable(
-  'agent_prompt',
+  'agent_prompts',
   {
     id: uuid('id').primaryKey().defaultRandom(),
     agentKey: varchar('agent_key', { length: 50 }).notNull().unique(),
@@ -126,7 +126,7 @@ export const agentPrompt = pgTable(
 // ============================================================================
 
 export const agentConversation = pgTable(
-  'agent_conversation',
+  'agent_conversations',
   {
     id: uuid('id').primaryKey().defaultRandom(),
 
@@ -178,7 +178,7 @@ export const agentConversation = pgTable(
 // ============================================================================
 
 export const agentMessage = pgTable(
-  'agent_message',
+  'agent_messages',
   {
     id: uuid('id').primaryKey().defaultRandom(),
     conversationId: uuid('conversation_id')
@@ -238,7 +238,7 @@ export const agentMessage = pgTable(
 // ============================================================================
 
 export const agentInbox = pgTable(
-  'agent_inbox',
+  'agent_inboxes',
   {
     id: uuid('id').primaryKey().defaultRandom(),
 
@@ -269,7 +269,7 @@ export const agentInbox = pgTable(
 // ============================================================================
 
 export const attachmentDownload = pgTable(
-  'attachment_download',
+  'attachment_downloads',
   {
     id: uuid('id').primaryKey().defaultRandom(),
 

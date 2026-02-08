@@ -32,7 +32,7 @@ export const meetingStatusEnum = pgEnum('meeting_status', [
 // ============================================================================
 
 export const meeting = pgTable(
-  'meeting',
+  'meetings',
   {
     id: uuid('id').primaryKey().defaultRandom(),
     startupId: uuid('startup_id')

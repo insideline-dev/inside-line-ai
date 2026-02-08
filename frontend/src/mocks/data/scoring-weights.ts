@@ -16,7 +16,7 @@ const defaultRationale: ScoringRationale = {
 
 export const mockStageScoringWeights: StageScoringWeights[] = [
   {
-    id: 1,
+    id: "1",
     stage: "pre_seed",
     weights: {
       team: 30,
@@ -41,7 +41,7 @@ export const mockStageScoringWeights: StageScoringWeights[] = [
     updatedAt: "2024-01-01T00:00:00Z",
   },
   {
-    id: 2,
+    id: "2",
     stage: "seed",
     weights: {
       team: 25,
@@ -66,7 +66,7 @@ export const mockStageScoringWeights: StageScoringWeights[] = [
     updatedAt: "2024-01-01T00:00:00Z",
   },
   {
-    id: 3,
+    id: "3",
     stage: "series_a",
     weights: {
       team: 18,
@@ -91,7 +91,7 @@ export const mockStageScoringWeights: StageScoringWeights[] = [
     updatedAt: "2024-01-01T00:00:00Z",
   },
   {
-    id: 4,
+    id: "4",
     stage: "series_b",
     weights: {
       team: 12,
@@ -116,7 +116,7 @@ export const mockStageScoringWeights: StageScoringWeights[] = [
     updatedAt: "2024-01-01T00:00:00Z",
   },
   {
-    id: 5,
+    id: "5",
     stage: "series_c",
     weights: {
       team: 8,

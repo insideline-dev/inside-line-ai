@@ -43,7 +43,7 @@ export const portalSubmissionStatusEnum = pgEnum('portal_submission_status', [
  * - Public can view active portals
  */
 export const portal = pgTable(
-  'portal',
+  'portals',
   {
     id: uuid('id').primaryKey().defaultRandom(),
     userId: uuid('user_id')
@@ -86,7 +86,7 @@ export const portal = pgTable(
  * - Startup owners can submit and view their own submissions
  */
 export const portalSubmission = pgTable(
-  'portal_submission',
+  'portal_submissions',
   {
     id: uuid('id').primaryKey().defaultRandom(),
     portalId: uuid('portal_id')

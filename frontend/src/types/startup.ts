@@ -21,25 +21,29 @@ export interface StartupFile {
 }
 
 export interface Startup {
-  id: number;
-  founderId: string;
+  id: string;
+  userId: string;
+  slug: string;
   submittedByRole: "founder" | "investor" | "admin" | "scout";
   scoutId?: string;
   isPrivate: boolean;
   name: string;
+  tagline: string;
   website?: string;
+  logoUrl?: string;
   pitchDeckUrl?: string;
   pitchDeckPath?: string;
   files?: StartupFile[];
   teamMembers?: TeamMember[];
   description?: string;
+  industry?: string;
+  teamSize?: number;
   stage?: FundingStage;
-  sector?: string;
   sectorIndustryGroup?: string;
   sectorIndustry?: string;
   location?: string;
   normalizedRegion?: string;
-  roundSize?: number;
+  fundingTarget?: number;
   roundCurrency?: string;
   valuation?: number;
   valuationKnown?: boolean;
@@ -57,36 +61,40 @@ export interface Startup {
   previousInvestors?: string;
   previousRoundType?: string;
   status: StartupStatus;
+  submittedAt?: string;
+  approvedAt?: string;
+  rejectedAt?: string;
+  rejectionReason?: string;
   overallScore?: number;
   percentileRank?: number;
   productDescription?: string;
   technologyReadinessLevel?: TechnologyReadinessLevel;
   productScreenshots?: string[];
   demoVideoUrl?: string;
+  demoUrl?: string;
   createdAt: string;
   updatedAt?: string;
 }
 
 export interface StartupDraft {
-  id: number;
-  founderId: string;
-  formData: Partial<StartupFormData>;
-  pitchDeckPath?: string;
-  uploadedFiles?: StartupFile[];
-  teamMembers?: TeamMember[];
-  productScreenshots?: string[];
-  lastSavedAt: string;
+  id: string;
+  userId: string;
+  startupId: string;
+  draftData: Record<string, unknown>;
   createdAt: string;
+  updatedAt: string;
 }
 
 export interface StartupFormData {
   // Company basics
   name: string;
+  tagline: string;
   website: string;
   description: string;
   location: string;
 
   // Industry & stage
+  industry: string;
   sectorIndustryGroup: string;
   sectorIndustry: string;
   stage: FundingStage;
@@ -94,9 +102,10 @@ export interface StartupFormData {
 
   // Team
   teamMembers: TeamMember[];
+  teamSize: number;
 
   // Deal terms
-  roundSize: number;
+  fundingTarget: number;
   roundCurrency: string;
   valuation?: number;
   valuationKnown: boolean;

@@ -10,7 +10,7 @@ import {
 import { user } from '../../auth/entities/auth.schema';
 
 export const asset = pgTable(
-  'asset',
+  'assets',
   {
     id: uuid('id').primaryKey().defaultRandom(),
     userId: uuid('user_id')

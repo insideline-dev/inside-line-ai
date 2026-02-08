@@ -101,6 +101,8 @@ export * from './updateMatchStatusDto';
 export * from './updateMatchStatusDtoStatus';
 export * from './updateNoteDto';
 export * from './updatePortalDto';
+export * from './updateScoringPreferencesDto';
+export * from './updateScoringPreferencesDtoCustomWeights';
 export * from './updateScoringWeightsDto';
 export * from './updateStageWeightsDto';
 export * from './updateStageWeightsDtoRationale';

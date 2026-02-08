@@ -1,5 +1,5 @@
 export interface AgentPrompt {
-  id: number;
+  id: string;
   agentKey: string;
   displayName: string;
   description?: string;
@@ -25,7 +25,7 @@ export interface Analytics {
   averageScore: number;
   scoreDistribution: { range: string; count: number }[];
   submissionsOverTime: { date: string; count: number }[];
-  topSectors: { sector: string; count: number }[];
+  topIndustries: { industry: string; count: number }[];
   conversionRates: {
     submittedToAnalyzed: number;
     analyzedToApproved: number;
@@ -45,8 +45,8 @@ export interface DashboardStats {
 }
 
 export interface AgentConversation {
-  id: number;
-  investorProfileId?: number;
+  id: string;
+  investorThesisId?: string;
   senderEmail?: string;
   senderPhone?: string;
   senderName?: string;
@@ -54,7 +54,7 @@ export interface AgentConversation {
   whatsappThreadId?: string;
   status: "active" | "waiting_response" | "resolved" | "archived";
   lastMessageAt?: string;
-  currentStartupId?: number;
+  currentStartupId?: string;
   context?: Record<string, unknown>;
   messageCount: number;
   isAuthenticated: boolean;
@@ -63,15 +63,15 @@ export interface AgentConversation {
 }
 
 export interface AgentMessage {
-  id: number;
-  conversationId: number;
+  id: string;
+  conversationId: string;
   channel: "email" | "whatsapp" | "sms";
   direction: "inbound" | "outbound";
   content: string;
   intent?: "question" | "submission" | "follow_up" | "greeting" | "unknown";
   extractedEntities?: Record<string, unknown>;
   externalMessageId?: string;
-  inReplyToMessageId?: number;
+  inReplyToMessageId?: string;
   attachments?: { name: string; url: string; type: string }[];
   aiResponseMetadata?: Record<string, unknown>;
   deliveryStatus?: string;
@@ -80,8 +80,8 @@ export interface AgentMessage {
 }
 
 export interface AdminReview {
-  id: number;
-  startupId: number;
+  id: string;
+  startupId: string;
   reviewerId: string;
   scoreOverride?: number;
   memoEdits?: Record<string, unknown>;

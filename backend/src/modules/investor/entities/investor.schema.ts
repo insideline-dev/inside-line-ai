@@ -1,4 +1,4 @@
-import { relations, sql } from 'drizzle-orm';
+import { relations } from 'drizzle-orm';
 import {
   pgTable,
   pgEnum,
@@ -8,7 +8,6 @@ import {
   boolean,
   index,
   uuid,
-  check,
   jsonb,
   real,
   doublePrecision,
@@ -76,7 +75,7 @@ export type ScoringRationale = {
  * One profile per investor
  */
 export const investorProfile = pgTable(
-  'investor_profile',
+  'investor_profiles',
   {
     id: uuid('id').primaryKey().defaultRandom(),
     userId: uuid('user_id')
@@ -113,7 +112,7 @@ export const investorProfile = pgTable(
  * Defines what types of startups an investor is looking for
  */
 export const investorThesis = pgTable(
-  'investor_thesis',
+  'investor_theses',
   {
     id: uuid('id').primaryKey().defaultRandom(),
     userId: uuid('user_id')
@@ -169,49 +168,6 @@ export const investorThesis = pgTable(
 );
 
 // ============================================================================
-// SCORING WEIGHTS TABLE
-// ============================================================================
-
-/**
- * Custom scoring weights for an investor
- *
- * All weights should sum to 100
- * Defaults: all weights = 20 (equal distribution)
- */
-export const scoringWeight = pgTable(
-  'scoring_weight',
-  {
-    id: uuid('id').primaryKey().defaultRandom(),
-    userId: uuid('user_id')
-      .notNull()
-      .unique()
-      .references(() => user.id, { onDelete: 'cascade' }),
-
-    // Score weights (should sum to 100)
-    marketWeight: integer('market_weight').default(20).notNull(),
-    teamWeight: integer('team_weight').default(20).notNull(),
-    productWeight: integer('product_weight').default(20).notNull(),
-    tractionWeight: integer('traction_weight').default(20).notNull(),
-    financialsWeight: integer('financials_weight').default(20).notNull(),
-
-    createdAt: timestamp('created_at').defaultNow().notNull(),
-    updatedAt: timestamp('updated_at')
-      .defaultNow()
-      .$onUpdate(() => new Date())
-      .notNull(),
-  },
-  (table) => [
-    index('scoring_weight_user_idx').on(table.userId),
-
-    // Constraint: weights must sum to 100
-    check(
-      'weights_sum_100',
-      sql`${table.marketWeight} + ${table.teamWeight} + ${table.productWeight} + ${table.tractionWeight} + ${table.financialsWeight} = 100`,
-    ),
-  ],
-);
-
-// ============================================================================
 // STARTUP MATCHES TABLE
 // ============================================================================
 
@@ -222,7 +178,7 @@ export const scoringWeight = pgTable(
  * One match per investor-startup pair
  */
 export const startupMatch = pgTable(
-  'startup_match',
+  'startup_matches',
   {
     id: uuid('id').primaryKey().defaultRandom(),
     investorId: uuid('investor_id')
@@ -284,7 +240,7 @@ export const startupMatch = pgTable(
  * These are system-wide defaults that investors can override
  */
 export const stageScoringWeight = pgTable(
-  'stage_scoring_weight',
+  'stage_scoring_weights',
   {
     id: uuid('id').primaryKey().defaultRandom(),
     stage: startupStageEnum('stage').notNull().unique(),
@@ -314,7 +270,7 @@ export const stageScoringWeight = pgTable(
  * Allows investors to override default stage weights
  */
 export const investorScoringPreference = pgTable(
-  'investor_scoring_preference',
+  'investor_scoring_preferences',
   {
     id: uuid('id').primaryKey().defaultRandom(),
     investorId: uuid('investor_id')
@@ -359,13 +315,6 @@ export const investorThesisRelations = relations(investorThesis, ({ one }) => ({
   }),
 }));
 
-export const scoringWeightRelations = relations(scoringWeight, ({ one }) => ({
-  user: one(user, {
-    fields: [scoringWeight.userId],
-    references: [user.id],
-  }),
-}));
-
 export const startupMatchRelations = relations(startupMatch, ({ one }) => ({
   investor: one(user, {
     fields: [startupMatch.investorId],
@@ -405,8 +354,6 @@ export type InvestorProfile = typeof investorProfile.$inferSelect;
 export type NewInvestorProfile = typeof investorProfile.$inferInsert;
 export type InvestorThesis = typeof investorThesis.$inferSelect;
 export type NewInvestorThesis = typeof investorThesis.$inferInsert;
-export type ScoringWeight = typeof scoringWeight.$inferSelect;
-export type NewScoringWeight = typeof scoringWeight.$inferInsert;
 export type StartupMatch = typeof startupMatch.$inferSelect;
 export type NewStartupMatch = typeof startupMatch.$inferInsert;
 export type StageScoringWeight = typeof stageScoringWeight.$inferSelect;

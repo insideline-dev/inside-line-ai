@@ -9,30 +9,32 @@ import {
   Param,
   Query,
   UseGuards,
+  NotFoundException,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../auth/guards';
 import { CurrentUser } from '../../auth/decorators';
 import { UserRole } from '../../auth/entities/auth.schema';
+import { StartupStage } from '../startup/entities/startup.schema';
 import { RolesGuard } from '../startup/guards';
 import { Roles } from '../startup/decorators/roles.decorator';
 import { ThesisService } from './thesis.service';
-import { ScoringService } from './scoring.service';
 import { MatchService } from './match.service';
 import { TeamService } from './team.service';
 import { InvestorNoteService } from './investor-note.service';
 import { PortfolioService } from './portfolio.service';
 import { DealPipelineService } from './deal-pipeline.service';
 import { MessagingService } from './messaging.service';
+import { ScoringPreferencesService } from './scoring-preferences.service';
 import {
   CreateThesisDto,
   UpdateThesisDto,
-  UpdateScoringWeightsDto,
   GetMatchesQueryDto,
   CreateTeamInviteDto,
   CreateNoteDto,
   UpdateNoteDto,
   AddPortfolioDto,
   UpdateMatchStatusDto,
+  UpdateScoringPreferencesDto,
 } from './dto';
 
 type User = {
@@ -50,13 +52,13 @@ type User = {
 export class InvestorController {
   constructor(
     private thesisService: ThesisService,
-    private scoringService: ScoringService,
     private matchService: MatchService,
     private teamService: TeamService,
     private noteService: InvestorNoteService,
     private portfolioService: PortfolioService,
     private pipelineService: DealPipelineService,
     private messagingService: MessagingService,
+    private scoringPreferencesService: ScoringPreferencesService,
   ) {}
 
   // ============ THESIS ENDPOINTS ============
@@ -80,23 +82,6 @@ export class InvestorController {
   async deleteThesis(@CurrentUser() user: User) {
     await this.thesisService.delete(user.id);
     return { success: true, message: 'Thesis deleted' };
-  }
-
-  // ============ SCORING ENDPOINTS ============
-
-  @Get('scoring')
-  async getScoringWeights(@CurrentUser() user: User) {
-    return this.scoringService.findOne(user.id);
-  }
-
-  @Put('scoring')
-  async updateScoringWeights(
-    @CurrentUser() user: User,
-    @Body() dto: UpdateScoringWeightsDto,
-  ) {
-    const weights = await this.scoringService.update(user.id, dto);
-    await this.matchService.regenerateMatches(user.id);
-    return weights;
   }
 
   // ============ MATCHES ENDPOINTS ============
@@ -195,6 +180,57 @@ export class InvestorController {
   @Get('messaging/conversations')
   async getConversations() {
     return this.messagingService.getConversations();
+  }
+
+  // ============ SCORING PREFERENCES ENDPOINTS ============
+
+  @Get('scoring/preferences')
+  async getScoringPreferences(@CurrentUser() user: User) {
+    return this.scoringPreferencesService.getAll(user.id);
+  }
+
+  @Get('scoring/preferences/:stage')
+  async getScoringPreferenceByStage(
+    @CurrentUser() user: User,
+    @Param('stage') stage: StartupStage,
+  ) {
+    const pref = await this.scoringPreferencesService.getByStage(user.id, stage);
+    if (!pref) {
+      throw new NotFoundException(`No scoring preference found for stage ${stage}`);
+    }
+    return pref;
+  }
+
+  @Get('scoring/effective/:stage')
+  async getEffectiveWeights(
+    @CurrentUser() user: User,
+    @Param('stage') stage: StartupStage,
+  ) {
+    return this.scoringPreferencesService.getEffectiveWeights(user.id, stage);
+  }
+
+  @Put('scoring/preferences/:stage')
+  async updateScoringPreference(
+    @CurrentUser() user: User,
+    @Param('stage') stage: StartupStage,
+    @Body() dto: UpdateScoringPreferencesDto,
+  ) {
+    return this.scoringPreferencesService.upsert(user.id, stage, dto);
+  }
+
+  @Delete('scoring/preferences/:stage')
+  async resetScoringPreference(
+    @CurrentUser() user: User,
+    @Param('stage') stage: StartupStage,
+  ) {
+    await this.scoringPreferencesService.reset(user.id, stage);
+    return { success: true, message: 'Scoring preference reset to defaults' };
+  }
+
+  @Delete('scoring/preferences')
+  async resetAllScoringPreferences(@CurrentUser() user: User) {
+    await this.scoringPreferencesService.resetAll(user.id);
+    return { success: true, message: 'All scoring preferences reset to defaults' };
   }
 
   // ============ TEAM ENDPOINTS ============

@@ -109,7 +109,7 @@ export const valuationTypeEnum = pgEnum('valuation_type', [
  * - Admins see all (via isOwnerOrAdmin in crudOwnPolicy)
  */
 export const startup = pgTable(
-  'startup',
+  'startups',
   {
     id: uuid('id').primaryKey().defaultRandom(),
     userId: uuid('user_id')
@@ -219,7 +219,7 @@ export const startup = pgTable(
  * Stores partial/incomplete data as JSONB
  */
 export const startupDraft = pgTable(
-  'startup_draft',
+  'startup_drafts',
   {
     id: uuid('id').primaryKey().defaultRandom(),
     startupId: uuid('startup_id')

@@ -11,6 +11,7 @@ export const envSchema = z.object({
   DATABASE_URL: z.url(
     'DATABASE_URL must be a valid PostgreSQL connection string',
   ),
+  PROD_DATABASE_URL: z.string().optional(),
 
   // Redis Configuration (use REDIS_URL, or fallback to individual vars)
   REDIS_URL: z.string().default('redis://localhost:6379'),
@@ -65,6 +66,11 @@ export const envSchema = z.object({
   UNIPILE_DSN: z.string().optional(),
   UNIPILE_API_KEY: z.string().optional(),
   UNIPILE_ACCOUNT_ID: z.string().optional(),
+
+  // AI Providers
+  OPENAI_API_KEY: z.string().optional(),
+  GOOGLE_API_KEY: z.string().optional(), // For Gemini (grounding research)
+  MISTRAL_API_KEY: z.string().optional(), // For OCR
 });
 
 export type Env = z.infer<typeof envSchema>;

@@ -34,7 +34,7 @@ export const inviteStatusEnum = pgEnum('invite_status', [
  * Only the investor thesis owner can create invites
  */
 export const teamInvite = pgTable(
-  'team_invite',
+  'team_invites',
   {
     id: uuid('id').primaryKey().defaultRandom(),
     investorThesisId: uuid('investor_thesis_id')
@@ -75,7 +75,7 @@ export const teamInvite = pgTable(
  * Admins can additionally manage team members
  */
 export const teamMember = pgTable(
-  'team_member',
+  'team_members',
   {
     id: uuid('id').primaryKey().defaultRandom(),
     investorThesisId: uuid('investor_thesis_id')

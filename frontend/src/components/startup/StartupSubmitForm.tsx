@@ -95,7 +95,7 @@ const baseFormSchema = z.object({
   sectorIndustryGroup: z.string().optional(),
   sectorIndustry: z.string().optional(),
   location: z.string().optional(),
-  roundSize: z.string().optional(),
+  fundingTarget: z.string().optional(),
   roundCurrency: z.string().default("USD"),
   valuation: z.string().optional(),
   valuationKnown: z.boolean().optional(),
@@ -132,7 +132,7 @@ const createSubmitSchema = (userRole: "founder" | "investor" | "admin" | "portal
     sectorIndustryGroup: z.string().optional(),
     sectorIndustry: z.string().optional(),
     location: z.string().optional(),
-    roundSize: z.string().optional(),
+    fundingTarget: z.string().optional(),
     roundCurrency: z.string().default("USD"),
     valuation: z.string().optional(),
     valuationKnown: z.boolean().optional(),
@@ -231,7 +231,7 @@ export function StartupSubmitForm({
       sectorIndustryGroup: "",
       sectorIndustry: "",
       location: "",
-      roundSize: "",
+      fundingTarget: "",
       roundCurrency: "USD",
       valuation: "",
       valuationKnown: true,
@@ -423,7 +423,7 @@ export function StartupSubmitForm({
         stage: data.stage || undefined,
         sectorIndustryGroup: data.sectorIndustryGroup || undefined,
         sectorIndustry: data.sectorIndustry || undefined,
-        roundSize: data.roundSize ? parseFloat(data.roundSize) : undefined,
+        fundingTarget: data.fundingTarget ? parseFloat(data.fundingTarget) : undefined,
         roundCurrency: data.roundCurrency || "USD",
         valuation: data.valuationKnown && data.valuation ? parseFloat(data.valuation) : undefined,
         valuationKnown: data.valuationKnown ?? true,
@@ -1050,7 +1050,7 @@ export function StartupSubmitForm({
 
               <FormField
                 control={form.control}
-                name="roundSize"
+                name="fundingTarget"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Round Size</FormLabel>

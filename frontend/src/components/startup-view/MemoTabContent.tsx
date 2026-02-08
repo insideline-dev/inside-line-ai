@@ -30,7 +30,7 @@ interface FounderReport {
 }
 
 interface AdminFeedbackHandler {
-  onReanalyze: (sectionKey: string, comment: string) => Promise<void>;
+  onReanalyze: (sectionKey: string, evaluationId: string, comment: string) => Promise<void>;
   reanalyzingSection: string | null;
 }
 
@@ -284,10 +284,10 @@ export function MemoTabContent({
                 <Wallet className="w-8 h-8 mx-auto mb-2 opacity-50" />
                 <p className="text-sm">Funding history data coming soon.</p>
               </div>
-              {(startup.roundSize || startup.valuation) && (
+              {(startup.fundingTarget || startup.valuation) && (
                 <FundingRoundCard
                   round={formatStage(startup.stage) || "Current Round"}
-                  amount={formatCurrency(startup.roundSize)}
+                  amount={formatCurrency(startup.fundingTarget)}
                   valuation={formatCurrency(startup.valuation)}
                 />
               )}

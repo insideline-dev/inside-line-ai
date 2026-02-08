@@ -6,13 +6,13 @@ const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Mock investor data
 let mockThesis: InvestmentThesis = {
-  id: 1,
-  investorId: 1,
+  id: "1",
+  userId: "1",
   stages: ["seed", "series_a"],
   checkSizeMin: 500000,
   checkSizeMax: 3000000,
-  sectors: ["software", "artificial_intelligence", "financial_services"],
-  geographies: ["North America", "Europe"],
+  industries: ["software", "artificial_intelligence", "financial_services"],
+  geographicFocus: ["North America", "Europe"],
   businessModels: ["B2B SaaS", "Marketplace"],
   minRevenue: 100000,
   minGrowthRate: 15,
@@ -25,41 +25,48 @@ let mockThesis: InvestmentThesis = {
     { name: "DataCo", description: "Data infrastructure" },
     { name: "AIFlow", description: "AI workflow automation" },
   ],
+  isActive: true,
   createdAt: "2024-01-01T00:00:00Z",
   updatedAt: "2024-06-01T00:00:00Z",
 };
 
 let mockPortal: PortalSettings = {
-  id: 1,
-  investorId: 1,
+  id: "1",
+  userId: "1",
   slug: "venture-capital-partners",
+  name: "Venture Capital Partners",
   welcomeMessage: "Submit your startup for consideration by our investment team.",
   tagline: "Backing bold founders building the future",
   accentColor: "#6366f1",
   requiredFields: ["name", "website", "description", "stage", "teamMembers"],
   isEnabled: true,
+  isActive: true,
   createdAt: "2024-01-01T00:00:00Z",
   updatedAt: "2024-06-01T00:00:00Z",
 };
 
 const mockMatches: InvestorMatch[] = [
   {
-    id: 1,
-    investorId: 1,
-    startupId: 1,
+    id: "1",
+    investorId: "1",
+    startupId: "1",
     thesisFitScore: 85,
     fitRationale: "Strong fit with B2B SaaS thesis, experienced team, good traction",
-    matchedAt: "2024-06-20T10:00:00Z",
-    status: "new",
+    overallScore: 82,
+    isSaved: false,
+    createdAt: "2024-06-20T10:00:00Z",
+    status: "reviewing",
   },
   {
-    id: 2,
-    investorId: 1,
-    startupId: 5,
+    id: "2",
+    investorId: "1",
+    startupId: "5",
     thesisFitScore: 72,
     fitRationale: "AI focus aligns well, though healthcare vertical is new for fund",
-    matchedAt: "2024-06-15T10:00:00Z",
-    status: "viewed",
+    overallScore: 88,
+    isSaved: false,
+    createdAt: "2024-06-15T10:00:00Z",
+    status: "reviewing",
   },
 ];
 
@@ -103,12 +110,12 @@ export const mockInvestorService = {
     }));
   },
 
-  async updateMatchStatus(matchId: number, status: InvestorMatch["status"]): Promise<InvestorMatch> {
+  async updateMatchStatus(matchId: string, status: InvestorMatch["status"]): Promise<InvestorMatch> {
     await delay(200);
     const match = mockMatches.find((m) => m.id === matchId);
     if (!match) throw new Error("Match not found");
     match.status = status;
-    match.actionTakenAt = new Date().toISOString();
+    match.statusChangedAt = new Date().toISOString();
     return match;
   },
 
@@ -129,7 +136,7 @@ export const mockInvestorService = {
     return {
       totalMatches: mockMatches.length,
       newMatches: mockMatches.filter((m) => m.status === "new").length,
-      interested: mockMatches.filter((m) => m.status === "interested").length,
+      engaged: mockMatches.filter((m) => m.status === "engaged").length,
       avgFitScore: mockMatches.reduce((acc, m) => acc + (m.thesisFitScore || 0), 0) / mockMatches.length,
     };
   },

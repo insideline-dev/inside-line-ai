@@ -294,7 +294,7 @@ export function useFilteredStartups<T extends {
   name: string;
   description?: string | null;
   stage?: string | null;
-  sector?: string | null;
+  industry?: string | null;
   sectorIndustryGroup?: string | null;
   location?: string | null;
   normalizedRegion?: string | null;
@@ -316,7 +316,7 @@ export function useFilteredStartups<T extends {
       }
 
       if (filters.industries.length > 0) {
-        const industryGroup = startup.sectorIndustryGroup || startup.sector;
+        const industryGroup = startup.sectorIndustryGroup || startup.industry;
         const matchesIndustry = filters.industries.some(ind =>
           industryGroup?.toLowerCase().includes(ind.toLowerCase())
         );

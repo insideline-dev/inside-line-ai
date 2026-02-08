@@ -82,7 +82,7 @@ export const adminReviewDecisionEnum = pgEnum('admin_review_decision', [
  * - Only admin/system can create/update jobs
  */
 export const analysisJob = pgTable(
-  'analysis_job',
+  'analysis_jobs',
   {
     id: uuid('id').primaryKey().defaultRandom(),
     startupId: uuid('startup_id')
@@ -135,7 +135,7 @@ export const analysisJob = pgTable(
  * - Only admin can create/update evaluations
  */
 export const startupEvaluation = pgTable(
-  'startup_evaluation',
+  'startup_evaluations',
   {
     id: uuid('id').primaryKey().defaultRandom(),
     startupId: uuid('startup_id')
@@ -267,7 +267,7 @@ export const startupEvaluation = pgTable(
  * RLS: Admin-only access
  */
 export const adminReview = pgTable(
-  'admin_review',
+  'admin_reviews',
   {
     id: uuid('id').primaryKey().defaultRandom(),
     startupId: uuid('startup_id')

@@ -1,7 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { MatchService } from '../match.service';
-import { ScoringService } from '../scoring.service';
 import { DrizzleService } from '../../../database';
 import { QueueService } from '../../../queue';
 
@@ -9,8 +8,6 @@ describe('MatchService', () => {
   let service: MatchService;
   let drizzleService: jest.Mocked<DrizzleService>;
   let queueService: jest.Mocked<QueueService>;
-  let scoringService: jest.Mocked<ScoringService>;
-
   const createMockDb = () => ({
     select: jest.fn().mockReturnThis(),
     from: jest.fn().mockReturnThis(),
@@ -47,18 +44,6 @@ describe('MatchService', () => {
     updatedAt: new Date(),
   };
 
-  const mockWeights = {
-    id: '123e4567-e89b-12d3-a456-426614174003',
-    userId: mockInvestorId,
-    marketWeight: 30,
-    teamWeight: 25,
-    productWeight: 20,
-    tractionWeight: 15,
-    financialsWeight: 10,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  };
-
   beforeEach(async () => {
     mockDb = createMockDb();
 
@@ -78,19 +63,12 @@ describe('MatchService', () => {
             addJob: jest.fn(),
           },
         },
-        {
-          provide: ScoringService,
-          useValue: {
-            findOne: jest.fn().mockResolvedValue(mockWeights),
-          },
-        },
       ],
     }).compile();
 
     service = module.get<MatchService>(MatchService);
     drizzleService = module.get(DrizzleService);
     queueService = module.get(QueueService);
-    scoringService = module.get(ScoringService);
   });
 
   afterEach(() => {
@@ -336,7 +314,6 @@ describe('MatchService', () => {
 
       expect(result).toEqual(mockMatch);
       expect(mockDb.insert).toHaveBeenCalled();
-      expect(scoringService.findOne).toHaveBeenCalledWith(mockInvestorId);
     });
 
     it('should update existing match', async () => {
@@ -353,13 +330,12 @@ describe('MatchService', () => {
       expect(mockDb.update).toHaveBeenCalled();
     });
 
-    it('should calculate overall score using investor weights', async () => {
+    it('should calculate overall score using default weights', async () => {
       mockDb.limit.mockResolvedValue([]);
       mockDb.returning.mockResolvedValue([mockMatch]);
 
       await service.createOrUpdate(mockInvestorId, mockStartupId, scores);
 
-      expect(scoringService.findOne).toHaveBeenCalledWith(mockInvestorId);
       expect(mockDb.values).toHaveBeenCalledWith(
         expect.objectContaining({
           overallScore: expect.any(Number),

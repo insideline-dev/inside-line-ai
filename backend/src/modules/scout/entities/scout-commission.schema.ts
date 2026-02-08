@@ -30,7 +30,7 @@ export const scoutCommissionStatusEnum = pgEnum('scout_commission_status', [
 // ============================================================================
 
 export const scoutCommission = pgTable(
-  'scout_commission',
+  'scout_commissions',
   {
     id: uuid('id').primaryKey().defaultRandom(),
     scoutId: uuid('scout_id')

@@ -82,8 +82,8 @@ export interface AnalysisProgress {
 }
 
 export interface Evaluation {
-  id: number;
-  startupId: number;
+  id: string;
+  startupId: string;
 
   // Section scores
   sectionScores?: SectionScores;

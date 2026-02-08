@@ -18,7 +18,7 @@ type Interest = {
   id: string;
   investorId: string;
   investorName?: string | null;
-  status: "interested" | "passed" | "meeting_scheduled";
+  status: "reviewing" | "engaged" | "closed" | "passed" | "meeting_scheduled";
   notes?: string | null;
 };
 

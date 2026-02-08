@@ -9,7 +9,14 @@ import { DrizzleService } from '../../database';
 import { QueueService, QUEUE_NAMES } from '../../queue';
 import { startupMatch, NewStartupMatch } from './entities/investor.schema';
 import { GetMatchesQuery, UpdateMatchStatus } from './dto';
-import { ScoringService } from './scoring.service';
+
+const DEFAULT_SCORING_WEIGHTS = {
+  marketWeight: 20,
+  teamWeight: 20,
+  productWeight: 20,
+  tractionWeight: 20,
+  financialsWeight: 20,
+} as const;
 
 @Injectable()
 export class MatchService {
@@ -18,7 +25,6 @@ export class MatchService {
   constructor(
     private drizzle: DrizzleService,
     private queue: QueueService,
-    private scoringService: ScoringService,
   ) {}
 
   async findAll(investorId: string, query: GetMatchesQuery) {
@@ -249,7 +255,7 @@ export class MatchService {
     },
   ) {
     return this.drizzle.withRLS(investorId, async (db) => {
-      const weights = await this.scoringService.findOne(investorId);
+      const weights = DEFAULT_SCORING_WEIGHTS;
       const overallScore = this.calculateOverallScore(
         {
           marketScore: scores.marketScore ?? null,

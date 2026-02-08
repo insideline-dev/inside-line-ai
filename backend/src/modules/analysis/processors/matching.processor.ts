@@ -15,7 +15,6 @@ import { NotificationService } from '../../../notification/notification.service'
 import { NotificationGateway } from '../../../notification/notification.gateway';
 import { NotificationType } from '../../../notification/entities';
 import { MatchService } from '../../investor/match.service';
-import { ScoringService } from '../../investor/scoring.service';
 import { investorThesis, InvestorThesis } from '../../investor/entities';
 import type {
   MatchingJobData,
@@ -35,7 +34,6 @@ export class MatchingProcessor
     private drizzle: DrizzleService,
     private analysisService: AnalysisService,
     private matchService: MatchService,
-    private scoringService: ScoringService,
     private notificationService: NotificationService,
     private notificationGateway: NotificationGateway,
   ) {
@@ -87,8 +85,15 @@ export class MatchingProcessor
         overallScore: number;
       }> = [];
 
+      const defaultWeights = {
+        marketWeight: 20,
+        teamWeight: 20,
+        productWeight: 20,
+        tractionWeight: 20,
+        financialsWeight: 20,
+      };
+
       for (const investor of activeInvestors) {
-        const weights = await this.scoringService.findOne(investor.userId);
         const overallScore = this.matchService.calculateOverallScore(
           {
             marketScore: scores.marketScore,
@@ -97,7 +102,7 @@ export class MatchingProcessor
             tractionScore: scores.tractionScore,
             financialsScore: scores.financialsScore,
           },
-          weights,
+          defaultWeights,
         );
 
         await this.matchService.createOrUpdate(investor.userId, startupId, {

@@ -9,9 +9,9 @@ import type { LucideIcon } from "lucide-react";
 
 interface AdminFeedbackProps {
   sectionKey: string;
-  evaluationId: number;
+  evaluationId: string;
   existingComment?: string;
-  onReanalyze: (sectionKey: string, comment: string) => Promise<void>;
+  onReanalyze: (sectionKey: string, evaluationId: string, comment: string) => Promise<void>;
   isReanalyzing?: boolean;
 }
 
@@ -89,7 +89,7 @@ export function MemoSection({
 
   const handleReanalyze = async () => {
     if (adminFeedback && feedbackComment.trim()) {
-      await adminFeedback.onReanalyze(adminFeedback.sectionKey, feedbackComment.trim());
+      await adminFeedback.onReanalyze(adminFeedback.sectionKey, adminFeedback.evaluationId, feedbackComment.trim());
       setShowFeedback(false);
     }
   };

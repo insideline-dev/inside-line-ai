@@ -96,7 +96,7 @@ export function SummaryCard({
               </div>
               <div className="p-3 bg-muted/50 rounded-lg" data-testid="info-sector">
                 <p className="text-xs text-muted-foreground mb-1">Sector</p>
-                <p className="font-medium text-xs break-words">{startup.sector || "N/A"}</p>
+                <p className="font-medium text-xs break-words">{startup.industry || "N/A"}</p>
               </div>
               <div className="p-3 bg-muted/50 rounded-lg" data-testid="info-location">
                 <p className="text-xs text-muted-foreground mb-1">Location</p>
@@ -104,7 +104,7 @@ export function SummaryCard({
               </div>
               <div className="p-3 bg-muted/50 rounded-lg" data-testid="info-round-size">
                 <p className="text-xs text-muted-foreground mb-1">Round Size</p>
-                <p className="font-medium text-xs break-words">{formatCurrency(startup.roundSize)}</p>
+                <p className="font-medium text-xs break-words">{formatCurrency(startup.fundingTarget)}</p>
               </div>
               <div className="p-3 bg-muted/50 rounded-lg" data-testid="info-valuation">
                 <p className="text-xs text-muted-foreground mb-1">Valuation</p>

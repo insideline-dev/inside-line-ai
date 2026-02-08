@@ -42,7 +42,7 @@ export const notificationTypeEnum = pgEnum('notification_type', [
  * RLS: Users see only their own notifications
  */
 export const notification = pgTable(
-  'notification',
+  'notifications',
   {
     id: uuid('id').primaryKey().defaultRandom(),
     userId: uuid('user_id')

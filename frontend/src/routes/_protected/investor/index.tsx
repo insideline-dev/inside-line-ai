@@ -32,7 +32,7 @@ interface MatchedStartup {
   name: string;
   description: string;
   stage: string;
-  sector: string;
+  industry: string;
   sectorIndustryGroup?: string;
   location: string;
   normalizedRegion?: string;
@@ -48,7 +48,7 @@ interface PrivateStartup {
   name: string;
   description: string;
   stage: string;
-  sector: string;
+  industry: string;
   sectorIndustryGroup?: string;
   location: string;
   normalizedRegion?: string;
@@ -70,7 +70,7 @@ function InvestorDashboard() {
   const stats = {
     totalMatches: matches.length,
     reviewing: matches.filter((m) => m.status === "reviewing").length,
-    interested: matches.filter((m) => m.status === "interested").length,
+    engaged: matches.filter((m) => m.status === "engaged").length,
     passed: matches.filter((m) => m.status === "passed").length,
   };
   const isLoadingStats = isLoading;
@@ -236,8 +236,8 @@ function InvestorDashboard() {
                   <Star className="w-5 h-5 text-chart-2" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold">{stats?.interested || 0}</p>
-                  <p className="text-sm text-muted-foreground">Interested</p>
+                  <p className="text-2xl font-bold">{stats?.engaged || 0}</p>
+                  <p className="text-sm text-muted-foreground">Engaged</p>
                 </div>
               </div>
             </CardContent>
@@ -274,11 +274,11 @@ function InvestorDashboard() {
           <TabsTrigger value="all" data-testid="tab-all">All</TabsTrigger>
           <TabsTrigger value="new" data-testid="tab-new">New</TabsTrigger>
           <TabsTrigger value="reviewing" data-testid="tab-reviewing">Reviewing</TabsTrigger>
-          <TabsTrigger value="interested" data-testid="tab-interested">Interested</TabsTrigger>
+          <TabsTrigger value="engaged" data-testid="tab-engaged">Engaged</TabsTrigger>
           <TabsTrigger value="watchlist" data-testid="tab-watchlist">Watchlist</TabsTrigger>
         </TabsList>
 
-        {["all", "new", "reviewing", "interested", "watchlist"].map((tab) => (
+        {["all", "new", "reviewing", "engaged", "watchlist"].map((tab) => (
           <TabsContent key={tab} value={tab} className="space-y-4">
             {isLoading ? (
               <div className="space-y-4">
@@ -314,8 +314,8 @@ function InvestorDashboard() {
                             {match.stage && (
                               <Badge variant="outline">{match.stage.replace("_", " ")}</Badge>
                             )}
-                            {match.sector && (
-                              <Badge variant="secondary">{match.sector}</Badge>
+                            {match.industry && (
+                              <Badge variant="secondary">{match.industry}</Badge>
                             )}
                           </div>
                           <p className="text-muted-foreground line-clamp-2">{match.description}</p>

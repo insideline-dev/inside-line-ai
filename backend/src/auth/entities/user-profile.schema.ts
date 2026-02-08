@@ -7,7 +7,7 @@ import { user } from "./auth.schema";
  * Additional profile information beyond core auth data
  */
 export const userProfile = pgTable(
-  "user_profile",
+  "user_profiles",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     userId: uuid("user_id")

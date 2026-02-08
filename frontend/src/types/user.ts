@@ -11,9 +11,8 @@ export interface User {
 }
 
 export interface UserProfile {
-  id: number;
+  id: string;
   userId: string;
-  role: UserRole;
   companyName?: string;
   title?: string;
   linkedinUrl?: string;
@@ -23,29 +22,31 @@ export interface UserProfile {
 }
 
 export interface ScoutApplication {
-  id: number;
+  id: string;
   userId: string;
+  investorId: string;
   name: string;
   email: string;
   linkedinUrl?: string;
   experience: string;
   motivation: string;
   dealflowSources?: string;
+  portfolio?: string[];
   status: "pending" | "approved" | "rejected";
   reviewedBy?: string;
-  reviewNotes?: string;
+  rejectionReason?: string;
   reviewedAt?: string;
   createdAt: string;
   updatedAt?: string;
 }
 
 export interface Notification {
-  id: number;
+  id: string;
   userId: string;
-  type: "analysis_complete" | "startup_approved" | "startup_rejected" | "new_match" | "system";
+  type: "info" | "success" | "warning" | "error" | "match";
   title: string;
   message: string;
-  startupId?: number;
-  isRead: boolean;
+  link?: string;
+  read: boolean;
   createdAt: string;
 }

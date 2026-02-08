@@ -9,7 +9,7 @@ export interface BaseJobResult {
 }
 
 export interface TaskJobResult extends BaseJobResult {
-  type: 'task';
+  type: "task";
   result: unknown;
 }
 
@@ -23,18 +23,18 @@ export interface StartupScores {
 }
 
 export interface ScoringJobResult extends BaseJobResult {
-  type: 'scoring';
+  type: "scoring";
   scores: StartupScores;
 }
 
 export interface MatchingJobResult extends BaseJobResult {
-  type: 'matching';
+  type: "matching";
   matchCount: number;
   highScoreMatches: number;
 }
 
 export interface PdfJobResult extends BaseJobResult {
-  type: 'pdf';
+  type: "pdf";
   pdfUrl: string;
   pdfKey: string;
 }
@@ -57,7 +57,7 @@ export interface MarketAnalysis {
 }
 
 export interface MarketAnalysisJobResult extends BaseJobResult {
-  type: 'market_analysis';
+  type: "market_analysis";
   analysis: MarketAnalysis;
 }
 
@@ -67,4 +67,44 @@ export type AnalysisJobResult =
   | PdfJobResult
   | MarketAnalysisJobResult;
 
-export type JobResult = TaskJobResult | AnalysisJobResult;
+// AI pipeline job result types
+export interface AiPipelineBaseJobResult extends BaseJobResult {
+  type:
+    | "ai_extraction"
+    | "ai_scraping"
+    | "ai_research"
+    | "ai_evaluation"
+    | "ai_synthesis";
+  startupId: string;
+  pipelineRunId: string;
+  data: unknown;
+}
+
+export interface AiExtractionJobResult extends AiPipelineBaseJobResult {
+  type: "ai_extraction";
+}
+
+export interface AiScrapingJobResult extends AiPipelineBaseJobResult {
+  type: "ai_scraping";
+}
+
+export interface AiResearchJobResult extends AiPipelineBaseJobResult {
+  type: "ai_research";
+}
+
+export interface AiEvaluationJobResult extends AiPipelineBaseJobResult {
+  type: "ai_evaluation";
+}
+
+export interface AiSynthesisJobResult extends AiPipelineBaseJobResult {
+  type: "ai_synthesis";
+}
+
+export type AiPipelineJobResult =
+  | AiExtractionJobResult
+  | AiScrapingJobResult
+  | AiResearchJobResult
+  | AiEvaluationJobResult
+  | AiSynthesisJobResult;
+
+export type JobResult = TaskJobResult | AnalysisJobResult | AiPipelineJobResult;

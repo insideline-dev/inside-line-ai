@@ -1,8 +1,38 @@
-import { useEffect, useRef, useMemo } from "react";
+import { useEffect, useRef, useMemo, useCallback } from "react";
 import { io, Socket } from "socket.io-client";
 import { useCurrentUser } from "./hooks";
 
 const SOCKET_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
+
+// ── Shared socket singleton ──────────────────────────────────────────
+
+let sharedSocket: Socket | null = null;
+let refCount = 0;
+
+function acquireSocket(): Socket {
+  if (!sharedSocket) {
+    sharedSocket = io(`${SOCKET_URL}/notifications`, {
+      withCredentials: true,
+      transports: ["websocket"],
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+    });
+  }
+  refCount++;
+  return sharedSocket;
+}
+
+function releaseSocket(): void {
+  refCount--;
+  if (refCount <= 0 && sharedSocket) {
+    sharedSocket.disconnect();
+    sharedSocket = null;
+    refCount = 0;
+  }
+}
+
+// ── Types ────────────────────────────────────────────────────────────
 
 interface NotificationEvent {
   id: string;
@@ -18,24 +48,82 @@ interface NotificationCountEvent {
   count: number;
 }
 
-export type JobType = "scoring" | "pdf" | "matching" | "market_analysis";
+export type JobType =
+  | "scoring"
+  | "pdf"
+  | "matching"
+  | "market_analysis"
+  | "ai_extraction"
+  | "ai_scraping"
+  | "ai_research"
+  | "ai_evaluation"
+  | "ai_synthesis";
+
 export type JobStatus = "pending" | "processing" | "completed" | "failed";
 
 export interface JobStatusEvent {
   jobId: string;
   jobType: JobType;
   status: JobStatus;
+  startupId?: string;
+  pipelineRunId?: string;
   progress?: number;
   result?: unknown;
   error?: string;
+}
+
+export interface PhaseEvent {
+  startupId: string;
+  phase: string;
+  status: string;
+  error?: string;
+}
+
+export interface PipelineStatusEvent {
+  startupId: string;
+  pipelineRunId: string;
+  status: string;
+  overallScore?: number;
+  error?: string;
+}
+
+export interface AgentProgressEvent {
+  startupId: string;
+  phase: string;
+  agent: {
+    key: string;
+    status: "pending" | "running" | "completed" | "failed";
+    progress?: number;
+    error?: string;
+  };
+}
+
+// ── Hooks ────────────────────────────────────────────────────────────
+
+function useSocket(): Socket | null {
+  const socketRef = useRef<Socket | null>(null);
+  const { data: user } = useCurrentUser();
+
+  useEffect(() => {
+    if (!user) return;
+
+    const socket = acquireSocket();
+    socketRef.current = socket;
+
+    return () => {
+      releaseSocket();
+      socketRef.current = null;
+    };
+  }, [user?.id]);
+
+  return socketRef.current;
 }
 
 export function useNotificationSocket(
   onNewNotification?: (notification: NotificationEvent) => void,
   onCountUpdate?: (count: number) => void
 ) {
-  const socketRef = useRef<Socket | null>(null);
-  const { data: user } = useCurrentUser();
+  const socket = useSocket();
   const onNewNotificationRef = useRef(onNewNotification);
   const onCountUpdateRef = useRef(onCountUpdate);
 
@@ -45,41 +133,37 @@ export function useNotificationSocket(
   });
 
   useEffect(() => {
-    if (!user) return;
+    if (!socket) return;
 
-    const socket = io(`${SOCKET_URL}/notifications`, {
-      withCredentials: true,
-      transports: ["websocket"],
-      reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
-    });
-
-    socket.on("notification:new", (data: NotificationEvent) => {
+    const handleNew = (data: NotificationEvent) => {
       onNewNotificationRef.current?.(data);
-    });
-
-    socket.on("notification:count", (data: NotificationCountEvent) => {
+    };
+    const handleCount = (data: NotificationCountEvent) => {
       onCountUpdateRef.current?.(data.count);
-    });
+    };
+    const handleError = (data: { message: string }) => {
+      console.error("[WS] Auth error:", data.message);
+    };
 
-    socketRef.current = socket;
+    socket.on("notification:new", handleNew);
+    socket.on("notification:count", handleCount);
+    socket.on("error", handleError);
 
     return () => {
-      socket.disconnect();
-      socketRef.current = null;
+      socket.off("notification:new", handleNew);
+      socket.off("notification:count", handleCount);
+      socket.off("error", handleError);
     };
-  }, [user?.id]);
+  }, [socket]);
 
-  return socketRef.current;
+  return socket;
 }
 
 export function useJobStatus(
   onStatusChange?: (event: JobStatusEvent) => void,
   jobIds?: string[]
 ) {
-  const socketRef = useRef<Socket | null>(null);
-  const { data: user } = useCurrentUser();
+  const socket = useSocket();
   const jobIdsKey = useMemo(() => jobIds?.join(",") ?? "", [jobIds]);
   const onStatusChangeRef = useRef(onStatusChange);
 
@@ -88,28 +172,100 @@ export function useJobStatus(
   });
 
   useEffect(() => {
-    if (!user) return;
+    if (!socket) return;
 
-    const socket = io(`${SOCKET_URL}/notifications`, {
-      withCredentials: true,
-      transports: ["websocket"],
-      reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
-    });
-
-    socket.on("job:status", (event: JobStatusEvent) => {
+    const handleStatus = (event: JobStatusEvent) => {
       if (jobIds && !jobIds.includes(event.jobId)) return;
       onStatusChangeRef.current?.(event);
-    });
+    };
 
-    socketRef.current = socket;
+    socket.on("job:status", handleStatus);
 
     return () => {
-      socket.disconnect();
-      socketRef.current = null;
+      socket.off("job:status", handleStatus);
     };
-  }, [user?.id, jobIdsKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [socket, jobIdsKey]);
 
-  return socketRef.current;
+  return socket;
+}
+
+export function usePipelineStatus(
+  startupId: string | null,
+  handlers?: {
+    onPhaseUpdate?: (data: PhaseEvent) => void;
+    onPipelineStarted?: (data: { startupId: string; pipelineRunId: string }) => void;
+    onPipelineComplete?: (data: PipelineStatusEvent) => void;
+    onPipelineFailed?: (data: PipelineStatusEvent) => void;
+    onPipelineCancelled?: (data: PipelineStatusEvent) => void;
+    onAgentProgress?: (data: AgentProgressEvent) => void;
+  }
+) {
+  const socket = useSocket();
+  const handlersRef = useRef(handlers);
+
+  useEffect(() => {
+    handlersRef.current = handlers;
+  });
+
+  const filterByStartup = useCallback(
+    <T extends { startupId: string }>(handler: ((data: T) => void) | undefined) => {
+      return (data: T) => {
+        if (!startupId || data.startupId !== startupId) return;
+        handler?.(data);
+      };
+    },
+    [startupId]
+  );
+
+  useEffect(() => {
+    if (!socket || !startupId) return;
+
+    const onPipelineStarted = filterByStartup<{ startupId: string; pipelineRunId: string }>(
+      (d) => handlersRef.current?.onPipelineStarted?.(d)
+    );
+    const onPipelineCompleted = filterByStartup<PipelineStatusEvent>(
+      (d) => handlersRef.current?.onPipelineComplete?.(d)
+    );
+    const onPipelineFailed = filterByStartup<PipelineStatusEvent>(
+      (d) => handlersRef.current?.onPipelineFailed?.(d)
+    );
+    const onPipelineCancelled = filterByStartup<PipelineStatusEvent>(
+      (d) => handlersRef.current?.onPipelineCancelled?.(d)
+    );
+    const onPhaseUpdate = filterByStartup<PhaseEvent>(
+      (d) => handlersRef.current?.onPhaseUpdate?.(d)
+    );
+    const onAgentProgress = filterByStartup<AgentProgressEvent>(
+      (d) => handlersRef.current?.onAgentProgress?.(d)
+    );
+
+    socket.on("pipeline:started", onPipelineStarted);
+    socket.on("pipeline:completed", onPipelineCompleted);
+    socket.on("pipeline:failed", onPipelineFailed);
+    socket.on("pipeline:cancelled", onPipelineCancelled);
+    socket.on("phase:started", onPhaseUpdate);
+    socket.on("phase:completed", onPhaseUpdate);
+    socket.on("phase:failed", onPhaseUpdate);
+    socket.on("phase:waiting", onPhaseUpdate);
+    socket.on("phase:skipped", onPhaseUpdate);
+    socket.on("agent:progress", onAgentProgress);
+    socket.on("agent:completed", onAgentProgress);
+
+    return () => {
+      socket.off("pipeline:started", onPipelineStarted);
+      socket.off("pipeline:completed", onPipelineCompleted);
+      socket.off("pipeline:failed", onPipelineFailed);
+      socket.off("pipeline:cancelled", onPipelineCancelled);
+      socket.off("phase:started", onPhaseUpdate);
+      socket.off("phase:completed", onPhaseUpdate);
+      socket.off("phase:failed", onPhaseUpdate);
+      socket.off("phase:waiting", onPhaseUpdate);
+      socket.off("phase:skipped", onPhaseUpdate);
+      socket.off("agent:progress", onAgentProgress);
+      socket.off("agent:completed", onAgentProgress);
+    };
+  }, [socket, startupId, filterByStartup]);
+
+  return socket;
 }

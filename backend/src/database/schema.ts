@@ -35,3 +35,6 @@ export * from '../modules/integrations/agentmail/entities';
 
 // Agent System
 export * from '../modules/agent/entities';
+
+// AI Pipeline
+export * from '../modules/ai/entities';

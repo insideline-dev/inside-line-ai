@@ -1,9 +1,18 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { z } from "zod";
+import {
+  useStartupControllerCreate,
+  useStartupControllerSubmit,
+} from "@/api/generated/startup/startup";
+import { useStorageControllerGetUploadUrl } from "@/api/generated/storage/storage";
+import type {
+  CreateStartupDto,
+  GetUploadUrlDtoContentType,
+} from "@/api/generated/model";
 
 // Simple debounce hook
 function useDebouncedCallback<T extends (...args: any[]) => any>(
@@ -47,55 +56,17 @@ import { CountryCodeSelector } from "@/components/CountryCodeSelector";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Upload, Globe, FileText, Building2, MapPin, Loader2, CheckCircle, Users, Plus, Trash2, Linkedin, TrendingUp, Package, Video, Image, User, Mail, Phone, History, Info, Save, Cloud, CloudOff } from "lucide-react";
 
-// API helper function
-async function throwIfResNotOk(res: Response) {
-  if (!res.ok) {
-    const text = (await res.text()) || res.statusText;
-    throw new Error(`${res.status}: ${text}`);
-  }
-}
-
-async function apiRequest(
-  method: string,
-  url: string,
-  data?: unknown | undefined,
-): Promise<Response> {
-  const res = await fetch(url, {
-    method,
-    headers: data ? { "Content-Type": "application/json" } : {},
-    body: data ? JSON.stringify(data) : undefined,
-    credentials: "include",
-  });
-
-  await throwIfResNotOk(res);
-  return res;
-}
-
-// Type for StartupDraft based on backend schema
-interface StartupDraft {
-  id: number;
-  userId: string;
-  startupId: number | null;
-  formData: Record<string, any>;
-  pitchDeckPath: string | null;
-  uploadedFiles: any[] | null;
-  teamMembers: any[] | null;
-  productScreenshots: any[] | null;
-  lastSavedAt: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
 // Define base schema shape for type inference
 const baseFormSchema = z.object({
   name: z.string().min(1, "Company name is required"),
+  tagline: z.string().min(1, "Tagline is required").max(500, "Tagline is too long"),
   website: z.string().url("Please enter a valid URL").optional().or(z.literal("")),
-  description: z.string().optional(),
-  stage: z.string().optional(),
+  description: z.string().min(100, "Description must be at least 100 characters"),
+  stage: z.string().min(1, "Stage is required"),
   sectorIndustryGroup: z.string().optional(),
   sectorIndustry: z.string().optional(),
-  location: z.string().optional(),
-  fundingTarget: z.string().optional(),
+  location: z.string().min(1, "Location is required"),
+  fundingTarget: z.string().min(1, "Round size is required"),
   roundCurrency: z.string().default("USD"),
   valuation: z.string().optional(),
   valuationKnown: z.boolean().optional(),
@@ -126,13 +97,14 @@ const createSubmitSchema = (userRole: "founder" | "investor" | "admin" | "portal
 
   const baseSchema = z.object({
     name: z.string().min(1, "Company name is required"),
+    tagline: z.string().min(1, "Tagline is required").max(500, "Tagline is too long"),
     website: websiteValidation,
-    description: z.string().optional(),
-    stage: z.string().optional(),
+    description: z.string().min(100, "Description must be at least 100 characters"),
+    stage: z.string().min(1, "Stage is required"),
     sectorIndustryGroup: z.string().optional(),
     sectorIndustry: z.string().optional(),
-    location: z.string().optional(),
-    fundingTarget: z.string().optional(),
+    location: z.string().min(1, "Location is required"),
+    fundingTarget: z.string().min(1, "Round size is required"),
     roundCurrency: z.string().default("USD"),
     valuation: z.string().optional(),
     valuationKnown: z.boolean().optional(),
@@ -168,6 +140,7 @@ interface UploadedFile {
   path: string;
   name: string;
   type: string;
+  publicUrl?: string;
 }
 
 interface TeamMember {
@@ -187,6 +160,65 @@ interface StartupSubmitFormProps {
   draftId?: string | null;
 }
 
+interface StoredDraft {
+  formData: SubmitFormData;
+  deckPath: string | null;
+  uploadedFiles: UploadedFile[];
+  teamMembers: TeamMember[];
+  productScreenshots: string[];
+  savedAt: string;
+}
+
+function unwrapApiResponse<T>(payload: unknown): T {
+  if (
+    payload &&
+    typeof payload === "object" &&
+    "data" in (payload as Record<string, unknown>) &&
+    (payload as Record<string, unknown>).data !== undefined
+  ) {
+    return (payload as Record<string, unknown>).data as T;
+  }
+
+  return payload as T;
+}
+
+const SUPPORTED_IMAGE_TYPES = [
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/gif",
+] as const;
+
+const SUPPORTED_DOCUMENT_TYPES = [
+  "application/pdf",
+  ...SUPPORTED_IMAGE_TYPES,
+] as const;
+
+function isPdfFileType(fileType: string | undefined): boolean {
+  return fileType === "application/pdf";
+}
+
+function isImageFileType(fileType: string | undefined): boolean {
+  return !!fileType && SUPPORTED_IMAGE_TYPES.includes(fileType as (typeof SUPPORTED_IMAGE_TYPES)[number]);
+}
+
+function getDefaultDeckPath(files: UploadedFile[]): string | null {
+  const firstPdf = files.find((file) => isPdfFileType(file.type));
+  return firstPdf?.path ?? null;
+}
+
+function toSupportedContentType(fileType: string): GetUploadUrlDtoContentType {
+  if (
+    SUPPORTED_DOCUMENT_TYPES.includes(
+      fileType as (typeof SUPPORTED_DOCUMENT_TYPES)[number],
+    )
+  ) {
+    return fileType as GetUploadUrlDtoContentType;
+  }
+
+  throw new Error(`Unsupported content type: ${fileType}`);
+}
+
 export function StartupSubmitForm({
   userRole,
   onSuccess,
@@ -197,12 +229,12 @@ export function StartupSubmitForm({
   enableDraftSaving = false,
   draftId: draftIdProp,
 }: StartupSubmitFormProps) {
-  const effectiveEndpoint = portalSlug
-    ? `/api/portal/${portalSlug}/submit`
-    : (apiEndpoint || "/api/startups");
+  void apiEndpoint;
+  void draftIdProp;
   const isPortalSubmission = !!portalSlug;
   const isWebsiteRequired = isPortalSubmission ? portalRequiredFields.includes("website") : true;
   const isPitchDeckRequired = isPortalSubmission ? portalRequiredFields.includes("pitchDeck") : false;
+  const draftStorageKey = "startup-submit-draft-v1";
   const navigate = useNavigate();
   const { toast } = useToast();
   const [deckPath, setDeckPath] = useState<string | null>(null);
@@ -210,21 +242,25 @@ export function StartupSubmitForm({
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([{ name: "", role: "", linkedinUrl: "" }]);
   const [productScreenshots, setProductScreenshots] = useState<string[]>([]);
   const filePathMapRef = useRef<Record<string, string>>({});
+  const filePublicUrlMapRef = useRef<Record<string, string>>({});
   const screenshotPathMapRef = useRef<Record<string, string>>({});
-
-  const [draftId, setDraftId] = useState<number | null>(draftIdProp ? parseInt(draftIdProp) : null);
-  const [draftStatus, setDraftStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
-  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
-  const [isLoadingDraft, setIsLoadingDraft] = useState<boolean>(!!draftIdProp);
-  const [lastSavedSnapshot, setLastSavedSnapshot] = useState<string>("");
   const shouldSaveDraft = enableDraftSaving && userRole === "founder";
 
+  const [draftStatus, setDraftStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  const [isLoadingDraft, setIsLoadingDraft] = useState<boolean>(shouldSaveDraft);
+  const [lastSavedSnapshot, setLastSavedSnapshot] = useState<string>("");
+
   const submitSchema = createSubmitSchema(userRole, isWebsiteRequired);
+  const createStartupMutation = useStartupControllerCreate();
+  const submitStartupMutation = useStartupControllerSubmit();
+  const uploadUrlMutation = useStorageControllerGetUploadUrl();
 
   const form = useForm<SubmitFormData>({
     resolver: zodResolver(submitSchema) as any,
     defaultValues: {
       name: "",
+      tagline: "",
       website: "",
       description: "",
       stage: "",
@@ -259,96 +295,58 @@ export function StartupSubmitForm({
   const hasPreviousFunding = form.watch("hasPreviousFunding");
   const valuationKnown = form.watch("valuationKnown");
 
-  // Load existing draft
-  const { data: existingDraft } = useQuery<StartupDraft>({
-    queryKey: ["/api/drafts", draftId],
-    enabled: shouldSaveDraft && !!draftId,
-  });
-
-  // Populate form with draft data when loaded
+  // Load local draft snapshot
   useEffect(() => {
-    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    if (!shouldSaveDraft) {
+      setIsLoadingDraft(false);
+      return;
+    }
 
-    if (existingDraft) {
-      setIsLoadingDraft(true);
-      const fd = existingDraft.formData as any;
-      if (fd) {
-        Object.keys(fd).forEach((key) => {
-          if (fd[key] !== undefined && fd[key] !== null) {
-            form.setValue(key as any, fd[key]);
+    try {
+      const raw = localStorage.getItem(draftStorageKey);
+      if (!raw) {
+        return;
+      }
+
+      const parsed = JSON.parse(raw) as StoredDraft;
+      if (parsed.formData) {
+        Object.entries(parsed.formData).forEach(([key, value]) => {
+          if (value !== undefined && value !== null) {
+            form.setValue(key as keyof SubmitFormData, value as never);
           }
         });
       }
-      if (existingDraft.pitchDeckPath) setDeckPath(existingDraft.pitchDeckPath);
-      if (existingDraft.uploadedFiles) setUploadedFiles(existingDraft.uploadedFiles as any);
-      if (existingDraft.teamMembers && (existingDraft.teamMembers as any[]).length > 0) {
-        setTeamMembers(existingDraft.teamMembers as TeamMember[]);
+      const draftFiles = parsed.uploadedFiles ?? [];
+      setUploadedFiles(draftFiles);
+      const restoredDeckPath =
+        parsed.deckPath &&
+        draftFiles.some(
+          (file) => file.path === parsed.deckPath && isPdfFileType(file.type),
+        )
+          ? parsed.deckPath
+          : getDefaultDeckPath(draftFiles);
+      setDeckPath(restoredDeckPath);
+      setTeamMembers(parsed.teamMembers?.length ? parsed.teamMembers : [{ name: "", role: "", linkedinUrl: "" }]);
+      setProductScreenshots(parsed.productScreenshots ?? []);
+      if (parsed.savedAt) {
+        setLastSavedAt(new Date(parsed.savedAt));
       }
-      if (existingDraft.productScreenshots) setProductScreenshots(existingDraft.productScreenshots as string[]);
-      setLastSavedAt(new Date(existingDraft.lastSavedAt));
-      setDraftStatus("saved");
 
-      // Create initial snapshot after loading to prevent immediate resave
       const snapshot = JSON.stringify({
-        form: form.getValues(),
-        deckPath: existingDraft.pitchDeckPath,
-        files: existingDraft.uploadedFiles,
-        team: existingDraft.teamMembers,
-        screenshots: existingDraft.productScreenshots,
+        form: parsed.formData,
+        deckPath: restoredDeckPath,
+        files: draftFiles,
+        team: parsed.teamMembers,
+        screenshots: parsed.productScreenshots,
       });
       setLastSavedSnapshot(snapshot);
-
-      // Allow saves after a brief delay
-      timeoutId = setTimeout(() => setIsLoadingDraft(false), 500);
-    }
-
-    return () => {
-      if (timeoutId) clearTimeout(timeoutId);
-    };
-  }, [existingDraft, form]);
-
-  // Save draft mutation
-  const saveDraftMutation = useMutation({
-    mutationFn: async () => {
-      const formData = form.getValues();
-      const payload = {
-        formData,
-        pitchDeckPath: deckPath,
-        uploadedFiles: uploadedFiles.length > 0 ? uploadedFiles : null,
-        teamMembers: teamMembers.filter(m => m.name || m.linkedinUrl),
-        productScreenshots: productScreenshots.length > 0 ? productScreenshots : null,
-      };
-
-      if (draftId) {
-        const response = await apiRequest("PATCH", `/api/drafts/${draftId}`, payload);
-        return response.json();
-      } else {
-        const response = await apiRequest("POST", "/api/drafts", payload);
-        return response.json();
-      }
-    },
-    onSuccess: (data) => {
-      if (!draftId && data.id) {
-        setDraftId(data.id);
-      }
-      setLastSavedAt(new Date());
       setDraftStatus("saved");
-      queryClient.invalidateQueries({ queryKey: ["/api/drafts"] });
-    },
-    onError: () => {
+    } catch {
       setDraftStatus("error");
-    },
-  });
-
-  // Delete draft mutation
-  const deleteDraftMutation = useMutation({
-    mutationFn: async (id: number) => {
-      await apiRequest("DELETE", `/api/drafts/${id}`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/drafts"] });
-    },
-  });
+    } finally {
+      setIsLoadingDraft(false);
+    }
+  }, [form, shouldSaveDraft]);
 
   // Create a current snapshot for comparison
   const createSnapshot = useCallback(() => {
@@ -363,7 +361,7 @@ export function StartupSubmitForm({
 
   // Debounced auto-save with dirty check
   const debouncedSave = useDebouncedCallback(() => {
-    if (!shouldSaveDraft || isLoadingDraft || saveDraftMutation.isPending) {
+    if (!shouldSaveDraft || isLoadingDraft) {
       return;
     }
 
@@ -381,18 +379,28 @@ export function StartupSubmitForm({
     }
 
     setDraftStatus("saving");
-    saveDraftMutation.mutate();
-  }, 3000);
+    const payload: StoredDraft = {
+      formData,
+      deckPath,
+      uploadedFiles,
+      teamMembers: teamMembers.filter((m) => m.name || m.linkedinUrl),
+      productScreenshots,
+      savedAt: new Date().toISOString(),
+    };
 
-  // Update snapshot after successful save
-  useEffect(() => {
-    if (draftStatus === "saved") {
-      setLastSavedSnapshot(createSnapshot());
+    try {
+      localStorage.setItem(draftStorageKey, JSON.stringify(payload));
+      setLastSavedAt(new Date(payload.savedAt));
+      setLastSavedSnapshot(currentSnapshot);
+      setDraftStatus("saved");
+    } catch {
+      setDraftStatus("error");
     }
-  }, [draftStatus, createSnapshot]);
+  }, 3000);
 
   // Watch specific form fields for auto-save (avoiding full object comparison)
   const watchedName = form.watch("name");
+  const watchedTagline = form.watch("tagline");
   const watchedDescription = form.watch("description");
   const watchedWebsite = form.watch("website");
   const watchedStage = form.watch("stage");
@@ -403,7 +411,7 @@ export function StartupSubmitForm({
     if (shouldSaveDraft && !isLoadingDraft && watchedName) {
       debouncedSave();
     }
-  }, [watchedName, watchedDescription, watchedWebsite, watchedStage, watchedSector, watchedLocation, shouldSaveDraft, isLoadingDraft, debouncedSave]);
+  }, [watchedName, watchedTagline, watchedDescription, watchedWebsite, watchedStage, watchedSector, watchedLocation, shouldSaveDraft, isLoadingDraft, debouncedSave]);
 
   // Also trigger save when files/team change
   useEffect(() => {
@@ -414,63 +422,80 @@ export function StartupSubmitForm({
 
   const submitMutation = useMutation({
     mutationFn: async (data: SubmitFormData) => {
-      if (isPitchDeckRequired && !deckPath) {
-        throw new Error("Pitch deck is required");
+      if (isPortalSubmission) {
+        throw new Error("Portal submission is handled in the dedicated portal form");
       }
-      const validTeamMembers = teamMembers.filter(m => m.name.trim() || m.linkedinUrl.trim());
-      const response = await apiRequest("POST", effectiveEndpoint, {
-        ...data,
-        stage: data.stage || undefined,
-        sectorIndustryGroup: data.sectorIndustryGroup || undefined,
-        sectorIndustry: data.sectorIndustry || undefined,
-        fundingTarget: data.fundingTarget ? parseFloat(data.fundingTarget) : undefined,
-        roundCurrency: data.roundCurrency || "USD",
-        valuation: data.valuationKnown && data.valuation ? parseFloat(data.valuation) : undefined,
-        valuationKnown: data.valuationKnown ?? true,
-        valuationType: data.valuationKnown ? (data.valuationType || undefined) : undefined,
-        raiseType: data.raiseType || undefined,
-        leadSecured: data.leadSecured || false,
-        leadInvestorName: data.leadSecured ? data.leadInvestorName : undefined,
-        contactName: data.contactName || undefined,
-        contactEmail: data.contactEmail || undefined,
-        contactPhone: data.contactPhone || undefined,
-        contactPhoneCountryCode: data.contactPhoneCountryCode || undefined,
-        hasPreviousFunding: data.hasPreviousFunding || false,
-        previousFundingAmount: data.hasPreviousFunding && data.previousFundingAmount ? parseFloat(data.previousFundingAmount) : undefined,
-        previousFundingCurrency: data.hasPreviousFunding ? data.previousFundingCurrency : undefined,
-        previousInvestors: data.hasPreviousFunding ? data.previousInvestors : undefined,
-        previousRoundType: data.hasPreviousFunding ? data.previousRoundType : undefined,
-        technologyReadinessLevel: data.technologyReadinessLevel || undefined,
-        demoVideoUrl: data.demoVideoUrl || undefined,
-        productDescription: data.productDescription || undefined,
-        productScreenshots: productScreenshots.length > 0 ? productScreenshots : undefined,
-        pitchDeckPath: deckPath,
-        files: uploadedFiles.length > 0 ? uploadedFiles : undefined,
-        teamMembers: validTeamMembers.length > 0 ? validTeamMembers : undefined,
-        submittedByRole: userRole,
-        isPrivate: isInvestorOrAdmin,
+
+      const fundingTarget = Number.parseFloat(
+        (data.fundingTarget || "").replace(/,/g, ""),
+      );
+      if (!Number.isFinite(fundingTarget) || fundingTarget <= 0) {
+        throw new Error("Round size must be a positive number");
+      }
+
+      const validTeamMembers = teamMembers.filter(
+        (m) => m.name.trim() || m.linkedinUrl.trim(),
+      );
+      const pitchDeckFile =
+        uploadedFiles.find(
+          (file) => file.path === deckPath && isPdfFileType(file.type),
+        ) ?? uploadedFiles.find((file) => isPdfFileType(file.type));
+      const website = data.website?.trim();
+
+      if (!website) {
+        throw new Error("Website is required");
+      }
+
+      if (isPitchDeckRequired && !pitchDeckFile) {
+        throw new Error("Pitch deck PDF is required");
+      }
+
+      const createPayload = {
+        name: data.name.trim(),
+        tagline: data.tagline.trim(),
+        description: data.description.trim(),
+        website,
+        location: data.location.trim(),
+        industry:
+          data.sectorIndustry?.trim() ||
+          data.sectorIndustryGroup?.trim() ||
+          "general",
+        stage: data.stage as CreateStartupDto["stage"],
+        fundingTarget: Math.round(fundingTarget),
+        teamSize: Math.max(validTeamMembers.length, 1),
+        pitchDeckUrl: pitchDeckFile?.publicUrl,
+        demoUrl: data.demoVideoUrl || undefined,
+      };
+
+      const createResult = await createStartupMutation.mutateAsync({
+        data: createPayload,
       });
-      return response.json();
+      const created = unwrapApiResponse<{ id?: string }>(createResult);
+      const startupId = created?.id;
+
+      if (!startupId) {
+        throw new Error("Startup was created but no startup id was returned");
+      }
+
+      await submitStartupMutation.mutateAsync({
+        id: startupId,
+        data: {},
+      });
+
+      return created;
     },
     onSuccess: () => {
       const successMessage = isInvestorOrAdmin
-        ? "Startup submitted for analysis. You can view the report once complete."
-        : "Your startup has been submitted for analysis. We'll notify you when it's complete.";
+        ? "Startup submitted for analysis."
+        : "Your startup has been submitted and the AI pipeline has started.";
 
       toast.success(successMessage);
 
-      // Delete draft after successful submission
-      if (draftId) {
-        deleteDraftMutation.mutate(draftId);
+      if (shouldSaveDraft) {
+        localStorage.removeItem(draftStorageKey);
       }
 
-      if (userRole === "investor") {
-        queryClient.invalidateQueries({ queryKey: ["/api/investor/my-startups"] });
-      } else if (userRole === "admin") {
-        queryClient.invalidateQueries({ queryKey: ["/api/admin/startups"] });
-      } else {
-        queryClient.invalidateQueries({ queryKey: ["/api/startups"] });
-      }
+      queryClient.invalidateQueries({ queryKey: ["/startups"] });
 
       if (onSuccess) {
         onSuccess();
@@ -582,13 +607,31 @@ export function StartupSubmitForm({
 
             <FormField
               control={form.control}
+              name="tagline"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Tagline *</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="The one-line summary of your startup"
+                      {...field}
+                      data-testid="input-tagline"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
               name="description"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>One-liner Description</FormLabel>
                   <FormControl>
                     <Textarea
-                      placeholder="We help companies do X by providing Y..."
+                      placeholder="Describe what you do, who you serve, and why now (minimum 100 characters)"
                       className="resize-none"
                       {...field}
                       data-testid="input-description"
@@ -849,37 +892,33 @@ export function StartupSubmitForm({
                 maxNumberOfFiles={6}
                 maxFileSize={10485760}
                 onGetUploadParameters={async (file) => {
-                  const res = await fetch("/api/uploads/request-url", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      name: file.name,
-                      size: file.size,
-                      contentType: file.type,
-                      isPublic: true,
-                    }),
+                  if (!isImageFileType(file.type)) {
+                    throw new Error(
+                      "Only image files are supported for product screenshots",
+                    );
+                  }
+
+                  const uploadResult = await uploadUrlMutation.mutateAsync({
+                    data: {
+                      assetType: "images",
+                      contentType: toSupportedContentType(file.type),
+                    },
                   });
+                  const uploadData = unwrapApiResponse<{
+                    uploadUrl?: string;
+                    publicUrl?: string;
+                    key?: string;
+                  }>(uploadResult);
 
-                  if (!res.ok) {
-                    const errorData = await res.json().catch(() => ({}));
-                    throw new Error(errorData.error || `Upload failed: ${res.status}`);
+                  if (!uploadData.uploadUrl) {
+                    throw new Error("No upload url received from server");
                   }
-
-                  const data = await res.json();
-
-                  if (!data.uploadURL) {
-                    throw new Error("No upload URL received from server");
-                  }
-
-                  if (data.publicUrl) {
-                    screenshotPathMapRef.current[file.id] = data.publicUrl;
-                  } else if (data.objectPath) {
-                    screenshotPathMapRef.current[file.id] = data.objectPath;
-                  }
+                  screenshotPathMapRef.current[file.id] =
+                    uploadData.publicUrl || uploadData.key || "";
 
                   return {
                     method: "PUT",
-                    url: data.uploadURL,
+                    url: uploadData.uploadUrl,
                     headers: { "Content-Type": file.type },
                   };
                 }}
@@ -888,7 +927,9 @@ export function StartupSubmitForm({
                     const newUrls = result.successful
                       .map(file => screenshotPathMapRef.current[file.id])
                       .filter(Boolean);
-                    setProductScreenshots(prev => [...prev, ...newUrls]);
+                    setProductScreenshots((prev) =>
+                      Array.from(new Set([...prev, ...newUrls])),
+                    );
                   }
                 }}
                 buttonClassName="w-full"
@@ -911,7 +952,7 @@ export function StartupSubmitForm({
               Documents
             </CardTitle>
             <CardDescription>
-              Upload pitch deck{isPitchDeckRequired ? " (required)" : ""}, financials, product demos, and other supporting materials
+              Upload pitch deck{isPitchDeckRequired ? " (required)" : ""} and supporting images (PDF and image files)
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -933,7 +974,13 @@ export function StartupSubmitForm({
                       variant="ghost"
                       size="sm"
                       onClick={() => {
-                        setUploadedFiles(prev => prev.filter((_, i) => i !== index));
+                        setUploadedFiles((prev) => {
+                          const next = prev.filter((_, i) => i !== index);
+                          if (deckPath === file.path) {
+                            setDeckPath(getDefaultDeckPath(next));
+                          }
+                          return next;
+                        });
                       }}
                       data-testid={`button-remove-file-${index}`}
                     >
@@ -948,51 +995,74 @@ export function StartupSubmitForm({
               maxNumberOfFiles={10}
               maxFileSize={52428800}
               onGetUploadParameters={async (file) => {
-                const res = await fetch("/api/uploads/request-url", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    name: file.name,
-                    size: file.size,
-                    contentType: file.type,
-                  }),
+                if (
+                  !SUPPORTED_DOCUMENT_TYPES.includes(
+                    file.type as (typeof SUPPORTED_DOCUMENT_TYPES)[number],
+                  )
+                ) {
+                  throw new Error(
+                    "Only PDF and image files are supported for startup uploads",
+                  );
+                }
+
+                const uploadResult = await uploadUrlMutation.mutateAsync({
+                  data: {
+                    assetType: file.type.startsWith("image/")
+                      ? "images"
+                      : "transcripts",
+                    contentType: toSupportedContentType(file.type),
+                  },
                 });
+                const uploadData = unwrapApiResponse<{
+                  uploadUrl?: string;
+                  key?: string;
+                  publicUrl?: string;
+                }>(uploadResult);
 
-                if (!res.ok) {
-                  const errorData = await res.json().catch(() => ({}));
-                  throw new Error(errorData.error || `Upload failed: ${res.status}`);
+                if (!uploadData.uploadUrl || !uploadData.key) {
+                  throw new Error("No upload url received from server");
                 }
-
-                const data = await res.json();
-
-                if (!data.uploadURL) {
-                  throw new Error("No upload URL received from server");
-                }
-
-                if (data.objectPath) {
-                  filePathMapRef.current[file.id] = data.objectPath;
+                filePathMapRef.current[file.id] = uploadData.key;
+                if (uploadData.publicUrl) {
+                  filePublicUrlMapRef.current[file.id] = uploadData.publicUrl;
                 }
 
                 return {
                   method: "PUT",
-                  url: data.uploadURL,
+                  url: uploadData.uploadUrl,
                   headers: { "Content-Type": file.type },
                 };
               }}
               onComplete={(result) => {
                 if (result.successful && result.successful.length > 0) {
-                  const newFiles = result.successful.map(file => {
-                    const storedPath = filePathMapRef.current[file.id];
-                    return {
-                      name: file.name,
-                      path: storedPath || '',
-                      type: file.type || 'application/octet-stream',
-                    };
-                  }).filter(f => f.path);
-                  setUploadedFiles(prev => [...prev, ...newFiles]);
-                  if (!deckPath && newFiles.length > 0) {
-                    setDeckPath(newFiles[0].path);
-                  }
+                  const newFiles = result.successful
+                    .map((file) => {
+                      const storedPath = filePathMapRef.current[file.id];
+                      return {
+                        name: file.name,
+                        path: storedPath || "",
+                        type: file.type || "application/octet-stream",
+                        publicUrl: filePublicUrlMapRef.current[file.id],
+                      };
+                    })
+                    .filter((f) => f.path);
+                  setUploadedFiles((prev) => {
+                    const next = [...prev, ...newFiles];
+                    setDeckPath((currentDeckPath) => {
+                      if (
+                        currentDeckPath &&
+                        next.some(
+                          (file) =>
+                            file.path === currentDeckPath && isPdfFileType(file.type),
+                        )
+                      ) {
+                        return currentDeckPath;
+                      }
+
+                      return getDefaultDeckPath(next);
+                    });
+                    return next;
+                  });
                 }
               }}
               buttonClassName="w-full"
@@ -1002,7 +1072,7 @@ export function StartupSubmitForm({
             </ObjectUploader>
 
             <p className="text-xs text-muted-foreground mt-2">
-              Upload up to 10 files (pitch deck, financials, product demos, etc.)
+              Upload up to 10 files (PDF and image formats)
             </p>
           </CardContent>
         </Card>
@@ -1040,7 +1110,6 @@ export function StartupSubmitForm({
                         <SelectItem value="series_d">Series D</SelectItem>
                         <SelectItem value="series_e">Series E</SelectItem>
                         <SelectItem value="series_f_plus">Series F+</SelectItem>
-                        <SelectItem value="growth">Growth</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />

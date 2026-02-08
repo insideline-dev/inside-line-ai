@@ -4,7 +4,8 @@ import { Queue, QueueEvents, ConnectionOptions } from 'bullmq';
 import {
   QUEUE_NAMES,
   DEFAULT_JOB_OPTIONS,
-  QUEUE_DEPTH_LIMITS,
+  resolveQueueDepthLimits,
+  type QueueDepthLimits,
   QueueName,
 } from './queue.config';
 import type { JobData, JobResult } from './interfaces';
@@ -22,8 +23,12 @@ export class QueueService implements OnModuleDestroy {
   private readonly logger = new Logger(QueueService.name);
   private queues: Map<QueueName, Queue> = new Map();
   private queueEvents: Map<QueueName, QueueEvents> = new Map();
+  private readonly queueDepthLimits: QueueDepthLimits;
 
   constructor(private config: ConfigService) {
+    this.queueDepthLimits = resolveQueueDepthLimits((key, defaultValue) =>
+      this.config.get<number>(key, defaultValue),
+    );
     this.initializeQueues();
   }
 
@@ -209,7 +214,7 @@ export class QueueService implements OnModuleDestroy {
     if (!queue) throw new Error(`Queue ${queueName} not found`);
 
     const counts = await queue.getJobCounts('waiting', 'active');
-    const limits = QUEUE_DEPTH_LIMITS[queueName];
+    const limits = this.queueDepthLimits[queueName];
 
     const depth: QueueDepthInfo = {
       waiting: counts.waiting,
@@ -249,6 +254,57 @@ export class QueueService implements OnModuleDestroy {
     );
 
     return userJobs.length;
+  }
+
+  /**
+   * Remove all pending AI pipeline jobs for a startup.
+   * Active jobs are intentionally left untouched because BullMQ cannot safely
+   * remove an actively running job from a separate worker process.
+   */
+  async removePipelineJobs(startupId: string): Promise<number> {
+    const aiQueues: QueueName[] = [
+      QUEUE_NAMES.AI_EXTRACTION,
+      QUEUE_NAMES.AI_SCRAPING,
+      QUEUE_NAMES.AI_RESEARCH,
+      QUEUE_NAMES.AI_EVALUATION,
+      QUEUE_NAMES.AI_SYNTHESIS,
+    ];
+
+    let removed = 0;
+    for (const queueName of aiQueues) {
+      removed += await this.removePendingJobsByStartup(queueName, startupId);
+    }
+
+    return removed;
+  }
+
+  private async removePendingJobsByStartup(
+    queueName: QueueName,
+    startupId: string,
+  ): Promise<number> {
+    const queue = this.queues.get(queueName);
+    if (!queue) {
+      return 0;
+    }
+
+    const jobs = await queue.getJobs([
+      "waiting",
+      "delayed",
+      "paused",
+      "prioritized",
+    ]);
+
+    let removed = 0;
+    for (const job of jobs) {
+      if (job.data?.startupId !== startupId) {
+        continue;
+      }
+
+      await job.remove().catch(() => undefined);
+      removed += 1;
+    }
+
+    return removed;
   }
 
   async onModuleDestroy() {

@@ -1,4 +1,4 @@
-import { Test, TestingModule } from '@nestjs/testing';
+import { afterEach, beforeEach, describe, expect, it, jest } from "bun:test";
 import { StartupController } from '../startup.controller';
 import { StartupService } from '../startup.service';
 import { DraftService } from '../draft.service';
@@ -58,80 +58,67 @@ describe('StartupController', () => {
     updatedAt: new Date(),
   };
 
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      controllers: [StartupController],
-      providers: [
-        {
-          provide: StartupService,
-          useValue: {
-            create: jest.fn(),
-            findAll: jest.fn(),
-            findOne: jest.fn(),
-            update: jest.fn(),
-            delete: jest.fn(),
-            submit: jest.fn(),
-            resubmit: jest.fn(),
-            getJobs: jest.fn(),
-            getUploadUrl: jest.fn(),
-            findApproved: jest.fn(),
-            findApprovedById: jest.fn(),
-            adminFindAll: jest.fn(),
-            adminFindPending: jest.fn(),
-            approve: jest.fn(),
-            reject: jest.fn(),
-            reanalyze: jest.fn(),
-            adminUpdate: jest.fn(),
-            adminDelete: jest.fn(),
-            findBySlug: jest.fn(),
-            getProgress: jest.fn(),
-          },
-        },
-        {
-          provide: DraftService,
-          useValue: {
-            save: jest.fn(),
-            get: jest.fn(),
-            delete: jest.fn(),
-          },
-        },
-        {
-          provide: PdfService,
-          useValue: {
-            generateMemo: jest.fn(),
-            generateReport: jest.fn(),
-          },
-        },
-        {
-          provide: DataRoomService,
-          useValue: {
-            uploadFile: jest.fn(),
-            uploadDocument: jest.fn(),
-            getDocuments: jest.fn(),
-            updatePermissions: jest.fn(),
-            deleteDocument: jest.fn(),
-          },
-        },
-        {
-          provide: InvestorInterestService,
-          useValue: {
-            getInterest: jest.fn(),
-            respondToInterest: jest.fn(),
-          },
-        },
-        {
-          provide: MeetingService,
-          useValue: {
-            scheduleMeeting: jest.fn(),
-            getMeetings: jest.fn(),
-          },
-        },
-      ],
-    }).compile();
+  beforeEach(() => {
+    startupService = {
+      create: jest.fn(),
+      findAll: jest.fn(),
+      findOne: jest.fn(),
+      update: jest.fn(),
+      delete: jest.fn(),
+      submit: jest.fn(),
+      resubmit: jest.fn(),
+      getJobs: jest.fn(),
+      getUploadUrl: jest.fn(),
+      findApproved: jest.fn(),
+      findApprovedById: jest.fn(),
+      adminFindAll: jest.fn(),
+      adminFindPending: jest.fn(),
+      approve: jest.fn(),
+      reject: jest.fn(),
+      reanalyze: jest.fn(),
+      adminUpdate: jest.fn(),
+      adminDelete: jest.fn(),
+      findBySlug: jest.fn(),
+      getProgress: jest.fn(),
+    } as unknown as jest.Mocked<StartupService>;
 
-    controller = module.get<StartupController>(StartupController);
-    startupService = module.get(StartupService);
-    draftService = module.get(DraftService);
+    draftService = {
+      save: jest.fn(),
+      get: jest.fn(),
+      delete: jest.fn(),
+    } as unknown as jest.Mocked<DraftService>;
+
+    const pdfService = {
+      generateMemo: jest.fn(),
+      generateReport: jest.fn(),
+    } as unknown as jest.Mocked<PdfService>;
+
+    const dataRoomService = {
+      uploadFile: jest.fn(),
+      uploadDocument: jest.fn(),
+      getDocuments: jest.fn(),
+      updatePermissions: jest.fn(),
+      deleteDocument: jest.fn(),
+    } as unknown as jest.Mocked<DataRoomService>;
+
+    const interestService = {
+      getInterest: jest.fn(),
+      respondToInterest: jest.fn(),
+    } as unknown as jest.Mocked<InvestorInterestService>;
+
+    const meetingService = {
+      scheduleMeeting: jest.fn(),
+      getMeetings: jest.fn(),
+    } as unknown as jest.Mocked<MeetingService>;
+
+    controller = new StartupController(
+      startupService,
+      draftService,
+      pdfService,
+      dataRoomService,
+      interestService,
+      meetingService,
+    );
   });
 
   afterEach(() => {

@@ -21,14 +21,30 @@ export const Route = createFileRoute("/_protected/investor/startup/$id")({
   component: InvestorStartupDetailPage,
 });
 
+function unwrapApiResponse<T>(payload: unknown): T {
+  if (
+    payload &&
+    typeof payload === "object" &&
+    "data" in (payload as Record<string, unknown>) &&
+    (payload as Record<string, unknown>).data !== undefined
+  ) {
+    return (payload as Record<string, unknown>).data as T;
+  }
+
+  return payload as T;
+}
+
 function InvestorStartupDetailPage() {
   const { id } = Route.useParams();
   const { data: startupRes, isLoading: startupLoading, error: startupError } = useStartupControllerFindApprovedById(id);
   const { data: evalRes, isLoading: evalLoading, error: evalError } = useStartupControllerGetEvaluation(id);
 
-  // Extract data from responses (cast to any due to OpenAPI void response types)
-  const startup = startupRes?.data as Record<string, unknown> | undefined;
-  const evaluation = evalRes?.data as Record<string, unknown> | undefined;
+  const startup = startupRes
+    ? unwrapApiResponse<Record<string, unknown>>(startupRes)
+    : undefined;
+  const evaluation = evalRes
+    ? unwrapApiResponse<Record<string, unknown>>(evalRes)
+    : undefined;
   const isLoading = startupLoading || evalLoading;
   const error = startupError || evalError;
 

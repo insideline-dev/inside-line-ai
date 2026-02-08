@@ -1,0 +1,118 @@
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import { Job } from "bullmq";
+import {
+  AiEvaluationJobData,
+  AiEvaluationJobResult,
+} from "../../../queue/interfaces";
+import { QUEUE_CONCURRENCY, QUEUE_NAMES } from "../../../queue";
+import {
+  BaseProcessor,
+  parseRedisUrl,
+} from "../../../queue/processors/base.processor";
+import { NotificationGateway } from "../../../notification/notification.gateway";
+import { PipelinePhase } from "../interfaces/pipeline.interface";
+import { EvaluationService } from "../services/evaluation.service";
+import { PipelineStateService } from "../services/pipeline-state.service";
+import { PipelineService } from "../services/pipeline.service";
+import { runPipelinePhase } from "./run-phase.util";
+
+@Injectable()
+export class EvaluationProcessor
+  extends BaseProcessor<AiEvaluationJobData, AiEvaluationJobResult>
+  implements OnModuleInit, OnModuleDestroy
+{
+  protected readonly logger = new Logger(EvaluationProcessor.name);
+
+  constructor(
+    config: ConfigService,
+    private evaluationService: EvaluationService,
+    private pipelineState: PipelineStateService,
+    private pipelineService: PipelineService,
+    private notificationGateway: NotificationGateway,
+  ) {
+    const redisUrl = config.get<string>("REDIS_URL", "redis://localhost:6379");
+    super(
+      QUEUE_NAMES.AI_EVALUATION,
+      parseRedisUrl(redisUrl),
+      QUEUE_CONCURRENCY[QUEUE_NAMES.AI_EVALUATION],
+    );
+  }
+
+  onModuleInit() {
+    this.initialize();
+  }
+
+  async onModuleDestroy() {
+    await this.close();
+  }
+
+  protected async process(
+    job: Job<AiEvaluationJobData>,
+  ): Promise<Omit<AiEvaluationJobResult, "jobId" | "duration" | "success">> {
+    const { startupId, pipelineRunId, userId } = job.data;
+
+    if (job.data.type !== "ai_evaluation") {
+      throw new Error("Invalid job type for evaluation processor");
+    }
+
+    const runResult = await runPipelinePhase({
+      job,
+      phase: PipelinePhase.EVALUATION,
+      jobType: "ai_evaluation",
+      pipelineState: this.pipelineState,
+      pipelineService: this.pipelineService,
+      notificationGateway: this.notificationGateway,
+      run: () =>
+        this.evaluationService.run(startupId, {
+          onAgentComplete: ({ agent, output, usedFallback, error }) => {
+            this.pipelineService
+              .onAgentProgress({
+                startupId,
+                userId,
+                pipelineRunId,
+                phase: PipelinePhase.EVALUATION,
+                key: agent,
+                status: error ? "failed" : "completed",
+                progress: error ? 0 : 100,
+                error,
+              })
+              .catch((progressError) => {
+                this.logger.warn(
+                  `Failed to update evaluation agent progress for ${agent}: ${
+                    progressError instanceof Error
+                      ? progressError.message
+                      : String(progressError)
+                  }`,
+                );
+              });
+            this.notificationGateway.sendJobStatus(userId, {
+              jobId: String(job.id),
+              jobType: "ai_evaluation",
+              status: "processing",
+              startupId,
+              pipelineRunId,
+              result: {
+                agent,
+                output,
+                usedFallback,
+                error,
+              },
+            });
+          },
+        }),
+    });
+
+    return {
+      type: "ai_evaluation",
+      startupId: runResult.startupId,
+      pipelineRunId: runResult.pipelineRunId,
+      data: runResult.result,
+    };
+  }
+}

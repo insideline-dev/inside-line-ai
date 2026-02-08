@@ -65,6 +65,19 @@ interface StageScoringWeight {
   weights: ScoringWeights;
 }
 
+function unwrapApiResponse<T>(payload: unknown): T {
+  if (
+    payload &&
+    typeof payload === "object" &&
+    "data" in (payload as Record<string, unknown>) &&
+    (payload as Record<string, unknown>).data !== undefined
+  ) {
+    return (payload as Record<string, unknown>).data as T;
+  }
+
+  return payload as T;
+}
+
 const stageLabels: Record<string, string> = {
   pre_seed: "Pre-Seed",
   seed: "Seed",
@@ -102,11 +115,14 @@ function AdminReviewPage() {
   const [showRejectDialog, setShowRejectDialog] = useState(false);
 
   const { data: startupResponse, isLoading } = useStartupControllerFindOne(id);
-  const startup = startupResponse?.data as StartupDetail | undefined;
+  const startup = startupResponse
+    ? unwrapApiResponse<StartupDetail>(startupResponse)
+    : undefined;
 
   const { data: scoringDefaults } = useAdminControllerGetAllScoringWeights();
-  const stageScoringWeights =
-    (scoringDefaults as unknown as StageScoringWeight[] | undefined) ?? [];
+  const stageScoringWeights = scoringDefaults
+    ? unwrapApiResponse<StageScoringWeight[]>(scoringDefaults)
+    : [];
 
   const stageWeights = useMemo(() => {
     if (!startup?.stage) return null;
@@ -252,7 +268,7 @@ function AdminReviewPage() {
         <Card className="mb-6">
           <CardContent className="p-6">
             <AnalysisProgress
-              startupId={Number(startup.id)}
+              startupId={startup.id}
               isAnalyzing={true}
               weights={stageWeights}
               progress={evaluation?.analysisProgress as any}

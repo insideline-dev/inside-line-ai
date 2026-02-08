@@ -4,15 +4,14 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
-} from '@nestjs/common';
-import { eq, and, or, ilike, sql, desc } from 'drizzle-orm';
-import { DrizzleService } from '../../database';
-import { QueueService, QUEUE_NAMES } from '../../queue';
-import { StorageService } from '../../storage';
-import {
-  startup,
-  StartupStatus,
-} from './entities/startup.schema';
+} from "@nestjs/common";
+import { eq, and, or, ilike, sql, desc } from "drizzle-orm";
+import { DrizzleService } from "../../database";
+import { QueueService, QUEUE_NAMES } from "../../queue";
+import { StorageService } from "../../storage";
+import { AiConfigService } from "../ai/services/ai-config.service";
+import { PipelineService } from "../ai/services/pipeline.service";
+import { startup, StartupStatus } from "./entities/startup.schema";
 import {
   CreateStartup,
   UpdateStartup,
@@ -20,9 +19,12 @@ import {
   GetApprovedStartupsQuery,
   PresignedUrl,
   GetProgressResponse,
-} from './dto';
-import { DraftService } from './draft.service';
-import { analysisJob, startupEvaluation } from '../analysis/entities/analysis.schema';
+} from "./dto";
+import { DraftService } from "./draft.service";
+import {
+  analysisJob,
+  startupEvaluation,
+} from "../analysis/entities/analysis.schema";
 
 function escapeIlike(input: string): string {
   return input.replace(/[%_\\]/g, (ch) => `\\${ch}`).slice(0, 200);
@@ -37,13 +39,15 @@ export class StartupService {
     private queue: QueueService,
     private storage: StorageService,
     private draftService: DraftService,
+    private aiConfig: AiConfigService,
+    private aiPipeline: PipelineService,
   ) {}
 
   private generateSlug(name: string): string {
     return name
       .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '');
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
   }
 
   async create(userId: string, dto: CreateStartup) {
@@ -145,7 +149,7 @@ export class StartupService {
         existing.status === StartupStatus.APPROVED
       ) {
         throw new ForbiddenException(
-          'Cannot edit startup while submitted or approved',
+          "Cannot edit startup while submitted or approved",
         );
       }
 
@@ -168,7 +172,7 @@ export class StartupService {
       const existing = await this.findOne(id, userId);
 
       if (existing.status !== StartupStatus.DRAFT) {
-        throw new ForbiddenException('Can only delete draft startups');
+        throw new ForbiddenException("Can only delete draft startups");
       }
 
       await db.delete(startup).where(eq(startup.id, id));
@@ -182,7 +186,7 @@ export class StartupService {
       const existing = await this.findOne(id, userId);
 
       if (existing.status !== StartupStatus.DRAFT) {
-        throw new BadRequestException('Can only submit draft startups');
+        throw new BadRequestException("Can only submit draft startups");
       }
 
       const [updated] = await db
@@ -196,17 +200,7 @@ export class StartupService {
 
       await this.draftService.delete(id);
 
-      await this.queue.addJob(
-        QUEUE_NAMES.TASK,
-        {
-          type: 'task',
-          userId,
-          name: 'score-startup',
-          priority: 1,
-          payload: { startupId: id },
-        },
-        { priority: 1 },
-      );
+      await this.triggerAnalysis(id, userId);
 
       this.logger.log(`Submitted startup ${id} for review`);
       return updated;
@@ -218,7 +212,7 @@ export class StartupService {
       const existing = await this.findOne(id, userId);
 
       if (existing.status !== StartupStatus.REJECTED) {
-        throw new BadRequestException('Can only resubmit rejected startups');
+        throw new BadRequestException("Can only resubmit rejected startups");
       }
 
       const [updated] = await db
@@ -232,17 +226,7 @@ export class StartupService {
         .where(eq(startup.id, id))
         .returning();
 
-      await this.queue.addJob(
-        QUEUE_NAMES.TASK,
-        {
-          type: 'task',
-          userId,
-          name: 'score-startup',
-          priority: 1,
-          payload: { startupId: id },
-        },
-        { priority: 1 },
-      );
+      await this.triggerAnalysis(id, userId);
 
       this.logger.log(`Resubmitted startup ${id}`);
       return updated;
@@ -261,7 +245,7 @@ export class StartupService {
     }
 
     if (found.status !== StartupStatus.SUBMITTED) {
-      throw new BadRequestException('Can only approve submitted startups');
+      throw new BadRequestException("Can only approve submitted startups");
     }
 
     const [updated] = await this.drizzle.db
@@ -276,9 +260,9 @@ export class StartupService {
     await this.queue.addJob(
       QUEUE_NAMES.TASK,
       {
-        type: 'task',
+        type: "task",
         userId: adminId,
-        name: 'match-startup',
+        name: "match-startup",
         priority: 2,
         payload: { startupId: id },
       },
@@ -301,7 +285,7 @@ export class StartupService {
     }
 
     if (found.status !== StartupStatus.SUBMITTED) {
-      throw new BadRequestException('Can only reject submitted startups');
+      throw new BadRequestException("Can only reject submitted startups");
     }
 
     const [updated] = await this.drizzle.db
@@ -329,17 +313,22 @@ export class StartupService {
       throw new NotFoundException(`Startup with ID ${id} not found`);
     }
 
-    const jobId = await this.queue.addJob(
-      QUEUE_NAMES.TASK,
-      {
-        type: 'task',
-        userId: adminId,
-        name: 'reanalyze-startup',
-        priority: 3,
-        payload: { startupId: id },
-      },
-      { priority: 3 },
-    );
+    let jobId: string;
+    if (this.aiConfig.isPipelineEnabled()) {
+      jobId = await this.aiPipeline.startPipeline(id, adminId);
+    } else {
+      jobId = await this.queue.addJob(
+        QUEUE_NAMES.TASK,
+        {
+          type: "task",
+          userId: adminId,
+          name: "reanalyze-startup",
+          priority: 3,
+          payload: { startupId: id },
+        },
+        { priority: 3 },
+      );
+    }
 
     this.logger.log(`Queued reanalysis for startup ${id}`);
     return { jobId };
@@ -502,11 +491,13 @@ export class StartupService {
     const [found] = await this.drizzle.db
       .select()
       .from(startup)
-      .where(and(eq(startup.id, id), eq(startup.status, StartupStatus.APPROVED)))
+      .where(
+        and(eq(startup.id, id), eq(startup.status, StartupStatus.APPROVED)),
+      )
       .limit(1);
 
     if (!found) {
-      throw new NotFoundException('Approved startup not found');
+      throw new NotFoundException("Approved startup not found");
     }
 
     return found;
@@ -516,31 +507,29 @@ export class StartupService {
     const [found] = await this.drizzle.db
       .select()
       .from(startup)
-      .where(and(eq(startup.slug, slug), eq(startup.status, StartupStatus.APPROVED)))
+      .where(
+        and(eq(startup.slug, slug), eq(startup.status, StartupStatus.APPROVED)),
+      )
       .limit(1);
 
     if (!found) {
-      throw new NotFoundException('Startup not found');
+      throw new NotFoundException("Startup not found");
     }
 
     return found;
   }
 
   private static readonly ALLOWED_UPLOAD_TYPES = new Set([
-    'application/pdf',
-    'image/png',
-    'image/jpeg',
-    'image/webp',
-    'image/gif',
-    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-    'application/vnd.ms-powerpoint',
+    "application/pdf",
+    "image/png",
+    "image/jpeg",
+    "image/webp",
+    "image/gif",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "application/vnd.ms-powerpoint",
   ]);
 
-  async getUploadUrl(
-    id: string,
-    userId: string,
-    dto: PresignedUrl,
-  ) {
+  async getUploadUrl(id: string, userId: string, dto: PresignedUrl) {
     if (!StartupService.ALLOWED_UPLOAD_TYPES.has(dto.fileType)) {
       throw new BadRequestException(
         `File type '${dto.fileType}' is not allowed. Accepted: PDF, PNG, JPEG, WebP, GIF, PPTX, PPT`,
@@ -549,9 +538,9 @@ export class StartupService {
 
     await this.findOne(id, userId);
 
-    const assetType = dto.fileType.startsWith('application/')
-      ? 'pitch-deck'
-      : 'startup-assets';
+    const assetType = dto.fileType.startsWith("application/")
+      ? "pitch-deck"
+      : "startup-assets";
 
     const result = await this.storage.getUploadUrl(
       userId,
@@ -568,7 +557,7 @@ export class StartupService {
 
     return {
       jobs: [],
-      message: 'Job tracking not implemented yet',
+      message: "Job tracking not implemented yet",
     };
   }
 
@@ -589,7 +578,41 @@ export class StartupService {
         progress: null,
       };
 
-      if (found.status === StartupStatus.SUBMITTED || found.status === 'analyzing' as any) {
+      const pipelineState = await this.aiPipeline.getPipelineStatus(id);
+      if (pipelineState) {
+        const totalPhases = Object.keys(pipelineState.phases).length;
+        const completedCount = Object.values(pipelineState.phases).filter(
+          (phase) => phase.status === "completed",
+        ).length;
+
+        response.progress = {
+          overallProgress: Math.round((completedCount / totalPhases) * 100),
+          currentPhase: pipelineState.currentPhase,
+          phasesCompleted: Object.entries(pipelineState.phases)
+            .filter(([, phase]) => phase.status === "completed")
+            .map(([phase]) => phase),
+          phases: Object.fromEntries(
+            Object.entries(pipelineState.phases).map(([phase, value]) => [
+              phase,
+              {
+                status: value.status,
+                progress:
+                  value.status === "completed"
+                    ? 100
+                    : value.status === "running"
+                      ? 50
+                      : 0,
+              },
+            ]),
+          ),
+        };
+        return response;
+      }
+
+      if (
+        found.status === StartupStatus.SUBMITTED ||
+        found.status === StartupStatus.ANALYZING
+      ) {
         const [job] = await db
           .select()
           .from(analysisJob)
@@ -600,17 +623,42 @@ export class StartupService {
         if (job && job.result) {
           const jobResult = job.result as Record<string, unknown>;
           response.progress = {
-            overallProgress:
-              (jobResult.overallProgress as number) || 0,
-            currentPhase: (jobResult.currentPhase as string) || 'queued',
+            overallProgress: (jobResult.overallProgress as number) || 0,
+            currentPhase: (jobResult.currentPhase as string) || "queued",
             phasesCompleted: (jobResult.phasesCompleted as string[]) || [],
-            phases: (jobResult.phases as Record<string, { status: string; progress: number }>) || {},
+            phases:
+              (jobResult.phases as Record<
+                string,
+                { status: string; progress: number }
+              >) || {},
           };
         }
       }
 
       return response;
     });
+  }
+
+  private async triggerAnalysis(
+    startupId: string,
+    userId: string,
+  ): Promise<void> {
+    if (this.aiConfig.isPipelineEnabled()) {
+      await this.aiPipeline.startPipeline(startupId, userId);
+      return;
+    }
+
+    await this.queue.addJob(
+      QUEUE_NAMES.TASK,
+      {
+        type: "task",
+        userId,
+        name: "score-startup",
+        priority: 1,
+        payload: { startupId },
+      },
+      { priority: 1 },
+    );
   }
 
   async getEvaluation(startupId: string) {
@@ -621,7 +669,7 @@ export class StartupService {
       .limit(1);
 
     if (!evaluation) {
-      throw new NotFoundException('Evaluation not found');
+      throw new NotFoundException("Evaluation not found");
     }
 
     return evaluation;

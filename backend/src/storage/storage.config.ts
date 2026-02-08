@@ -27,6 +27,7 @@ export const MIME_TYPES = {
   'video/webm': 'webm',
   // Data
   'application/json': 'json',
+  'application/pdf': 'pdf',
 } as const;
 
 // Presigned URL expiry times in seconds

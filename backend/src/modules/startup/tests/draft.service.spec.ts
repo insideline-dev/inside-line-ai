@@ -1,12 +1,13 @@
-import { Test, TestingModule } from '@nestjs/testing';
+import { afterEach, beforeEach, describe, expect, it, jest } from "bun:test";
 import { DraftService } from '../draft.service';
 import { DrizzleService } from '../../../database';
 
 describe('DraftService', () => {
   let service: DraftService;
   let drizzleService: jest.Mocked<DrizzleService>;
+  let mockDb: ReturnType<typeof createMockDb>;
 
-  const mockDb = {
+  const createMockDb = () => ({
     select: jest.fn().mockReturnThis(),
     from: jest.fn().mockReturnThis(),
     where: jest.fn().mockReturnThis(),
@@ -17,7 +18,7 @@ describe('DraftService', () => {
     update: jest.fn().mockReturnThis(),
     set: jest.fn().mockReturnThis(),
     delete: jest.fn().mockReturnThis(),
-  };
+  });
 
   const mockUserId = '123e4567-e89b-12d3-a456-426614174000';
   const mockStartupId = '123e4567-e89b-12d3-a456-426614174001';
@@ -31,22 +32,13 @@ describe('DraftService', () => {
     updatedAt: new Date(),
   };
 
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        DraftService,
-        {
-          provide: DrizzleService,
-          useValue: {
-            db: mockDb,
-            withRLS: jest.fn((userId, callback) => callback(mockDb)),
-          },
-        },
-      ],
-    }).compile();
-
-    service = module.get<DraftService>(DraftService);
-    drizzleService = module.get(DrizzleService);
+  beforeEach(() => {
+    mockDb = createMockDb();
+    drizzleService = {
+      db: mockDb,
+      withRLS: jest.fn((_userId, callback) => callback(mockDb)),
+    } as unknown as jest.Mocked<DrizzleService>;
+    service = new DraftService(drizzleService);
   });
 
   afterEach(() => {

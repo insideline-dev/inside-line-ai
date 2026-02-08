@@ -1,0 +1,47 @@
+import type { ResearchAgentConfig } from "../../interfaces/agent.interface";
+import type { ProductResearch } from "../../schemas";
+import { ProductResearchSchema } from "../../schemas";
+import {
+  PRODUCT_RESEARCH_HUMAN_PROMPT,
+  PRODUCT_RESEARCH_SYSTEM_PROMPT,
+} from "../../prompts/research/product-research.prompt";
+import { toValidUrl } from "./url.util";
+
+export const ProductResearchAgent: ResearchAgentConfig<ProductResearch> = {
+  key: "product",
+  name: "Product Research",
+  systemPrompt: PRODUCT_RESEARCH_SYSTEM_PROMPT,
+  humanPromptTemplate: PRODUCT_RESEARCH_HUMAN_PROMPT,
+  schema: ProductResearchSchema,
+  contextBuilder: ({ extraction, scraping }) => ({
+    productDescription: extraction.rawText,
+    knownCompetitors: [],
+    websiteProductPages:
+      scraping.website?.subpages
+        .filter((page) =>
+          /\/(product|products|platform|solution|solutions|features)/i.test(
+            new URL(page.url).pathname,
+          ),
+        )
+        .map((page) => page.url) ?? [],
+    demoUrl: undefined,
+    extractedFeatures:
+      scraping.website?.headings.filter((heading) => heading.trim().length > 0) ?? [],
+  }),
+  fallback: ({ extraction }) => {
+    const websiteUrl = toValidUrl(extraction.website);
+
+    return {
+      productPages: websiteUrl ? [websiteUrl] : [],
+      features: ["Core workflow automation"],
+      techStack: ["Unknown"],
+      integrations: [],
+      customerReviews: {
+        summary:
+          "Public customer review coverage is limited in deterministic fallback mode.",
+        sentiment: "neutral",
+      },
+      sources: websiteUrl ? [websiteUrl] : [],
+    };
+  },
+};

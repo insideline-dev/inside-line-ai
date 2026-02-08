@@ -10,7 +10,7 @@ export interface BaseJobData {
 }
 
 export interface TaskJobData extends BaseJobData {
-  type: 'task';
+  type: "task";
   name: string;
   payload: Record<string, unknown>;
 }
@@ -22,20 +22,20 @@ export interface AnalysisBaseJobData extends BaseJobData {
 }
 
 export interface ScoringJobData extends AnalysisBaseJobData {
-  type: 'scoring';
+  type: "scoring";
 }
 
 export interface MatchingJobData extends AnalysisBaseJobData {
-  type: 'matching';
+  type: "matching";
 }
 
 export interface PdfJobData extends AnalysisBaseJobData {
-  type: 'pdf';
+  type: "pdf";
   requestedBy: string;
 }
 
 export interface MarketAnalysisJobData extends AnalysisBaseJobData {
-  type: 'market_analysis';
+  type: "market_analysis";
 }
 
 export type AnalysisJobData =
@@ -44,4 +44,43 @@ export type AnalysisJobData =
   | PdfJobData
   | MarketAnalysisJobData;
 
-export type JobData = TaskJobData | AnalysisJobData;
+// AI pipeline job data types
+export interface AiPipelineBaseJobData extends BaseJobData {
+  type:
+    | "ai_extraction"
+    | "ai_scraping"
+    | "ai_research"
+    | "ai_evaluation"
+    | "ai_synthesis";
+  startupId: string;
+  pipelineRunId: string;
+}
+
+export interface AiExtractionJobData extends AiPipelineBaseJobData {
+  type: "ai_extraction";
+}
+
+export interface AiScrapingJobData extends AiPipelineBaseJobData {
+  type: "ai_scraping";
+}
+
+export interface AiResearchJobData extends AiPipelineBaseJobData {
+  type: "ai_research";
+}
+
+export interface AiEvaluationJobData extends AiPipelineBaseJobData {
+  type: "ai_evaluation";
+}
+
+export interface AiSynthesisJobData extends AiPipelineBaseJobData {
+  type: "ai_synthesis";
+}
+
+export type AiPipelineJobData =
+  | AiExtractionJobData
+  | AiScrapingJobData
+  | AiResearchJobData
+  | AiEvaluationJobData
+  | AiSynthesisJobData;
+
+export type JobData = TaskJobData | AnalysisJobData | AiPipelineJobData;

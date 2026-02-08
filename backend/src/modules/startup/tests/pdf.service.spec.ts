@@ -1,4 +1,4 @@
-import { Test, TestingModule } from '@nestjs/testing';
+import { afterEach, beforeEach, describe, expect, it, jest } from "bun:test";
 import { NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PdfService } from '../pdf.service';
 import { DrizzleService } from '../../../database';
@@ -87,23 +87,12 @@ describe('PdfService', () => {
     createdAt: new Date(),
   };
 
-  beforeEach(async () => {
+  beforeEach(() => {
     mockDb = createMockDb();
-
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        PdfService,
-        {
-          provide: DrizzleService,
-          useValue: {
-            db: mockDb,
-          },
-        },
-      ],
-    }).compile();
-
-    service = module.get<PdfService>(PdfService);
-    drizzleService = module.get(DrizzleService);
+    drizzleService = {
+      db: mockDb,
+    } as unknown as jest.Mocked<DrizzleService>;
+    service = new PdfService(drizzleService);
   });
 
   afterEach(() => {

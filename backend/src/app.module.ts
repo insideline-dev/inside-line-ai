@@ -15,6 +15,7 @@ import { AnalysisModule } from "./modules/analysis";
 import { TwilioModule } from "./modules/integrations/twilio/twilio.module";
 import { AgentMailModule } from "./modules/integrations/agentmail/agentmail.module";
 import { UnipileModule } from "./modules/integrations/unipile/unipile.module";
+import { AiModule } from "./modules/ai";
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { UnipileModule } from "./modules/integrations/unipile/unipile.module";
     ScoutModule,
     AdminModule,
     AnalysisModule,
+    AiModule,
     TwilioModule,
     AgentMailModule,
     UnipileModule,

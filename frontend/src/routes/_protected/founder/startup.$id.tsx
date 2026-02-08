@@ -1,9 +1,10 @@
 import { createFileRoute, useParams } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
+import { Badge } from "@/components/ui/badge";
 import {
   StartupHeader,
   SummaryCard,
@@ -11,6 +12,10 @@ import {
   ProductTabContent,
   TeamTabContent,
 } from "@/components/startup-view";
+import {
+  useStartupControllerFindOne,
+  useStartupControllerGetProgress,
+} from "@/api/generated/startup/startup";
 import type { Startup } from "@/types/startup";
 import type { Evaluation } from "@/types/evaluation";
 
@@ -22,17 +27,59 @@ interface StartupWithEvaluation extends Startup {
   evaluation?: Evaluation;
 }
 
+interface PipelineProgressPayload {
+  overallProgress: number;
+  currentPhase: string;
+  phasesCompleted: string[];
+  phases: Record<string, { status: string; progress: number }>;
+}
+
+function unwrapApiResponse<T>(payload: unknown): T {
+  if (
+    payload &&
+    typeof payload === "object" &&
+    "data" in (payload as Record<string, unknown>) &&
+    (payload as Record<string, unknown>).data !== undefined
+  ) {
+    return (payload as Record<string, unknown>).data as T;
+  }
+
+  return payload as T;
+}
+
 function StartupDetail() {
   const { id } = useParams({ from: "/_protected/founder/startup/$id" });
 
-  const { data: startup, isLoading, error } = useQuery<StartupWithEvaluation>({
-    queryKey: ["/api/startups", id],
-    enabled: !!id,
-    refetchInterval: (query) => {
-      const data = query.state.data;
-      return data?.status === "analyzing" ? 5000 : false;
+  const {
+    data: startupResponse,
+    isLoading,
+    error,
+  } = useStartupControllerFindOne(id, {
+    query: {
+      refetchInterval: (query) => {
+        const data = unwrapApiResponse<StartupWithEvaluation | undefined>(
+          query.state.data,
+        );
+        return data?.status === "analyzing" ? 5000 : false;
+      },
     },
   });
+  const startup = startupResponse
+    ? unwrapApiResponse<StartupWithEvaluation>(startupResponse)
+    : null;
+
+  const { data: progressResponse } = useStartupControllerGetProgress(id, {
+    query: {
+      enabled: startup?.status === "analyzing",
+      refetchInterval: 2000,
+    },
+  });
+  const progressPayload = progressResponse
+    ? unwrapApiResponse<{ progress?: PipelineProgressPayload | null }>(
+        progressResponse,
+      )
+    : null;
+  const pipelineProgress = progressPayload?.progress ?? null;
 
   if (error) {
     return (
@@ -109,6 +156,30 @@ function StartupDetail() {
         backLink="/founder"
         showStatus={true}
       />
+
+      {startup.status === "analyzing" && pipelineProgress && (
+        <Card>
+          <CardContent className="p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">AI Pipeline Progress</p>
+                <p className="font-medium capitalize">{pipelineProgress.currentPhase}</p>
+              </div>
+              <Badge variant="secondary">
+                {pipelineProgress.overallProgress}%
+              </Badge>
+            </div>
+            <Progress value={pipelineProgress.overallProgress} className="h-2" />
+            <div className="flex flex-wrap gap-2">
+              {Object.entries(pipelineProgress.phases).map(([phase, phaseData]) => (
+                <Badge key={phase} variant={phaseData.status === "completed" ? "default" : "outline"}>
+                  {phase}: {phaseData.status}
+                </Badge>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Tabs defaultValue="summary" className="space-y-6">
         <TabsList className="grid w-full grid-cols-4">

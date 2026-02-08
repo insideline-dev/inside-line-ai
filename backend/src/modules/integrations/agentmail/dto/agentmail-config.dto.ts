@@ -3,8 +3,11 @@ import { z } from 'zod';
 
 export const AgentMailConfigSchema = z.object({
   inboxId: z.string().min(1),
-  apiKey: z.string().min(1),
-  webhookUrl: z.string().url(),
+  inboxEmail: z.string().optional(),
+  displayName: z.string().optional(),
+  webhookId: z.string().optional(),
+  webhookUrl: z.string().url().optional(),
+  isActive: z.boolean().default(true),
 });
 
 export type AgentMailConfig = z.infer<typeof AgentMailConfigSchema>;

@@ -24,7 +24,15 @@ import { AgentMailSignatureGuard } from './guards';
 import { CurrentUser } from '../../../auth/decorators';
 import { Public } from '../../../auth/decorators';
 import type { DbUser } from '../../../auth/user-auth.service';
-import type { AgentMailWebhookDto, GetThreadsQueryDto, AgentMailConfigDto } from './dto';
+import type {
+  AgentMailWebhookDto,
+  GetThreadsQueryDto,
+  AgentMailConfigDto,
+  SendEmailDto,
+  ReplyEmailDto,
+  CreateInboxDto,
+  ManageWebhookDto,
+} from './dto';
 
 @ApiTags('integrations/agentmail')
 @Controller('integrations/agentmail')
@@ -39,7 +47,7 @@ export class AgentMailController {
   @Post('webhook')
   @Public()
   @UseGuards(AgentMailSignatureGuard)
-  @Throttle({ default: { limit: 1000, ttl: 3600000 } }) // 1000/hour
+  @Throttle({ default: { limit: 1000, ttl: 3600000 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Receive AgentMail webhook events' })
   @ApiResponse({ status: 200, description: 'Webhook processed' })
@@ -50,12 +58,131 @@ export class AgentMailController {
   }
 
   // ============================================================================
-  // EMAIL THREADS (Authenticated)
+  // INBOXES (Authenticated)
+  // ============================================================================
+
+  @Post('inboxes')
+  @ApiBearerAuth('JWT')
+  @Throttle({ default: { limit: 10, ttl: 3600000 } })
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Create inbox and save config' })
+  @ApiResponse({ status: 201, description: 'Inbox created' })
+  async createInbox(@CurrentUser() user: DbUser, @Body() body: CreateInboxDto) {
+    return this.agentMailService.createInboxForUser(user.id, body);
+  }
+
+  @Get('inboxes')
+  @ApiBearerAuth('JWT')
+  @Throttle({ default: { limit: 100, ttl: 60000 } })
+  @ApiOperation({ summary: 'List inboxes (SDK)' })
+  @ApiResponse({ status: 200, description: 'Inbox list' })
+  async listInboxes(
+    @Query('limit') limit?: number,
+    @Query('pageToken') pageToken?: string,
+  ) {
+    return this.agentMailService.listInboxes(limit, pageToken);
+  }
+
+  @Get('inboxes/:id')
+  @ApiBearerAuth('JWT')
+  @Throttle({ default: { limit: 100, ttl: 60000 } })
+  @ApiOperation({ summary: 'Get inbox (SDK)' })
+  @ApiResponse({ status: 200, description: 'Inbox details' })
+  async getInbox(@Param('id') id: string) {
+    return this.agentMailService.getInbox(id);
+  }
+
+  // ============================================================================
+  // MESSAGES (Authenticated)
+  // ============================================================================
+
+  @Get('messages')
+  @ApiBearerAuth('JWT')
+  @Throttle({ default: { limit: 100, ttl: 60000 } })
+  @ApiOperation({ summary: 'List messages for current user' })
+  @ApiResponse({ status: 200, description: 'Message list' })
+  async listMessages(
+    @CurrentUser() user: DbUser,
+    @Query('limit') limit?: number,
+    @Query('pageToken') pageToken?: string,
+    @Query('before') before?: string,
+    @Query('after') after?: string,
+  ) {
+    return this.agentMailService.listUserMessages(user.id, { limit, pageToken, before, after });
+  }
+
+  @Get('messages/:id')
+  @ApiBearerAuth('JWT')
+  @Throttle({ default: { limit: 100, ttl: 60000 } })
+  @ApiOperation({ summary: 'Get a single message' })
+  @ApiResponse({ status: 200, description: 'Message details' })
+  async getMessage(@CurrentUser() user: DbUser, @Param('id') id: string) {
+    return this.agentMailService.getUserMessage(user.id, id);
+  }
+
+  @Post('messages/send')
+  @ApiBearerAuth('JWT')
+  @Throttle({ default: { limit: 50, ttl: 60000 } })
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Send an email' })
+  @ApiResponse({ status: 201, description: 'Email sent' })
+  async sendEmail(@CurrentUser() user: DbUser, @Body() body: SendEmailDto) {
+    return this.agentMailService.sendUserEmail(user.id, body);
+  }
+
+  @Post('messages/:threadId/reply')
+  @ApiBearerAuth('JWT')
+  @Throttle({ default: { limit: 50, ttl: 60000 } })
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Reply to a message' })
+  @ApiResponse({ status: 201, description: 'Reply sent' })
+  async replyToMessage(
+    @CurrentUser() user: DbUser,
+    @Param('threadId') messageId: string,
+    @Body() body: ReplyEmailDto,
+  ) {
+    return this.agentMailService.replyToUserEmail(user.id, messageId, body);
+  }
+
+  @Get('messages/:msgId/attachments/:attId')
+  @ApiBearerAuth('JWT')
+  @Throttle({ default: { limit: 100, ttl: 60000 } })
+  @ApiOperation({ summary: 'Download an attachment' })
+  @ApiResponse({ status: 200, description: 'Attachment data' })
+  async downloadAttachment(
+    @CurrentUser() user: DbUser,
+    @Param('msgId') msgId: string,
+    @Param('attId') attId: string,
+  ) {
+    return this.agentMailService.downloadUserAttachment(user.id, msgId, attId);
+  }
+
+  // ============================================================================
+  // SDK THREADS (Authenticated)
+  // ============================================================================
+
+  @Get('sdk-threads')
+  @ApiBearerAuth('JWT')
+  @Throttle({ default: { limit: 100, ttl: 60000 } })
+  @ApiOperation({ summary: 'List threads from SDK' })
+  @ApiResponse({ status: 200, description: 'Thread list from SDK' })
+  async listSdkThreads(
+    @CurrentUser() user: DbUser,
+    @Query('limit') limit?: number,
+    @Query('pageToken') pageToken?: string,
+    @Query('before') before?: string,
+    @Query('after') after?: string,
+  ) {
+    return this.agentMailService.listUserSdkThreads(user.id, { limit, pageToken, before, after });
+  }
+
+  // ============================================================================
+  // LOCAL THREADS (DB, Authenticated)
   // ============================================================================
 
   @Get('threads')
   @ApiBearerAuth('JWT')
-  @Throttle({ default: { limit: 100, ttl: 60000 } }) // 100/min
+  @Throttle({ default: { limit: 100, ttl: 60000 } })
   @ApiOperation({ summary: 'Get my email threads (paginated)' })
   @ApiResponse({ status: 200, description: 'List of threads' })
   async getThreads(@CurrentUser() user: DbUser, @Query() query: GetThreadsQueryDto) {
@@ -101,6 +228,49 @@ export class AgentMailController {
   }
 
   // ============================================================================
+  // WEBHOOKS MANAGEMENT (Authenticated)
+  // ============================================================================
+
+  @Get('webhooks')
+  @ApiBearerAuth('JWT')
+  @Throttle({ default: { limit: 100, ttl: 60000 } })
+  @ApiOperation({ summary: 'List webhooks' })
+  @ApiResponse({ status: 200, description: 'Webhook list' })
+  async listWebhooks() {
+    return this.agentMailService.listWebhooks();
+  }
+
+  @Post('webhooks')
+  @ApiBearerAuth('JWT')
+  @Throttle({ default: { limit: 10, ttl: 3600000 } })
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Create webhook' })
+  @ApiResponse({ status: 201, description: 'Webhook created' })
+  async createWebhook(@CurrentUser() user: DbUser, @Body() body: ManageWebhookDto) {
+    return this.agentMailService.createUserWebhook(user.id, body);
+  }
+
+  @Delete('webhooks/:id')
+  @ApiBearerAuth('JWT')
+  @Throttle({ default: { limit: 10, ttl: 3600000 } })
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Delete webhook' })
+  @ApiResponse({ status: 204, description: 'Webhook deleted' })
+  async deleteWebhook(@Param('id') id: string) {
+    await this.agentMailService.deleteUserWebhook(id);
+  }
+
+  @Post('webhooks/configure')
+  @ApiBearerAuth('JWT')
+  @Throttle({ default: { limit: 5, ttl: 3600000 } })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Idempotent webhook setup' })
+  @ApiResponse({ status: 200, description: 'Webhook configured' })
+  async configureWebhook(@CurrentUser() user: DbUser) {
+    return this.agentMailService.configureWebhook(user.id);
+  }
+
+  // ============================================================================
   // CONFIGURATION (Authenticated)
   // ============================================================================
 
@@ -115,7 +285,7 @@ export class AgentMailController {
 
   @Post('config')
   @ApiBearerAuth('JWT')
-  @Throttle({ default: { limit: 10, ttl: 3600000 } }) // 10/hour
+  @Throttle({ default: { limit: 10, ttl: 3600000 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Save AgentMail config' })
   @ApiResponse({ status: 200, description: 'Config saved' })

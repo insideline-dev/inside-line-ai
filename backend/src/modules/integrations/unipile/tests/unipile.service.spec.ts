@@ -161,8 +161,9 @@ describe('UnipileService', () => {
 
       expect(result).toEqual(mockProfile);
       expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining('api.unipile.com/api/v1/users/test-account-id/linkedin/profile'),
+        'https://api.unipile.com/api/v1/users/john-doe-123?account_id=test-account-id',
         expect.objectContaining({
+          method: 'GET',
           headers: expect.objectContaining({
             'X-API-KEY': 'test-api-key',
           }),
@@ -219,7 +220,7 @@ describe('UnipileService', () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          results: [
+          items: [
             {
               id: 'profile-123',
               first_name: 'John',
@@ -239,22 +240,28 @@ describe('UnipileService', () => {
       expect(result).toHaveLength(1);
       expect(result[0].firstName).toBe('John');
       expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining('keywords=John+Doe'),
-        expect.any(Object),
+        'https://api.unipile.com/api/v1/linkedin/search?account_id=test-account-id',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ api: 'classic', category: 'people', keywords: 'John Doe' }),
+        }),
       );
     });
 
     it('should search profiles by name and company', async () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ results: [] }),
+        json: async () => ({ items: [] }),
       });
 
       await service.searchProfiles('John Doe', 'TechCorp');
 
       expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining('keywords=John+Doe&company=TechCorp'),
-        expect.any(Object),
+        'https://api.unipile.com/api/v1/linkedin/search?account_id=test-account-id',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ api: 'classic', category: 'people', keywords: 'John Doe', company: 'TechCorp' }),
+        }),
       );
     });
 
@@ -271,7 +278,7 @@ describe('UnipileService', () => {
     it('should return empty array if no results', async () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ results: [] }),
+        json: async () => ({ items: [] }),
       });
 
       const result = await service.searchProfiles('Unknown Person');

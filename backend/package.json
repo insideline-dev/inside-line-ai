@@ -41,6 +41,7 @@
     "@nestjs/swagger": "^11.2.3",
     "@nestjs/throttler": "^6.5.0",
     "@nestjs/websockets": "^11.1.13",
+    "agentmail": "^0.2.11",
     "bcrypt": "^6.0.0",
     "bullmq": "^5.66.2",
     "cheerio": "^1.2.0",

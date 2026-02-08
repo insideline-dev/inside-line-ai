@@ -57,8 +57,10 @@ describe('AdminController', () => {
         {
           provide: ScoringConfigService,
           useValue: {
-            getDefaults: jest.fn(),
-            updateDefaults: jest.fn(),
+            getAll: jest.fn(),
+            getByStage: jest.fn(),
+            updateByStage: jest.fn(),
+            seed: jest.fn(),
           },
         },
         {
@@ -183,7 +185,7 @@ describe('AdminController', () => {
           meta: { total: 1, page: 1, limit: 20, totalPages: 1 },
         };
 
-        userManagementService.findAll.mockResolvedValueOnce(mockResponse);
+        userManagementService.findAll.mockResolvedValueOnce(mockResponse as any);
 
         const result = await controller.getUsers({ page: 1, limit: 20 });
 
@@ -254,7 +256,7 @@ describe('AdminController', () => {
           meta: { total: 1, page: 1, limit: 20, totalPages: 1 },
         };
 
-        startupService.adminFindPending.mockResolvedValueOnce(mockResponse);
+        startupService.adminFindPending.mockResolvedValueOnce(mockResponse as any);
 
         const result = await controller.getPendingStartups({ page: 1, limit: 20 });
 
@@ -312,39 +314,32 @@ describe('AdminController', () => {
   });
 
   describe('Scoring Configuration Endpoints', () => {
-    describe('GET /admin/scoring/defaults', () => {
-      it('should return default scoring weights', async () => {
-        const defaults = {
-          marketWeight: 20,
-          teamWeight: 20,
-          productWeight: 20,
-          tractionWeight: 20,
-          financialsWeight: 20,
-        };
+    describe('GET /admin/scoring/weights', () => {
+      it('should return all scoring weights', async () => {
+        const weights = [
+          { stage: 'pre_seed', weights: { team: 30, market: 20 } },
+          { stage: 'seed', weights: { team: 25, market: 18 } },
+        ];
 
-        scoringConfigService.getDefaults.mockResolvedValueOnce(defaults);
+        scoringConfigService.getAll.mockResolvedValueOnce(weights as any);
 
-        const result = await controller.getScoringDefaults();
+        const result = await controller.getAllScoringWeights();
 
-        expect(result).toEqual(defaults);
+        expect(result).toEqual(weights);
+        expect(scoringConfigService.getAll).toHaveBeenCalled();
       });
     });
 
-    describe('PUT /admin/scoring/defaults', () => {
-      it('should update default scoring weights', async () => {
-        const newDefaults = {
-          marketWeight: 30,
-          teamWeight: 25,
-          productWeight: 20,
-          tractionWeight: 15,
-          financialsWeight: 10,
-        };
+    describe('GET /admin/scoring/weights/:stage', () => {
+      it('should return scoring weights for a stage', async () => {
+        const stageWeights = { stage: 'seed', weights: { team: 25, market: 18 } };
 
-        scoringConfigService.updateDefaults.mockResolvedValueOnce(newDefaults);
+        scoringConfigService.getByStage.mockResolvedValueOnce(stageWeights as any);
 
-        const result = await controller.updateScoringDefaults(newDefaults);
+        const result = await controller.getScoringWeightsByStage('seed');
 
-        expect(result).toEqual(newDefaults);
+        expect(result).toEqual(stageWeights);
+        expect(scoringConfigService.getByStage).toHaveBeenCalledWith('seed');
       });
     });
   });

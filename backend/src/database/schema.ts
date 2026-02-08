@@ -30,5 +30,8 @@ export * from '../modules/integration/entities';
 // Unipile Integration
 export * from '../modules/integrations/unipile/entities';
 
+// AgentMail Integration
+export * from '../modules/integrations/agentmail/entities';
+
 // Agent System
 export * from '../modules/agent/entities';

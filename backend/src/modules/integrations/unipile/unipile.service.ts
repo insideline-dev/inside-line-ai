@@ -91,14 +91,14 @@ export class UnipileService {
    */
   private async fetchProfileFromAPI(profileUrl: string): Promise<LinkedInProfile | null> {
     const { dsn, apiKey, accountId } = this.config!;
-    const encodedUrl = encodeURIComponent(profileUrl);
-    const url = `https://${dsn}/api/v1/users/${accountId}/linkedin/profile?profile_url=${encodedUrl}`;
+    const identifier = this.extractIdentifierFromUrl(profileUrl);
+    const url = `https://${dsn}/api/v1/users/${identifier}?account_id=${accountId}`;
 
     const response = await fetch(url, {
       method: 'GET',
       headers: {
         'X-API-KEY': apiKey,
-        'Content-Type': 'application/json',
+        Accept: 'application/json',
       },
     });
 
@@ -119,19 +119,25 @@ export class UnipileService {
    */
   private async searchProfilesFromAPI(name: string, company?: string): Promise<LinkedInProfile[]> {
     const { dsn, apiKey, accountId } = this.config!;
-    const params = new URLSearchParams({ keywords: name });
+    const url = `https://${dsn}/api/v1/linkedin/search?account_id=${accountId}`;
+
+    const body: Record<string, unknown> = {
+      api: 'classic',
+      category: 'people',
+      keywords: name,
+    };
     if (company) {
-      params.append('company', company);
+      body.company = company;
     }
 
-    const url = `https://${dsn}/api/v1/users/${accountId}/linkedin/search?${params.toString()}`;
-
     const response = await fetch(url, {
-      method: 'GET',
+      method: 'POST',
       headers: {
         'X-API-KEY': apiKey,
         'Content-Type': 'application/json',
+        Accept: 'application/json',
       },
+      body: JSON.stringify(body),
     });
 
     if (!response.ok) {
@@ -140,7 +146,7 @@ export class UnipileService {
     }
 
     const data = await response.json();
-    const results = data.results || [];
+    const results = data.items || [];
     return results.map((profile: any) => this.mapUnipileProfileToLinkedInProfile(profile));
   }
 

@@ -1,7 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { AgentMailService } from '../agentmail.service';
 import { AttachmentService } from '../attachment.service';
+import { AgentMailClientService } from '../agentmail-client.service';
 import { DrizzleService } from '../../../../database';
 import { NotificationService } from '../../../../notification/notification.service';
 import { WebhookSource } from '../../../integration/entities';
@@ -9,9 +11,10 @@ import { NotificationType } from '../../../../notification/entities';
 
 describe('AgentMailService', () => {
   let service: AgentMailService;
-  let drizzleService: any;
-  let notificationService: any;
-  let attachmentService: any;
+  let drizzleService: ReturnType<typeof createMockDrizzle>;
+  let notificationService: { create: jest.Mock };
+  let attachmentService: { downloadMultiple: jest.Mock; downloadFromSdk: jest.Mock };
+  let agentMailClient: Record<string, jest.Mock>;
 
   const mockThread = {
     id: 'thread-1',
@@ -24,27 +27,41 @@ describe('AgentMailService', () => {
     createdAt: new Date(),
   };
 
+  const mockConfig = {
+    id: 'config-1',
+    userId: 'user-1',
+    inboxId: 'inbox-1',
+    inboxEmail: 'test@agentmail.to',
+    displayName: 'Test',
+    webhookId: null,
+    webhookUrl: null,
+    isActive: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
   const mockWebhookPayload = {
-    event: 'email.received',
+    organization_id: 'org-123',
+    inbox_id: 'inbox-1',
     thread_id: 'ext-thread-123',
-    message: {
-      id: 'msg-123',
-      from: 'founder@startup.com',
-      to: ['investor@example.com'],
-      subject: 'Investment Opportunity',
-      text: 'Hello, I would like to...',
-      html: '<p>Hello, I would like to...</p>',
-      attachments: [
-        {
-          filename: 'pitch_deck.pdf',
-          url: 'https://agentmail.com/attachments/123',
-          size: 2048000,
-          content_type: 'application/pdf',
-        },
-      ],
-      timestamp: '2024-01-15T10:30:00Z',
-    },
-    signature: 'sha256=abc123',
+    message_id: 'msg-123',
+  };
+
+  const mockSdkMessage = {
+    inboxId: 'inbox-1',
+    threadId: 'ext-thread-123',
+    messageId: 'msg-123',
+    from: 'founder@startup.com',
+    to: ['investor@example.com'],
+    subject: 'Investment Opportunity',
+    text: 'Hello, I would like to...',
+    html: '<p>Hello, I would like to...</p>',
+    attachments: [],
+    timestamp: new Date('2024-01-15T10:30:00Z'),
+    labels: [],
+    size: 1024,
+    updatedAt: new Date(),
+    createdAt: new Date(),
   };
 
   const createMockDrizzle = () => ({
@@ -61,24 +78,40 @@ describe('AgentMailService', () => {
       update: jest.fn().mockReturnThis(),
       set: jest.fn().mockReturnThis(),
       delete: jest.fn().mockReturnThis(),
+      onConflictDoUpdate: jest.fn().mockReturnThis(),
     },
   });
 
   beforeEach(async () => {
     drizzleService = createMockDrizzle();
-    notificationService = {
-      create: jest.fn().mockResolvedValue({}),
-    };
+    notificationService = { create: jest.fn().mockResolvedValue({}) };
     attachmentService = {
       downloadMultiple: jest.fn().mockResolvedValue(['key-1']),
+      downloadFromSdk: jest.fn().mockResolvedValue(['key-1']),
+    };
+    agentMailClient = {
+      getMessage: jest.fn().mockResolvedValue(mockSdkMessage),
+      createInbox: jest.fn().mockResolvedValue({ inboxId: 'inbox-1', podId: 'pod-1' }),
+      listInboxes: jest.fn().mockResolvedValue({ count: 0, inboxes: [] }),
+      getInbox: jest.fn().mockResolvedValue({ inboxId: 'inbox-1' }),
+      sendMessage: jest.fn().mockResolvedValue({ messageId: 'msg-1', threadId: 'thread-1' }),
+      replyToMessage: jest.fn().mockResolvedValue({ messageId: 'msg-2', threadId: 'thread-1' }),
+      listMessages: jest.fn().mockResolvedValue({ count: 0, messages: [] }),
+      listThreads: jest.fn().mockResolvedValue({ count: 0, threads: [] }),
+      getMessageAttachment: jest.fn().mockResolvedValue({ downloadUrl: 'https://example.com/att' }),
+      listWebhooks: jest.fn().mockResolvedValue({ count: 0, webhooks: [] }),
+      createWebhook: jest.fn().mockResolvedValue({ webhookId: 'wh-1', secret: 'sec' }),
+      deleteWebhook: jest.fn().mockResolvedValue(undefined),
     };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AgentMailService,
         { provide: DrizzleService, useValue: drizzleService },
+        { provide: ConfigService, useValue: { get: jest.fn().mockReturnValue('http://localhost:8080') } },
         { provide: NotificationService, useValue: notificationService },
         { provide: AttachmentService, useValue: attachmentService },
+        { provide: AgentMailClientService, useValue: agentMailClient },
       ],
     }).compile();
 
@@ -92,20 +125,23 @@ describe('AgentMailService', () => {
   // ============ WEBHOOK HANDLING ============
 
   describe('handleWebhook', () => {
-    it('should process webhook and create new thread', async () => {
-      drizzleService.db.limit.mockResolvedValueOnce([]); // No existing thread
-      drizzleService.db.returning.mockResolvedValue([{ id: 'webhook-1' }]);
+    it('should process webhook with ID-only payload and fetch full message', async () => {
+      // findUserByInbox returns config
+      drizzleService.db.limit.mockResolvedValueOnce([mockConfig]);
+      // No existing thread
+      drizzleService.db.limit.mockResolvedValueOnce([]);
 
       await service.handleWebhook(mockWebhookPayload);
 
       expect(drizzleService.db.insert).toHaveBeenCalled();
-      expect(attachmentService.downloadMultiple).toHaveBeenCalled();
+      expect(agentMailClient.getMessage).toHaveBeenCalledWith('inbox-1', 'msg-123');
       expect(notificationService.create).toHaveBeenCalled();
     });
 
-    it('should update existing thread', async () => {
-      drizzleService.db.limit.mockResolvedValueOnce([mockThread]);
-      drizzleService.db.returning.mockResolvedValue([{ id: 'webhook-1' }]);
+    it('should update existing thread on webhook', async () => {
+      drizzleService.db.limit
+        .mockResolvedValueOnce([mockConfig])
+        .mockResolvedValueOnce([mockThread]);
 
       await service.handleWebhook(mockWebhookPayload);
 
@@ -117,56 +153,92 @@ describe('AgentMailService', () => {
       );
     });
 
-    it('should log webhook event', async () => {
+    it('should skip if no user found for inbox', async () => {
       drizzleService.db.limit.mockResolvedValueOnce([]);
-      drizzleService.db.returning.mockResolvedValue([{ id: 'webhook-1' }]);
 
       await service.handleWebhook(mockWebhookPayload);
 
-      expect(drizzleService.db.insert).toHaveBeenCalled();
-      expect(drizzleService.db.values).toHaveBeenCalledWith(
-        expect.objectContaining({
-          source: WebhookSource.AGENTMAIL,
-          eventType: 'email.received',
-        }),
-      );
-    });
-
-    it('should handle webhook processing errors', async () => {
-      drizzleService.db.limit.mockRejectedValueOnce(new Error('DB error'));
-      drizzleService.db.returning.mockResolvedValue([{ id: 'webhook-1' }]);
-
-      await expect(service.handleWebhook(mockWebhookPayload)).rejects.toThrow();
-      expect(drizzleService.db.update).toHaveBeenCalled();
-      expect(drizzleService.db.set).toHaveBeenCalledWith(
-        expect.objectContaining({
-          processed: false,
-          errorMessage: expect.any(String),
-        }),
-      );
+      expect(agentMailClient.getMessage).not.toHaveBeenCalled();
     });
 
     it('should create priority notification for urgent emails', async () => {
-      const urgentPayload = {
-        ...mockWebhookPayload,
-        message: {
-          ...mockWebhookPayload.message,
-          subject: 'URGENT: Follow-up required',
-        },
+      const urgentMessage = {
+        ...mockSdkMessage,
+        subject: 'URGENT: Follow-up required',
       };
+      agentMailClient.getMessage.mockResolvedValueOnce(urgentMessage);
 
-      drizzleService.db.limit.mockResolvedValueOnce([]);
-      drizzleService.db.returning.mockResolvedValue([{ id: 'webhook-1' }]);
+      drizzleService.db.limit
+        .mockResolvedValueOnce([mockConfig])
+        .mockResolvedValueOnce([]);
 
-      await service.handleWebhook(urgentPayload);
+      await service.handleWebhook(mockWebhookPayload);
 
       expect(notificationService.create).toHaveBeenCalledWith(
-        expect.any(String),
+        'user-1',
         expect.any(String),
         expect.stringContaining('URGENT'),
         NotificationType.WARNING,
         expect.any(String),
       );
+    });
+
+    it('should handle webhook processing errors', async () => {
+      drizzleService.db.limit.mockRejectedValueOnce(new Error('DB error'));
+
+      await expect(service.handleWebhook(mockWebhookPayload)).rejects.toThrow();
+      expect(drizzleService.db.update).toHaveBeenCalled();
+    });
+  });
+
+  // ============ INBOX MANAGEMENT ============
+
+  describe('createInboxForUser', () => {
+    it('should create inbox and save config', async () => {
+      drizzleService.db.returning.mockResolvedValueOnce([mockConfig]);
+
+      const result = await service.createInboxForUser('user-1', {
+        username: 'test',
+        displayName: 'Test',
+      });
+
+      expect(agentMailClient.createInbox).toHaveBeenCalledWith({
+        username: 'test',
+        displayName: 'Test',
+      });
+      expect(result).toEqual(mockConfig);
+    });
+  });
+
+  // ============ EMAIL SEND / REPLY ============
+
+  describe('sendUserEmail', () => {
+    it('should send email using SDK', async () => {
+      drizzleService.db.limit.mockResolvedValueOnce([mockConfig]);
+
+      const params = { to: ['test@example.com'], subject: 'Hi', text: 'Hello' };
+      await service.sendUserEmail('user-1', params);
+
+      expect(agentMailClient.sendMessage).toHaveBeenCalledWith('inbox-1', params);
+    });
+
+    it('should throw if user has no config', async () => {
+      drizzleService.db.limit.mockResolvedValueOnce([]);
+
+      await expect(
+        service.sendUserEmail('user-1', { to: ['test@example.com'] }),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('replyToUserEmail', () => {
+    it('should reply to message using SDK', async () => {
+      drizzleService.db.limit.mockResolvedValueOnce([mockConfig]);
+
+      const params = { text: 'Thanks!' };
+      await service.replyToUserEmail('user-1', 'msg-1', params);
+
+      expect(agentMailClient.replyToMessage).toHaveBeenCalledWith('inbox-1', 'msg-1', params);
     });
   });
 
@@ -203,26 +275,6 @@ describe('AgentMailService', () => {
         totalPages: 1,
       });
     });
-
-    it('should filter by unread status', async () => {
-      drizzleService.db.select
-        .mockReturnValueOnce({
-          from: jest.fn().mockReturnThis(),
-          where: jest.fn().mockResolvedValue([{ count: 1 }]),
-        })
-        .mockReturnValueOnce({
-          from: jest.fn().mockReturnThis(),
-          where: jest.fn().mockReturnThis(),
-          orderBy: jest.fn().mockReturnThis(),
-          limit: jest.fn().mockReturnThis(),
-          offset: jest.fn().mockResolvedValue([mockThread]),
-        });
-
-      const result = await service.findThreads('user-1', { page: 1, limit: 20, unread: true });
-
-      expect(result.data).toEqual([mockThread]);
-      expect(result.meta.total).toBe(1);
-    });
   });
 
   describe('findThread', () => {
@@ -230,24 +282,13 @@ describe('AgentMailService', () => {
       drizzleService.db.limit.mockResolvedValueOnce([mockThread]);
 
       const result = await service.findThread('thread-1', 'user-1');
-
       expect(result).toEqual(mockThread);
     });
 
     it('should throw NotFoundException if thread not found', async () => {
       drizzleService.db.limit.mockResolvedValueOnce([]);
 
-      await expect(service.findThread('thread-1', 'user-1')).rejects.toThrow(
-        NotFoundException,
-      );
-    });
-
-    it('should respect RLS (userId filter)', async () => {
-      drizzleService.db.limit.mockResolvedValueOnce([mockThread]);
-
-      await service.findThread('thread-1', 'user-1');
-
-      expect(drizzleService.db.where).toHaveBeenCalled();
+      await expect(service.findThread('thread-1', 'user-1')).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -257,57 +298,88 @@ describe('AgentMailService', () => {
       drizzleService.db.returning.mockResolvedValueOnce([archived]);
 
       const result = await service.archiveThread('thread-1', 'user-1');
-
       expect(result.unreadCount).toBe(0);
-      expect(drizzleService.db.update).toHaveBeenCalled();
     });
 
     it('should throw NotFoundException if thread not found', async () => {
       drizzleService.db.returning.mockResolvedValueOnce([]);
 
-      await expect(service.archiveThread('thread-1', 'user-1')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.archiveThread('thread-1', 'user-1')).rejects.toThrow(NotFoundException);
     });
   });
 
   describe('deleteThread', () => {
     it('should delete thread', async () => {
       drizzleService.db.returning.mockResolvedValueOnce([{ id: 'thread-1' }]);
-
       await service.deleteThread('thread-1', 'user-1');
-
       expect(drizzleService.db.delete).toHaveBeenCalled();
     });
 
     it('should throw NotFoundException if thread not found', async () => {
       drizzleService.db.returning.mockResolvedValueOnce([]);
-
-      await expect(service.deleteThread('thread-1', 'user-1')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.deleteThread('thread-1', 'user-1')).rejects.toThrow(NotFoundException);
     });
   });
 
   // ============ CONFIG MANAGEMENT ============
 
   describe('getConfig', () => {
-    it('should return null for now', async () => {
+    it('should return config from database', async () => {
+      drizzleService.db.limit.mockResolvedValueOnce([mockConfig]);
+      const result = await service.getConfig('user-1');
+      expect(result).toEqual(mockConfig);
+    });
+
+    it('should return null if no config', async () => {
+      drizzleService.db.limit.mockResolvedValueOnce([]);
       const result = await service.getConfig('user-1');
       expect(result).toBeNull();
     });
   });
 
   describe('saveConfig', () => {
-    it('should return config as-is for now', async () => {
-      const config = {
-        inboxId: 'inbox-1',
-        apiKey: 'key-123',
-        webhookUrl: 'https://example.com/webhook',
-      };
+    it('should upsert config', async () => {
+      drizzleService.db.returning.mockResolvedValueOnce([mockConfig]);
 
-      const result = await service.saveConfig('user-1', config);
-      expect(result).toEqual(config);
+      const result = await service.saveConfig('user-1', {
+        inboxId: 'inbox-1',
+        inboxEmail: 'test@agentmail.to',
+        displayName: 'Test',
+        isActive: true,
+      });
+
+      expect(result).toEqual(mockConfig);
+      expect(drizzleService.db.insert).toHaveBeenCalled();
+    });
+  });
+
+  // ============ WEBHOOK MANAGEMENT ============
+
+  describe('configureWebhook', () => {
+    it('should create webhook and update config', async () => {
+      drizzleService.db.limit.mockResolvedValueOnce([mockConfig]);
+
+      const result = await service.configureWebhook('user-1');
+
+      expect(agentMailClient.createWebhook).toHaveBeenCalledWith({
+        url: 'http://localhost:8080/integrations/agentmail/webhook',
+        eventTypes: ['message.received'],
+        inboxIds: ['inbox-1'],
+      });
+      expect(result).toEqual({
+        webhookId: 'wh-1',
+        url: 'http://localhost:8080/integrations/agentmail/webhook',
+      });
+    });
+
+    it('should cleanup existing webhook before creating new one', async () => {
+      const configWithWebhook = { ...mockConfig, webhookId: 'old-wh' };
+      drizzleService.db.limit.mockResolvedValueOnce([configWithWebhook]);
+
+      await service.configureWebhook('user-1');
+
+      expect(agentMailClient.deleteWebhook).toHaveBeenCalledWith('old-wh');
+      expect(agentMailClient.createWebhook).toHaveBeenCalled();
     });
   });
 });

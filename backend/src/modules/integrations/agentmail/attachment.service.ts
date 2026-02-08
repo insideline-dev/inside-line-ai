@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { StorageService } from '../../../storage/storage.service';
 import { ASSET_TYPES } from '../../../storage/storage.config';
+import type { AgentMailClientService } from './agentmail-client.service';
 
 @Injectable()
 export class AttachmentService {
@@ -50,6 +51,44 @@ export class AttachmentService {
         keys.push(key);
       } catch (error) {
         this.logger.error(`Failed to download ${attachment.filename}, skipping`, error);
+      }
+    }
+
+    return keys;
+  }
+
+  async downloadFromSdk(
+    userId: string,
+    inboxId: string,
+    messageId: string,
+    attachments: Array<{
+      attachmentId: string;
+      filename: string;
+      content_type: string;
+      inboxId: string;
+      messageId: string;
+      url: string;
+    }>,
+    client: AgentMailClientService,
+  ): Promise<string[]> {
+    const keys: string[] = [];
+
+    for (const att of attachments) {
+      try {
+        const response = await client.getMessageAttachment(inboxId, messageId, att.attachmentId);
+
+        const downloadUrl = response.downloadUrl;
+        if (downloadUrl) {
+          const key = await this.downloadAttachment(
+            userId,
+            downloadUrl,
+            att.filename,
+            att.content_type,
+          );
+          keys.push(key);
+        }
+      } catch (error) {
+        this.logger.error(`Failed to download SDK attachment ${att.filename}, skipping`, error);
       }
     }
 

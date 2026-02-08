@@ -23,6 +23,8 @@ export const envSchema = z.object({
   // Queue Configuration
   QUEUE_DEFAULT_ATTEMPTS: z.coerce.number().default(3),
   QUEUE_BACKOFF_DELAY: z.coerce.number().default(1000),
+  QUEUE_MAX_DEPTH_TASK: z.coerce.number().default(1000),
+  QUEUE_MAX_PER_USER_TASK: z.coerce.number().default(20),
 
   // JWT Authentication
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
@@ -39,6 +41,7 @@ export const envSchema = z.object({
 
   // Feature Flags
   ENABLE_SWAGGER: z.coerce.boolean().default(true),
+  DEV_EXPOSE_TOKENS: z.coerce.boolean().default(false),
 
   // Storage Configuration (R2/S3)
   STORAGE_PROVIDER: z.enum(['r2', 's3', 'backblaze']).default('r2'),

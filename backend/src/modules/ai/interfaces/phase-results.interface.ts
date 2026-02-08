@@ -16,6 +16,48 @@ import type {
   TractionEvaluation,
 } from "../schemas";
 
+export interface StartupFileReference {
+  path: string;
+  name: string;
+  type: string;
+}
+
+export interface StartupTeamMemberReference {
+  name: string;
+  role?: string;
+  linkedinUrl?: string;
+}
+
+export interface StartupFormContext {
+  sectorIndustryGroup?: string | null;
+  sectorIndustry?: string | null;
+  pitchDeckPath?: string | null;
+  pitchDeckUrl?: string | null;
+  demoUrl?: string | null;
+  logoUrl?: string | null;
+  files?: StartupFileReference[];
+  teamMembers?: StartupTeamMemberReference[];
+  roundCurrency?: string | null;
+  valuationKnown?: boolean | null;
+  valuationType?: string | null;
+  raiseType?: string | null;
+  leadSecured?: boolean | null;
+  leadInvestorName?: string | null;
+  contactName?: string | null;
+  contactEmail?: string | null;
+  contactPhone?: string | null;
+  contactPhoneCountryCode?: string | null;
+  hasPreviousFunding?: boolean | null;
+  previousFundingAmount?: number | null;
+  previousFundingCurrency?: string | null;
+  previousInvestors?: string | null;
+  previousRoundType?: string | null;
+  technologyReadinessLevel?: string | null;
+  demoVideoUrl?: string | null;
+  productDescription?: string | null;
+  productScreenshots?: string[];
+}
+
 export interface ExtractionResult {
   companyName: string;
   tagline: string;
@@ -27,6 +69,7 @@ export interface ExtractionResult {
   fundingAsk?: number;
   valuation?: number;
   rawText: string;
+  startupContext?: StartupFormContext;
   source?: "pdf-parse" | "mistral-ocr" | "startup-context";
   pageCount?: number;
   warnings?: string[];

@@ -54,7 +54,7 @@ export class LegalEvaluationAgent extends BaseEvaluationAgent<LegalEvaluation> {
 
   fallback(): LegalEvaluation {
     return LegalEvaluationSchema.parse({
-      ...baseEvaluation(60, "No blocking legal red flags identified in this pass"),
+      ...baseEvaluation(45, "No blocking legal red flags identified in this pass"),
       ipStatus: "No material IP blockers identified",
       regulatoryRisks: ["Regulatory exposure depends on target geography"],
       legalStructure: "Standard venture-friendly entity assumptions",

@@ -2,6 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import type {
   EvaluationAgent,
   EvaluationAgentCompletion,
+  EvaluationFeedbackNote,
   EvaluationAgentKey,
   EvaluationPipelineInput,
 } from "../interfaces/agent.interface";
@@ -12,6 +13,7 @@ import type {
 import { PipelinePhase } from "../interfaces/pipeline.interface";
 import { PipelineStateService } from "./pipeline-state.service";
 import { PhaseTransitionService } from "../orchestrator/phase-transition.service";
+import { PipelineFeedbackService } from "./pipeline-feedback.service";
 import {
   BusinessModelEvaluationAgent,
   CompetitiveAdvantageEvaluationAgent,
@@ -46,6 +48,7 @@ export class EvaluationAgentRegistryService {
     private exitPotential: ExitPotentialEvaluationAgent,
     private pipelineState: PipelineStateService,
     private phaseTransition: PhaseTransitionService,
+    private pipelineFeedback: PipelineFeedbackService,
   ) {
     this.agents = [
       this.team,
@@ -76,7 +79,8 @@ export class EvaluationAgentRegistryService {
       this.agents.map(async (agent) => {
         const startedAt = new Date();
         startedAtByAgent.set(agent.key, startedAt);
-        const result = await agent.run(pipelineData);
+        const feedbackNotes = await this.loadFeedbackNotes(startupId, agent.key);
+        const result = await agent.run(pipelineData, { feedbackNotes });
         const completedAt = new Date();
 
         await this.recordTelemetrySafely(startupId, {
@@ -87,6 +91,10 @@ export class EvaluationAgentRegistryService {
           durationMs: completedAt.getTime() - startedAt.getTime(),
           retryCount: 0,
         });
+
+        if (!result.usedFallback) {
+          await this.consumeAgentFeedback(startupId, agent.key);
+        }
 
         return result;
       }),
@@ -175,6 +183,62 @@ export class EvaluationAgentRegistryService {
     };
   }
 
+  async runOne(
+    startupId: string,
+    key: EvaluationAgentKey,
+    pipelineData: EvaluationPipelineInput,
+  ): Promise<EvaluationAgentCompletion> {
+    const agent = this.agents.find((candidate) => candidate.key === key);
+    if (!agent) {
+      throw new Error(`Unsupported evaluation agent "${key}"`);
+    }
+
+    const startedAt = new Date();
+    try {
+      const feedbackNotes = await this.loadFeedbackNotes(startupId, key);
+      const result = await agent.run(pipelineData, { feedbackNotes });
+      const completedAt = new Date();
+
+      await this.recordTelemetrySafely(startupId, {
+        agentKey: result.key,
+        phase: PipelinePhase.EVALUATION,
+        startedAt: startedAt.toISOString(),
+        completedAt: completedAt.toISOString(),
+        durationMs: completedAt.getTime() - startedAt.getTime(),
+        retryCount: 0,
+      });
+
+      if (!result.usedFallback) {
+        await this.consumeAgentFeedback(startupId, key);
+        await this.consumePhaseFeedback(startupId);
+      }
+
+      return {
+        agent: result.key,
+        output: result.output,
+        usedFallback: result.usedFallback,
+        error: result.error,
+      };
+    } catch (error) {
+      const completedAt = new Date();
+      const message = error instanceof Error ? error.message : String(error);
+      await this.recordTelemetrySafely(startupId, {
+        agentKey: key,
+        phase: PipelinePhase.EVALUATION,
+        startedAt: startedAt.toISOString(),
+        completedAt: completedAt.toISOString(),
+        durationMs: completedAt.getTime() - startedAt.getTime(),
+        retryCount: 0,
+      });
+      return {
+        agent: key,
+        output: agent.fallback(pipelineData),
+        usedFallback: true,
+        error: message,
+      };
+    }
+  }
+
   private async recordTelemetrySafely(
     startupId: string,
     payload: Parameters<PipelineStateService["recordAgentTelemetry"]>[1],
@@ -203,6 +267,81 @@ export class EvaluationAgentRegistryService {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.warn(
         `Evaluation agent completion callback failed for ${payload.agent}: ${message}`,
+      );
+    }
+  }
+
+  private async loadFeedbackNotes(
+    startupId: string,
+    key: EvaluationAgentKey,
+  ): Promise<EvaluationFeedbackNote[]> {
+    const [phaseScope, agentScope] = await Promise.all([
+      this.pipelineFeedback.getContext({
+        startupId,
+        phase: PipelinePhase.EVALUATION,
+        limit: 10,
+      }),
+      this.pipelineFeedback.getContext({
+        startupId,
+        phase: PipelinePhase.EVALUATION,
+        agentKey: key,
+        limit: 10,
+      }),
+    ]);
+
+    const byId = new Map<string, EvaluationFeedbackNote>();
+    for (const item of phaseScope.items) {
+      if (item.agentKey !== null) {
+        continue;
+      }
+      byId.set(item.id, {
+        scope: "phase",
+        feedback: item.feedback,
+        createdAt: item.createdAt,
+      });
+    }
+    for (const item of agentScope.items) {
+      byId.set(item.id, {
+        scope: item.agentKey ? `agent:${key}` : "phase",
+        feedback: item.feedback,
+        createdAt: item.createdAt,
+      });
+    }
+
+    return Array.from(byId.values())
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, 10);
+  }
+
+  private async consumeAgentFeedback(
+    startupId: string,
+    key: EvaluationAgentKey,
+  ): Promise<void> {
+    try {
+      await this.pipelineFeedback.markConsumedByScope({
+        startupId,
+        phase: PipelinePhase.EVALUATION,
+        agentKey: key,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `Failed to mark evaluation feedback consumed for ${key}: ${message}`,
+      );
+    }
+  }
+
+  private async consumePhaseFeedback(startupId: string): Promise<void> {
+    try {
+      await this.pipelineFeedback.markConsumedByScope({
+        startupId,
+        phase: PipelinePhase.EVALUATION,
+        agentKey: null,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `Failed to mark phase-level evaluation feedback consumed: ${message}`,
       );
     }
   }

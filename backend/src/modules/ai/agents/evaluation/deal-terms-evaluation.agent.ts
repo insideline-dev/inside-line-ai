@@ -59,7 +59,7 @@ export class DealTermsEvaluationAgent extends BaseEvaluationAgent<DealTermsEvalu
     const ask = extraction.fundingAsk ?? 0;
 
     return DealTermsEvaluationSchema.parse({
-      ...baseEvaluation(50 + fundingScore(ask) / 8, "Deal framing is acceptable for diligence progression"),
+      ...baseEvaluation(35 + fundingScore(ask) / 8, "Deal framing is acceptable for diligence progression"),
       valuation: extraction.valuation ?? Math.max(5_000_000, ask * 5),
       askAmount: ask,
       equity: 12,

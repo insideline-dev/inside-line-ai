@@ -43,7 +43,7 @@ export class BusinessModelEvaluationAgent extends BaseEvaluationAgent<BusinessMo
 
   fallback({ extraction }: EvaluationPipelineInput): BusinessModelEvaluation {
     return BusinessModelEvaluationSchema.parse({
-      ...baseEvaluation(52 + fundingScore(extraction.fundingAsk ?? 0) / 10, "Business model clarity is moderate"),
+      ...baseEvaluation(37 + fundingScore(extraction.fundingAsk ?? 0) / 10, "Business model clarity is moderate"),
       revenueStreams: ["Subscription", "Service add-ons"],
       unitEconomics: "Unit economics assumptions are preliminary",
       scalability: "Model scales with increased automation and channel leverage",

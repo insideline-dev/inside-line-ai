@@ -1,11 +1,12 @@
 import { Injectable } from "@nestjs/common";
-import { generateObject } from "ai";
+import { generateText, Output } from "ai";
 import { z } from "zod";
 import type {
   EvaluationAgent,
   EvaluationAgentKey,
   EvaluationAgentResult,
   EvaluationPipelineInput,
+  EvaluationAgentRunOptions,
 } from "../../interfaces/agent.interface";
 import { ModelPurpose } from "../../interfaces/pipeline.interface";
 import { AiProviderService } from "../../providers/ai-provider.service";
@@ -29,32 +30,44 @@ export abstract class BaseEvaluationAgent<TOutput>
 
   async run(
     pipelineData: EvaluationPipelineInput,
+    options?: EvaluationAgentRunOptions,
   ): Promise<EvaluationAgentResult<TOutput>> {
     const context = this.buildContext(pipelineData);
+    const promptContext = {
+      ...context,
+      startupFormContext: pipelineData.extraction.startupContext ?? {},
+      adminFeedback: options?.feedbackNotes ?? [],
+    };
 
     try {
       const modelFactory = this.providers.getGemini();
       const modelName = this.aiConfig.getModelForPurpose(ModelPurpose.EVALUATION);
 
-      const { object } = await generateObject({
+      const { output } = await generateText({
         model: modelFactory(modelName),
-        schema: this.schema,
-        system: this.systemPrompt,
-        prompt: [
-          "Evaluate using only provided context. Do not invent facts.",
-          "Scoring rubric: 0-39 weak/high risk, 40-69 mixed/unproven, 70-84 strong with manageable risk, 85-100 exceptional evidence-backed strength.",
-          "When key evidence is missing, lower confidence and avoid extreme scores unless clear risk signals exist.",
-          "Keep rationales concise and directly tied to observable evidence in context.",
-          "Return strict JSON matching schema only.",
-          JSON.stringify(context, null, 2),
-        ].join("\n\n"),
+        output: Output.object({ schema: this.schema }),
+        system: [
+          this.systemPrompt,
+          "",
+          "## Scoring Rubric",
+          "0-39: Weak / high risk — significant gaps or red flags",
+          "40-69: Mixed / unproven — some positives but material unknowns",
+          "70-84: Strong with manageable risk — solid evidence, minor gaps",
+          "85-100: Exceptional — evidence-backed strength across dimensions",
+          "",
+          "## Rules",
+          "- Evaluate using ONLY the provided context. Do not invent facts.",
+          "- When key evidence is missing, lower confidence and avoid extreme scores.",
+          "- Keep rationales concise and tied to observable evidence.",
+        ].join("\n"),
+        prompt: this.formatContext(promptContext),
         temperature: this.aiConfig.getEvaluationTemperature(),
         maxOutputTokens: this.aiConfig.getEvaluationMaxOutputTokens(),
       });
 
       return {
         key: this.key,
-        output: this.schema.parse(object),
+        output: this.schema.parse(output),
         usedFallback: false,
       };
     } catch (error) {
@@ -66,5 +79,24 @@ export abstract class BaseEvaluationAgent<TOutput>
         error: message,
       };
     }
+  }
+
+  private formatContext(context: Record<string, unknown>): string {
+    const sections: string[] = [];
+    for (const [key, value] of Object.entries(context)) {
+      if (value === undefined || value === null) continue;
+      const label = key
+        .replace(/([A-Z])/g, " $1")
+        .replace(/^./, (s) => s.toUpperCase())
+        .trim();
+      if (typeof value === "string") {
+        sections.push(`## ${label}\n${value}`);
+      } else if (Array.isArray(value) && value.length === 0) {
+        continue;
+      } else {
+        sections.push(`## ${label}\n${JSON.stringify(value)}`);
+      }
+    }
+    return sections.join("\n\n");
   }
 }

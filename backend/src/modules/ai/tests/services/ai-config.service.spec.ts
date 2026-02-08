@@ -72,7 +72,7 @@ describe("AiConfigService", () => {
       (_: string, fallback?: unknown) => fallback as number,
     );
 
-    expect(service.getEvaluationTemperature()).toBe(0.2);
+    expect(service.getEvaluationTemperature()).toBe(0.1);
     expect(service.getEvaluationMaxOutputTokens()).toBe(4000);
   });
 });

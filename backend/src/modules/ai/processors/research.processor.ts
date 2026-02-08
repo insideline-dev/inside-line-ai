@@ -16,6 +16,7 @@ import {
   parseRedisUrl,
 } from "../../../queue/processors/base.processor";
 import { NotificationGateway } from "../../../notification/notification.gateway";
+import type { ResearchAgentKey } from "../interfaces/agent.interface";
 import { PipelinePhase } from "../interfaces/pipeline.interface";
 import { PipelineStateService } from "../services/pipeline-state.service";
 import { PipelineService } from "../services/pipeline.service";
@@ -56,6 +57,7 @@ export class ResearchProcessor
     job: Job<AiResearchJobData>,
   ): Promise<Omit<AiResearchJobResult, "jobId" | "duration" | "success">> {
     const { startupId } = job.data;
+    const agentKey = this.readAgentRetryKey(job.data.metadata);
 
     if (job.data.type !== "ai_research") {
       throw new Error("Invalid job type for research processor");
@@ -68,7 +70,11 @@ export class ResearchProcessor
       pipelineState: this.pipelineState,
       pipelineService: this.pipelineService,
       notificationGateway: this.notificationGateway,
-      run: () => this.researchService.run(startupId),
+      run: () =>
+        this.researchService.run(
+          startupId,
+          agentKey ? { agentKey } : undefined,
+        ),
     });
 
     return {
@@ -77,5 +83,25 @@ export class ResearchProcessor
       pipelineRunId: runResult.pipelineRunId,
       data: runResult.result,
     };
+  }
+
+  private readAgentRetryKey(
+    metadata: Record<string, unknown> | undefined,
+  ): ResearchAgentKey | undefined {
+    if (!metadata || metadata.mode !== "agent_retry") {
+      return undefined;
+    }
+
+    const agentKey = metadata.agentKey;
+    if (
+      agentKey === "team" ||
+      agentKey === "market" ||
+      agentKey === "product" ||
+      agentKey === "news"
+    ) {
+      return agentKey;
+    }
+
+    return undefined;
   }
 }

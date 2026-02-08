@@ -35,6 +35,7 @@ import { GeminiResearchService } from "./services/gemini-research.service";
 import { MistralOcrService } from "./services/mistral-ocr.service";
 import { PipelineService } from "./services/pipeline.service";
 import { PipelineStateService } from "./services/pipeline-state.service";
+import { PipelineFeedbackService } from "./services/pipeline-feedback.service";
 import { PdfTextExtractorService } from "./services/pdf-text-extractor.service";
 import { LinkedinEnrichmentService } from "./services/linkedin-enrichment.service";
 import { InvestorMatchingService } from "./services/investor-matching.service";
@@ -62,6 +63,7 @@ import { WebsiteScraperService } from "./services/website-scraper.service";
     AiProviderService,
     AiConfigService,
     PipelineStateService,
+    PipelineFeedbackService,
     PipelineService,
     GeminiResearchService,
     ExtractionService,
@@ -102,6 +104,7 @@ import { WebsiteScraperService } from "./services/website-scraper.service";
     AiProviderService,
     AiConfigService,
     PipelineStateService,
+    PipelineFeedbackService,
     PipelineService,
   ],
 })

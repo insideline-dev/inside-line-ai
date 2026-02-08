@@ -5,4 +5,15 @@ export const NEWS_RESEARCH_HUMAN_PROMPT = `Research public news and announcement
 Capture notable articles, press releases, and high-signal events.
 
 Context:
-{{contextJson}}`;
+{{contextJson}}
+
+Return your response as a single JSON block inside a \`\`\`json fenced code block.
+
+Expected structure:
+- articles: array of objects with { title, source, date, summary, url }
+- pressReleases: array of press release description strings
+- sentiment: "positive"|"neutral"|"negative"
+- recentEvents: array of recent event description strings
+- sources: array of source URLs used
+
+Use empty arrays [] for fields with no data. Only include URLs you can cite.`;

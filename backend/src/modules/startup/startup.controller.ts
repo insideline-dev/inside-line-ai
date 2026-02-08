@@ -82,6 +82,10 @@ export class StartupController {
   @Get(':id')
   @Roles(UserRole.FOUNDER, UserRole.ADMIN)
   async findOne(@CurrentUser() user: User, @Param('id') id: string) {
+    if (user.role === UserRole.ADMIN) {
+      return this.startupService.adminFindOne(id);
+    }
+
     return this.startupService.findOne(id, user.id);
   }
 
@@ -157,6 +161,10 @@ export class StartupController {
   @Get(':id/progress')
   @Roles(UserRole.FOUNDER, UserRole.ADMIN)
   async getProgress(@CurrentUser() user: User, @Param('id') id: string) {
+    if (user.role === UserRole.ADMIN) {
+      return this.startupService.adminGetProgress(id);
+    }
+
     return this.startupService.getProgress(id, user.id);
   }
 

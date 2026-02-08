@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import Redis from "ioredis";
-import { generateObject } from "ai";
+import { generateText, Output } from "ai";
 import { z } from "zod";
 import { ModelPurpose } from "../interfaces/pipeline.interface";
 import { AiProviderService } from "../providers/ai-provider.service";
@@ -45,11 +45,11 @@ export class LocationNormalizerService implements OnModuleDestroy {
     }
 
     try {
-      const { object } = await generateObject({
+      const { output } = await generateText({
         model: this.providers.resolveModelForPurpose(
           ModelPurpose.LOCATION_NORMALIZATION,
         ),
-        schema: NormalizedRegionSchema,
+        output: Output.object({ schema: NormalizedRegionSchema }),
         temperature: 0,
         maxOutputTokens: 64,
         prompt: [
@@ -59,7 +59,7 @@ export class LocationNormalizerService implements OnModuleDestroy {
         ].join("\n"),
       });
 
-      const parsed = NormalizedRegionSchema.parse(object);
+      const parsed = NormalizedRegionSchema.parse(output);
       await this.cacheRegion(key, parsed.region);
       return parsed.region;
     } catch (error) {

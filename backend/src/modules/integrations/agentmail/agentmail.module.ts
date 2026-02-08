@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AgentMailController } from './agentmail.controller';
 import { AgentMailService } from './agentmail.service';
@@ -8,9 +8,10 @@ import { AgentMailSignatureGuard } from './guards';
 import { DatabaseModule } from '../../../database/database.module';
 import { StorageModule } from '../../../storage/storage.module';
 import { NotificationModule } from '../../../notification/notification.module';
+import { ClaraModule } from '../../clara/clara.module';
 
 @Module({
-  imports: [ConfigModule, DatabaseModule, StorageModule, NotificationModule],
+  imports: [ConfigModule, DatabaseModule, StorageModule, NotificationModule, forwardRef(() => ClaraModule)],
   controllers: [AgentMailController],
   providers: [AgentMailService, AgentMailClientService, AttachmentService, AgentMailSignatureGuard],
   exports: [AgentMailService, AgentMailClientService],

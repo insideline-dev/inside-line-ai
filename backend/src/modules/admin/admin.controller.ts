@@ -39,6 +39,8 @@ import {
   ExportUsersQueryDto,
   ExportStartupsQueryDto,
   GetStartupStatsQueryDto,
+  RetryPhaseDto,
+  RetryAgentDto,
 } from './dto';
 import { GetStartupsQueryDto } from '../startup/dto';
 
@@ -171,6 +173,24 @@ export class AdminController {
     @Param('id', ParseUUIDPipe) id: string,
   ) {
     return this.startupService.reanalyze(id, admin.id);
+  }
+
+  @Post('startups/:id/retry-phase')
+  async retryStartupPhase(
+    @CurrentUser() admin: User,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: RetryPhaseDto,
+  ) {
+    return this.startupService.adminRetryPhase(id, admin.id, dto);
+  }
+
+  @Post('startups/:id/retry-agent')
+  async retryStartupAgent(
+    @CurrentUser() admin: User,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: RetryAgentDto,
+  ) {
+    return this.startupService.adminRetryAgent(id, admin.id, dto);
   }
 
   // ============ SCORING CONFIGURATION ENDPOINTS ============

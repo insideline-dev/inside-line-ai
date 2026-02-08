@@ -36,8 +36,6 @@ describe('AgentMailController', () => {
     inboxId: 'inbox-1',
     inboxEmail: 'test@agentmail.to',
     displayName: 'Test',
-    webhookId: null,
-    webhookUrl: null,
     isActive: true,
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -71,10 +69,6 @@ describe('AgentMailController', () => {
       replyToUserEmail: jest.fn().mockResolvedValue({ messageId: 'msg-2', threadId: 'thread-1' }),
       downloadUserAttachment: jest.fn().mockResolvedValue({ downloadUrl: 'https://example.com' }),
       listUserSdkThreads: jest.fn().mockResolvedValue({ count: 0, threads: [] }),
-      listWebhooks: jest.fn().mockResolvedValue({ count: 0, webhooks: [] }),
-      createUserWebhook: jest.fn().mockResolvedValue({ webhookId: 'wh-1' }),
-      deleteUserWebhook: jest.fn().mockResolvedValue(undefined),
-      configureWebhook: jest.fn().mockResolvedValue({ webhookId: 'wh-1', url: 'https://example.com/webhook' }),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -182,23 +176,6 @@ describe('AgentMailController', () => {
     it('should delete thread', async () => {
       const result = await controller.deleteThread(mockUser, 'thread-1');
       expect(result).toBeUndefined();
-    });
-  });
-
-  // ============ WEBHOOK MANAGEMENT TESTS ============
-
-  describe('listWebhooks', () => {
-    it('should list webhooks', async () => {
-      const result = await controller.listWebhooks();
-      expect(result).toEqual({ count: 0, webhooks: [] });
-    });
-  });
-
-  describe('configureWebhook', () => {
-    it('should configure webhook', async () => {
-      const result = await controller.configureWebhook(mockUser);
-      expect(result).toEqual({ webhookId: 'wh-1', url: 'https://example.com/webhook' });
-      expect(service.configureWebhook).toHaveBeenCalledWith('user-1');
     });
   });
 

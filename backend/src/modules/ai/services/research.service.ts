@@ -10,8 +10,10 @@ import type {
   SourceEntry,
 } from "../interfaces/phase-results.interface";
 import { PipelinePhase } from "../interfaces/pipeline.interface";
+import type { PipelineFeedback } from "../entities/pipeline-feedback.schema";
 import { PipelineStateService } from "./pipeline-state.service";
 import { GeminiResearchService } from "./gemini-research.service";
+import { PipelineFeedbackService } from "./pipeline-feedback.service";
 
 type ResearchAgentOutput =
   | NonNullable<ResearchResult["team"]>
@@ -19,14 +21,19 @@ type ResearchAgentOutput =
   | NonNullable<ResearchResult["product"]>
   | NonNullable<ResearchResult["news"]>;
 
+export interface ResearchRunOptions {
+  agentKey?: ResearchAgentKey;
+}
+
 @Injectable()
 export class ResearchService {
   constructor(
     private pipelineState: PipelineStateService,
     private geminiResearchService: GeminiResearchService,
+    private pipelineFeedback: PipelineFeedbackService,
   ) {}
 
-  async run(startupId: string): Promise<ResearchResult> {
+  async run(startupId: string, options?: ResearchRunOptions): Promise<ResearchResult> {
     const extraction = await this.pipelineState.getPhaseResult(
       startupId,
       PipelinePhase.EXTRACTION,
@@ -41,26 +48,35 @@ export class ResearchService {
     }
 
     const pipelineInput: ResearchPipelineInput = { extraction, scraping };
-    const keys = Object.keys(RESEARCH_AGENTS) as ResearchAgentKey[];
+    const keys = options?.agentKey
+      ? [options.agentKey]
+      : (Object.keys(RESEARCH_AGENTS) as ResearchAgentKey[]);
+    const currentResult = options?.agentKey
+      ? await this.pipelineState.getPhaseResult(startupId, PipelinePhase.RESEARCH)
+      : null;
 
     const settled = await Promise.allSettled(
-      keys.map((key) => this.runSingleAgent(key, RESEARCH_AGENTS[key], pipelineInput)),
+      keys.map((key) =>
+        this.runSingleAgent(startupId, key, RESEARCH_AGENTS[key], pipelineInput),
+      ),
     );
 
-    const result: ResearchResult = {
-      team: null,
-      market: null,
-      product: null,
-      news: null,
-      sources: [],
-      errors: [],
-    };
+    const result = this.createInitialResult(currentResult, options?.agentKey);
+    const shouldConsumePhaseFeedback = Boolean(options?.agentKey);
+    let phaseFeedbackConsumed = false;
 
     const dedupeSources = new Map<string, SourceEntry>();
+    for (const source of result.sources) {
+      const sourceKey = this.getSourceKey(source);
+      if (!dedupeSources.has(sourceKey)) {
+        dedupeSources.set(sourceKey, source);
+      }
+    }
 
     for (let index = 0; index < settled.length; index += 1) {
       const settledResult = settled[index];
       const key = keys[index];
+      result.errors = result.errors.filter((item) => item.agent !== key);
 
       if (settledResult.status === "rejected") {
         result.errors.push({
@@ -73,7 +89,7 @@ export class ResearchService {
         continue;
       }
 
-      const { output, sources, error } = settledResult.value;
+      const { output, sources, error, usedFallback } = settledResult.value;
 
       if (key === "team") {
         result.team = output as ResearchResult["team"];
@@ -86,7 +102,7 @@ export class ResearchService {
       }
 
       for (const source of sources) {
-        const sourceKey = source.url ?? source.name;
+        const sourceKey = this.getSourceKey(source);
         if (!dedupeSources.has(sourceKey)) {
           dedupeSources.set(sourceKey, source);
         }
@@ -94,6 +110,22 @@ export class ResearchService {
 
       if (error) {
         result.errors.push({ agent: key, error });
+      }
+
+      if (!usedFallback) {
+        await this.pipelineFeedback.markConsumedByScope({
+          startupId,
+          phase: PipelinePhase.RESEARCH,
+          agentKey: key,
+        });
+        if (shouldConsumePhaseFeedback && !phaseFeedbackConsumed) {
+          await this.pipelineFeedback.markConsumedByScope({
+            startupId,
+            phase: PipelinePhase.RESEARCH,
+            agentKey: null,
+          });
+          phaseFeedbackConsumed = true;
+        }
       }
     }
 
@@ -103,34 +135,117 @@ export class ResearchService {
   }
 
   private async runSingleAgent(
+    startupId: string,
     key: ResearchAgentKey,
     agent: ResearchAgentConfig<ResearchAgentOutput>,
     pipelineInput: ResearchPipelineInput,
   ): Promise<{
     output: ResearchAgentOutput;
     sources: SourceEntry[];
+    usedFallback: boolean;
     error?: string;
   }> {
     const context = agent.contextBuilder(pipelineInput);
+    const feedbackContext = await this.loadFeedbackContext(startupId, key);
+    const promptContext = {
+      ...context,
+      startupFormContext: pipelineInput.extraction.startupContext ?? {},
+      adminFeedback: feedbackContext.map((item) => ({
+        scope: item.agentKey ? `agent:${item.agentKey}` : "phase",
+        feedback: item.feedback,
+        createdAt: item.createdAt,
+      })),
+    };
     const prompt = this.renderPrompt(agent.humanPromptTemplate, {
-      contextJson: JSON.stringify(context, null, 2),
+      contextJson: JSON.stringify(promptContext),
       agentName: agent.name,
       agentKey: key,
     });
 
-    const response = await this.geminiResearchService.research({
-      agent: key,
-      prompt,
-      systemPrompt: agent.systemPrompt,
-      schema: agent.schema,
-      fallback: () => agent.fallback(pipelineInput),
-    });
+    try {
+      return await this.geminiResearchService.research({
+        agent: key,
+        prompt,
+        systemPrompt: agent.systemPrompt,
+        schema: agent.schema,
+        fallback: () => agent.fallback(pipelineInput),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        output: agent.fallback(pipelineInput),
+        sources: [],
+        usedFallback: true,
+        error: message,
+      };
+    }
+  }
+
+  private createInitialResult(
+    current: ResearchResult | null,
+    rerunAgent?: ResearchAgentKey,
+  ): ResearchResult {
+    if (!current) {
+      return {
+        team: null,
+        market: null,
+        product: null,
+        news: null,
+        sources: [],
+        errors: [],
+      };
+    }
+
+    const retainedSources = rerunAgent
+      ? current.sources.filter((item) => item.agent !== rerunAgent)
+      : current.sources;
 
     return {
-      output: response.output,
-      sources: response.sources,
-      error: response.error,
+      team: current.team,
+      market: current.market,
+      product: current.product,
+      news: current.news,
+      sources: [...retainedSources],
+      errors: [...current.errors],
     };
+  }
+
+  private getSourceKey(source: SourceEntry): string {
+    return `${source.agent}::${source.url ?? source.name}`;
+  }
+
+  private async loadFeedbackContext(
+    startupId: string,
+    key: ResearchAgentKey,
+  ): Promise<PipelineFeedback[]> {
+    const [phaseScope, agentScope] = await Promise.all([
+      this.pipelineFeedback.getContext({
+        startupId,
+        phase: PipelinePhase.RESEARCH,
+        limit: 10,
+      }),
+      this.pipelineFeedback.getContext({
+        startupId,
+        phase: PipelinePhase.RESEARCH,
+        agentKey: key,
+        limit: 10,
+      }),
+    ]);
+
+    const dedupe = new Map<string, PipelineFeedback>();
+    for (const item of phaseScope.items) {
+      if (item.agentKey !== null) {
+        continue;
+      }
+      dedupe.set(item.id, item);
+    }
+    for (const item of agentScope.items) {
+      dedupe.set(item.id, item);
+    }
+
+    return Array.from(dedupe.values()).sort(
+      (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+    );
   }
 
   private renderPrompt(

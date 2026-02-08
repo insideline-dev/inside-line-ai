@@ -48,6 +48,16 @@ export interface EvaluationAgentResult<TOutput> {
   error?: string;
 }
 
+export interface EvaluationFeedbackNote {
+  scope: "phase" | `agent:${EvaluationAgentKey}`;
+  feedback: string;
+  createdAt: Date;
+}
+
+export interface EvaluationAgentRunOptions {
+  feedbackNotes?: EvaluationFeedbackNote[];
+}
+
 export interface EvaluationAgentCompletion {
   agent: EvaluationAgentKey;
   output: unknown;
@@ -57,6 +67,9 @@ export interface EvaluationAgentCompletion {
 
 export interface EvaluationAgent<TOutput> {
   key: EvaluationAgentKey;
-  run(pipelineData: EvaluationPipelineInput): Promise<EvaluationAgentResult<TOutput>>;
+  run(
+    pipelineData: EvaluationPipelineInput,
+    options?: EvaluationAgentRunOptions,
+  ): Promise<EvaluationAgentResult<TOutput>>;
   fallback(pipelineData: EvaluationPipelineInput): TOutput;
 }

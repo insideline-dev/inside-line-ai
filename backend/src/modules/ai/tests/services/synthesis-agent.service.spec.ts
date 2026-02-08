@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, jest, mock } from "bun:test";
 
-const generateObjectMock = jest.fn();
-mock.module("ai", () => ({ generateObject: generateObjectMock }));
+const generateTextMock = jest.fn();
+mock.module("ai", () => ({
+  generateText: generateTextMock,
+  Output: { object: ({ schema }: { schema: unknown }) => schema },
+}));
 
 import type { AiConfigService } from "../../services/ai-config.service";
 import type { AiProviderService } from "../../providers/ai-provider.service";
@@ -17,7 +20,7 @@ describe("SynthesisAgentService", () => {
   const resolvedModel = { provider: "resolved-model" };
 
   beforeEach(() => {
-    generateObjectMock.mockReset();
+    generateTextMock.mockReset();
 
     providers = {
       resolveModelForPurpose: jest.fn().mockReturnValue(resolvedModel),
@@ -35,8 +38,8 @@ describe("SynthesisAgentService", () => {
   });
 
   it("uses synthesis model config and returns schema-valid output", async () => {
-    generateObjectMock.mockResolvedValueOnce({
-      object: {
+    generateTextMock.mockResolvedValueOnce({
+      output: {
         overallScore: 79.2,
         recommendation: "Consider",
         executiveSummary: "Balanced opportunity with execution risk.",
@@ -64,19 +67,23 @@ describe("SynthesisAgentService", () => {
     );
     expect(aiConfig.getSynthesisTemperature).toHaveBeenCalledTimes(1);
     expect(aiConfig.getSynthesisMaxOutputTokens).toHaveBeenCalledTimes(1);
-    expect(generateObjectMock).toHaveBeenCalledWith(
+    expect(generateTextMock).toHaveBeenCalledWith(
       expect.objectContaining({
         temperature: 0.2,
         maxOutputTokens: 4000,
       }),
     );
+    const call = generateTextMock.mock.calls[0]?.[0];
+    expect(call?.system).toContain("Required Output Fields");
+    expect(call?.prompt).toContain("Company Overview");
+    expect(call?.prompt).toContain("Clipaf");
     expect(output.recommendation).toBe("Consider");
     expect(output.investorMemo).toContain("Investor memo");
   });
 
   it("routes to gemini provider when synthesis model is non-gpt", async () => {
-    generateObjectMock.mockResolvedValueOnce({
-      object: {
+    generateTextMock.mockResolvedValueOnce({
+      output: {
         overallScore: 75,
         recommendation: "Consider",
         executiveSummary: "Summary",

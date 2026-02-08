@@ -3,9 +3,11 @@ import type {
   EvaluationAgent,
   EvaluationAgentKey,
 } from "../../interfaces/agent.interface";
+import { PipelinePhase } from "../../interfaces/pipeline.interface";
 import { EvaluationAgentRegistryService } from "../../services/evaluation-agent-registry.service";
 import { PipelineStateService } from "../../services/pipeline-state.service";
 import type { PhaseTransitionService } from "../../orchestrator/phase-transition.service";
+import type { PipelineFeedbackService } from "../../services/pipeline-feedback.service";
 import { createEvaluationPipelineInput } from "../fixtures/evaluation-pipeline.fixture";
 
 const ALL_KEYS: EvaluationAgentKey[] = [
@@ -64,6 +66,7 @@ function createRegistry(
   agents: FakeAgent[],
   pipelineState: PipelineStateService,
   phaseTransition: PhaseTransitionService,
+  pipelineFeedback: PipelineFeedbackService,
 ): EvaluationAgentRegistryService {
   const constructorArgs = [
     agents[0],
@@ -79,6 +82,7 @@ function createRegistry(
     agents[10],
     pipelineState,
     phaseTransition,
+    pipelineFeedback,
   ] as unknown as ConstructorParameters<typeof EvaluationAgentRegistryService>;
 
   return new EvaluationAgentRegistryService(...constructorArgs);
@@ -87,6 +91,7 @@ function createRegistry(
 describe("EvaluationAgentRegistryService", () => {
   let pipelineState: jest.Mocked<PipelineStateService>;
   let phaseTransition: jest.Mocked<PhaseTransitionService>;
+  let pipelineFeedback: jest.Mocked<PipelineFeedbackService>;
   const pipelineData = createEvaluationPipelineInput();
 
   beforeEach(() => {
@@ -99,6 +104,11 @@ describe("EvaluationAgentRegistryService", () => {
         minimumEvaluationAgents: 8,
       }),
     } as unknown as jest.Mocked<PhaseTransitionService>;
+
+    pipelineFeedback = {
+      getContext: jest.fn().mockResolvedValue({ items: [] }),
+      markConsumedByScope: jest.fn().mockResolvedValue(0),
+    } as unknown as jest.Mocked<PipelineFeedbackService>;
   });
 
   it("marks run as healthy when all agents return structured outputs", async () => {
@@ -108,6 +118,7 @@ describe("EvaluationAgentRegistryService", () => {
       agents,
       pipelineState as unknown as PipelineStateService,
       phaseTransition as unknown as PhaseTransitionService,
+      pipelineFeedback as unknown as PipelineFeedbackService,
     );
 
     const result = await service.runAll("startup-1", pipelineData);
@@ -134,6 +145,7 @@ describe("EvaluationAgentRegistryService", () => {
       agents,
       pipelineState as unknown as PipelineStateService,
       phaseTransition as unknown as PhaseTransitionService,
+      pipelineFeedback as unknown as PipelineFeedbackService,
     );
 
     const result = await service.runAll("startup-2", pipelineData);
@@ -153,6 +165,7 @@ describe("EvaluationAgentRegistryService", () => {
       agents,
       pipelineState as unknown as PipelineStateService,
       phaseTransition as unknown as PhaseTransitionService,
+      pipelineFeedback as unknown as PipelineFeedbackService,
     );
 
     const result = await service.runAll("startup-3", pipelineData);
@@ -169,6 +182,7 @@ describe("EvaluationAgentRegistryService", () => {
       agents,
       pipelineState as unknown as PipelineStateService,
       phaseTransition as unknown as PhaseTransitionService,
+      pipelineFeedback as unknown as PipelineFeedbackService,
     );
 
     await service.runAll("startup-4", pipelineData, callback);
@@ -192,11 +206,118 @@ describe("EvaluationAgentRegistryService", () => {
       agents,
       pipelineState as unknown as PipelineStateService,
       phaseTransition as unknown as PhaseTransitionService,
+      pipelineFeedback as unknown as PipelineFeedbackService,
     );
 
     const result = await service.runAll("startup-5", pipelineData);
 
     expect(result.summary.degraded).toBe(false);
     expect(result.summary.failedAgents).toBe(0);
+  });
+
+  it("reruns one evaluation agent", async () => {
+    const agents = ALL_KEYS.map((key) => createAgent(key));
+    const service = createRegistry(
+      agents,
+      pipelineState as unknown as PipelineStateService,
+      phaseTransition as unknown as PhaseTransitionService,
+      pipelineFeedback as unknown as PipelineFeedbackService,
+    );
+
+    const result = await service.runOne("startup-6", "market", pipelineData);
+
+    expect(result.agent).toBe("market");
+    expect(result.usedFallback).toBe(false);
+    expect((agents[1].run as jest.Mock).mock.calls.length).toBe(1);
+    expect(pipelineFeedback.markConsumedByScope).toHaveBeenCalledWith({
+      startupId: "startup-6",
+      phase: PipelinePhase.EVALUATION,
+      agentKey: "market",
+    });
+    expect(pipelineFeedback.markConsumedByScope).toHaveBeenCalledWith({
+      startupId: "startup-6",
+      phase: PipelinePhase.EVALUATION,
+      agentKey: null,
+    });
+  });
+
+  it("passes structured feedback notes to evaluation agents", async () => {
+    const agents = ALL_KEYS.map((key) => createAgent(key));
+    const now = new Date();
+    pipelineFeedback.getContext
+      .mockResolvedValueOnce({
+        items: [
+          {
+            id: "phase-feedback",
+            startupId: "startup-7",
+            phase: PipelinePhase.EVALUATION,
+            agentKey: null,
+            feedback: "Validate assumptions",
+            metadata: null,
+            createdBy: "admin-1",
+            consumedAt: null,
+            createdAt: now,
+            updatedAt: now,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        items: [
+          {
+            id: "agent-feedback",
+            startupId: "startup-7",
+            phase: PipelinePhase.EVALUATION,
+            agentKey: "team",
+            feedback: "Focus on founder fit",
+            metadata: null,
+            createdBy: "admin-1",
+            consumedAt: null,
+            createdAt: new Date(now.getTime() + 1000),
+            updatedAt: new Date(now.getTime() + 1000),
+          },
+        ],
+      });
+
+    const service = createRegistry(
+      agents,
+      pipelineState as unknown as PipelineStateService,
+      phaseTransition as unknown as PhaseTransitionService,
+      pipelineFeedback as unknown as PipelineFeedbackService,
+    );
+
+    await service.runOne("startup-7", "team", pipelineData);
+
+    expect(agents[0].run).toHaveBeenCalledWith(
+      pipelineData,
+      expect.objectContaining({
+        feedbackNotes: expect.arrayContaining([
+          expect.objectContaining({
+            scope: "phase",
+            feedback: "Validate assumptions",
+          }),
+          expect.objectContaining({
+            scope: "agent:team",
+            feedback: "Focus on founder fit",
+          }),
+        ]),
+      }),
+    );
+  });
+
+  it("does not consume feedback when runOne uses fallback", async () => {
+    const agents = ALL_KEYS.map((key) =>
+      createAgent(key, { reject: key === "team" }),
+    );
+    const service = createRegistry(
+      agents,
+      pipelineState as unknown as PipelineStateService,
+      phaseTransition as unknown as PhaseTransitionService,
+      pipelineFeedback as unknown as PipelineFeedbackService,
+    );
+
+    const result = await service.runOne("startup-8", "team", pipelineData);
+
+    expect(result.usedFallback).toBe(true);
+    expect(pipelineFeedback.markConsumedByScope).not.toHaveBeenCalled();
   });
 });

@@ -18,9 +18,7 @@ export class MarketEvaluationAgent extends BaseEvaluationAgent<MarketEvaluation>
   }
 
   buildContext({ extraction, research }: EvaluationPipelineInput) {
-    const claimedTAM =
-      research.market?.marketSize.tam ??
-      (extraction.fundingAsk ? extraction.fundingAsk * 120 : undefined);
+    const claimedTAM = research.market?.marketSize.tam;
 
     return {
       marketResearch: research.market,
@@ -35,12 +33,12 @@ export class MarketEvaluationAgent extends BaseEvaluationAgent<MarketEvaluation>
     const stageBoost = stageMultiplier(extraction.stage);
 
     return MarketEvaluationSchema.parse({
-      ...baseEvaluation(55 + stageBoost, "Market appears plausible but needs third-party validation"),
+      ...baseEvaluation(40 + stageBoost, "Market appears plausible but needs third-party validation"),
       marketSize: "TAM/SAM/SOM require stronger external benchmarks",
       marketGrowth: "Growth trajectory appears favorable for this segment",
-      tamEstimate: Math.max(100_000_000, (extraction.fundingAsk ?? 0) * 100),
+      tamEstimate: 0, // Unknown — do not fabricate TAM from funding ask
       marketTiming: "Timing is favorable due to sustained demand tailwinds",
-      credibilityScore: clampScore(50 + stageBoost),
+      credibilityScore: clampScore(35 + stageBoost),
     });
   }
 }

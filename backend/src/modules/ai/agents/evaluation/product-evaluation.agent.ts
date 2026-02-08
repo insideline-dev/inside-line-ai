@@ -6,6 +6,14 @@ import { AiProviderService } from "../../providers/ai-provider.service";
 import { BaseEvaluationAgent } from "./base-evaluation.agent";
 import { baseEvaluation, stageMultiplier } from "./evaluation-utils";
 
+const tryPathname = (url: string): string => {
+  try {
+    return new URL(url).pathname;
+  } catch {
+    return "";
+  }
+};
+
 @Injectable()
 export class ProductEvaluationAgent extends BaseEvaluationAgent<ProductEvaluation> {
   readonly key = "product" as const;
@@ -22,7 +30,7 @@ export class ProductEvaluationAgent extends BaseEvaluationAgent<ProductEvaluatio
       scraping.website?.subpages
         .filter((page) =>
           /\/(product|products|platform|solution|solutions|features|demo)/i.test(
-            new URL(page.url).pathname,
+            tryPathname(page.url),
           ),
         )
         .map((page) => page.url) ?? [];
@@ -60,7 +68,7 @@ export class ProductEvaluationAgent extends BaseEvaluationAgent<ProductEvaluatio
 
   fallback({ extraction }: EvaluationPipelineInput): ProductEvaluation {
     return ProductEvaluationSchema.parse({
-      ...baseEvaluation(58 + stageMultiplier(extraction.stage), "Product signal is present but moat proof is limited"),
+      ...baseEvaluation(40 + stageMultiplier(extraction.stage), "Product signal is present but moat proof is limited"),
       productDescription: extraction.rawText || "Product description is limited",
       uniqueValue: "Differentiation exists but needs stronger external proof",
       technologyStack: ["Unknown"],

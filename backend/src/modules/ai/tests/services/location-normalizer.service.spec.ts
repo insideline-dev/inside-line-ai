@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, it, jest, mock } from "bun:test";
 import type { ConfigService } from "@nestjs/config";
 
-const generateObjectMock = jest.fn();
-mock.module("ai", () => ({ generateObject: generateObjectMock }));
+const generateTextMock = jest.fn();
+mock.module("ai", () => ({
+  generateText: generateTextMock,
+  Output: { object: ({ schema }: { schema: unknown }) => schema },
+}));
 
 import type { AiProviderService } from "../../providers/ai-provider.service";
 import { ModelPurpose } from "../../interfaces/pipeline.interface";
@@ -16,7 +19,7 @@ describe("LocationNormalizerService", () => {
   const resolvedModel = { provider: "gemini-model" };
 
   beforeEach(() => {
-    generateObjectMock.mockReset();
+    generateTextMock.mockReset();
 
     providers = {
       resolveModelForPurpose: jest.fn().mockReturnValue(resolvedModel),
@@ -33,8 +36,8 @@ describe("LocationNormalizerService", () => {
   });
 
   it("normalizes location via model and caches subsequent hits", async () => {
-    generateObjectMock.mockResolvedValueOnce({
-      object: {
+    generateTextMock.mockResolvedValueOnce({
+      output: {
         region: "us",
       },
     });
@@ -47,11 +50,11 @@ describe("LocationNormalizerService", () => {
     expect(providers.resolveModelForPurpose).toHaveBeenCalledWith(
       ModelPurpose.LOCATION_NORMALIZATION,
     );
-    expect(generateObjectMock).toHaveBeenCalledTimes(1);
+    expect(generateTextMock).toHaveBeenCalledTimes(1);
   });
 
   it("uses deterministic fallback mapping when model fails", async () => {
-    generateObjectMock.mockRejectedValueOnce(new Error("provider timeout"));
+    generateTextMock.mockRejectedValueOnce(new Error("provider timeout"));
 
     const region = await service.normalize("London");
 
@@ -62,6 +65,6 @@ describe("LocationNormalizerService", () => {
     const region = await service.normalize("  ");
 
     expect(region).toBe("global");
-    expect(generateObjectMock).not.toHaveBeenCalled();
+    expect(generateTextMock).not.toHaveBeenCalled();
   });
 });

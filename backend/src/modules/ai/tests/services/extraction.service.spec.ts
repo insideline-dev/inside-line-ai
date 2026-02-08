@@ -26,7 +26,32 @@ describe("ExtractionService", () => {
     location: "San Francisco, CA",
     website: "https://inside-line.test",
     fundingTarget: 1_500_000,
+    teamSize: 8,
     valuation: 9_000_000,
+    sectorIndustryGroup: "Enterprise Software",
+    sectorIndustry: "Workflow Automation",
+    roundCurrency: "USD",
+    valuationKnown: true,
+    valuationType: "pre_money",
+    raiseType: "safe",
+    leadSecured: false,
+    leadInvestorName: null,
+    hasPreviousFunding: true,
+    previousFundingAmount: 750_000,
+    previousFundingCurrency: "USD",
+    previousInvestors: "Operator Angels",
+    previousRoundType: "pre-seed",
+    technologyReadinessLevel: "mvp",
+    demoVideoUrl: "https://inside-line.test/demo-video",
+    productDescription: "Workflow copilot for startup diligence.",
+    productScreenshots: ["https://inside-line.test/image-1.png"],
+    files: [
+      {
+        path: "user/startup/files/product-one-pager.pdf",
+        name: "Product One Pager",
+        type: "application/pdf",
+      },
+    ],
     teamMembers: [
       { name: "Alex Founder", role: "CEO", linkedinUrl: "https://linkedin.com/in/alex" },
     ],
@@ -110,6 +135,9 @@ describe("ExtractionService", () => {
     expect(result.warnings).toContain(
       "No pitch deck found; using startup form data only",
     );
+    expect(result.startupContext?.technologyReadinessLevel).toBe("mvp");
+    expect(result.startupContext?.raiseType).toBe("safe");
+    expect(result.rawText).toContain("Raise type: safe");
     expect(fieldExtractor.extractFields).not.toHaveBeenCalled();
   });
 

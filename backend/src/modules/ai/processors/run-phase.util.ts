@@ -1,5 +1,9 @@
 import type { Job } from "bullmq";
-import { PhaseStatus, PipelinePhase } from "../interfaces/pipeline.interface";
+import {
+  PhaseStatus,
+  PipelinePhase,
+  PipelineStatus,
+} from "../interfaces/pipeline.interface";
 import type { PhaseResultMap } from "../interfaces/pipeline.interface";
 import type { PipelineStateService } from "../services/pipeline-state.service";
 import type { PipelineService } from "../services/pipeline.service";
@@ -22,9 +26,44 @@ export async function runPipelinePhase<P extends PipelinePhase>(
   startupId: string;
   pipelineRunId: string;
   userId: string;
-  result: PhaseResultMap[P];
+  result: PhaseResultMap[P] | null;
 }> {
   const { startupId, pipelineRunId, userId } = options.job.data;
+  const state = await options.pipelineState.get(startupId);
+  if (!state) {
+    return {
+      startupId,
+      pipelineRunId,
+      userId,
+      result: null,
+    };
+  }
+
+  if (
+    state.pipelineRunId !== pipelineRunId ||
+    state.status !== PipelineStatus.RUNNING
+  ) {
+    return {
+      startupId,
+      pipelineRunId,
+      userId,
+      result: (state.results[options.phase] as PhaseResultMap[P] | undefined) ?? null,
+    };
+  }
+
+  const phaseStatus = state.phases[options.phase].status;
+  if (
+    phaseStatus === PhaseStatus.COMPLETED ||
+    phaseStatus === PhaseStatus.FAILED ||
+    phaseStatus === PhaseStatus.SKIPPED
+  ) {
+    return {
+      startupId,
+      pipelineRunId,
+      userId,
+      result: (state.results[options.phase] as PhaseResultMap[P] | undefined) ?? null,
+    };
+  }
 
   try {
     await options.pipelineState.updatePhase(

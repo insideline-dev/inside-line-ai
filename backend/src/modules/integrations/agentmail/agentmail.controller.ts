@@ -31,7 +31,6 @@ import type {
   SendEmailDto,
   ReplyEmailDto,
   CreateInboxDto,
-  ManageWebhookDto,
 } from './dto';
 
 @ApiTags('integrations/agentmail')
@@ -41,7 +40,7 @@ export class AgentMailController {
   constructor(private agentMailService: AgentMailService) {}
 
   // ============================================================================
-  // WEBHOOK (Public, signature-validated)
+  // WEBHOOK (Public, signature-validated via global AGENTMAIL_WEBHOOK_SECRET)
   // ============================================================================
 
   @Post('webhook')
@@ -225,49 +224,6 @@ export class AgentMailController {
     @Param('id', ParseUUIDPipe) id: string,
   ) {
     await this.agentMailService.deleteThread(id, user.id);
-  }
-
-  // ============================================================================
-  // WEBHOOKS MANAGEMENT (Authenticated)
-  // ============================================================================
-
-  @Get('webhooks')
-  @ApiBearerAuth('JWT')
-  @Throttle({ default: { limit: 100, ttl: 60000 } })
-  @ApiOperation({ summary: 'List webhooks' })
-  @ApiResponse({ status: 200, description: 'Webhook list' })
-  async listWebhooks() {
-    return this.agentMailService.listWebhooks();
-  }
-
-  @Post('webhooks')
-  @ApiBearerAuth('JWT')
-  @Throttle({ default: { limit: 10, ttl: 3600000 } })
-  @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Create webhook' })
-  @ApiResponse({ status: 201, description: 'Webhook created' })
-  async createWebhook(@CurrentUser() user: DbUser, @Body() body: ManageWebhookDto) {
-    return this.agentMailService.createUserWebhook(user.id, body);
-  }
-
-  @Delete('webhooks/:id')
-  @ApiBearerAuth('JWT')
-  @Throttle({ default: { limit: 10, ttl: 3600000 } })
-  @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Delete webhook' })
-  @ApiResponse({ status: 204, description: 'Webhook deleted' })
-  async deleteWebhook(@Param('id') id: string) {
-    await this.agentMailService.deleteUserWebhook(id);
-  }
-
-  @Post('webhooks/configure')
-  @ApiBearerAuth('JWT')
-  @Throttle({ default: { limit: 5, ttl: 3600000 } })
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Idempotent webhook setup' })
-  @ApiResponse({ status: 200, description: 'Webhook configured' })
-  async configureWebhook(@CurrentUser() user: DbUser) {
-    return this.agentMailService.configureWebhook(user.id);
   }
 
   // ============================================================================

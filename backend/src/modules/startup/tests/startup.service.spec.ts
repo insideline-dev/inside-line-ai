@@ -12,6 +12,12 @@ import { StorageService } from "../../../storage";
 import { StartupStatus, StartupStage } from "../entities/startup.schema";
 import { AiConfigService } from "../../ai/services/ai-config.service";
 import { PipelineService } from "../../ai/services/pipeline.service";
+import { PipelineFeedbackService } from "../../ai/services/pipeline-feedback.service";
+import {
+  PipelineStatus,
+  PipelinePhase,
+  type PipelineState,
+} from "../../ai/interfaces/pipeline.interface";
 
 describe("StartupService", () => {
   let service: StartupService;
@@ -21,6 +27,7 @@ describe("StartupService", () => {
   let draftService: jest.Mocked<DraftService>;
   let aiConfigService: jest.Mocked<AiConfigService>;
   let pipelineService: jest.Mocked<PipelineService>;
+  let pipelineFeedbackService: jest.Mocked<PipelineFeedbackService>;
 
   const createMockDb = () => ({
     select: jest.fn().mockReturnThis(),
@@ -67,6 +74,14 @@ describe("StartupService", () => {
     updatedAt: new Date(),
   };
 
+  const mockEvaluation = {
+    id: "evaluation-1",
+    startupId: mockStartupId,
+    overallScore: 82,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
   beforeEach(() => {
     mockDb = createMockDb();
 
@@ -94,7 +109,14 @@ describe("StartupService", () => {
     pipelineService = {
       startPipeline: jest.fn().mockResolvedValue("pipeline-run-id"),
       getPipelineStatus: jest.fn().mockResolvedValue(null),
+      retryPhase: jest.fn().mockResolvedValue(undefined),
+      rerunFromPhase: jest.fn().mockResolvedValue(undefined),
+      retryAgent: jest.fn().mockResolvedValue(undefined),
     } as unknown as jest.Mocked<PipelineService>;
+
+    pipelineFeedbackService = {
+      record: jest.fn().mockResolvedValue({ id: "feedback-1" }),
+    } as unknown as jest.Mocked<PipelineFeedbackService>;
 
     service = new StartupService(
       drizzleService,
@@ -103,6 +125,7 @@ describe("StartupService", () => {
       draftService,
       aiConfigService,
       pipelineService,
+      pipelineFeedbackService,
     );
   });
 
@@ -185,6 +208,90 @@ describe("StartupService", () => {
         NotFoundException,
       );
     });
+
+    it("should include evaluation data for approved startups", async () => {
+      const approvedStartup = {
+        ...mockStartup,
+        status: StartupStatus.APPROVED,
+      };
+
+      mockDb.limit
+        .mockResolvedValueOnce([approvedStartup])
+        .mockResolvedValueOnce([mockEvaluation]);
+
+      const result = await service.findOne(mockStartupId, mockUserId);
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          id: mockStartupId,
+          evaluation: mockEvaluation,
+        }),
+      );
+    });
+
+    it("should not include evaluation data before approval for founders", async () => {
+      const reviewingStartup = {
+        ...mockStartup,
+        status: StartupStatus.PENDING_REVIEW,
+      };
+
+      mockDb.limit.mockResolvedValueOnce([reviewingStartup]);
+
+      const result = await service.findOne(mockStartupId, mockUserId);
+
+      expect(result).toEqual(reviewingStartup);
+    });
+  });
+
+  describe("adminFindOne", () => {
+    it("should return startup by id without RLS owner filter", async () => {
+      const approvedStartup = {
+        ...mockStartup,
+        status: StartupStatus.APPROVED,
+      };
+
+      mockDb.limit
+        .mockResolvedValueOnce([approvedStartup])
+        .mockResolvedValueOnce([mockEvaluation]);
+
+      const result = await service.adminFindOne(mockStartupId);
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          id: mockStartupId,
+          evaluation: mockEvaluation,
+        }),
+      );
+      expect(drizzleService.withRLS).not.toHaveBeenCalled();
+    });
+
+    it("should throw NotFoundException when startup does not exist", async () => {
+      mockDb.limit.mockResolvedValueOnce([]);
+
+      await expect(service.adminFindOne(mockStartupId)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it("should include evaluation data during pending review for admins", async () => {
+      const reviewingStartup = {
+        ...mockStartup,
+        status: StartupStatus.PENDING_REVIEW,
+      };
+
+      mockDb.limit
+        .mockResolvedValueOnce([reviewingStartup])
+        .mockResolvedValueOnce([mockEvaluation]);
+
+      const result = await service.adminFindOne(mockStartupId);
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          id: mockStartupId,
+          evaluation: mockEvaluation,
+        }),
+      );
+    });
   });
 
   describe("update", () => {
@@ -219,7 +326,9 @@ describe("StartupService", () => {
         ...mockStartup,
         status: StartupStatus.APPROVED,
       };
-      mockDb.limit.mockResolvedValueOnce([approvedStartup]);
+      mockDb.limit
+        .mockResolvedValueOnce([approvedStartup])
+        .mockResolvedValueOnce([]);
 
       await expect(
         service.update(mockStartupId, mockUserId, { name: "Updated" }),
@@ -434,6 +543,187 @@ describe("StartupService", () => {
 
       expect(result).toEqual(mockUploadUrl);
       expect(storageService.getUploadUrl).toHaveBeenCalled();
+    });
+  });
+
+  describe("getProgress", () => {
+    it("should return null progress when no pipeline state or job exists", async () => {
+      mockDb.limit.mockResolvedValueOnce([mockStartup]);
+
+      const result = await service.getProgress(mockStartupId, mockUserId);
+
+      expect(result).toEqual({
+        status: mockStartup.status,
+        progress: null,
+      });
+    });
+  });
+
+  describe("adminGetProgress", () => {
+    it("should return progress for any startup id", async () => {
+      const analyzingStartup = {
+        ...mockStartup,
+        status: StartupStatus.ANALYZING,
+      };
+      mockDb.limit
+        .mockResolvedValueOnce([analyzingStartup])
+        .mockResolvedValueOnce([]);
+
+      const result = await service.adminGetProgress(mockStartupId);
+
+      expect(result.status).toBe(StartupStatus.ANALYZING);
+      expect(drizzleService.withRLS).not.toHaveBeenCalled();
+    });
+
+    it("should throw NotFoundException when startup not found", async () => {
+      mockDb.limit.mockResolvedValueOnce([]);
+
+      await expect(service.adminGetProgress(mockStartupId)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe("adminRetryPhase", () => {
+    it("should forward phase retry request to pipeline service", async () => {
+      mockDb.limit.mockResolvedValueOnce([mockStartup]);
+
+      const result = await service.adminRetryPhase(mockStartupId, mockUserId, {
+        phase: "evaluation" as any,
+        forceRerun: false,
+        feedback: "Please verify unit economics with updated assumptions.",
+      });
+
+      expect(result.accepted).toBe(true);
+      expect(pipelineService.retryPhase).toHaveBeenCalledWith(
+        mockStartupId,
+        "evaluation",
+      );
+      expect(pipelineFeedbackService.record).toHaveBeenCalledTimes(1);
+    });
+
+    it("should force rerun from selected phase when requested", async () => {
+      mockDb.limit.mockResolvedValueOnce([mockStartup]);
+
+      await service.adminRetryPhase(mockStartupId, mockUserId, {
+        phase: "research" as any,
+        forceRerun: true,
+      });
+
+      expect(pipelineService.rerunFromPhase).toHaveBeenCalledWith(
+        mockStartupId,
+        "research",
+      );
+      expect(pipelineService.retryPhase).not.toHaveBeenCalled();
+    });
+
+    it("should throw when startup is missing", async () => {
+      mockDb.limit.mockResolvedValueOnce([]);
+
+      await expect(
+        service.adminRetryPhase(mockStartupId, mockUserId, {
+          phase: "evaluation" as any,
+        }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it("should reject retry when pipeline is disabled", async () => {
+      mockDb.limit.mockResolvedValueOnce([mockStartup]);
+      aiConfigService.isPipelineEnabled.mockReturnValueOnce(false);
+
+      await expect(
+        service.adminRetryPhase(mockStartupId, mockUserId, {
+          phase: "evaluation" as any,
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it("should reject unsupported phase values", async () => {
+      mockDb.limit.mockResolvedValueOnce([mockStartup]);
+
+      await expect(
+        service.adminRetryPhase(mockStartupId, mockUserId, {
+          phase: "invalid-phase" as any,
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe("adminRetryAgent", () => {
+    it("should queue targeted retry for agent retry request", async () => {
+      mockDb.limit.mockResolvedValueOnce([mockStartup]);
+
+      const result = await service.adminRetryAgent(mockStartupId, mockUserId, {
+        phase: "evaluation" as any,
+        agent: "market",
+        feedback: "Re-check TAM assumptions using current benchmarks.",
+      });
+
+      expect(result.accepted).toBe(true);
+      expect(pipelineService.retryAgent).toHaveBeenCalledWith(
+        mockStartupId,
+        {
+          phase: "evaluation",
+          agentKey: "market",
+        },
+      );
+      expect(pipelineFeedbackService.record).toHaveBeenCalledTimes(1);
+    });
+
+    it("should reject unsupported phase-agent combinations", async () => {
+      mockDb.limit.mockResolvedValueOnce([mockStartup]);
+
+      await expect(
+        service.adminRetryAgent(mockStartupId, mockUserId, {
+          phase: "research" as any,
+          agent: "financials",
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it("should reject retry agent when pipeline is disabled", async () => {
+      mockDb.limit.mockResolvedValueOnce([mockStartup]);
+      aiConfigService.isPipelineEnabled.mockReturnValueOnce(false);
+
+      await expect(
+        service.adminRetryAgent(mockStartupId, mockUserId, {
+          phase: "evaluation" as any,
+          agent: "market",
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe("buildProgressResponse", () => {
+    it("returns 0 overallProgress when pipeline phase map is empty", async () => {
+      const analyzingStartup = {
+        ...mockStartup,
+        status: StartupStatus.ANALYZING,
+      };
+      mockDb.limit.mockResolvedValueOnce([analyzingStartup]);
+      pipelineService.getPipelineStatus.mockResolvedValueOnce({
+        pipelineRunId: "run-1",
+        startupId: mockStartupId,
+        userId: mockUserId,
+        status: PipelineStatus.RUNNING,
+        quality: "standard",
+        currentPhase: PipelinePhase.EXTRACTION,
+        phases: {},
+        results: {},
+        retryCounts: {},
+        telemetry: {
+          startedAt: new Date().toISOString(),
+          totalTokens: { input: 0, output: 0 },
+          phases: {},
+          agents: {},
+        },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      } as unknown as PipelineState);
+
+      const result = await service.getProgress(mockStartupId, mockUserId);
+
+      expect(result.progress?.overallProgress).toBe(0);
     });
   });
 });

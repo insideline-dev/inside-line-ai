@@ -25,15 +25,15 @@ export class AiConfigService {
   }
 
   getResearchTemperature(): number {
-    return this.config.get<number>("AI_RESEARCH_TEMPERATURE", 0.2);
+    return this.config.get<number>("AI_RESEARCH_TEMPERATURE", 0.4);
   }
 
   getSynthesisTemperature(): number {
-    return this.config.get<number>("AI_SYNTHESIS_TEMPERATURE", 0.2);
+    return this.config.get<number>("AI_SYNTHESIS_TEMPERATURE", 0.3);
   }
 
   getEvaluationTemperature(): number {
-    return this.config.get<number>("AI_EVALUATION_TEMPERATURE", 0.2);
+    return this.config.get<number>("AI_EVALUATION_TEMPERATURE", 0.1);
   }
 
   getEvaluationMaxOutputTokens(): number {

@@ -7,6 +7,14 @@ import {
 } from "../../prompts/research/product-research.prompt";
 import { toValidUrl } from "./url.util";
 
+const tryPathname = (url: string): string => {
+  try {
+    return new URL(url).pathname;
+  } catch {
+    return "";
+  }
+};
+
 export const ProductResearchAgent: ResearchAgentConfig<ProductResearch> = {
   key: "product",
   name: "Product Research",
@@ -20,12 +28,13 @@ export const ProductResearchAgent: ResearchAgentConfig<ProductResearch> = {
       scraping.website?.subpages
         .filter((page) =>
           /\/(product|products|platform|solution|solutions|features)/i.test(
-            new URL(page.url).pathname,
+            tryPathname(page.url),
           ),
         )
         .map((page) => page.url) ?? [],
     demoUrl: undefined,
-    extractedFeatures:
+    // Page headings provided as context signals, not confirmed product features
+    websiteHeadings:
       scraping.website?.headings.filter((heading) => heading.trim().length > 0) ?? [],
   }),
   fallback: ({ extraction }) => {

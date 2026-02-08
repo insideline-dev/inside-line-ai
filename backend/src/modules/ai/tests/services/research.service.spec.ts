@@ -2,9 +2,11 @@ import { beforeEach, describe, expect, it, jest } from "bun:test";
 import { ResearchService } from "../../services/research.service";
 import { PipelineStateService } from "../../services/pipeline-state.service";
 import { GeminiResearchService } from "../../services/gemini-research.service";
+import { PipelineFeedbackService } from "../../services/pipeline-feedback.service";
 import { PipelinePhase } from "../../interfaces/pipeline.interface";
 import type {
   ExtractionResult,
+  ResearchResult,
   ScrapingResult,
   SourceEntry,
 } from "../../interfaces/phase-results.interface";
@@ -13,6 +15,7 @@ describe("ResearchService", () => {
   let service: ResearchService;
   let pipelineState: jest.Mocked<PipelineStateService>;
   let geminiResearch: jest.Mocked<GeminiResearchService>;
+  let pipelineFeedback: jest.Mocked<PipelineFeedbackService>;
 
   const extraction: ExtractionResult = {
     companyName: "Inside Line",
@@ -24,6 +27,11 @@ describe("ResearchService", () => {
     website: "https://inside-line.test",
     fundingAsk: 1_500_000,
     rawText: "Inside Line automates diligence workflows for investors.",
+    startupContext: {
+      raiseType: "safe",
+      previousFundingAmount: 500_000,
+      technologyReadinessLevel: "mvp",
+    },
   };
 
   const scraping: ScrapingResult = {
@@ -119,7 +127,12 @@ describe("ResearchService", () => {
       }),
     } as unknown as jest.Mocked<GeminiResearchService>;
 
-    service = new ResearchService(pipelineState, geminiResearch);
+    pipelineFeedback = {
+      getContext: jest.fn().mockResolvedValue({ items: [] }),
+      markConsumedByScope: jest.fn().mockResolvedValue(0),
+    } as unknown as jest.Mocked<PipelineFeedbackService>;
+
+    service = new ResearchService(pipelineState, geminiResearch, pipelineFeedback);
   });
 
   it("runs all 4 research agents and aggregates results with deduped sources", async () => {
@@ -134,8 +147,17 @@ describe("ResearchService", () => {
       { agent: "market", error: "Market provider timeout" },
     ]);
 
-    const urls = result.sources.map((entry) => entry.url);
-    expect(new Set(urls).size).toBe(result.sources.length);
+    const keys = result.sources.map((entry) => `${entry.agent}::${entry.url}`);
+    expect(new Set(keys).size).toBe(result.sources.length);
+  });
+
+  it("injects startup form context into each agent prompt", async () => {
+    await service.run("startup-1");
+
+    const firstCall = geminiResearch.research.mock.calls[0]?.[0];
+    expect(firstCall?.prompt).toContain("startupFormContext");
+    expect(firstCall?.prompt).toContain("raiseType");
+    expect(firstCall?.prompt).toContain("technologyReadinessLevel");
   });
 
   it("throws when required upstream phase results are missing", async () => {
@@ -153,12 +175,204 @@ describe("ResearchService", () => {
 
     const result = await service.run("startup-1");
 
-    expect(result.team).toBeNull();
+    expect(result.team).not.toBeNull();
     expect(result.market).not.toBeNull();
     expect(result.errors).toEqual(
       expect.arrayContaining([
         { agent: "team", error: "team lookup failed" },
       ]),
     );
+  });
+
+  it("reruns a single research agent and preserves previous outputs", async () => {
+    const previous: ResearchResult = {
+      team: {
+        linkedinProfiles: [],
+        previousCompanies: ["Company A"],
+        education: [],
+        achievements: ["Strong execution"],
+        onlinePresence: { personalSites: [] },
+        sources: [],
+      },
+      market: {
+        marketReports: ["Old market report"],
+        competitors: [],
+        marketTrends: [],
+        marketSize: {},
+        sources: [],
+      },
+      product: {
+        productPages: ["https://inside-line.test/product"],
+        features: ["Automation"],
+        techStack: ["TypeScript"],
+        integrations: [],
+        customerReviews: { sentiment: "positive", summary: "Strong" },
+        sources: [],
+      },
+      news: {
+        articles: [],
+        pressReleases: [],
+        sentiment: "neutral",
+        recentEvents: [],
+        sources: [],
+      },
+      sources: [source("team")],
+      errors: [],
+    };
+
+    pipelineState.getPhaseResult.mockImplementation(
+      (_startupId: string, phase: PipelinePhase) => {
+        if (phase === PipelinePhase.EXTRACTION) {
+          return Promise.resolve(extraction);
+        }
+        if (phase === PipelinePhase.SCRAPING) {
+          return Promise.resolve(scraping);
+        }
+        if (phase === PipelinePhase.RESEARCH) {
+          return Promise.resolve(previous);
+        }
+        return Promise.resolve(null);
+      },
+    );
+
+    const result = await service.run("startup-1", { agentKey: "market" });
+
+    expect(geminiResearch.research).toHaveBeenCalledTimes(1);
+    expect(result.team).toEqual(previous.team);
+    expect(result.product).toEqual(previous.product);
+    expect(result.market).not.toEqual(previous.market);
+  });
+
+  it("replaces prior sources for a rerun agent and preserves other agent sources", async () => {
+    const previous: ResearchResult = {
+      team: null,
+      market: null,
+      product: null,
+      news: null,
+      sources: [
+        {
+          ...source("market"),
+          name: "market-old",
+          url: "https://market-old.example.com",
+        },
+        {
+          ...source("team"),
+          name: "team-old",
+          url: "https://team-old.example.com",
+        },
+      ],
+      errors: [],
+    };
+
+    pipelineState.getPhaseResult.mockImplementation(
+      (_startupId: string, phase: PipelinePhase) => {
+        if (phase === PipelinePhase.EXTRACTION) {
+          return Promise.resolve(extraction);
+        }
+        if (phase === PipelinePhase.SCRAPING) {
+          return Promise.resolve(scraping);
+        }
+        if (phase === PipelinePhase.RESEARCH) {
+          return Promise.resolve(previous);
+        }
+        return Promise.resolve(null);
+      },
+    );
+
+    const result = await service.run("startup-1", { agentKey: "market" });
+
+    expect(result.sources.some((item) => item.url === "https://market-old.example.com")).toBe(false);
+    expect(result.sources.some((item) => item.url === "https://team-old.example.com")).toBe(true);
+    expect(result.sources.some((item) => item.agent === "market")).toBe(true);
+  });
+
+  it("consumes agent-level and phase-level feedback on successful targeted rerun", async () => {
+    geminiResearch.research.mockResolvedValueOnce({
+      output: {
+        marketReports: ["Updated report"],
+        competitors: [],
+        marketTrends: [],
+        marketSize: {},
+        sources: ["https://market.example.com"],
+      },
+      sources: [source("market")],
+      usedFallback: false,
+    });
+
+    pipelineState.getPhaseResult.mockImplementation(
+      (_startupId: string, phase: PipelinePhase) => {
+        if (phase === PipelinePhase.EXTRACTION) {
+          return Promise.resolve(extraction);
+        }
+        if (phase === PipelinePhase.SCRAPING) {
+          return Promise.resolve(scraping);
+        }
+        if (phase === PipelinePhase.RESEARCH) {
+          return Promise.resolve({
+            team: null,
+            market: null,
+            product: null,
+            news: null,
+            sources: [],
+            errors: [],
+          } satisfies ResearchResult);
+        }
+        return Promise.resolve(null);
+      },
+    );
+
+    await service.run("startup-1", { agentKey: "market" });
+
+    expect(pipelineFeedback.markConsumedByScope).toHaveBeenCalledWith({
+      startupId: "startup-1",
+      phase: PipelinePhase.RESEARCH,
+      agentKey: "market",
+    });
+    expect(pipelineFeedback.markConsumedByScope).toHaveBeenCalledWith({
+      startupId: "startup-1",
+      phase: PipelinePhase.RESEARCH,
+      agentKey: null,
+    });
+  });
+
+  it("does not consume feedback when targeted rerun falls back", async () => {
+    geminiResearch.research.mockResolvedValueOnce({
+      output: {
+        marketReports: [],
+        competitors: [],
+        marketTrends: [],
+        marketSize: {},
+        sources: [],
+      },
+      sources: [],
+      usedFallback: true,
+      error: "fallback",
+    });
+
+    pipelineState.getPhaseResult.mockImplementation(
+      (_startupId: string, phase: PipelinePhase) => {
+        if (phase === PipelinePhase.EXTRACTION) {
+          return Promise.resolve(extraction);
+        }
+        if (phase === PipelinePhase.SCRAPING) {
+          return Promise.resolve(scraping);
+        }
+        if (phase === PipelinePhase.RESEARCH) {
+          return Promise.resolve({
+            team: null,
+            market: null,
+            product: null,
+            news: null,
+            sources: [],
+            errors: [],
+          } satisfies ResearchResult);
+        }
+        return Promise.resolve(null);
+      },
+    );
+
+    await service.run("startup-1", { agentKey: "market" });
+
+    expect(pipelineFeedback.markConsumedByScope).not.toHaveBeenCalled();
   });
 });

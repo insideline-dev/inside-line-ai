@@ -29,7 +29,6 @@ describe("MarketResearchAgent", () => {
     const context = MarketResearchAgent.contextBuilder(pipelineInput);
 
     expect(Object.keys(context).sort()).toEqual([
-      "claimedTAM",
       "companyDescription",
       "geographicFocus",
       "industry",

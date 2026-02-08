@@ -10,7 +10,13 @@ import { DrizzleService } from "../../database";
 import { QueueService, QUEUE_NAMES } from "../../queue";
 import { StorageService } from "../../storage";
 import { AiConfigService } from "../ai/services/ai-config.service";
+import type {
+  EvaluationAgentKey,
+  ResearchAgentKey,
+} from "../ai/interfaces/agent.interface";
 import { PipelineService } from "../ai/services/pipeline.service";
+import { PipelinePhase } from "../ai/interfaces/pipeline.interface";
+import { PipelineFeedbackService } from "../ai/services/pipeline-feedback.service";
 import { startup, StartupStatus } from "./entities/startup.schema";
 import {
   CreateStartup,
@@ -24,15 +30,46 @@ import { DraftService } from "./draft.service";
 import {
   analysisJob,
   startupEvaluation,
+  type StartupEvaluation,
 } from "../analysis/entities/analysis.schema";
 
 function escapeIlike(input: string): string {
   return input.replace(/[%_\\]/g, (ch) => `\\${ch}`).slice(0, 200);
 }
 
+export interface AdminRetryPhaseRequest {
+  phase: PipelinePhase;
+  forceRerun?: boolean;
+  feedback?: string;
+}
+
+export interface AdminRetryAgentRequest {
+  phase: PipelinePhase.RESEARCH | PipelinePhase.EVALUATION;
+  agent: string;
+  feedback?: string;
+}
+
 @Injectable()
 export class StartupService {
   private readonly logger = new Logger(StartupService.name);
+  private static readonly RESEARCH_AGENTS = new Set<
+    ResearchAgentKey
+  >(["team", "market", "product", "news"]);
+  private static readonly EVALUATION_AGENTS = new Set<
+    EvaluationAgentKey
+  >([
+    "team",
+    "market",
+    "product",
+    "traction",
+    "businessModel",
+    "gtm",
+    "financials",
+    "competitiveAdvantage",
+    "legal",
+    "dealTerms",
+    "exitPotential",
+  ]);
 
   constructor(
     private drizzle: DrizzleService,
@@ -41,6 +78,7 @@ export class StartupService {
     private draftService: DraftService,
     private aiConfig: AiConfigService,
     private aiPipeline: PipelineService,
+    private pipelineFeedback: PipelineFeedbackService,
   ) {}
 
   private generateSlug(name: string): string {
@@ -136,8 +174,22 @@ export class StartupService {
         throw new NotFoundException(`Startup with ID ${id} not found`);
       }
 
-      return found;
+      return this.withEvaluation(db, found, false);
     });
+  }
+
+  async adminFindOne(id: string) {
+    const [found] = await this.drizzle.db
+      .select()
+      .from(startup)
+      .where(eq(startup.id, id))
+      .limit(1);
+
+    if (!found) {
+      throw new NotFoundException(`Startup with ID ${id} not found`);
+    }
+
+    return this.withEvaluation(this.drizzle.db, found, true);
   }
 
   async update(id: string, userId: string, dto: UpdateStartup) {
@@ -332,6 +384,120 @@ export class StartupService {
 
     this.logger.log(`Queued reanalysis for startup ${id}`);
     return { jobId };
+  }
+
+  async adminRetryPhase(
+    id: string,
+    adminId: string,
+    request: AdminRetryPhaseRequest,
+  ) {
+    const [found] = await this.drizzle.db
+      .select()
+      .from(startup)
+      .where(eq(startup.id, id))
+      .limit(1);
+
+    if (!found) {
+      throw new NotFoundException(`Startup with ID ${id} not found`);
+    }
+
+    if (!this.aiConfig.isPipelineEnabled()) {
+      throw new BadRequestException("AI pipeline is disabled");
+    }
+    if (!this.isValidPipelinePhase(request.phase)) {
+      throw new BadRequestException(`Unsupported phase "${String(request.phase)}"`);
+    }
+
+    const feedback = request.feedback?.trim();
+
+    if (feedback) {
+      await this.pipelineFeedback.record({
+        startupId: id,
+        phase: request.phase,
+        feedback,
+        createdBy: adminId,
+        metadata: {
+          source: "admin_retry_phase",
+          forceRerun: Boolean(request.forceRerun),
+        },
+      });
+    }
+
+    if (request.forceRerun) {
+      await this.aiPipeline.rerunFromPhase(id, request.phase);
+    } else {
+      await this.aiPipeline.retryPhase(id, request.phase);
+    }
+
+    this.logger.log(
+      `Admin ${adminId} requested phase retry for startup ${id}, phase ${request.phase}`,
+    );
+
+    return {
+      startupId: id,
+      phase: request.phase,
+      accepted: true,
+      mode: request.forceRerun ? "force_rerun" : "retry_failed_phase",
+      feedbackAccepted: Boolean(feedback),
+    };
+  }
+
+  async adminRetryAgent(
+    id: string,
+    adminId: string,
+    request: AdminRetryAgentRequest,
+  ) {
+    const [found] = await this.drizzle.db
+      .select()
+      .from(startup)
+      .where(eq(startup.id, id))
+      .limit(1);
+
+    if (!found) {
+      throw new NotFoundException(`Startup with ID ${id} not found`);
+    }
+
+    if (!this.aiConfig.isPipelineEnabled()) {
+      throw new BadRequestException("AI pipeline is disabled");
+    }
+    if (!this.isValidRetryAgentRequest(request.phase, request.agent)) {
+      throw new BadRequestException(
+        `Unsupported agent "${request.agent}" for phase "${String(request.phase)}"`,
+      );
+    }
+
+    const feedback = request.feedback?.trim();
+
+    if (feedback) {
+      await this.pipelineFeedback.record({
+        startupId: id,
+        phase: request.phase,
+        agentKey: request.agent,
+        feedback,
+        createdBy: adminId,
+        metadata: {
+          source: "admin_retry_agent",
+        },
+      });
+    }
+
+    await this.aiPipeline.retryAgent(id, {
+      phase: request.phase,
+      agentKey: request.agent as ResearchAgentKey | EvaluationAgentKey,
+    });
+
+    this.logger.log(
+      `Admin ${adminId} requested agent retry for startup ${id}, phase ${request.phase}, agent ${request.agent}`,
+    );
+
+    return {
+      startupId: id,
+      phase: request.phase,
+      agent: request.agent,
+      accepted: true,
+      feedbackAccepted: Boolean(feedback),
+      mode: "agent_retry",
+    };
   }
 
   async adminUpdate(id: string, dto: UpdateStartup) {
@@ -573,70 +739,22 @@ export class StartupService {
         throw new NotFoundException(`Startup with ID ${id} not found`);
       }
 
-      const response: GetProgressResponse = {
-        status: found.status,
-        progress: null,
-      };
-
-      const pipelineState = await this.aiPipeline.getPipelineStatus(id);
-      if (pipelineState) {
-        const totalPhases = Object.keys(pipelineState.phases).length;
-        const completedCount = Object.values(pipelineState.phases).filter(
-          (phase) => phase.status === "completed",
-        ).length;
-
-        response.progress = {
-          overallProgress: Math.round((completedCount / totalPhases) * 100),
-          currentPhase: pipelineState.currentPhase,
-          phasesCompleted: Object.entries(pipelineState.phases)
-            .filter(([, phase]) => phase.status === "completed")
-            .map(([phase]) => phase),
-          phases: Object.fromEntries(
-            Object.entries(pipelineState.phases).map(([phase, value]) => [
-              phase,
-              {
-                status: value.status,
-                progress:
-                  value.status === "completed"
-                    ? 100
-                    : value.status === "running"
-                      ? 50
-                      : 0,
-              },
-            ]),
-          ),
-        };
-        return response;
-      }
-
-      if (
-        found.status === StartupStatus.SUBMITTED ||
-        found.status === StartupStatus.ANALYZING
-      ) {
-        const [job] = await db
-          .select()
-          .from(analysisJob)
-          .where(eq(analysisJob.startupId, id))
-          .orderBy(desc(analysisJob.createdAt))
-          .limit(1);
-
-        if (job && job.result) {
-          const jobResult = job.result as Record<string, unknown>;
-          response.progress = {
-            overallProgress: (jobResult.overallProgress as number) || 0,
-            currentPhase: (jobResult.currentPhase as string) || "queued",
-            phasesCompleted: (jobResult.phasesCompleted as string[]) || [],
-            phases:
-              (jobResult.phases as Record<
-                string,
-                { status: string; progress: number }
-              >) || {},
-          };
-        }
-      }
-
-      return response;
+      return this.buildProgressResponse(db, id, found.status);
     });
+  }
+
+  async adminGetProgress(id: string): Promise<GetProgressResponse> {
+    const [found] = await this.drizzle.db
+      .select()
+      .from(startup)
+      .where(eq(startup.id, id))
+      .limit(1);
+
+    if (!found) {
+      throw new NotFoundException(`Startup with ID ${id} not found`);
+    }
+
+    return this.buildProgressResponse(this.drizzle.db, id, found.status);
   }
 
   private async triggerAnalysis(
@@ -673,5 +791,136 @@ export class StartupService {
     }
 
     return evaluation;
+  }
+
+  private async withEvaluation<
+    T extends { id: string; status?: StartupStatus | string | null },
+  >(
+    db: DrizzleService["db"],
+    startupRecord: T,
+    includePreApproval: boolean,
+  ): Promise<T & { evaluation?: StartupEvaluation }> {
+    const status = startupRecord.status;
+    const includeEvaluation =
+      status === StartupStatus.APPROVED ||
+      (includePreApproval &&
+        (status === StartupStatus.ANALYZING ||
+          status === StartupStatus.PENDING_REVIEW));
+
+    if (!includeEvaluation) {
+      return startupRecord;
+    }
+
+    const [evaluation] = await db
+      .select()
+      .from(startupEvaluation)
+      .where(eq(startupEvaluation.startupId, startupRecord.id))
+      .limit(1);
+
+    if (!evaluation) {
+      return startupRecord;
+    }
+
+    return {
+      ...startupRecord,
+      evaluation,
+    };
+  }
+
+  private async buildProgressResponse(
+    db: DrizzleService["db"],
+    startupId: string,
+    status: StartupStatus,
+  ): Promise<GetProgressResponse> {
+    const response: GetProgressResponse = {
+      status,
+      progress: null,
+    };
+
+    const pipelineState = await this.aiPipeline.getPipelineStatus(startupId);
+    if (pipelineState) {
+      const totalPhases = Object.keys(pipelineState.phases).length;
+      const completedCount = Object.values(pipelineState.phases).filter(
+        (phase) => phase.status === "completed",
+      ).length;
+      const overallProgress =
+        totalPhases === 0
+          ? 0
+          : Math.round((completedCount / totalPhases) * 100);
+
+      response.progress = {
+        overallProgress,
+        currentPhase: pipelineState.currentPhase,
+        phasesCompleted: Object.entries(pipelineState.phases)
+          .filter(([, phase]) => phase.status === "completed")
+          .map(([phase]) => phase),
+        phases: Object.fromEntries(
+          Object.entries(pipelineState.phases).map(([phase, value]) => [
+            phase,
+            {
+              status: value.status,
+              progress:
+                value.status === "completed"
+                  ? 100
+                  : value.status === "running"
+                    ? 50
+                    : 0,
+            },
+          ]),
+        ),
+      };
+      return response;
+    }
+
+    if (status === StartupStatus.SUBMITTED || status === StartupStatus.ANALYZING) {
+      const [job] = await db
+        .select()
+        .from(analysisJob)
+        .where(eq(analysisJob.startupId, startupId))
+        .orderBy(desc(analysisJob.createdAt))
+        .limit(1);
+
+      if (job && job.result) {
+        const jobResult = job.result as Record<string, unknown>;
+        response.progress = {
+          overallProgress: (jobResult.overallProgress as number) || 0,
+          currentPhase: (jobResult.currentPhase as string) || "queued",
+          phasesCompleted: (jobResult.phasesCompleted as string[]) || [],
+          phases:
+            (jobResult.phases as Record<
+              string,
+              { status: string; progress: number }
+            >) || {},
+        };
+      }
+    }
+
+    return response;
+  }
+
+  private isValidPipelinePhase(phase: unknown): phase is PipelinePhase {
+    return (
+      phase === PipelinePhase.EXTRACTION ||
+      phase === PipelinePhase.SCRAPING ||
+      phase === PipelinePhase.RESEARCH ||
+      phase === PipelinePhase.EVALUATION ||
+      phase === PipelinePhase.SYNTHESIS
+    );
+  }
+
+  private isValidRetryAgentRequest(phase: unknown, agent: unknown): boolean {
+    if (typeof agent !== "string" || agent.trim().length === 0) {
+      return false;
+    }
+
+    if (phase === PipelinePhase.RESEARCH) {
+      return StartupService.RESEARCH_AGENTS.has(agent as ResearchAgentKey);
+    }
+
+    if (phase === PipelinePhase.EVALUATION) {
+      return StartupService.EVALUATION_AGENTS.has(agent as EvaluationAgentKey);
+    }
+
+    return false;
   }
 }

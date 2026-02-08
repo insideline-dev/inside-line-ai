@@ -16,6 +16,7 @@ import {
   parseRedisUrl,
 } from "../../../queue/processors/base.processor";
 import { NotificationGateway } from "../../../notification/notification.gateway";
+import type { EvaluationAgentKey } from "../interfaces/agent.interface";
 import { PipelinePhase } from "../interfaces/pipeline.interface";
 import { EvaluationService } from "../services/evaluation.service";
 import { PipelineStateService } from "../services/pipeline-state.service";
@@ -56,6 +57,7 @@ export class EvaluationProcessor
     job: Job<AiEvaluationJobData>,
   ): Promise<Omit<AiEvaluationJobResult, "jobId" | "duration" | "success">> {
     const { startupId, pipelineRunId, userId } = job.data;
+    const agentKey = this.readAgentRetryKey(job.data.metadata);
 
     if (job.data.type !== "ai_evaluation") {
       throw new Error("Invalid job type for evaluation processor");
@@ -70,6 +72,7 @@ export class EvaluationProcessor
       notificationGateway: this.notificationGateway,
       run: () =>
         this.evaluationService.run(startupId, {
+          agentKey,
           onAgentComplete: ({ agent, output, usedFallback, error }) => {
             this.pipelineService
               .onAgentProgress({
@@ -114,5 +117,32 @@ export class EvaluationProcessor
       pipelineRunId: runResult.pipelineRunId,
       data: runResult.result,
     };
+  }
+
+  private readAgentRetryKey(
+    metadata: Record<string, unknown> | undefined,
+  ): EvaluationAgentKey | undefined {
+    if (!metadata || metadata.mode !== "agent_retry") {
+      return undefined;
+    }
+
+    const agentKey = metadata.agentKey;
+    if (
+      agentKey === "team" ||
+      agentKey === "market" ||
+      agentKey === "product" ||
+      agentKey === "traction" ||
+      agentKey === "businessModel" ||
+      agentKey === "gtm" ||
+      agentKey === "financials" ||
+      agentKey === "competitiveAdvantage" ||
+      agentKey === "legal" ||
+      agentKey === "dealTerms" ||
+      agentKey === "exitPotential"
+    ) {
+      return agentKey;
+    }
+
+    return undefined;
   }
 }

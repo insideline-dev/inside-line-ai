@@ -1,7 +1,5 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { Injectable, Logger, NotFoundException, Optional, Inject, forwardRef } from '@nestjs/common';
 import { eq, and, desc, gt, count as drizzleCount } from 'drizzle-orm';
-import type { AgentMail } from 'agentmail';
 import { DrizzleService } from '../../../database';
 import {
   integrationWebhook,
@@ -15,6 +13,7 @@ import { NotificationService } from '../../../notification/notification.service'
 import { NotificationType } from '../../../notification/entities';
 import { AttachmentService } from './attachment.service';
 import { AgentMailClientService } from './agentmail-client.service';
+import { ClaraService } from '../../clara/clara.service';
 import type {
   AgentMailWebhook,
   GetThreadsQuery,
@@ -22,7 +21,6 @@ import type {
   SendEmail,
   ReplyEmail,
   CreateInbox,
-  ManageWebhook,
 } from './dto';
 
 export type PaginatedThreads = {
@@ -41,10 +39,10 @@ export class AgentMailService {
 
   constructor(
     private drizzle: DrizzleService,
-    private configService: ConfigService,
     private notificationService: NotificationService,
     private attachmentService: AttachmentService,
     private agentMailClient: AgentMailClientService,
+    @Optional() @Inject(forwardRef(() => ClaraService)) private claraService: ClaraService | null,
   ) {}
 
   // ============================================================================
@@ -57,7 +55,7 @@ export class AgentMailService {
     try {
       await this.drizzle.db.insert(integrationWebhook).values({
         source: WebhookSource.AGENTMAIL,
-        eventType: 'message.created',
+        eventType: 'message.received',
         payload: webhookPayload,
         processed: false,
       });
@@ -70,7 +68,7 @@ export class AgentMailService {
         .where(
           and(
             eq(integrationWebhook.source, WebhookSource.AGENTMAIL),
-            eq(integrationWebhook.eventType, 'message.created'),
+            eq(integrationWebhook.eventType, 'message.received'),
           ),
         );
 
@@ -86,7 +84,7 @@ export class AgentMailService {
         .where(
           and(
             eq(integrationWebhook.source, WebhookSource.AGENTMAIL),
-            eq(integrationWebhook.eventType, 'message.created'),
+            eq(integrationWebhook.eventType, 'message.received'),
           ),
         );
 
@@ -96,6 +94,13 @@ export class AgentMailService {
 
   private async processWebhookEvent(payload: AgentMailWebhook): Promise<void> {
     const { inbox_id, thread_id, message_id } = payload;
+
+    // Route to Clara if this is Clara's inbox
+    if (this.claraService?.isClaraInbox(inbox_id)) {
+      this.logger.log(`Routing message ${message_id} to Clara`);
+      await this.claraService.handleIncomingMessage(inbox_id, thread_id, message_id);
+      return;
+    }
 
     const userId = await this.findUserByInbox(inbox_id);
     if (!userId) {
@@ -137,7 +142,7 @@ export class AgentMailService {
     // Download attachments asynchronously
     if (message.attachments && message.attachments.length > 0) {
       const attachmentDownloads = message.attachments.map((att) => ({
-        url: '', // SDK attachments use getAttachment endpoint
+        url: '',
         filename: att.filename ?? 'attachment',
         content_type: att.contentType ?? 'application/octet-stream',
         attachmentId: att.attachmentId,
@@ -283,70 +288,6 @@ export class AgentMailService {
   }
 
   // ============================================================================
-  // WEBHOOK MANAGEMENT
-  // ============================================================================
-
-  async listWebhooks() {
-    return this.agentMailClient.listWebhooks();
-  }
-
-  async createUserWebhook(userId: string, params: ManageWebhook) {
-    const config = await this.getUserConfig(userId);
-    const webhook = await this.agentMailClient.createWebhook({
-      url: params.url,
-      eventTypes: params.eventTypes as AgentMail.EventType[],
-      inboxIds: [config.inboxId],
-    });
-
-    await this.drizzle.db
-      .update(agentmailConfig)
-      .set({
-        webhookId: webhook.webhookId,
-        webhookUrl: params.url,
-        updatedAt: new Date(),
-      })
-      .where(eq(agentmailConfig.userId, userId));
-
-    return webhook;
-  }
-
-  async deleteUserWebhook(webhookId: string) {
-    return this.agentMailClient.deleteWebhook(webhookId);
-  }
-
-  async configureWebhook(userId: string): Promise<{ webhookId: string; url: string }> {
-    const config = await this.getUserConfig(userId);
-    const appUrl = this.configService.get<string>('APP_URL');
-    const webhookUrl = `${appUrl}/integrations/agentmail/webhook`;
-
-    // Cleanup existing webhook if any
-    if (config.webhookId) {
-      try {
-        await this.agentMailClient.deleteWebhook(config.webhookId);
-      } catch {
-        // Webhook may already be deleted
-      }
-    }
-
-    const webhook = await this.agentMailClient.createWebhook({
-      url: webhookUrl,
-      eventTypes: ['message.received' as AgentMail.EventType],
-      inboxIds: [config.inboxId],
-    });
-
-    await this.drizzle.db
-      .update(agentmailConfig)
-      .set({
-        webhookId: webhook.webhookId,
-        webhookUrl,
-        updatedAt: new Date(),
-      })
-      .where(eq(agentmailConfig.userId, userId));
-
-    return { webhookId: webhook.webhookId, url: webhookUrl };
-  }
-
-  // ============================================================================
   // LOCAL THREAD MANAGEMENT (DB)
   // ============================================================================
 
@@ -435,8 +376,6 @@ export class AgentMailService {
         inboxId: config.inboxId,
         inboxEmail: config.inboxEmail,
         displayName: config.displayName,
-        webhookId: config.webhookId,
-        webhookUrl: config.webhookUrl,
         isActive: config.isActive,
       })
       .onConflictDoUpdate({
@@ -445,8 +384,6 @@ export class AgentMailService {
           inboxId: config.inboxId,
           inboxEmail: config.inboxEmail,
           displayName: config.displayName,
-          webhookId: config.webhookId,
-          webhookUrl: config.webhookUrl,
           isActive: config.isActive,
           updatedAt: new Date(),
         },

@@ -268,6 +268,30 @@ export class PipelineStateService implements OnModuleDestroy {
     await this.persist(current);
   }
 
+  async resetPhase(startupId: string, phase: PipelinePhase): Promise<void> {
+    const current = await this.requireState(startupId);
+    current.phases[phase] = { status: PhaseStatus.PENDING };
+    current.telemetry.phases[phase] = {
+      phase,
+      agentCount: 0,
+      successCount: 0,
+      failedCount: 0,
+    };
+    current.updatedAt = new Date().toISOString();
+    await this.persist(current);
+  }
+
+  async resetPhaseStatus(
+    startupId: string,
+    phase: PipelinePhase,
+    status: PhaseStatus = PhaseStatus.PENDING,
+  ): Promise<void> {
+    const current = await this.requireState(startupId);
+    current.phases[phase] = { status };
+    current.updatedAt = new Date().toISOString();
+    await this.persist(current);
+  }
+
   async setPhaseResult<P extends PipelinePhase>(
     startupId: string,
     phase: P,

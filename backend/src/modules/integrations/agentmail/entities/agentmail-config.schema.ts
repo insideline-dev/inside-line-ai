@@ -18,10 +18,6 @@ export const agentmailConfig = pgTable(
     inboxEmail: text('inbox_email'),
     displayName: text('display_name'),
 
-    // Webhook tracking
-    webhookId: text('webhook_id'),
-    webhookUrl: text('webhook_url'),
-
     // Status
     isActive: boolean('is_active').default(true).notNull(),
 

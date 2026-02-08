@@ -38,3 +38,6 @@ export * from '../modules/agent/entities';
 
 // AI Pipeline
 export * from '../modules/ai/entities';
+
+// Clara
+export * from '../modules/clara/entities';

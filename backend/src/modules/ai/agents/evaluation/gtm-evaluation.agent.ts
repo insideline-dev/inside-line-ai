@@ -6,6 +6,14 @@ import { AiProviderService } from "../../providers/ai-provider.service";
 import { BaseEvaluationAgent } from "./base-evaluation.agent";
 import { baseEvaluation, stageMultiplier } from "./evaluation-utils";
 
+const tryPathname = (url: string): string => {
+  try {
+    return new URL(url).pathname;
+  } catch {
+    return "";
+  }
+};
+
 @Injectable()
 export class GtmEvaluationAgent extends BaseEvaluationAgent<GtmEvaluation> {
   readonly key = "gtm" as const;
@@ -22,7 +30,7 @@ export class GtmEvaluationAgent extends BaseEvaluationAgent<GtmEvaluation> {
       scraping.website?.subpages
         .filter((page) =>
           /\/(customers|case-studies|blog|news|press|solutions|pricing|demo)/i.test(
-            new URL(page.url).pathname,
+            tryPathname(page.url),
           ),
         )
         .map((page) => page.url) ?? [];
@@ -48,7 +56,7 @@ export class GtmEvaluationAgent extends BaseEvaluationAgent<GtmEvaluation> {
 
   fallback({ extraction }: EvaluationPipelineInput): GtmEvaluation {
     return GtmEvaluationSchema.parse({
-      ...baseEvaluation(53 + stageMultiplier(extraction.stage) / 2, "GTM appears coherent but needs channel efficiency proof"),
+      ...baseEvaluation(38 + stageMultiplier(extraction.stage) / 2, "GTM appears coherent but needs channel efficiency proof"),
       customerSegments: ["SMB", "Mid-market"],
       acquisitionChannels: ["Founder-led sales", "Partnerships", "Inbound content"],
       salesStrategy: "Hybrid founder-led and inbound-assisted sales motion",

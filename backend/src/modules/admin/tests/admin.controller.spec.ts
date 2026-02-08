@@ -12,6 +12,7 @@ import { SystemConfigService } from '../system-config.service';
 import { BulkDataService } from '../bulk-data.service';
 import { UserRole } from '../../../auth/entities/auth.schema';
 import { StartupStatus } from '../../startup/entities/startup.schema';
+import { PipelinePhase } from '../../ai/interfaces/pipeline.interface';
 
 describe('AdminController', () => {
   let controller: AdminController;
@@ -85,6 +86,9 @@ describe('AdminController', () => {
             adminFindPending: jest.fn(),
             approve: jest.fn(),
             reject: jest.fn(),
+            reanalyze: jest.fn(),
+            adminRetryPhase: jest.fn(),
+            adminRetryAgent: jest.fn(),
           },
         },
         {
@@ -309,6 +313,71 @@ describe('AdminController', () => {
         await expect(
           controller.rejectStartup(mockAdmin, 'startup-1', ''),
         ).rejects.toThrow(BadRequestException);
+      });
+    });
+
+    describe('POST /admin/startups/:id/reanalyze', () => {
+      it('should trigger startup reanalysis', async () => {
+        const payload = { jobId: 'pipeline-run-1' };
+        startupService.reanalyze.mockResolvedValueOnce(payload as any);
+
+        const result = await controller.reanalyzeStartup(mockAdmin, 'startup-1');
+
+        expect(result).toEqual(payload);
+        expect(startupService.reanalyze).toHaveBeenCalledWith(
+          'startup-1',
+          mockAdmin.id,
+        );
+      });
+    });
+
+    describe('POST /admin/startups/:id/retry-phase', () => {
+      it('should retry a specific pipeline phase', async () => {
+        const dto = {
+          phase: PipelinePhase.EVALUATION,
+          forceRerun: false,
+          feedback: 'Focus on revised unit economics assumptions',
+        };
+        const payload = { accepted: true };
+        startupService.adminRetryPhase.mockResolvedValueOnce(payload as any);
+
+        const result = await controller.retryStartupPhase(
+          mockAdmin,
+          'startup-1',
+          dto,
+        );
+
+        expect(result).toEqual(payload);
+        expect(startupService.adminRetryPhase).toHaveBeenCalledWith(
+          'startup-1',
+          mockAdmin.id,
+          dto,
+        );
+      });
+    });
+
+    describe('POST /admin/startups/:id/retry-agent', () => {
+      it('should retry a specific AI agent', async () => {
+        const dto = {
+          phase: PipelinePhase.EVALUATION,
+          agent: 'market',
+          feedback: 'Re-check TAM assumptions with updated sources',
+        };
+        const payload = { accepted: true };
+        startupService.adminRetryAgent.mockResolvedValueOnce(payload as any);
+
+        const result = await controller.retryStartupAgent(
+          mockAdmin,
+          'startup-1',
+          dto,
+        );
+
+        expect(result).toEqual(payload);
+        expect(startupService.adminRetryAgent).toHaveBeenCalledWith(
+          'startup-1',
+          mockAdmin.id,
+          dto,
+        );
       });
     });
   });

@@ -58,6 +58,11 @@ describe("EvaluationService", () => {
 
     registry = {
       runAll: jest.fn().mockResolvedValue(evaluationResult),
+      runOne: jest.fn().mockResolvedValue({
+        agent: "market",
+        output: { score: 91 },
+        usedFallback: false,
+      }),
     } as unknown as jest.Mocked<EvaluationAgentRegistryService>;
 
     service = new EvaluationService(
@@ -112,5 +117,41 @@ describe("EvaluationService", () => {
       "Evaluation requires extraction, scraping, and research results",
     );
     expect(registry.runAll).not.toHaveBeenCalled();
+  });
+
+  it("reruns a single agent and merges it into the existing evaluation", async () => {
+    pipelineState.getPhaseResult.mockImplementation(
+      (_startupId: string, phase: PipelinePhase) => {
+        if (phase === PipelinePhase.EXTRACTION) {
+          return Promise.resolve(pipelineInput.extraction);
+        }
+
+        if (phase === PipelinePhase.SCRAPING) {
+          return Promise.resolve(pipelineInput.scraping);
+        }
+
+        if (phase === PipelinePhase.RESEARCH) {
+          return Promise.resolve(pipelineInput.research);
+        }
+
+        if (phase === PipelinePhase.EVALUATION) {
+          return Promise.resolve(evaluationResult);
+        }
+
+        return Promise.resolve(null);
+      },
+    );
+
+    const result = await service.run("startup-1", { agentKey: "market" });
+
+    expect(registry.runOne).toHaveBeenCalledWith(
+      "startup-1",
+      "market",
+      expect.objectContaining({
+        extraction: pipelineInput.extraction,
+      }),
+    );
+    expect(result.market).toEqual({ score: 91 });
+    expect(result.summary.failedAgents).toBe(0);
   });
 });

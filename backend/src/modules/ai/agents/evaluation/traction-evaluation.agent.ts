@@ -49,7 +49,7 @@ export class TractionEvaluationAgent extends BaseEvaluationAgent<TractionEvaluat
 
   fallback({ extraction }: EvaluationPipelineInput): TractionEvaluation {
     return TractionEvaluationSchema.parse({
-      ...baseEvaluation(45 + stageMultiplier(extraction.stage), "Traction evidence is moderate and needs KPI validation"),
+      ...baseEvaluation(30 + stageMultiplier(extraction.stage), "Traction evidence is moderate and needs KPI validation"),
       metrics: {
         users: undefined,
         revenue: undefined,

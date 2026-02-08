@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { generateObject } from "ai";
+import { generateText, Output } from "ai";
 import { z } from "zod";
 import { type Startup } from "../../startup/entities";
 import { ModelPurpose } from "../interfaces/pipeline.interface";
@@ -46,12 +46,35 @@ export class FieldExtractorService {
       fundingAsk: startupContext?.fundingTarget,
       valuation: startupContext?.valuation,
       teamMembers: startupContext?.teamMembers,
+      startupFormContext: {
+        sectorIndustryGroup: startupContext?.sectorIndustryGroup,
+        sectorIndustry: startupContext?.sectorIndustry,
+        pitchDeckPath: startupContext?.pitchDeckPath,
+        pitchDeckUrl: startupContext?.pitchDeckUrl,
+        demoUrl: startupContext?.demoUrl,
+        demoVideoUrl: startupContext?.demoVideoUrl,
+        roundCurrency: startupContext?.roundCurrency,
+        valuationKnown: startupContext?.valuationKnown,
+        valuationType: startupContext?.valuationType,
+        raiseType: startupContext?.raiseType,
+        leadSecured: startupContext?.leadSecured,
+        leadInvestorName: startupContext?.leadInvestorName,
+        hasPreviousFunding: startupContext?.hasPreviousFunding,
+        previousFundingAmount: startupContext?.previousFundingAmount,
+        previousFundingCurrency: startupContext?.previousFundingCurrency,
+        previousInvestors: startupContext?.previousInvestors,
+        previousRoundType: startupContext?.previousRoundType,
+        technologyReadinessLevel: startupContext?.technologyReadinessLevel,
+        productDescription: startupContext?.productDescription,
+        productScreenshots: startupContext?.productScreenshots,
+        files: startupContext?.files,
+      },
     };
 
     try {
-      const { object } = await generateObject({
+      const { output } = await generateText({
         model: this.providers.resolveModelForPurpose(ModelPurpose.EXTRACTION),
-        schema: ExtractedFieldsSchema,
+        output: Output.object({ schema: ExtractedFieldsSchema }),
         temperature: 0.1,
         prompt: [
           "Extract structured startup fields from the pitch deck text.",
@@ -59,13 +82,13 @@ export class FieldExtractorService {
           "- Return only fields supported by evidence in the text.",
           "- Do not invent financial numbers.",
           "- Keep founder names as plain names without titles.",
-          `Startup context hints: ${JSON.stringify(context, null, 2)}`,
+          `Startup context hints: ${JSON.stringify(context)}`,
           "Pitch deck text:",
           this.truncateForPrompt(trimmed),
         ].join("\n\n"),
       });
 
-      return ExtractedFieldsSchema.parse(object);
+      return ExtractedFieldsSchema.parse(output);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.warn(`AI field extraction failed, falling back to context only: ${message}`);

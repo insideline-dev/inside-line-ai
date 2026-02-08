@@ -51,7 +51,7 @@ export class ExitPotentialEvaluationAgent extends BaseEvaluationAgent<ExitPotent
 
   fallback({ extraction }: EvaluationPipelineInput): ExitPotentialEvaluation {
     return ExitPotentialEvaluationSchema.parse({
-      ...baseEvaluation(54 + stageMultiplier(extraction.stage) / 2, "Exit potential is plausible with execution upside"),
+      ...baseEvaluation(38 + stageMultiplier(extraction.stage) / 2, "Exit potential is plausible with execution upside"),
       exitScenarios: ["Strategic acquisition", "Secondary-led growth exit"],
       acquirers: ["Category incumbent", "Platform consolidator"],
       exitTimeline: "5-8 years",

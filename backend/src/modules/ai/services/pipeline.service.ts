@@ -1,10 +1,16 @@
 import { BadRequestException, Injectable, Logger } from "@nestjs/common";
+import { ModuleRef } from "@nestjs/core";
 import { eq } from "drizzle-orm";
 import { DrizzleService } from "../../../database";
 import { QueueService } from "../../../queue";
 import { startup, StartupStatus } from "../../startup/entities";
 import { pipelineRun } from "../entities";
+import type {
+  EvaluationAgentKey,
+  ResearchAgentKey,
+} from "../interfaces/agent.interface";
 import { AiConfigService } from "./ai-config.service";
+import { PipelineFeedbackService } from "./pipeline-feedback.service";
 import { PipelineStateService } from "./pipeline-state.service";
 import {
   PhaseStatus,
@@ -15,6 +21,7 @@ import {
 import { ErrorRecoveryService } from "../orchestrator/error-recovery.service";
 import { PhaseTransitionService } from "../orchestrator/phase-transition.service";
 import { ProgressTrackerService } from "../orchestrator/progress-tracker.service";
+import type { ClaraService } from "../../clara/clara.service"; // lazy-loaded via ModuleRef
 
 function toJsonRecord(value: unknown, context: string): Record<string, unknown> {
   const serialized = JSON.stringify(value);
@@ -28,6 +35,16 @@ function toJsonRecord(value: unknown, context: string): Record<string, unknown> 
   }
 
   return parsed as Record<string, unknown>;
+}
+
+type AgentRetryMetadata = {
+  mode: "agent_retry";
+  agentKey: string;
+};
+
+export interface RetryAgentRequest {
+  phase: PipelinePhase.RESEARCH | PipelinePhase.EVALUATION;
+  agentKey: ResearchAgentKey | EvaluationAgentKey;
 }
 
 @Injectable()
@@ -48,15 +65,30 @@ export class PipelineService {
     [PipelinePhase.SYNTHESIS]: "ai_synthesis",
   };
 
+  private claraService: ClaraService | null = null;
+
   constructor(
     private drizzle: DrizzleService,
     private queue: QueueService,
     private pipelineState: PipelineStateService,
     private aiConfig: AiConfigService,
+    private pipelineFeedback: PipelineFeedbackService,
     private progressTracker: ProgressTrackerService,
     private phaseTransition: PhaseTransitionService,
     private errorRecovery: ErrorRecoveryService,
+    private moduleRef: ModuleRef,
   ) {}
+
+  private getClaraService(): ClaraService | null {
+    if (this.claraService) return this.claraService;
+    try {
+      const { ClaraService: ClaraServiceClass } = require("../../clara/clara.service");
+      this.claraService = this.moduleRef.get(ClaraServiceClass, { strict: false });
+      return this.claraService;
+    } catch {
+      return null;
+    }
+  }
 
   async startPipeline(startupId: string, userId: string): Promise<string> {
     if (!this.aiConfig.isPipelineEnabled()) {
@@ -104,10 +136,20 @@ export class PipelineService {
       throw new BadRequestException(`Phase "${phase}" is not in failed state`);
     }
 
+    await this.queue.removePipelineJobs(startupId);
     await this.pipelineState.setStatus(startupId, PipelineStatus.RUNNING);
+    await this.updatePipelineRunStatus(state.pipelineRunId, PipelineStatus.RUNNING);
+    await this.progressTracker.setPipelineStatus({
+      startupId,
+      userId: state.userId,
+      pipelineRunId: state.pipelineRunId,
+      status: PipelineStatus.RUNNING,
+      currentPhase: phase,
+    });
+    await this.updateStartupStatus(startupId, StartupStatus.ANALYZING);
     await this.pipelineState.clearPhaseResult(startupId, phase);
     await this.pipelineState.resetRetryCount(startupId, phase);
-    await this.pipelineState.updatePhase(startupId, phase, PhaseStatus.PENDING);
+    await this.pipelineState.resetPhase(startupId, phase);
     await this.progressTracker.updatePhaseProgress({
       startupId,
       userId: state.userId,
@@ -117,6 +159,141 @@ export class PipelineService {
     });
 
     await this.queuePhase(startupId, state.pipelineRunId, state.userId, phase);
+  }
+
+  async rerunFromPhase(startupId: string, phase: PipelinePhase): Promise<void> {
+    const state = await this.pipelineState.get(startupId);
+    if (!state) {
+      throw new Error(`Pipeline state for startup ${startupId} not found`);
+    }
+
+    const phasesToReset = this.getPhasesFrom(phase);
+    if (!phasesToReset.length) {
+      throw new BadRequestException(`Unknown phase "${phase}"`);
+    }
+
+    await this.queue.removePipelineJobs(startupId);
+    await this.pipelineState.setStatus(startupId, PipelineStatus.RUNNING);
+    await this.updatePipelineRunStatus(state.pipelineRunId, PipelineStatus.RUNNING);
+    await this.progressTracker.setPipelineStatus({
+      startupId,
+      userId: state.userId,
+      pipelineRunId: state.pipelineRunId,
+      status: PipelineStatus.RUNNING,
+      currentPhase: phase,
+    });
+    await this.updateStartupStatus(startupId, StartupStatus.ANALYZING);
+
+    for (const phaseToReset of phasesToReset) {
+      await this.resetPhaseForRerun({
+        startupId,
+        userId: state.userId,
+        pipelineRunId: state.pipelineRunId,
+        phase: phaseToReset,
+        clearResult: true,
+      });
+    }
+
+    await this.queuePhase(startupId, state.pipelineRunId, state.userId, phase);
+  }
+
+  async retryAgent(startupId: string, request: RetryAgentRequest): Promise<void> {
+    const state = await this.pipelineState.get(startupId);
+    if (!state) {
+      throw new Error(`Pipeline state for startup ${startupId} not found`);
+    }
+    if (!this.isValidAgentForPhase(request.phase, request.agentKey)) {
+      throw new BadRequestException(
+        `Agent "${request.agentKey}" is not valid for phase "${request.phase}"`,
+      );
+    }
+    const phaseStatus = state.phases[request.phase].status;
+    if (phaseStatus !== PhaseStatus.FAILED && phaseStatus !== PhaseStatus.COMPLETED) {
+      throw new BadRequestException(
+        `Agent retry is only allowed when phase "${request.phase}" is failed or completed`,
+      );
+    }
+
+    const metadata: AgentRetryMetadata = {
+      mode: "agent_retry",
+      agentKey: request.agentKey,
+    };
+
+    await this.queue.removePipelineJobs(startupId);
+    await this.pipelineState.setStatus(startupId, PipelineStatus.RUNNING);
+    await this.updatePipelineRunStatus(state.pipelineRunId, PipelineStatus.RUNNING);
+    await this.progressTracker.setPipelineStatus({
+      startupId,
+      userId: state.userId,
+      pipelineRunId: state.pipelineRunId,
+      status: PipelineStatus.RUNNING,
+      currentPhase: request.phase,
+    });
+    await this.updateStartupStatus(startupId, StartupStatus.ANALYZING);
+
+    if (request.phase === PipelinePhase.RESEARCH) {
+      await this.resetPhaseForRerun({
+        startupId,
+        userId: state.userId,
+        pipelineRunId: state.pipelineRunId,
+        phase: PipelinePhase.RESEARCH,
+        clearResult: false,
+        preserveTelemetry: true,
+      });
+      await this.resetPhaseForRerun({
+        startupId,
+        userId: state.userId,
+        pipelineRunId: state.pipelineRunId,
+        phase: PipelinePhase.EVALUATION,
+        clearResult: true,
+      });
+      await this.resetPhaseForRerun({
+        startupId,
+        userId: state.userId,
+        pipelineRunId: state.pipelineRunId,
+        phase: PipelinePhase.SYNTHESIS,
+        clearResult: true,
+      });
+
+      await this.queuePhase(
+        startupId,
+        state.pipelineRunId,
+        state.userId,
+        PipelinePhase.RESEARCH,
+        0,
+        0,
+        undefined,
+        metadata,
+      );
+      return;
+    }
+
+    await this.resetPhaseForRerun({
+      startupId,
+      userId: state.userId,
+      pipelineRunId: state.pipelineRunId,
+      phase: PipelinePhase.EVALUATION,
+      clearResult: false,
+      preserveTelemetry: true,
+    });
+    await this.resetPhaseForRerun({
+      startupId,
+      userId: state.userId,
+      pipelineRunId: state.pipelineRunId,
+      phase: PipelinePhase.SYNTHESIS,
+      clearResult: true,
+    });
+
+    await this.queuePhase(
+      startupId,
+      state.pipelineRunId,
+      state.userId,
+      PipelinePhase.EVALUATION,
+      0,
+      0,
+      undefined,
+      metadata,
+    );
   }
 
   async cancelPipeline(startupId: string): Promise<{ removedJobs: number }> {
@@ -159,6 +336,7 @@ export class PipelineService {
       phase,
       status: PhaseStatus.COMPLETED,
     });
+    await this.consumePhaseFeedbackSafely(startupId, phase);
 
     if (phase === PipelinePhase.EVALUATION) {
       await this.updatePipelineQualityFromEvaluation(state.startupId);
@@ -244,6 +422,7 @@ export class PipelineService {
     delayMs = 0,
     retryCount = 0,
     waitingError?: string,
+    metadata?: Record<string, unknown>,
   ): Promise<void> {
     const phaseConfig = this.phaseTransition.getPhaseConfig(phase);
     await this.pipelineState.updatePhase(
@@ -271,6 +450,7 @@ export class PipelineService {
         priority: 1,
         metadata: {
           retryCount,
+          ...(metadata ?? {}),
         },
       },
       {
@@ -405,6 +585,20 @@ export class PipelineService {
       overallScore: synthesisResult?.overallScore,
     });
     await this.updateStartupStatus(startupId, StartupStatus.PENDING_REVIEW);
+
+    // Notify Clara conversation if exists
+    this.notifyClaraSafely(startupId, synthesisResult?.overallScore);
+  }
+
+  private notifyClaraSafely(
+    startupId: string,
+    overallScore?: number,
+  ): void {
+    const clara = this.getClaraService();
+    if (!clara) return;
+    clara.notifyPipelineComplete(startupId, overallScore).catch((err) => {
+      this.logger.warn(`Clara notification failed for ${startupId}: ${err}`);
+    });
   }
 
   private async handlePhaseTimeout(
@@ -424,5 +618,89 @@ export class PipelineService {
     const message = `Phase "${phase}" timed out`;
     await this.pipelineState.updatePhase(startupId, phase, PhaseStatus.FAILED, message);
     await this.onPhaseFailed(startupId, phase, message);
+  }
+
+  private getPhasesFrom(phase: PipelinePhase): PipelinePhase[] {
+    const orderedPhases = this.phaseTransition
+      .getConfig()
+      .phases.map((entry) => entry.phase);
+    const index = orderedPhases.indexOf(phase);
+    if (index < 0) {
+      return [];
+    }
+
+    return orderedPhases.slice(index);
+  }
+
+  private async resetPhaseForRerun(params: {
+    startupId: string;
+    userId: string;
+    pipelineRunId: string;
+    phase: PipelinePhase;
+    clearResult: boolean;
+    preserveTelemetry?: boolean;
+  }): Promise<void> {
+    if (params.clearResult) {
+      await this.pipelineState.clearPhaseResult(params.startupId, params.phase);
+    }
+    await this.pipelineState.resetRetryCount(params.startupId, params.phase);
+    if (params.preserveTelemetry) {
+      await this.pipelineState.resetPhaseStatus(params.startupId, params.phase);
+    } else {
+      await this.pipelineState.resetPhase(params.startupId, params.phase);
+    }
+    await this.progressTracker.updatePhaseProgress({
+      startupId: params.startupId,
+      userId: params.userId,
+      pipelineRunId: params.pipelineRunId,
+      phase: params.phase,
+      status: PhaseStatus.PENDING,
+    });
+  }
+
+  private isValidAgentForPhase(
+    phase: PipelinePhase.RESEARCH | PipelinePhase.EVALUATION,
+    agentKey: string,
+  ): boolean {
+    if (phase === PipelinePhase.RESEARCH) {
+      return (
+        agentKey === "team" ||
+        agentKey === "market" ||
+        agentKey === "product" ||
+        agentKey === "news"
+      );
+    }
+
+    return (
+      agentKey === "team" ||
+      agentKey === "market" ||
+      agentKey === "product" ||
+      agentKey === "traction" ||
+      agentKey === "businessModel" ||
+      agentKey === "gtm" ||
+      agentKey === "financials" ||
+      agentKey === "competitiveAdvantage" ||
+      agentKey === "legal" ||
+      agentKey === "dealTerms" ||
+      agentKey === "exitPotential"
+    );
+  }
+
+  private async consumePhaseFeedbackSafely(
+    startupId: string,
+    phase: PipelinePhase,
+  ): Promise<void> {
+    try {
+      await this.pipelineFeedback.markConsumedByScope({
+        startupId,
+        phase,
+        agentKey: null,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `Failed to mark phase-level feedback consumed for ${phase}: ${message}`,
+      );
+    }
   }
 }

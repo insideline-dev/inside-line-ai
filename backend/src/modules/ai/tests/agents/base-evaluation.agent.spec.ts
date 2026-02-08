@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, jest, mock } from "bun:test";
 import { z } from "zod";
 
-const generateObjectMock = jest.fn();
+const generateTextMock = jest.fn();
 
 mock.module("ai", () => ({
-  generateObject: generateObjectMock,
+  generateText: generateTextMock,
+  Output: { object: ({ schema }: { schema: unknown }) => schema },
 }));
 
 import { BaseEvaluationAgent } from "../../agents/evaluation/base-evaluation.agent";
@@ -45,7 +46,7 @@ describe("BaseEvaluationAgent", () => {
   let pipelineData: EvaluationPipelineInput;
 
   beforeEach(() => {
-    generateObjectMock.mockReset();
+    generateTextMock.mockReset();
     modelFactoryMock = jest.fn().mockReturnValue({ providerModel: "gemini-3.0-flash" });
 
     providers = {
@@ -66,9 +67,14 @@ describe("BaseEvaluationAgent", () => {
     pipelineData = createEvaluationPipelineInput();
   });
 
-  it("runs generateObject with evaluation model and validated schema output", async () => {
-    generateObjectMock.mockResolvedValueOnce({
-      object: {
+  it("runs generateText with evaluation model and validated schema output", async () => {
+    pipelineData.extraction.startupContext = {
+      raiseType: "safe",
+      previousFundingAmount: 750_000,
+    };
+
+    generateTextMock.mockResolvedValueOnce({
+      output: {
         score: 82,
         verdict: "Strong profile",
       },
@@ -82,13 +88,17 @@ describe("BaseEvaluationAgent", () => {
     expect(providers.getGemini).toHaveBeenCalledTimes(1);
     expect(modelFactoryMock).toHaveBeenCalledWith("gemini-3.0-flash");
     expect(agent.buildContext).toHaveBeenCalledWith(pipelineData);
-    expect(generateObjectMock).toHaveBeenCalledWith(
+    expect(generateTextMock).toHaveBeenCalledWith(
       expect.objectContaining({
         temperature: 0.2,
         maxOutputTokens: 4000,
-        system: "Test evaluator",
+        system: expect.stringContaining("Test evaluator"),
       }),
     );
+    const call = generateTextMock.mock.calls[0]?.[0];
+    expect(call?.system).toContain("Scoring Rubric");
+    expect(call?.prompt).toContain("Startup Form Context");
+    expect(call?.prompt).toContain("safe");
     expect(result).toEqual({
       key: "team",
       output: { score: 82, verdict: "Strong profile" },
@@ -97,7 +107,7 @@ describe("BaseEvaluationAgent", () => {
   });
 
   it("uses fallback when provider call fails", async () => {
-    generateObjectMock.mockRejectedValueOnce(new Error("provider timeout"));
+    generateTextMock.mockRejectedValueOnce(new Error("provider timeout"));
 
     const result = await agent.run(pipelineData);
 
@@ -111,8 +121,8 @@ describe("BaseEvaluationAgent", () => {
   });
 
   it("uses fallback when model output fails schema validation", async () => {
-    generateObjectMock.mockResolvedValueOnce({
-      object: {
+    generateTextMock.mockResolvedValueOnce({
+      output: {
         score: 999,
         verdict: "Invalid",
       },

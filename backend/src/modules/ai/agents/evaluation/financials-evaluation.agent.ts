@@ -56,7 +56,7 @@ export class FinancialsEvaluationAgent extends BaseEvaluationAgent<FinancialsEva
     const ask = extraction.fundingAsk ?? 0;
 
     return FinancialsEvaluationSchema.parse({
-      ...baseEvaluation(50 + fundingScore(ask), "Financial assumptions are directionally plausible"),
+      ...baseEvaluation(35 + fundingScore(ask), "Financial assumptions are directionally plausible"),
       burnRate: Math.max(0, ask / 18),
       runway: 18,
       fundingHistory: [],

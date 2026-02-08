@@ -5,4 +5,16 @@ export const PRODUCT_RESEARCH_HUMAN_PROMPT = `Research the startup's product and
 Focus on product pages, features, integrations, technical stack clues, and customer review sentiment.
 
 Context:
-{{contextJson}}`;
+{{contextJson}}
+
+Return your response as a single JSON block inside a \`\`\`json fenced code block.
+
+Expected structure:
+- productPages: array of product page URLs
+- features: array of feature description strings
+- techStack: array of technology strings
+- integrations: array of integration strings
+- customerReviews: object with optional summary (string) and sentiment ("positive"|"neutral"|"negative")
+- sources: array of source URLs used
+
+Use empty arrays [] for fields with no data. Only include URLs you can cite.`;

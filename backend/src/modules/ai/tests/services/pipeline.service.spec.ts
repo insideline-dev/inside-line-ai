@@ -14,6 +14,7 @@ import {
 import { ProgressTrackerService } from "../../orchestrator/progress-tracker.service";
 import { PhaseTransitionService } from "../../orchestrator/phase-transition.service";
 import { ErrorRecoveryService } from "../../orchestrator/error-recovery.service";
+import { PipelineFeedbackService } from "../../services/pipeline-feedback.service";
 
 function createState(
   overrides: Partial<PipelineState> = {},
@@ -97,6 +98,7 @@ describe("PipelineService", () => {
   let progressTracker: jest.Mocked<ProgressTrackerService>;
   let phaseTransition: jest.Mocked<PhaseTransitionService>;
   let errorRecovery: jest.Mocked<ErrorRecoveryService>;
+  let pipelineFeedback: jest.Mocked<PipelineFeedbackService>;
 
   const mockDb = {
     update: jest.fn().mockReturnThis(),
@@ -168,6 +170,8 @@ describe("PipelineService", () => {
       setStatus: jest.fn().mockResolvedValue(undefined),
       clearPhaseResult: jest.fn().mockResolvedValue(undefined),
       resetRetryCount: jest.fn().mockResolvedValue(undefined),
+      resetPhase: jest.fn().mockResolvedValue(undefined),
+      resetPhaseStatus: jest.fn().mockResolvedValue(undefined),
       incrementRetryCount: jest.fn().mockResolvedValue(1),
       setQuality: jest.fn().mockResolvedValue(undefined),
       getPhaseResult: jest.fn().mockResolvedValue(null),
@@ -216,11 +220,16 @@ describe("PipelineService", () => {
       getRetryDelayMs: jest.fn().mockReturnValue(1000),
     } as unknown as jest.Mocked<ErrorRecoveryService>;
 
+    pipelineFeedback = {
+      markConsumedByScope: jest.fn().mockResolvedValue(0),
+    } as unknown as jest.Mocked<PipelineFeedbackService>;
+
     service = new PipelineService(
       drizzle,
       queue,
       stateService,
       aiConfig,
+      pipelineFeedback,
       progressTracker,
       phaseTransition,
       errorRecovery,
@@ -499,6 +508,121 @@ describe("PipelineService", () => {
       }),
       expect.any(Object),
     );
+    expect(mockDb.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: PipelineStatus.RUNNING,
+        completedAt: null,
+      }),
+    );
+  });
+
+  it("force-reruns from a selected phase and clears downstream state", async () => {
+    stateService.get.mockResolvedValueOnce(
+      createState(
+        {},
+        {
+          [PipelinePhase.EXTRACTION]: PhaseStatus.COMPLETED,
+          [PipelinePhase.SCRAPING]: PhaseStatus.COMPLETED,
+          [PipelinePhase.RESEARCH]: PhaseStatus.COMPLETED,
+          [PipelinePhase.EVALUATION]: PhaseStatus.COMPLETED,
+          [PipelinePhase.SYNTHESIS]: PhaseStatus.COMPLETED,
+        },
+      ),
+    );
+
+    await service.rerunFromPhase("startup-1", PipelinePhase.RESEARCH);
+
+    expect(queue.removePipelineJobs).toHaveBeenCalledWith("startup-1");
+    expect(stateService.clearPhaseResult).toHaveBeenCalledWith(
+      "startup-1",
+      PipelinePhase.RESEARCH,
+    );
+    expect(stateService.clearPhaseResult).toHaveBeenCalledWith(
+      "startup-1",
+      PipelinePhase.EVALUATION,
+    );
+    expect(stateService.clearPhaseResult).toHaveBeenCalledWith(
+      "startup-1",
+      PipelinePhase.SYNTHESIS,
+    );
+    expect(queue.addJob).toHaveBeenCalledWith(
+      "ai-research",
+      expect.objectContaining({ type: "ai_research" }),
+      expect.any(Object),
+    );
+    expect(mockDb.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: PipelineStatus.RUNNING,
+        completedAt: null,
+      }),
+    );
+  });
+
+  it("queues targeted research agent retry and resets downstream phases", async () => {
+    stateService.get.mockResolvedValueOnce(
+      createState({}, {
+        [PipelinePhase.RESEARCH]: PhaseStatus.COMPLETED,
+      }),
+    );
+
+    await service.retryAgent("startup-1", {
+      phase: PipelinePhase.RESEARCH,
+      agentKey: "market",
+    });
+
+    expect(stateService.resetPhaseStatus).toHaveBeenCalledWith(
+      "startup-1",
+      PipelinePhase.RESEARCH,
+    );
+    expect(stateService.resetPhase).toHaveBeenCalledWith(
+      "startup-1",
+      PipelinePhase.EVALUATION,
+    );
+    expect(stateService.resetPhase).toHaveBeenCalledWith(
+      "startup-1",
+      PipelinePhase.SYNTHESIS,
+    );
+    expect(stateService.clearPhaseResult).toHaveBeenCalledWith(
+      "startup-1",
+      PipelinePhase.EVALUATION,
+    );
+    expect(stateService.clearPhaseResult).toHaveBeenCalledWith(
+      "startup-1",
+      PipelinePhase.SYNTHESIS,
+    );
+    expect(queue.addJob).toHaveBeenCalledWith(
+      "ai-research",
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          mode: "agent_retry",
+          agentKey: "market",
+        }),
+      }),
+      expect.any(Object),
+    );
+    expect(mockDb.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: PipelineStatus.RUNNING,
+        completedAt: null,
+      }),
+    );
+  });
+
+  it("rejects targeted retry when the phase is running", async () => {
+    stateService.get.mockResolvedValueOnce(
+      createState({}, {
+        [PipelinePhase.EVALUATION]: PhaseStatus.RUNNING,
+      }),
+    );
+
+    await expect(
+      service.retryAgent("startup-1", {
+        phase: PipelinePhase.EVALUATION,
+        agentKey: "market",
+      }),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(queue.addJob).not.toHaveBeenCalled();
   });
 
   it("rejects manual retry when phase is not failed", async () => {

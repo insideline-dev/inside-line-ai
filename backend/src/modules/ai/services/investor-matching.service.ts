@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { and, eq } from "drizzle-orm";
-import { generateObject } from "ai";
+import { generateText, Output } from "ai";
 import { z } from "zod";
 import { DrizzleService } from "../../../database";
 import { ModelPurpose } from "../interfaces/pipeline.interface";
@@ -144,24 +144,35 @@ export class InvestorMatchingService {
     input: StartupMatchInput,
   ): Promise<z.infer<typeof ThesisFitSchema>> {
     try {
-      const { object } = await generateObject({
+      const { output } = await generateText({
         model: this.providers.resolveModelForPurpose(
           ModelPurpose.THESIS_ALIGNMENT,
         ),
-        schema: ThesisFitSchema,
+        output: Output.object({ schema: ThesisFitSchema }),
         temperature: 0.2,
         maxOutputTokens: 500,
+        system: [
+          "You are an investor-startup fit analyst.",
+          "Score how well a startup aligns with an investor's stated thesis.",
+          "",
+          "## Scoring Rubric",
+          "0-30: Poor fit — misaligned on sector, stage, or thesis fundamentals",
+          "31-60: Partial fit — some overlap but material gaps in alignment",
+          "61-80: Good fit — strong overlap on key thesis dimensions",
+          "81-100: Excellent fit — deep alignment across sector, stage, and thesis narrative",
+        ].join("\n"),
         prompt: [
-          "Score fit between startup and investor thesis from 0-100.",
-          "Use startup synthesis and thesis narrative only.",
-          `Investor thesis: ${candidate.thesisNarrative ?? candidate.notes ?? "No thesis provided"}`,
-          `Startup summary: ${input.synthesis.executiveSummary}`,
-          `Startup recommendation: ${input.synthesis.recommendation}`,
-          `Startup overall score: ${input.synthesis.overallScore}`,
-        ].join("\n\n"),
+          "## Investor Thesis",
+          candidate.thesisNarrative ?? candidate.notes ?? "No thesis provided",
+          "",
+          "## Startup Profile",
+          `Summary: ${input.synthesis.executiveSummary}`,
+          `Recommendation: ${input.synthesis.recommendation}`,
+          `Overall Score: ${input.synthesis.overallScore}`,
+        ].join("\n"),
       });
 
-      return ThesisFitSchema.parse(object);
+      return ThesisFitSchema.parse(output);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.warn(
@@ -169,7 +180,7 @@ export class InvestorMatchingService {
       );
 
       return {
-        thesisFitScore: 50,
+        thesisFitScore: 30,
         fitRationale:
           "Alignment fallback used due to model/runtime issue; requires manual review.",
       };

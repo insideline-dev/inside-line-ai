@@ -63,6 +63,7 @@ describe('StartupController', () => {
       create: jest.fn(),
       findAll: jest.fn(),
       findOne: jest.fn(),
+      adminFindOne: jest.fn(),
       update: jest.fn(),
       delete: jest.fn(),
       submit: jest.fn(),
@@ -80,6 +81,7 @@ describe('StartupController', () => {
       adminDelete: jest.fn(),
       findBySlug: jest.fn(),
       getProgress: jest.fn(),
+      adminGetProgress: jest.fn(),
     } as unknown as jest.Mocked<StartupService>;
 
     draftService = {
@@ -182,6 +184,17 @@ describe('StartupController', () => {
 
       expect(result).toEqual(mockStartup);
       expect(startupService.findOne).toHaveBeenCalledWith(mockStartup.id, mockUser.id);
+    });
+
+    it('should use admin lookup for admin users', async () => {
+      const adminUser = { ...mockUser, role: UserRole.ADMIN };
+      startupService.adminFindOne.mockResolvedValueOnce(mockStartup);
+
+      const result = await controller.findOne(adminUser, mockStartup.id);
+
+      expect(result).toEqual(mockStartup);
+      expect(startupService.adminFindOne).toHaveBeenCalledWith(mockStartup.id);
+      expect(startupService.findOne).not.toHaveBeenCalled();
     });
   });
 
@@ -344,6 +357,26 @@ describe('StartupController', () => {
 
       expect(result).toEqual(progressResponse);
       expect(startupService.getProgress).toHaveBeenCalledWith(mockStartup.id, mockUser.id);
+    });
+
+    it('should use admin progress endpoint for admin users', async () => {
+      const adminUser = { ...mockUser, role: UserRole.ADMIN };
+      const progressResponse = {
+        status: StartupStatus.ANALYZING,
+        progress: {
+          overallProgress: 45,
+          currentPhase: 'research',
+          phasesCompleted: ['extraction', 'scraping'],
+          phases: {},
+        },
+      };
+      startupService.adminGetProgress.mockResolvedValueOnce(progressResponse as any);
+
+      const result = await controller.getProgress(adminUser, mockStartup.id);
+
+      expect(result).toEqual(progressResponse);
+      expect(startupService.adminGetProgress).toHaveBeenCalledWith(mockStartup.id);
+      expect(startupService.getProgress).not.toHaveBeenCalled();
     });
 
     it('should return progress with analysis data for analyzing status', async () => {

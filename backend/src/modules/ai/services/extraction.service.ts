@@ -4,7 +4,12 @@ import { eq } from "drizzle-orm";
 import { DrizzleService } from "../../../database";
 import { StorageService } from "../../../storage";
 import { startup, type Startup } from "../../startup/entities";
-import { ExtractionResult } from "../interfaces/phase-results.interface";
+import {
+  type ExtractionResult,
+  type StartupFileReference,
+  type StartupFormContext,
+  type StartupTeamMemberReference,
+} from "../interfaces/phase-results.interface";
 import { ExtractionSchema } from "../schemas";
 import { FieldExtractorService, type ExtractedFields } from "./field-extractor.service";
 import { MistralOcrService } from "./mistral-ocr.service";
@@ -50,11 +55,20 @@ export class ExtractionService {
     }
 
     const warnings: string[] = [];
-    const fallbackText = this.buildSummary(record.tagline, record.description);
+    const startupContext = this.mapStartupContext(record);
+    const fallbackText = this.buildSummary(record, startupContext);
 
     if (!record.pitchDeckPath && !record.pitchDeckUrl) {
       warnings.push("No pitch deck found; using startup form data only");
-      return this.buildResult(record, {}, fallbackText, "startup-context", 0, warnings);
+      return this.buildResult(
+        record,
+        {},
+        fallbackText,
+        startupContext,
+        "startup-context",
+        0,
+        warnings,
+      );
     }
 
     let deckUrl: string | null = null;
@@ -80,7 +94,15 @@ export class ExtractionService {
 
     if (!pdfBuffer) {
       warnings.push("Deck file is unavailable; using startup form data only");
-      return this.buildResult(record, {}, fallbackText, "startup-context", 0, warnings);
+      return this.buildResult(
+        record,
+        {},
+        fallbackText,
+        startupContext,
+        "startup-context",
+        0,
+        warnings,
+      );
     }
 
     let source: ExtractionResult["source"] = "startup-context";
@@ -120,13 +142,22 @@ export class ExtractionService {
 
     const aiFields = await this.fieldExtractor.extractFields(extractedText, record);
 
-    return this.buildResult(record, aiFields, extractedText, source, pageCount, warnings);
+    return this.buildResult(
+      record,
+      aiFields,
+      extractedText,
+      startupContext,
+      source,
+      pageCount,
+      warnings,
+    );
   }
 
   private buildResult(
     startupRecord: Startup,
     aiFields: ExtractedFields,
     rawText: string,
+    startupContext: StartupFormContext,
     source: NonNullable<ExtractionResult["source"]>,
     pageCount: number,
     warnings: string[],
@@ -151,6 +182,7 @@ export class ExtractionService {
       fundingAsk: aiFields.fundingAsk ?? startupRecord.fundingTarget,
       valuation: aiFields.valuation ?? startupRecord.valuation ?? undefined,
       rawText: this.limitText(rawText),
+      startupContext,
       source,
       pageCount: pageCount > 0 ? pageCount : undefined,
       warnings: [...new Set(warnings)].filter(Boolean),
@@ -173,9 +205,70 @@ export class ExtractionService {
     return "";
   }
 
-  private buildSummary(tagline: string, description: string): string {
-    const composed = `${tagline}. ${description}`.trim();
-    return this.limitText(composed || description || tagline || "");
+  private buildSummary(startupRecord: Startup, startupContext: StartupFormContext): string {
+    const lines: string[] = [
+      `Company: ${startupRecord.name}`,
+      `Tagline: ${startupRecord.tagline}`,
+      `Description: ${startupRecord.description}`,
+      `Industry: ${startupRecord.industry}`,
+      `Stage: ${startupRecord.stage}`,
+      `Location: ${startupRecord.location}`,
+      `Website: ${startupRecord.website}`,
+      `Funding target: ${startupRecord.fundingTarget}`,
+      `Team size: ${startupRecord.teamSize}`,
+    ];
+
+    this.addSummaryLine(lines, "Sector group", startupContext.sectorIndustryGroup);
+    this.addSummaryLine(lines, "Sector industry", startupContext.sectorIndustry);
+    this.addSummaryLine(lines, "Round currency", startupContext.roundCurrency);
+    this.addSummaryLine(lines, "Valuation", startupRecord.valuation);
+    this.addSummaryLine(lines, "Valuation known", startupContext.valuationKnown);
+    this.addSummaryLine(lines, "Valuation type", startupContext.valuationType);
+    this.addSummaryLine(lines, "Raise type", startupContext.raiseType);
+    this.addSummaryLine(lines, "Lead secured", startupContext.leadSecured);
+    this.addSummaryLine(lines, "Lead investor", startupContext.leadInvestorName);
+    this.addSummaryLine(lines, "Has previous funding", startupContext.hasPreviousFunding);
+    this.addSummaryLine(
+      lines,
+      "Previous funding amount",
+      startupContext.previousFundingAmount,
+    );
+    this.addSummaryLine(
+      lines,
+      "Previous funding currency",
+      startupContext.previousFundingCurrency,
+    );
+    this.addSummaryLine(lines, "Previous investors", startupContext.previousInvestors);
+    this.addSummaryLine(lines, "Previous round type", startupContext.previousRoundType);
+    this.addSummaryLine(lines, "TRL", startupContext.technologyReadinessLevel);
+    this.addSummaryLine(lines, "Demo URL", startupContext.demoUrl);
+    this.addSummaryLine(lines, "Demo video URL", startupContext.demoVideoUrl);
+    this.addSummaryLine(lines, "Product description", startupContext.productDescription);
+
+    if (startupContext.teamMembers && startupContext.teamMembers.length > 0) {
+      lines.push(
+        `Team members: ${startupContext.teamMembers
+          .map((member) =>
+            member.role ? `${member.name} (${member.role})` : member.name,
+          )
+          .join(", ")}`,
+      );
+    }
+
+    if (startupContext.files && startupContext.files.length > 0) {
+      lines.push(
+        `Uploaded files: ${startupContext.files
+          .map((file) => `${file.name} [${file.type}]`)
+          .join(", ")}`,
+      );
+    }
+
+    if (startupContext.productScreenshots && startupContext.productScreenshots.length > 0) {
+      lines.push(`Product screenshots: ${startupContext.productScreenshots.join(", ")}`);
+    }
+
+    const composed = lines.filter((line) => line.trim().length > 0).join("\n");
+    return this.limitText(composed);
   }
 
   private limitText(text: string): string {
@@ -214,5 +307,70 @@ export class ExtractionService {
 
   private asMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
+  }
+
+  private mapStartupContext(startupRecord: Startup): StartupFormContext {
+    const files: StartupFileReference[] | undefined =
+      startupRecord.files && startupRecord.files.length > 0
+        ? startupRecord.files.map((file) => ({
+            path: file.path,
+            name: file.name,
+            type: file.type,
+          }))
+        : undefined;
+
+    const teamMembers: StartupTeamMemberReference[] | undefined =
+      startupRecord.teamMembers && startupRecord.teamMembers.length > 0
+        ? startupRecord.teamMembers.map((member) => ({
+            name: member.name,
+            role: member.role || undefined,
+            linkedinUrl: member.linkedinUrl || undefined,
+          }))
+        : undefined;
+
+    return {
+      sectorIndustryGroup: startupRecord.sectorIndustryGroup,
+      sectorIndustry: startupRecord.sectorIndustry,
+      pitchDeckPath: startupRecord.pitchDeckPath,
+      pitchDeckUrl: startupRecord.pitchDeckUrl,
+      demoUrl: startupRecord.demoUrl,
+      logoUrl: startupRecord.logoUrl,
+      files,
+      teamMembers,
+      roundCurrency: startupRecord.roundCurrency,
+      valuationKnown: startupRecord.valuationKnown,
+      valuationType: startupRecord.valuationType,
+      raiseType: startupRecord.raiseType,
+      leadSecured: startupRecord.leadSecured,
+      leadInvestorName: startupRecord.leadInvestorName,
+      contactName: startupRecord.contactName,
+      contactEmail: startupRecord.contactEmail,
+      contactPhone: startupRecord.contactPhone,
+      contactPhoneCountryCode: startupRecord.contactPhoneCountryCode,
+      hasPreviousFunding: startupRecord.hasPreviousFunding,
+      previousFundingAmount: startupRecord.previousFundingAmount,
+      previousFundingCurrency: startupRecord.previousFundingCurrency,
+      previousInvestors: startupRecord.previousInvestors,
+      previousRoundType: startupRecord.previousRoundType,
+      technologyReadinessLevel: startupRecord.technologyReadinessLevel,
+      demoVideoUrl: startupRecord.demoVideoUrl,
+      productDescription: startupRecord.productDescription,
+      productScreenshots:
+        startupRecord.productScreenshots && startupRecord.productScreenshots.length > 0
+          ? startupRecord.productScreenshots
+          : undefined,
+    };
+  }
+
+  private addSummaryLine(
+    lines: string[],
+    label: string,
+    value: string | number | boolean | null | undefined,
+  ): void {
+    if (value === null || value === undefined || value === "") {
+      return;
+    }
+
+    lines.push(`${label}: ${String(value)}`);
   }
 }

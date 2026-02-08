@@ -15,7 +15,6 @@ export const MarketResearchAgent: ResearchAgentConfig<MarketResearch> = {
   schema: MarketResearchSchema,
   contextBuilder: ({ extraction, scraping }) => ({
     industry: extraction.industry,
-    claimedTAM: extraction.fundingAsk,
     geographicFocus: extraction.location ? [extraction.location] : [],
     companyDescription: extraction.rawText,
     targetMarket: scraping.notableClaims[0] ?? extraction.tagline,
@@ -32,7 +31,7 @@ export const MarketResearchAgent: ResearchAgentConfig<MarketResearch> = {
         `Early-stage ${extraction.industry} investment interest remains selective`,
       ],
       marketSize: {
-        tam: extraction.fundingAsk ? extraction.fundingAsk * 100 : undefined,
+        tam: undefined,
         sam: undefined,
         som: undefined,
       },

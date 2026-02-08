@@ -46,14 +46,14 @@ export class TeamEvaluationAgent extends BaseEvaluationAgent<TeamEvaluation> {
   }
 
   fallback({ extraction, scraping }: EvaluationPipelineInput): TeamEvaluation {
-    const score = 50 + scraping.teamMembers.length * 4 + stageMultiplier(extraction.stage);
+    const score = 35 + scraping.teamMembers.length * 4 + stageMultiplier(extraction.stage);
 
     return TeamEvaluationSchema.parse({
       ...baseEvaluation(score, "Team composition is adequate for the current stage"),
       founderQuality: "Founding team has domain-relevant background",
-      teamCompletion: clampScore(60 + scraping.teamMembers.length * 8),
+      teamCompletion: clampScore(45 + scraping.teamMembers.length * 8),
       executionCapability: "Execution capability appears moderate to strong",
-      founderMarketFitScore: clampScore(55 + stageMultiplier(extraction.stage)),
+      founderMarketFitScore: clampScore(40 + stageMultiplier(extraction.stage)),
       teamMembers: scraping.teamMembers.length
         ? scraping.teamMembers.map((member) => ({
             name: member.name,

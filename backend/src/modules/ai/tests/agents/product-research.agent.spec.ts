@@ -51,9 +51,9 @@ describe("ProductResearchAgent", () => {
 
     expect(Object.keys(context).sort()).toEqual([
       "demoUrl",
-      "extractedFeatures",
       "knownCompetitors",
       "productDescription",
+      "websiteHeadings",
       "websiteProductPages",
     ]);
     expect(context).not.toHaveProperty("teamMembers");

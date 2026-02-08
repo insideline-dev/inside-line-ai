@@ -2,7 +2,11 @@ import { beforeEach, describe, expect, it, jest } from "bun:test";
 import { ConfigService } from "@nestjs/config";
 import type { Job } from "bullmq";
 import { SynthesisProcessor } from "../../processors/synthesis.processor";
-import { PhaseStatus, PipelinePhase } from "../../interfaces/pipeline.interface";
+import {
+  PhaseStatus,
+  PipelinePhase,
+  PipelineStatus,
+} from "../../interfaces/pipeline.interface";
 import type { PipelineStateService } from "../../services/pipeline-state.service";
 import type { PipelineService } from "../../services/pipeline.service";
 import type { SynthesisService } from "../../services/synthesis.service";
@@ -31,6 +35,62 @@ describe("SynthesisProcessor", () => {
     } as unknown as jest.Mocked<SynthesisService>;
 
     pipelineState = {
+      get: jest.fn().mockResolvedValue({
+        pipelineRunId: "run-1",
+        startupId: "startup-1",
+        userId: "user-1",
+        status: PipelineStatus.RUNNING,
+        quality: "standard",
+        currentPhase: PipelinePhase.SYNTHESIS,
+        phases: {
+          [PipelinePhase.EXTRACTION]: { status: PhaseStatus.COMPLETED },
+          [PipelinePhase.SCRAPING]: { status: PhaseStatus.COMPLETED },
+          [PipelinePhase.RESEARCH]: { status: PhaseStatus.COMPLETED },
+          [PipelinePhase.EVALUATION]: { status: PhaseStatus.COMPLETED },
+          [PipelinePhase.SYNTHESIS]: { status: PhaseStatus.PENDING },
+        },
+        results: {},
+        retryCounts: {},
+        telemetry: {
+          startedAt: new Date().toISOString(),
+          totalTokens: { input: 0, output: 0 },
+          phases: {
+            [PipelinePhase.EXTRACTION]: {
+              phase: PipelinePhase.EXTRACTION,
+              agentCount: 0,
+              successCount: 0,
+              failedCount: 0,
+            },
+            [PipelinePhase.SCRAPING]: {
+              phase: PipelinePhase.SCRAPING,
+              agentCount: 0,
+              successCount: 0,
+              failedCount: 0,
+            },
+            [PipelinePhase.RESEARCH]: {
+              phase: PipelinePhase.RESEARCH,
+              agentCount: 0,
+              successCount: 0,
+              failedCount: 0,
+            },
+            [PipelinePhase.EVALUATION]: {
+              phase: PipelinePhase.EVALUATION,
+              agentCount: 0,
+              successCount: 0,
+              failedCount: 0,
+            },
+            [PipelinePhase.SYNTHESIS]: {
+              phase: PipelinePhase.SYNTHESIS,
+              agentCount: 0,
+              successCount: 0,
+              failedCount: 0,
+            },
+          },
+          agents: {},
+        },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }),
       updatePhase: jest.fn().mockResolvedValue(undefined),
       setPhaseResult: jest.fn().mockResolvedValue(undefined),
     } as unknown as jest.Mocked<PipelineStateService>;

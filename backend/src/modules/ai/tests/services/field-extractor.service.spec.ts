@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, jest, mock } from "bun:test";
 
-const generateObjectMock = jest.fn();
+const generateTextMock = jest.fn();
 
 mock.module("ai", () => ({
-  generateObject: generateObjectMock,
+  generateText: generateTextMock,
+  Output: { object: ({ schema }: { schema: unknown }) => schema },
 }));
 
 import { FieldExtractorService } from "../../services/field-extractor.service";
@@ -16,7 +17,7 @@ describe("FieldExtractorService", () => {
   const resolvedModel = { providerModel: "gemini-3.0-flash" };
 
   beforeEach(() => {
-    generateObjectMock.mockReset();
+    generateTextMock.mockReset();
 
     providers = {
       resolveModelForPurpose: jest.fn().mockReturnValue(resolvedModel),
@@ -29,12 +30,12 @@ describe("FieldExtractorService", () => {
     const result = await service.extractFields("   ");
 
     expect(result).toEqual({});
-    expect(generateObjectMock).not.toHaveBeenCalled();
+    expect(generateTextMock).not.toHaveBeenCalled();
   });
 
-  it("uses generateObject and returns parsed extraction fields", async () => {
-    generateObjectMock.mockResolvedValue({
-      object: {
+  it("uses generateText and returns parsed extraction fields", async () => {
+    generateTextMock.mockResolvedValue({
+      output: {
         companyName: "Inside Line",
         founderNames: ["Alex Founder"],
         industry: "SaaS",
@@ -46,13 +47,13 @@ describe("FieldExtractorService", () => {
     expect(providers.resolveModelForPurpose).toHaveBeenCalledWith(
       ModelPurpose.EXTRACTION,
     );
-    expect(generateObjectMock).toHaveBeenCalledTimes(1);
+    expect(generateTextMock).toHaveBeenCalledTimes(1);
     expect(result.companyName).toBe("Inside Line");
     expect(result.founderNames).toEqual(["Alex Founder"]);
   });
 
   it("falls back to empty extraction on model error", async () => {
-    generateObjectMock.mockRejectedValue(new Error("provider timeout"));
+    generateTextMock.mockRejectedValue(new Error("provider timeout"));
 
     const result = await service.extractFields("Pitch deck content");
 

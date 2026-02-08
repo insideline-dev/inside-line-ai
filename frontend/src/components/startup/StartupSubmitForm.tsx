@@ -219,6 +219,25 @@ function toSupportedContentType(fileType: string): GetUploadUrlDtoContentType {
   throw new Error(`Unsupported content type: ${fileType}`);
 }
 
+function normalizeOptionalText(value?: string): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function parsePositiveNumberInput(value?: string): number | undefined {
+  const normalized = value?.replace(/,/g, "").trim();
+  if (!normalized) {
+    return undefined;
+  }
+
+  const parsed = Number.parseFloat(normalized);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return undefined;
+  }
+
+  return parsed;
+}
+
 export function StartupSubmitForm({
   userRole,
   onSuccess,
@@ -426,21 +445,51 @@ export function StartupSubmitForm({
         throw new Error("Portal submission is handled in the dedicated portal form");
       }
 
-      const fundingTarget = Number.parseFloat(
-        (data.fundingTarget || "").replace(/,/g, ""),
-      );
-      if (!Number.isFinite(fundingTarget) || fundingTarget <= 0) {
+      const fundingTarget = parsePositiveNumberInput(data.fundingTarget);
+      if (fundingTarget === undefined) {
         throw new Error("Round size must be a positive number");
       }
 
-      const validTeamMembers = teamMembers.filter(
-        (m) => m.name.trim() || m.linkedinUrl.trim(),
-      );
+      const validTeamMembers = teamMembers
+        .map((member) => ({
+          name: member.name.trim(),
+          role: member.role.trim(),
+          linkedinUrl: member.linkedinUrl.trim(),
+        }))
+        .filter((member) => member.name || member.role || member.linkedinUrl);
+
+      const normalizedFiles = uploadedFiles
+        .map((file) => ({
+          path: file.path.trim(),
+          name: file.name.trim(),
+          type: file.type.trim(),
+        }))
+        .filter((file) => file.path && file.name && file.type);
+
       const pitchDeckFile =
         uploadedFiles.find(
           (file) => file.path === deckPath && isPdfFileType(file.type),
         ) ?? uploadedFiles.find((file) => isPdfFileType(file.type));
+      const pitchDeckPath =
+        deckPath && normalizedFiles.some((file) => file.path === deckPath)
+          ? deckPath
+          : getDefaultDeckPath(uploadedFiles);
       const website = data.website?.trim();
+      const valuation = parsePositiveNumberInput(data.valuation);
+      const previousFundingAmount = parsePositiveNumberInput(
+        data.previousFundingAmount,
+      );
+      const productScreenshotsToPersist = productScreenshots
+        .map((url) => url.trim())
+        .filter(Boolean);
+      const demoVideoUrl = normalizeOptionalText(data.demoVideoUrl);
+      const contactEmail = normalizeOptionalText(data.contactEmail);
+      const valuationKnown =
+        typeof data.valuationKnown === "boolean" ? data.valuationKnown : undefined;
+      const hasPreviousFunding =
+        typeof data.hasPreviousFunding === "boolean"
+          ? data.hasPreviousFunding
+          : undefined;
 
       if (!website) {
         throw new Error("Website is required");
@@ -463,9 +512,49 @@ export function StartupSubmitForm({
         stage: data.stage as CreateStartupDto["stage"],
         fundingTarget: Math.round(fundingTarget),
         teamSize: Math.max(validTeamMembers.length, 1),
+        sectorIndustryGroup: normalizeOptionalText(data.sectorIndustryGroup),
+        sectorIndustry: normalizeOptionalText(data.sectorIndustry),
         pitchDeckUrl: pitchDeckFile?.publicUrl,
-        demoUrl: data.demoVideoUrl || undefined,
-      };
+        pitchDeckPath: pitchDeckPath || undefined,
+        files: normalizedFiles.length ? normalizedFiles : undefined,
+        teamMembers: validTeamMembers.length ? validTeamMembers : undefined,
+        roundCurrency: normalizeOptionalText(data.roundCurrency) || "USD",
+        valuation,
+        valuationKnown,
+        valuationType: valuationKnown ? data.valuationType : undefined,
+        raiseType: data.raiseType,
+        leadSecured: data.leadSecured,
+        leadInvestorName: normalizeOptionalText(data.leadInvestorName),
+        contactName: normalizeOptionalText(data.contactName),
+        contactEmail,
+        contactPhone: normalizeOptionalText(data.contactPhone),
+        contactPhoneCountryCode: normalizeOptionalText(
+          data.contactPhoneCountryCode,
+        ),
+        hasPreviousFunding,
+        previousFundingAmount:
+          hasPreviousFunding === false ? undefined : previousFundingAmount,
+        previousFundingCurrency:
+          hasPreviousFunding === false
+            ? undefined
+            : normalizeOptionalText(data.previousFundingCurrency),
+        previousInvestors:
+          hasPreviousFunding === false
+            ? undefined
+            : normalizeOptionalText(data.previousInvestors),
+        previousRoundType:
+          hasPreviousFunding === false
+            ? undefined
+            : normalizeOptionalText(data.previousRoundType),
+        technologyReadinessLevel: data.technologyReadinessLevel,
+        demoVideoUrl,
+        productDescription: normalizeOptionalText(data.productDescription),
+        productScreenshots: productScreenshotsToPersist.length
+          ? productScreenshotsToPersist
+          : undefined,
+        // Keep backward-compatible field used in older flows.
+        demoUrl: demoVideoUrl,
+      } as CreateStartupDto;
 
       const createResult = await createStartupMutation.mutateAsync({
         data: createPayload,

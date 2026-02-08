@@ -36,7 +36,7 @@ export class CompetitiveAdvantageEvaluationAgent extends BaseEvaluationAgent<Com
 
   fallback({ extraction }: EvaluationPipelineInput): CompetitiveAdvantageEvaluation {
     return CompetitiveAdvantageEvaluationSchema.parse({
-      ...baseEvaluation(51 + stageMultiplier(extraction.stage) / 3, "Differentiation signal is present but moat evidence is limited"),
+      ...baseEvaluation(36 + stageMultiplier(extraction.stage) / 3, "Differentiation signal is present but moat evidence is limited"),
       moats: ["Workflow integration depth", "Execution velocity"],
       competitivePosition: "Positioned as an early category challenger",
       barriers: ["Domain expertise", "Accumulating operational know-how"],

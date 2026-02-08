@@ -1,6 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { AgentMailService } from '../agentmail.service';
 import { AttachmentService } from '../attachment.service';
 import { AgentMailClientService } from '../agentmail-client.service';
@@ -33,8 +32,6 @@ describe('AgentMailService', () => {
     inboxId: 'inbox-1',
     inboxEmail: 'test@agentmail.to',
     displayName: 'Test',
-    webhookId: null,
-    webhookUrl: null,
     isActive: true,
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -99,16 +96,12 @@ describe('AgentMailService', () => {
       listMessages: jest.fn().mockResolvedValue({ count: 0, messages: [] }),
       listThreads: jest.fn().mockResolvedValue({ count: 0, threads: [] }),
       getMessageAttachment: jest.fn().mockResolvedValue({ downloadUrl: 'https://example.com/att' }),
-      listWebhooks: jest.fn().mockResolvedValue({ count: 0, webhooks: [] }),
-      createWebhook: jest.fn().mockResolvedValue({ webhookId: 'wh-1', secret: 'sec' }),
-      deleteWebhook: jest.fn().mockResolvedValue(undefined),
     };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AgentMailService,
         { provide: DrizzleService, useValue: drizzleService },
-        { provide: ConfigService, useValue: { get: jest.fn().mockReturnValue('http://localhost:8080') } },
         { provide: NotificationService, useValue: notificationService },
         { provide: AttachmentService, useValue: attachmentService },
         { provide: AgentMailClientService, useValue: agentMailClient },
@@ -126,10 +119,8 @@ describe('AgentMailService', () => {
 
   describe('handleWebhook', () => {
     it('should process webhook with ID-only payload and fetch full message', async () => {
-      // findUserByInbox returns config
-      drizzleService.db.limit.mockResolvedValueOnce([mockConfig]);
-      // No existing thread
-      drizzleService.db.limit.mockResolvedValueOnce([]);
+      drizzleService.db.limit.mockResolvedValueOnce([mockConfig]); // findUserByInbox
+      drizzleService.db.limit.mockResolvedValueOnce([]); // no existing thread
 
       await service.handleWebhook(mockWebhookPayload);
 
@@ -350,36 +341,6 @@ describe('AgentMailService', () => {
 
       expect(result).toEqual(mockConfig);
       expect(drizzleService.db.insert).toHaveBeenCalled();
-    });
-  });
-
-  // ============ WEBHOOK MANAGEMENT ============
-
-  describe('configureWebhook', () => {
-    it('should create webhook and update config', async () => {
-      drizzleService.db.limit.mockResolvedValueOnce([mockConfig]);
-
-      const result = await service.configureWebhook('user-1');
-
-      expect(agentMailClient.createWebhook).toHaveBeenCalledWith({
-        url: 'http://localhost:8080/integrations/agentmail/webhook',
-        eventTypes: ['message.received'],
-        inboxIds: ['inbox-1'],
-      });
-      expect(result).toEqual({
-        webhookId: 'wh-1',
-        url: 'http://localhost:8080/integrations/agentmail/webhook',
-      });
-    });
-
-    it('should cleanup existing webhook before creating new one', async () => {
-      const configWithWebhook = { ...mockConfig, webhookId: 'old-wh' };
-      drizzleService.db.limit.mockResolvedValueOnce([configWithWebhook]);
-
-      await service.configureWebhook('user-1');
-
-      expect(agentMailClient.deleteWebhook).toHaveBeenCalledWith('old-wh');
-      expect(agentMailClient.createWebhook).toHaveBeenCalled();
     });
   });
 });

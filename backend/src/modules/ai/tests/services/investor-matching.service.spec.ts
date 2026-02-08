@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, jest, mock } from "bun:test";
 
-const generateObjectMock = jest.fn();
-mock.module("ai", () => ({ generateObject: generateObjectMock }));
+const generateTextMock = jest.fn();
+mock.module("ai", () => ({
+  generateText: generateTextMock,
+  Output: { object: ({ schema }: { schema: unknown }) => schema },
+}));
 
 import { StartupStage } from "../../../startup/entities";
 import type { DrizzleService } from "../../../../database";
@@ -20,7 +23,7 @@ describe("InvestorMatchingService", () => {
   const resolvedModel = { provider: "openai-model" };
 
   beforeEach(() => {
-    generateObjectMock.mockReset();
+    generateTextMock.mockReset();
 
     const candidates = createMockInvestorCandidates();
     let selectCalls = 0;
@@ -72,8 +75,8 @@ describe("InvestorMatchingService", () => {
   });
 
   it("filters investors by stage/industry/check/geography before AI alignment", async () => {
-    generateObjectMock.mockResolvedValue({
-      object: {
+    generateTextMock.mockResolvedValue({
+      output: {
         thesisFitScore: 88,
         fitRationale: "Strong fit on market and team assumptions.",
       },
@@ -95,20 +98,20 @@ describe("InvestorMatchingService", () => {
       ModelPurpose.THESIS_ALIGNMENT,
     );
     expect(result.candidatesEvaluated).toBe(2);
-    expect(generateObjectMock).toHaveBeenCalledTimes(2);
+    expect(generateTextMock).toHaveBeenCalledTimes(2);
     expect(result.matches.length).toBe(2);
   });
 
   it("does not include candidates below thesis fit threshold", async () => {
-    generateObjectMock
+    generateTextMock
       .mockResolvedValueOnce({
-        object: {
+        output: {
           thesisFitScore: 79,
           fitRationale: "Close but below threshold.",
         },
       })
       .mockResolvedValueOnce({
-        object: {
+        output: {
           thesisFitScore: 85,
           fitRationale: "Strong alignment.",
         },

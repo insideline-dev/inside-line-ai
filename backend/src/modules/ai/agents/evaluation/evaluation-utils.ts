@@ -13,10 +13,10 @@ export function baseEvaluation(
 
   return {
     score: normalized,
-    confidence: Math.max(0.2, Math.min(0.95, Number((normalized / 100).toFixed(2)))),
+    confidence: 0.15,
     keyFindings: [finding],
     risks: [],
-    dataGaps: [],
+    dataGaps: ["Evaluation failed — used heuristic fallback"],
     sources: [source],
   };
 }

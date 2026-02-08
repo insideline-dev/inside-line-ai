@@ -5,8 +5,6 @@ export const AgentMailConfigSchema = z.object({
   inboxId: z.string().min(1),
   inboxEmail: z.string().optional(),
   displayName: z.string().optional(),
-  webhookId: z.string().optional(),
-  webhookUrl: z.string().url().optional(),
   isActive: z.boolean().default(true),
 });
 

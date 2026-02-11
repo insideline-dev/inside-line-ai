@@ -51,26 +51,28 @@ export class AgentMailService {
 
   async handleWebhook(payload: AgentMailWebhook): Promise<void> {
     const webhookPayload: Record<string, unknown> = payload as unknown as Record<string, unknown>;
+    let webhookRowId: string | null = null;
 
     try {
-      await this.drizzle.db.insert(integrationWebhook).values({
-        source: WebhookSource.AGENTMAIL,
-        eventType: 'message.received',
-        payload: webhookPayload,
-        processed: false,
-      });
+      const [inserted] = await this.drizzle.db
+        .insert(integrationWebhook)
+        .values({
+          source: WebhookSource.AGENTMAIL,
+          eventType: 'message.received',
+          payload: webhookPayload,
+          processed: false,
+        })
+        .returning({ id: integrationWebhook.id });
+      webhookRowId = inserted?.id ?? null;
 
       await this.processWebhookEvent(payload);
 
-      await this.drizzle.db
-        .update(integrationWebhook)
-        .set({ processed: true })
-        .where(
-          and(
-            eq(integrationWebhook.source, WebhookSource.AGENTMAIL),
-            eq(integrationWebhook.eventType, 'message.received'),
-          ),
-        );
+      if (webhookRowId) {
+        await this.drizzle.db
+          .update(integrationWebhook)
+          .set({ processed: true })
+          .where(eq(integrationWebhook.id, webhookRowId));
+      }
 
       this.logger.log(
         `Processed webhook: message ${payload.message_id} in thread ${payload.thread_id}`,
@@ -78,15 +80,12 @@ export class AgentMailService {
     } catch (error) {
       this.logger.error(`Webhook processing failed: ${error.message}`, error);
 
-      await this.drizzle.db
-        .update(integrationWebhook)
-        .set({ processed: false, errorMessage: error.message })
-        .where(
-          and(
-            eq(integrationWebhook.source, WebhookSource.AGENTMAIL),
-            eq(integrationWebhook.eventType, 'message.received'),
-          ),
-        );
+      if (webhookRowId) {
+        await this.drizzle.db
+          .update(integrationWebhook)
+          .set({ processed: false, errorMessage: error.message })
+          .where(eq(integrationWebhook.id, webhookRowId));
+      }
 
       throw error;
     }
@@ -108,8 +107,14 @@ export class AgentMailService {
       return;
     }
 
-    // Fetch full message from SDK
-    const message = await this.agentMailClient.getMessage(inbox_id, message_id);
+    let message;
+    try {
+      message = await this.agentMailClient.getMessage(inbox_id, message_id);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to fetch message ${message_id} from SDK: ${errorMessage}`, error);
+      throw new Error(`SDK getMessage failed: ${errorMessage}`);
+    }
 
     // Find existing thread or create new one
     const [existingThread] = await this.drizzle.db
@@ -142,7 +147,6 @@ export class AgentMailService {
     // Download attachments asynchronously
     if (message.attachments && message.attachments.length > 0) {
       const attachmentDownloads = message.attachments.map((att) => ({
-        url: '',
         filename: att.filename ?? 'attachment',
         content_type: att.contentType ?? 'application/octet-stream',
         attachmentId: att.attachmentId,

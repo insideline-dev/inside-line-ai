@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable } from "@nestjs/common";
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { DrizzleService } from "../../../database";
 import {
@@ -20,11 +20,23 @@ export interface PipelineFeedbackContext {
   items: PipelineFeedback[];
 }
 
+const VALID_PHASES = new Set(Object.values(PipelinePhase));
+
+function validateStartupIdAndPhase(startupId: string, phase: PipelinePhase): void {
+  if (!startupId || typeof startupId !== "string") {
+    throw new BadRequestException(`Invalid startupId: must be a non-empty string`);
+  }
+  if (!VALID_PHASES.has(phase)) {
+    throw new BadRequestException(`Invalid phase: ${phase}`);
+  }
+}
+
 @Injectable()
 export class PipelineFeedbackService {
   constructor(private drizzle: DrizzleService) {}
 
   async record(input: RecordPipelineFeedbackInput): Promise<PipelineFeedback> {
+    validateStartupIdAndPhase(input.startupId, input.phase);
     const [created] = await this.drizzle.db
       .insert(pipelineFeedback)
       .values({
@@ -46,6 +58,7 @@ export class PipelineFeedbackService {
     agentKey?: string;
     limit?: number;
   }): Promise<PipelineFeedbackContext> {
+    validateStartupIdAndPhase(params.startupId, params.phase);
     const limit = Math.max(1, Math.min(params.limit ?? 5, 200));
     const filters = [
       eq(pipelineFeedback.startupId, params.startupId),

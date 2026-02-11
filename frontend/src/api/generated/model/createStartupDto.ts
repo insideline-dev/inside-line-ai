@@ -5,7 +5,12 @@
  * Inside Line API Documentation
  * OpenAPI spec version: 2.0
  */
+import type { CreateStartupDtoFilesItem } from './createStartupDtoFilesItem';
+import type { CreateStartupDtoRaiseType } from './createStartupDtoRaiseType';
 import type { CreateStartupDtoStage } from './createStartupDtoStage';
+import type { CreateStartupDtoTeamMembersItem } from './createStartupDtoTeamMembersItem';
+import type { CreateStartupDtoTechnologyReadinessLevel } from './createStartupDtoTechnologyReadinessLevel';
+import type { CreateStartupDtoValuationType } from './createStartupDtoValuationType';
 
 export interface CreateStartupDto {
   /**
@@ -45,6 +50,58 @@ export interface CreateStartupDto {
    * @exclusiveMinimum 0
    */
   teamSize: number;
+  /** @maxLength 200 */
+  sectorIndustryGroup?: string;
+  /** @maxLength 200 */
+  sectorIndustry?: string;
   pitchDeckUrl?: string;
+  /** @maxLength 1000 */
+  pitchDeckPath?: string;
+  /** @maxItems 20 */
+  files?: CreateStartupDtoFilesItem[];
+  /** @maxItems 50 */
+  teamMembers?: CreateStartupDtoTeamMembersItem[];
+  /**
+   * @minLength 1
+   * @maxLength 10
+   */
+  roundCurrency?: string;
+  /** @exclusiveMinimum 0 */
+  valuation?: number;
+  valuationKnown?: boolean;
+  valuationType?: CreateStartupDtoValuationType;
+  raiseType?: CreateStartupDtoRaiseType;
+  leadSecured?: boolean;
+  /** @maxLength 200 */
+  leadInvestorName?: string;
+  /** @maxLength 200 */
+  contactName?: string;
+  /**
+   * @maxLength 320
+   * @pattern ^(?!\.)(?!.*\.\.)([A-Za-z0-9_'+\-\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\-]*\.)+[A-Za-z]{2,}$
+   */
+  contactEmail?: string;
+  /** @maxLength 50 */
+  contactPhone?: string;
+  /** @maxLength 5 */
+  contactPhoneCountryCode?: string;
+  hasPreviousFunding?: boolean;
+  /** @exclusiveMinimum 0 */
+  previousFundingAmount?: number;
+  /**
+   * @minLength 1
+   * @maxLength 10
+   */
+  previousFundingCurrency?: string;
+  /** @maxLength 5000 */
+  previousInvestors?: string;
+  /** @maxLength 100 */
+  previousRoundType?: string;
+  technologyReadinessLevel?: CreateStartupDtoTechnologyReadinessLevel;
+  demoVideoUrl?: string;
+  /** @maxLength 10000 */
+  productDescription?: string;
+  /** @maxItems 20 */
+  productScreenshots?: string[];
   demoUrl?: string;
 }

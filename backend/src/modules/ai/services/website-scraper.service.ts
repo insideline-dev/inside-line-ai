@@ -1,6 +1,8 @@
 import { Injectable, Optional } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import * as cheerio from "cheerio";
+import { lookup } from "node:dns/promises";
+import { isIP } from "node:net";
 import type { WebsiteScrapedData } from "../interfaces/phase-results.interface";
 
 interface ScrapedPage {
@@ -17,6 +19,11 @@ interface ScrapedPage {
   metadata: Pick<WebsiteScrapedData["metadata"], "ogImage" | "keywords" | "author">;
 }
 
+interface ResolvedSafeUrl {
+  fetchUrl: string;
+  hostHeader: string;
+}
+
 @Injectable()
 export class WebsiteScraperService {
   private readonly maxSubpages: number;
@@ -24,14 +31,41 @@ export class WebsiteScraperService {
   private readonly maxLinksPerPage: number;
   private readonly maxPathDepth: number;
   private readonly timeoutMs: number;
+  private readonly batchDelayMs: number;
+  private readonly userAgent: string;
+
+  private static readonly DNS_TIMEOUT_MS = 5000;
+  private static readonly BLOCKED_HOSTNAMES = new Set([
+    "metadata.google.internal",
+  ]);
 
   constructor(@Optional() private config?: ConfigService) {
-    this.maxSubpages = this.config?.get<number>("SCRAPING_MAX_SUBPAGES", 20) ?? 20;
-    this.batchSize = this.config?.get<number>("SCRAPING_BATCH_SIZE", 5) ?? 5;
-    this.maxLinksPerPage =
-      this.config?.get<number>("SCRAPING_MAX_LINKS_PER_PAGE", 100) ?? 100;
-    this.maxPathDepth = this.config?.get<number>("SCRAPING_MAX_PATH_DEPTH", 4) ?? 4;
-    this.timeoutMs = this.config?.get<number>("WEBSITE_SCRAPE_TIMEOUT_MS", 30000) ?? 30000;
+    this.maxSubpages = this.validatePositiveInt(
+      this.config?.get<number>("SCRAPING_MAX_SUBPAGES", 20) ?? 20, 1, 200,
+    );
+    this.batchSize = this.validatePositiveInt(
+      this.config?.get<number>("SCRAPING_BATCH_SIZE", 5) ?? 5, 1, 50,
+    );
+    this.maxLinksPerPage = this.validatePositiveInt(
+      this.config?.get<number>("SCRAPING_MAX_LINKS_PER_PAGE", 100) ?? 100, 1, 1000,
+    );
+    this.maxPathDepth = this.validatePositiveInt(
+      this.config?.get<number>("SCRAPING_MAX_PATH_DEPTH", 4) ?? 4, 1, 20,
+    );
+    this.timeoutMs = this.validatePositiveInt(
+      this.config?.get<number>("WEBSITE_SCRAPE_TIMEOUT_MS", 30000) ?? 30000, 1000, 120000,
+    );
+    this.batchDelayMs = this.validatePositiveInt(
+      this.config?.get<number>("SCRAPING_BATCH_DELAY_MS", 500) ?? 500, 0, 10000,
+    );
+    this.userAgent = this.config?.get<string>("SCRAPER_USER_AGENT", "InsideLine-Bot/1.0") ?? "InsideLine-Bot/1.0";
+  }
+
+  private validatePositiveInt(value: number, min: number, max: number): number {
+    const clamped = Math.round(value);
+    if (!Number.isFinite(clamped) || clamped < min) return min;
+    if (clamped > max) return max;
+    return clamped;
   }
 
   async deepScrape(url: string): Promise<WebsiteScrapedData> {
@@ -152,6 +186,10 @@ export class WebsiteScraperService {
     const pages: ScrapedPage[] = [];
 
     for (let index = 0; index < urls.length; index += this.batchSize) {
+      if (index > 0 && this.batchDelayMs > 0) {
+        await new Promise<void>((resolve) => setTimeout(resolve, this.batchDelayMs));
+      }
+
       const batch = urls.slice(index, index + this.batchSize);
       const settled = await Promise.allSettled(
         batch.map((url) => this.fetchAndParsePage(url, true)),
@@ -171,66 +209,78 @@ export class WebsiteScraperService {
     pageUrl: string,
     tolerateErrors = false,
   ): Promise<ScrapedPage> {
-    const response = await fetch(pageUrl, {
-      headers: { "User-Agent": "InsideLine-Bot/1.0" },
-      redirect: "follow",
-      signal: AbortSignal.timeout(this.timeoutMs),
-    });
+    const { fetchUrl, hostHeader } = await this.assertSafeUrl(pageUrl);
 
-    if (!response.ok) {
-      if (tolerateErrors) {
-        throw new Error(`HTTP ${response.status}`);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+
+    try {
+      const response = await fetch(fetchUrl, {
+        headers: {
+          "User-Agent": this.userAgent,
+          Host: hostHeader,
+        },
+        redirect: "follow",
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        if (tolerateErrors) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        throw new Error(`Unable to scrape ${pageUrl}: HTTP ${response.status}`);
       }
-      throw new Error(`Unable to scrape ${pageUrl}: HTTP ${response.status}`);
+
+      const html = await response.text();
+      const $ = cheerio.load(html);
+
+      const title =
+        $("title").text().trim() ||
+        $('meta[property="og:title"]').attr("content")?.trim() ||
+        "";
+      const description =
+        $('meta[name="description"]').attr("content")?.trim() ||
+        $('meta[property="og:description"]').attr("content")?.trim() ||
+        "";
+
+      const headings = $("h1, h2, h3, h4, h5, h6")
+        .toArray()
+        .map((node) => $(node).text().replace(/\s+/g, " ").trim())
+        .filter(Boolean);
+
+      const links = $("a[href]")
+        .toArray()
+        .map((node) => {
+          const href = $(node).attr("href")?.trim() ?? "";
+          const text = $(node).text().replace(/\s+/g, " ").trim();
+          const normalized = this.resolveLink(href, pageUrl);
+          return normalized ? { url: normalized, text } : null;
+        })
+        .filter((entry): entry is { url: string; text: string } => Boolean(entry))
+        .slice(0, this.maxLinksPerPage);
+
+      const content = $("body").text().replace(/\s+/g, " ").trim();
+
+      return {
+        url: this.normalizeUrl(pageUrl, pageUrl.endsWith("/")),
+        title,
+        description,
+        content,
+        headings,
+        links,
+        teamBios: this.extractTeamBios($),
+        pricing: this.extractPricing($),
+        customerLogos: this.extractCustomerLogos($, pageUrl),
+        testimonials: this.extractTestimonials($),
+        metadata: {
+          ogImage: $('meta[property="og:image"]').attr("content")?.trim(),
+          keywords: $('meta[name="keywords"]').attr("content")?.trim(),
+          author: $('meta[name="author"]').attr("content")?.trim(),
+        },
+      };
+    } finally {
+      clearTimeout(timer);
     }
-
-    const html = await response.text();
-    const $ = cheerio.load(html);
-
-    const title =
-      $("title").text().trim() ||
-      $('meta[property="og:title"]').attr("content")?.trim() ||
-      "";
-    const description =
-      $('meta[name="description"]').attr("content")?.trim() ||
-      $('meta[property="og:description"]').attr("content")?.trim() ||
-      "";
-
-    const headings = $("h1, h2, h3, h4, h5, h6")
-      .toArray()
-      .map((node) => $(node).text().replace(/\s+/g, " ").trim())
-      .filter(Boolean);
-
-    const links = $("a[href]")
-      .toArray()
-      .map((node) => {
-        const href = $(node).attr("href")?.trim() ?? "";
-        const text = $(node).text().replace(/\s+/g, " ").trim();
-        const normalized = this.resolveLink(href, pageUrl);
-        return normalized ? { url: normalized, text } : null;
-      })
-      .filter((entry): entry is { url: string; text: string } => Boolean(entry))
-      .slice(0, this.maxLinksPerPage);
-
-    const content = $("body").text().replace(/\s+/g, " ").trim();
-
-    return {
-      url: this.normalizeUrl(pageUrl, pageUrl.endsWith("/")),
-      title,
-      description,
-      content,
-      headings,
-      links,
-      teamBios: this.extractTeamBios($),
-      pricing: this.extractPricing($),
-      customerLogos: this.extractCustomerLogos($, pageUrl),
-      testimonials: this.extractTestimonials($),
-      metadata: {
-        ogImage: $('meta[property="og:image"]').attr("content")?.trim(),
-        keywords: $('meta[name="keywords"]').attr("content")?.trim(),
-        author: $('meta[name="author"]').attr("content")?.trim(),
-      },
-    };
   }
 
   private extractTeamBios($: cheerio.CheerioAPI): WebsiteScrapedData["teamBios"] {
@@ -409,6 +459,98 @@ export class WebsiteScraperService {
       parsed.pathname = "/";
     }
     return parsed.toString();
+  }
+
+  private async assertSafeUrl(url: string): Promise<ResolvedSafeUrl> {
+    const parsed = new URL(url);
+    const protocol = parsed.protocol.toLowerCase();
+    if (protocol !== "http:" && protocol !== "https:") {
+      throw new Error(`Unsupported URL protocol: ${parsed.protocol}`);
+    }
+
+    const hostname = parsed.hostname.toLowerCase();
+    if (
+      hostname === "localhost" ||
+      hostname.endsWith(".localhost") ||
+      hostname.endsWith(".local") ||
+      WebsiteScraperService.BLOCKED_HOSTNAMES.has(hostname)
+    ) {
+      throw new Error(`Unsafe hostname blocked: ${parsed.hostname}`);
+    }
+
+    const literalIpVersion = isIP(hostname);
+    if (literalIpVersion > 0) {
+      if (this.isPrivateIp(hostname)) {
+        throw new Error(`Unsafe IP blocked: ${hostname}`);
+      }
+      return { fetchUrl: url, hostHeader: hostname };
+    }
+
+    const resolved = await this.dnsLookupWithTimeout(hostname);
+    const safeAddress = resolved.find((entry) => !this.isPrivateIp(entry.address));
+
+    if (!safeAddress) {
+      throw new Error(`Unsafe DNS target blocked for host: ${parsed.hostname}`);
+    }
+
+    const pinnedUrl = new URL(url);
+    pinnedUrl.hostname = safeAddress.address;
+
+    return {
+      fetchUrl: pinnedUrl.toString(),
+      hostHeader: hostname,
+    };
+  }
+
+  private async dnsLookupWithTimeout(
+    hostname: string,
+  ): Promise<Array<{ address: string; family: number }>> {
+    const result = await Promise.race([
+      lookup(hostname, { all: true }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`DNS lookup timed out for ${hostname}`)), WebsiteScraperService.DNS_TIMEOUT_MS),
+      ),
+    ]);
+    return result;
+  }
+
+  private isPrivateIp(address: string): boolean {
+    const ipVersion = isIP(address);
+    if (ipVersion === 4) {
+      return this.isPrivateIpv4(address);
+    }
+    if (ipVersion === 6) {
+      return this.isPrivateIpv6(address);
+    }
+    return false;
+  }
+
+  private isPrivateIpv4(address: string): boolean {
+    const octets = address.split(".").map((part) => Number(part));
+    if (octets.length !== 4 || octets.some((value) => !Number.isInteger(value))) {
+      return false;
+    }
+    const [a, b] = octets;
+    return (
+      a === 10 ||
+      a === 127 ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) ||
+      (a === 0) ||
+      (a >= 224)
+    );
+  }
+
+  private isPrivateIpv6(address: string): boolean {
+    const normalized = address.toLowerCase();
+    return (
+      normalized === "::1" ||
+      normalized.startsWith("fe80:") ||
+      normalized.startsWith("fc") ||
+      normalized.startsWith("fd") ||
+      normalized.startsWith("::ffff:127.")
+    );
   }
 
   private getPriorityScore(pathname: string): number {

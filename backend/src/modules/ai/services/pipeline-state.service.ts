@@ -1,6 +1,5 @@
 import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import Redis from "ioredis";
 import { customAlphabet } from "nanoid";
 import { z } from "zod";
 import {
@@ -13,6 +12,7 @@ import {
   PipelineStatus,
 } from "../interfaces/pipeline.interface";
 import { AI_PIPELINE_REDIS_KEY_PREFIX } from "../ai.config";
+import { RedisFallbackClient } from "./redis-fallback.service";
 
 const nanoid = customAlphabet("abcdefghijklmnopqrstuvwxyz0123456789", 16);
 
@@ -72,29 +72,21 @@ const PipelineStateSchema = z.object({
 @Injectable()
 export class PipelineStateService implements OnModuleDestroy {
   private readonly logger = new Logger(PipelineStateService.name);
-  private redis: Redis | null = null;
-  private readonly redisUrl: string;
-  private readonly redisRecoveryIntervalMs: number;
-  private readonly maxMemoryEntries: number;
-  private useMemory = false;
-  private reconnectInFlight = false;
-  private lastRecoveryAttemptAt = 0;
-  private readonly memoryStore = new Map<
-    string,
-    { state: PipelineState; expiresAt: number }
-  >();
+  private readonly redisClient: RedisFallbackClient;
 
   constructor(private config: ConfigService) {
-    this.redisUrl = this.config.get<string>("REDIS_URL", "redis://localhost:6379");
-    this.redisRecoveryIntervalMs = this.config.get<number>(
-      "AI_PIPELINE_REDIS_RECOVERY_INTERVAL_MS",
-      30_000,
-    );
-    this.maxMemoryEntries = this.config.get<number>(
-      "AI_PIPELINE_MEMORY_MAX_ENTRIES",
-      2000,
-    );
-    this.initializeRedis();
+    this.redisClient = new RedisFallbackClient({
+      redisUrl: this.config.get<string>("REDIS_URL", "redis://localhost:6379"),
+      recoveryIntervalMs: this.config.get<number>(
+        "AI_PIPELINE_REDIS_RECOVERY_INTERVAL_MS",
+        30_000,
+      ),
+      maxMemoryEntries: this.config.get<number>(
+        "AI_PIPELINE_MEMORY_MAX_ENTRIES",
+        2000,
+      ),
+      loggerContext: "PipelineStateRedis",
+    });
   }
 
   async init(
@@ -242,6 +234,19 @@ export class PipelineStateService implements OnModuleDestroy {
     await this.persist(current);
   }
 
+  async setPipelineRunId(startupId: string, pipelineRunId: string): Promise<void> {
+    const current = await this.requireState(startupId);
+    const now = new Date().toISOString();
+    current.pipelineRunId = pipelineRunId;
+    current.status = PipelineStatus.RUNNING;
+    current.quality = "standard";
+    current.telemetry.startedAt = now;
+    current.telemetry.completedAt = undefined;
+    current.telemetry.totalDurationMs = undefined;
+    current.updatedAt = now;
+    await this.persist(current);
+  }
+
   async clearPhaseResult(startupId: string, phase: PipelinePhase): Promise<void> {
     const current = await this.requireState(startupId);
     delete current.results[phase];
@@ -334,53 +339,11 @@ export class PipelineStateService implements OnModuleDestroy {
   }
 
   async clear(startupId: string): Promise<void> {
-    const key = this.getKey(startupId);
-    this.memoryStore.delete(key);
-
-    if (!this.useMemory && this.redis) {
-      try {
-        await this.redis.del(key);
-      } catch (error) {
-        this.logger.warn(
-          `Failed to clear Redis pipeline state for startup ${startupId}: ${String(error)}`,
-        );
-      }
-    }
+    await this.redisClient.del(this.getKey(startupId));
   }
 
   async onModuleDestroy() {
-    if (this.redis) {
-      await this.redis.quit().catch(() => undefined);
-    }
-  }
-
-  private initializeRedis() {
-    try {
-      const redis = new Redis(this.redisUrl, {
-        lazyConnect: true,
-        maxRetriesPerRequest: 1,
-        retryStrategy: () => null,
-      });
-
-      redis
-        .connect()
-        .then(() => {
-          this.redis = redis;
-          this.useMemory = false;
-          this.logger.log("Pipeline state Redis connected");
-        })
-        .catch((error) => {
-          this.markRedisUnavailable(
-            `initial connect failed: ${String(error)}`,
-          );
-        });
-
-      redis.on("error", (error) => {
-        this.markRedisUnavailable(`redis error: ${String(error)}`);
-      });
-    } catch {
-      this.markRedisUnavailable("redis init failed");
-    }
+    await this.redisClient.destroy();
   }
 
   private createInitialPhases(): Record<PipelinePhase, PhaseResult> {
@@ -403,28 +366,15 @@ export class PipelineStateService implements OnModuleDestroy {
 
   private async read(startupId: string): Promise<PipelineState | null> {
     const key = this.getKey(startupId);
+    const json = await this.redisClient.get(key);
+    if (!json) return null;
 
-    if (this.useMemory) {
-      void this.attemptRedisRecovery();
+    const parsed = PipelineStateSchema.safeParse(JSON.parse(json));
+    if (!parsed.success) {
+      this.logger.warn(`Corrupt pipeline state for ${key}: ${parsed.error.message}`);
+      return null;
     }
-
-    if (this.useMemory || !this.redis) {
-      return this.readMemory(key);
-    }
-
-    try {
-      const json = await this.redis.get(key);
-      if (!json) return null;
-      const parsed = PipelineStateSchema.safeParse(JSON.parse(json));
-      if (!parsed.success) {
-        this.logger.warn(`Corrupt pipeline state in Redis for ${key}: ${parsed.error.message}`);
-        return null;
-      }
-      return parsed.data as PipelineState;
-    } catch (error) {
-      this.markRedisUnavailable(`redis read failed: ${String(error)}`);
-      return this.readMemory(key);
-    }
+    return parsed.data as PipelineState;
   }
 
   private async requireState(startupId: string): Promise<PipelineState> {
@@ -438,109 +388,6 @@ export class PipelineStateService implements OnModuleDestroy {
 
   private async persist(state: PipelineState): Promise<void> {
     const key = this.getKey(state.startupId);
-    this.writeMemory(key, state);
-
-    if (this.useMemory) {
-      void this.attemptRedisRecovery();
-    }
-
-    if (this.useMemory || !this.redis) {
-      return;
-    }
-
-    try {
-      await this.redis.set(
-        key,
-        JSON.stringify(state),
-        "EX",
-        this.getTtlSeconds(),
-      );
-    } catch (error) {
-      this.markRedisUnavailable(`redis write failed: ${String(error)}`);
-    }
-  }
-
-  private writeMemory(key: string, state: PipelineState): void {
-    if (this.memoryStore.has(key)) {
-      this.memoryStore.delete(key);
-    }
-
-    this.memoryStore.set(key, {
-      state,
-      expiresAt: Date.now() + this.getTtlSeconds() * 1000,
-    });
-    this.evictMemoryIfNeeded();
-  }
-
-  private readMemory(key: string): PipelineState | null {
-    const entry = this.memoryStore.get(key);
-    if (!entry) {
-      return null;
-    }
-
-    if (entry.expiresAt <= Date.now()) {
-      this.memoryStore.delete(key);
-      return null;
-    }
-
-    // touch for LRU
-    this.memoryStore.delete(key);
-    this.memoryStore.set(key, entry);
-    return entry.state;
-  }
-
-  private evictMemoryIfNeeded(): void {
-    while (this.memoryStore.size > this.maxMemoryEntries) {
-      const oldestKey = this.memoryStore.keys().next().value as string | undefined;
-      if (!oldestKey) {
-        return;
-      }
-      this.memoryStore.delete(oldestKey);
-    }
-  }
-
-  private markRedisUnavailable(reason: string): void {
-    if (!this.useMemory) {
-      this.logger.warn(`Pipeline state using memory fallback: ${reason}`);
-    }
-    this.useMemory = true;
-  }
-
-  private async attemptRedisRecovery(): Promise<void> {
-    if (!this.useMemory || this.reconnectInFlight) {
-      return;
-    }
-
-    const now = Date.now();
-    if (now - this.lastRecoveryAttemptAt < this.redisRecoveryIntervalMs) {
-      return;
-    }
-    this.lastRecoveryAttemptAt = now;
-    this.reconnectInFlight = true;
-
-    try {
-      if (this.redis) {
-        await this.redis.quit().catch(() => undefined);
-        this.redis = null;
-      }
-
-      const redis = new Redis(this.redisUrl, {
-        lazyConnect: true,
-        maxRetriesPerRequest: 1,
-        retryStrategy: () => null,
-      });
-      redis.on("error", (error) => {
-        this.markRedisUnavailable(`redis error: ${String(error)}`);
-      });
-      await redis.connect();
-      this.redis = redis;
-      this.useMemory = false;
-      this.logger.log("Pipeline state Redis recovered");
-    } catch (error) {
-      this.logger.warn(`Pipeline state Redis recovery failed: ${String(error)}`);
-      this.useMemory = true;
-    } finally {
-      this.reconnectInFlight = false;
-    }
+    await this.redisClient.set(key, JSON.stringify(state), this.getTtlSeconds());
   }
 }

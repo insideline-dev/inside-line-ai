@@ -5,9 +5,10 @@ import {
   type BusinessModelEvaluation,
 } from "../../schemas";
 import { AiConfigService } from "../../services/ai-config.service";
+import { AiPromptService } from "../../services/ai-prompt.service";
 import { AiProviderService } from "../../providers/ai-provider.service";
 import { BaseEvaluationAgent } from "./base-evaluation.agent";
-import { baseEvaluation, fundingScore } from "./evaluation-utils";
+import { baseEvaluation } from "./evaluation-utils";
 
 @Injectable()
 export class BusinessModelEvaluationAgent extends BaseEvaluationAgent<BusinessModelEvaluation> {
@@ -16,8 +17,8 @@ export class BusinessModelEvaluationAgent extends BaseEvaluationAgent<BusinessMo
   protected readonly systemPrompt =
     "You are a startup investment analyst evaluating business model quality and scalability.";
 
-  constructor(providers: AiProviderService, aiConfig: AiConfigService) {
-    super(providers, aiConfig);
+  constructor(providers: AiProviderService, aiConfig: AiConfigService, promptService: AiPromptService) {
+    super(providers, aiConfig, promptService);
   }
 
   buildContext({ extraction, scraping }: EvaluationPipelineInput) {
@@ -43,7 +44,7 @@ export class BusinessModelEvaluationAgent extends BaseEvaluationAgent<BusinessMo
 
   fallback({ extraction }: EvaluationPipelineInput): BusinessModelEvaluation {
     return BusinessModelEvaluationSchema.parse({
-      ...baseEvaluation(37 + fundingScore(extraction.fundingAsk ?? 0) / 10, "Business model clarity is moderate"),
+      ...baseEvaluation(22, "Business model evaluation incomplete — requires manual review"),
       revenueStreams: ["Subscription", "Service add-ons"],
       unitEconomics: "Unit economics assumptions are preliminary",
       scalability: "Model scales with increased automation and channel leverage",

@@ -5,9 +5,10 @@ import {
   type ExitPotentialEvaluation,
 } from "../../schemas";
 import { AiConfigService } from "../../services/ai-config.service";
+import { AiPromptService } from "../../services/ai-prompt.service";
 import { AiProviderService } from "../../providers/ai-provider.service";
 import { BaseEvaluationAgent } from "./base-evaluation.agent";
-import { baseEvaluation, stageMultiplier } from "./evaluation-utils";
+import { baseEvaluation } from "./evaluation-utils";
 
 @Injectable()
 export class ExitPotentialEvaluationAgent extends BaseEvaluationAgent<ExitPotentialEvaluation> {
@@ -16,8 +17,8 @@ export class ExitPotentialEvaluationAgent extends BaseEvaluationAgent<ExitPotent
   protected readonly systemPrompt =
     "You are a startup investment analyst evaluating long-term exit scenarios and return potential.";
 
-  constructor(providers: AiProviderService, aiConfig: AiConfigService) {
-    super(providers, aiConfig);
+  constructor(providers: AiProviderService, aiConfig: AiConfigService, promptService: AiPromptService) {
+    super(providers, aiConfig, promptService);
   }
 
   buildContext({ extraction, research }: EvaluationPipelineInput) {
@@ -51,7 +52,7 @@ export class ExitPotentialEvaluationAgent extends BaseEvaluationAgent<ExitPotent
 
   fallback({ extraction }: EvaluationPipelineInput): ExitPotentialEvaluation {
     return ExitPotentialEvaluationSchema.parse({
-      ...baseEvaluation(38 + stageMultiplier(extraction.stage) / 2, "Exit potential is plausible with execution upside"),
+      ...baseEvaluation(20, "Exit potential evaluation incomplete — requires manual review"),
       exitScenarios: ["Strategic acquisition", "Secondary-led growth exit"],
       acquirers: ["Category incumbent", "Platform consolidator"],
       exitTimeline: "5-8 years",

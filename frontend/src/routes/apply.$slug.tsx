@@ -176,14 +176,17 @@ function PublicApplyPage() {
                     />
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="location">Location *</Label>
+                    <Label htmlFor="location">City / Location *</Label>
                     <Input
                       id="location"
-                      placeholder="e.g., San Francisco, CA"
+                      placeholder="e.g., Cairo, Egypt"
                       maxLength={200}
                       value={formData.location || ""}
                       onChange={(e) => setFormData({ ...formData, location: e.target.value })}
                     />
+                    <p className="text-xs text-muted-foreground">
+                      We map this automatically to investor geography levels.
+                    </p>
                   </div>
                 </div>
 

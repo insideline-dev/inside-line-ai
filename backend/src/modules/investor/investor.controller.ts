@@ -63,6 +63,11 @@ export class InvestorController {
 
   // ============ THESIS ENDPOINTS ============
 
+  @Get('geography-taxonomy')
+  getGeographyTaxonomy() {
+    return this.thesisService.getGeographyTaxonomy();
+  }
+
   @Get('thesis')
   async getThesis(@CurrentUser() user: User) {
     return this.thesisService.findOne(user.id);

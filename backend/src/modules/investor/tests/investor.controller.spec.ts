@@ -91,6 +91,7 @@ describe('InvestorController', () => {
             findOne: jest.fn(),
             upsert: jest.fn(),
             delete: jest.fn(),
+            getGeographyTaxonomy: jest.fn(),
           },
         },
         {
@@ -166,6 +167,32 @@ describe('InvestorController', () => {
   });
 
   describe('Thesis endpoints', () => {
+    describe('GET /investor/geography-taxonomy', () => {
+      it('should return geography taxonomy metadata', async () => {
+        const taxonomy = {
+          version: '2026-02-09',
+          levels: 3,
+          nodes: [
+            {
+              id: 'l1:mena',
+              label: 'MENA',
+              level: 1,
+              children: [
+                { id: 'l2:gcc', label: 'GCC', level: 2 },
+              ],
+            },
+          ],
+        };
+
+        thesisService.getGeographyTaxonomy.mockReturnValue(taxonomy);
+
+        const result = await controller.getGeographyTaxonomy();
+
+        expect(result).toEqual(taxonomy);
+        expect(thesisService.getGeographyTaxonomy).toHaveBeenCalled();
+      });
+    });
+
     describe('GET /investor/thesis', () => {
       it('should return thesis', async () => {
         thesisService.findOne.mockResolvedValue(mockThesis);

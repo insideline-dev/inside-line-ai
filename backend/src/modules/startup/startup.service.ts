@@ -32,6 +32,7 @@ import {
   startupEvaluation,
   type StartupEvaluation,
 } from "../analysis/entities/analysis.schema";
+import { deriveStartupGeography } from "../geography";
 
 function escapeIlike(input: string): string {
   return input.replace(/[%_\\]/g, (ch) => `\\${ch}`).slice(0, 200);
@@ -91,6 +92,7 @@ export class StartupService {
   async create(userId: string, dto: CreateStartup) {
     return this.drizzle.withRLS(userId, async (db) => {
       const slug = this.generateSlug(dto.name);
+      const geography = deriveStartupGeography(dto.location);
 
       const [created] = await db
         .insert(startup)
@@ -98,6 +100,12 @@ export class StartupService {
           userId,
           slug,
           ...dto,
+          normalizedRegion: geography.normalizedRegion,
+          geoCountryCode: geography.countryCode,
+          geoLevel1: geography.level1,
+          geoLevel2: geography.level2,
+          geoLevel3: geography.level3,
+          geoPath: geography.path,
           status: StartupStatus.DRAFT,
         })
         .returning();
@@ -205,10 +213,24 @@ export class StartupService {
         );
       }
 
+      const geographyUpdate = dto.location
+        ? deriveStartupGeography(dto.location)
+        : null;
+
       const [updated] = await db
         .update(startup)
         .set({
           ...dto,
+          ...(geographyUpdate
+            ? {
+                normalizedRegion: geographyUpdate.normalizedRegion,
+                geoCountryCode: geographyUpdate.countryCode,
+                geoLevel1: geographyUpdate.level1,
+                geoLevel2: geographyUpdate.level2,
+                geoLevel3: geographyUpdate.level3,
+                geoPath: geographyUpdate.path,
+              }
+            : {}),
           updatedAt: new Date(),
         })
         .where(eq(startup.id, id))
@@ -511,10 +533,24 @@ export class StartupService {
       throw new NotFoundException(`Startup with ID ${id} not found`);
     }
 
+    const geographyUpdate = dto.location
+      ? deriveStartupGeography(dto.location)
+      : null;
+
     const [updated] = await this.drizzle.db
       .update(startup)
       .set({
         ...dto,
+        ...(geographyUpdate
+          ? {
+              normalizedRegion: geographyUpdate.normalizedRegion,
+              geoCountryCode: geographyUpdate.countryCode,
+              geoLevel1: geographyUpdate.level1,
+              geoLevel2: geographyUpdate.level2,
+              geoLevel3: geographyUpdate.level3,
+              geoPath: geographyUpdate.path,
+            }
+          : {}),
         updatedAt: new Date(),
       })
       .where(eq(startup.id, id))

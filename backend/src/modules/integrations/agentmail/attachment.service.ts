@@ -67,7 +67,6 @@ export class AttachmentService {
       content_type: string;
       inboxId: string;
       messageId: string;
-      url: string;
     }>,
     client: AgentMailClientService,
   ): Promise<string[]> {

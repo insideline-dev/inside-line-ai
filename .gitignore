@@ -68,6 +68,8 @@ Thumbs.db
 *.sqlite3
 .turso/
 drizzle/
+!backend/drizzle/
+!backend/drizzle/**
 
 # TanStack Router
 .tanstack/

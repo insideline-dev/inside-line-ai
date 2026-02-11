@@ -20,6 +20,7 @@ import {
   TractionEvaluationAgent,
 } from "./agents/evaluation";
 import { AiConfigService } from "./services/ai-config.service";
+import { AiPromptService } from "./services/ai-prompt.service";
 import {
   EvaluationProcessor,
   ExtractionProcessor,
@@ -45,7 +46,7 @@ import { ResearchService } from "./services/research.service";
 import { ScoreComputationService } from "./services/score-computation.service";
 import { ScrapingCacheService } from "./services/scraping-cache.service";
 import { ScrapingService } from "./services/scraping.service";
-import { SynthesisAgentService } from "./services/synthesis-agent.service";
+import { SynthesisAgent } from "./agents/synthesis";
 import { SynthesisService } from "./services/synthesis.service";
 import { WebsiteScraperService } from "./services/website-scraper.service";
 
@@ -62,6 +63,7 @@ import { WebsiteScraperService } from "./services/website-scraper.service";
   providers: [
     AiProviderService,
     AiConfigService,
+    AiPromptService,
     PipelineStateService,
     PipelineFeedbackService,
     PipelineService,
@@ -75,7 +77,7 @@ import { WebsiteScraperService } from "./services/website-scraper.service";
     LinkedinEnrichmentService,
     ScrapingCacheService,
     ResearchService,
-    SynthesisAgentService,
+    SynthesisAgent,
     ScoreComputationService,
     LocationNormalizerService,
     InvestorMatchingService,
@@ -103,6 +105,7 @@ import { WebsiteScraperService } from "./services/website-scraper.service";
   exports: [
     AiProviderService,
     AiConfigService,
+    AiPromptService,
     PipelineStateService,
     PipelineFeedbackService,
     PipelineService,

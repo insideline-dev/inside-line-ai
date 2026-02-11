@@ -39,12 +39,25 @@ describe("TeamEvaluationSchema", () => {
     ).toThrow();
   });
 
-  it("requires teamMembers", () => {
-    expect(() =>
-      TeamEvaluationSchema.parse({
-        ...valid,
-        teamMembers: [],
-      }),
-    ).toThrow();
+  it("defaults teamMembers to empty array when omitted", () => {
+    const { teamMembers: _, ...withoutMembers } = valid;
+    const parsed = TeamEvaluationSchema.parse(withoutMembers);
+    expect(parsed.teamMembers).toEqual([]);
+  });
+
+  it("defaults nested arrays in teamMembers", () => {
+    const parsed = TeamEvaluationSchema.parse({
+      ...valid,
+      teamMembers: [
+        {
+          name: "Alice",
+          role: "CTO",
+          background: "Ex-Meta",
+        },
+      ],
+    });
+
+    expect(parsed.teamMembers[0]?.strengths).toEqual([]);
+    expect(parsed.teamMembers[0]?.concerns).toEqual([]);
   });
 });

@@ -15,6 +15,7 @@ import {
   ScoutSubmission,
 } from './entities/scout.schema';
 import { startup, StartupStatus } from '../startup/entities/startup.schema';
+import { deriveStartupGeography } from '../geography';
 import type { ScoutSubmitStartup, GetSubmissionsQuery } from './dto';
 
 export type PaginatedSubmissions = {
@@ -69,6 +70,7 @@ export class SubmissionService {
 
     return this.drizzle.db.transaction(async (tx) => {
       const slug = this.generateSlug(dto.startupData.name);
+      const geography = deriveStartupGeography(dto.startupData.location);
 
       const [createdStartup] = await tx
         .insert(startup)
@@ -76,6 +78,12 @@ export class SubmissionService {
           userId: scoutId,
           slug,
           ...dto.startupData,
+          normalizedRegion: geography.normalizedRegion,
+          geoCountryCode: geography.countryCode,
+          geoLevel1: geography.level1,
+          geoLevel2: geography.level2,
+          geoLevel3: geography.level3,
+          geoPath: geography.path,
           status: StartupStatus.SUBMITTED,
           submittedAt: new Date(),
         })

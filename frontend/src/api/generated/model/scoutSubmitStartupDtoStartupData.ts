@@ -5,7 +5,12 @@
  * Inside Line API Documentation
  * OpenAPI spec version: 2.0
  */
+import type { ScoutSubmitStartupDtoStartupDataFilesItem } from './scoutSubmitStartupDtoStartupDataFilesItem';
+import type { ScoutSubmitStartupDtoStartupDataRaiseType } from './scoutSubmitStartupDtoStartupDataRaiseType';
 import type { ScoutSubmitStartupDtoStartupDataStage } from './scoutSubmitStartupDtoStartupDataStage';
+import type { ScoutSubmitStartupDtoStartupDataTeamMembersItem } from './scoutSubmitStartupDtoStartupDataTeamMembersItem';
+import type { ScoutSubmitStartupDtoStartupDataTechnologyReadinessLevel } from './scoutSubmitStartupDtoStartupDataTechnologyReadinessLevel';
+import type { ScoutSubmitStartupDtoStartupDataValuationType } from './scoutSubmitStartupDtoStartupDataValuationType';
 
 export type ScoutSubmitStartupDtoStartupData = {
   /**
@@ -45,6 +50,58 @@ export type ScoutSubmitStartupDtoStartupData = {
    * @exclusiveMinimum 0
    */
   teamSize: number;
+  /** @maxLength 200 */
+  sectorIndustryGroup?: string;
+  /** @maxLength 200 */
+  sectorIndustry?: string;
   pitchDeckUrl?: string;
+  /** @maxLength 1000 */
+  pitchDeckPath?: string;
+  /** @maxItems 20 */
+  files?: ScoutSubmitStartupDtoStartupDataFilesItem[];
+  /** @maxItems 50 */
+  teamMembers?: ScoutSubmitStartupDtoStartupDataTeamMembersItem[];
+  /**
+   * @minLength 1
+   * @maxLength 10
+   */
+  roundCurrency?: string;
+  /** @exclusiveMinimum 0 */
+  valuation?: number;
+  valuationKnown?: boolean;
+  valuationType?: ScoutSubmitStartupDtoStartupDataValuationType;
+  raiseType?: ScoutSubmitStartupDtoStartupDataRaiseType;
+  leadSecured?: boolean;
+  /** @maxLength 200 */
+  leadInvestorName?: string;
+  /** @maxLength 200 */
+  contactName?: string;
+  /**
+   * @maxLength 320
+   * @pattern ^(?!\.)(?!.*\.\.)([A-Za-z0-9_'+\-\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\-]*\.)+[A-Za-z]{2,}$
+   */
+  contactEmail?: string;
+  /** @maxLength 50 */
+  contactPhone?: string;
+  /** @maxLength 5 */
+  contactPhoneCountryCode?: string;
+  hasPreviousFunding?: boolean;
+  /** @exclusiveMinimum 0 */
+  previousFundingAmount?: number;
+  /**
+   * @minLength 1
+   * @maxLength 10
+   */
+  previousFundingCurrency?: string;
+  /** @maxLength 5000 */
+  previousInvestors?: string;
+  /** @maxLength 100 */
+  previousRoundType?: string;
+  technologyReadinessLevel?: ScoutSubmitStartupDtoStartupDataTechnologyReadinessLevel;
+  demoVideoUrl?: string;
+  /** @maxLength 10000 */
+  productDescription?: string;
+  /** @maxItems 20 */
+  productScreenshots?: string[];
   demoUrl?: string;
 };

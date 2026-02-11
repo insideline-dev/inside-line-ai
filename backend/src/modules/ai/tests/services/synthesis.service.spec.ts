@@ -3,11 +3,10 @@ import { PipelinePhase } from "../../interfaces/pipeline.interface";
 import type { DrizzleService } from "../../../../database";
 import type { NotificationService } from "../../../../notification/notification.service";
 import type { PipelineStateService } from "../../services/pipeline-state.service";
-import type { SynthesisAgentService } from "../../services/synthesis-agent.service";
+import type { SynthesisAgent } from "../../agents/synthesis";
 import type { ScoreComputationService } from "../../services/score-computation.service";
 import type { InvestorMatchingService } from "../../services/investor-matching.service";
 import type { MemoGeneratorService } from "../../services/memo-generator.service";
-import type { AiConfigService } from "../../services/ai-config.service";
 import { SynthesisService } from "../../services/synthesis.service";
 import { createEvaluationPipelineInput } from "../fixtures/evaluation-pipeline.fixture";
 import { createMockEvaluationResult } from "../fixtures/mock-evaluation.fixture";
@@ -17,12 +16,11 @@ describe("SynthesisService", () => {
   let service: SynthesisService;
   let drizzle: jest.Mocked<DrizzleService>;
   let pipelineState: jest.Mocked<PipelineStateService>;
-  let synthesisAgent: jest.Mocked<SynthesisAgentService>;
+  let synthesisAgent: jest.Mocked<SynthesisAgent>;
   let scoreComputation: jest.Mocked<ScoreComputationService>;
   let investorMatching: jest.Mocked<InvestorMatchingService>;
   let memoGenerator: jest.Mocked<MemoGeneratorService>;
   let notifications: jest.Mocked<NotificationService>;
-  let aiConfig: jest.Mocked<AiConfigService>;
 
   const pipeline = createEvaluationPipelineInput();
 
@@ -61,8 +59,8 @@ describe("SynthesisService", () => {
     } as unknown as jest.Mocked<PipelineStateService>;
 
     synthesisAgent = {
-      generate: jest.fn().mockResolvedValue(createMockSynthesisResult()),
-    } as unknown as jest.Mocked<SynthesisAgentService>;
+      run: jest.fn().mockResolvedValue(createMockSynthesisResult()),
+    } as unknown as jest.Mocked<SynthesisAgent>;
 
     scoreComputation = {
       getWeightsForStage: jest.fn().mockResolvedValue({
@@ -106,26 +104,21 @@ describe("SynthesisService", () => {
       createBulk: jest.fn().mockResolvedValue([]),
     } as unknown as jest.Mocked<NotificationService>;
 
-    aiConfig = {
-      getMaxRetries: jest.fn().mockReturnValue(3),
-    } as unknown as jest.Mocked<AiConfigService>;
-
     service = new SynthesisService(
       drizzle as unknown as DrizzleService,
       pipelineState as unknown as PipelineStateService,
-      synthesisAgent as unknown as SynthesisAgentService,
+      synthesisAgent as unknown as SynthesisAgent,
       scoreComputation as unknown as ScoreComputationService,
       investorMatching as unknown as InvestorMatchingService,
       memoGenerator as unknown as MemoGeneratorService,
       notifications as unknown as NotificationService,
-      aiConfig as unknown as AiConfigService,
     );
   });
 
   it("orchestrates synthesis, scoring, persistence, matching, memo generation, and notifications", async () => {
     const result = await service.run("startup-1");
 
-    expect(synthesisAgent.generate).toHaveBeenCalledTimes(1);
+    expect(synthesisAgent.run).toHaveBeenCalledTimes(1);
     expect(scoreComputation.getWeightsForStage).toHaveBeenCalledWith(pipeline.extraction.stage);
     expect(scoreComputation.computeWeightedScore).toHaveBeenCalled();
     expect(scoreComputation.computePercentileRank).toHaveBeenCalledWith(79.4);
@@ -141,15 +134,26 @@ describe("SynthesisService", () => {
     expect(result.overallScore).toBe(79.4);
   });
 
-  it("retries synthesis generation up to 2 retries before succeeding", async () => {
-    synthesisAgent.generate
-      .mockRejectedValueOnce(new Error("schema validation failed"))
-      .mockResolvedValueOnce(createMockSynthesisResult());
+  it("receives fallback result when synthesis agent fails", async () => {
+    synthesisAgent.run.mockResolvedValueOnce({
+      overallScore: 0,
+      recommendation: "Decline",
+      executiveSummary: "Synthesis failed — manual review required.",
+      strengths: [],
+      concerns: ["Automated synthesis could not be completed"],
+      investmentThesis: "Unable to generate investment thesis due to synthesis failure.",
+      nextSteps: ["Manual review required"],
+      confidenceLevel: "Low",
+      investorMemo: "Synthesis generation failed. Please review evaluation data manually.",
+      founderReport: "We were unable to generate an automated report. Our team will follow up.",
+      dataConfidenceNotes: "Synthesis failed — all scores require manual verification.",
+    });
 
     const result = await service.run("startup-1");
 
-    expect(synthesisAgent.generate).toHaveBeenCalledTimes(2);
-    expect(result.recommendation).toBe("Consider");
+    expect(synthesisAgent.run).toHaveBeenCalledTimes(1);
+    expect(result.recommendation).toBe("Decline");
+    expect(result.executiveSummary).toContain("manual review required");
   });
 
   it("does not fail the pipeline when memo generation fails", async () => {
@@ -167,5 +171,89 @@ describe("SynthesisService", () => {
     await expect(service.run("startup-1")).rejects.toThrow(
       "Synthesis requires extraction, research, and evaluation results",
     );
+  });
+
+  describe("post-synthesis operations isolation", () => {
+    it("memo generation failure does not fail the synthesis", async () => {
+      memoGenerator.generateAndUpload.mockRejectedValueOnce(
+        new Error("S3 upload timeout"),
+      );
+
+      const result = await service.run("startup-1");
+
+      expect(result.overallScore).toBe(79.4);
+      expect(synthesisAgent.run).toHaveBeenCalledTimes(1);
+      expect(drizzle.db.transaction).toHaveBeenCalledTimes(1);
+      expect(result.investorMemoUrl).toBeUndefined();
+    });
+
+    it("investor matching failure does not fail the synthesis", async () => {
+      investorMatching.matchStartup.mockRejectedValueOnce(
+        new Error("Database connection lost"),
+      );
+
+      const result = await service.run("startup-1");
+
+      expect(result.overallScore).toBe(79.4);
+      expect(drizzle.db.transaction).toHaveBeenCalledTimes(1);
+      expect(notifications.createBulk).not.toHaveBeenCalled();
+    });
+
+    it("post-synthesis operations are isolated from each other", async () => {
+      investorMatching.matchStartup.mockRejectedValueOnce(
+        new Error("Matching service down"),
+      );
+      memoGenerator.generateAndUpload.mockResolvedValueOnce({
+        investorMemoUrl: "https://cdn.test/memo-working.pdf",
+        founderReportUrl: "https://cdn.test/founder-working.pdf",
+      });
+
+      const result = await service.run("startup-1");
+
+      expect(result.overallScore).toBe(79.4);
+      expect(result.investorMemoUrl).toBe("https://cdn.test/memo-working.pdf");
+      expect(result.founderReportUrl).toBe("https://cdn.test/founder-working.pdf");
+      expect(notifications.createBulk).not.toHaveBeenCalled();
+    });
+
+    it("both post-synthesis operations fail independently without cascade", async () => {
+      investorMatching.matchStartup.mockRejectedValueOnce(
+        new Error("Matching failed"),
+      );
+      memoGenerator.generateAndUpload.mockRejectedValueOnce(
+        new Error("Memo generation failed"),
+      );
+
+      const result = await service.run("startup-1");
+
+      expect(result.overallScore).toBe(79.4);
+      expect(drizzle.db.transaction).toHaveBeenCalledTimes(1);
+      expect(result.investorMemoUrl).toBeUndefined();
+      expect(result.founderReportUrl).toBeUndefined();
+    });
+
+    it("notification creation failure after successful matching does not fail synthesis", async () => {
+      notifications.createBulk.mockRejectedValueOnce(
+        new Error("Notification service unavailable"),
+      );
+
+      const result = await service.run("startup-1");
+
+      expect(result.overallScore).toBe(79.4);
+      expect(investorMatching.matchStartup).toHaveBeenCalledTimes(1);
+      expect(drizzle.db.transaction).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not send notifications when no investor matches found", async () => {
+      investorMatching.matchStartup.mockResolvedValueOnce({
+        candidatesEvaluated: 5,
+        matches: [],
+      });
+
+      const result = await service.run("startup-1");
+
+      expect(result.overallScore).toBe(79.4);
+      expect(notifications.createBulk).not.toHaveBeenCalled();
+    });
   });
 });

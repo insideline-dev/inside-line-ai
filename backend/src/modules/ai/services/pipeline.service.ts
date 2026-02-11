@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { ModuleRef } from "@nestjs/core";
+import { randomUUID } from "crypto";
 import { eq } from "drizzle-orm";
 import { DrizzleService } from "../../../database";
 import { QueueService } from "../../../queue";
@@ -9,6 +10,7 @@ import type {
   EvaluationAgentKey,
   ResearchAgentKey,
 } from "../interfaces/agent.interface";
+import { EVALUATION_AGENT_KEYS, RESEARCH_AGENT_KEYS } from "../constants/agent-keys";
 import { AiConfigService } from "./ai-config.service";
 import { PipelineFeedbackService } from "./pipeline-feedback.service";
 import { PipelineStateService } from "./pipeline-state.service";
@@ -21,7 +23,7 @@ import {
 import { ErrorRecoveryService } from "../orchestrator/error-recovery.service";
 import { PhaseTransitionService } from "../orchestrator/phase-transition.service";
 import { ProgressTrackerService } from "../orchestrator/progress-tracker.service";
-import type { ClaraService } from "../../clara/clara.service"; // lazy-loaded via ModuleRef
+import type { ClaraService } from "../../clara/clara.service";
 
 function toJsonRecord(value: unknown, context: string): Record<string, unknown> {
   const serialized = JSON.stringify(value);
@@ -47,9 +49,21 @@ export interface RetryAgentRequest {
   agentKey: ResearchAgentKey | EvaluationAgentKey;
 }
 
+interface QueuePhaseParams {
+  startupId: string;
+  pipelineRunId: string;
+  userId: string;
+  phase: PipelinePhase;
+  delayMs?: number;
+  retryCount?: number;
+  waitingError?: string;
+  metadata?: Record<string, unknown>;
+}
+
 @Injectable()
 export class PipelineService {
   private readonly logger = new Logger(PipelineService.name);
+  private claraService: ClaraService | null = null;
   private readonly typeByPhase: Record<
     PipelinePhase,
     | "ai_extraction"
@@ -64,8 +78,6 @@ export class PipelineService {
     [PipelinePhase.EVALUATION]: "ai_evaluation",
     [PipelinePhase.SYNTHESIS]: "ai_synthesis",
   };
-
-  private claraService: ClaraService | null = null;
 
   constructor(
     private drizzle: DrizzleService,
@@ -82,8 +94,9 @@ export class PipelineService {
   private getClaraService(): ClaraService | null {
     if (this.claraService) return this.claraService;
     try {
-      const { ClaraService: ClaraServiceClass } = require("../../clara/clara.service");
-      this.claraService = this.moduleRef.get(ClaraServiceClass, { strict: false });
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { ClaraService: Cls } = require("../../clara/clara.service");
+      this.claraService = this.moduleRef.get(Cls, { strict: false });
       return this.claraService;
     } catch {
       return null;
@@ -113,7 +126,7 @@ export class PipelineService {
     });
 
     for (const phase of this.phaseTransition.getInitialPhases()) {
-      await this.queuePhase(startupId, state.pipelineRunId, userId, phase);
+      await this.queuePhase({ startupId, pipelineRunId: state.pipelineRunId, userId, phase });
     }
 
     this.logger.log(
@@ -136,16 +149,8 @@ export class PipelineService {
       throw new BadRequestException(`Phase "${phase}" is not in failed state`);
     }
 
+    const newRunId = await this.beginManualRun(state, phase);
     await this.queue.removePipelineJobs(startupId);
-    await this.pipelineState.setStatus(startupId, PipelineStatus.RUNNING);
-    await this.updatePipelineRunStatus(state.pipelineRunId, PipelineStatus.RUNNING);
-    await this.progressTracker.setPipelineStatus({
-      startupId,
-      userId: state.userId,
-      pipelineRunId: state.pipelineRunId,
-      status: PipelineStatus.RUNNING,
-      currentPhase: phase,
-    });
     await this.updateStartupStatus(startupId, StartupStatus.ANALYZING);
     await this.pipelineState.clearPhaseResult(startupId, phase);
     await this.pipelineState.resetRetryCount(startupId, phase);
@@ -153,12 +158,12 @@ export class PipelineService {
     await this.progressTracker.updatePhaseProgress({
       startupId,
       userId: state.userId,
-      pipelineRunId: state.pipelineRunId,
+      pipelineRunId: newRunId,
       phase,
       status: PhaseStatus.PENDING,
     });
 
-    await this.queuePhase(startupId, state.pipelineRunId, state.userId, phase);
+    await this.queuePhase({ startupId, pipelineRunId: newRunId, userId: state.userId, phase });
   }
 
   async rerunFromPhase(startupId: string, phase: PipelinePhase): Promise<void> {
@@ -172,29 +177,21 @@ export class PipelineService {
       throw new BadRequestException(`Unknown phase "${phase}"`);
     }
 
+    const newRunId = await this.beginManualRun(state, phase);
     await this.queue.removePipelineJobs(startupId);
-    await this.pipelineState.setStatus(startupId, PipelineStatus.RUNNING);
-    await this.updatePipelineRunStatus(state.pipelineRunId, PipelineStatus.RUNNING);
-    await this.progressTracker.setPipelineStatus({
-      startupId,
-      userId: state.userId,
-      pipelineRunId: state.pipelineRunId,
-      status: PipelineStatus.RUNNING,
-      currentPhase: phase,
-    });
     await this.updateStartupStatus(startupId, StartupStatus.ANALYZING);
 
     for (const phaseToReset of phasesToReset) {
       await this.resetPhaseForRerun({
         startupId,
         userId: state.userId,
-        pipelineRunId: state.pipelineRunId,
+        pipelineRunId: newRunId,
         phase: phaseToReset,
         clearResult: true,
       });
     }
 
-    await this.queuePhase(startupId, state.pipelineRunId, state.userId, phase);
+    await this.queuePhase({ startupId, pipelineRunId: newRunId, userId: state.userId, phase });
   }
 
   async retryAgent(startupId: string, request: RetryAgentRequest): Promise<void> {
@@ -219,23 +216,15 @@ export class PipelineService {
       agentKey: request.agentKey,
     };
 
+    const newRunId = await this.beginManualRun(state, request.phase);
     await this.queue.removePipelineJobs(startupId);
-    await this.pipelineState.setStatus(startupId, PipelineStatus.RUNNING);
-    await this.updatePipelineRunStatus(state.pipelineRunId, PipelineStatus.RUNNING);
-    await this.progressTracker.setPipelineStatus({
-      startupId,
-      userId: state.userId,
-      pipelineRunId: state.pipelineRunId,
-      status: PipelineStatus.RUNNING,
-      currentPhase: request.phase,
-    });
     await this.updateStartupStatus(startupId, StartupStatus.ANALYZING);
 
     if (request.phase === PipelinePhase.RESEARCH) {
       await this.resetPhaseForRerun({
         startupId,
         userId: state.userId,
-        pipelineRunId: state.pipelineRunId,
+        pipelineRunId: newRunId,
         phase: PipelinePhase.RESEARCH,
         clearResult: false,
         preserveTelemetry: true,
@@ -243,35 +232,32 @@ export class PipelineService {
       await this.resetPhaseForRerun({
         startupId,
         userId: state.userId,
-        pipelineRunId: state.pipelineRunId,
+        pipelineRunId: newRunId,
         phase: PipelinePhase.EVALUATION,
         clearResult: true,
       });
       await this.resetPhaseForRerun({
         startupId,
         userId: state.userId,
-        pipelineRunId: state.pipelineRunId,
+        pipelineRunId: newRunId,
         phase: PipelinePhase.SYNTHESIS,
         clearResult: true,
       });
 
-      await this.queuePhase(
+      await this.queuePhase({
         startupId,
-        state.pipelineRunId,
-        state.userId,
-        PipelinePhase.RESEARCH,
-        0,
-        0,
-        undefined,
+        pipelineRunId: newRunId,
+        userId: state.userId,
+        phase: PipelinePhase.RESEARCH,
         metadata,
-      );
+      });
       return;
     }
 
     await this.resetPhaseForRerun({
       startupId,
       userId: state.userId,
-      pipelineRunId: state.pipelineRunId,
+      pipelineRunId: newRunId,
       phase: PipelinePhase.EVALUATION,
       clearResult: false,
       preserveTelemetry: true,
@@ -279,21 +265,18 @@ export class PipelineService {
     await this.resetPhaseForRerun({
       startupId,
       userId: state.userId,
-      pipelineRunId: state.pipelineRunId,
+      pipelineRunId: newRunId,
       phase: PipelinePhase.SYNTHESIS,
       clearResult: true,
     });
 
-    await this.queuePhase(
+    await this.queuePhase({
       startupId,
-      state.pipelineRunId,
-      state.userId,
-      PipelinePhase.EVALUATION,
-      0,
-      0,
-      undefined,
+      pipelineRunId: newRunId,
+      userId: state.userId,
+      phase: PipelinePhase.EVALUATION,
       metadata,
-    );
+    });
   }
 
   async cancelPipeline(startupId: string): Promise<{ removedJobs: number }> {
@@ -386,15 +369,15 @@ export class PipelineService {
         this.phaseTransition.getConfig().defaultRetryPolicy,
         retryCount,
       );
-      await this.queuePhase(
+      await this.queuePhase({
         startupId,
-        state.pipelineRunId,
-        state.userId,
+        pipelineRunId: state.pipelineRunId,
+        userId: state.userId,
         phase,
         delayMs,
         retryCount,
-        error,
-      );
+        waitingError: error,
+      });
       return;
     }
 
@@ -414,16 +397,8 @@ export class PipelineService {
     await this.progressTracker.updateAgentProgress(params);
   }
 
-  private async queuePhase(
-    startupId: string,
-    pipelineRunId: string,
-    userId: string,
-    phase: PipelinePhase,
-    delayMs = 0,
-    retryCount = 0,
-    waitingError?: string,
-    metadata?: Record<string, unknown>,
-  ): Promise<void> {
+  private async queuePhase(params: QueuePhaseParams): Promise<void> {
+    const { startupId, pipelineRunId, userId, phase, delayMs = 0, retryCount = 0, waitingError, metadata } = params;
     const phaseConfig = this.phaseTransition.getPhaseConfig(phase);
     await this.pipelineState.updatePhase(
       startupId,
@@ -455,6 +430,7 @@ export class PipelineService {
       },
       {
         delay: delayMs,
+        attempts: 1,
       },
     );
 
@@ -539,12 +515,12 @@ export class PipelineService {
     }
 
     for (const phase of decision.queue) {
-      await this.queuePhase(
+      await this.queuePhase({
         startupId,
-        refreshed.pipelineRunId,
-        refreshed.userId,
+        pipelineRunId: refreshed.pipelineRunId,
+        userId: refreshed.userId,
         phase,
-      );
+      });
     }
 
     if (!decision.pipelineComplete) {
@@ -595,9 +571,9 @@ export class PipelineService {
     overallScore?: number,
   ): void {
     const clara = this.getClaraService();
-    if (!clara) return;
+    if (!clara?.isEnabled()) return;
     clara.notifyPipelineComplete(startupId, overallScore).catch((err) => {
-      this.logger.warn(`Clara notification failed for ${startupId}: ${err}`);
+      this.logger.error(`Clara notification failed for ${startupId}: ${err}`);
     });
   }
 
@@ -662,28 +638,9 @@ export class PipelineService {
     phase: PipelinePhase.RESEARCH | PipelinePhase.EVALUATION,
     agentKey: string,
   ): boolean {
-    if (phase === PipelinePhase.RESEARCH) {
-      return (
-        agentKey === "team" ||
-        agentKey === "market" ||
-        agentKey === "product" ||
-        agentKey === "news"
-      );
-    }
-
-    return (
-      agentKey === "team" ||
-      agentKey === "market" ||
-      agentKey === "product" ||
-      agentKey === "traction" ||
-      agentKey === "businessModel" ||
-      agentKey === "gtm" ||
-      agentKey === "financials" ||
-      agentKey === "competitiveAdvantage" ||
-      agentKey === "legal" ||
-      agentKey === "dealTerms" ||
-      agentKey === "exitPotential"
-    );
+    const keys: readonly string[] =
+      phase === PipelinePhase.RESEARCH ? RESEARCH_AGENT_KEYS : EVALUATION_AGENT_KEYS;
+    return keys.includes(agentKey);
   }
 
   private async consumePhaseFeedbackSafely(
@@ -698,9 +655,48 @@ export class PipelineService {
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.logger.warn(
+      this.logger.error(
         `Failed to mark phase-level feedback consumed for ${phase}: ${message}`,
       );
     }
+  }
+
+  private async beginManualRun(
+    state: PipelineState,
+    currentPhase: PipelinePhase,
+  ): Promise<string> {
+    const nextRunId = randomUUID();
+
+    if (state.status === PipelineStatus.RUNNING) {
+      await this.updatePipelineRunStatus(
+        state.pipelineRunId,
+        PipelineStatus.CANCELLED,
+        "Superseded by manual rerun",
+      );
+    }
+
+    await this.pipelineState.setPipelineRunId(state.startupId, nextRunId);
+    await this.pipelineState.setStatus(state.startupId, PipelineStatus.RUNNING);
+    await this.createPipelineRunRecord({
+      ...state,
+      pipelineRunId: nextRunId,
+      status: PipelineStatus.RUNNING,
+      quality: "standard",
+    });
+    await this.progressTracker.initProgress({
+      startupId: state.startupId,
+      userId: state.userId,
+      pipelineRunId: nextRunId,
+      phases: this.phaseTransition.getConfig().phases.map((entry) => entry.phase),
+    });
+    await this.progressTracker.setPipelineStatus({
+      startupId: state.startupId,
+      userId: state.userId,
+      pipelineRunId: nextRunId,
+      status: PipelineStatus.RUNNING,
+      currentPhase,
+    });
+
+    return nextRunId;
   }
 }

@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it, jest } from 'bun:test';
 import { Test, TestingModule } from '@nestjs/testing';
 import { UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -7,7 +8,7 @@ import * as crypto from 'crypto';
 
 describe('AgentMailSignatureGuard', () => {
   let guard: AgentMailSignatureGuard;
-  let configService: any;
+  let configService: { get: ReturnType<typeof jest.fn> };
 
   const mockSecret = 'test-webhook-secret-key';
   const mockPayload = {
@@ -35,7 +36,7 @@ describe('AgentMailSignatureGuard', () => {
     expect(guard).toBeDefined();
   });
 
-  const createMockContext = (signature: string | undefined, body: any): ExecutionContext => {
+  const createMockContext = (signature: string | undefined, body: unknown): ExecutionContext => {
     return {
       switchToHttp: () => ({
         getRequest: () => ({
@@ -163,6 +164,180 @@ describe('AgentMailSignatureGuard', () => {
       const context = createMockContext('sha256=', mockPayload);
 
       expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
+    });
+  });
+
+  // ============ EDGE CASE TESTS ============
+
+  describe('edge cases', () => {
+    it('should reject signature with wrong prefix (not sha256=)', () => {
+      const hmac = crypto.createHmac('sha256', mockSecret);
+      hmac.update(JSON.stringify(mockPayload));
+      const wrongPrefix = `sha512=${hmac.digest('hex')}`;
+      const context = createMockContext(wrongPrefix, mockPayload);
+
+      expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
+      expect(() => guard.canActivate(context)).toThrow('Invalid signature');
+    });
+
+    it('should reject signature with wrong length (not 71 chars)', () => {
+      const shortSignature = 'sha256=abc123';
+      const context = createMockContext(shortSignature, mockPayload);
+
+      expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
+      expect(() => guard.canActivate(context)).toThrow('Invalid signature');
+    });
+
+    it('should reject signature with wrong length (too long)', () => {
+      const longSignature = 'sha256=' + 'a'.repeat(100);
+      const context = createMockContext(longSignature, mockPayload);
+
+      expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
+    });
+
+    it('should reject non-hex characters in signature', () => {
+      const nonHexSignature = 'sha256=' + 'z'.repeat(64);
+      const context = createMockContext(nonHexSignature, mockPayload);
+
+      expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
+    });
+
+    it('should validate empty payload with valid signature', () => {
+      const emptyPayload = {};
+      const signature = generateValidSignature(emptyPayload, mockSecret);
+      const context = createMockContext(signature, emptyPayload);
+
+      const result = guard.canActivate(context);
+
+      expect(result).toBe(true);
+    });
+
+    it('should reject empty payload with signature for non-empty payload', () => {
+      const signature = generateValidSignature(mockPayload, mockSecret);
+      const emptyPayload = {};
+      const context = createMockContext(signature, emptyPayload);
+
+      expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
+    });
+
+    it('should throw UnauthorizedException when webhook secret is null', () => {
+      configService.get.mockReturnValue(null);
+      const signature = generateValidSignature(mockPayload, mockSecret);
+      const context = createMockContext(signature, mockPayload);
+
+      try {
+        guard.canActivate(context);
+        expect(true).toBe(false); // Should not reach here
+      } catch (error: any) {
+        expect(error).toBeInstanceOf(UnauthorizedException);
+        expect(error.message).toContain('Webhook not configured');
+      } finally {
+        configService.get.mockReturnValue(mockSecret);
+      }
+    });
+
+    it('should throw UnauthorizedException when webhook secret is empty string', () => {
+      configService.get.mockReturnValue('');
+      const signature = generateValidSignature(mockPayload, mockSecret);
+      const context = createMockContext(signature, mockPayload);
+
+      try {
+        guard.canActivate(context);
+        expect(true).toBe(false); // Should not reach here
+      } catch (error: any) {
+        expect(error).toBeInstanceOf(UnauthorizedException);
+        expect(error.message).toContain('Webhook not configured');
+      } finally {
+        configService.get.mockReturnValue(mockSecret);
+      }
+    });
+
+    it('should handle signature header as undefined', () => {
+      const context = {
+        switchToHttp: () => ({
+          getRequest: () => ({
+            headers: { 'x-agentmail-signature': undefined },
+            body: mockPayload,
+          }),
+        }),
+      } as ExecutionContext;
+
+      expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
+      expect(() => guard.canActivate(context)).toThrow('Missing signature');
+    });
+
+    it('should handle complex nested payload correctly', () => {
+      const complexPayload = {
+        event: 'email.received',
+        nested: {
+          deeply: {
+            nested: {
+              value: 'test',
+              array: [1, 2, 3],
+            },
+          },
+        },
+      };
+      const signature = generateValidSignature(complexPayload, mockSecret);
+      const context = createMockContext(signature, complexPayload);
+
+      const result = guard.canActivate(context);
+
+      expect(result).toBe(true);
+    });
+
+    it('should fail on signature with uppercase hex characters', () => {
+      const hmac = crypto.createHmac('sha256', mockSecret);
+      hmac.update(JSON.stringify(mockPayload));
+      const upperCaseSignature = `sha256=${hmac.digest('hex').toUpperCase()}`;
+      const context = createMockContext(upperCaseSignature, mockPayload);
+
+      expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
+    });
+
+    it('should reject signature with special characters', () => {
+      const specialCharSignature = 'sha256=' + '@'.repeat(64);
+      const context = createMockContext(specialCharSignature, mockPayload);
+
+      expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
+    });
+
+    it('should reject signature with mixed valid/invalid hex', () => {
+      const mixedSignature = 'sha256=' + 'a'.repeat(32) + 'z'.repeat(32);
+      const context = createMockContext(mixedSignature, mockPayload);
+
+      expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
+    });
+
+    it('should handle payload with unicode characters', () => {
+      const unicodePayload = {
+        message: 'Hello 世界 🌍',
+        emoji: '🚀',
+      };
+      const signature = generateValidSignature(unicodePayload, mockSecret);
+      const context = createMockContext(signature, unicodePayload);
+
+      const result = guard.canActivate(context);
+
+      expect(result).toBe(true);
+    });
+
+    it('should reject signature with whitespace padding', () => {
+      const signature = generateValidSignature(mockPayload, mockSecret);
+      const paddedSignature = ` ${signature} `;
+      const context = createMockContext(paddedSignature, mockPayload);
+
+      expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
+    });
+
+    it('should handle array payload correctly', () => {
+      const arrayPayload = [1, 2, 3, { nested: 'value' }];
+      const signature = generateValidSignature(arrayPayload, mockSecret);
+      const context = createMockContext(signature, arrayPayload);
+
+      const result = guard.canActivate(context);
+
+      expect(result).toBe(true);
     });
   });
 });

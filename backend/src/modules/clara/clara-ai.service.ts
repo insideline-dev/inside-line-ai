@@ -3,6 +3,7 @@ import { generateText, Output } from "ai";
 import { z } from "zod";
 import { AiProviderService } from "../ai/providers/ai-provider.service";
 import { ModelPurpose } from "../ai/interfaces/pipeline.interface";
+import { AiPromptService } from "../ai/services/ai-prompt.service";
 import {
   ClaraIntent,
   type IntentClassification,
@@ -20,7 +21,10 @@ const IntentClassificationSchema = z.object({
 export class ClaraAiService {
   private readonly logger = new Logger(ClaraAiService.name);
 
-  constructor(private providers: AiProviderService) {}
+  constructor(
+    private providers: AiProviderService,
+    private promptService: AiPromptService,
+  ) {}
 
   async classifyIntent(ctx: MessageContext): Promise<IntentClassification> {
     const fastPath = this.tryHeuristic(ctx);
@@ -34,13 +38,23 @@ export class ClaraAiService {
   async generateResponse(
     intent: ClaraIntent,
     ctx: MessageContext,
-    extra?: { startupName?: string; startupStatus?: string; score?: number },
+    extra?: {
+      startupName?: string;
+      startupStatus?: string;
+      score?: number;
+      startupStage?: string;
+    },
   ): Promise<string> {
     try {
+      const promptConfig = await this.promptService.resolve({
+        key: "clara.response",
+        stage: extra?.startupStage,
+      });
       const { text } = await generateText({
         model: this.providers.resolveModelForPurpose(ModelPurpose.EXTRACTION),
         temperature: 0.4,
-        prompt: this.buildResponsePrompt(intent, ctx, extra),
+        system: promptConfig.systemPrompt,
+        prompt: this.buildResponsePrompt(promptConfig.userPrompt, intent, ctx, extra),
       });
       return text;
     } catch (error) {
@@ -105,31 +119,28 @@ export class ClaraAiService {
       )
       .join("\n");
 
-    const prompt = [
-      "You are Clara, an AI email assistant for Inside Line, an investor deal-flow platform.",
-      "Classify the intent of this incoming email.",
-      "",
-      `From: ${ctx.fromEmail}`,
-      `Subject: ${ctx.subject ?? "(no subject)"}`,
-      `Body: ${ctx.bodyText?.slice(0, 2000) ?? "(empty)"}`,
-      `Attachments: ${ctx.attachments.map((a) => `${a.filename} (${a.contentType})`).join(", ") || "none"}`,
-      `Has linked startup: ${ctx.startupId ? "yes" : "no"}`,
-      "",
-      historyText ? `Conversation history:\n${historyText}` : "No prior conversation.",
-      "",
-      "Intents:",
-      "- submission: Investor forwarding a pitch deck or startup details for analysis",
-      "- question: Asking about a startup's status, scores, or analysis progress",
-      "- report_request: Requesting the investment memo, report PDF, or detailed analysis",
-      "- follow_up: Continuing an existing conversation or providing additional info",
-      "- greeting: General hello, introduction, or asking what Clara can do",
-    ].join("\n");
+    const promptConfig = await this.promptService.resolve({
+      key: "clara.intent",
+      stage: ctx.startupStage,
+    });
+    const prompt = this.promptService.renderTemplate(promptConfig.userPrompt, {
+      fromEmail: ctx.fromEmail,
+      subject: ctx.subject ?? "(no subject)",
+      body: ctx.bodyText?.slice(0, 2000) ?? "(empty)",
+      attachments:
+        ctx.attachments.map((a) => `${a.filename} (${a.contentType})`).join(", ") ||
+        "none",
+      hasLinkedStartup: ctx.startupId ? "yes" : "no",
+      historyBlock: historyText ? `Conversation history:\n${historyText}` : "No prior conversation.",
+      startupStage: ctx.startupStage ?? "unknown",
+    });
 
     try {
       const { output } = await generateText({
         model: this.providers.resolveModelForPurpose(ModelPurpose.EXTRACTION),
         output: Output.object({ schema: IntentClassificationSchema }),
         temperature: 0.1,
+        system: promptConfig.systemPrompt,
         prompt,
       });
 
@@ -145,16 +156,17 @@ export class ClaraAiService {
   }
 
   private buildResponsePrompt(
+    promptTemplate: string,
     intent: ClaraIntent,
     ctx: MessageContext,
-    extra?: { startupName?: string; startupStatus?: string; score?: number },
+    extra?: {
+      startupName?: string;
+      startupStatus?: string;
+      score?: number;
+      startupStage?: string;
+    },
   ): string {
-    const parts = [
-      "You are Clara, a friendly and professional AI assistant for Inside Line, an investor deal-flow platform.",
-      "Write a concise email reply. Be warm but professional. Use the investor's name if available.",
-      `Investor name: ${ctx.fromName ?? "there"}`,
-      `Intent: ${intent}`,
-    ];
+    const parts: string[] = [];
 
     switch (intent) {
       case ClaraIntent.SUBMISSION:
@@ -202,11 +214,22 @@ export class ClaraAiService {
       )
       .join("\n");
 
-    if (history) {
-      parts.push("", "Recent conversation:", history);
-    }
+    const startupBlock = [
+      `Startup: ${extra?.startupName ?? "unknown"}`,
+      `Status: ${extra?.startupStatus ?? "unknown"}`,
+      typeof extra?.score === "number" ? `Current score: ${extra.score}/100` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
 
-    return parts.filter(Boolean).join("\n");
+    return this.promptService.renderTemplate(promptTemplate, {
+      investorName: ctx.fromName ?? "there",
+      intent,
+      startupStage: extra?.startupStage ?? ctx.startupStage ?? "unknown",
+      startupBlock,
+      intentInstructions: parts.join("\n"),
+      historyBlock: history ? `Recent conversation:\n${history}` : "No recent conversation.",
+    });
   }
 
   private fallbackResponse(intent: ClaraIntent): string {

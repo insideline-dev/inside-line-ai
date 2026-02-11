@@ -83,7 +83,7 @@ export class QueueService implements OnModuleDestroy {
   async addJob<T extends JobData>(
     queueName: QueueName,
     data: T,
-    options?: { priority?: number; delay?: number; jobId?: string },
+    options?: { priority?: number; delay?: number; jobId?: string; attempts?: number },
   ): Promise<string> {
     const queue = this.queues.get(queueName);
     if (!queue) throw new Error(`Queue ${queueName} not found`);
@@ -92,6 +92,7 @@ export class QueueService implements OnModuleDestroy {
       priority: options?.priority ?? data.priority,
       delay: options?.delay,
       jobId: options?.jobId,
+      attempts: options?.attempts,
     });
 
     this.logger.debug(`Added job ${job.id} to queue ${queueName}`);
@@ -134,7 +135,18 @@ export class QueueService implements OnModuleDestroy {
     if (!events) throw new Error(`Queue events ${queueName} not found`);
 
     return new Promise((resolve, reject) => {
+      let cleaned = false;
+
+      const cleanup = () => {
+        if (cleaned) return;
+        cleaned = true;
+        clearTimeout(timer);
+        events.off('completed', completedHandler);
+        events.off('failed', failedHandler);
+      };
+
       const timer = setTimeout(() => {
+        cleanup();
         reject(new Error(`Job ${jobId} timed out after ${timeout}ms`));
       }, timeout);
 
@@ -146,9 +158,7 @@ export class QueueService implements OnModuleDestroy {
         returnvalue: string;
       }) => {
         if (completedId === jobId) {
-          clearTimeout(timer);
-          events.off('completed', completedHandler);
-          events.off('failed', failedHandler);
+          cleanup();
           resolve(JSON.parse(returnvalue) as T);
         }
       };
@@ -161,9 +171,7 @@ export class QueueService implements OnModuleDestroy {
         failedReason: string;
       }) => {
         if (failedId === jobId) {
-          clearTimeout(timer);
-          events.off('completed', completedHandler);
-          events.off('failed', failedHandler);
+          cleanup();
           reject(new Error(failedReason));
         }
       };

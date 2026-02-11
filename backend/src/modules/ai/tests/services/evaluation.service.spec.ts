@@ -154,4 +154,133 @@ describe("EvaluationService", () => {
     expect(result.market).toEqual({ score: 91 });
     expect(result.summary.failedAgents).toBe(0);
   });
+
+  describe("rerun with fallback output edge cases", () => {
+    it("rerun with fallback output still merges output even when safeParse fails", async () => {
+      pipelineState.getPhaseResult.mockImplementation(
+        (_startupId: string, phase: PipelinePhase) => {
+          if (phase === PipelinePhase.EXTRACTION) return Promise.resolve(pipelineInput.extraction);
+          if (phase === PipelinePhase.SCRAPING) return Promise.resolve(pipelineInput.scraping);
+          if (phase === PipelinePhase.RESEARCH) return Promise.resolve(pipelineInput.research);
+          if (phase === PipelinePhase.EVALUATION) return Promise.resolve(evaluationResult);
+          return Promise.resolve(null);
+        },
+      );
+
+      registry.runOne.mockResolvedValueOnce({
+        agent: "team",
+        output: { invalidSchema: "bad data" },
+        usedFallback: true,
+        error: "Agent generation failed, fallback used",
+      });
+
+      const result = await service.run("startup-1", { agentKey: "team" });
+
+      expect(result.team).toEqual({ invalidSchema: "bad data" });
+      expect(result.summary.failedAgents).toBe(1);
+      expect(result.summary.failedKeys).toContain("team");
+    });
+
+    it("rerun updates failedKeys when usedFallback is true", async () => {
+      const currentResult = {
+        ...evaluationResult,
+        summary: {
+          ...evaluationResult.summary,
+          failedAgents: 0,
+          failedKeys: [],
+          errors: [],
+        },
+      };
+
+      pipelineState.getPhaseResult.mockImplementation(
+        (_startupId: string, phase: PipelinePhase) => {
+          if (phase === PipelinePhase.EXTRACTION) return Promise.resolve(pipelineInput.extraction);
+          if (phase === PipelinePhase.SCRAPING) return Promise.resolve(pipelineInput.scraping);
+          if (phase === PipelinePhase.RESEARCH) return Promise.resolve(pipelineInput.research);
+          if (phase === PipelinePhase.EVALUATION) return Promise.resolve(currentResult);
+          return Promise.resolve(null);
+        },
+      );
+
+      registry.runOne.mockResolvedValueOnce({
+        agent: "market",
+        output: { score: 60 },
+        usedFallback: true,
+        error: "Timeout during agent execution",
+      });
+
+      const result = await service.run("startup-1", { agentKey: "market" });
+
+      expect(result.summary.failedKeys).toContain("market");
+      expect(result.summary.failedAgents).toBe(1);
+      expect(result.summary.errors).toEqual([
+        {
+          agent: "market",
+          error: "Timeout during agent execution",
+        },
+      ]);
+    });
+
+    it("rerun clears previous errors for that agent", async () => {
+      const currentResult = {
+        ...evaluationResult,
+        summary: {
+          ...evaluationResult.summary,
+          failedAgents: 1,
+          failedKeys: ["market"],
+          errors: [
+            { agent: "market", error: "Previous error" },
+          ],
+        },
+      };
+
+      pipelineState.getPhaseResult.mockImplementation(
+        (_startupId: string, phase: PipelinePhase) => {
+          if (phase === PipelinePhase.EXTRACTION) return Promise.resolve(pipelineInput.extraction);
+          if (phase === PipelinePhase.SCRAPING) return Promise.resolve(pipelineInput.scraping);
+          if (phase === PipelinePhase.RESEARCH) return Promise.resolve(pipelineInput.research);
+          if (phase === PipelinePhase.EVALUATION) return Promise.resolve(currentResult);
+          return Promise.resolve(null);
+        },
+      );
+
+      registry.runOne.mockResolvedValueOnce({
+        agent: "market",
+        output: { score: 85 },
+        usedFallback: false,
+      });
+
+      const result = await service.run("startup-1", { agentKey: "market" });
+
+      expect(result.summary.errors).toEqual([]);
+      expect(result.summary.failedKeys).not.toContain("market");
+      expect(result.summary.failedAgents).toBe(0);
+    });
+
+    it("missing upstream results throws error", async () => {
+      pipelineState.getPhaseResult.mockResolvedValueOnce(pipelineInput.extraction);
+      pipelineState.getPhaseResult.mockResolvedValueOnce(null);
+
+      await expect(service.run("startup-1")).rejects.toThrow(
+        "Evaluation requires extraction, scraping, and research results",
+      );
+      expect(registry.runAll).not.toHaveBeenCalled();
+    });
+
+    it("missing research result throws error", async () => {
+      pipelineState.getPhaseResult.mockImplementation(
+        (_startupId: string, phase: PipelinePhase) => {
+          if (phase === PipelinePhase.EXTRACTION) return Promise.resolve(pipelineInput.extraction);
+          if (phase === PipelinePhase.SCRAPING) return Promise.resolve(pipelineInput.scraping);
+          if (phase === PipelinePhase.RESEARCH) return Promise.resolve(null);
+          return Promise.resolve(null);
+        },
+      );
+
+      await expect(service.run("startup-1")).rejects.toThrow(
+        "Evaluation requires extraction, scraping, and research results",
+      );
+      expect(registry.runAll).not.toHaveBeenCalled();
+    });
+  });
 });

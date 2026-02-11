@@ -7,9 +7,11 @@ export const CreateThesisSchema = z.object({
   checkSizeMin: z.number().int().positive().optional(),
   checkSizeMax: z.number().int().positive().optional(),
   geographicFocus: z.array(z.string()).optional(),
+  geographicFocusNodes: z.array(z.string().min(1).max(100)).max(300).optional(),
   mustHaveFeatures: z.array(z.string()).optional(),
   dealBreakers: z.array(z.string()).optional(),
   notes: z.string().max(5000).optional(),
+  thesisNarrative: z.string().max(10000).optional(),
 }).refine(
   (data) => {
     if (data.checkSizeMin && data.checkSizeMax) {

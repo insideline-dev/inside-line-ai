@@ -57,14 +57,48 @@ interface PrivateStartup {
   createdAt: string;
 }
 
+function extractList<T>(payload: unknown): T[] {
+  if (Array.isArray(payload)) {
+    return payload as T[];
+  }
+
+  if (
+    payload &&
+    typeof payload === "object" &&
+    "data" in payload &&
+    Array.isArray((payload as { data?: unknown }).data)
+  ) {
+    return (payload as { data: T[] }).data;
+  }
+
+  return [];
+}
+
+function formatDateSafe(
+  value: unknown,
+  dateFormat: string,
+  fallback = "Unknown date",
+): string {
+  if (!value) {
+    return fallback;
+  }
+
+  const date = value instanceof Date ? value : new Date(String(value));
+  if (Number.isNaN(date.getTime())) {
+    return fallback;
+  }
+
+  return format(date, dateFormat);
+}
+
 function InvestorDashboard() {
   const [filters, setFilters] = useState<FilterState>(defaultFilters);
 
   const { data: matchesData, isLoading } = useInvestorControllerGetMatches();
-  const matches = (matchesData as MatchedStartup[] | undefined) ?? [];
+  const matches = extractList<MatchedStartup>(matchesData);
 
   const { data: myStartupsData, isLoading: isLoadingMyStartups } = useStartupControllerFindAll();
-  const myStartups = (myStartupsData as PrivateStartup[] | undefined) ?? [];
+  const myStartups = extractList<PrivateStartup>(myStartupsData);
 
   // Calculate stats from matches
   const stats = {
@@ -171,7 +205,7 @@ function InvestorDashboard() {
                       </p>
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         <Clock className="w-3 h-3" />
-                        {format(new Date(startup.createdAt), "MMM d, yyyy")}
+                        {formatDateSafe(startup.createdAt, "MMM d, yyyy")}
                       </div>
                     </div>
                   </div>
@@ -328,7 +362,7 @@ function InvestorDashboard() {
                             )}
                             <span className="flex items-center gap-1">
                               <Clock className="w-4 h-4" />
-                              Matched {format(new Date(match.matchedAt), "MMM d")}
+                              Matched {formatDateSafe(match.matchedAt, "MMM d", "unknown")}
                             </span>
                           </div>
                         </div>

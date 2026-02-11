@@ -175,10 +175,55 @@ describe('AgentMailService', () => {
     });
 
     it('should handle webhook processing errors', async () => {
+      drizzleService.db.returning.mockResolvedValueOnce([{ id: 'webhook-1' }]);
       drizzleService.db.limit.mockRejectedValueOnce(new Error('DB error'));
 
       await expect(service.handleWebhook(mockWebhookPayload)).rejects.toThrow();
       expect(drizzleService.db.update).toHaveBeenCalled();
+    });
+
+    it('should mark webhook as processed with error when SDK getMessage() fails', async () => {
+      drizzleService.db.returning.mockResolvedValueOnce([{ id: 'webhook-1' }]);
+      drizzleService.db.limit.mockResolvedValueOnce([mockConfig]);
+      agentMailClient.getMessage.mockRejectedValueOnce(new Error('SDK API timeout'));
+
+      await expect(service.handleWebhook(mockWebhookPayload)).rejects.toThrow('SDK getMessage failed');
+      expect(drizzleService.db.update).toHaveBeenCalled();
+      expect(drizzleService.db.set).toHaveBeenCalledWith(
+        expect.objectContaining({
+          processed: false,
+          errorMessage: expect.stringContaining('SDK getMessage failed'),
+        }),
+      );
+    });
+
+    it('should handle webhook with missing inbox_id gracefully', async () => {
+      const invalidPayload = {
+        organization_id: 'org-123',
+        inbox_id: '',
+        thread_id: 'ext-thread-123',
+        message_id: 'msg-123',
+      };
+
+      drizzleService.db.limit.mockResolvedValueOnce([]);
+
+      await service.handleWebhook(invalidPayload as any);
+
+      expect(agentMailClient.getMessage).not.toHaveBeenCalled();
+    });
+
+    it('should handle webhook with missing message_id by passing to SDK', async () => {
+      const invalidPayload = {
+        organization_id: 'org-123',
+        inbox_id: 'inbox-1',
+        thread_id: 'ext-thread-123',
+        message_id: '',
+      };
+
+      drizzleService.db.limit.mockResolvedValueOnce([mockConfig]);
+      agentMailClient.getMessage.mockRejectedValueOnce(new Error('Invalid message_id'));
+
+      await expect(service.handleWebhook(invalidPayload as any)).rejects.toThrow('SDK getMessage failed');
     });
   });
 

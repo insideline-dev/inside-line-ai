@@ -1,13 +1,15 @@
 import { Injectable } from "@nestjs/common";
+import { CONTENT_PATTERNS } from "../../constants";
 import type { EvaluationPipelineInput } from "../../interfaces/agent.interface";
 import {
   FinancialsEvaluationSchema,
   type FinancialsEvaluation,
 } from "../../schemas";
 import { AiConfigService } from "../../services/ai-config.service";
+import { AiPromptService } from "../../services/ai-prompt.service";
 import { AiProviderService } from "../../providers/ai-provider.service";
 import { BaseEvaluationAgent } from "./base-evaluation.agent";
-import { baseEvaluation, fundingScore } from "./evaluation-utils";
+import { baseEvaluation } from "./evaluation-utils";
 
 @Injectable()
 export class FinancialsEvaluationAgent extends BaseEvaluationAgent<FinancialsEvaluation> {
@@ -16,8 +18,8 @@ export class FinancialsEvaluationAgent extends BaseEvaluationAgent<FinancialsEva
   protected readonly systemPrompt =
     "You are a startup investment analyst evaluating financial health, burn, and runway assumptions.";
 
-  constructor(providers: AiProviderService, aiConfig: AiConfigService) {
-    super(providers, aiConfig);
+  constructor(providers: AiProviderService, aiConfig: AiConfigService, promptService: AiPromptService) {
+    super(providers, aiConfig, promptService);
   }
 
   buildContext({ extraction, research }: EvaluationPipelineInput) {
@@ -27,9 +29,7 @@ export class FinancialsEvaluationAgent extends BaseEvaluationAgent<FinancialsEva
     const previousFunding =
       research.news?.articles
         .filter((article) =>
-          /(fund|raise|series|seed|investment)/i.test(
-            `${article.title} ${article.summary}`,
-          ),
+          CONTENT_PATTERNS.FUNDING.test(`${article.title} ${article.summary}`),
         )
         .map((article) => ({
           title: article.title,
@@ -56,7 +56,7 @@ export class FinancialsEvaluationAgent extends BaseEvaluationAgent<FinancialsEva
     const ask = extraction.fundingAsk ?? 0;
 
     return FinancialsEvaluationSchema.parse({
-      ...baseEvaluation(35 + fundingScore(ask), "Financial assumptions are directionally plausible"),
+      ...baseEvaluation(20, "Financial evaluation incomplete — requires manual review"),
       burnRate: Math.max(0, ask / 18),
       runway: 18,
       fundingHistory: [],

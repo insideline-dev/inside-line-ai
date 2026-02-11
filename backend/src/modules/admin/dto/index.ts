@@ -5,3 +5,4 @@ export * from './export-query.dto';
 export * from './stats-query.dto';
 export * from "./retry-phase.dto";
 export * from "./retry-agent.dto";
+export * from "./ai-prompt.dto";

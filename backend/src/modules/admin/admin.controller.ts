@@ -15,6 +15,7 @@ import {
   BadRequestException,
   ParseUUIDPipe,
 } from '@nestjs/common';
+import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import { JwtAuthGuard } from '../../auth/guards';
@@ -31,6 +32,7 @@ import { QueueManagementService } from './queue-management.service';
 import { IntegrationHealthService } from './integration-health.service';
 import { SystemConfigService } from './system-config.service';
 import { BulkDataService } from './bulk-data.service';
+import { AiPromptService } from '../ai/services/ai-prompt.service';
 import { QUEUE_NAMES, QueueName } from '../../queue';
 import {
   GetUsersQueryDto,
@@ -41,6 +43,13 @@ import {
   GetStartupStatsQueryDto,
   RetryPhaseDto,
   RetryAgentDto,
+  CreateAiPromptRevisionDto,
+  UpdateAiPromptRevisionDto,
+  AiPromptDefinitionsResponseDto,
+  AiPromptRevisionsResponseDto,
+  AiPromptRevisionResponseDto,
+  AiPromptSeedResultDto,
+  AiPromptFlowResponseDto,
 } from './dto';
 import { GetStartupsQueryDto } from '../startup/dto';
 
@@ -54,6 +63,7 @@ type User = {
 };
 
 @Controller('admin')
+@ApiTags("Admin")
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.ADMIN)
 export class AdminController {
@@ -67,6 +77,7 @@ export class AdminController {
     private integrationHealthService: IntegrationHealthService,
     private systemConfigService: SystemConfigService,
     private bulkDataService: BulkDataService,
+    private aiPromptService: AiPromptService,
   ) {}
 
   // ============ ANALYTICS ENDPOINTS ============
@@ -217,6 +228,69 @@ export class AdminController {
   @Post('scoring/weights/seed')
   async seedScoringWeights(@CurrentUser() admin: User) {
     return this.scoringConfigService.seed(admin.id);
+  }
+
+  // ============ AI PROMPT MANAGEMENT ============
+
+  @Get('ai-prompts')
+  @ApiOperation({ summary: "List AI prompt definitions and published revisions" })
+  @ApiResponse({ status: 200, type: AiPromptDefinitionsResponseDto })
+  async getAiPrompts() {
+    return this.aiPromptService.listPromptDefinitions();
+  }
+
+  @Get('ai-prompts/flow')
+  @ApiOperation({ summary: "Get AI flow metadata for visual prompt management" })
+  @ApiResponse({ status: 200, type: AiPromptFlowResponseDto })
+  async getAiPromptFlow() {
+    return this.aiPromptService.getFlowGraph();
+  }
+
+  @Get('ai-prompts/:key/revisions')
+  @ApiOperation({ summary: "List revisions for a prompt key" })
+  @ApiResponse({ status: 200, type: AiPromptRevisionsResponseDto })
+  async getAiPromptRevisions(@Param('key') key: string) {
+    return this.aiPromptService.getRevisionsByKey(key);
+  }
+
+  @Post('ai-prompts/:key/revisions')
+  @ApiOperation({ summary: "Create prompt draft revision" })
+  @ApiResponse({ status: 201, type: AiPromptRevisionResponseDto })
+  async createAiPromptRevision(
+    @CurrentUser() admin: User,
+    @Param('key') key: string,
+    @Body() dto: CreateAiPromptRevisionDto,
+  ) {
+    return this.aiPromptService.createDraft(key, admin.id, dto);
+  }
+
+  @Put('ai-prompts/:key/revisions/:revisionId')
+  @ApiOperation({ summary: "Update prompt draft revision" })
+  @ApiResponse({ status: 200, type: AiPromptRevisionResponseDto })
+  async updateAiPromptRevision(
+    @Param('key') key: string,
+    @Param('revisionId', ParseUUIDPipe) revisionId: string,
+    @Body() dto: UpdateAiPromptRevisionDto,
+  ) {
+    return this.aiPromptService.updateDraft(key, revisionId, dto);
+  }
+
+  @Post('ai-prompts/:key/revisions/:revisionId/publish')
+  @ApiOperation({ summary: "Publish prompt draft revision" })
+  @ApiResponse({ status: 201, type: AiPromptRevisionResponseDto })
+  async publishAiPromptRevision(
+    @CurrentUser() admin: User,
+    @Param('key') key: string,
+    @Param('revisionId', ParseUUIDPipe) revisionId: string,
+  ) {
+    return this.aiPromptService.publishRevision(key, revisionId, admin.id);
+  }
+
+  @Post('ai-prompts/seed-from-code')
+  @ApiOperation({ summary: "Seed prompt defaults for global and stage-specific variants" })
+  @ApiResponse({ status: 201, type: AiPromptSeedResultDto })
+  async seedAiPrompts(@CurrentUser() admin: User) {
+    return this.aiPromptService.seedFromCode(admin.id);
   }
 
   // ============ DATA IMPORT/EXPORT ENDPOINTS ============

@@ -1,21 +1,31 @@
 import type { BaseEvaluation } from "../../schemas";
 
+export const INTERNAL_PIPELINE_SOURCE = "internal://pipeline-state";
+
 export function clampScore(value: number, min = 0, max = 100): number {
   return Math.max(min, Math.min(max, Math.round(value)));
+}
+
+export function tryPathname(url: string): string {
+  try {
+    return new URL(url).pathname;
+  } catch {
+    return "";
+  }
 }
 
 export function baseEvaluation(
   score: number,
   finding: string,
-  source = "internal://pipeline-state",
+  source = INTERNAL_PIPELINE_SOURCE,
 ): BaseEvaluation {
   const normalized = clampScore(score);
 
   return {
     score: normalized,
-    confidence: 0.15,
-    keyFindings: [finding],
-    risks: [],
+    confidence: 0.1,
+    keyFindings: [finding, "Automated evaluation failed — requires manual review"],
+    risks: ["Unable to complete automated assessment"],
     dataGaps: ["Evaluation failed — used heuristic fallback"],
     sources: [source],
   };

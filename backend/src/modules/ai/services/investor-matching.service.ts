@@ -7,7 +7,13 @@ import { ModelPurpose } from "../interfaces/pipeline.interface";
 import type { SynthesisResult } from "../interfaces/phase-results.interface";
 import { AiProviderService } from "../providers/ai-provider.service";
 import { investorThesis, startupMatch } from "../../investor/entities";
-import { LocationNormalizerService } from "./location-normalizer.service";
+import { AiPromptService } from "./ai-prompt.service";
+import { AiConfigService } from "./ai-config.service";
+import {
+  canonicalizeGeographicFocus,
+  geographySelectionMatchesStartupPath,
+  normalizeStartupPathFromLocation,
+} from "../../geography";
 
 const ThesisFitSchema = z.object({
   thesisFitScore: z.number().int().min(0).max(100),
@@ -21,6 +27,7 @@ interface StartupMatchInput {
     stage: string;
     fundingTarget?: number;
     location: string;
+    geoPath?: string[] | null;
   };
   synthesis: SynthesisResult;
   threshold?: number;
@@ -34,6 +41,7 @@ interface InvestorCandidate {
   checkSizeMin: number | null;
   checkSizeMax: number | null;
   geographicFocus: string[] | null;
+  geographicFocusNodes: string[] | null;
   thesisNarrative: string | null;
   notes: string | null;
 }
@@ -56,14 +64,16 @@ export class InvestorMatchingService {
   constructor(
     private drizzle: DrizzleService,
     private providers: AiProviderService,
-    private locationNormalizer: LocationNormalizerService,
+    private promptService: AiPromptService,
+    private aiConfig: AiConfigService,
   ) {}
 
   async matchStartup(input: StartupMatchInput): Promise<InvestorMatchingOutput> {
-    const threshold = input.threshold ?? 80;
-    const normalizedRegion = await this.locationNormalizer.normalize(
-      input.startup.location,
-    );
+    const threshold = input.threshold ?? this.aiConfig.getMatchingMinThesisFitScore();
+    const startupGeoPath =
+      input.startup.geoPath?.length && input.startup.geoPath.length > 0
+        ? input.startup.geoPath.map((value) => value.trim().toLowerCase())
+        : normalizeStartupPathFromLocation(input.startup.location);
 
     const candidates = await this.drizzle.db
       .select({
@@ -74,6 +84,7 @@ export class InvestorMatchingService {
         checkSizeMin: investorThesis.checkSizeMin,
         checkSizeMax: investorThesis.checkSizeMax,
         geographicFocus: investorThesis.geographicFocus,
+        geographicFocusNodes: investorThesis.geographicFocusNodes,
         thesisNarrative: investorThesis.thesisNarrative,
         notes: investorThesis.notes,
       })
@@ -81,7 +92,7 @@ export class InvestorMatchingService {
       .where(eq(investorThesis.isActive, true));
 
     const firstFilterPassed = candidates.filter((candidate) =>
-      this.passesFirstFilter(candidate, input, normalizedRegion),
+      this.passesFirstFilter(candidate, input, startupGeoPath),
     );
 
     const aligned = await Promise.all(
@@ -106,11 +117,10 @@ export class InvestorMatchingService {
   private passesFirstFilter(
     candidate: InvestorCandidate,
     input: StartupMatchInput,
-    normalizedRegion: string,
+    startupGeoPath: string[],
   ): boolean {
     const industries = candidate.industries ?? [];
     const stages = candidate.stages ?? [];
-    const geography = candidate.geographicFocus ?? [];
     const startupIndustry = input.startup.industry.trim().toLowerCase();
 
     const industryOk =
@@ -129,12 +139,14 @@ export class InvestorMatchingService {
       ((typeof checkMin !== "number" || fundingTarget >= checkMin) &&
         (typeof checkMax !== "number" || fundingTarget <= checkMax));
 
-    const geographyOk =
-      geography.length === 0 ||
-      geography.some((region) => {
-        const normalized = region.trim().toLowerCase();
-        return normalized === "global" || normalized === normalizedRegion;
-      });
+    const normalizedGeoFocus = canonicalizeGeographicFocus({
+      geographicFocusNodes: candidate.geographicFocusNodes,
+      geographicFocus: candidate.geographicFocus,
+    });
+    const geographyOk = geographySelectionMatchesStartupPath(
+      normalizedGeoFocus,
+      startupGeoPath,
+    );
 
     return industryOk && stageOk && checkSizeOk && geographyOk;
   }
@@ -144,32 +156,27 @@ export class InvestorMatchingService {
     input: StartupMatchInput,
   ): Promise<z.infer<typeof ThesisFitSchema>> {
     try {
+      const promptConfig = await this.promptService.resolve({
+        key: "matching.thesis",
+        stage: input.startup.stage,
+      });
+
       const { output } = await generateText({
         model: this.providers.resolveModelForPurpose(
           ModelPurpose.THESIS_ALIGNMENT,
         ),
         output: Output.object({ schema: ThesisFitSchema }),
-        temperature: 0.2,
-        maxOutputTokens: 500,
-        system: [
-          "You are an investor-startup fit analyst.",
-          "Score how well a startup aligns with an investor's stated thesis.",
-          "",
-          "## Scoring Rubric",
-          "0-30: Poor fit — misaligned on sector, stage, or thesis fundamentals",
-          "31-60: Partial fit — some overlap but material gaps in alignment",
-          "61-80: Good fit — strong overlap on key thesis dimensions",
-          "81-100: Excellent fit — deep alignment across sector, stage, and thesis narrative",
-        ].join("\n"),
-        prompt: [
-          "## Investor Thesis",
-          candidate.thesisNarrative ?? candidate.notes ?? "No thesis provided",
-          "",
-          "## Startup Profile",
-          `Summary: ${input.synthesis.executiveSummary}`,
-          `Recommendation: ${input.synthesis.recommendation}`,
-          `Overall Score: ${input.synthesis.overallScore}`,
-        ].join("\n"),
+        temperature: this.aiConfig.getMatchingTemperature(),
+        maxOutputTokens: this.aiConfig.getMatchingMaxOutputTokens(),
+        system: promptConfig.systemPrompt,
+        prompt: this.promptService.renderTemplate(promptConfig.userPrompt, {
+          investorThesis:
+            candidate.thesisNarrative ?? candidate.notes ?? "No thesis provided",
+          startupSummary: input.synthesis.executiveSummary,
+          recommendation: input.synthesis.recommendation,
+          overallScore: input.synthesis.overallScore,
+          startupProfile: JSON.stringify(input.synthesis),
+        }),
       });
 
       return ThesisFitSchema.parse(output);
@@ -180,7 +187,7 @@ export class InvestorMatchingService {
       );
 
       return {
-        thesisFitScore: 30,
+        thesisFitScore: this.aiConfig.getMatchingFallbackScore(),
         fitRationale:
           "Alignment fallback used due to model/runtime issue; requires manual review.",
       };

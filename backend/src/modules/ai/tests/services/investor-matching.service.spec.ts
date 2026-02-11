@@ -9,9 +9,10 @@ mock.module("ai", () => ({
 import { StartupStage } from "../../../startup/entities";
 import type { DrizzleService } from "../../../../database";
 import type { AiProviderService } from "../../providers/ai-provider.service";
+import type { AiPromptService } from "../../services/ai-prompt.service";
+import type { AiConfigService } from "../../services/ai-config.service";
 import { ModelPurpose } from "../../interfaces/pipeline.interface";
 import { InvestorMatchingService } from "../../services/investor-matching.service";
-import type { LocationNormalizerService } from "../../services/location-normalizer.service";
 import { createMockInvestorCandidates } from "../fixtures/mock-investor.fixture";
 import { createMockSynthesisResult } from "../fixtures/mock-synthesis.fixture";
 
@@ -19,7 +20,8 @@ describe("InvestorMatchingService", () => {
   let service: InvestorMatchingService;
   let drizzle: jest.Mocked<DrizzleService>;
   let providers: jest.Mocked<AiProviderService>;
-  let locationNormalizer: jest.Mocked<LocationNormalizerService>;
+  let promptService: jest.Mocked<AiPromptService>;
+  let aiConfig: jest.Mocked<AiConfigService>;
   const resolvedModel = { provider: "openai-model" };
 
   beforeEach(() => {
@@ -63,14 +65,37 @@ describe("InvestorMatchingService", () => {
       resolveModelForPurpose: jest.fn().mockReturnValue(resolvedModel),
     } as unknown as jest.Mocked<AiProviderService>;
 
-    locationNormalizer = {
-      normalize: jest.fn().mockResolvedValue("us"),
-    } as unknown as jest.Mocked<LocationNormalizerService>;
+    promptService = {
+      resolve: jest.fn().mockResolvedValue({
+        key: "matching.thesis",
+        stage: "seed",
+        systemPrompt: "You are an investor-startup fit analyst.",
+        userPrompt:
+          "## Investor Thesis\n{{investorThesis}}\n\n## Startup Profile\nSummary: {{startupSummary}}\nRecommendation: {{recommendation}}\nOverall Score: {{overallScore}}",
+        source: "code",
+        revisionId: null,
+      }),
+      renderTemplate: jest.fn().mockImplementation((template: string, vars: Record<string, string | number>) => {
+        let rendered = template;
+        for (const [key, value] of Object.entries(vars)) {
+          rendered = rendered.replaceAll(`{{${key}}}`, String(value));
+        }
+        return rendered;
+      }),
+    } as unknown as jest.Mocked<AiPromptService>;
+
+    aiConfig = {
+      getMatchingTemperature: jest.fn().mockReturnValue(0.2),
+      getMatchingMaxOutputTokens: jest.fn().mockReturnValue(500),
+      getMatchingMinThesisFitScore: jest.fn().mockReturnValue(80),
+      getMatchingFallbackScore: jest.fn().mockReturnValue(30),
+    } as unknown as jest.Mocked<AiConfigService>;
 
     service = new InvestorMatchingService(
       drizzle as unknown as DrizzleService,
       providers as unknown as AiProviderService,
-      locationNormalizer as unknown as LocationNormalizerService,
+      promptService as unknown as AiPromptService,
+      aiConfig as unknown as AiConfigService,
     );
   });
 
@@ -93,7 +118,6 @@ describe("InvestorMatchingService", () => {
       synthesis: createMockSynthesisResult(),
     });
 
-    expect(locationNormalizer.normalize).toHaveBeenCalledWith("San Francisco, CA");
     expect(providers.resolveModelForPurpose).toHaveBeenCalledWith(
       ModelPurpose.THESIS_ALIGNMENT,
     );

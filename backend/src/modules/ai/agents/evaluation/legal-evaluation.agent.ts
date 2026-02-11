@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import type { EvaluationPipelineInput } from "../../interfaces/agent.interface";
 import { LegalEvaluationSchema, type LegalEvaluation } from "../../schemas";
 import { AiConfigService } from "../../services/ai-config.service";
+import { AiPromptService } from "../../services/ai-prompt.service";
 import { AiProviderService } from "../../providers/ai-provider.service";
 import { BaseEvaluationAgent } from "./base-evaluation.agent";
 import { baseEvaluation } from "./evaluation-utils";
@@ -13,8 +14,8 @@ export class LegalEvaluationAgent extends BaseEvaluationAgent<LegalEvaluation> {
   protected readonly systemPrompt =
     "You are a startup investment analyst evaluating legal, compliance, and regulatory risk.";
 
-  constructor(providers: AiProviderService, aiConfig: AiConfigService) {
-    super(providers, aiConfig);
+  constructor(providers: AiProviderService, aiConfig: AiConfigService, promptService: AiPromptService) {
+    super(providers, aiConfig, promptService);
   }
 
   buildContext({ extraction, scraping, research }: EvaluationPipelineInput) {
@@ -54,7 +55,7 @@ export class LegalEvaluationAgent extends BaseEvaluationAgent<LegalEvaluation> {
 
   fallback(): LegalEvaluation {
     return LegalEvaluationSchema.parse({
-      ...baseEvaluation(45, "No blocking legal red flags identified in this pass"),
+      ...baseEvaluation(25, "Legal evaluation incomplete — requires manual review"),
       ipStatus: "No material IP blockers identified",
       regulatoryRisks: ["Regulatory exposure depends on target geography"],
       legalStructure: "Standard venture-friendly entity assumptions",

@@ -43,6 +43,10 @@ export class AgentMailSignatureGuard implements CanActivate {
 
   private validateSignature(payload: string, signature: string, secret: string): boolean {
     try {
+      if (!signature.startsWith('sha256=') || signature.length !== 71) {
+        return false;
+      }
+
       const hmac = crypto.createHmac('sha256', secret);
       hmac.update(payload);
       const expected = `sha256=${hmac.digest('hex')}`;

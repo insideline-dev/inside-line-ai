@@ -8,6 +8,7 @@ export interface MockInvestorCandidate {
   checkSizeMin: number | null;
   checkSizeMax: number | null;
   geographicFocus: string[];
+  geographicFocusNodes: string[];
   thesisNarrative: string | null;
   notes: string | null;
   isActive: boolean;
@@ -22,7 +23,8 @@ export function createMockInvestorCandidates(): MockInvestorCandidate[] {
       stages: [StartupStage.SEED],
       checkSizeMin: 500_000,
       checkSizeMax: 3_000_000,
-      geographicFocus: ["us", "global"],
+      geographicFocus: ["North America"],
+      geographicFocusNodes: ["l1:north_america"],
       thesisNarrative:
         "Invest in early-stage workflow software with clear compliance ROI and strong operator teams.",
       notes: "High conviction on industrial digitization",
@@ -35,7 +37,8 @@ export function createMockInvestorCandidates(): MockInvestorCandidate[] {
       stages: [StartupStage.SERIES_A],
       checkSizeMin: 3_000_000,
       checkSizeMax: 8_000_000,
-      geographicFocus: ["europe"],
+      geographicFocus: ["Europe"],
+      geographicFocusNodes: ["l1:europe"],
       thesisNarrative: "Growth-stage Europe-focused sector specialist.",
       notes: null,
       isActive: true,
@@ -47,7 +50,8 @@ export function createMockInvestorCandidates(): MockInvestorCandidate[] {
       stages: [StartupStage.PRE_SEED, StartupStage.SEED, StartupStage.SERIES_A],
       checkSizeMin: 250_000,
       checkSizeMax: 5_000_000,
-      geographicFocus: ["global"],
+      geographicFocus: ["Global"],
+      geographicFocusNodes: ["l1:global"],
       thesisNarrative:
         "Generalist fund focused on strong teams with automation and workflow defensibility.",
       notes: "Prefers evidence-driven execution",

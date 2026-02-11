@@ -15,6 +15,7 @@ import {
   portal,
 } from './entities';
 import { startup, StartupStatus } from '../startup/entities/startup.schema';
+import { deriveStartupGeography } from '../geography';
 import { SubmitToPortal, GetSubmissionsQuery } from './dto';
 import { NotificationType } from '../../notification/entities';
 
@@ -69,6 +70,7 @@ export class SubmissionService {
     }
 
     const slug = this.generateSlug(dto.name);
+    const geography = deriveStartupGeography(dto.location);
 
     const result = await this.drizzle.db.transaction(async (tx) => {
       const [createdStartup] = await tx
@@ -81,6 +83,12 @@ export class SubmissionService {
           description: dto.description,
           website: dto.website,
           location: dto.location,
+          normalizedRegion: geography.normalizedRegion,
+          geoCountryCode: geography.countryCode,
+          geoLevel1: geography.level1,
+          geoLevel2: geography.level2,
+          geoLevel3: geography.level3,
+          geoPath: geography.path,
           industry: dto.industry,
           stage: dto.stage,
           fundingTarget: dto.fundingTarget,

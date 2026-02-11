@@ -10,10 +10,14 @@ mock.module("ai", () => ({
 import { FieldExtractorService } from "../../services/field-extractor.service";
 import { AiProviderService } from "../../providers/ai-provider.service";
 import { ModelPurpose } from "../../interfaces/pipeline.interface";
+import { AiPromptService } from "../../services/ai-prompt.service";
+import { AiConfigService } from "../../services/ai-config.service";
 
 describe("FieldExtractorService", () => {
   let service: FieldExtractorService;
   let providers: jest.Mocked<AiProviderService>;
+  let promptService: jest.Mocked<AiPromptService>;
+  let aiConfig: jest.Mocked<AiConfigService>;
   const resolvedModel = { providerModel: "gemini-3.0-flash" };
 
   beforeEach(() => {
@@ -23,7 +27,30 @@ describe("FieldExtractorService", () => {
       resolveModelForPurpose: jest.fn().mockReturnValue(resolvedModel),
     } as unknown as jest.Mocked<AiProviderService>;
 
-    service = new FieldExtractorService(providers);
+    promptService = {
+      resolve: jest.fn().mockResolvedValue({
+        key: "extraction.fields",
+        stage: null,
+        systemPrompt: "extract",
+        userPrompt: "{{startupContextJson}}\n{{pitchDeckText}}",
+        source: "code",
+        revisionId: null,
+      }),
+      renderTemplate: jest.fn().mockImplementation((template: string, vars: Record<string, string>) => {
+        let rendered = template;
+        for (const [key, value] of Object.entries(vars)) {
+          rendered = rendered.replaceAll(`{{${key}}}`, value);
+        }
+        return rendered;
+      }),
+    } as unknown as jest.Mocked<AiPromptService>;
+
+    aiConfig = {
+      getExtractionTemperature: jest.fn().mockReturnValue(0.1),
+      getExtractionMaxInputLength: jest.fn().mockReturnValue(80000),
+    } as unknown as jest.Mocked<AiConfigService>;
+
+    service = new FieldExtractorService(providers, promptService, aiConfig);
   });
 
   it("returns empty result when raw text is blank", async () => {

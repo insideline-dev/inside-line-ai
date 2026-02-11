@@ -76,7 +76,7 @@ export const envSchema = z.object({
 
   // Email Configuration (Resend)
   RESEND_API_KEY: z.string().optional(), // Optional in dev mode
-  EMAIL_FROM: z.string().default("Clipaf <noreply@clipaf.com>"),
+  EMAIL_FROM: z.string().default("Inside Line <noreply@insideline.com>"),
 
   // Twilio Configuration
   TWILIO_ACCOUNT_SID: z.string().optional(),
@@ -86,6 +86,9 @@ export const envSchema = z.object({
   // AgentMail Integration
   AGENTMAIL_WEBHOOK_SECRET: z.string().optional(),
   AGENTMAIL_API_KEY: z.string().optional(),
+  // Clara email assistant routing
+  CLARA_INBOX_ID: z.string().optional(),
+  CLARA_ADMIN_USER_ID: z.string().optional(),
 
   // Unipile Integration (LinkedIn)
   UNIPILE_DSN: z.string().optional(),
@@ -100,6 +103,8 @@ export const envSchema = z.object({
   LINKEDIN_CACHE_TTL_DAYS: z.coerce.number().default(7),
   SCRAPING_MAX_LINKS_PER_PAGE: z.coerce.number().default(100),
   SCRAPING_MAX_PATH_DEPTH: z.coerce.number().default(4),
+  SCRAPING_BATCH_DELAY_MS: z.coerce.number().default(500),
+  SCRAPER_USER_AGENT: z.string().default("InsideLine-Bot/1.0"),
   SCRAPING_MEMORY_CACHE_MAX_ENTRIES: z.coerce.number().default(5000),
   SCRAPING_CACHE_REDIS_RECOVERY_INTERVAL_MS: z.coerce.number().default(30000),
 

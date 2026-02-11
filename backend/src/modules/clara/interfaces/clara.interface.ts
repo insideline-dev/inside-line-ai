@@ -47,6 +47,7 @@ export interface MessageContext {
   conversationHistory: ConversationMessage[];
   investorUserId: string | null;
   startupId: string | null;
+  startupStage?: string | null;
   conversationStatus: ConversationStatus;
 }
 

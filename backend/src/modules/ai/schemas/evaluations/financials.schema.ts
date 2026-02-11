@@ -8,8 +8,8 @@ export const FundingHistoryEntrySchema = z.object({
 });
 
 export const FinancialsEvaluationSchema = BaseEvaluationSchema.extend({
-  burnRate: z.number().nonnegative(),
-  runway: z.number().nonnegative(),
+  burnRate: z.number().nonnegative().optional(),
+  runway: z.number().nonnegative().optional(),
   fundingHistory: z.array(FundingHistoryEntrySchema).default([]),
   financialHealth: z.string().min(1),
 });

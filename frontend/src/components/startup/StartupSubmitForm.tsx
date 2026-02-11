@@ -743,13 +743,16 @@ export function StartupSubmitForm({
               name="location"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Location</FormLabel>
+                  <FormLabel>City / Location</FormLabel>
                   <FormControl>
                     <div className="relative">
                       <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                      <Input className="pl-10" placeholder="San Francisco, CA" {...field} data-testid="input-location" />
+                      <Input className="pl-10" placeholder="City, Country (e.g., Dubai, UAE)" {...field} data-testid="input-location" />
                     </div>
                   </FormControl>
+                  <FormDescription>
+                    We map your city/location to Level 1-3 investor geographies automatically.
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}

@@ -311,8 +311,7 @@ export class AuthController {
     // Revoke all refresh tokens for this user
     await this.authService.revokeAllUserTokens(currentUser.id);
 
-    res.clearCookie(JWT_COOKIE_NAME);
-    res.clearCookie(REFRESH_COOKIE_NAME);
+    this.clearTokenCookies(res);
     return { message: "Logged out successfully" };
   }
 
@@ -326,8 +325,7 @@ export class AuthController {
   ) {
     await this.authService.revokeAllUserTokens(currentUser.id);
 
-    res.clearCookie(JWT_COOKIE_NAME);
-    res.clearCookie(REFRESH_COOKIE_NAME);
+    this.clearTokenCookies(res);
     return { message: "Logged out from all devices" };
   }
 
@@ -398,19 +396,36 @@ export class AuthController {
   ) {
     const isDev = process.env.NODE_ENV === "development";
 
+    const sameSite: "lax" | "strict" = isDev ? "lax" : "strict";
+    const secure = !isDev;
+
     res.cookie(JWT_COOKIE_NAME, accessToken, {
       httpOnly: true,
-      secure: !isDev,
-      sameSite: isDev ? "lax" : "strict",
+      secure,
+      sameSite,
+      path: "/",
       maxAge: 15 * 60 * 1000,
     });
 
     res.cookie(REFRESH_COOKIE_NAME, refreshToken, {
       httpOnly: true,
-      secure: !isDev,
-      sameSite: isDev ? "lax" : "strict",
+      secure,
+      sameSite,
+      path: "/",
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
+  }
+
+  private clearTokenCookies(res: Response) {
+    const isDev = process.env.NODE_ENV === "development";
+    const opts = {
+      httpOnly: true,
+      secure: !isDev,
+      sameSite: (isDev ? "lax" : "strict") as "lax" | "strict",
+      path: "/",
+    };
+    res.clearCookie(JWT_COOKIE_NAME, opts);
+    res.clearCookie(REFRESH_COOKIE_NAME, opts);
   }
 
   private sanitizeUser(u: DbUser): UserResponseDto {

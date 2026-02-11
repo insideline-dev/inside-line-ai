@@ -43,6 +43,110 @@ type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
 
 
 
+export type investorControllerGetGeographyTaxonomyResponse200 = {
+  data: void
+  status: 200
+}
+    
+export type investorControllerGetGeographyTaxonomyResponseSuccess = (investorControllerGetGeographyTaxonomyResponse200) & {
+  headers: Headers;
+};
+;
+
+export type investorControllerGetGeographyTaxonomyResponse = (investorControllerGetGeographyTaxonomyResponseSuccess)
+
+export const getInvestorControllerGetGeographyTaxonomyUrl = () => {
+
+
+  
+
+  return `/investor/geography-taxonomy`
+}
+
+export const investorControllerGetGeographyTaxonomy = async ( options?: RequestInit): Promise<investorControllerGetGeographyTaxonomyResponse> => {
+  
+  return customFetch<investorControllerGetGeographyTaxonomyResponse>(getInvestorControllerGetGeographyTaxonomyUrl(),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getInvestorControllerGetGeographyTaxonomyQueryKey = () => {
+    return [
+    `/investor/geography-taxonomy`
+    ] as const;
+    }
+
+    
+export const getInvestorControllerGetGeographyTaxonomyQueryOptions = <TData = Awaited<ReturnType<typeof investorControllerGetGeographyTaxonomy>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetGeographyTaxonomy>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getInvestorControllerGetGeographyTaxonomyQueryKey();
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof investorControllerGetGeographyTaxonomy>>> = ({ signal }) => investorControllerGetGeographyTaxonomy({ signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetGeographyTaxonomy>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type InvestorControllerGetGeographyTaxonomyQueryResult = NonNullable<Awaited<ReturnType<typeof investorControllerGetGeographyTaxonomy>>>
+export type InvestorControllerGetGeographyTaxonomyQueryError = ErrorType<unknown>
+
+
+export function useInvestorControllerGetGeographyTaxonomy<TData = Awaited<ReturnType<typeof investorControllerGetGeographyTaxonomy>>, TError = ErrorType<unknown>>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetGeographyTaxonomy>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof investorControllerGetGeographyTaxonomy>>,
+          TError,
+          Awaited<ReturnType<typeof investorControllerGetGeographyTaxonomy>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useInvestorControllerGetGeographyTaxonomy<TData = Awaited<ReturnType<typeof investorControllerGetGeographyTaxonomy>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetGeographyTaxonomy>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof investorControllerGetGeographyTaxonomy>>,
+          TError,
+          Awaited<ReturnType<typeof investorControllerGetGeographyTaxonomy>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useInvestorControllerGetGeographyTaxonomy<TData = Awaited<ReturnType<typeof investorControllerGetGeographyTaxonomy>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetGeographyTaxonomy>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useInvestorControllerGetGeographyTaxonomy<TData = Awaited<ReturnType<typeof investorControllerGetGeographyTaxonomy>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetGeographyTaxonomy>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getInvestorControllerGetGeographyTaxonomyQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
 export type investorControllerGetThesisResponse200 = {
   data: void
   status: 200

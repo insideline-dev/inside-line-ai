@@ -3,6 +3,7 @@ import { ResearchService } from "../../services/research.service";
 import { PipelineStateService } from "../../services/pipeline-state.service";
 import { GeminiResearchService } from "../../services/gemini-research.service";
 import { PipelineFeedbackService } from "../../services/pipeline-feedback.service";
+import { AiPromptService } from "../../services/ai-prompt.service";
 import { PipelinePhase } from "../../interfaces/pipeline.interface";
 import type {
   ExtractionResult,
@@ -16,6 +17,7 @@ describe("ResearchService", () => {
   let pipelineState: jest.Mocked<PipelineStateService>;
   let geminiResearch: jest.Mocked<GeminiResearchService>;
   let pipelineFeedback: jest.Mocked<PipelineFeedbackService>;
+  let promptService: jest.Mocked<AiPromptService>;
 
   const extraction: ExtractionResult = {
     companyName: "Inside Line",
@@ -132,7 +134,30 @@ describe("ResearchService", () => {
       markConsumedByScope: jest.fn().mockResolvedValue(0),
     } as unknown as jest.Mocked<PipelineFeedbackService>;
 
-    service = new ResearchService(pipelineState, geminiResearch, pipelineFeedback);
+    promptService = {
+      resolve: jest.fn().mockResolvedValue({
+        key: "research.team",
+        stage: "seed",
+        systemPrompt: "test-system",
+        userPrompt: "{{contextJson}}",
+        source: "code",
+        revisionId: null,
+      }),
+      renderTemplate: jest.fn().mockImplementation((template: string, vars: Record<string, string>) => {
+        let rendered = template;
+        for (const [key, value] of Object.entries(vars)) {
+          rendered = rendered.replaceAll(`{{${key}}}`, value);
+        }
+        return rendered;
+      }),
+    } as unknown as jest.Mocked<AiPromptService>;
+
+    service = new ResearchService(
+      pipelineState,
+      geminiResearch,
+      pipelineFeedback,
+      promptService,
+    );
   });
 
   it("runs all 4 research agents and aggregates results with deduped sources", async () => {

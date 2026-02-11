@@ -21,6 +21,7 @@ export interface InvestmentThesis {
   checkSizeMax?: number;
   industries?: string[];
   geographicFocus?: string[];
+  geographicFocusNodes?: string[];
   businessModels?: string[];
   minRevenue?: number;
   minGrowthRate?: number;

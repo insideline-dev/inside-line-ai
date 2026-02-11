@@ -106,10 +106,13 @@ describe('ThesisService', () => {
 
       expect(result).toEqual(mockThesis);
       expect(mockDb.insert).toHaveBeenCalled();
-      expect(mockDb.values).toHaveBeenCalledWith({
-        userId: mockUserId,
-        ...createDto,
-      });
+      expect(mockDb.values).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: mockUserId,
+          geographicFocus: expect.any(Array),
+          geographicFocusNodes: expect.arrayContaining(["l1:north_america"]),
+        }),
+      );
     });
 
     it('should update thesis when one exists', async () => {

@@ -1,4 +1,5 @@
 import { env } from "@/env";
+import { getAccessToken, setAccessToken } from "@/lib/auth/token";
 
 const API_BASE_URL = env.VITE_API_BASE_URL;
 
@@ -11,7 +12,12 @@ async function refreshToken(): Promise<boolean> {
       method: "POST",
       credentials: "include",
     });
-    return res.ok;
+    if (res.ok) {
+      const data = await res.json();
+      if (data.accessToken) setAccessToken(data.accessToken);
+      return true;
+    }
+    return false;
   } catch {
     return false;
   }
@@ -21,13 +27,20 @@ export async function customFetch<T>(
   url: string,
   options: RequestInit = {}
 ): Promise<T> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(options.headers as Record<string, string>),
+  };
+
+  const token = getAccessToken();
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
   const config: RequestInit = {
     ...options,
-    credentials: "include", // Always send cookies
-    headers: {
-      "Content-Type": "application/json",
-      ...options.headers,
-    },
+    credentials: "include", // Cookies as fallback
+    headers,
   };
 
   let response = await fetch(`${API_BASE_URL}${url}`, config);
@@ -44,13 +57,14 @@ export async function customFetch<T>(
     const refreshed = await refreshPromise;
 
     if (refreshed) {
-      response = await fetch(`${API_BASE_URL}${url}`, config);
-    } else {
-      sessionStorage.removeItem("redirectAfterAuth");
-      if (typeof window !== "undefined" && "queryClient" in window) {
-        (window as Record<string, unknown>).queryClient = undefined;
+      // Retry with new token
+      const retryToken = getAccessToken();
+      if (retryToken) {
+        headers["Authorization"] = `Bearer ${retryToken}`;
       }
-      window.location.href = "/login";
+      response = await fetch(`${API_BASE_URL}${url}`, { ...config, headers });
+    } else {
+      setAccessToken(null);
       throw new Error("Session expired");
     }
   }

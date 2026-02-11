@@ -7,6 +7,7 @@ import { eq } from 'drizzle-orm';
 import { DrizzleService } from '../../database';
 import { user, UserRole } from '../../auth/entities/auth.schema';
 import { startup, StartupStatus, StartupStage } from '../startup/entities/startup.schema';
+import { deriveStartupGeography } from '../geography';
 import { ExportUsersQuery, ExportStartupsQuery } from './dto';
 
 interface CsvRow {
@@ -172,6 +173,7 @@ export class DataImportService {
         }
 
         const slug = this.generateSlug(row.name);
+        const geography = deriveStartupGeography(row.location.trim());
 
         await this.drizzle.db.insert(startup).values({
           userId: foundUser.id,
@@ -181,6 +183,12 @@ export class DataImportService {
           description: row.description.trim(),
           website: row.website.trim(),
           location: row.location.trim(),
+          normalizedRegion: geography.normalizedRegion,
+          geoCountryCode: geography.countryCode,
+          geoLevel1: geography.level1,
+          geoLevel2: geography.level2,
+          geoLevel3: geography.level3,
+          geoPath: geography.path,
           industry: row.industry.trim(),
           stage: stage as StartupStage,
           fundingTarget,

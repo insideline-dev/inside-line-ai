@@ -12,6 +12,7 @@ import { TeamEvaluationAgent } from "../../agents/evaluation/team-evaluation.age
 import { TractionEvaluationAgent } from "../../agents/evaluation/traction-evaluation.agent";
 import type { AiProviderService } from "../../providers/ai-provider.service";
 import type { AiConfigService } from "../../services/ai-config.service";
+import type { AiPromptService } from "../../services/ai-prompt.service";
 import { createEvaluationPipelineInput } from "../fixtures/evaluation-pipeline.fixture";
 
 const providers = {
@@ -22,11 +23,16 @@ const aiConfig = {
   getModelForPurpose: jest.fn(),
 } as unknown as AiConfigService;
 
+const promptService = {
+  resolve: jest.fn(),
+  renderTemplate: jest.fn(),
+} as unknown as AiPromptService;
+
 describe("Evaluation agent context engineering", () => {
   const pipelineData = createEvaluationPipelineInput();
 
   it("team agent includes only team-relevant context", () => {
-    const agent = new TeamEvaluationAgent(providers, aiConfig);
+    const agent = new TeamEvaluationAgent(providers, aiConfig, promptService);
     const context = agent.buildContext(pipelineData);
 
     expect(Object.keys(context).sort()).toEqual([
@@ -41,7 +47,7 @@ describe("Evaluation agent context engineering", () => {
   });
 
   it("market agent includes market and TAM context only", () => {
-    const agent = new MarketEvaluationAgent(providers, aiConfig);
+    const agent = new MarketEvaluationAgent(providers, aiConfig, promptService);
     const context = agent.buildContext(pipelineData);
 
     expect(Object.keys(context).sort()).toEqual([
@@ -56,7 +62,7 @@ describe("Evaluation agent context engineering", () => {
   });
 
   it("product agent includes product section and website product signals", () => {
-    const agent = new ProductEvaluationAgent(providers, aiConfig);
+    const agent = new ProductEvaluationAgent(providers, aiConfig, promptService);
     const context = agent.buildContext(pipelineData);
 
     expect(Object.keys(context).sort()).toEqual([
@@ -71,7 +77,7 @@ describe("Evaluation agent context engineering", () => {
   });
 
   it("traction agent includes metrics and news signals", () => {
-    const agent = new TractionEvaluationAgent(providers, aiConfig);
+    const agent = new TractionEvaluationAgent(providers, aiConfig, promptService);
     const context = agent.buildContext(pipelineData);
 
     expect(Object.keys(context).sort()).toEqual([
@@ -85,7 +91,7 @@ describe("Evaluation agent context engineering", () => {
   });
 
   it("business model agent includes pricing and revenue context", () => {
-    const agent = new BusinessModelEvaluationAgent(providers, aiConfig);
+    const agent = new BusinessModelEvaluationAgent(providers, aiConfig, promptService);
     const context = agent.buildContext(pipelineData);
 
     expect(Object.keys(context).sort()).toEqual([
@@ -99,7 +105,7 @@ describe("Evaluation agent context engineering", () => {
   });
 
   it("gtm agent includes marketing pages and distribution context", () => {
-    const agent = new GtmEvaluationAgent(providers, aiConfig);
+    const agent = new GtmEvaluationAgent(providers, aiConfig, promptService);
     const context = agent.buildContext(pipelineData);
 
     expect(Object.keys(context).sort()).toEqual([
@@ -113,7 +119,7 @@ describe("Evaluation agent context engineering", () => {
   });
 
   it("financials agent includes financial assumptions only", () => {
-    const agent = new FinancialsEvaluationAgent(providers, aiConfig);
+    const agent = new FinancialsEvaluationAgent(providers, aiConfig, promptService);
     const context = agent.buildContext(pipelineData);
 
     expect(Object.keys(context).sort()).toEqual([
@@ -128,7 +134,7 @@ describe("Evaluation agent context engineering", () => {
   });
 
   it("competitive advantage agent includes moat-specific context", () => {
-    const agent = new CompetitiveAdvantageEvaluationAgent(providers, aiConfig);
+    const agent = new CompetitiveAdvantageEvaluationAgent(providers, aiConfig, promptService);
     const context = agent.buildContext(pipelineData);
 
     expect(Object.keys(context).sort()).toEqual([
@@ -142,7 +148,7 @@ describe("Evaluation agent context engineering", () => {
   });
 
   it("legal agent includes compliance and regulatory context", () => {
-    const agent = new LegalEvaluationAgent(providers, aiConfig);
+    const agent = new LegalEvaluationAgent(providers, aiConfig, promptService);
     const context = agent.buildContext(pipelineData);
 
     expect(Object.keys(context).sort()).toEqual([
@@ -156,7 +162,7 @@ describe("Evaluation agent context engineering", () => {
   });
 
   it("deal terms agent includes fundraising structure details", () => {
-    const agent = new DealTermsEvaluationAgent(providers, aiConfig);
+    const agent = new DealTermsEvaluationAgent(providers, aiConfig, promptService);
     const context = agent.buildContext(pipelineData);
 
     expect(Object.keys(context).sort()).toEqual([
@@ -171,7 +177,7 @@ describe("Evaluation agent context engineering", () => {
   });
 
   it("exit potential agent includes market size and M&A signals", () => {
-    const agent = new ExitPotentialEvaluationAgent(providers, aiConfig);
+    const agent = new ExitPotentialEvaluationAgent(providers, aiConfig, promptService);
     const context = agent.buildContext(pipelineData);
 
     expect(Object.keys(context).sort()).toEqual([

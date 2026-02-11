@@ -132,6 +132,23 @@ function getAllMatches(pipeline: PipelineData): PipelineMatch[] {
   return STATUSES.flatMap((s) => pipeline[s]);
 }
 
+function extractResponseData<T>(payload: unknown): T | null {
+  if (payload === null || payload === undefined) {
+    return null;
+  }
+
+  if (
+    typeof payload === "object" &&
+    !Array.isArray(payload) &&
+    "data" in (payload as Record<string, unknown>) &&
+    (payload as Record<string, unknown>).data !== undefined
+  ) {
+    return (payload as { data: T }).data;
+  }
+
+  return payload as T;
+}
+
 // --- Main Component ---
 
 function PipelinePage() {
@@ -145,7 +162,7 @@ function PipelinePage() {
 
   const queryClient = useQueryClient();
   const pipelineResponse = useInvestorControllerGetPipeline();
-  const pipeline = pipelineResponse.data?.data as PipelineData | undefined;
+  const pipeline = extractResponseData<PipelineData>(pipelineResponse.data);
 
   const updateStatus = useInvestorControllerUpdateMatchStatus({
     mutation: {

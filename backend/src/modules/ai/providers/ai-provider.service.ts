@@ -6,6 +6,15 @@ import { Mistral } from "@mistralai/mistralai";
 import { ModelPurpose } from "../interfaces/pipeline.interface";
 import { AiConfigService } from "../services/ai-config.service";
 
+const MODEL_PROVIDER_PREFIX: Record<string, string> = {
+  gpt: "openai",
+  o1: "openai",
+  o3: "openai",
+  gemini: "google",
+  claude: "anthropic",
+  mistral: "mistral",
+};
+
 @Injectable()
 export class AiProviderService {
   private openAiClient: ReturnType<typeof createOpenAI> | null = null;
@@ -53,16 +62,24 @@ export class AiProviderService {
   }
 
   resolveModel(modelName: string) {
-    if (modelName.startsWith("gpt")) {
+    const provider = this.resolveProviderForModel(modelName);
+    if (provider === "openai") {
       return this.getOpenAi()(modelName);
     }
-
     return this.getGemini()(modelName);
   }
 
   resolveModelForPurpose(purpose: ModelPurpose) {
     const modelName = this.aiConfig.getModelForPurpose(purpose);
     return this.resolveModel(modelName);
+  }
+
+  private resolveProviderForModel(modelName: string): string {
+    const lowerModel = modelName.toLowerCase();
+    const prefix = Object.keys(MODEL_PROVIDER_PREFIX).find((p) =>
+      lowerModel.startsWith(p),
+    );
+    return prefix ? MODEL_PROVIDER_PREFIX[prefix] : "openai";
   }
 
   private assertKey(

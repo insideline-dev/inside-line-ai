@@ -126,6 +126,7 @@ export const investorThesis = pgTable(
     checkSizeMin: integer('check_size_min'),
     checkSizeMax: integer('check_size_max'),
     geographicFocus: text('geographic_focus').array(),
+    geographicFocusNodes: text('geographic_focus_nodes').array(),
 
     // Preferences
     mustHaveFeatures: text('must_have_features').array(),

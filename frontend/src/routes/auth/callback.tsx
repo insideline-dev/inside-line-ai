@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { authApi, authKeys } from "@/lib/auth";
+import { setAccessToken } from "@/lib/auth/token";
 import { safeRedirect } from "@/lib/utils";
 
 const searchSchema = z.object({
@@ -29,10 +30,12 @@ function AuthCallbackPage() {
       }
 
       if (success === "true") {
-        // OAuth succeeded - fetch user and redirect
+        // OAuth succeeded - refresh to get access token, then fetch user
         try {
-          const user = await authApi.getCurrentUser();
-          queryClient.setQueryData(authKeys.user, user);
+          const refreshRes = await authApi.refresh();
+          setAccessToken(refreshRes.accessToken);
+          queryClient.setQueryData(authKeys.user, refreshRes.user);
+          const user = refreshRes.user;
           if (user.onboardingCompleted) {
             const rawRedirect = sessionStorage.getItem("redirectAfterAuth");
             if (rawRedirect) sessionStorage.removeItem("redirectAfterAuth");

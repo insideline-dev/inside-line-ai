@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,14 +7,23 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Save, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Loader2, Save } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useInvestorControllerGetThesis,
+  useInvestorControllerGetGeographyTaxonomy,
   useInvestorControllerCreateOrUpdateThesis,
   getInvestorControllerGetThesisQueryKey,
 } from "@/api/generated/investor/investor";
+import {
+  buildThesisSavePayload,
+  extractResponseData,
+  mapLegacyLabelsToNodeIds,
+  toggleGeographyNodeSelection,
+  type GeographyNode,
+  type ThesisFormData,
+} from "./-thesis.helpers";
 
 export const Route = createFileRoute("/_protected/investor/thesis")({
   component: InvestorThesisPage,
@@ -37,46 +46,114 @@ const sectors = [
   { id: "ecommerce", label: "E-Commerce" },
 ];
 
-const geographies = ["North America", "Europe", "Asia Pacific", "Latin America", "Middle East"];
+function buildParentNodeMap(
+  nodes: GeographyNode[],
+  parentId?: string,
+  map = new Map<string, string>(),
+): Map<string, string> {
+  for (const node of nodes) {
+    if (parentId) {
+      map.set(node.id, parentId);
+    }
+    if (node.children?.length) {
+      buildParentNodeMap(node.children, node.id, map);
+    }
+  }
+  return map;
+}
 
-interface ThesisFormData {
-  stages: string[];
-  industries: string[];
-  geographicFocus: string[];
-  checkSizeMin: number;
-  checkSizeMax: number;
-  narrative: string;
+function collectExpandableNodeIds(nodes: GeographyNode[], ids: string[] = []): string[] {
+  for (const node of nodes) {
+    if (node.children?.length) {
+      ids.push(node.id);
+      collectExpandableNodeIds(node.children, ids);
+    }
+  }
+  return ids;
 }
 
 function InvestorThesisPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { data: response, isLoading } = useInvestorControllerGetThesis();
-  const thesis = response?.data;
+  const { data: response, isLoading: isLoadingThesis } = useInvestorControllerGetThesis();
+  const {
+    data: taxonomyResponse,
+    isLoading: isLoadingTaxonomy,
+    isError: isTaxonomyError,
+  } = useInvestorControllerGetGeographyTaxonomy();
+  const thesis = useMemo(
+    () => extractResponseData<Record<string, unknown> | null>(response),
+    [response],
+  );
+  const taxonomyNodes = useMemo(
+    () => {
+      const taxonomy = extractResponseData<{ nodes?: GeographyNode[] }>(taxonomyResponse);
+      return taxonomy?.nodes ?? [];
+    },
+    [taxonomyResponse],
+  );
 
   const [formData, setFormData] = useState<ThesisFormData>({
     stages: ["seed", "series_a"],
     industries: ["software", "artificial_intelligence"],
-    geographicFocus: ["North America", "Europe"],
+    geographicFocusNodes: [],
     checkSizeMin: 500000,
     checkSizeMax: 3000000,
-    narrative: "",
+    notes: "",
   });
+  const [expandedGeographyNodes, setExpandedGeographyNodes] = useState<string[]>([]);
+  const parentNodeMap = useMemo(() => buildParentNodeMap(taxonomyNodes), [taxonomyNodes]);
+  const expandableNodeIds = useMemo(() => collectExpandableNodeIds(taxonomyNodes), [taxonomyNodes]);
 
   // Populate form when thesis loads
   useEffect(() => {
-    if (thesis) {
-      const t = thesis as ThesisFormData & Record<string, unknown>;
+    if (thesis && taxonomyNodes.length > 0) {
+      const t = thesis;
+      const savedGeoNodes = Array.isArray(t.geographicFocusNodes)
+        ? t.geographicFocusNodes.filter((value): value is string => typeof value === "string")
+        : [];
+      const legacyGeo = Array.isArray(t.geographicFocus)
+        ? t.geographicFocus.filter((value): value is string => typeof value === "string")
+        : [];
+
       setFormData({
-        stages: t.stages ?? ["seed", "series_a"],
-        industries: t.industries ?? ["software", "artificial_intelligence"],
-        geographicFocus: t.geographicFocus ?? ["North America", "Europe"],
-        checkSizeMin: t.checkSizeMin ?? 500000,
-        checkSizeMax: t.checkSizeMax ?? 3000000,
-        narrative: t.narrative ?? "",
+        stages: Array.isArray(t.stages)
+          ? t.stages.filter((value): value is string => typeof value === "string")
+          : ["seed", "series_a"],
+        industries: Array.isArray(t.industries)
+          ? t.industries.filter((value): value is string => typeof value === "string")
+          : ["software", "artificial_intelligence"],
+        geographicFocusNodes:
+          savedGeoNodes.length > 0
+            ? savedGeoNodes
+            : mapLegacyLabelsToNodeIds(legacyGeo, taxonomyNodes),
+        checkSizeMin: typeof t.checkSizeMin === "number" ? t.checkSizeMin : 500000,
+        checkSizeMax: typeof t.checkSizeMax === "number" ? t.checkSizeMax : 3000000,
+        notes: typeof t.notes === "string" ? t.notes : "",
       });
     }
-  }, [thesis]);
+  }, [thesis, taxonomyNodes]);
+
+  useEffect(() => {
+    if (!formData.geographicFocusNodes.length || taxonomyNodes.length === 0) {
+      return;
+    }
+
+    const ancestors = new Set<string>();
+    for (const nodeId of formData.geographicFocusNodes) {
+      let currentParent = parentNodeMap.get(nodeId);
+      while (currentParent) {
+        ancestors.add(currentParent);
+        currentParent = parentNodeMap.get(currentParent);
+      }
+    }
+
+    if (ancestors.size === 0) {
+      return;
+    }
+
+    setExpandedGeographyNodes((prev) => Array.from(new Set([...prev, ...Array.from(ancestors)])));
+  }, [formData.geographicFocusNodes, parentNodeMap, taxonomyNodes.length]);
 
   const { mutate: saveThesis, isPending: isSaving } = useInvestorControllerCreateOrUpdateThesis({
     mutation: {
@@ -108,20 +185,84 @@ function InvestorThesisPage() {
     }));
   };
 
-  const handleGeoToggle = (geo: string, checked: boolean) => {
+  const handleGeoToggle = (nodeId: string, checked: boolean) => {
     setFormData((prev) => ({
       ...prev,
-      geographicFocus: checked
-        ? [...prev.geographicFocus, geo]
-        : prev.geographicFocus.filter((g) => g !== geo),
+      geographicFocusNodes: toggleGeographyNodeSelection(
+        prev.geographicFocusNodes,
+        nodeId,
+        checked,
+      ),
     }));
   };
 
-  const handleSave = () => {
-    saveThesis({ data: formData });
+  const handleGeoExpandToggle = (nodeId: string) => {
+    setExpandedGeographyNodes((prev) =>
+      prev.includes(nodeId)
+        ? prev.filter((id) => id !== nodeId)
+        : [...prev, nodeId],
+    );
   };
 
-  if (isLoading) {
+  const handleExpandAllGeographies = () => {
+    setExpandedGeographyNodes(expandableNodeIds);
+  };
+
+  const handleCollapseAllGeographies = () => {
+    setExpandedGeographyNodes([]);
+  };
+
+  const handleSave = () => {
+    saveThesis({
+      data: buildThesisSavePayload(formData),
+    });
+  };
+
+  const renderGeographyNode = (node: GeographyNode, depth = 0) => (
+    <div key={node.id} className="space-y-1">
+      <div
+        className="flex items-center gap-2 rounded-md py-1 pr-1 hover:bg-muted/40"
+        style={{ paddingLeft: `${depth * 16}px` }}
+      >
+        {node.children?.length ? (
+          <button
+            type="button"
+            aria-label={
+              expandedGeographyNodes.includes(node.id) ? `Collapse ${node.label}` : `Expand ${node.label}`
+            }
+            className="inline-flex h-5 w-5 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted"
+            onClick={() => handleGeoExpandToggle(node.id)}
+          >
+            {expandedGeographyNodes.includes(node.id) ? (
+              <ChevronDown className="h-4 w-4" />
+            ) : (
+              <ChevronRight className="h-4 w-4" />
+            )}
+          </button>
+        ) : (
+          <span className="inline-block h-5 w-5" />
+        )}
+        <Checkbox
+          id={node.id}
+          checked={formData.geographicFocusNodes.includes(node.id)}
+          onCheckedChange={(checked) => handleGeoToggle(node.id, !!checked)}
+        />
+        <Label
+          htmlFor={node.id}
+          className={`cursor-pointer ${node.level === 1 ? "font-semibold" : ""}`}
+        >
+          {node.label}
+        </Label>
+      </div>
+      {node.children?.length && expandedGeographyNodes.includes(node.id) ? (
+        <div className="ml-2 space-y-1 border-l border-border/60">
+          {node.children.map((child) => renderGeographyNode(child, depth + 1))}
+        </div>
+      ) : null}
+    </div>
+  );
+
+  if (isLoadingThesis || isLoadingTaxonomy) {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
@@ -223,19 +364,46 @@ function InvestorThesisPage() {
         <Card>
           <CardHeader>
             <CardTitle>Geographies</CardTitle>
-            <CardDescription>Regions you invest in</CardDescription>
+            <CardDescription>
+              Select your regional focus (Level 1/2/3). Expand regions to drill down.
+            </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            {geographies.map((geo) => (
-              <div key={geo} className="flex items-center space-x-2">
-                <Checkbox
-                  id={geo}
-                  checked={formData.geographicFocus.includes(geo)}
-                  onCheckedChange={(checked) => handleGeoToggle(geo, !!checked)}
-                />
-                <Label htmlFor={geo}>{geo}</Label>
-              </div>
-            ))}
+          <CardContent className="space-y-4 max-h-[460px] overflow-y-auto">
+            {isTaxonomyError ? (
+              <p className="text-sm text-destructive">
+                Failed to load geography taxonomy. Please refresh and try again.
+              </p>
+            ) : taxonomyNodes.length > 0 ? (
+              <>
+                <div className="flex items-center justify-end gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleExpandAllGeographies}
+                    disabled={expandableNodeIds.length === 0}
+                  >
+                    Expand all
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleCollapseAllGeographies}
+                    disabled={expandedGeographyNodes.length === 0}
+                  >
+                    Collapse all
+                  </Button>
+                </div>
+                <div className="space-y-1">
+                  {taxonomyNodes.map((node) => renderGeographyNode(node))}
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                No geography taxonomy available.
+              </p>
+            )}
           </CardContent>
         </Card>
 
@@ -248,8 +416,8 @@ function InvestorThesisPage() {
             <Textarea
               placeholder="We invest in early-stage B2B SaaS companies with strong technical founders..."
               className="min-h-[150px]"
-              value={formData.narrative}
-              onChange={(e) => setFormData((prev) => ({ ...prev, narrative: e.target.value }))}
+              value={formData.notes}
+              onChange={(e) => setFormData((prev) => ({ ...prev, notes: e.target.value }))}
             />
           </CardContent>
         </Card>

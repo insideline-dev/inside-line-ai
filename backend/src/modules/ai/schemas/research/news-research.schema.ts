@@ -11,7 +11,7 @@ export const NewsArticleSchema = z.object({
 export const NewsResearchSchema = z.object({
   articles: z.array(NewsArticleSchema).default([]),
   pressReleases: z.array(z.string()).default([]),
-  sentiment: z.enum(["positive", "neutral", "negative"]),
+  sentiment: z.enum(["positive", "neutral", "negative"]).default("neutral"),
   recentEvents: z.array(z.string()).default([]),
   sources: z.array(z.string().url()).default([]),
 });

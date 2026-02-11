@@ -21,4 +21,5 @@ export const GetUploadUrlDtoContentType = {
   'video/mp4': 'video/mp4',
   'video/webm': 'video/webm',
   'application/json': 'application/json',
+  'application/pdf': 'application/pdf',
 } as const;

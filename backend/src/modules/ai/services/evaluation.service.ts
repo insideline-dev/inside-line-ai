@@ -8,25 +8,13 @@ import type {
   EvaluationPipelineInput,
 } from "../interfaces/agent.interface";
 import type { EvaluationResult } from "../interfaces/phase-results.interface";
+import { EVALUATION_SCHEMAS } from "../schemas";
+import { EVALUATION_AGENT_KEYS } from "../constants/agent-keys";
 
 export interface EvaluationRunOptions {
   onAgentComplete?: (payload: EvaluationAgentCompletion) => void;
   agentKey?: EvaluationAgentKey;
 }
-
-const ALL_EVALUATION_AGENT_KEYS: EvaluationAgentKey[] = [
-  "team",
-  "market",
-  "product",
-  "traction",
-  "businessModel",
-  "gtm",
-  "financials",
-  "competitiveAdvantage",
-  "legal",
-  "dealTerms",
-  "exitPotential",
-];
 
 @Injectable()
 export class EvaluationService {
@@ -109,30 +97,11 @@ export class EvaluationService {
       (entry) => entry.agent !== rerun.agent,
     );
 
-    if (rerun.agent === "team") {
-      next.team = rerun.output as EvaluationResult["team"];
-    } else if (rerun.agent === "market") {
-      next.market = rerun.output as EvaluationResult["market"];
-    } else if (rerun.agent === "product") {
-      next.product = rerun.output as EvaluationResult["product"];
-    } else if (rerun.agent === "traction") {
-      next.traction = rerun.output as EvaluationResult["traction"];
-    } else if (rerun.agent === "businessModel") {
-      next.businessModel = rerun.output as EvaluationResult["businessModel"];
-    } else if (rerun.agent === "gtm") {
-      next.gtm = rerun.output as EvaluationResult["gtm"];
-    } else if (rerun.agent === "financials") {
-      next.financials = rerun.output as EvaluationResult["financials"];
-    } else if (rerun.agent === "competitiveAdvantage") {
-      next.competitiveAdvantage =
-        rerun.output as EvaluationResult["competitiveAdvantage"];
-    } else if (rerun.agent === "legal") {
-      next.legal = rerun.output as EvaluationResult["legal"];
-    } else if (rerun.agent === "dealTerms") {
-      next.dealTerms = rerun.output as EvaluationResult["dealTerms"];
-    } else {
-      next.exitPotential = rerun.output as EvaluationResult["exitPotential"];
-    }
+    const schema = EVALUATION_SCHEMAS[rerun.agent];
+    const parsed = schema.safeParse(rerun.output);
+    (next as unknown as Record<string, unknown>)[rerun.agent] = parsed.success
+      ? parsed.data
+      : rerun.output;
 
     const failed = new Set(next.summary.failedKeys);
     if (rerun.usedFallback) {
@@ -145,12 +114,12 @@ export class EvaluationService {
       failed.delete(rerun.agent);
     }
 
-    next.summary.failedKeys = ALL_EVALUATION_AGENT_KEYS.filter((key) =>
+    next.summary.failedKeys = EVALUATION_AGENT_KEYS.filter((key) =>
       failed.has(key),
     );
     next.summary.failedAgents = next.summary.failedKeys.length;
     next.summary.completedAgents =
-      ALL_EVALUATION_AGENT_KEYS.length - next.summary.failedAgents;
+      EVALUATION_AGENT_KEYS.length - next.summary.failedAgents;
     next.summary.degraded =
       next.summary.completedAgents < next.summary.minimumRequired;
 

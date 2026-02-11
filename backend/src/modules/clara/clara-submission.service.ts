@@ -9,6 +9,7 @@ import { PipelineService } from "../ai/services/pipeline.service";
 import { NotificationService } from "../../notification/notification.service";
 import { NotificationType } from "../../notification/entities";
 import { ClaraAiService } from "./clara-ai.service";
+import { deriveStartupGeography } from "../geography";
 import type { AttachmentMeta, MessageContext } from "./interfaces/clara.interface";
 
 const PDF_MAGIC_BYTES = Buffer.from("%PDF-");
@@ -68,6 +69,8 @@ export class ClaraSubmissionService {
     const deckAttachment = processedAttachments.find(
       (a) => a.isPitchDeck && a.status === "uploaded",
     );
+    const location = "Pending extraction";
+    const geography = deriveStartupGeography(location);
 
     const slug = this.generateSlug(companyName);
     const [created] = await this.drizzle.db
@@ -79,7 +82,13 @@ export class ClaraSubmissionService {
         tagline: `Submitted via email by ${ctx.fromEmail}`,
         description: ctx.bodyText?.slice(0, 5000) || "Submitted via Clara email assistant. Details will be extracted from the pitch deck.",
         website: "https://pending-extraction.com",
-        location: "Pending extraction",
+        location,
+        normalizedRegion: geography.normalizedRegion,
+        geoCountryCode: geography.countryCode,
+        geoLevel1: geography.level1,
+        geoLevel2: geography.level2,
+        geoLevel3: geography.level3,
+        geoPath: geography.path,
         industry: "Pending extraction",
         stage: StartupStage.SEED,
         fundingTarget: 0,

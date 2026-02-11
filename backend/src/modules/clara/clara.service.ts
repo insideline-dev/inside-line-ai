@@ -78,6 +78,7 @@ export class ClaraService {
 
       const history =
         await this.conversationService.getRecentMessages(conversation.id);
+      const startupContext = await this.getStartupExtra(conversation.startupId);
 
       const attachments: AttachmentMeta[] = (message.attachments ?? []).map(
         (a) => ({
@@ -103,6 +104,7 @@ export class ClaraService {
         conversationHistory: history,
         investorUserId,
         startupId: conversation.startupId,
+        startupStage: startupContext.startupStage ?? null,
         conversationStatus: conversation.status as ConversationStatus,
       };
 
@@ -131,6 +133,7 @@ export class ClaraService {
         startupName?: string;
         startupStatus?: string;
         score?: number;
+        startupStage?: string;
       } = {};
 
       switch (classification.intent) {
@@ -170,6 +173,7 @@ export class ClaraService {
           extra = {
             startupName: result.startupName,
             startupStatus: result.status,
+            startupStage: startupContext.startupStage ?? "seed",
           };
 
           if (result.isDuplicate) {
@@ -345,6 +349,7 @@ export class ClaraService {
     startupName?: string;
     startupStatus?: string;
     score?: number;
+    startupStage?: string;
   }> {
     if (!startupId) return {};
 
@@ -353,6 +358,7 @@ export class ClaraService {
         name: startup.name,
         status: startup.status,
         overallScore: startup.overallScore,
+        stage: startup.stage,
       })
       .from(startup)
       .where(eq(startup.id, startupId))
@@ -364,6 +370,7 @@ export class ClaraService {
       startupName: record.name,
       startupStatus: record.status,
       score: record.overallScore ?? undefined,
+      startupStage: record.stage,
     };
   }
 }

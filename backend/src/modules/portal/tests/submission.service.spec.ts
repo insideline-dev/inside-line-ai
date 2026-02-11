@@ -171,6 +171,17 @@ describe('SubmissionService', () => {
       expect(userAuthService.findUserByEmail).toHaveBeenCalledWith(
         'founder@startup.com',
       );
+      expect(txMock.values).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          location: 'San Francisco',
+          geoCountryCode: 'US',
+          geoLevel1: 'l1:north_america',
+          geoLevel2: 'l2:us_canada',
+          geoLevel3: 'l3:us',
+          geoPath: ['l1:north_america', 'l2:us_canada', 'l3:us'],
+        }),
+      );
       expect(notificationService.create).toHaveBeenCalled();
     });
 

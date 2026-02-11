@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { sql, eq, gte, count, and, isNull } from 'drizzle-orm';
+import { sql, eq, gte, count, and, isNull, isNotNull, desc } from 'drizzle-orm';
+import { z } from 'zod';
 import { DrizzleService } from '../../database';
 import { CacheService } from './cache.service';
 import { user, UserRole } from '../../auth/entities/auth.schema';
@@ -9,6 +10,12 @@ import { portal, portalSubmission } from '../portal/entities/portal.schema';
 import { investorThesis } from '../investor/entities/investor.schema';
 
 const CACHE_TTL = 300; // 5 minutes
+
+const approvalStatsSchema = z.object({
+  total: z.string(),
+  approved: z.string(),
+  avg_hours: z.string().nullable(),
+});
 
 export interface PlatformStats {
   users: {
@@ -161,75 +168,61 @@ export class AnalyticsService {
     const [submissionsPerDay, approvalStats, rejectionReasons] =
       await Promise.all([
         // Submissions per day
-        this.drizzle.db.execute<{ date: string; count: string }>(sql`
-          SELECT
-            DATE(submitted_at) as date,
-            COUNT(*) as count
-          FROM startup
-          WHERE submitted_at IS NOT NULL
-            AND submitted_at >= ${cutoffDate}
-          GROUP BY DATE(submitted_at)
-          ORDER BY date DESC
-        `),
+        this.drizzle.db
+          .select({
+            date: sql<string>`DATE(${startup.submittedAt})`.as('date'),
+            count: count(),
+          })
+          .from(startup)
+          .where(
+            and(
+              isNotNull(startup.submittedAt),
+              gte(startup.submittedAt, cutoffDate),
+            ),
+          )
+          .groupBy(sql`DATE(${startup.submittedAt})`)
+          .orderBy(desc(sql`DATE(${startup.submittedAt})`)),
 
         // Approval stats
-        this.drizzle.db.execute<{
-          total: string;
-          approved: string;
-          avg_hours: string | null;
-        }>(sql`
-          SELECT
-            COUNT(*) FILTER (WHERE status IN ('approved', 'rejected')) as total,
-            COUNT(*) FILTER (WHERE status = 'approved') as approved,
-            AVG(EXTRACT(EPOCH FROM (approved_at - submitted_at)) / 3600)
-              FILTER (WHERE status = 'approved') as avg_hours
-          FROM startup
-          WHERE submitted_at IS NOT NULL
-        `),
+        this.drizzle.db
+          .select({
+            total: sql<string>`COUNT(*) FILTER (WHERE ${startup.status} IN ('approved', 'rejected'))`,
+            approved: sql<string>`COUNT(*) FILTER (WHERE ${startup.status} = 'approved')`,
+            avg_hours: sql<string>`AVG(EXTRACT(EPOCH FROM (${startup.approvedAt} - ${startup.submittedAt})) / 3600) FILTER (WHERE ${startup.status} = 'approved')`,
+          })
+          .from(startup)
+          .where(isNotNull(startup.submittedAt)),
 
         // Top rejection reasons
-        this.drizzle.db.execute<{ reason: string; count: string }>(sql`
-          SELECT
-            rejection_reason as reason,
-            COUNT(*) as count
-          FROM startup
-          WHERE rejection_reason IS NOT NULL
-          GROUP BY rejection_reason
-          ORDER BY count DESC
-          LIMIT 10
-        `),
+        this.drizzle.db
+          .select({
+            reason: startup.rejectionReason,
+            count: count(),
+          })
+          .from(startup)
+          .where(isNotNull(startup.rejectionReason))
+          .groupBy(startup.rejectionReason)
+          .orderBy(desc(count()))
+          .limit(10),
       ]);
 
-    const approvalArray = approvalStats as unknown as Array<{
-      total: string;
-      approved: string;
-      avg_hours: string | null;
-    }>;
+    const approvalArray = z.array(approvalStatsSchema).parse(approvalStats);
     const approval = approvalArray[0];
     const total = Number(approval?.total ?? 0);
     const approved = Number(approval?.approved ?? 0);
 
-    const submissionsArray = submissionsPerDay as unknown as Array<{
-      date: string;
-      count: string;
-    }>;
-    const rejectionArray = rejectionReasons as unknown as Array<{
-      reason: string;
-      count: string;
-    }>;
-
     const stats: StartupStats = {
-      submissionsPerDay: submissionsArray.map((r) => ({
+      submissionsPerDay: submissionsPerDay.map((r) => ({
         date: r.date,
-        count: Number(r.count),
+        count: r.count,
       })),
       approvalRate: total > 0 ? (approved / total) * 100 : 0,
       averageTimeToApproval: approval?.avg_hours
         ? Number(approval.avg_hours)
         : 0,
-      topRejectionReasons: rejectionArray.map((r) => ({
-        reason: r.reason,
-        count: Number(r.count),
+      topRejectionReasons: rejectionReasons.map((r) => ({
+        reason: r.reason!,
+        count: r.count,
       })),
     };
 
@@ -250,59 +243,45 @@ export class AnalyticsService {
         .where(eq(investorThesis.isActive, true)),
 
       // Match distribution by score ranges
-      this.drizzle.db.execute<{ range: string; count: string }>(sql`
-        SELECT
-          CASE
-            WHEN overall_score >= 80 THEN '80-100'
-            WHEN overall_score >= 60 THEN '60-79'
-            WHEN overall_score >= 40 THEN '40-59'
-            WHEN overall_score >= 20 THEN '20-39'
+      this.drizzle.db
+        .select({
+          range: sql<string>`CASE
+            WHEN ${startupMatch.overallScore} >= 80 THEN '80-100'
+            WHEN ${startupMatch.overallScore} >= 60 THEN '60-79'
+            WHEN ${startupMatch.overallScore} >= 40 THEN '40-59'
+            WHEN ${startupMatch.overallScore} >= 20 THEN '20-39'
             ELSE '0-19'
-          END as range,
-          COUNT(*) as count
-        FROM startup_match
-        GROUP BY range
-        ORDER BY range DESC
-      `),
+          END`.as('range'),
+          count: count(),
+        })
+        .from(startupMatch)
+        .groupBy(sql`range`)
+        .orderBy(desc(sql`range`)),
 
       // Most active investors
-      this.drizzle.db.execute<{
-        user_id: string;
-        name: string;
-        match_count: string;
-      }>(sql`
-        SELECT
-          sm.investor_id as user_id,
-          u.name,
-          COUNT(*) as match_count
-        FROM startup_match sm
-        JOIN "user" u ON u.id = sm.investor_id
-        GROUP BY sm.investor_id, u.name
-        ORDER BY match_count DESC
-        LIMIT 10
-      `),
+      this.drizzle.db
+        .select({
+          user_id: startupMatch.investorId,
+          name: user.name,
+          match_count: count(),
+        })
+        .from(startupMatch)
+        .innerJoin(user, eq(user.id, startupMatch.investorId))
+        .groupBy(startupMatch.investorId, user.name)
+        .orderBy(desc(count()))
+        .limit(10),
     ]);
-
-    const distributionArray = matchDistribution as unknown as Array<{
-      range: string;
-      count: string;
-    }>;
-    const activeArray = mostActive as unknown as Array<{
-      user_id: string;
-      name: string;
-      match_count: string;
-    }>;
 
     const stats: InvestorStats = {
       activeInvestors: Number(activeInvestors[0]?.count ?? 0),
-      matchDistribution: distributionArray.map((r) => ({
+      matchDistribution: matchDistribution.map((r) => ({
         range: r.range,
-        count: Number(r.count),
+        count: r.count,
       })),
-      mostActiveInvestors: activeArray.map((r) => ({
+      mostActiveInvestors: mostActive.map((r) => ({
         userId: r.user_id,
         name: r.name,
-        matchCount: Number(r.match_count),
+        matchCount: r.match_count,
       })),
     };
 
@@ -313,55 +292,42 @@ export class AnalyticsService {
   private async getWeeklySignups(): Promise<
     Array<{ week: string; count: number }>
   > {
-    const result = await this.drizzle.db.execute<{
-      week: string;
-      count: string;
-    }>(sql`
-      SELECT
-        DATE_TRUNC('week', created_at)::date::text as week,
-        COUNT(*) as count
-      FROM "user"
-      WHERE created_at >= NOW() - INTERVAL '8 weeks'
-      GROUP BY week
-      ORDER BY week DESC
-    `);
+    const eightWeeksAgo = new Date();
+    eightWeeksAgo.setDate(eightWeeksAgo.getDate() - 56);
 
-    const resultArray = result as unknown as Array<{
-      week: string;
-      count: string;
-    }>;
+    const result = await this.drizzle.db
+      .select({
+        week: sql<string>`DATE_TRUNC('week', ${user.createdAt})::date::text`.as('week'),
+        count: count(),
+      })
+      .from(user)
+      .where(gte(user.createdAt, eightWeeksAgo))
+      .groupBy(sql`DATE_TRUNC('week', ${user.createdAt})::date::text`)
+      .orderBy(desc(sql`DATE_TRUNC('week', ${user.createdAt})::date::text`));
 
-    return resultArray.map((r) => ({
+    return result.map((r) => ({
       week: r.week,
-      count: Number(r.count),
+      count: r.count,
     }));
   }
 
   private async getTopIndustries(): Promise<
     Array<{ industry: string; count: number }>
   > {
-    const result = await this.drizzle.db.execute<{
-      industry: string;
-      count: string;
-    }>(sql`
-      SELECT
-        industry,
-        COUNT(*) as count
-      FROM startup
-      WHERE status = 'approved'
-      GROUP BY industry
-      ORDER BY count DESC
-      LIMIT 5
-    `);
+    const result = await this.drizzle.db
+      .select({
+        industry: startup.industry,
+        count: count(),
+      })
+      .from(startup)
+      .where(eq(startup.status, StartupStatus.APPROVED))
+      .groupBy(startup.industry)
+      .orderBy(desc(count()))
+      .limit(5);
 
-    const resultArray = result as unknown as Array<{
-      industry: string;
-      count: string;
-    }>;
-
-    return resultArray.map((r) => ({
-      industry: r.industry,
-      count: Number(r.count),
+    return result.map((r) => ({
+      industry: r.industry!,
+      count: r.count,
     }));
   }
 

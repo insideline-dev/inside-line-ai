@@ -13,6 +13,7 @@ import { TractionEvaluationAgent } from "../../agents/evaluation/traction-evalua
 import type { EvaluationPipelineInput } from "../../interfaces/agent.interface";
 import type { AiProviderService } from "../../providers/ai-provider.service";
 import type { AiConfigService } from "../../services/ai-config.service";
+import type { AiPromptService } from "../../services/ai-prompt.service";
 import { createEvaluationPipelineInput } from "../fixtures/evaluation-pipeline.fixture";
 
 const providers = {
@@ -22,6 +23,11 @@ const providers = {
 const aiConfig = {
   getModelForPurpose: jest.fn(),
 } as unknown as AiConfigService;
+
+const promptService = {
+  resolve: jest.fn(),
+  renderTemplate: jest.fn(),
+} as unknown as AiPromptService;
 
 function createSparseInput(): EvaluationPipelineInput {
   const input = createEvaluationPipelineInput();
@@ -55,17 +61,17 @@ describe("Evaluation agent fallbacks", () => {
 
   it("all evaluation agents return schema-safe fallback outputs", () => {
     const agents = [
-      new TeamEvaluationAgent(providers, aiConfig),
-      new MarketEvaluationAgent(providers, aiConfig),
-      new ProductEvaluationAgent(providers, aiConfig),
-      new TractionEvaluationAgent(providers, aiConfig),
-      new BusinessModelEvaluationAgent(providers, aiConfig),
-      new GtmEvaluationAgent(providers, aiConfig),
-      new FinancialsEvaluationAgent(providers, aiConfig),
-      new CompetitiveAdvantageEvaluationAgent(providers, aiConfig),
-      new LegalEvaluationAgent(providers, aiConfig),
-      new DealTermsEvaluationAgent(providers, aiConfig),
-      new ExitPotentialEvaluationAgent(providers, aiConfig),
+      new TeamEvaluationAgent(providers, aiConfig, promptService),
+      new MarketEvaluationAgent(providers, aiConfig, promptService),
+      new ProductEvaluationAgent(providers, aiConfig, promptService),
+      new TractionEvaluationAgent(providers, aiConfig, promptService),
+      new BusinessModelEvaluationAgent(providers, aiConfig, promptService),
+      new GtmEvaluationAgent(providers, aiConfig, promptService),
+      new FinancialsEvaluationAgent(providers, aiConfig, promptService),
+      new CompetitiveAdvantageEvaluationAgent(providers, aiConfig, promptService),
+      new LegalEvaluationAgent(providers, aiConfig, promptService),
+      new DealTermsEvaluationAgent(providers, aiConfig, promptService),
+      new ExitPotentialEvaluationAgent(providers, aiConfig, promptService),
     ];
 
     for (const agent of agents) {
@@ -76,6 +82,94 @@ describe("Evaluation agent fallbacks", () => {
       expect(parsed.score).toBeLessThanOrEqual(100);
       expect(parsed.keyFindings.length).toBeGreaterThan(0);
       expect(parsed.sources.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("fallback returns score <= 25 for all agents", () => {
+    const agents = [
+      new TeamEvaluationAgent(providers, aiConfig, promptService),
+      new MarketEvaluationAgent(providers, aiConfig, promptService),
+      new ProductEvaluationAgent(providers, aiConfig, promptService),
+      new TractionEvaluationAgent(providers, aiConfig, promptService),
+      new BusinessModelEvaluationAgent(providers, aiConfig, promptService),
+      new GtmEvaluationAgent(providers, aiConfig, promptService),
+      new FinancialsEvaluationAgent(providers, aiConfig, promptService),
+      new CompetitiveAdvantageEvaluationAgent(providers, aiConfig, promptService),
+      new LegalEvaluationAgent(providers, aiConfig, promptService),
+      new DealTermsEvaluationAgent(providers, aiConfig, promptService),
+      new ExitPotentialEvaluationAgent(providers, aiConfig, promptService),
+    ];
+
+    for (const agent of agents) {
+      const output = agent.fallback(pipelineData);
+      const parsed = output as { score: number };
+
+      expect(parsed.score).toBeLessThanOrEqual(25);
+    }
+  });
+
+  it("fallback returns confidence <= 0.15 for all agents", () => {
+    const agents = [
+      new TeamEvaluationAgent(providers, aiConfig, promptService),
+      new MarketEvaluationAgent(providers, aiConfig, promptService),
+      new ProductEvaluationAgent(providers, aiConfig, promptService),
+      new TractionEvaluationAgent(providers, aiConfig, promptService),
+      new BusinessModelEvaluationAgent(providers, aiConfig, promptService),
+      new GtmEvaluationAgent(providers, aiConfig, promptService),
+      new FinancialsEvaluationAgent(providers, aiConfig, promptService),
+      new CompetitiveAdvantageEvaluationAgent(providers, aiConfig, promptService),
+      new LegalEvaluationAgent(providers, aiConfig, promptService),
+      new DealTermsEvaluationAgent(providers, aiConfig, promptService),
+      new ExitPotentialEvaluationAgent(providers, aiConfig, promptService),
+    ];
+
+    for (const agent of agents) {
+      const output = agent.fallback(pipelineData);
+      const parsed = output as { confidence: number };
+
+      expect(parsed.confidence).toBeLessThanOrEqual(0.15);
+    }
+  });
+
+  it("fallback keyFindings contain manual review indicators", () => {
+    const agents = [
+      new TeamEvaluationAgent(providers, aiConfig, promptService),
+      new MarketEvaluationAgent(providers, aiConfig, promptService),
+      new ProductEvaluationAgent(providers, aiConfig, promptService),
+    ];
+
+    for (const agent of agents) {
+      const output = agent.fallback(pipelineData);
+      const parsed = output as { keyFindings: string[] };
+
+      const combined = parsed.keyFindings.join(" ").toLowerCase();
+      const hasManualReviewIndicator =
+        combined.includes("manual review") ||
+        combined.includes("failed") ||
+        combined.includes("incomplete");
+
+      expect(hasManualReviewIndicator).toBe(true);
+    }
+  });
+
+  it("fallback risks contain automated assessment warnings", () => {
+    const agents = [
+      new TeamEvaluationAgent(providers, aiConfig, promptService),
+      new MarketEvaluationAgent(providers, aiConfig, promptService),
+      new ProductEvaluationAgent(providers, aiConfig, promptService),
+    ];
+
+    for (const agent of agents) {
+      const output = agent.fallback(pipelineData);
+      const parsed = output as { risks: string[] };
+
+      const combined = parsed.risks.join(" ").toLowerCase();
+      const hasAutomatedWarning =
+        combined.includes("automated") ||
+        combined.includes("assessment") ||
+        combined.includes("unable");
+
+      expect(hasAutomatedWarning).toBe(true);
     }
   });
 });

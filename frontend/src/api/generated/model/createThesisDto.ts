@@ -20,8 +20,12 @@ export interface CreateThesisDto {
    */
   checkSizeMax?: number;
   geographicFocus?: string[];
+  /** @maxItems 300 */
+  geographicFocusNodes?: string[];
   mustHaveFeatures?: string[];
   dealBreakers?: string[];
   /** @maxLength 5000 */
   notes?: string;
+  /** @maxLength 10000 */
+  thesisNarrative?: string;
 }

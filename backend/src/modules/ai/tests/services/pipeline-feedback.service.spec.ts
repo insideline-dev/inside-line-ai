@@ -132,4 +132,81 @@ describe("PipelineFeedbackService", () => {
     expect(result).toBe(1);
     expect(mockDb.update).toHaveBeenCalledTimes(1);
   });
+
+  it("throws BadRequestException when startupId is empty string", async () => {
+    expect(() =>
+      service.record({
+        startupId: "",
+        phase: PipelinePhase.EXTRACTION,
+        feedback: "Test feedback",
+        createdBy: "admin-1",
+      }),
+    ).toThrow("Invalid startupId: must be a non-empty string");
+  });
+
+  it("throws BadRequestException when startupId is invalid type", async () => {
+    expect(() =>
+      service.record({
+        startupId: null as any,
+        phase: PipelinePhase.EXTRACTION,
+        feedback: "Test feedback",
+        createdBy: "admin-1",
+      }),
+    ).toThrow("Invalid startupId: must be a non-empty string");
+  });
+
+  it("throws BadRequestException when phase is invalid", async () => {
+    expect(() =>
+      service.record({
+        startupId: "startup-1",
+        phase: "INVALID_PHASE" as any,
+        feedback: "Test feedback",
+        createdBy: "admin-1",
+      }),
+    ).toThrow("Invalid phase: INVALID_PHASE");
+  });
+
+  it("passes validation when startupId and phase are valid", async () => {
+    const createdAt = new Date();
+    const entry = {
+      id: "feedback-1",
+      startupId: "startup-1",
+      phase: PipelinePhase.SCRAPING,
+      agentKey: null,
+      feedback: "Test feedback",
+      metadata: null,
+      createdBy: "admin-1",
+      consumedAt: null,
+      createdAt,
+      updatedAt: createdAt,
+    };
+    mockDb.returning.mockResolvedValueOnce([entry]);
+
+    const result = await service.record({
+      startupId: "startup-1",
+      phase: PipelinePhase.SCRAPING,
+      feedback: "Test feedback",
+      createdBy: "admin-1",
+    });
+
+    expect(result).toEqual(entry);
+  });
+
+  it("validates startupId in getContext", async () => {
+    expect(() =>
+      service.getContext({
+        startupId: "",
+        phase: PipelinePhase.EVALUATION,
+      }),
+    ).toThrow("Invalid startupId");
+  });
+
+  it("validates phase in getContext", async () => {
+    expect(() =>
+      service.getContext({
+        startupId: "startup-1",
+        phase: "BAD_PHASE" as any,
+      }),
+    ).toThrow("Invalid phase");
+  });
 });

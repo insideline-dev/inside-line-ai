@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import type { EvaluationPipelineInput } from "../../interfaces/agent.interface";
 import { TeamEvaluationSchema, type TeamEvaluation } from "../../schemas";
 import { AiConfigService } from "../../services/ai-config.service";
+import { AiPromptService } from "../../services/ai-prompt.service";
 import { AiProviderService } from "../../providers/ai-provider.service";
 import { BaseEvaluationAgent } from "./base-evaluation.agent";
 import { baseEvaluation, clampScore, stageMultiplier } from "./evaluation-utils";
@@ -13,8 +14,8 @@ export class TeamEvaluationAgent extends BaseEvaluationAgent<TeamEvaluation> {
   protected readonly systemPrompt =
     "You are a startup investment analyst evaluating founder and leadership quality.";
 
-  constructor(providers: AiProviderService, aiConfig: AiConfigService) {
-    super(providers, aiConfig);
+  constructor(providers: AiProviderService, aiConfig: AiConfigService, promptService: AiPromptService) {
+    super(providers, aiConfig, promptService);
   }
 
   buildContext({ extraction, scraping, research }: EvaluationPipelineInput) {
@@ -46,14 +47,12 @@ export class TeamEvaluationAgent extends BaseEvaluationAgent<TeamEvaluation> {
   }
 
   fallback({ extraction, scraping }: EvaluationPipelineInput): TeamEvaluation {
-    const score = 35 + scraping.teamMembers.length * 4 + stageMultiplier(extraction.stage);
-
     return TeamEvaluationSchema.parse({
-      ...baseEvaluation(score, "Team composition is adequate for the current stage"),
+      ...baseEvaluation(25, "Team evaluation incomplete — requires manual review"),
       founderQuality: "Founding team has domain-relevant background",
-      teamCompletion: clampScore(45 + scraping.teamMembers.length * 8),
+      teamCompletion: clampScore(25 + scraping.teamMembers.length * 5),
       executionCapability: "Execution capability appears moderate to strong",
-      founderMarketFitScore: clampScore(40 + stageMultiplier(extraction.stage)),
+      founderMarketFitScore: clampScore(25 + stageMultiplier(extraction.stage)),
       teamMembers: scraping.teamMembers.length
         ? scraping.teamMembers.map((member) => ({
             name: member.name,

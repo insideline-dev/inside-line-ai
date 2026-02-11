@@ -2,6 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import { google } from "@ai-sdk/google";
 import { generateText } from "ai";
 import { z } from "zod";
+import { INTERNAL_PIPELINE_SOURCE } from "../agents/evaluation/evaluation-utils";
 import type { ResearchAgentKey } from "../interfaces/agent.interface";
 import type { SourceEntry } from "../interfaces/phase-results.interface";
 import { ModelPurpose } from "../interfaces/pipeline.interface";
@@ -38,16 +39,19 @@ export class GeminiResearchService {
     const fallback = request.fallback();
 
     try {
-      const modelFactory = this.providers.getGemini();
       const modelName = this.aiConfig.getModelForPurpose(ModelPurpose.RESEARCH);
+      const model = this.providers.resolveModelForPurpose(ModelPurpose.RESEARCH);
+      const canUseGoogleSearchTool = this.isGeminiModel(modelName);
 
       const response = await generateText({
-        model: modelFactory(modelName),
+        model,
         system: request.systemPrompt,
         prompt: request.prompt,
-        tools: {
-          google_search: google.tools.googleSearch({}),
-        },
+        tools: canUseGoogleSearchTool
+          ? {
+              google_search: google.tools.googleSearch({}),
+            }
+          : undefined,
         temperature: this.aiConfig.getResearchTemperature(),
       });
 
@@ -58,10 +62,11 @@ export class GeminiResearchService {
 
       const parsed = this.parseTextToObject(response.text, request.schema);
       if (!parsed.success) {
+        const fallbackSources = Array.isArray(fallback.sources) ? fallback.sources : [];
         return {
           output: {
             ...fallback,
-            sources: this.mergeSourceUrls(fallback.sources, sourceUrls),
+            sources: this.mergeSourceUrls(fallbackSources, sourceUrls),
           },
           sources: extractedSources,
           usedFallback: true,
@@ -79,8 +84,11 @@ export class GeminiResearchService {
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      const modelName = this.aiConfig.getModelForPurpose(ModelPurpose.RESEARCH);
+      const promptSize = request.prompt.length + request.systemPrompt.length;
+
       this.logger.warn(
-        `Research agent ${request.agent} failed, using fallback: ${message}`,
+        `Research agent ${request.agent} failed (model: ${modelName}, prompt size: ${promptSize}), using fallback: ${message}`,
       );
 
       return {
@@ -132,7 +140,12 @@ export class GeminiResearchService {
     }
 
     try {
-      return JSON.parse(text.slice(startIndex, endIndex + 1));
+      const candidate = text.slice(startIndex, endIndex + 1);
+      const parsed = JSON.parse(candidate);
+      if (typeof parsed !== "object" || Array.isArray(parsed) || parsed === null) {
+        return null;
+      }
+      return parsed;
     } catch {
       return null;
     }
@@ -201,7 +214,7 @@ export class GeminiResearchService {
     return [
       {
         name: "internal pipeline context",
-        url: "internal://pipeline-state",
+        url: INTERNAL_PIPELINE_SOURCE,
         type: "document",
         agent,
         timestamp: new Date().toISOString(),
@@ -219,5 +232,9 @@ export class GeminiResearchService {
 
   private readString(value: unknown): string | undefined {
     return typeof value === "string" && value.length > 0 ? value : undefined;
+  }
+
+  private isGeminiModel(modelName: string): boolean {
+    return modelName.toLowerCase().startsWith("gemini");
   }
 }

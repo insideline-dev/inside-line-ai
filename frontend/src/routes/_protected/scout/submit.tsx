@@ -194,10 +194,13 @@ function ScoutSubmit() {
                   name="location"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Location</FormLabel>
+                      <FormLabel>City / Location</FormLabel>
                       <FormControl>
-                        <Input placeholder="San Francisco, CA" {...field} />
+                        <Input placeholder="City, Country (e.g., Riyadh, Saudi Arabia)" {...field} />
                       </FormControl>
+                      <FormDescription>
+                        Geographic hierarchy is mapped automatically in the backend.
+                      </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}

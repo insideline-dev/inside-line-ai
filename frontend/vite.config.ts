@@ -21,5 +21,12 @@ export default defineConfig({
   server: {
     port: 3030,
     host: true,
+    proxy: {
+      "/api": {
+        target: "http://localhost:8080",
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/api/, ""),
+      },
+    },
   },
 });

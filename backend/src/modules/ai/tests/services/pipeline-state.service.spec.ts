@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, jest, mock } from "bun:test";
 import { ConfigService } from "@nestjs/config";
 
 class MockRedis {
-  private store = new Map<string, string>();
+  private store = new Map<string, { value: string; expiresAt: number }>();
 
   connect() {
     return Promise.resolve();
@@ -13,11 +13,20 @@ class MockRedis {
   }
 
   async get(key: string) {
-    return this.store.get(key) ?? null;
+    const entry = this.store.get(key);
+    if (!entry) return null;
+    if (entry.expiresAt <= Date.now()) {
+      this.store.delete(key);
+      return null;
+    }
+    return entry.value;
   }
 
-  async set(key: string, value: string) {
-    this.store.set(key, value);
+  async set(key: string, value: string, _mode?: string, ttlSeconds?: number) {
+    this.store.set(key, {
+      value,
+      expiresAt: ttlSeconds ? Date.now() + ttlSeconds * 1000 : Infinity,
+    });
     return "OK";
   }
 
@@ -129,5 +138,96 @@ describe("PipelineStateService", () => {
     const state = await service.get("startup-5");
     expect(state?.status).toBe(PipelineStatus.CANCELLED);
     expect(state?.telemetry.completedAt).toBeDefined();
+  });
+
+  it("state expires after TTL and returns null", async () => {
+    const shortTtlConfig = {
+      get: jest.fn((key: string, fallback?: unknown) => {
+        if (key === "REDIS_URL") return "redis://localhost:6379";
+        if (key === "AI_PIPELINE_TTL_SECONDS") return 0.05;
+        return fallback;
+      }),
+    } as unknown as jest.Mocked<ConfigService>;
+
+    const shortTtlService = new PipelineStateService(shortTtlConfig);
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    await shortTtlService.init("startup-expiry", "user-expiry", "run-expiry");
+
+    const immediate = await shortTtlService.get("startup-expiry");
+    expect(immediate).not.toBeNull();
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    const expired = await shortTtlService.get("startup-expiry");
+    expect(expired).toBeNull();
+
+    await shortTtlService.onModuleDestroy();
+  });
+
+  it("concurrent updates don't corrupt state", async () => {
+    await service.init("startup-concurrent", "user-concurrent", "run-concurrent");
+
+    await service.updatePhase(
+      "startup-concurrent",
+      PipelinePhase.EXTRACTION,
+      PhaseStatus.RUNNING,
+    );
+    await service.setPhaseResult("startup-concurrent", PipelinePhase.RESEARCH, {
+      summary: "test",
+    });
+    await service.incrementRetryCount("startup-concurrent", PipelinePhase.SCRAPING);
+    await service.setQuality("startup-concurrent", "degraded");
+
+    const state = await service.get("startup-concurrent");
+
+    expect(state).not.toBeNull();
+    expect(state?.phases.extraction.status).toBe("running");
+    expect(state?.results.research).toEqual({ summary: "test" });
+    expect(state?.retryCounts.scraping).toBe(1);
+    expect(state?.quality).toBe("degraded");
+  });
+
+  it("handles corrupt state gracefully and returns null", async () => {
+    await service.init("startup-corrupt", "user-corrupt", "run-corrupt");
+
+    const mockRedis = new MockRedis();
+    await mockRedis.set("ai:pipeline:startup-corrupt", "{invalid json", "EX", 3600);
+
+    const corruptConfig = {
+      get: jest.fn((key: string, fallback?: unknown) => {
+        if (key === "REDIS_URL") return "redis://localhost:6379";
+        return fallback;
+      }),
+    } as unknown as jest.Mocked<ConfigService>;
+
+    const corruptService = new PipelineStateService(corruptConfig);
+
+    await mockRedis.set("ai:pipeline:startup-corrupt-2", "{invalid json", "EX", 3600);
+
+    await corruptService.onModuleDestroy();
+  });
+
+  it("throws error when accessing non-existent state", async () => {
+    await expect(
+      service.updatePhase(
+        "nonexistent-startup",
+        PipelinePhase.EXTRACTION,
+        PhaseStatus.RUNNING,
+      ),
+    ).rejects.toThrow("Pipeline state for startup nonexistent-startup not found");
+  });
+
+  it("clear removes state from storage", async () => {
+    await service.init("startup-clear", "user-clear", "run-clear");
+
+    const beforeClear = await service.get("startup-clear");
+    expect(beforeClear).not.toBeNull();
+
+    await service.clear("startup-clear");
+
+    const afterClear = await service.get("startup-clear");
+    expect(afterClear).toBeNull();
   });
 });

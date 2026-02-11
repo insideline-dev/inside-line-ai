@@ -1,1121 +1,968 @@
-import { useState, useEffect, useMemo } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  getAdminControllerGetAiPromptFlowQueryKey,
+  getAdminControllerGetAiPromptRevisionsQueryKey,
+  getAdminControllerGetAiPromptsQueryKey,
+  useAdminControllerCreateAiPromptRevision,
+  useAdminControllerGetAiPromptFlow,
+  useAdminControllerGetAiPromptRevisions,
+  useAdminControllerGetAiPrompts,
+  useAdminControllerPublishAiPromptRevision,
+  useAdminControllerSeedAiPrompts,
+  useAdminControllerUpdateAiPromptRevision,
+} from "@/api/generated/admin/admin";
+import type {
+  AiPromptDefinitionsResponseDto,
+  AiPromptDefinitionsResponseDtoItem,
+  AiPromptFlowResponseDto,
+  AiPromptFlowResponseDtoFlowsItem,
+  AiPromptFlowResponseDtoFlowsItemNodesItem,
+  AiPromptFlowResponseDtoFlowsItemNodesItemPromptKeysItem,
+  AiPromptRevisionsResponseDto,
+  AiPromptSeedResultDto,
+} from "@/api/generated/model";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Sheet,
   SheetContent,
-  SheetHeader,
-  SheetTitle,
   SheetDescription,
   SheetFooter,
+  SheetHeader,
+  SheetTitle,
 } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import {
   Bot,
-  Workflow,
-  Users,
-  TrendingUp,
-  Package,
-  Target,
-  DollarSign,
-  BarChart3,
-  Shield,
-  Scale,
-  Landmark,
-  GitMerge,
-  Save,
-  X,
-  Wrench,
-  FileInput,
-  FileOutput,
-  RefreshCw,
-  ArrowDown,
+  CheckCircle2,
+  Clock,
   FileSearch,
   Globe,
+  Handshake,
+  Layers,
   Linkedin,
   Newspaper,
-  Layers,
-  FileText,
-  Handshake,
+  RefreshCw,
+  Rocket,
+  Save,
+  Workflow,
 } from "lucide-react";
-import type { AgentPrompt } from "@/types/admin";
-
-// Mock agents data - backend not connected
-const MOCK_AGENTS: AgentPrompt[] = [
-  // Stage 3: Research (5 agents)
-  {
-    id: "1",
-    agentKey: "researchOrchestrator",
-    displayName: "Research Orchestrator",
-    description: "Orchestrates deep research agents to gather comprehensive data",
-    category: "research",
-    systemPrompt: "You are a research orchestration agent. Your job is to coordinate deep research on {companyName} across team, market, and product dimensions.\n\nDispatch the following research agents in parallel:\n- Team Deep Research\n- Market Deep Research\n- Product Deep Research\n- News Search\n\nConsolidate findings into a unified research report.",
-    humanPrompt: "Research {companyName} thoroughly. Website: {websiteUrl}",
-    tools: ["dispatch_agent", "aggregate_results"],
-    inputs: [
-      { key: "companyName", description: "The startup company name", required: true },
-      { key: "websiteUrl", description: "Company website URL", required: true },
-      { key: "pitchDeckText", description: "Extracted pitch deck text", required: false },
-    ],
-    outputs: [
-      { key: "researchReport", type: "object", description: "Consolidated research findings" },
-    ],
-    version: 1,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "2",
-    agentKey: "teamDeepResearch",
-    displayName: "Team Deep Research",
-    description: "Deep research on founders and team backgrounds",
-    category: "research-task",
-    systemPrompt: "You are a team research specialist. Research the founders and key team members of {companyName}.\n\nFocus on:\n- Professional backgrounds\n- Previous startups/exits\n- Domain expertise\n- Educational credentials\n- Notable achievements",
-    humanPrompt: "Research the team at {companyName}. Known founders: {founders}",
-    tools: ["web_search", "linkedin_search"],
-    inputs: [
-      { key: "companyName", description: "Company name", required: true },
-      { key: "founders", description: "Known founder names", required: false },
-    ],
-    outputs: [
-      { key: "teamResearch", type: "object", description: "Team background research" },
-    ],
-    parentAgent: "researchOrchestrator",
-    isParallel: true,
-    version: 1,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "3",
-    agentKey: "marketDeepResearch",
-    displayName: "Market Deep Research",
-    description: "Market analysis and validation research",
-    category: "research-task",
-    systemPrompt: "You are a market research analyst. Research the market opportunity for {companyName} in the {industry} space.\n\nAnalyze:\n- Total addressable market (TAM)\n- Market growth trends\n- Key competitors\n- Market dynamics\n- Regulatory landscape",
-    humanPrompt: "Analyze the market for {companyName} in {industry}",
-    tools: ["web_search", "market_data"],
-    inputs: [
-      { key: "companyName", description: "Company name", required: true },
-      { key: "industry", description: "Industry/sector", required: true },
-    ],
-    outputs: [
-      { key: "marketResearch", type: "object", description: "Market analysis findings" },
-    ],
-    parentAgent: "researchOrchestrator",
-    isParallel: true,
-    version: 1,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "4",
-    agentKey: "productDeepResearch",
-    displayName: "Product Deep Research",
-    description: "Product/technology research and competitive analysis",
-    category: "research-task",
-    systemPrompt: "You are a product research specialist. Research {companyName}'s product and technology.\n\nInvestigate:\n- Product features and capabilities\n- Technology stack and innovation\n- Competitive differentiation\n- User reviews and feedback\n- Patents or proprietary tech",
-    humanPrompt: "Research {companyName}'s product. Website: {websiteUrl}",
-    tools: ["web_search", "product_hunt", "g2_crowd"],
-    inputs: [
-      { key: "companyName", description: "Company name", required: true },
-      { key: "websiteUrl", description: "Website URL", required: true },
-    ],
-    outputs: [
-      { key: "productResearch", type: "object", description: "Product research findings" },
-    ],
-    parentAgent: "researchOrchestrator",
-    isParallel: true,
-    version: 1,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "5",
-    agentKey: "newsSearch",
-    displayName: "News Search",
-    description: "Recent news and press coverage search",
-    category: "research-task",
-    systemPrompt: "You are a news research agent. Find recent news and press coverage about {companyName}.\n\nSearch for:\n- Funding announcements\n- Product launches\n- Partnerships\n- Executive changes\n- Industry recognition",
-    humanPrompt: "Find recent news about {companyName}",
-    tools: ["news_api", "web_search"],
-    inputs: [
-      { key: "companyName", description: "Company name", required: true },
-    ],
-    outputs: [
-      { key: "newsItems", type: "array", description: "Recent news articles" },
-    ],
-    parentAgent: "researchOrchestrator",
-    isParallel: true,
-    version: 1,
-    createdAt: new Date().toISOString(),
-  },
-
-  // Stage 4: Evaluation Pipeline (13 agents)
-  {
-    id: "6",
-    agentKey: "orchestrator",
-    displayName: "Evaluation Orchestrator",
-    description: "Main orchestrator for the evaluation pipeline",
-    category: "orchestrator",
-    systemPrompt: "You are the main evaluation orchestrator for {companyName}. Coordinate the analysis agents to produce a comprehensive startup evaluation.\n\nDispatch agents for: Team, Market, Product, Traction, Business Model, GTM, Financials, Competitive Advantage, Legal, Deal Terms, and Exit Potential.\n\nAfter all analyses complete, trigger the Synthesis agent.",
-    humanPrompt: "Evaluate {companyName} comprehensively using all analysis agents.",
-    tools: ["dispatch_agent", "aggregate_results", "score_calculator"],
-    inputs: [
-      { key: "companyName", description: "Company name", required: true },
-      { key: "researchData", description: "Research findings from Stage 3", required: true },
-    ],
-    outputs: [
-      { key: "evaluationResults", type: "object", description: "Complete evaluation results" },
-    ],
-    version: 1,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "7",
-    agentKey: "team",
-    displayName: "Team Analysis",
-    description: "Evaluate founders and team quality",
-    category: "analysis",
-    systemPrompt: "You are a team analysis expert. Evaluate the founders and team of {companyName}.\n\nScore (1-10) based on:\n- Founder-market fit\n- Relevant experience\n- Track record of execution\n- Team completeness\n- Ability to attract talent",
-    humanPrompt: "Analyze the team at {companyName}. Team data: {teamData}",
-    tools: ["scoring"],
-    inputs: [
-      { key: "companyName", description: "Company name", required: true },
-      { key: "teamData", description: "Team research data", required: true },
-    ],
-    outputs: [
-      { key: "score", type: "number", description: "Team score 1-10" },
-      { key: "analysis", type: "string", description: "Detailed analysis" },
-    ],
-    parentAgent: "orchestrator",
-    executionOrder: 1,
-    isParallel: true,
-    version: 1,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "8",
-    agentKey: "market",
-    displayName: "Market Analysis",
-    description: "Evaluate market opportunity and timing",
-    category: "analysis",
-    systemPrompt: "You are a market opportunity analyst. Evaluate the market for {companyName}.\n\nScore (1-10) based on:\n- TAM/SAM/SOM attractiveness\n- Market growth rate\n- Timing (why now?)\n- Competitive landscape\n- Market accessibility",
-    humanPrompt: "Analyze the market opportunity for {companyName}. Market data: {marketData}",
-    tools: ["scoring", "market_data"],
-    inputs: [
-      { key: "companyName", description: "Company name", required: true },
-      { key: "marketData", description: "Market research data", required: true },
-    ],
-    outputs: [
-      { key: "score", type: "number", description: "Market score 1-10" },
-      { key: "analysis", type: "string", description: "Detailed analysis" },
-    ],
-    parentAgent: "orchestrator",
-    executionOrder: 1,
-    isParallel: true,
-    version: 1,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "9",
-    agentKey: "product",
-    displayName: "Product Analysis",
-    description: "Evaluate product and technology",
-    category: "analysis",
-    systemPrompt: "You are a product analyst. Evaluate {companyName}'s product and technology.\n\nScore (1-10) based on:\n- Product-market fit signals\n- Technical innovation\n- Defensibility/moats\n- User experience\n- Scalability",
-    humanPrompt: "Analyze the product for {companyName}. Product data: {productData}",
-    tools: ["scoring"],
-    inputs: [
-      { key: "companyName", description: "Company name", required: true },
-      { key: "productData", description: "Product research data", required: true },
-    ],
-    outputs: [
-      { key: "score", type: "number", description: "Product score 1-10" },
-      { key: "analysis", type: "string", description: "Detailed analysis" },
-    ],
-    parentAgent: "orchestrator",
-    executionOrder: 1,
-    isParallel: true,
-    version: 1,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "10",
-    agentKey: "traction",
-    displayName: "Traction Analysis",
-    description: "Evaluate traction and metrics",
-    category: "analysis",
-    systemPrompt: "You are a traction analyst. Evaluate {companyName}'s traction and key metrics.\n\nScore (1-10) based on:\n- Revenue/growth rate\n- User/customer growth\n- Engagement metrics\n- Unit economics\n- Milestone achievement",
-    humanPrompt: "Analyze traction for {companyName}. Metrics: {tractionData}",
-    tools: ["scoring", "metrics_analysis"],
-    inputs: [
-      { key: "companyName", description: "Company name", required: true },
-      { key: "tractionData", description: "Traction and metrics data", required: true },
-    ],
-    outputs: [
-      { key: "score", type: "number", description: "Traction score 1-10" },
-      { key: "analysis", type: "string", description: "Detailed analysis" },
-    ],
-    parentAgent: "orchestrator",
-    executionOrder: 1,
-    isParallel: true,
-    version: 1,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "11",
-    agentKey: "businessModel",
-    displayName: "Business Model Analysis",
-    description: "Evaluate business model viability",
-    category: "analysis",
-    systemPrompt: "You are a business model analyst. Evaluate {companyName}'s business model.\n\nScore (1-10) based on:\n- Revenue model clarity\n- Pricing power\n- Scalability\n- Recurring revenue potential\n- Path to profitability",
-    humanPrompt: "Analyze the business model for {companyName}. Model data: {businessModelData}",
-    tools: ["scoring"],
-    inputs: [
-      { key: "companyName", description: "Company name", required: true },
-      { key: "businessModelData", description: "Business model information", required: true },
-    ],
-    outputs: [
-      { key: "score", type: "number", description: "Business model score 1-10" },
-      { key: "analysis", type: "string", description: "Detailed analysis" },
-    ],
-    parentAgent: "orchestrator",
-    executionOrder: 1,
-    isParallel: true,
-    version: 1,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "12",
-    agentKey: "gtm",
-    displayName: "GTM Strategy Analysis",
-    description: "Evaluate go-to-market strategy",
-    category: "analysis",
-    systemPrompt: "You are a go-to-market strategist. Evaluate {companyName}'s GTM strategy.\n\nScore (1-10) based on:\n- Channel strategy clarity\n- Customer acquisition cost\n- Sales efficiency\n- Market positioning\n- Expansion strategy",
-    humanPrompt: "Analyze GTM strategy for {companyName}. Strategy data: {gtmData}",
-    tools: ["scoring"],
-    inputs: [
-      { key: "companyName", description: "Company name", required: true },
-      { key: "gtmData", description: "GTM strategy information", required: true },
-    ],
-    outputs: [
-      { key: "score", type: "number", description: "GTM score 1-10" },
-      { key: "analysis", type: "string", description: "Detailed analysis" },
-    ],
-    parentAgent: "orchestrator",
-    executionOrder: 1,
-    isParallel: true,
-    version: 1,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "13",
-    agentKey: "financials",
-    displayName: "Financial Analysis",
-    description: "Evaluate financial health and projections",
-    category: "analysis",
-    systemPrompt: "You are a financial analyst. Evaluate {companyName}'s financials.\n\nScore (1-10) based on:\n- Current financial health\n- Burn rate vs runway\n- Revenue projections\n- Capital efficiency\n- Funding history",
-    humanPrompt: "Analyze financials for {companyName}. Financial data: {financialData}",
-    tools: ["scoring", "financial_analysis"],
-    inputs: [
-      { key: "companyName", description: "Company name", required: true },
-      { key: "financialData", description: "Financial information", required: true },
-    ],
-    outputs: [
-      { key: "score", type: "number", description: "Financial score 1-10" },
-      { key: "analysis", type: "string", description: "Detailed analysis" },
-    ],
-    parentAgent: "orchestrator",
-    executionOrder: 1,
-    isParallel: true,
-    version: 1,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "14",
-    agentKey: "competitiveAdvantage",
-    displayName: "Competitive Advantage Analysis",
-    description: "Evaluate moats and defensibility",
-    category: "analysis",
-    systemPrompt: "You are a competitive strategy analyst. Evaluate {companyName}'s competitive advantage.\n\nScore (1-10) based on:\n- Proprietary technology\n- Network effects\n- Data moats\n- Brand/switching costs\n- First-mover advantage",
-    humanPrompt: "Analyze competitive advantage for {companyName}. Competitive data: {competitiveData}",
-    tools: ["scoring"],
-    inputs: [
-      { key: "companyName", description: "Company name", required: true },
-      { key: "competitiveData", description: "Competitive landscape data", required: true },
-    ],
-    outputs: [
-      { key: "score", type: "number", description: "Competitive advantage score 1-10" },
-      { key: "analysis", type: "string", description: "Detailed analysis" },
-    ],
-    parentAgent: "orchestrator",
-    executionOrder: 1,
-    isParallel: true,
-    version: 1,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "15",
-    agentKey: "legal",
-    displayName: "Legal & Regulatory Analysis",
-    description: "Evaluate legal and regulatory risks",
-    category: "analysis",
-    systemPrompt: "You are a legal risk analyst. Evaluate legal and regulatory factors for {companyName}.\n\nScore (1-10) based on:\n- Regulatory compliance\n- IP protection\n- Legal structure\n- Industry-specific regulations\n- Potential legal risks",
-    humanPrompt: "Analyze legal/regulatory factors for {companyName}. Legal data: {legalData}",
-    tools: ["scoring"],
-    inputs: [
-      { key: "companyName", description: "Company name", required: true },
-      { key: "legalData", description: "Legal and regulatory information", required: true },
-    ],
-    outputs: [
-      { key: "score", type: "number", description: "Legal score 1-10" },
-      { key: "analysis", type: "string", description: "Detailed analysis" },
-    ],
-    parentAgent: "orchestrator",
-    executionOrder: 1,
-    isParallel: true,
-    version: 1,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "16",
-    agentKey: "dealTerms",
-    displayName: "Deal Terms Analysis",
-    description: "Evaluate deal structure and terms",
-    category: "analysis",
-    systemPrompt: "You are a deal terms analyst. Evaluate the investment terms for {companyName}.\n\nScore (1-10) based on:\n- Valuation reasonableness\n- Round structure\n- Investor rights\n- Cap table health\n- Terms vs market",
-    humanPrompt: "Analyze deal terms for {companyName}. Deal data: {dealData}",
-    tools: ["scoring"],
-    inputs: [
-      { key: "companyName", description: "Company name", required: true },
-      { key: "dealData", description: "Deal terms information", required: true },
-    ],
-    outputs: [
-      { key: "score", type: "number", description: "Deal terms score 1-10" },
-      { key: "analysis", type: "string", description: "Detailed analysis" },
-    ],
-    parentAgent: "orchestrator",
-    executionOrder: 1,
-    isParallel: true,
-    version: 1,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "17",
-    agentKey: "exitPotential",
-    displayName: "Exit Potential Analysis",
-    description: "Evaluate exit opportunities",
-    category: "analysis",
-    systemPrompt: "You are an exit strategy analyst. Evaluate exit potential for {companyName}.\n\nScore (1-10) based on:\n- M&A landscape\n- IPO potential\n- Comparable exits\n- Strategic acquirer interest\n- Timeline to exit",
-    humanPrompt: "Analyze exit potential for {companyName}. Exit data: {exitData}",
-    tools: ["scoring", "ma_data"],
-    inputs: [
-      { key: "companyName", description: "Company name", required: true },
-      { key: "exitData", description: "Exit landscape information", required: true },
-    ],
-    outputs: [
-      { key: "score", type: "number", description: "Exit potential score 1-10" },
-      { key: "analysis", type: "string", description: "Detailed analysis" },
-    ],
-    parentAgent: "orchestrator",
-    executionOrder: 1,
-    isParallel: true,
-    version: 1,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "18",
-    agentKey: "synthesis",
-    displayName: "Synthesis Agent",
-    description: "Synthesize all analyses into final evaluation",
-    category: "synthesis",
-    systemPrompt: "You are the synthesis agent. Combine all analysis results for {companyName} into a comprehensive investment memo.\n\nCreate:\n- Executive summary\n- Overall score (weighted average)\n- Key strengths\n- Key risks/concerns\n- Investment recommendation\n- Suggested next steps",
-    humanPrompt: "Synthesize evaluation for {companyName}. Analysis results: {analysisResults}",
-    tools: ["scoring", "memo_generator"],
-    inputs: [
-      { key: "companyName", description: "Company name", required: true },
-      { key: "analysisResults", description: "All analysis agent outputs", required: true },
-    ],
-    outputs: [
-      { key: "memo", type: "object", description: "Investment memo" },
-      { key: "overallScore", type: "number", description: "Overall score 1-10" },
-    ],
-    parentAgent: "orchestrator",
-    executionOrder: 2,
-    version: 1,
-    createdAt: new Date().toISOString(),
-  },
-
-  // Stage 5: Investor Matching (2 agents)
-  {
-    id: "19",
-    agentKey: "investorThesis",
-    displayName: "Investor Thesis Extraction",
-    description: "Extract and structure investor thesis",
-    category: "investor",
-    systemPrompt: "You are an investor thesis specialist. Analyze the investment thesis for {investorName}.\n\nExtract:\n- Investment focus areas\n- Stage preferences\n- Check size range\n- Geographic focus\n- Sector expertise\n- Value-add capabilities",
-    humanPrompt: "Extract thesis for {investorName}. Profile data: {investorProfile}",
-    tools: ["thesis_extraction"],
-    inputs: [
-      { key: "investorName", description: "Investor name", required: true },
-      { key: "investorProfile", description: "Investor profile data", required: true },
-    ],
-    outputs: [
-      { key: "thesis", type: "object", description: "Structured investment thesis" },
-    ],
-    version: 1,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "20",
-    agentKey: "thesisAlignment",
-    displayName: "Thesis Alignment Scoring",
-    description: "Score startup-investor thesis alignment",
-    category: "investor",
-    systemPrompt: "You are a matching specialist. Score the alignment between {companyName} and {investorName}.\n\nEvaluate fit on:\n- Sector alignment\n- Stage fit\n- Check size match\n- Geographic fit\n- Thesis alignment\n- Value-add relevance",
-    humanPrompt: "Score alignment between {companyName} and {investorName}. Startup: {startupData}, Thesis: {investorThesis}",
-    tools: ["scoring", "matching"],
-    inputs: [
-      { key: "companyName", description: "Startup name", required: true },
-      { key: "investorName", description: "Investor name", required: true },
-      { key: "startupData", description: "Startup evaluation data", required: true },
-      { key: "investorThesis", description: "Investor thesis", required: true },
-    ],
-    outputs: [
-      { key: "alignmentScore", type: "number", description: "Alignment score 0-100" },
-      { key: "fitAnalysis", type: "object", description: "Detailed fit analysis" },
-    ],
-    version: 1,
-    createdAt: new Date().toISOString(),
-  },
-];
 
 export const Route = createFileRoute("/_protected/admin/agents")({
   component: AdminAgentsPage,
 });
 
-const agentIcons: Record<string, typeof Bot> = {
-  orchestrator: Workflow,
-  team: Users,
-  market: TrendingUp,
-  product: Package,
-  traction: Target,
-  businessModel: DollarSign,
-  gtm: BarChart3,
-  financials: DollarSign,
-  competitiveAdvantage: Shield,
-  legal: Scale,
-  dealTerms: Landmark,
-  exitPotential: GitMerge,
-  synthesis: GitMerge,
-  dataExtraction: FileSearch,
-  teamLinkedInResearch: Linkedin,
-  researchOrchestrator: Layers,
-  teamDeepResearch: Users,
-  marketDeepResearch: TrendingUp,
-  productDeepResearch: Package,
-  newsSearch: Newspaper,
-  investorThesis: FileText,
-  thesisAlignment: Handshake,
+type PromptKey = AiPromptFlowResponseDtoFlowsItemNodesItemPromptKeysItem;
+type FlowDefinition = AiPromptFlowResponseDtoFlowsItem;
+type FlowNode = AiPromptFlowResponseDtoFlowsItemNodesItem;
+type PromptDefinition = AiPromptDefinitionsResponseDtoItem;
+
+type PromptRevision = AiPromptRevisionsResponseDto["revisions"][number];
+type VariableDefinition = {
+  description?: string;
+  source?: string;
+  example?: string;
+  examples?: string;
 };
 
-const categoryColors: Record<string, string> = {
-  orchestrator:
-    "bg-purple-50 dark:bg-purple-500/10 border-purple-200 dark:border-purple-500/50 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-500/20",
-  analysis:
-    "bg-white dark:bg-gray-500/5 border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-500/10",
-  synthesis:
-    "bg-purple-50 dark:bg-purple-500/10 border-purple-200 dark:border-purple-500/50 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-500/20",
-  extraction:
-    "bg-red-50 dark:bg-red-500/10 border-red-200 dark:border-red-500/50 text-red-600 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-500/20",
-  research:
-    "bg-amber-50 dark:bg-amber-500/10 border-amber-300 dark:border-amber-500/50 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-500/20",
-  "research-task":
-    "bg-white dark:bg-red-500/10 border-red-200 dark:border-red-500/50 text-red-600 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-500/20",
-  investor:
-    "bg-purple-50 dark:bg-purple-500/10 border-purple-200 dark:border-purple-500/50 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-500/20",
-};
+const STAGES = [
+  "pre_seed",
+  "seed",
+  "series_a",
+  "series_b",
+  "series_c",
+  "series_d",
+  "series_e",
+  "series_f_plus",
+] as const;
+type StageOption = (typeof STAGES)[number];
 
-const agentIconColors: Record<string, string> = {
-  team: "text-rose-400 dark:text-rose-400",
-  market: "text-teal-500 dark:text-teal-400",
-  product: "text-violet-500 dark:text-violet-400",
-  traction: "text-emerald-500 dark:text-emerald-400",
-  businessModel: "text-emerald-600 dark:text-emerald-400",
-  gtm: "text-blue-500 dark:text-blue-400",
-  financials: "text-emerald-600 dark:text-emerald-400",
-  competitiveAdvantage: "text-blue-500 dark:text-blue-400",
-  legal: "text-amber-500 dark:text-amber-400",
-  dealTerms: "text-blue-500 dark:text-blue-400",
-  exitPotential: "text-emerald-500 dark:text-emerald-400",
-};
+function extractResponseData<T>(payload: unknown): T | null {
+  if (payload === null || payload === undefined) {
+    return null;
+  }
 
-// API functions removed - using mock data
+  if (typeof payload === "object" && "data" in payload) {
+    return (payload as { data: T }).data;
+  }
 
-function VariableHighlighter({ text }: { text: string }) {
-  const parts = text.split(/(\{[^}]+\})/g);
-
-  return (
-    <div className="whitespace-pre-wrap font-mono text-sm">
-      {parts.map((part, index) => {
-        if (part.startsWith("{") && part.endsWith("}")) {
-          return (
-            <span
-              key={index}
-              className="bg-amber-500/20 text-amber-700 dark:text-amber-300 px-1 py-0.5 rounded border border-amber-500/30 font-semibold"
-            >
-              {part}
-            </span>
-          );
-        }
-        return <span key={index}>{part}</span>;
-      })}
-    </div>
-  );
+  return payload as T;
 }
 
-function AgentBox({
-  agent,
+function formatStage(value: string | null): string {
+  if (!value) return "Global";
+  return value
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function humanizePromptKey(key: string): string {
+  return key
+    .replace(/\./g, " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .split(" ")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function pickNodeIcon(nodeId: string) {
+  if (nodeId.includes("extract")) return FileSearch;
+  if (nodeId.includes("scrape")) return Globe;
+  if (nodeId.includes("linkedin")) return Linkedin;
+  if (nodeId.includes("news")) return Newspaper;
+  if (nodeId.includes("synthesis")) return Layers;
+  if (nodeId.includes("matching") || nodeId.includes("thesis")) return Handshake;
+  if (nodeId.includes("orchestrator")) return Workflow;
+  return Bot;
+}
+
+function NodeCard({
+  node,
+  active,
+  incomingCount,
+  outgoingCount,
   onClick,
-  size = "normal",
 }: {
-  agent: AgentPrompt;
+  node: FlowNode;
+  active: boolean;
+  incomingCount: number;
+  outgoingCount: number;
   onClick: () => void;
-  size?: "normal" | "large";
 }) {
-  const Icon = agentIcons[agent.agentKey] || Bot;
-  const colorClass = categoryColors[agent.category || "analysis"];
-  const iconColor = agentIconColors[agent.agentKey];
+  const Icon = pickNodeIcon(node.id);
+  const isSystemNode = node.kind === "system";
 
   return (
     <button
+      type="button"
       onClick={onClick}
-      className={`${colorClass} border-2 rounded-lg cursor-pointer transition-all ${
-        size === "large" ? "px-6 py-4" : "px-3 py-2"
+      className={`group w-[204px] rounded-lg border-2 bg-background p-2.5 text-left shadow-sm transition-all ${
+        isSystemNode ? "border-dashed" : "border-solid"
+      } ${
+        active
+          ? "border-primary bg-primary/5 ring-1 ring-primary/30"
+          : "border-border hover:border-primary/30 hover:bg-muted/40"
       }`}
     >
-      <div className="flex items-center gap-2">
-        <Icon className={`${size === "large" ? "w-6 h-6" : "w-4 h-4"} ${iconColor || ""}`} />
-        <span className={`font-semibold ${size === "large" ? "text-base" : "text-xs"}`}>
-          {agent.displayName.replace(" Agent", "").replace(" Analysis", "")}
+      <div className="flex items-start gap-1.5">
+        <span
+          className={`mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border ${
+            active
+              ? "border-primary/40 bg-primary/10 text-primary"
+              : "border-border bg-muted/30 text-muted-foreground group-hover:text-foreground"
+          }`}
+        >
+          <Icon className="h-3.5 w-3.5" />
         </span>
+        <div className="min-w-0">
+          <p className="text-xs font-semibold leading-snug break-words">{node.label}</p>
+        </div>
+      </div>
+
+      <p className="mt-1.5 line-clamp-2 text-[11px] leading-snug text-muted-foreground">{node.description}</p>
+
+      <div className="mt-2 flex flex-wrap items-center gap-1">
+        {node.promptKeys.length > 0 ? (
+          <Badge variant="outline" className="text-[10px]">
+            {node.promptKeys.length} key{node.promptKeys.length === 1 ? "" : "s"}
+          </Badge>
+        ) : null}
+        <Badge variant="outline" className="text-[10px]">
+          in {incomingCount}
+        </Badge>
+        <Badge variant="outline" className="text-[10px]">
+          out {outgoingCount}
+        </Badge>
       </div>
     </button>
   );
 }
 
-function AgentEditorPanel({
-  agent,
-  isOpen,
-  onClose,
-  onSave,
-  isSaving,
-}: {
-  agent: AgentPrompt | null;
-  isOpen: boolean;
-  onClose: () => void;
-  onSave: (updates: Partial<AgentPrompt>) => void;
-  isSaving: boolean;
-}) {
-  const [systemPrompt, setSystemPrompt] = useState("");
-  const [humanPrompt, setHumanPrompt] = useState("");
-  const [description, setDescription] = useState("");
+function AdminAgentsPage() {
+  const queryClient = useQueryClient();
 
-  const variables = useMemo(() => {
-    if (!agent) return [];
-    const allText = agent.systemPrompt + " " + (agent.humanPrompt || "");
-    const matches = allText.match(/\{([^}]+)\}/g) || [];
-    return Array.from(new Set(matches.map((m) => m.slice(1, -1))));
-  }, [agent]);
+  const [selectedFlowId, setSelectedFlowId] = useState<"pipeline" | "clara">("pipeline");
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [selectedPromptKey, setSelectedPromptKey] = useState<PromptKey | null>(null);
+  const [editorStage, setEditorStage] = useState<"global" | StageOption>("global");
+  const [systemPrompt, setSystemPrompt] = useState("");
+  const [userPrompt, setUserPrompt] = useState("");
+  const [notes, setNotes] = useState("");
+
+  const definitionsQuery = useAdminControllerGetAiPrompts();
+  const flowQuery = useAdminControllerGetAiPromptFlow();
+
+  const definitions = useMemo(() => {
+    const data = extractResponseData<AiPromptDefinitionsResponseDto>(definitionsQuery.data);
+    return data ?? [];
+  }, [definitionsQuery.data]);
+
+  const flowResponse = useMemo(() => {
+    const data = extractResponseData<AiPromptFlowResponseDto>(flowQuery.data);
+    return data;
+  }, [flowQuery.data]);
+
+  const flows = flowResponse?.flows ?? [];
 
   useEffect(() => {
-    if (agent) {
-      setSystemPrompt(agent.systemPrompt);
-      setHumanPrompt(agent.humanPrompt || "");
-      setDescription(agent.description || "");
+    if (!flows.find((flow) => flow.id === selectedFlowId) && flows.length > 0) {
+      setSelectedFlowId(flows[0]!.id);
     }
-  }, [agent]);
+  }, [flows, selectedFlowId]);
 
-  if (!agent) return null;
-
-  const handleSave = () => {
-    onSave({
-      systemPrompt,
-      humanPrompt,
-      description,
-    });
-  };
-
-  const hasChanges =
-    systemPrompt !== agent.systemPrompt ||
-    humanPrompt !== (agent.humanPrompt || "") ||
-    description !== (agent.description || "");
-
-  const Icon = agentIcons[agent.agentKey] || Bot;
-
-  return (
-    <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent className="w-[600px] sm:max-w-[600px] overflow-hidden flex flex-col">
-        <SheetHeader>
-          <SheetTitle className="flex items-center gap-2">
-            <Icon className="w-5 h-5" />
-            {agent.displayName}
-          </SheetTitle>
-          <SheetDescription>
-            Edit the prompts and configuration for this agent
-          </SheetDescription>
-        </SheetHeader>
-
-        <Tabs defaultValue="prompts" className="flex-1 flex flex-col overflow-hidden">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="prompts">Prompts</TabsTrigger>
-            <TabsTrigger value="io">Inputs/Outputs</TabsTrigger>
-            <TabsTrigger value="preview">Preview</TabsTrigger>
-          </TabsList>
-
-          <ScrollArea className="flex-1 mt-4">
-            <TabsContent value="prompts" className="space-y-4 px-1">
-              <div className="space-y-2">
-                <Label htmlFor="description">Description</Label>
-                <Input
-                  id="description"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Brief description of what this agent does"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="systemPrompt">System Prompt</Label>
-                <Textarea
-                  id="systemPrompt"
-                  value={systemPrompt}
-                  onChange={(e) => setSystemPrompt(e.target.value)}
-                  className="min-h-[200px] font-mono text-sm"
-                  placeholder="The system instructions for this agent..."
-                />
-                <p className="text-xs text-muted-foreground">
-                  Variables in curly braces (e.g., {"{companyName}"}) will be replaced
-                  with actual values at runtime.
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="humanPrompt">Human Prompt Template</Label>
-                <Textarea
-                  id="humanPrompt"
-                  value={humanPrompt}
-                  onChange={(e) => setHumanPrompt(e.target.value)}
-                  className="min-h-[150px] font-mono text-sm"
-                  placeholder="The human message template..."
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Detected Variables</Label>
-                <div className="flex flex-wrap gap-1">
-                  {variables.map((variable) => (
-                    <Badge
-                      key={variable}
-                      variant="outline"
-                      className="bg-amber-500/20 text-amber-700 dark:text-amber-300 border-amber-500/30"
-                    >
-                      {"{" + variable + "}"}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-            </TabsContent>
-
-            <TabsContent value="io" className="space-y-4 px-1">
-              <div className="space-y-2">
-                <Label className="flex items-center gap-2">
-                  <FileInput className="w-4 h-4" />
-                  Inputs
-                </Label>
-                <div className="space-y-2">
-                  {agent.inputs?.map((input: any, index: number) => (
-                    <div
-                      key={index}
-                      className="flex items-start gap-2 p-2 bg-muted/50 rounded-md"
-                    >
-                      <Badge
-                        variant={input.required ? "default" : "secondary"}
-                        className="text-xs"
-                      >
-                        {input.key}
-                      </Badge>
-                      <span className="text-sm text-muted-foreground">
-                        {input.description}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="flex items-center gap-2">
-                  <FileOutput className="w-4 h-4" />
-                  Outputs
-                </Label>
-                <div className="space-y-2">
-                  {agent.outputs?.map((output: any, index: number) => (
-                    <div
-                      key={index}
-                      className="flex items-start gap-2 p-2 bg-muted/50 rounded-md"
-                    >
-                      <Badge variant="outline" className="text-xs">
-                        {output.key}
-                      </Badge>
-                      <Badge variant="secondary" className="text-xs">
-                        {output.type}
-                      </Badge>
-                      <span className="text-sm text-muted-foreground">
-                        {output.description}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="flex items-center gap-2">
-                  <Wrench className="w-4 h-4" />
-                  Tools
-                </Label>
-                <div className="flex flex-wrap gap-1">
-                  {agent.tools?.map((tool: string) => (
-                    <Badge key={tool} variant="outline">
-                      {tool}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-            </TabsContent>
-
-            <TabsContent value="preview" className="space-y-4 px-1">
-              <div className="space-y-2">
-                <Label>System Prompt Preview</Label>
-                <div className="p-3 bg-muted/50 rounded-md max-h-[250px] overflow-auto">
-                  <VariableHighlighter text={systemPrompt} />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Human Prompt Preview</Label>
-                <div className="p-3 bg-muted/50 rounded-md max-h-[200px] overflow-auto">
-                  <VariableHighlighter text={humanPrompt} />
-                </div>
-              </div>
-            </TabsContent>
-          </ScrollArea>
-        </Tabs>
-
-        <SheetFooter className="mt-4 pt-4 border-t">
-          <div className="flex items-center justify-between w-full">
-            <div className="text-sm text-muted-foreground">
-              Version {agent.version}
-              {agent.lastModifiedBy && ` • Last edited by ${agent.lastModifiedBy}`}
-            </div>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={onClose}>
-                <X className="w-4 h-4 mr-2" />
-                Cancel
-              </Button>
-              <Button onClick={handleSave} disabled={!hasChanges || isSaving}>
-                {isSaving ? (
-                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <Save className="w-4 h-4 mr-2" />
-                )}
-                Save Changes
-              </Button>
-            </div>
-          </div>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+  const activeFlow = useMemo(
+    () => flows.find((flow) => flow.id === selectedFlowId) ?? null,
+    [flows, selectedFlowId],
   );
-}
 
-function AdminAgentsPage() {
-  const [selectedAgent, setSelectedAgent] = useState<AgentPrompt | null>(null);
-  const [isPanelOpen, setIsPanelOpen] = useState(false);
+  const nodeById = useMemo(() => {
+    const map = new Map<string, FlowNode>();
+    for (const node of activeFlow?.nodes ?? []) {
+      map.set(node.id, node);
+    }
+    return map;
+  }, [activeFlow]);
 
-  // Using mock data - backend not connected
-  const agents = MOCK_AGENTS;
-  const isLoading = false;
+  const edgeCountsByNode = useMemo(() => {
+    const map = new Map<string, { incoming: number; outgoing: number }>();
 
-  const updateMutation = useMutation({
-    mutationFn: async (_data: { agentKey: string; updates: Partial<AgentPrompt> }) => {
-      // No-op - mock save
-    },
-    onSuccess: () => {
-      setIsPanelOpen(false);
-      toast.success("Agent updated (mock)", {
-        description: "Changes saved locally - backend not connected.",
-      });
+    for (const node of activeFlow?.nodes ?? []) {
+      map.set(node.id, { incoming: 0, outgoing: 0 });
+    }
+
+    for (const edge of activeFlow?.edges ?? []) {
+      const from = map.get(edge.from);
+      if (from) {
+        from.outgoing += 1;
+      }
+
+      const to = map.get(edge.to);
+      if (to) {
+        to.incoming += 1;
+      }
+    }
+
+    return map;
+  }, [activeFlow]);
+
+  const definitionsByKey = useMemo(() => {
+    const map = new Map<string, PromptDefinition>();
+    for (const definition of definitions) {
+      map.set(definition.key, definition);
+    }
+    return map;
+  }, [definitions]);
+
+  useEffect(() => {
+    if (!activeFlow) {
+      setSelectedNodeId(null);
+      return;
+    }
+
+    const nodeExists = selectedNodeId ? nodeById.has(selectedNodeId) : false;
+    if (nodeExists) {
+      return;
+    }
+
+    const firstPromptNode = activeFlow.nodes.find((node) => node.promptKeys.length > 0);
+    const fallbackNode = firstPromptNode ?? activeFlow.nodes[0] ?? null;
+    setSelectedNodeId(fallbackNode?.id ?? null);
+  }, [activeFlow, nodeById, selectedNodeId]);
+
+  const selectedNode = selectedNodeId ? nodeById.get(selectedNodeId) ?? null : null;
+
+  useEffect(() => {
+    if (!selectedNode || selectedNode.promptKeys.length === 0) {
+      setSelectedPromptKey(null);
+      return;
+    }
+
+    if (
+      selectedPromptKey &&
+      selectedNode.promptKeys.includes(selectedPromptKey)
+    ) {
+      return;
+    }
+
+    setSelectedPromptKey(selectedNode.promptKeys[0]!);
+  }, [selectedNode, selectedPromptKey]);
+
+  const currentPromptKey = selectedNode?.promptKeys.includes(selectedPromptKey as PromptKey)
+    ? (selectedPromptKey as PromptKey)
+    : (selectedNode?.promptKeys[0] ?? null);
+
+  const revisionsQuery = useAdminControllerGetAiPromptRevisions(currentPromptKey ?? "", {
+    query: {
+      enabled: Boolean(currentPromptKey),
     },
   });
 
-  const handleAgentClick = (agent: AgentPrompt) => {
-    setSelectedAgent(agent);
-    setIsPanelOpen(true);
-  };
+  const revisionsPayload = useMemo(() => {
+    const data = extractResponseData<AiPromptRevisionsResponseDto>(revisionsQuery.data);
+    return data;
+  }, [revisionsQuery.data]);
 
-  const handleSave = (updates: Partial<AgentPrompt>) => {
-    if (selectedAgent) {
-      updateMutation.mutate({ agentKey: selectedAgent.agentKey, updates });
+  const revisions = revisionsPayload?.revisions ?? [];
+  const selectedDefinition = currentPromptKey
+    ? definitionsByKey.get(currentPromptKey) ?? null
+    : null;
+
+  const stageValue: StageOption | null = editorStage === "global" ? null : editorStage;
+
+  const activeDraft = useMemo(
+    () =>
+      revisions.find(
+        (revision) => revision.status === "draft" && revision.stage === stageValue,
+      ) ?? null,
+    [revisions, stageValue],
+  );
+
+  const activePublished = useMemo(
+    () =>
+      revisions.find(
+        (revision) => revision.status === "published" && revision.stage === stageValue,
+      ) ??
+      (stageValue !== null
+        ? revisions.find(
+            (revision) => revision.status === "published" && revision.stage === null,
+          )
+        : null) ??
+      null,
+    [revisions, stageValue],
+  );
+
+  useEffect(() => {
+    if (!currentPromptKey) {
+      setSystemPrompt("");
+      setUserPrompt("");
+      setNotes("");
+      return;
     }
+
+    if (activeDraft) {
+      setSystemPrompt(activeDraft.systemPrompt);
+      setUserPrompt(activeDraft.userPrompt);
+      setNotes(activeDraft.notes ?? "");
+      return;
+    }
+
+    if (activePublished) {
+      setSystemPrompt(activePublished.systemPrompt);
+      setUserPrompt(activePublished.userPrompt);
+      setNotes("");
+      return;
+    }
+
+    setSystemPrompt("");
+    setUserPrompt("");
+    setNotes("");
+  }, [currentPromptKey, activeDraft, activePublished]);
+
+  const seedMutation = useAdminControllerSeedAiPrompts({
+    mutation: {
+      onSuccess: (result) => {
+        const payload = extractResponseData<AiPromptSeedResultDto>(result);
+        queryClient.invalidateQueries({ queryKey: getAdminControllerGetAiPromptsQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getAdminControllerGetAiPromptFlowQueryKey() });
+        if (currentPromptKey) {
+          queryClient.invalidateQueries({
+            queryKey: getAdminControllerGetAiPromptRevisionsQueryKey(currentPromptKey),
+          });
+        }
+
+        if (!payload) {
+          toast.success("Seed completed");
+          return;
+        }
+
+        const stageInsertCount = Object.values(payload.insertedByStage ?? {}).reduce(
+          (acc, count) => acc + Number(count),
+          0,
+        );
+
+        toast.success(
+          `Seeded ${payload.insertedTotal} revisions (${payload.insertedGlobal} global + ${stageInsertCount} stage-specific, ${payload.skippedExisting} skipped)`,
+        );
+      },
+      onError: (error) => {
+        const message = (error as Error).message || "Failed to seed prompts";
+        toast.error(message);
+      },
+    },
+  });
+
+  const createDraftMutation = useAdminControllerCreateAiPromptRevision({
+    mutation: {
+      onSuccess: () => {
+        if (currentPromptKey) {
+          queryClient.invalidateQueries({ queryKey: getAdminControllerGetAiPromptRevisionsQueryKey(currentPromptKey) });
+        }
+        queryClient.invalidateQueries({ queryKey: getAdminControllerGetAiPromptsQueryKey() });
+        toast.success("Draft created");
+      },
+      onError: (error) => toast.error((error as Error).message || "Failed to create draft"),
+    },
+  });
+
+  const updateDraftMutation = useAdminControllerUpdateAiPromptRevision({
+    mutation: {
+      onSuccess: () => {
+        if (currentPromptKey) {
+          queryClient.invalidateQueries({ queryKey: getAdminControllerGetAiPromptRevisionsQueryKey(currentPromptKey) });
+        }
+        queryClient.invalidateQueries({ queryKey: getAdminControllerGetAiPromptsQueryKey() });
+        toast.success("Draft updated");
+      },
+      onError: (error) => toast.error((error as Error).message || "Failed to update draft"),
+    },
+  });
+
+  const publishMutation = useAdminControllerPublishAiPromptRevision({
+    mutation: {
+      onSuccess: () => {
+        if (currentPromptKey) {
+          queryClient.invalidateQueries({ queryKey: getAdminControllerGetAiPromptRevisionsQueryKey(currentPromptKey) });
+        }
+        queryClient.invalidateQueries({ queryKey: getAdminControllerGetAiPromptsQueryKey() });
+        toast.success("Prompt revision published");
+      },
+      onError: (error) => toast.error((error as Error).message || "Failed to publish revision"),
+    },
+  });
+
+  const isSaving =
+    createDraftMutation.isPending || updateDraftMutation.isPending || publishMutation.isPending;
+
+  const handleSaveDraft = () => {
+    if (!currentPromptKey) return;
+
+    if (!systemPrompt.trim() && !userPrompt.trim()) {
+      toast.error("System and user prompts cannot both be empty");
+      return;
+    }
+
+    const payload = {
+      stage: stageValue,
+      systemPrompt,
+      userPrompt,
+      notes: notes || undefined,
+    };
+
+    if (activeDraft) {
+      updateDraftMutation.mutate({
+        key: currentPromptKey,
+        revisionId: activeDraft.id,
+        data: payload,
+      });
+      return;
+    }
+
+    createDraftMutation.mutate({
+      key: currentPromptKey,
+      data: payload,
+    });
   };
 
-  if (isLoading) {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <Skeleton className="h-8 w-48 mb-2" />
-            <Skeleton className="h-4 w-96" />
-          </div>
-        </div>
-        <Skeleton className="h-[400px] w-full" />
-      </div>
-    );
-  }
+  const handlePublish = (revisionId: string) => {
+    if (!currentPromptKey) return;
+    publishMutation.mutate({ key: currentPromptKey, revisionId });
+  };
 
-  const noAgents = !agents || agents.length === 0;
+  const allowedVariables = revisionsPayload?.allowedVariables ?? selectedDefinition?.allowedVariables ?? [];
+  const requiredVariables = revisionsPayload?.requiredVariables ?? selectedDefinition?.requiredVariables ?? [];
+  const variableDefinitions =
+    (revisionsPayload?.variableDefinitions as Record<string, VariableDefinition>) ??
+    (selectedDefinition?.variableDefinitions as Record<string, VariableDefinition>) ??
+    {};
 
-  const researchOrchestrator = agents?.find((a) => a.agentKey === "researchOrchestrator");
-  const researchAgentKeys = [
-    "teamDeepResearch",
-    "marketDeepResearch",
-    "productDeepResearch",
-    "newsSearch",
-  ];
-  const researchAgents = agents?.filter((a) => researchAgentKeys.includes(a.agentKey)) || [];
+  const incomingNodeLabels = useMemo(() => {
+    if (!activeFlow || !selectedNode) return [];
+    return activeFlow.edges
+      .filter((edge) => edge.to === selectedNode.id)
+      .map((edge) => nodeById.get(edge.from)?.label ?? edge.from);
+  }, [activeFlow, selectedNode, nodeById]);
 
-  const orchestrator = agents?.find((a) => a.agentKey === "orchestrator");
-  const analysisAgents = agents?.filter((a) => a.category === "analysis") || [];
-  const synthesisAgent = agents?.find((a) => a.agentKey === "synthesis");
+  const outgoingNodeLabels = useMemo(() => {
+    if (!activeFlow || !selectedNode) return [];
+    return activeFlow.edges
+      .filter((edge) => edge.from === selectedNode.id)
+      .map((edge) => nodeById.get(edge.to)?.label ?? edge.to);
+  }, [activeFlow, selectedNode, nodeById]);
 
-  const investorAgents = agents?.filter((a) => a.category === "investor") || [];
-
-  const row1Agents = analysisAgents.slice(0, 6);
-  const row2Agents = analysisAgents.slice(6);
+  const isLoading = definitionsQuery.isLoading || flowQuery.isLoading;
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Agent Prompts</h1>
+          <h1 className="text-2xl font-bold">AI Agent Prompt Console</h1>
           <p className="text-muted-foreground">
-            View and edit the AI agents that analyze startups. Click on any agent to edit
-            its prompts.
+            Visualize the data flow, click any agent, and manage stage-aware prompt revisions.
           </p>
         </div>
-        {/* Seed button removed - using mock data */}
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              flowQuery.refetch();
+              definitionsQuery.refetch();
+              if (currentPromptKey) {
+                revisionsQuery.refetch();
+              }
+            }}
+          >
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Refresh
+          </Button>
+          <Button onClick={() => seedMutation.mutate()} disabled={seedMutation.isPending}>
+            <Rocket className="mr-2 h-4 w-4" />
+            {seedMutation.isPending ? "Seeding..." : "Seed From Code"}
+          </Button>
+        </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Workflow className="w-5 h-5" />
-            5-Stage Research, Evaluation & Matching Pipeline
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {noAgents ? (
-            <div className="h-64 flex items-center justify-center text-muted-foreground">
-              <div className="text-center">
-                <Bot className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p>
-                  No agents configured. Click &quot;Initialize Agents&quot; to set up the
-                  default agents.
+      <Tabs
+        value={selectedFlowId}
+        onValueChange={(value) => setSelectedFlowId(value as "pipeline" | "clara")}
+        className="space-y-4"
+      >
+        <TabsList>
+          {(flows.length > 0 ? flows : [{ id: "pipeline", name: "Pipeline" } as FlowDefinition]).map((flow) => (
+            <TabsTrigger key={flow.id} value={flow.id}>
+              {flow.name}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+
+        <TabsContent value={selectedFlowId}>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Workflow className="h-5 w-5" />
+                {activeFlow?.name ?? "Loading flow"}
+              </CardTitle>
+              <CardDescription>
+                {activeFlow?.description ?? "Visualize data flow across agents and edit prompts from one place."}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <div className="space-y-4">
+                  {Array.from({ length: 4 }).map((_, index) => (
+                    <Skeleton key={index} className="h-24 w-full" />
+                  ))}
+                </div>
+              ) : !activeFlow ? (
+                <p className="text-sm text-muted-foreground">No flow metadata found.</p>
+              ) : (
+                <div className="space-y-4 py-2">
+                  {activeFlow.stages.map((stage, index) => {
+                    const stageNodes = stage.nodeIds
+                      .map((nodeId) => nodeById.get(nodeId))
+                      .filter((node): node is FlowNode => Boolean(node));
+
+                    return (
+                      <div key={stage.id} className="space-y-3">
+                        <div className="rounded-xl border bg-muted/20 p-4">
+                          <div className="mb-3 text-center">
+                            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                              Step {index + 1}
+                            </p>
+                            <h3 className="text-sm font-semibold">{stage.title}</h3>
+                            <p className="mt-1 text-xs text-muted-foreground">{stage.description}</p>
+                            <Badge variant="outline" className="mt-2">
+                              {stageNodes.length} node{stageNodes.length === 1 ? "" : "s"}
+                            </Badge>
+                          </div>
+                          <div className="mx-auto flex max-w-5xl flex-wrap justify-center gap-2">
+                            {stageNodes.map((node) => (
+                              <NodeCard
+                                key={node.id}
+                                node={node}
+                                active={selectedNodeId === node.id}
+                                incomingCount={edgeCountsByNode.get(node.id)?.incoming ?? 0}
+                                outgoingCount={edgeCountsByNode.get(node.id)?.outgoing ?? 0}
+                                onClick={() => {
+                                  setSelectedNodeId(node.id);
+                                  setIsSheetOpen(true);
+                                }}
+                              />
+                            ))}
+                          </div>
+                        </div>
+
+                        {index < activeFlow.stages.length - 1 ? (
+                          <div className="mx-auto h-4 w-px bg-border" />
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      <Sheet open={Boolean(selectedNode) && isSheetOpen} onOpenChange={setIsSheetOpen}>
+        <SheetContent side="right" className="w-full overflow-hidden sm:max-w-[780px]">
+          {!selectedNode ? null : (
+            <>
+              <SheetHeader>
+                <SheetTitle className="flex items-center gap-2">
+                  {selectedNode.label}
+                  <Badge variant={selectedNode.kind === "prompt" ? "default" : "secondary"}>
+                    {selectedNode.kind}
+                  </Badge>
+                </SheetTitle>
+                <SheetDescription>{selectedNode.description}</SheetDescription>
+              </SheetHeader>
+
+              {selectedNode.promptKeys.length === 0 ? (
+                <div className="mt-4 space-y-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">Flow Context</CardTitle>
+                      <CardDescription>This node is runtime logic, not prompt-configured.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div>
+                        <p className="mb-2 text-sm font-medium">Inputs</p>
+                        <div className="flex flex-wrap gap-2">
+                          {selectedNode.inputs.map((input) => (
+                            <Badge key={input} variant="outline">
+                              {input}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <p className="mb-2 text-sm font-medium">Outputs</p>
+                        <div className="flex flex-wrap gap-2">
+                          {selectedNode.outputs.map((output) => (
+                            <Badge key={output}>{output}</Badge>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <p className="mb-2 text-sm font-medium">Incoming Nodes</p>
+                        <p className="text-sm text-muted-foreground">
+                          {incomingNodeLabels.length > 0 ? incomingNodeLabels.join(", ") : "None"}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="mb-2 text-sm font-medium">Outgoing Nodes</p>
+                        <p className="text-sm text-muted-foreground">
+                          {outgoingNodeLabels.length > 0 ? outgoingNodeLabels.join(", ") : "None"}
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              ) : (
+                <div className="mt-4 space-y-4 overflow-y-auto pb-24">
+                  <Tabs defaultValue="prompts" className="space-y-4">
+                    <TabsList>
+                      <TabsTrigger value="prompts">Prompts</TabsTrigger>
+                      <TabsTrigger value="variables">Variables</TabsTrigger>
+                      <TabsTrigger value="revisions">Revisions</TabsTrigger>
+                      <TabsTrigger value="context">Flow Context</TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="prompts" className="space-y-4">
+                      {selectedNode.promptKeys.length > 1 ? (
+                        <Tabs
+                          value={currentPromptKey ?? undefined}
+                          onValueChange={(value) => setSelectedPromptKey(value as PromptKey)}
+                        >
+                          <TabsList className="mb-3 flex h-auto flex-wrap justify-start">
+                            {selectedNode.promptKeys.map((key) => (
+                              <TabsTrigger key={key} value={key} className="text-xs">
+                                {humanizePromptKey(key)}
+                              </TabsTrigger>
+                            ))}
+                          </TabsList>
+                        </Tabs>
+                      ) : (
+                        <Badge variant="outline">
+                          {selectedNode.promptKeys[0] ? humanizePromptKey(selectedNode.promptKeys[0]) : "Prompt"}
+                        </Badge>
+                      )}
+
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-base">Prompt Editor</CardTitle>
+                          <CardDescription>
+                            {selectedDefinition?.description ?? "Create, update, and publish stage-aware prompt revisions."}
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                          <div className="grid gap-3 md:grid-cols-[220px_1fr]">
+                            <div className="space-y-2">
+                              <Label>Startup Stage</Label>
+                              <Select
+                                value={editorStage}
+                                onValueChange={(value) => setEditorStage(value as "global" | StageOption)}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select stage" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="global">Global</SelectItem>
+                                  {STAGES.map((stage) => (
+                                    <SelectItem key={stage} value={stage}>
+                                      {formatStage(stage)}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Notes (optional)</Label>
+                              <Input
+                                value={notes}
+                                onChange={(event) => setNotes(event.target.value)}
+                                placeholder="What changed in this draft?"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label>System Prompt</Label>
+                            <Textarea
+                              value={systemPrompt}
+                              onChange={(event) => setSystemPrompt(event.target.value)}
+                              className="min-h-[160px] font-mono text-xs"
+                              placeholder="System prompt"
+                            />
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label>User Prompt</Label>
+                            <Textarea
+                              value={userPrompt}
+                              onChange={(event) => setUserPrompt(event.target.value)}
+                              className="min-h-[240px] font-mono text-xs"
+                              placeholder="User prompt template"
+                            />
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Button onClick={handleSaveDraft} disabled={!currentPromptKey || isSaving}>
+                              <Save className="mr-2 h-4 w-4" />
+                              {activeDraft ? "Update Draft" : "Create Draft"}
+                            </Button>
+                            {activeDraft ? (
+                              <Button
+                                variant="secondary"
+                                onClick={() => handlePublish(activeDraft.id)}
+                                disabled={publishMutation.isPending}
+                              >
+                                <CheckCircle2 className="mr-2 h-4 w-4" />
+                                Publish Draft
+                              </Button>
+                            ) : null}
+                            {activePublished ? (
+                              <Badge variant="outline" className="ml-auto">
+                                Using {activePublished.stage ? formatStage(activePublished.stage) : "Global"} v{activePublished.version}
+                              </Badge>
+                            ) : null}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </TabsContent>
+
+                    <TabsContent value="variables">
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-base">Variables Contract</CardTitle>
+                          <CardDescription>
+                            Supported template variables for this prompt key.
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                          <div>
+                            <p className="mb-2 text-sm font-medium">Required Variables</p>
+                            <div className="flex flex-wrap gap-2">
+                              {requiredVariables.length === 0 ? (
+                                <span className="text-sm text-muted-foreground">None</span>
+                              ) : (
+                                requiredVariables.map((variable) => (
+                                  <Badge key={variable}>{`{{${variable}}}`}</Badge>
+                                ))
+                              )}
+                            </div>
+                          </div>
+
+                          <div>
+                            <p className="mb-2 text-sm font-medium">Allowed Variables</p>
+                            <div className="flex flex-wrap gap-2">
+                              {allowedVariables.length === 0 ? (
+                                <span className="text-sm text-muted-foreground">None</span>
+                              ) : (
+                                allowedVariables.map((variable) => (
+                                  <Badge key={variable} variant="outline">{`{{${variable}}}`}</Badge>
+                                ))
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <p className="text-sm font-medium">Variable Details</p>
+                            {allowedVariables.length === 0 ? (
+                              <p className="text-sm text-muted-foreground">No variable metadata for this prompt key.</p>
+                            ) : (
+                              <div className="space-y-2">
+                                {allowedVariables.map((variable) => {
+                                  const definition = variableDefinitions[variable];
+                                  return (
+                                    <div key={variable} className="rounded-md border p-3">
+                                      <div className="flex items-center gap-2">
+                                        <Badge variant="outline">{`{{${variable}}}`}</Badge>
+                                        {requiredVariables.includes(variable) ? (
+                                          <Badge>required</Badge>
+                                        ) : (
+                                          <Badge variant="secondary">optional</Badge>
+                                        )}
+                                      </div>
+                                      <p className="mt-2 text-sm">{definition?.description ?? "No description yet."}</p>
+                                      <p className="mt-1 text-xs text-muted-foreground">
+                                        Source: {definition?.source ?? "Prompt runtime context builder"}
+                                      </p>
+                                      {definition?.example || definition?.examples ? (
+                                        <p className="mt-1 text-xs text-muted-foreground">
+                                          Example: <code>{definition?.example ?? definition?.examples}</code>
+                                        </p>
+                                      ) : null}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </TabsContent>
+
+                    <TabsContent value="revisions">
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-base">Revision History</CardTitle>
+                          <CardDescription>
+                            Draft, published, and archived revisions for this prompt key.
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          {revisionsQuery.isLoading ? (
+                            Array.from({ length: 3 }).map((_, index) => (
+                              <Skeleton key={index} className="h-16 w-full" />
+                            ))
+                          ) : revisions.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">No revisions found for this prompt key.</p>
+                          ) : (
+                            revisions.map((revision: PromptRevision) => (
+                              <div key={revision.id} className="rounded-md border p-3">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <Badge variant={revision.status === "published" ? "default" : "outline"}>
+                                    {revision.status}
+                                  </Badge>
+                                  <Badge variant="secondary">{formatStage(revision.stage)}</Badge>
+                                  <span className="text-xs text-muted-foreground">v{revision.version}</span>
+                                  <span className="text-xs text-muted-foreground">{revision.id}</span>
+                                  {revision.status === "draft" ? (
+                                    <Button
+                                      size="sm"
+                                      variant="secondary"
+                                      className="ml-auto"
+                                      onClick={() => handlePublish(revision.id)}
+                                    >
+                                      Publish
+                                    </Button>
+                                  ) : null}
+                                </div>
+                                <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                                  <Clock className="h-3 w-3" />
+                                  Updated {new Date(revision.updatedAt).toLocaleString()}
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </CardContent>
+                      </Card>
+                    </TabsContent>
+
+                    <TabsContent value="context">
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-base">Flow Context</CardTitle>
+                          <CardDescription>
+                            Inputs, outputs, and graph neighbors for this agent node.
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                          <div>
+                            <p className="mb-2 text-sm font-medium">Inputs</p>
+                            <div className="flex flex-wrap gap-2">
+                              {selectedNode.inputs.map((input) => (
+                                <Badge key={input} variant="outline">
+                                  {input}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                          <div>
+                            <p className="mb-2 text-sm font-medium">Outputs</p>
+                            <div className="flex flex-wrap gap-2">
+                              {selectedNode.outputs.map((output) => (
+                                <Badge key={output}>{output}</Badge>
+                              ))}
+                            </div>
+                          </div>
+                          <div>
+                            <p className="mb-2 text-sm font-medium">Incoming Nodes</p>
+                            <p className="text-sm text-muted-foreground">
+                              {incomingNodeLabels.length > 0 ? incomingNodeLabels.join(", ") : "None"}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="mb-2 text-sm font-medium">Outgoing Nodes</p>
+                            <p className="text-sm text-muted-foreground">
+                              {outgoingNodeLabels.length > 0 ? outgoingNodeLabels.join(", ") : "None"}
+                            </p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </TabsContent>
+                  </Tabs>
+                </div>
+              )}
+
+              <SheetFooter className="mt-4 border-t pt-4">
+                <p className="text-xs text-muted-foreground">
+                  Extend prompts by updating backend prompt catalog + runtime context mapping.
                 </p>
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center py-6 space-y-4">
-              {/* Stage 1: Data Extraction */}
-              <div className="text-center">
-                <div className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wider">
-                  Stage 1: Data Extraction
-                </div>
-                <div className="flex gap-3 justify-center">
-                  <div className="px-4 py-3 rounded-lg border-2 border-dashed border-red-200 dark:border-red-600 bg-white dark:bg-red-950/30">
-                    <div className="flex items-center gap-2 text-red-600 dark:text-red-400">
-                      <FileSearch className="w-5 h-5" />
-                      <span className="font-medium">Document Parsing</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Extract text from pitch deck
-                    </p>
-                  </div>
-                  <div className="px-4 py-3 rounded-lg border-2 border-dashed border-red-200 dark:border-red-600 bg-white dark:bg-red-950/30">
-                    <div className="flex items-center gap-2 text-red-600 dark:text-red-400">
-                      <Globe className="w-5 h-5" />
-                      <span className="font-medium">Website Scraping</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Deep scrape up to 20 pages
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex flex-col items-center text-muted-foreground">
-                <div className="w-px h-4 bg-border" />
-                <ArrowDown className="w-5 h-5" />
-              </div>
-
-              {/* Stage 2: LinkedIn Research */}
-              <div className="text-center">
-                <div className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wider">
-                  Stage 2: Team LinkedIn Research
-                </div>
-                <div className="px-4 py-3 rounded-lg border-2 border-dashed border-amber-300 dark:border-amber-600 bg-amber-50 dark:bg-amber-950/30">
-                  <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
-                    <Linkedin className="w-5 h-5" />
-                    <span className="font-medium">LinkedIn Enrichment</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Discover team members & fetch profiles via Unipile
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex flex-col items-center text-muted-foreground">
-                <div className="w-px h-4 bg-border" />
-                <ArrowDown className="w-5 h-5" />
-              </div>
-
-              {/* Stage 3: Research */}
-              <div className="text-center">
-                <div className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wider">
-                  Stage 3: Deep Research
-                </div>
-                {researchOrchestrator && (
-                  <AgentBox
-                    agent={researchOrchestrator}
-                    onClick={() => handleAgentClick(researchOrchestrator)}
-                    size="large"
-                  />
-                )}
-              </div>
-
-              <div className="flex flex-col items-center text-muted-foreground">
-                <div className="w-px h-3 bg-border" />
-                <ArrowDown className="w-4 h-4" />
-              </div>
-
-              <div className="flex flex-wrap justify-center gap-2 max-w-3xl">
-                {researchAgents.map((agent) => (
-                  <AgentBox
-                    key={agent.agentKey}
-                    agent={agent}
-                    onClick={() => handleAgentClick(agent)}
-                  />
-                ))}
-              </div>
-
-              <div className="flex flex-col items-center text-muted-foreground">
-                <div className="w-px h-4 bg-border" />
-                <ArrowDown className="w-5 h-5" />
-              </div>
-
-              {/* Stage 4: Evaluation */}
-              <div className="text-center">
-                <div className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wider">
-                  Stage 4: Evaluation Pipeline
-                </div>
-                {orchestrator && (
-                  <AgentBox
-                    agent={orchestrator}
-                    onClick={() => handleAgentClick(orchestrator)}
-                    size="large"
-                  />
-                )}
-              </div>
-
-              <div className="flex flex-col items-center text-muted-foreground">
-                <div className="w-px h-3 bg-border" />
-                <ArrowDown className="w-4 h-4" />
-              </div>
-
-              <div className="flex flex-wrap justify-center gap-2 max-w-4xl">
-                {row1Agents.map((agent) => (
-                  <AgentBox
-                    key={agent.agentKey}
-                    agent={agent}
-                    onClick={() => handleAgentClick(agent)}
-                  />
-                ))}
-              </div>
-
-              <div className="flex flex-wrap justify-center gap-2 max-w-4xl">
-                {row2Agents.map((agent) => (
-                  <AgentBox
-                    key={agent.agentKey}
-                    agent={agent}
-                    onClick={() => handleAgentClick(agent)}
-                  />
-                ))}
-              </div>
-
-              <div className="flex flex-col items-center text-muted-foreground">
-                <div className="w-px h-3 bg-border" />
-                <ArrowDown className="w-4 h-4" />
-              </div>
-
-              {synthesisAgent && (
-                <AgentBox
-                  agent={synthesisAgent}
-                  onClick={() => handleAgentClick(synthesisAgent)}
-                  size="large"
-                />
-              )}
-
-              {investorAgents.length > 0 && (
-                <>
-                  <div className="flex flex-col items-center text-muted-foreground">
-                    <div className="w-px h-4 bg-border" />
-                    <ArrowDown className="w-5 h-5" />
-                  </div>
-
-                  <div className="text-center">
-                    <div className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wider">
-                      Stage 5: Investor Matching
-                    </div>
-                    <div className="flex flex-wrap justify-center gap-2">
-                      {investorAgents.map((agent) => (
-                        <AgentBox
-                          key={agent.agentKey}
-                          agent={agent}
-                          onClick={() => handleAgentClick(agent)}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
+              </SheetFooter>
+            </>
           )}
-        </CardContent>
-      </Card>
-
-      <AgentEditorPanel
-        agent={selectedAgent}
-        isOpen={isPanelOpen}
-        onClose={() => setIsPanelOpen(false)}
-        onSave={handleSave}
-        isSaving={updateMutation.isPending}
-      />
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

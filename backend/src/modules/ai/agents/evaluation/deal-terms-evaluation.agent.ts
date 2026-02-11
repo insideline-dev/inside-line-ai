@@ -2,9 +2,10 @@ import { Injectable } from "@nestjs/common";
 import type { EvaluationPipelineInput } from "../../interfaces/agent.interface";
 import { DealTermsEvaluationSchema, type DealTermsEvaluation } from "../../schemas";
 import { AiConfigService } from "../../services/ai-config.service";
+import { AiPromptService } from "../../services/ai-prompt.service";
 import { AiProviderService } from "../../providers/ai-provider.service";
 import { BaseEvaluationAgent } from "./base-evaluation.agent";
-import { baseEvaluation, fundingScore } from "./evaluation-utils";
+import { baseEvaluation } from "./evaluation-utils";
 
 @Injectable()
 export class DealTermsEvaluationAgent extends BaseEvaluationAgent<DealTermsEvaluation> {
@@ -13,8 +14,8 @@ export class DealTermsEvaluationAgent extends BaseEvaluationAgent<DealTermsEvalu
   protected readonly systemPrompt =
     "You are a startup investment analyst evaluating valuation and round terms quality.";
 
-  constructor(providers: AiProviderService, aiConfig: AiConfigService) {
-    super(providers, aiConfig);
+  constructor(providers: AiProviderService, aiConfig: AiConfigService, promptService: AiPromptService) {
+    super(providers, aiConfig, promptService);
   }
 
   buildContext({ extraction, scraping }: EvaluationPipelineInput) {
@@ -59,7 +60,7 @@ export class DealTermsEvaluationAgent extends BaseEvaluationAgent<DealTermsEvalu
     const ask = extraction.fundingAsk ?? 0;
 
     return DealTermsEvaluationSchema.parse({
-      ...baseEvaluation(35 + fundingScore(ask) / 8, "Deal framing is acceptable for diligence progression"),
+      ...baseEvaluation(20, "Deal terms evaluation incomplete — requires manual review"),
       valuation: extraction.valuation ?? Math.max(5_000_000, ask * 5),
       askAmount: ask,
       equity: 12,

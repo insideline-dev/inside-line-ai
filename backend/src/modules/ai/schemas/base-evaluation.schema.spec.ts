@@ -50,4 +50,29 @@ describe("BaseEvaluationSchema", () => {
       }),
     ).toThrow();
   });
+
+  it("defaults keyFindings to empty array when omitted", () => {
+    const parsed = BaseEvaluationSchema.parse({
+      score: 75,
+      confidence: 0.8,
+    });
+
+    expect(parsed.keyFindings).toEqual([]);
+    expect(parsed.risks).toEqual([]);
+    expect(parsed.dataGaps).toEqual([]);
+    expect(parsed.sources).toEqual([]);
+  });
+
+  it("defaults all optional arrays independently", () => {
+    const parsed = BaseEvaluationSchema.parse({
+      score: 60,
+      confidence: 0.5,
+      keyFindings: ["Finding 1"],
+    });
+
+    expect(parsed.keyFindings).toEqual(["Finding 1"]);
+    expect(parsed.risks).toEqual([]);
+    expect(parsed.dataGaps).toEqual([]);
+    expect(parsed.sources).toEqual([]);
+  });
 });

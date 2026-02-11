@@ -122,7 +122,6 @@ describe('AttachmentService', () => {
           content_type: 'application/pdf',
           inboxId: 'inbox-1',
           messageId: 'msg-1',
-          url: '',
         },
       ];
 
@@ -150,7 +149,77 @@ describe('AttachmentService', () => {
           content_type: 'application/pdf',
           inboxId: 'inbox-1',
           messageId: 'msg-1',
-          url: '',
+        },
+      ];
+
+      const result = await service.downloadFromSdk(
+        'user-1',
+        'inbox-1',
+        'msg-1',
+        attachments,
+        mockClient as any,
+      );
+
+      expect(result).toEqual([]);
+    });
+
+    it('should work when downloadFromSdk interface does not have url field', async () => {
+      const mockClient = {
+        getMessageAttachment: jest.fn().mockResolvedValue({ downloadUrl: 'https://example.com/att' }),
+      };
+
+      storageService.uploadFromExternalUrl.mockResolvedValueOnce({ key: 'key-1' });
+
+      const attachments = [
+        {
+          attachmentId: 'att-1',
+          filename: 'doc.pdf',
+          content_type: 'application/pdf',
+          inboxId: 'inbox-1',
+          messageId: 'msg-1',
+        },
+      ];
+
+      const result = await service.downloadFromSdk(
+        'user-1',
+        'inbox-1',
+        'msg-1',
+        attachments,
+        mockClient as any,
+      );
+
+      expect(result).toEqual(['key-1']);
+      expect(storageService.uploadFromExternalUrl).toHaveBeenCalledWith(
+        'user-1',
+        expect.any(String),
+        'https://example.com/att',
+        'application/pdf',
+        undefined,
+        expect.objectContaining({ originalFilename: 'doc.pdf' }),
+      );
+    });
+
+    it('should return empty keys array when all downloads fail', async () => {
+      const mockClient = {
+        getMessageAttachment: jest.fn().mockResolvedValue({ downloadUrl: 'https://example.com/att' }),
+      };
+
+      storageService.uploadFromExternalUrl.mockRejectedValue(new Error('Storage service unavailable'));
+
+      const attachments = [
+        {
+          attachmentId: 'att-1',
+          filename: 'doc.pdf',
+          content_type: 'application/pdf',
+          inboxId: 'inbox-1',
+          messageId: 'msg-1',
+        },
+        {
+          attachmentId: 'att-2',
+          filename: 'doc2.pdf',
+          content_type: 'application/pdf',
+          inboxId: 'inbox-1',
+          messageId: 'msg-1',
         },
       ];
 

@@ -3065,6 +3065,72 @@
         ]
       }
     },
+    "/admin/startups/{id}/retry-phase": {
+      "post": {
+        "operationId": "AdminController_retryStartupPhase",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetryPhaseDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/startups/{id}/retry-agent": {
+      "post": {
+        "operationId": "AdminController_retryStartupAgent",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetryAgentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
     "/admin/scoring/weights": {
       "get": {
         "operationId": "AdminController_getAllScoringWeights",
@@ -3142,6 +3208,230 @@
             "description": ""
           }
         },
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/ai-prompts": {
+      "get": {
+        "operationId": "AdminController_getAiPrompts",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiPromptDefinitionsResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List AI prompt definitions and published revisions",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/ai-prompts/flow": {
+      "get": {
+        "operationId": "AdminController_getAiPromptFlow",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiPromptFlowResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get AI flow metadata for visual prompt management",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/ai-prompts/{key}/revisions": {
+      "get": {
+        "operationId": "AdminController_getAiPromptRevisions",
+        "parameters": [
+          {
+            "name": "key",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiPromptRevisionsResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List revisions for a prompt key",
+        "tags": [
+          "Admin"
+        ]
+      },
+      "post": {
+        "operationId": "AdminController_createAiPromptRevision",
+        "parameters": [
+          {
+            "name": "key",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAiPromptRevisionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiPromptRevisionResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Create prompt draft revision",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/ai-prompts/{key}/revisions/{revisionId}": {
+      "put": {
+        "operationId": "AdminController_updateAiPromptRevision",
+        "parameters": [
+          {
+            "name": "key",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "revisionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAiPromptRevisionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiPromptRevisionResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Update prompt draft revision",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/ai-prompts/{key}/revisions/{revisionId}/publish": {
+      "post": {
+        "operationId": "AdminController_publishAiPromptRevision",
+        "parameters": [
+          {
+            "name": "key",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "revisionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiPromptRevisionResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Publish prompt draft revision",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/ai-prompts/seed-from-code": {
+      "post": {
+        "operationId": "AdminController_seedAiPrompts",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiPromptSeedResultDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Seed prompt defaults for global and stage-specific variants",
         "tags": [
           "Admin"
         ]
@@ -3419,6 +3709,20 @@
         "summary": "Search LinkedIn profiles by name and optional company",
         "tags": [
           "integrations/linkedin"
+        ]
+      }
+    },
+    "/investor/geography-taxonomy": {
+      "get": {
+        "operationId": "InvestorController_getGeographyTaxonomy",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Investor"
         ]
       }
     },
@@ -4234,6 +4538,368 @@
         ]
       }
     },
+    "/integrations/agentmail/inboxes": {
+      "post": {
+        "operationId": "AgentMailController_createInbox",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Function"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Inbox created"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Create inbox and save config",
+        "tags": [
+          "integrations/agentmail"
+        ]
+      },
+      "get": {
+        "operationId": "AgentMailController_listInboxes",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageToken",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Inbox list"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "List inboxes (SDK)",
+        "tags": [
+          "integrations/agentmail"
+        ]
+      }
+    },
+    "/integrations/agentmail/inboxes/{id}": {
+      "get": {
+        "operationId": "AgentMailController_getInbox",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Inbox details"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Get inbox (SDK)",
+        "tags": [
+          "integrations/agentmail"
+        ]
+      }
+    },
+    "/integrations/agentmail/messages": {
+      "get": {
+        "operationId": "AgentMailController_listMessages",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageToken",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "before",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "after",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Message list"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "List messages for current user",
+        "tags": [
+          "integrations/agentmail"
+        ]
+      }
+    },
+    "/integrations/agentmail/messages/{id}": {
+      "get": {
+        "operationId": "AgentMailController_getMessage",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Message details"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Get a single message",
+        "tags": [
+          "integrations/agentmail"
+        ]
+      }
+    },
+    "/integrations/agentmail/messages/send": {
+      "post": {
+        "operationId": "AgentMailController_sendEmail",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Function"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Email sent"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Send an email",
+        "tags": [
+          "integrations/agentmail"
+        ]
+      }
+    },
+    "/integrations/agentmail/messages/{threadId}/reply": {
+      "post": {
+        "operationId": "AgentMailController_replyToMessage",
+        "parameters": [
+          {
+            "name": "threadId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Function"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Reply sent"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Reply to a message",
+        "tags": [
+          "integrations/agentmail"
+        ]
+      }
+    },
+    "/integrations/agentmail/messages/{msgId}/attachments/{attId}": {
+      "get": {
+        "operationId": "AgentMailController_downloadAttachment",
+        "parameters": [
+          {
+            "name": "msgId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "attId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Attachment data"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Download an attachment",
+        "tags": [
+          "integrations/agentmail"
+        ]
+      }
+    },
+    "/integrations/agentmail/sdk-threads": {
+      "get": {
+        "operationId": "AgentMailController_listSdkThreads",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageToken",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "before",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "after",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Thread list from SDK"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "List threads from SDK",
+        "tags": [
+          "integrations/agentmail"
+        ]
+      }
+    },
     "/integrations/agentmail/threads": {
       "get": {
         "operationId": "AgentMailController_getThreads",
@@ -4502,7 +5168,8 @@
               "image/gif",
               "video/mp4",
               "video/webm",
-              "application/json"
+              "application/json",
+              "application/pdf"
             ]
           },
           "projectId": {
@@ -4913,9 +5580,177 @@
             "maximum": 9007199254740991,
             "minimum": 0
           },
+          "sectorIndustryGroup": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "sectorIndustry": {
+            "type": "string",
+            "maxLength": 200
+          },
           "pitchDeckUrl": {
             "type": "string",
             "format": "uri"
+          },
+          "pitchDeckPath": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "files": {
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1000
+                },
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 255
+                },
+                "type": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 255
+                }
+              },
+              "required": [
+                "path",
+                "name",
+                "type"
+              ]
+            }
+          },
+          "teamMembers": {
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "role": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "linkedinUrl": {
+                  "type": "string",
+                  "maxLength": 500
+                }
+              },
+              "required": [
+                "name",
+                "role",
+                "linkedinUrl"
+              ]
+            }
+          },
+          "roundCurrency": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 10
+          },
+          "valuation": {
+            "type": "number",
+            "exclusiveMinimum": true,
+            "minimum": 0
+          },
+          "valuationKnown": {
+            "type": "boolean"
+          },
+          "valuationType": {
+            "type": "string",
+            "enum": [
+              "pre_money",
+              "post_money"
+            ]
+          },
+          "raiseType": {
+            "type": "string",
+            "enum": [
+              "safe",
+              "convertible_note",
+              "equity",
+              "safe_equity",
+              "undecided"
+            ]
+          },
+          "leadSecured": {
+            "type": "boolean"
+          },
+          "leadInvestorName": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "contactName": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "contactEmail": {
+            "type": "string",
+            "maxLength": 320,
+            "format": "email",
+            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          },
+          "contactPhone": {
+            "type": "string",
+            "maxLength": 50
+          },
+          "contactPhoneCountryCode": {
+            "type": "string",
+            "maxLength": 5
+          },
+          "hasPreviousFunding": {
+            "type": "boolean"
+          },
+          "previousFundingAmount": {
+            "type": "number",
+            "exclusiveMinimum": true,
+            "minimum": 0
+          },
+          "previousFundingCurrency": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 10
+          },
+          "previousInvestors": {
+            "type": "string",
+            "maxLength": 5000
+          },
+          "previousRoundType": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "technologyReadinessLevel": {
+            "type": "string",
+            "enum": [
+              "idea",
+              "mvp",
+              "scaling",
+              "mature"
+            ]
+          },
+          "demoVideoUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "productDescription": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "productScreenshots": {
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1000
+            }
           },
           "demoUrl": {
             "type": "string",
@@ -4991,9 +5826,177 @@
             "maximum": 9007199254740991,
             "minimum": 0
           },
+          "sectorIndustryGroup": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "sectorIndustry": {
+            "type": "string",
+            "maxLength": 200
+          },
           "pitchDeckUrl": {
             "type": "string",
             "format": "uri"
+          },
+          "pitchDeckPath": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "files": {
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1000
+                },
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 255
+                },
+                "type": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 255
+                }
+              },
+              "required": [
+                "path",
+                "name",
+                "type"
+              ]
+            }
+          },
+          "teamMembers": {
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "role": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "linkedinUrl": {
+                  "type": "string",
+                  "maxLength": 500
+                }
+              },
+              "required": [
+                "name",
+                "role",
+                "linkedinUrl"
+              ]
+            }
+          },
+          "roundCurrency": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 10
+          },
+          "valuation": {
+            "type": "number",
+            "exclusiveMinimum": true,
+            "minimum": 0
+          },
+          "valuationKnown": {
+            "type": "boolean"
+          },
+          "valuationType": {
+            "type": "string",
+            "enum": [
+              "pre_money",
+              "post_money"
+            ]
+          },
+          "raiseType": {
+            "type": "string",
+            "enum": [
+              "safe",
+              "convertible_note",
+              "equity",
+              "safe_equity",
+              "undecided"
+            ]
+          },
+          "leadSecured": {
+            "type": "boolean"
+          },
+          "leadInvestorName": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "contactName": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "contactEmail": {
+            "type": "string",
+            "maxLength": 320,
+            "format": "email",
+            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          },
+          "contactPhone": {
+            "type": "string",
+            "maxLength": 50
+          },
+          "contactPhoneCountryCode": {
+            "type": "string",
+            "maxLength": 5
+          },
+          "hasPreviousFunding": {
+            "type": "boolean"
+          },
+          "previousFundingAmount": {
+            "type": "number",
+            "exclusiveMinimum": true,
+            "minimum": 0
+          },
+          "previousFundingCurrency": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 10
+          },
+          "previousInvestors": {
+            "type": "string",
+            "maxLength": 5000
+          },
+          "previousRoundType": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "technologyReadinessLevel": {
+            "type": "string",
+            "enum": [
+              "idea",
+              "mvp",
+              "scaling",
+              "mature"
+            ]
+          },
+          "demoVideoUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "productDescription": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "productScreenshots": {
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1000
+            }
           },
           "demoUrl": {
             "type": "string",
@@ -5409,9 +6412,177 @@
                 "maximum": 9007199254740991,
                 "minimum": 0
               },
+              "sectorIndustryGroup": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "sectorIndustry": {
+                "type": "string",
+                "maxLength": 200
+              },
               "pitchDeckUrl": {
                 "type": "string",
                 "format": "uri"
+              },
+              "pitchDeckPath": {
+                "type": "string",
+                "maxLength": 1000
+              },
+              "files": {
+                "maxItems": 20,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1000
+                    },
+                    "name": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 255
+                    },
+                    "type": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 255
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "name",
+                    "type"
+                  ]
+                }
+              },
+              "teamMembers": {
+                "maxItems": 50,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "maxLength": 200
+                    },
+                    "role": {
+                      "type": "string",
+                      "maxLength": 200
+                    },
+                    "linkedinUrl": {
+                      "type": "string",
+                      "maxLength": 500
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "role",
+                    "linkedinUrl"
+                  ]
+                }
+              },
+              "roundCurrency": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 10
+              },
+              "valuation": {
+                "type": "number",
+                "exclusiveMinimum": true,
+                "minimum": 0
+              },
+              "valuationKnown": {
+                "type": "boolean"
+              },
+              "valuationType": {
+                "type": "string",
+                "enum": [
+                  "pre_money",
+                  "post_money"
+                ]
+              },
+              "raiseType": {
+                "type": "string",
+                "enum": [
+                  "safe",
+                  "convertible_note",
+                  "equity",
+                  "safe_equity",
+                  "undecided"
+                ]
+              },
+              "leadSecured": {
+                "type": "boolean"
+              },
+              "leadInvestorName": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "contactName": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "contactEmail": {
+                "type": "string",
+                "maxLength": 320,
+                "format": "email",
+                "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+              },
+              "contactPhone": {
+                "type": "string",
+                "maxLength": 50
+              },
+              "contactPhoneCountryCode": {
+                "type": "string",
+                "maxLength": 5
+              },
+              "hasPreviousFunding": {
+                "type": "boolean"
+              },
+              "previousFundingAmount": {
+                "type": "number",
+                "exclusiveMinimum": true,
+                "minimum": 0
+              },
+              "previousFundingCurrency": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 10
+              },
+              "previousInvestors": {
+                "type": "string",
+                "maxLength": 5000
+              },
+              "previousRoundType": {
+                "type": "string",
+                "maxLength": 100
+              },
+              "technologyReadinessLevel": {
+                "type": "string",
+                "enum": [
+                  "idea",
+                  "mvp",
+                  "scaling",
+                  "mature"
+                ]
+              },
+              "demoVideoUrl": {
+                "type": "string",
+                "format": "uri"
+              },
+              "productDescription": {
+                "type": "string",
+                "maxLength": 10000
+              },
+              "productScreenshots": {
+                "maxItems": 20,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 1000
+                }
               },
               "demoUrl": {
                 "type": "string",
@@ -5476,6 +6647,58 @@
             ]
           }
         }
+      },
+      "RetryPhaseDto": {
+        "type": "object",
+        "properties": {
+          "phase": {
+            "type": "string",
+            "enum": [
+              "extraction",
+              "scraping",
+              "research",
+              "evaluation",
+              "synthesis"
+            ]
+          },
+          "forceRerun": {
+            "default": false,
+            "type": "boolean"
+          },
+          "feedback": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 3000
+          }
+        },
+        "required": [
+          "phase"
+        ]
+      },
+      "RetryAgentDto": {
+        "type": "object",
+        "properties": {
+          "phase": {
+            "type": "string",
+            "enum": [
+              "research",
+              "evaluation"
+            ]
+          },
+          "agent": {
+            "type": "string",
+            "minLength": 1
+          },
+          "feedback": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 3000
+          }
+        },
+        "required": [
+          "phase",
+          "agent"
+        ]
       },
       "UpdateStageWeightsDto": {
         "type": "object",
@@ -5613,6 +6836,889 @@
           "rationale"
         ]
       },
+      "AiPromptDefinitionsResponseDto": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "key": {
+              "type": "string",
+              "enum": [
+                "extraction.fields",
+                "research.team",
+                "research.market",
+                "research.product",
+                "research.news",
+                "evaluation.team",
+                "evaluation.market",
+                "evaluation.product",
+                "evaluation.traction",
+                "evaluation.businessModel",
+                "evaluation.gtm",
+                "evaluation.financials",
+                "evaluation.competitiveAdvantage",
+                "evaluation.legal",
+                "evaluation.dealTerms",
+                "evaluation.exitPotential",
+                "synthesis.final",
+                "matching.thesis",
+                "clara.intent",
+                "clara.response"
+              ]
+            },
+            "displayName": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string",
+              "nullable": true
+            },
+            "surface": {
+              "type": "string",
+              "enum": [
+                "pipeline",
+                "clara"
+              ]
+            },
+            "createdAt": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+            },
+            "updatedAt": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+            },
+            "publishedGlobal": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "stage": {
+                  "type": "string",
+                  "enum": [
+                    "pre_seed",
+                    "seed",
+                    "series_a",
+                    "series_b",
+                    "series_c",
+                    "series_d",
+                    "series_e",
+                    "series_f_plus"
+                  ],
+                  "nullable": true
+                },
+                "version": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "publishedAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                  "nullable": true
+                }
+              },
+              "required": [
+                "id",
+                "stage",
+                "version",
+                "publishedAt"
+              ],
+              "nullable": true
+            },
+            "publishedStages": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "stage": {
+                    "type": "string",
+                    "enum": [
+                      "pre_seed",
+                      "seed",
+                      "series_a",
+                      "series_b",
+                      "series_c",
+                      "series_d",
+                      "series_e",
+                      "series_f_plus"
+                    ],
+                    "nullable": true
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "publishedAt": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                    "nullable": true
+                  }
+                },
+                "required": [
+                  "id",
+                  "stage",
+                  "version",
+                  "publishedAt"
+                ]
+              }
+            },
+            "allowedVariables": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "requiredVariables": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "variableDefinitions": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "description": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string"
+                  },
+                  "example": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "description",
+                  "source"
+                ]
+              }
+            }
+          },
+          "required": [
+            "id",
+            "key",
+            "displayName",
+            "description",
+            "surface",
+            "createdAt",
+            "updatedAt",
+            "publishedGlobal",
+            "publishedStages",
+            "allowedVariables",
+            "requiredVariables",
+            "variableDefinitions"
+          ]
+        }
+      },
+      "AiPromptFlowResponseDto": {
+        "type": "object",
+        "properties": {
+          "flows": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "enum": [
+                    "pipeline",
+                    "clara"
+                  ]
+                },
+                "name": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "stages": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "description": {
+                        "type": "string"
+                      },
+                      "nodeIds": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "title",
+                      "description",
+                      "nodeIds"
+                    ]
+                  }
+                },
+                "nodes": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "label": {
+                        "type": "string"
+                      },
+                      "description": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "prompt",
+                          "system"
+                        ]
+                      },
+                      "promptKeys": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "extraction.fields",
+                            "research.team",
+                            "research.market",
+                            "research.product",
+                            "research.news",
+                            "evaluation.team",
+                            "evaluation.market",
+                            "evaluation.product",
+                            "evaluation.traction",
+                            "evaluation.businessModel",
+                            "evaluation.gtm",
+                            "evaluation.financials",
+                            "evaluation.competitiveAdvantage",
+                            "evaluation.legal",
+                            "evaluation.dealTerms",
+                            "evaluation.exitPotential",
+                            "synthesis.final",
+                            "matching.thesis",
+                            "clara.intent",
+                            "clara.response"
+                          ]
+                        }
+                      },
+                      "inputs": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "outputs": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "label",
+                      "description",
+                      "kind",
+                      "promptKeys",
+                      "inputs",
+                      "outputs"
+                    ]
+                  }
+                },
+                "edges": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "from": {
+                        "type": "string"
+                      },
+                      "to": {
+                        "type": "string"
+                      },
+                      "label": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "from",
+                      "to"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "description",
+                "stages",
+                "nodes",
+                "edges"
+              ]
+            }
+          }
+        },
+        "required": [
+          "flows"
+        ]
+      },
+      "AiPromptRevisionsResponseDto": {
+        "type": "object",
+        "properties": {
+          "definition": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "key": {
+                "type": "string",
+                "enum": [
+                  "extraction.fields",
+                  "research.team",
+                  "research.market",
+                  "research.product",
+                  "research.news",
+                  "evaluation.team",
+                  "evaluation.market",
+                  "evaluation.product",
+                  "evaluation.traction",
+                  "evaluation.businessModel",
+                  "evaluation.gtm",
+                  "evaluation.financials",
+                  "evaluation.competitiveAdvantage",
+                  "evaluation.legal",
+                  "evaluation.dealTerms",
+                  "evaluation.exitPotential",
+                  "synthesis.final",
+                  "matching.thesis",
+                  "clara.intent",
+                  "clara.response"
+                ]
+              },
+              "displayName": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string",
+                "nullable": true
+              },
+              "surface": {
+                "type": "string",
+                "enum": [
+                  "pipeline",
+                  "clara"
+                ]
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+              },
+              "updatedAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+              },
+              "publishedGlobal": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "stage": {
+                    "type": "string",
+                    "enum": [
+                      "pre_seed",
+                      "seed",
+                      "series_a",
+                      "series_b",
+                      "series_c",
+                      "series_d",
+                      "series_e",
+                      "series_f_plus"
+                    ],
+                    "nullable": true
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "publishedAt": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                    "nullable": true
+                  }
+                },
+                "required": [
+                  "id",
+                  "stage",
+                  "version",
+                  "publishedAt"
+                ],
+                "nullable": true
+              },
+              "publishedStages": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "stage": {
+                      "type": "string",
+                      "enum": [
+                        "pre_seed",
+                        "seed",
+                        "series_a",
+                        "series_b",
+                        "series_c",
+                        "series_d",
+                        "series_e",
+                        "series_f_plus"
+                      ],
+                      "nullable": true
+                    },
+                    "version": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "publishedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "stage",
+                    "version",
+                    "publishedAt"
+                  ]
+                }
+              },
+              "allowedVariables": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "requiredVariables": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "variableDefinitions": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "description": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "example": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "description",
+                    "source"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "id",
+              "key",
+              "displayName",
+              "description",
+              "surface",
+              "createdAt",
+              "updatedAt",
+              "publishedGlobal",
+              "publishedStages",
+              "allowedVariables",
+              "requiredVariables",
+              "variableDefinitions"
+            ]
+          },
+          "revisions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "definitionId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "stage": {
+                  "type": "string",
+                  "enum": [
+                    "pre_seed",
+                    "seed",
+                    "series_a",
+                    "series_b",
+                    "series_c",
+                    "series_d",
+                    "series_e",
+                    "series_f_plus"
+                  ],
+                  "nullable": true
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "draft",
+                    "published",
+                    "archived"
+                  ]
+                },
+                "systemPrompt": {
+                  "type": "string"
+                },
+                "userPrompt": {
+                  "type": "string"
+                },
+                "notes": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "version": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "createdBy": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                  "nullable": true
+                },
+                "publishedBy": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                  "nullable": true
+                },
+                "publishedAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                  "nullable": true
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                },
+                "updatedAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                }
+              },
+              "required": [
+                "id",
+                "definitionId",
+                "stage",
+                "status",
+                "systemPrompt",
+                "userPrompt",
+                "notes",
+                "version",
+                "createdBy",
+                "publishedBy",
+                "publishedAt",
+                "createdAt",
+                "updatedAt"
+              ]
+            }
+          },
+          "allowedVariables": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "requiredVariables": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "variableDefinitions": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "description": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string"
+                },
+                "example": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "description",
+                "source"
+              ]
+            }
+          }
+        },
+        "required": [
+          "definition",
+          "revisions",
+          "allowedVariables",
+          "requiredVariables",
+          "variableDefinitions"
+        ]
+      },
+      "CreateAiPromptRevisionDto": {
+        "type": "object",
+        "properties": {
+          "stage": {
+            "type": "string",
+            "enum": [
+              "pre_seed",
+              "seed",
+              "series_a",
+              "series_b",
+              "series_c",
+              "series_d",
+              "series_e",
+              "series_f_plus"
+            ],
+            "nullable": true
+          },
+          "systemPrompt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "userPrompt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 4000
+          }
+        },
+        "required": [
+          "systemPrompt",
+          "userPrompt"
+        ]
+      },
+      "AiPromptRevisionResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "definitionId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "stage": {
+            "type": "string",
+            "enum": [
+              "pre_seed",
+              "seed",
+              "series_a",
+              "series_b",
+              "series_c",
+              "series_d",
+              "series_e",
+              "series_f_plus"
+            ],
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "published",
+              "archived"
+            ]
+          },
+          "systemPrompt": {
+            "type": "string"
+          },
+          "userPrompt": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "version": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "createdBy": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "nullable": true
+          },
+          "publishedBy": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "nullable": true
+          },
+          "publishedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+          }
+        },
+        "required": [
+          "id",
+          "definitionId",
+          "stage",
+          "status",
+          "systemPrompt",
+          "userPrompt",
+          "notes",
+          "version",
+          "createdBy",
+          "publishedBy",
+          "publishedAt",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "UpdateAiPromptRevisionDto": {
+        "type": "object",
+        "properties": {
+          "systemPrompt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "userPrompt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 4000
+          }
+        }
+      },
+      "AiPromptSeedResultDto": {
+        "type": "object",
+        "properties": {
+          "insertedTotal": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "insertedGlobal": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "insertedByStage": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            }
+          },
+          "skippedExisting": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "totalPromptKeys": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "totalTargetSlots": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "insertedTotal",
+          "insertedGlobal",
+          "insertedByStage",
+          "skippedExisting",
+          "totalPromptKeys",
+          "totalTargetSlots"
+        ]
+      },
       "CreateThesisDto": {
         "type": "object",
         "properties": {
@@ -5646,6 +7752,15 @@
               "type": "string"
             }
           },
+          "geographicFocusNodes": {
+            "maxItems": 300,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          },
           "mustHaveFeatures": {
             "type": "array",
             "items": {
@@ -5661,6 +7776,10 @@
           "notes": {
             "type": "string",
             "maxLength": 5000
+          },
+          "thesisNarrative": {
+            "type": "string",
+            "maxLength": 10000
           }
         }
       },

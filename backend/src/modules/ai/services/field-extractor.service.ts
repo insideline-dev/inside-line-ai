@@ -4,6 +4,8 @@ import { z } from "zod";
 import { type Startup } from "../../startup/entities";
 import { ModelPurpose } from "../interfaces/pipeline.interface";
 import { AiProviderService } from "../providers/ai-provider.service";
+import { AiPromptService } from "./ai-prompt.service";
+import { AiConfigService } from "./ai-config.service";
 
 const ExtractedFieldsSchema = z.object({
   companyName: z.string().min(1).optional(),
@@ -25,6 +27,8 @@ export class FieldExtractorService {
 
   constructor(
     private providers: AiProviderService,
+    private promptService: AiPromptService,
+    private aiConfig: AiConfigService,
   ) {}
 
   async extractFields(
@@ -72,20 +76,21 @@ export class FieldExtractorService {
     };
 
     try {
+      const promptConfig = await this.promptService.resolve({
+        key: "extraction.fields",
+        stage: startupContext?.stage,
+      });
+      const prompt = this.promptService.renderTemplate(promptConfig.userPrompt, {
+        startupContextJson: JSON.stringify(context),
+        pitchDeckText: this.truncateForPrompt(trimmed),
+      });
+
       const { output } = await generateText({
         model: this.providers.resolveModelForPurpose(ModelPurpose.EXTRACTION),
         output: Output.object({ schema: ExtractedFieldsSchema }),
-        temperature: 0.1,
-        prompt: [
-          "Extract structured startup fields from the pitch deck text.",
-          "Rules:",
-          "- Return only fields supported by evidence in the text.",
-          "- Do not invent financial numbers.",
-          "- Keep founder names as plain names without titles.",
-          `Startup context hints: ${JSON.stringify(context)}`,
-          "Pitch deck text:",
-          this.truncateForPrompt(trimmed),
-        ].join("\n\n"),
+        temperature: this.aiConfig.getExtractionTemperature(),
+        system: promptConfig.systemPrompt,
+        prompt,
       });
 
       return ExtractedFieldsSchema.parse(output);
@@ -96,11 +101,12 @@ export class FieldExtractorService {
     }
   }
 
-  private truncateForPrompt(text: string, maxLength = 80_000): string {
-    if (text.length <= maxLength) {
+  private truncateForPrompt(text: string, maxLength?: number): string {
+    const max = maxLength ?? this.aiConfig.getExtractionMaxInputLength();
+    if (text.length <= max) {
       return text;
     }
 
-    return `${text.slice(0, maxLength)}\n\n[TRUNCATED]`;
+    return `${text.slice(0, max)}\n\n[TRUNCATED]`;
   }
 }

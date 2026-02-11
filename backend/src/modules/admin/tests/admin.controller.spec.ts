@@ -10,6 +10,7 @@ import { StartupService } from '../../startup/startup.service';
 import { IntegrationHealthService } from '../integration-health.service';
 import { SystemConfigService } from '../system-config.service';
 import { BulkDataService } from '../bulk-data.service';
+import { AiPromptService } from '../../ai/services/ai-prompt.service';
 import { UserRole } from '../../../auth/entities/auth.schema';
 import { StartupStatus } from '../../startup/entities/startup.schema';
 import { PipelinePhase } from '../../ai/interfaces/pipeline.interface';
@@ -22,6 +23,7 @@ describe('AdminController', () => {
   let dataImportService: jest.Mocked<DataImportService>;
   let queueManagementService: jest.Mocked<QueueManagementService>;
   let startupService: jest.Mocked<StartupService>;
+  let aiPromptService: jest.Mocked<AiPromptService>;
 
   const mockAdmin = {
     id: 'admin-id',
@@ -110,6 +112,18 @@ describe('AdminController', () => {
             exportStartups: jest.fn(),
           },
         },
+        {
+          provide: AiPromptService,
+          useValue: {
+            listPromptDefinitions: jest.fn(),
+            getFlowGraph: jest.fn(),
+            getRevisionsByKey: jest.fn(),
+            createDraft: jest.fn(),
+            updateDraft: jest.fn(),
+            publishRevision: jest.fn(),
+            seedFromCode: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
@@ -120,6 +134,7 @@ describe('AdminController', () => {
     dataImportService = module.get(DataImportService);
     queueManagementService = module.get(QueueManagementService);
     startupService = module.get(StartupService);
+    aiPromptService = module.get(AiPromptService);
   });
 
   afterEach(() => {
@@ -583,6 +598,38 @@ describe('AdminController', () => {
 
         expect(result).toEqual(mockResult);
       });
+    });
+  });
+
+  describe('AI Prompt Management Endpoints', () => {
+    it('should return prompt definitions', async () => {
+      const payload = [{ key: 'research.team' }];
+      aiPromptService.listPromptDefinitions.mockResolvedValueOnce(payload as any);
+
+      const result = await controller.getAiPrompts();
+
+      expect(result).toEqual(payload);
+      expect(aiPromptService.listPromptDefinitions).toHaveBeenCalled();
+    });
+
+    it('should return flow graph metadata', async () => {
+      const payload = { flows: [{ id: 'pipeline' }] };
+      aiPromptService.getFlowGraph.mockReturnValueOnce(payload as any);
+
+      const result = await controller.getAiPromptFlow();
+
+      expect(result).toEqual(payload);
+      expect(aiPromptService.getFlowGraph).toHaveBeenCalled();
+    });
+
+    it('should seed prompts from code', async () => {
+      const payload = { insertedTotal: 10, insertedGlobal: 2 };
+      aiPromptService.seedFromCode.mockResolvedValueOnce(payload as any);
+
+      const result = await controller.seedAiPrompts(mockAdmin as any);
+
+      expect(result).toEqual(payload);
+      expect(aiPromptService.seedFromCode).toHaveBeenCalledWith(mockAdmin.id);
     });
   });
 });

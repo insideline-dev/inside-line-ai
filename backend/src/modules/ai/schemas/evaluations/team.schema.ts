@@ -14,7 +14,7 @@ export const TeamEvaluationSchema = BaseEvaluationSchema.extend({
   teamCompletion: z.number().int().min(0).max(100),
   executionCapability: z.string().min(1),
   founderMarketFitScore: z.number().int().min(0).max(100),
-  teamMembers: z.array(TeamMemberEvaluationSchema).min(1),
+  teamMembers: z.array(TeamMemberEvaluationSchema).default([]),
 });
 
 export type TeamEvaluation = z.infer<typeof TeamEvaluationSchema>;

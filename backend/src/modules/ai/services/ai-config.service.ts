@@ -125,4 +125,28 @@ export class AiConfigService {
 
     return fallback[queueName];
   }
+
+  getExtractionTemperature(): number {
+    return Number(this.config.get("AI_EXTRACTION_TEMPERATURE", "0.1"));
+  }
+
+  getExtractionMaxInputLength(): number {
+    return Number(this.config.get("AI_EXTRACTION_MAX_INPUT_LENGTH", "80000"));
+  }
+
+  getMatchingTemperature(): number {
+    return Number(this.config.get("AI_MATCHING_TEMPERATURE", "0.2"));
+  }
+
+  getMatchingMaxOutputTokens(): number {
+    return Number(this.config.get("AI_MATCHING_MAX_OUTPUT_TOKENS", "500"));
+  }
+
+  getMatchingMinThesisFitScore(): number {
+    return Number(this.config.get("AI_MATCHING_MIN_THESIS_FIT_SCORE", "80"));
+  }
+
+  getMatchingFallbackScore(): number {
+    return Number(this.config.get("AI_MATCHING_FALLBACK_SCORE", "30"));
+  }
 }

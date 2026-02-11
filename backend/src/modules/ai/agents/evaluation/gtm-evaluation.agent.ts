@@ -1,18 +1,12 @@
 import { Injectable } from "@nestjs/common";
+import { CONTENT_PATTERNS, URL_PATH_PATTERNS } from "../../constants";
 import type { EvaluationPipelineInput } from "../../interfaces/agent.interface";
 import { GtmEvaluationSchema, type GtmEvaluation } from "../../schemas";
 import { AiConfigService } from "../../services/ai-config.service";
+import { AiPromptService } from "../../services/ai-prompt.service";
 import { AiProviderService } from "../../providers/ai-provider.service";
 import { BaseEvaluationAgent } from "./base-evaluation.agent";
-import { baseEvaluation, stageMultiplier } from "./evaluation-utils";
-
-const tryPathname = (url: string): string => {
-  try {
-    return new URL(url).pathname;
-  } catch {
-    return "";
-  }
-};
+import { baseEvaluation, tryPathname } from "./evaluation-utils";
 
 @Injectable()
 export class GtmEvaluationAgent extends BaseEvaluationAgent<GtmEvaluation> {
@@ -21,24 +15,20 @@ export class GtmEvaluationAgent extends BaseEvaluationAgent<GtmEvaluation> {
   protected readonly systemPrompt =
     "You are a startup investment analyst evaluating go-to-market strategy and distribution quality.";
 
-  constructor(providers: AiProviderService, aiConfig: AiConfigService) {
-    super(providers, aiConfig);
+  constructor(providers: AiProviderService, aiConfig: AiConfigService, promptService: AiPromptService) {
+    super(providers, aiConfig, promptService);
   }
 
   buildContext({ extraction, scraping }: EvaluationPipelineInput) {
     const websiteMarketingPages =
       scraping.website?.subpages
-        .filter((page) =>
-          /\/(customers|case-studies|blog|news|press|solutions|pricing|demo)/i.test(
-            tryPathname(page.url),
-          ),
-        )
+        .filter((page) => URL_PATH_PATTERNS.MARKETING.test(tryPathname(page.url)))
         .map((page) => page.url) ?? [];
 
     const distributionChannels = Array.from(
       new Set([
         ...scraping.notableClaims
-          .filter((claim) => /(partner|channel|inbound|outbound|sales)/i.test(claim))
+          .filter((claim) => CONTENT_PATTERNS.DISTRIBUTION.test(claim))
           .map((claim) => claim),
         "Founder-led sales",
       ]),
@@ -56,7 +46,7 @@ export class GtmEvaluationAgent extends BaseEvaluationAgent<GtmEvaluation> {
 
   fallback({ extraction }: EvaluationPipelineInput): GtmEvaluation {
     return GtmEvaluationSchema.parse({
-      ...baseEvaluation(38 + stageMultiplier(extraction.stage) / 2, "GTM appears coherent but needs channel efficiency proof"),
+      ...baseEvaluation(22, "GTM evaluation incomplete — requires manual review"),
       customerSegments: ["SMB", "Mid-market"],
       acquisitionChannels: ["Founder-led sales", "Partnerships", "Inbound content"],
       salesStrategy: "Hybrid founder-led and inbound-assisted sales motion",

@@ -129,6 +129,11 @@ export const startup = pgTable(
     website: text('website').notNull(),
     location: text('location').notNull(),
     normalizedRegion: text('normalized_region'),
+    geoCountryCode: text('geo_country_code'),
+    geoLevel1: text('geo_level_1'),
+    geoLevel2: text('geo_level_2'),
+    geoLevel3: text('geo_level_3'),
+    geoPath: text('geo_path').array(),
     industry: text('industry').notNull(),
 
     // Sector details
@@ -204,6 +209,9 @@ export const startup = pgTable(
     index('startup_industry_idx').on(table.industry),
     index('startup_stage_idx').on(table.stage),
     index('startup_location_idx').on(table.location),
+    index('startup_geo_level1_idx').on(table.geoLevel1),
+    index('startup_geo_level2_idx').on(table.geoLevel2),
+    index('startup_geo_level3_idx').on(table.geoLevel3),
     uniqueIndex('startup_slug_idx').on(table.slug),
   ],
 );

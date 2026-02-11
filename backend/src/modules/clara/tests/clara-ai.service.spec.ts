@@ -10,6 +10,7 @@ mock.module("ai", () => ({
 import { ClaraAiService } from "../clara-ai.service";
 import { AiProviderService } from "../../ai/providers/ai-provider.service";
 import { ModelPurpose } from "../../ai/interfaces/pipeline.interface";
+import { AiPromptService } from "../../ai/services/ai-prompt.service";
 import {
   ClaraIntent,
   ConversationStatus,
@@ -41,6 +42,7 @@ function createTestContext(
 describe("ClaraAiService", () => {
   let service: ClaraAiService;
   let providers: jest.Mocked<AiProviderService>;
+  let promptService: jest.Mocked<AiPromptService>;
   const resolvedModel = { providerModel: "test-model" };
 
   beforeEach(() => {
@@ -49,8 +51,40 @@ describe("ClaraAiService", () => {
     providers = {
       resolveModelForPurpose: jest.fn().mockReturnValue(resolvedModel),
     } as unknown as jest.Mocked<AiProviderService>;
+    promptService = {
+      resolve: jest.fn().mockImplementation(({ key }: { key: string }) =>
+        Promise.resolve(
+          key === "clara.intent"
+            ? {
+                key: "clara.intent",
+                stage: null,
+                systemPrompt: "You are Clara",
+                userPrompt:
+                  "You are Clara\nFrom: {{fromEmail}}\nSubject: {{subject}}\nBody: {{body}}\nAttachments: {{attachments}}\nHas linked startup: {{hasLinkedStartup}}\n{{historyBlock}}",
+                source: "code",
+                revisionId: null,
+              }
+            : {
+                key: "clara.response",
+                stage: null,
+                systemPrompt: "You are Clara",
+                userPrompt:
+                  "You are Clara\nWrite a concise email reply.\nInvestor name: {{investorName}}\nIntent: {{intent}}\n{{startupBlock}}\n{{intentInstructions}}\n{{historyBlock}}",
+                source: "code",
+                revisionId: null,
+              },
+        ),
+      ),
+      renderTemplate: jest.fn().mockImplementation((template: string, vars: Record<string, string | number>) => {
+        let rendered = template;
+        for (const [key, value] of Object.entries(vars)) {
+          rendered = rendered.replaceAll(`{{${key}}}`, String(value));
+        }
+        return rendered;
+      }),
+    } as unknown as jest.Mocked<AiPromptService>;
 
-    service = new ClaraAiService(providers);
+    service = new ClaraAiService(providers, promptService);
   });
 
   describe("classifyIntent - heuristic classification", () => {

@@ -25,6 +25,9 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AgentMailControllerListInboxesParams,
+  AgentMailControllerListMessagesParams,
+  AgentMailControllerListSdkThreadsParams,
   Function
 } from '.././model';
 
@@ -131,6 +134,1005 @@ export const useAgentMailControllerHandleWebhook = <TError = ErrorType<void>,
       return useMutation(getAgentMailControllerHandleWebhookMutationOptions(options), queryClient);
     }
     /**
+ * @summary Create inbox and save config
+ */
+export type agentMailControllerCreateInboxResponse201 = {
+  data: void
+  status: 201
+}
+
+export type agentMailControllerCreateInboxResponse429 = {
+  data: void
+  status: 429
+}
+    
+export type agentMailControllerCreateInboxResponseSuccess = (agentMailControllerCreateInboxResponse201) & {
+  headers: Headers;
+};
+export type agentMailControllerCreateInboxResponseError = (agentMailControllerCreateInboxResponse429) & {
+  headers: Headers;
+};
+
+export type agentMailControllerCreateInboxResponse = (agentMailControllerCreateInboxResponseSuccess | agentMailControllerCreateInboxResponseError)
+
+export const getAgentMailControllerCreateInboxUrl = () => {
+
+
+  
+
+  return `/integrations/agentmail/inboxes`
+}
+
+export const agentMailControllerCreateInbox = async (_function: Function, options?: RequestInit): Promise<agentMailControllerCreateInboxResponse> => {
+  
+  return customFetch<agentMailControllerCreateInboxResponse>(getAgentMailControllerCreateInboxUrl(),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      _function,)
+  }
+);}
+
+
+
+
+export const getAgentMailControllerCreateInboxMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof agentMailControllerCreateInbox>>, TError,{data: BodyType<Function>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof agentMailControllerCreateInbox>>, TError,{data: BodyType<Function>}, TContext> => {
+
+const mutationKey = ['agentMailControllerCreateInbox'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof agentMailControllerCreateInbox>>, {data: BodyType<Function>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  agentMailControllerCreateInbox(data,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AgentMailControllerCreateInboxMutationResult = NonNullable<Awaited<ReturnType<typeof agentMailControllerCreateInbox>>>
+    export type AgentMailControllerCreateInboxMutationBody = BodyType<Function>
+    export type AgentMailControllerCreateInboxMutationError = ErrorType<void>
+
+    /**
+ * @summary Create inbox and save config
+ */
+export const useAgentMailControllerCreateInbox = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof agentMailControllerCreateInbox>>, TError,{data: BodyType<Function>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof agentMailControllerCreateInbox>>,
+        TError,
+        {data: BodyType<Function>},
+        TContext
+      > => {
+      return useMutation(getAgentMailControllerCreateInboxMutationOptions(options), queryClient);
+    }
+    /**
+ * @summary List inboxes (SDK)
+ */
+export type agentMailControllerListInboxesResponse200 = {
+  data: void
+  status: 200
+}
+
+export type agentMailControllerListInboxesResponse429 = {
+  data: void
+  status: 429
+}
+    
+export type agentMailControllerListInboxesResponseSuccess = (agentMailControllerListInboxesResponse200) & {
+  headers: Headers;
+};
+export type agentMailControllerListInboxesResponseError = (agentMailControllerListInboxesResponse429) & {
+  headers: Headers;
+};
+
+export type agentMailControllerListInboxesResponse = (agentMailControllerListInboxesResponseSuccess | agentMailControllerListInboxesResponseError)
+
+export const getAgentMailControllerListInboxesUrl = (params: AgentMailControllerListInboxesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/integrations/agentmail/inboxes?${stringifiedParams}` : `/integrations/agentmail/inboxes`
+}
+
+export const agentMailControllerListInboxes = async (params: AgentMailControllerListInboxesParams, options?: RequestInit): Promise<agentMailControllerListInboxesResponse> => {
+  
+  return customFetch<agentMailControllerListInboxesResponse>(getAgentMailControllerListInboxesUrl(params),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getAgentMailControllerListInboxesQueryKey = (params?: AgentMailControllerListInboxesParams,) => {
+    return [
+    `/integrations/agentmail/inboxes`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+    
+export const getAgentMailControllerListInboxesQueryOptions = <TData = Awaited<ReturnType<typeof agentMailControllerListInboxes>>, TError = ErrorType<void>>(params: AgentMailControllerListInboxesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof agentMailControllerListInboxes>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAgentMailControllerListInboxesQueryKey(params);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof agentMailControllerListInboxes>>> = ({ signal }) => agentMailControllerListInboxes(params, { signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof agentMailControllerListInboxes>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type AgentMailControllerListInboxesQueryResult = NonNullable<Awaited<ReturnType<typeof agentMailControllerListInboxes>>>
+export type AgentMailControllerListInboxesQueryError = ErrorType<void>
+
+
+export function useAgentMailControllerListInboxes<TData = Awaited<ReturnType<typeof agentMailControllerListInboxes>>, TError = ErrorType<void>>(
+ params: AgentMailControllerListInboxesParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof agentMailControllerListInboxes>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof agentMailControllerListInboxes>>,
+          TError,
+          Awaited<ReturnType<typeof agentMailControllerListInboxes>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAgentMailControllerListInboxes<TData = Awaited<ReturnType<typeof agentMailControllerListInboxes>>, TError = ErrorType<void>>(
+ params: AgentMailControllerListInboxesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof agentMailControllerListInboxes>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof agentMailControllerListInboxes>>,
+          TError,
+          Awaited<ReturnType<typeof agentMailControllerListInboxes>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAgentMailControllerListInboxes<TData = Awaited<ReturnType<typeof agentMailControllerListInboxes>>, TError = ErrorType<void>>(
+ params: AgentMailControllerListInboxesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof agentMailControllerListInboxes>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List inboxes (SDK)
+ */
+
+export function useAgentMailControllerListInboxes<TData = Awaited<ReturnType<typeof agentMailControllerListInboxes>>, TError = ErrorType<void>>(
+ params: AgentMailControllerListInboxesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof agentMailControllerListInboxes>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getAgentMailControllerListInboxesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+/**
+ * @summary Get inbox (SDK)
+ */
+export type agentMailControllerGetInboxResponse200 = {
+  data: void
+  status: 200
+}
+
+export type agentMailControllerGetInboxResponse429 = {
+  data: void
+  status: 429
+}
+    
+export type agentMailControllerGetInboxResponseSuccess = (agentMailControllerGetInboxResponse200) & {
+  headers: Headers;
+};
+export type agentMailControllerGetInboxResponseError = (agentMailControllerGetInboxResponse429) & {
+  headers: Headers;
+};
+
+export type agentMailControllerGetInboxResponse = (agentMailControllerGetInboxResponseSuccess | agentMailControllerGetInboxResponseError)
+
+export const getAgentMailControllerGetInboxUrl = (id: string,) => {
+
+
+  
+
+  return `/integrations/agentmail/inboxes/${id}`
+}
+
+export const agentMailControllerGetInbox = async (id: string, options?: RequestInit): Promise<agentMailControllerGetInboxResponse> => {
+  
+  return customFetch<agentMailControllerGetInboxResponse>(getAgentMailControllerGetInboxUrl(id),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getAgentMailControllerGetInboxQueryKey = (id: string,) => {
+    return [
+    `/integrations/agentmail/inboxes/${id}`
+    ] as const;
+    }
+
+    
+export const getAgentMailControllerGetInboxQueryOptions = <TData = Awaited<ReturnType<typeof agentMailControllerGetInbox>>, TError = ErrorType<void>>(id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof agentMailControllerGetInbox>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAgentMailControllerGetInboxQueryKey(id);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof agentMailControllerGetInbox>>> = ({ signal }) => agentMailControllerGetInbox(id, { signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof agentMailControllerGetInbox>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type AgentMailControllerGetInboxQueryResult = NonNullable<Awaited<ReturnType<typeof agentMailControllerGetInbox>>>
+export type AgentMailControllerGetInboxQueryError = ErrorType<void>
+
+
+export function useAgentMailControllerGetInbox<TData = Awaited<ReturnType<typeof agentMailControllerGetInbox>>, TError = ErrorType<void>>(
+ id: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof agentMailControllerGetInbox>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof agentMailControllerGetInbox>>,
+          TError,
+          Awaited<ReturnType<typeof agentMailControllerGetInbox>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAgentMailControllerGetInbox<TData = Awaited<ReturnType<typeof agentMailControllerGetInbox>>, TError = ErrorType<void>>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof agentMailControllerGetInbox>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof agentMailControllerGetInbox>>,
+          TError,
+          Awaited<ReturnType<typeof agentMailControllerGetInbox>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAgentMailControllerGetInbox<TData = Awaited<ReturnType<typeof agentMailControllerGetInbox>>, TError = ErrorType<void>>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof agentMailControllerGetInbox>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get inbox (SDK)
+ */
+
+export function useAgentMailControllerGetInbox<TData = Awaited<ReturnType<typeof agentMailControllerGetInbox>>, TError = ErrorType<void>>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof agentMailControllerGetInbox>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getAgentMailControllerGetInboxQueryOptions(id,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+/**
+ * @summary List messages for current user
+ */
+export type agentMailControllerListMessagesResponse200 = {
+  data: void
+  status: 200
+}
+
+export type agentMailControllerListMessagesResponse429 = {
+  data: void
+  status: 429
+}
+    
+export type agentMailControllerListMessagesResponseSuccess = (agentMailControllerListMessagesResponse200) & {
+  headers: Headers;
+};
+export type agentMailControllerListMessagesResponseError = (agentMailControllerListMessagesResponse429) & {
+  headers: Headers;
+};
+
+export type agentMailControllerListMessagesResponse = (agentMailControllerListMessagesResponseSuccess | agentMailControllerListMessagesResponseError)
+
+export const getAgentMailControllerListMessagesUrl = (params: AgentMailControllerListMessagesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/integrations/agentmail/messages?${stringifiedParams}` : `/integrations/agentmail/messages`
+}
+
+export const agentMailControllerListMessages = async (params: AgentMailControllerListMessagesParams, options?: RequestInit): Promise<agentMailControllerListMessagesResponse> => {
+  
+  return customFetch<agentMailControllerListMessagesResponse>(getAgentMailControllerListMessagesUrl(params),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getAgentMailControllerListMessagesQueryKey = (params?: AgentMailControllerListMessagesParams,) => {
+    return [
+    `/integrations/agentmail/messages`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+    
+export const getAgentMailControllerListMessagesQueryOptions = <TData = Awaited<ReturnType<typeof agentMailControllerListMessages>>, TError = ErrorType<void>>(params: AgentMailControllerListMessagesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof agentMailControllerListMessages>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAgentMailControllerListMessagesQueryKey(params);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof agentMailControllerListMessages>>> = ({ signal }) => agentMailControllerListMessages(params, { signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof agentMailControllerListMessages>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type AgentMailControllerListMessagesQueryResult = NonNullable<Awaited<ReturnType<typeof agentMailControllerListMessages>>>
+export type AgentMailControllerListMessagesQueryError = ErrorType<void>
+
+
+export function useAgentMailControllerListMessages<TData = Awaited<ReturnType<typeof agentMailControllerListMessages>>, TError = ErrorType<void>>(
+ params: AgentMailControllerListMessagesParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof agentMailControllerListMessages>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof agentMailControllerListMessages>>,
+          TError,
+          Awaited<ReturnType<typeof agentMailControllerListMessages>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAgentMailControllerListMessages<TData = Awaited<ReturnType<typeof agentMailControllerListMessages>>, TError = ErrorType<void>>(
+ params: AgentMailControllerListMessagesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof agentMailControllerListMessages>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof agentMailControllerListMessages>>,
+          TError,
+          Awaited<ReturnType<typeof agentMailControllerListMessages>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAgentMailControllerListMessages<TData = Awaited<ReturnType<typeof agentMailControllerListMessages>>, TError = ErrorType<void>>(
+ params: AgentMailControllerListMessagesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof agentMailControllerListMessages>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List messages for current user
+ */
+
+export function useAgentMailControllerListMessages<TData = Awaited<ReturnType<typeof agentMailControllerListMessages>>, TError = ErrorType<void>>(
+ params: AgentMailControllerListMessagesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof agentMailControllerListMessages>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getAgentMailControllerListMessagesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+/**
+ * @summary Get a single message
+ */
+export type agentMailControllerGetMessageResponse200 = {
+  data: void
+  status: 200
+}
+
+export type agentMailControllerGetMessageResponse429 = {
+  data: void
+  status: 429
+}
+    
+export type agentMailControllerGetMessageResponseSuccess = (agentMailControllerGetMessageResponse200) & {
+  headers: Headers;
+};
+export type agentMailControllerGetMessageResponseError = (agentMailControllerGetMessageResponse429) & {
+  headers: Headers;
+};
+
+export type agentMailControllerGetMessageResponse = (agentMailControllerGetMessageResponseSuccess | agentMailControllerGetMessageResponseError)
+
+export const getAgentMailControllerGetMessageUrl = (id: string,) => {
+
+
+  
+
+  return `/integrations/agentmail/messages/${id}`
+}
+
+export const agentMailControllerGetMessage = async (id: string, options?: RequestInit): Promise<agentMailControllerGetMessageResponse> => {
+  
+  return customFetch<agentMailControllerGetMessageResponse>(getAgentMailControllerGetMessageUrl(id),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getAgentMailControllerGetMessageQueryKey = (id: string,) => {
+    return [
+    `/integrations/agentmail/messages/${id}`
+    ] as const;
+    }
+
+    
+export const getAgentMailControllerGetMessageQueryOptions = <TData = Awaited<ReturnType<typeof agentMailControllerGetMessage>>, TError = ErrorType<void>>(id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof agentMailControllerGetMessage>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAgentMailControllerGetMessageQueryKey(id);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof agentMailControllerGetMessage>>> = ({ signal }) => agentMailControllerGetMessage(id, { signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof agentMailControllerGetMessage>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type AgentMailControllerGetMessageQueryResult = NonNullable<Awaited<ReturnType<typeof agentMailControllerGetMessage>>>
+export type AgentMailControllerGetMessageQueryError = ErrorType<void>
+
+
+export function useAgentMailControllerGetMessage<TData = Awaited<ReturnType<typeof agentMailControllerGetMessage>>, TError = ErrorType<void>>(
+ id: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof agentMailControllerGetMessage>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof agentMailControllerGetMessage>>,
+          TError,
+          Awaited<ReturnType<typeof agentMailControllerGetMessage>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAgentMailControllerGetMessage<TData = Awaited<ReturnType<typeof agentMailControllerGetMessage>>, TError = ErrorType<void>>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof agentMailControllerGetMessage>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof agentMailControllerGetMessage>>,
+          TError,
+          Awaited<ReturnType<typeof agentMailControllerGetMessage>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAgentMailControllerGetMessage<TData = Awaited<ReturnType<typeof agentMailControllerGetMessage>>, TError = ErrorType<void>>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof agentMailControllerGetMessage>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get a single message
+ */
+
+export function useAgentMailControllerGetMessage<TData = Awaited<ReturnType<typeof agentMailControllerGetMessage>>, TError = ErrorType<void>>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof agentMailControllerGetMessage>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getAgentMailControllerGetMessageQueryOptions(id,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+/**
+ * @summary Send an email
+ */
+export type agentMailControllerSendEmailResponse201 = {
+  data: void
+  status: 201
+}
+
+export type agentMailControllerSendEmailResponse429 = {
+  data: void
+  status: 429
+}
+    
+export type agentMailControllerSendEmailResponseSuccess = (agentMailControllerSendEmailResponse201) & {
+  headers: Headers;
+};
+export type agentMailControllerSendEmailResponseError = (agentMailControllerSendEmailResponse429) & {
+  headers: Headers;
+};
+
+export type agentMailControllerSendEmailResponse = (agentMailControllerSendEmailResponseSuccess | agentMailControllerSendEmailResponseError)
+
+export const getAgentMailControllerSendEmailUrl = () => {
+
+
+  
+
+  return `/integrations/agentmail/messages/send`
+}
+
+export const agentMailControllerSendEmail = async (_function: Function, options?: RequestInit): Promise<agentMailControllerSendEmailResponse> => {
+  
+  return customFetch<agentMailControllerSendEmailResponse>(getAgentMailControllerSendEmailUrl(),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      _function,)
+  }
+);}
+
+
+
+
+export const getAgentMailControllerSendEmailMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof agentMailControllerSendEmail>>, TError,{data: BodyType<Function>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof agentMailControllerSendEmail>>, TError,{data: BodyType<Function>}, TContext> => {
+
+const mutationKey = ['agentMailControllerSendEmail'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof agentMailControllerSendEmail>>, {data: BodyType<Function>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  agentMailControllerSendEmail(data,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AgentMailControllerSendEmailMutationResult = NonNullable<Awaited<ReturnType<typeof agentMailControllerSendEmail>>>
+    export type AgentMailControllerSendEmailMutationBody = BodyType<Function>
+    export type AgentMailControllerSendEmailMutationError = ErrorType<void>
+
+    /**
+ * @summary Send an email
+ */
+export const useAgentMailControllerSendEmail = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof agentMailControllerSendEmail>>, TError,{data: BodyType<Function>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof agentMailControllerSendEmail>>,
+        TError,
+        {data: BodyType<Function>},
+        TContext
+      > => {
+      return useMutation(getAgentMailControllerSendEmailMutationOptions(options), queryClient);
+    }
+    /**
+ * @summary Reply to a message
+ */
+export type agentMailControllerReplyToMessageResponse201 = {
+  data: void
+  status: 201
+}
+
+export type agentMailControllerReplyToMessageResponse429 = {
+  data: void
+  status: 429
+}
+    
+export type agentMailControllerReplyToMessageResponseSuccess = (agentMailControllerReplyToMessageResponse201) & {
+  headers: Headers;
+};
+export type agentMailControllerReplyToMessageResponseError = (agentMailControllerReplyToMessageResponse429) & {
+  headers: Headers;
+};
+
+export type agentMailControllerReplyToMessageResponse = (agentMailControllerReplyToMessageResponseSuccess | agentMailControllerReplyToMessageResponseError)
+
+export const getAgentMailControllerReplyToMessageUrl = (threadId: string,) => {
+
+
+  
+
+  return `/integrations/agentmail/messages/${threadId}/reply`
+}
+
+export const agentMailControllerReplyToMessage = async (threadId: string,
+    _function: Function, options?: RequestInit): Promise<agentMailControllerReplyToMessageResponse> => {
+  
+  return customFetch<agentMailControllerReplyToMessageResponse>(getAgentMailControllerReplyToMessageUrl(threadId),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      _function,)
+  }
+);}
+
+
+
+
+export const getAgentMailControllerReplyToMessageMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof agentMailControllerReplyToMessage>>, TError,{threadId: string;data: BodyType<Function>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof agentMailControllerReplyToMessage>>, TError,{threadId: string;data: BodyType<Function>}, TContext> => {
+
+const mutationKey = ['agentMailControllerReplyToMessage'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof agentMailControllerReplyToMessage>>, {threadId: string;data: BodyType<Function>}> = (props) => {
+          const {threadId,data} = props ?? {};
+
+          return  agentMailControllerReplyToMessage(threadId,data,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AgentMailControllerReplyToMessageMutationResult = NonNullable<Awaited<ReturnType<typeof agentMailControllerReplyToMessage>>>
+    export type AgentMailControllerReplyToMessageMutationBody = BodyType<Function>
+    export type AgentMailControllerReplyToMessageMutationError = ErrorType<void>
+
+    /**
+ * @summary Reply to a message
+ */
+export const useAgentMailControllerReplyToMessage = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof agentMailControllerReplyToMessage>>, TError,{threadId: string;data: BodyType<Function>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof agentMailControllerReplyToMessage>>,
+        TError,
+        {threadId: string;data: BodyType<Function>},
+        TContext
+      > => {
+      return useMutation(getAgentMailControllerReplyToMessageMutationOptions(options), queryClient);
+    }
+    /**
+ * @summary Download an attachment
+ */
+export type agentMailControllerDownloadAttachmentResponse200 = {
+  data: void
+  status: 200
+}
+
+export type agentMailControllerDownloadAttachmentResponse429 = {
+  data: void
+  status: 429
+}
+    
+export type agentMailControllerDownloadAttachmentResponseSuccess = (agentMailControllerDownloadAttachmentResponse200) & {
+  headers: Headers;
+};
+export type agentMailControllerDownloadAttachmentResponseError = (agentMailControllerDownloadAttachmentResponse429) & {
+  headers: Headers;
+};
+
+export type agentMailControllerDownloadAttachmentResponse = (agentMailControllerDownloadAttachmentResponseSuccess | agentMailControllerDownloadAttachmentResponseError)
+
+export const getAgentMailControllerDownloadAttachmentUrl = (msgId: string,
+    attId: string,) => {
+
+
+  
+
+  return `/integrations/agentmail/messages/${msgId}/attachments/${attId}`
+}
+
+export const agentMailControllerDownloadAttachment = async (msgId: string,
+    attId: string, options?: RequestInit): Promise<agentMailControllerDownloadAttachmentResponse> => {
+  
+  return customFetch<agentMailControllerDownloadAttachmentResponse>(getAgentMailControllerDownloadAttachmentUrl(msgId,attId),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getAgentMailControllerDownloadAttachmentQueryKey = (msgId: string,
+    attId: string,) => {
+    return [
+    `/integrations/agentmail/messages/${msgId}/attachments/${attId}`
+    ] as const;
+    }
+
+    
+export const getAgentMailControllerDownloadAttachmentQueryOptions = <TData = Awaited<ReturnType<typeof agentMailControllerDownloadAttachment>>, TError = ErrorType<void>>(msgId: string,
+    attId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof agentMailControllerDownloadAttachment>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAgentMailControllerDownloadAttachmentQueryKey(msgId,attId);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof agentMailControllerDownloadAttachment>>> = ({ signal }) => agentMailControllerDownloadAttachment(msgId,attId, { signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(msgId && attId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof agentMailControllerDownloadAttachment>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type AgentMailControllerDownloadAttachmentQueryResult = NonNullable<Awaited<ReturnType<typeof agentMailControllerDownloadAttachment>>>
+export type AgentMailControllerDownloadAttachmentQueryError = ErrorType<void>
+
+
+export function useAgentMailControllerDownloadAttachment<TData = Awaited<ReturnType<typeof agentMailControllerDownloadAttachment>>, TError = ErrorType<void>>(
+ msgId: string,
+    attId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof agentMailControllerDownloadAttachment>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof agentMailControllerDownloadAttachment>>,
+          TError,
+          Awaited<ReturnType<typeof agentMailControllerDownloadAttachment>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAgentMailControllerDownloadAttachment<TData = Awaited<ReturnType<typeof agentMailControllerDownloadAttachment>>, TError = ErrorType<void>>(
+ msgId: string,
+    attId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof agentMailControllerDownloadAttachment>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof agentMailControllerDownloadAttachment>>,
+          TError,
+          Awaited<ReturnType<typeof agentMailControllerDownloadAttachment>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAgentMailControllerDownloadAttachment<TData = Awaited<ReturnType<typeof agentMailControllerDownloadAttachment>>, TError = ErrorType<void>>(
+ msgId: string,
+    attId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof agentMailControllerDownloadAttachment>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Download an attachment
+ */
+
+export function useAgentMailControllerDownloadAttachment<TData = Awaited<ReturnType<typeof agentMailControllerDownloadAttachment>>, TError = ErrorType<void>>(
+ msgId: string,
+    attId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof agentMailControllerDownloadAttachment>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getAgentMailControllerDownloadAttachmentQueryOptions(msgId,attId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+/**
+ * @summary List threads from SDK
+ */
+export type agentMailControllerListSdkThreadsResponse200 = {
+  data: void
+  status: 200
+}
+
+export type agentMailControllerListSdkThreadsResponse429 = {
+  data: void
+  status: 429
+}
+    
+export type agentMailControllerListSdkThreadsResponseSuccess = (agentMailControllerListSdkThreadsResponse200) & {
+  headers: Headers;
+};
+export type agentMailControllerListSdkThreadsResponseError = (agentMailControllerListSdkThreadsResponse429) & {
+  headers: Headers;
+};
+
+export type agentMailControllerListSdkThreadsResponse = (agentMailControllerListSdkThreadsResponseSuccess | agentMailControllerListSdkThreadsResponseError)
+
+export const getAgentMailControllerListSdkThreadsUrl = (params: AgentMailControllerListSdkThreadsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/integrations/agentmail/sdk-threads?${stringifiedParams}` : `/integrations/agentmail/sdk-threads`
+}
+
+export const agentMailControllerListSdkThreads = async (params: AgentMailControllerListSdkThreadsParams, options?: RequestInit): Promise<agentMailControllerListSdkThreadsResponse> => {
+  
+  return customFetch<agentMailControllerListSdkThreadsResponse>(getAgentMailControllerListSdkThreadsUrl(params),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getAgentMailControllerListSdkThreadsQueryKey = (params?: AgentMailControllerListSdkThreadsParams,) => {
+    return [
+    `/integrations/agentmail/sdk-threads`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+    
+export const getAgentMailControllerListSdkThreadsQueryOptions = <TData = Awaited<ReturnType<typeof agentMailControllerListSdkThreads>>, TError = ErrorType<void>>(params: AgentMailControllerListSdkThreadsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof agentMailControllerListSdkThreads>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAgentMailControllerListSdkThreadsQueryKey(params);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof agentMailControllerListSdkThreads>>> = ({ signal }) => agentMailControllerListSdkThreads(params, { signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof agentMailControllerListSdkThreads>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type AgentMailControllerListSdkThreadsQueryResult = NonNullable<Awaited<ReturnType<typeof agentMailControllerListSdkThreads>>>
+export type AgentMailControllerListSdkThreadsQueryError = ErrorType<void>
+
+
+export function useAgentMailControllerListSdkThreads<TData = Awaited<ReturnType<typeof agentMailControllerListSdkThreads>>, TError = ErrorType<void>>(
+ params: AgentMailControllerListSdkThreadsParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof agentMailControllerListSdkThreads>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof agentMailControllerListSdkThreads>>,
+          TError,
+          Awaited<ReturnType<typeof agentMailControllerListSdkThreads>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAgentMailControllerListSdkThreads<TData = Awaited<ReturnType<typeof agentMailControllerListSdkThreads>>, TError = ErrorType<void>>(
+ params: AgentMailControllerListSdkThreadsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof agentMailControllerListSdkThreads>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof agentMailControllerListSdkThreads>>,
+          TError,
+          Awaited<ReturnType<typeof agentMailControllerListSdkThreads>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAgentMailControllerListSdkThreads<TData = Awaited<ReturnType<typeof agentMailControllerListSdkThreads>>, TError = ErrorType<void>>(
+ params: AgentMailControllerListSdkThreadsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof agentMailControllerListSdkThreads>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List threads from SDK
+ */
+
+export function useAgentMailControllerListSdkThreads<TData = Awaited<ReturnType<typeof agentMailControllerListSdkThreads>>, TError = ErrorType<void>>(
+ params: AgentMailControllerListSdkThreadsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof agentMailControllerListSdkThreads>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getAgentMailControllerListSdkThreadsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+/**
  * @summary Get my email threads (paginated)
  */
 export type agentMailControllerGetThreadsResponse200 = {

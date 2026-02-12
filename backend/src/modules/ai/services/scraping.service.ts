@@ -86,7 +86,7 @@ export class ScrapingService {
         `[Scraping] Website data captured | URL: ${website.url} | Pages: ${website.metadata.pageCount} | Links: ${website.links.length} | TeamBios: ${website.teamBios.length}`,
       );
       this.logger.debug(
-        `[Scraping] Website content | Title: ${website.metadata.title || "none"} | Description: ${website.description?.substring(0, 100) || "none"}...`,
+        `[Scraping] Website content | Title: ${website.title || "none"} | Description: ${website.description?.substring(0, 100) || "none"}...`,
       );
     } else {
       this.logger.warn(`[Scraping] No website data scraped for ${record.website || "unknown URL"}`);

@@ -44,8 +44,12 @@ export class SynthesisProcessor
     );
   }
 
-  onModuleInit() {
-    this.initialize();
+  async onModuleInit() {
+    await this.initialize();
+    if (!this.worker) {
+      throw new Error('SynthesisProcessor failed to initialize: Worker is null');
+    }
+    this.logger.log(`✅ SynthesisProcessor ready | Queue: ${QUEUE_NAMES.AI_SYNTHESIS} | Concurrency: ${QUEUE_CONCURRENCY[QUEUE_NAMES.AI_SYNTHESIS]}`);
   }
 
   async onModuleDestroy() {

@@ -44,8 +44,12 @@ export class ExtractionProcessor
     );
   }
 
-  onModuleInit() {
-    this.initialize();
+  async onModuleInit() {
+    await this.initialize();
+    if (!this.worker) {
+      throw new Error('ExtractionProcessor failed to initialize: Worker is null');
+    }
+    this.logger.log(`✅ ExtractionProcessor ready | Queue: ${QUEUE_NAMES.AI_EXTRACTION} | Concurrency: ${QUEUE_CONCURRENCY[QUEUE_NAMES.AI_EXTRACTION]}`);
   }
 
   async onModuleDestroy() {

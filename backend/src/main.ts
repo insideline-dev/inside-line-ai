@@ -8,16 +8,32 @@ import helmet from "helmet";
 import { AppModule } from "./app.module";
 import { HttpExceptionFilter } from "./common/filters";
 import { LoggingInterceptor } from "./common/interceptors";
+import { AppFileLogger } from "./common/logging";
 import { Env } from "./config";
 
 async function bootstrap() {
+  const appLogger = new AppFileLogger();
   const app = await NestFactory.create(AppModule, {
     // Enable raw body for webhook signature verification
     rawBody: true,
+    bufferLogs: true,
+    logger: appLogger,
   });
+  app.useLogger(appLogger);
 
   const configService = app.get(ConfigService<Env, true>);
   const logger = new Logger("Bootstrap");
+
+  process.on("unhandledRejection", (reason) => {
+    const message =
+      reason instanceof Error ? reason.message : String(reason);
+    const stack = reason instanceof Error ? reason.stack : undefined;
+    appLogger.error(`Unhandled rejection: ${message}`, stack);
+  });
+
+  process.on("uncaughtException", (error) => {
+    appLogger.error(`Uncaught exception: ${error.message}`, error.stack);
+  });
 
   app.use(helmet());
 

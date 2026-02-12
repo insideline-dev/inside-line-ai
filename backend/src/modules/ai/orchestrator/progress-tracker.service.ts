@@ -109,9 +109,25 @@ export class ProgressTrackerService {
     if (params.status === PhaseStatus.RUNNING && !phase.startedAt) {
       phase.startedAt = now;
       payload.currentPhase = params.phase;
+      this.logger.log(
+        `[Pipeline] 🚀 STARTING ${params.phase} phase | Startup: ${params.startupId}`,
+      );
     }
     if (isPhaseTerminal(params.status)) {
       phase.completedAt = now;
+      const duration =
+        (new Date(now).getTime() -
+          new Date(phase.startedAt || now).getTime()) /
+        1000;
+      if (params.status === PhaseStatus.COMPLETED) {
+        this.logger.log(
+          `[Pipeline] ✅ COMPLETED ${params.phase} phase in ${duration}s | Startup: ${params.startupId}`,
+        );
+      } else if (params.status === PhaseStatus.FAILED) {
+        this.logger.error(
+          `[Pipeline] ❌ FAILED ${params.phase} phase after ${duration}s | Error: ${params.error} | Startup: ${params.startupId}`,
+        );
+      }
     }
     if (params.error) {
       phase.error = params.error;
@@ -129,8 +145,13 @@ export class ProgressTrackerService {
       (payload.phasesCompleted.length / Object.keys(payload.phases).length) *
         100,
     );
+    payload.currentPhase = this.resolveCurrentPhase(payload, params.phase);
     payload.estimatedTimeRemaining = this.estimateTimeRemaining(payload);
     payload.updatedAt = now;
+
+    this.logger.debug(
+      `[Pipeline] Progress: ${payload.overallProgress}% | Completed: ${payload.phasesCompleted.join(", ") || "none"} | Next: ${payload.currentPhase}`,
+    );
 
     await this.persistProgress(params.startupId, payload);
     this.emitPhaseEvent(params.userId, params.startupId, params.phase, phase);
@@ -169,12 +190,31 @@ export class ProgressTrackerService {
 
     if (params.status === "running" && !next.startedAt) {
       next.startedAt = now;
+      this.logger.log(
+        `[Pipeline] 🤖 Agent running: ${params.key} | Phase: ${params.phase}`,
+      );
     }
     if (params.status === "completed" || params.status === "failed") {
       next.completedAt = now;
+      const duration =
+        (new Date(now).getTime() -
+          new Date(next.startedAt || now).getTime()) /
+        1000;
+      if (params.status === "completed") {
+        this.logger.log(
+          `[Pipeline] ✅ Agent completed: ${params.key} in ${duration}s | Phase: ${params.phase}`,
+        );
+      } else {
+        this.logger.error(
+          `[Pipeline] ❌ Agent failed: ${params.key} | Error: ${params.error} | Phase: ${params.phase}`,
+        );
+      }
     }
     if (typeof params.progress === "number") {
       next.progress = params.progress;
+      this.logger.debug(
+        `[Pipeline] Agent ${params.key} progress: ${params.progress}%`,
+      );
     }
     if (params.error) {
       next.error = params.error;
@@ -211,9 +251,28 @@ export class ProgressTrackerService {
     payload.currentPhase = params.currentPhase ?? payload.currentPhase;
     if (params.status === PipelineStatus.COMPLETED) {
       payload.overallProgress = 100;
+      const totalTime = Object.values(payload.phases).reduce(
+        (sum, phase) => {
+          if (phase.startedAt && phase.completedAt) {
+            return (
+              sum +
+              (new Date(phase.completedAt).getTime() -
+                new Date(phase.startedAt).getTime())
+            );
+          }
+          return sum;
+        },
+        0,
+      ) / 1000;
+      this.logger.log(
+        `[Pipeline] 🎉 PIPELINE COMPLETED | Total time: ${totalTime}s | Overall score: ${params.overallScore ?? "N/A"} | Startup: ${params.startupId}`,
+      );
     }
     if (params.error) {
       payload.error = params.error;
+      this.logger.error(
+        `[Pipeline] ❌ PIPELINE FAILED | Error: ${params.error} | Startup: ${params.startupId}`,
+      );
     } else if (params.status === PipelineStatus.COMPLETED) {
       delete payload.error;
     }
@@ -324,6 +383,39 @@ export class ProgressTrackerService {
     ).length;
 
     return Math.max(0, Math.round((avgDuration * remainingCount) / 1000));
+  }
+
+  private resolveCurrentPhase(
+    payload: PipelineProgressPayload,
+    fallback: PipelinePhase,
+  ): PipelinePhase {
+    const orderedPhases = Object.values(PipelinePhase);
+
+    const running = orderedPhases.find(
+      (phase) => payload.phases[phase]?.status === PhaseStatus.RUNNING,
+    );
+    if (running) {
+      return running;
+    }
+
+    const waiting = orderedPhases.find(
+      (phase) => payload.phases[phase]?.status === PhaseStatus.WAITING,
+    );
+    if (waiting) {
+      return waiting;
+    }
+
+    const pending = orderedPhases.find(
+      (phase) => payload.phases[phase]?.status === PhaseStatus.PENDING,
+    );
+    if (pending) {
+      return pending;
+    }
+
+    const completed = [...orderedPhases].reverse().find(
+      (phase) => payload.phases[phase]?.status === PhaseStatus.COMPLETED,
+    );
+    return completed ?? fallback;
   }
 
   private emitPhaseEvent(

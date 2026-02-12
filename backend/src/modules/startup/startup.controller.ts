@@ -15,6 +15,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { JwtAuthGuard } from '../../auth/guards';
 import { CurrentUser } from '../../auth/decorators';
@@ -46,6 +47,7 @@ import {
   PresignedUrlDto,
   GetStartupsQueryDto,
   GetApprovedStartupsQueryDto,
+  GetProgressResponseDto,
   UploadDataRoomDto,
   UpdateDataRoomPermissionsDto,
   RespondInterestDto,
@@ -55,6 +57,8 @@ import { Public } from '../../auth/decorators';
 
 @Controller('startups')
 @UseGuards(JwtAuthGuard, RolesGuard)
+@ApiTags('Startups')
+@ApiBearerAuth('JWT')
 export class StartupController {
   constructor(
     private startupService: StartupService,
@@ -160,6 +164,8 @@ export class StartupController {
 
   @Get(':id/progress')
   @Roles(UserRole.FOUNDER, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Get startup analysis progress' })
+  @ApiResponse({ status: 200, type: GetProgressResponseDto })
   async getProgress(@CurrentUser() user: User, @Param('id') id: string) {
     if (user.role === UserRole.ADMIN) {
       return this.startupService.adminGetProgress(id);

@@ -1,4 +1,4 @@
-import { Injectable, Optional } from "@nestjs/common";
+import { Injectable, Logger, Optional } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import * as cheerio from "cheerio";
 import { lookup } from "node:dns/promises";
@@ -26,6 +26,7 @@ interface ResolvedSafeUrl {
 
 @Injectable()
 export class WebsiteScraperService {
+  private readonly logger = new Logger(WebsiteScraperService.name);
   private readonly maxSubpages: number;
   private readonly batchSize: number;
   private readonly maxLinksPerPage: number;
@@ -70,10 +71,19 @@ export class WebsiteScraperService {
 
   async deepScrape(url: string): Promise<WebsiteScrapedData> {
     const homepageUrl = this.normalizeUrl(url, true);
+    this.logger.log(`[Scrape] Starting deep scrape for ${homepageUrl}`);
     const homepage = await this.fetchAndParsePage(homepageUrl);
 
     const subpageCandidates = this.discoverSubpages(homepage.links, homepageUrl);
+    this.logger.debug(
+      `[Scrape] Discovered ${subpageCandidates.length} subpage candidates: ${subpageCandidates.join(", ")}`,
+    );
     const subpages = await this.scrapeSubpages(subpageCandidates);
+    if (subpages.length > 0) {
+      this.logger.debug(
+        `[Scrape] Successfully scraped ${subpages.length} subpages: ${subpages.map((page) => page.url).join(", ")}`,
+      );
+    }
     const pages: ScrapedPage[] = [homepage, ...subpages];
 
     const teamBios = this.dedupeTeamBios(
@@ -107,7 +117,7 @@ export class WebsiteScraperService {
       /\/pricing|\/plans/i.test(new URL(page.url).pathname),
     );
 
-    return {
+    const result: WebsiteScrapedData = {
       url: homepage.url,
       title: homepage.title,
       description: homepage.description,
@@ -134,6 +144,11 @@ export class WebsiteScraperService {
         author: homepage.metadata.author,
       },
     };
+
+    this.logger.log(
+      `[Scrape] Completed deep scrape for ${homepageUrl} | Pages: ${result.metadata.pageCount} | Team bios: ${result.teamBios.length} | Links: ${result.links.length} | Testimonials: ${result.testimonials.length}`,
+    );
+    return result;
   }
 
   private discoverSubpages(
@@ -191,13 +206,28 @@ export class WebsiteScraperService {
       }
 
       const batch = urls.slice(index, index + this.batchSize);
+      this.logger.debug(
+        `[Scrape] Processing subpage batch ${Math.floor(index / this.batchSize) + 1} (${batch.length} urls)`,
+      );
       const settled = await Promise.allSettled(
         batch.map((url) => this.fetchAndParsePage(url, true)),
+      );
+      const fulfilled = settled.filter((result) => result.status === "fulfilled").length;
+      const rejected = settled.length - fulfilled;
+      this.logger.debug(
+        `[Scrape] Batch ${Math.floor(index / this.batchSize) + 1} completed | success=${fulfilled} | failed=${rejected}`,
       );
 
       for (const result of settled) {
         if (result.status === "fulfilled" && result.value) {
           pages.push(result.value);
+          continue;
+        }
+
+        if (result.status === "rejected") {
+          this.logger.warn(
+            `[Scrape] Failed subpage scrape in batch: ${this.asMessage(result.reason)}`,
+          );
         }
       }
     }
@@ -261,7 +291,7 @@ export class WebsiteScraperService {
 
       const content = $("body").text().replace(/\s+/g, " ").trim();
 
-      return {
+      const page: ScrapedPage = {
         url: this.normalizeUrl(pageUrl, pageUrl.endsWith("/")),
         title,
         description,
@@ -278,6 +308,18 @@ export class WebsiteScraperService {
           author: $('meta[name="author"]').attr("content")?.trim(),
         },
       };
+      this.logger.debug(
+        `[Scrape] Parsed page ${page.url} | Title: ${page.title || "n/a"} | Headings: ${page.headings.length} | Links: ${page.links.length}`,
+      );
+      return page;
+    } catch (error) {
+      const message = this.asMessage(error);
+      if (tolerateErrors) {
+        this.logger.warn(`[Scrape] Tolerated page scrape error for ${pageUrl}: ${message}`);
+      } else {
+        this.logger.error(`[Scrape] Page scrape failed for ${pageUrl}: ${message}`);
+      }
+      throw error;
     } finally {
       clearTimeout(timer);
     }
@@ -493,11 +535,10 @@ export class WebsiteScraperService {
       throw new Error(`Unsafe DNS target blocked for host: ${parsed.hostname}`);
     }
 
-    const pinnedUrl = new URL(url);
-    pinnedUrl.hostname = safeAddress.address;
-
     return {
-      fetchUrl: pinnedUrl.toString(),
+      // Keep the original hostname to preserve TLS/SNI correctness for HTTPS.
+      // We still validate DNS resolution above to block private-network targets.
+      fetchUrl: url,
       hostHeader: hostname,
     };
   }
@@ -610,5 +651,24 @@ export class WebsiteScraperService {
       }
     }
     return Array.from(dedupe.values());
+  }
+
+  private asMessage(error: unknown): string {
+    if (!(error instanceof Error)) {
+      return String(error);
+    }
+
+    const cause = (error as { cause?: unknown }).cause;
+    if (!cause) {
+      return error.message;
+    }
+    if (cause instanceof Error) {
+      return `${error.message} (cause: ${cause.message})`;
+    }
+    try {
+      return `${error.message} (cause: ${JSON.stringify(cause)})`;
+    } catch {
+      return `${error.message} (cause: ${String(cause)})`;
+    }
   }
 }

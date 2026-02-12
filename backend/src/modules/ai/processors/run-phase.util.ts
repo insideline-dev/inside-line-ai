@@ -1,4 +1,5 @@
 import type { Job } from "bullmq";
+import { Logger } from "@nestjs/common";
 import {
   PhaseStatus,
   PipelinePhase,
@@ -9,6 +10,8 @@ import type { PipelineStateService } from "../services/pipeline-state.service";
 import type { PipelineService } from "../services/pipeline.service";
 import type { NotificationGateway } from "../../../notification/notification.gateway";
 import type { JobType } from "../../../notification/dto/job-status-event.dto";
+
+const logger = new Logger("RunPipelinePhase");
 
 interface RunPhaseOptions<P extends PipelinePhase> {
   job: Job<{ startupId: string; pipelineRunId: string; userId: string }>;
@@ -29,8 +32,11 @@ export async function runPipelinePhase<P extends PipelinePhase>(
   result: PhaseResultMap[P] | null;
 }> {
   const { startupId, pipelineRunId, userId } = options.job.data;
+  logger.log(`[${options.phase}] Job picked up | Startup: ${startupId} | Run: ${pipelineRunId}`);
+
   const state = await options.pipelineState.get(startupId);
   if (!state) {
+    logger.warn(`[${options.phase}] SKIPPED — no pipeline state found | Startup: ${startupId}`);
     return {
       startupId,
       pipelineRunId,
@@ -43,6 +49,9 @@ export async function runPipelinePhase<P extends PipelinePhase>(
     state.pipelineRunId !== pipelineRunId ||
     state.status !== PipelineStatus.RUNNING
   ) {
+    logger.warn(
+      `[${options.phase}] SKIPPED — stale state | Expected run: ${pipelineRunId}, got: ${state.pipelineRunId} | Status: ${state.status}`,
+    );
     return {
       startupId,
       pipelineRunId,
@@ -57,6 +66,7 @@ export async function runPipelinePhase<P extends PipelinePhase>(
     phaseStatus === PhaseStatus.FAILED ||
     phaseStatus === PhaseStatus.SKIPPED
   ) {
+    logger.log(`[${options.phase}] SKIPPED — already ${phaseStatus} | Startup: ${startupId}`);
     return {
       startupId,
       pipelineRunId,
@@ -79,6 +89,7 @@ export async function runPipelinePhase<P extends PipelinePhase>(
       pipelineRunId,
     });
 
+    logger.log(`[${options.phase}] Executing phase logic... | Startup: ${startupId}`);
     const result = await options.run();
 
     await options.pipelineState.setPhaseResult(startupId, options.phase, result);

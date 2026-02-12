@@ -136,8 +136,12 @@ export class LocationNormalizerService implements OnModuleDestroy {
     try {
       const client = new Redis(redisUrl, {
         lazyConnect: true,
-        maxRetriesPerRequest: 1,
-        retryStrategy: () => null,
+        maxRetriesPerRequest: null,
+        connectTimeout: 10_000,
+        keepAlive: 30_000,
+        retryStrategy: (attempt) =>
+          Math.min(Math.max(attempt, 1) * 100, 2000),
+        reconnectOnError: () => true,
       });
 
       client

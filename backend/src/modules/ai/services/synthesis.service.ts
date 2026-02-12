@@ -38,11 +38,17 @@ export class SynthesisService {
   ) {}
 
   async run(startupId: string): Promise<SynthesisResult> {
+    this.logger.log(`[Synthesis] Starting synthesis run | Startup: ${startupId}`);
+
     const { extraction, research, evaluation, scraping } =
       await this.loadPhaseResults(startupId);
 
     const sectionScores = this.computeSectionScores(evaluation);
     const normalizedWeights = await this.scoreComputation.getWeightsForStage(extraction.stage);
+
+    this.logger.debug(
+      `[Synthesis] Loaded phase results | Company: ${extraction.companyName} | Research sources: ${research.sources?.length ?? 0}`,
+    );
 
     const generated = await this.synthesisAgent.run({
       extraction,
@@ -54,6 +60,10 @@ export class SynthesisService {
 
     const overallScore = this.scoreComputation.computeWeightedScore(sectionScores, normalizedWeights);
 
+    this.logger.log(
+      `[Synthesis] Agent output | Strengths: ${generated.strengths.length} | Concerns: ${generated.concerns.length}`,
+    );
+
     const synthesis = this.buildSynthesisResult(
       generated,
       sectionScores,
@@ -62,6 +72,10 @@ export class SynthesisService {
     );
 
     await this.persistResults(startupId, synthesis, evaluation, research);
+
+    this.logger.log(
+      `[Synthesis] ✅ Results persisted | Score: ${synthesis.overallScore} | KeyStrengths: ${synthesis.strengths?.length} | KeyRisks: ${synthesis.concerns?.length}`,
+    );
 
     await this.performPostSynthesisOps(startupId, synthesis, extraction);
 

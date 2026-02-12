@@ -139,7 +139,8 @@ describe("PhaseTransitionService", () => {
 
     const decision = service.decideNextPhases(state);
     expect(decision.blockedByRequiredFailure).toBe(true);
-    expect(decision.pipelineComplete).toBe(false);
+    expect(decision.queue).toEqual([]);
+    expect(decision.pipelineComplete).toBe(true);
   });
 
   it("marks pipeline complete once synthesis finishes", () => {

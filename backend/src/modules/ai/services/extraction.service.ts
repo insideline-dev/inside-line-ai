@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { eq } from "drizzle-orm";
 import { DrizzleService } from "../../../database";
@@ -17,6 +17,7 @@ import { PdfTextExtractorService } from "./pdf-text-extractor.service";
 
 @Injectable()
 export class ExtractionService {
+  private readonly logger = new Logger(ExtractionService.name);
   private readonly maxTextChars: number;
   private readonly maxPdfBytes: number;
   private readonly fetchTimeoutMs: number;
@@ -44,6 +45,8 @@ export class ExtractionService {
   }
 
   async run(startupId: string): Promise<ExtractionResult> {
+    this.logger.log(`[Extraction] Starting extraction phase for startup ${startupId}`);
+
     const [record] = await this.drizzle.db
       .select()
       .from(startup)
@@ -57,10 +60,16 @@ export class ExtractionService {
     const warnings: string[] = [];
     const startupContext = this.mapStartupContext(record);
     const fallbackText = this.buildSummary(record, startupContext);
+    this.logger.debug(
+      `[Extraction] Startup context loaded | pitchDeckPath=${Boolean(record.pitchDeckPath)} | pitchDeckUrl=${Boolean(record.pitchDeckUrl)} | teamMembers=${record.teamMembers?.length ?? 0} | files=${record.files?.length ?? 0}`,
+    );
 
     if (!record.pitchDeckPath && !record.pitchDeckUrl) {
       warnings.push("No pitch deck found; using startup form data only");
-      return this.buildResult(
+      this.logger.warn(
+        `[Extraction] No deck source found for startup ${startupId}; using startup context fallback`,
+      );
+      const fallbackResult = this.buildResult(
         record,
         {},
         fallbackText,
@@ -69,6 +78,10 @@ export class ExtractionService {
         0,
         warnings,
       );
+      this.logger.log(
+        `[Extraction] Completed extraction phase for startup ${startupId} | source=startup-context | pageCount=0 | warnings=${fallbackResult.warnings?.length ?? 0}`,
+      );
+      return fallbackResult;
     }
 
     let deckUrl: string | null = null;
@@ -76,25 +89,51 @@ export class ExtractionService {
 
     if (record.pitchDeckPath) {
       try {
+        this.logger.log(
+          `[Extraction] Attempting deck fetch from storage path ${record.pitchDeckPath}`,
+        );
         deckUrl = await this.storage.getDownloadUrl(record.pitchDeckPath, 900);
+        this.logger.debug(
+          `[Extraction] Generated signed deck URL ${this.redactUrl(deckUrl)}`,
+        );
         pdfBuffer = await this.fetchPdfBuffer(deckUrl);
+        this.logger.debug(
+          `[Extraction] Downloaded PDF from pitchDeckPath | bytes=${pdfBuffer.byteLength}`,
+        );
       } catch (error) {
-        warnings.push(`Unable to load PDF from pitchDeckPath: ${this.asMessage(error)}`);
+        const message = this.asMessage(error);
+        warnings.push(`Unable to load PDF from pitchDeckPath: ${message}`);
+        this.logger.warn(
+          `[Extraction] Failed to load deck from pitchDeckPath ${record.pitchDeckPath}: ${message}`,
+        );
       }
     }
 
     if (!pdfBuffer && record.pitchDeckUrl) {
       try {
+        this.logger.log(
+          `[Extraction] Attempting deck fetch from direct URL ${this.redactUrl(record.pitchDeckUrl)}`,
+        );
         deckUrl = record.pitchDeckUrl;
         pdfBuffer = await this.fetchPdfBuffer(record.pitchDeckUrl);
+        this.logger.debug(
+          `[Extraction] Downloaded PDF from pitchDeckUrl | bytes=${pdfBuffer.byteLength}`,
+        );
       } catch (error) {
-        warnings.push(`Unable to load PDF from pitchDeckUrl: ${this.asMessage(error)}`);
+        const message = this.asMessage(error);
+        warnings.push(`Unable to load PDF from pitchDeckUrl: ${message}`);
+        this.logger.warn(
+          `[Extraction] Failed to load deck from pitchDeckUrl ${this.redactUrl(record.pitchDeckUrl)}: ${message}`,
+        );
       }
     }
 
     if (!pdfBuffer) {
       warnings.push("Deck file is unavailable; using startup form data only");
-      return this.buildResult(
+      this.logger.warn(
+        `[Extraction] Deck unavailable after all fetch attempts for startup ${startupId}; using startup context fallback`,
+      );
+      const fallbackResult = this.buildResult(
         record,
         {},
         fallbackText,
@@ -103,6 +142,10 @@ export class ExtractionService {
         0,
         warnings,
       );
+      this.logger.log(
+        `[Extraction] Completed extraction phase for startup ${startupId} | source=startup-context | pageCount=0 | warnings=${fallbackResult.warnings?.length ?? 0}`,
+      );
+      return fallbackResult;
     }
 
     let source: ExtractionResult["source"] = "startup-context";
@@ -110,27 +153,44 @@ export class ExtractionService {
     let pageCount = 0;
 
     try {
+      this.logger.log(`[Extraction] Running pdf-parse text extraction for startup ${startupId}`);
       const pdfResult = await this.pdfTextExtractor.extractText(pdfBuffer);
       pageCount = pdfResult.pageCount;
 
       if (pdfResult.hasContent) {
         extractedText = pdfResult.text;
         source = "pdf-parse";
+        this.logger.log(
+          `[Extraction] pdf-parse succeeded | pages=${pdfResult.pageCount} | chars=${pdfResult.text.length}`,
+        );
       } else {
         warnings.push("PDF appears scanned/image-only; switching to OCR");
+        this.logger.warn(
+          `[Extraction] pdf-parse returned no text | pages=${pdfResult.pageCount}; switching to OCR`,
+        );
       }
     } catch (error) {
-      warnings.push(`pdf-parse failed: ${this.asMessage(error)}`);
+      const message = this.asMessage(error);
+      warnings.push(`pdf-parse failed: ${message}`);
+      this.logger.warn(`[Extraction] pdf-parse failed: ${message}`);
     }
 
     if (!extractedText && deckUrl) {
       try {
+        this.logger.log(
+          `[Extraction] Running OCR fallback for startup ${startupId} using ${this.redactUrl(deckUrl)}`,
+        );
         const ocrResult = await this.mistralOcr.extractFromPdf(deckUrl);
         extractedText = ocrResult.text;
         pageCount = Math.max(pageCount, ocrResult.pages.length);
         source = "mistral-ocr";
+        this.logger.log(
+          `[Extraction] OCR succeeded | pages=${ocrResult.pages.length} | chars=${ocrResult.text.length}`,
+        );
       } catch (error) {
-        warnings.push(`Mistral OCR failed: ${this.asMessage(error)}`);
+        const message = this.asMessage(error);
+        warnings.push(`Mistral OCR failed: ${message}`);
+        this.logger.warn(`[Extraction] OCR failed: ${message}`);
       }
     }
 
@@ -138,11 +198,17 @@ export class ExtractionService {
       extractedText = fallbackText;
       source = "startup-context";
       warnings.push("No extractable deck text found; using startup form data only");
+      this.logger.warn(
+        `[Extraction] No extractable text found for startup ${startupId}; using startup context fallback`,
+      );
     }
 
+    this.logger.debug(
+      `[Extraction] Running field extraction | source=${source} | rawChars=${extractedText.length} | pageCount=${pageCount}`,
+    );
     const aiFields = await this.fieldExtractor.extractFields(extractedText, record);
 
-    return this.buildResult(
+    const result = this.buildResult(
       record,
       aiFields,
       extractedText,
@@ -151,6 +217,16 @@ export class ExtractionService {
       pageCount,
       warnings,
     );
+    this.logger.log(
+      `[Extraction] Completed extraction phase for startup ${startupId} | source=${result.source ?? "unknown"} | pageCount=${result.pageCount ?? 0} | warnings=${result.warnings?.length ?? 0}`,
+    );
+    if (result.warnings && result.warnings.length > 0) {
+      this.logger.warn(
+        `[Extraction] Warning summary for startup ${startupId}: ${result.warnings.join(" | ")}`,
+      );
+    }
+
+    return result;
   }
 
   private buildResult(
@@ -303,6 +379,15 @@ export class ExtractionService {
     }
 
     return Buffer.from(body);
+  }
+
+  private redactUrl(url: string): string {
+    try {
+      const parsed = new URL(url);
+      return `${parsed.origin}${parsed.pathname}`;
+    } catch {
+      return url;
+    }
   }
 
   private asMessage(error: unknown): string {

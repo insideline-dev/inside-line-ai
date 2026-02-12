@@ -44,6 +44,10 @@ export class SynthesisAgent {
       });
       const synthesisBrief = this.buildSynthesisBrief(input);
 
+      this.logger.debug(
+        `[Synthesis] Starting synthesis | Company: ${input.extraction.companyName} | Stage: ${input.extraction.stage}`,
+      );
+
       const { output } = await generateText({
         model: this.providers.resolveModelForPurpose(ModelPurpose.SYNTHESIS),
         output: Output.object({ schema: SynthesisSchema }),
@@ -60,11 +64,22 @@ export class SynthesisAgent {
         }),
       });
 
-      return SynthesisSchema.parse(output);
-    } catch (error) {
-      this.logger.error(
-        `Synthesis generation failed: ${error instanceof Error ? error.message : String(error)}`,
+      this.logger.debug(
+        `[Synthesis] Raw AI output | Keys: ${Object.keys(output).join(", ")} | ${JSON.stringify(output).substring(0, 200)}...`,
       );
+
+      const parsed = SynthesisSchema.parse(output);
+      this.logger.log(
+        `[Synthesis] ✅ Synthesis completed | Strengths: ${parsed.strengths.length} | Concerns: ${parsed.concerns.length} | Score: ${parsed.overallScore}`,
+      );
+      return parsed;
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `[Synthesis] ❌ Synthesis generation failed: ${errorMsg}`,
+        error instanceof Error ? error.stack : undefined,
+      );
+      this.logger.debug(`[Synthesis] Fallback triggered | Company: ${input.extraction.companyName}`);
       return this.fallback();
     }
   }

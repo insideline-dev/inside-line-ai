@@ -59,7 +59,15 @@ export class UnipileService {
       if (profile) {
         // Extract identifier from URL (e.g., "john-doe-123" from linkedin.com/in/john-doe-123/)
         const identifier = this.extractIdentifierFromUrl(linkedinUrl);
-        await this.cacheService.setCache(userId, linkedinUrl, identifier, profile);
+        try {
+          await this.cacheService.setCache(userId, linkedinUrl, identifier, profile);
+        } catch (cacheError) {
+          const cacheMessage =
+            cacheError instanceof Error ? cacheError.message : String(cacheError);
+          this.logger.warn(
+            `Fetched LinkedIn profile but failed to cache ${linkedinUrl}: ${cacheMessage}`,
+          );
+        }
       }
 
       return profile;

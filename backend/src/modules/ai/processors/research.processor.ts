@@ -45,8 +45,12 @@ export class ResearchProcessor
     );
   }
 
-  onModuleInit() {
-    this.initialize();
+  async onModuleInit() {
+    await this.initialize();
+    if (!this.worker) {
+      throw new Error('ResearchProcessor failed to initialize: Worker is null');
+    }
+    this.logger.log(`✅ ResearchProcessor ready | Queue: ${QUEUE_NAMES.AI_RESEARCH} | Concurrency: ${QUEUE_CONCURRENCY[QUEUE_NAMES.AI_RESEARCH]}`);
   }
 
   async onModuleDestroy() {

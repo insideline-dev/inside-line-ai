@@ -883,25 +883,40 @@ export class StartupService {
         totalPhases === 0
           ? 0
           : Math.round((completedCount / totalPhases) * 100);
+      const phaseResults = pipelineState.results;
 
       response.progress = {
         overallProgress,
         currentPhase: pipelineState.currentPhase,
+        pipelineStatus: pipelineState.status,
+        error: pipelineState.status === "failed" ? (pipelineState.phases[pipelineState.currentPhase]?.error ?? "Pipeline failed") : undefined,
         phasesCompleted: Object.entries(pipelineState.phases)
           .filter(([, phase]) => phase.status === "completed")
           .map(([phase]) => phase),
         phases: Object.fromEntries(
           Object.entries(pipelineState.phases).map(([phase, value]) => [
             phase,
-            {
-              status: value.status,
-              progress:
-                value.status === "completed"
-                  ? 100
-                  : value.status === "running"
-                    ? 50
-                    : 0,
-            },
+            (() => {
+              const phaseIssue = this.derivePhaseIssue(
+                phase as PipelinePhase,
+                phaseResults[phase as PipelinePhase],
+              );
+              const shouldExposeIssue =
+                value.status === "failed" ||
+                value.status === "running" ||
+                value.status === "waiting";
+
+              return {
+                status: value.status,
+                progress:
+                  value.status === "completed"
+                    ? 100
+                    : value.status === "running"
+                      ? 50
+                      : 0,
+                error: shouldExposeIssue ? (value.error ?? phaseIssue) : undefined,
+              };
+            })(),
           ]),
         ),
       };
@@ -958,5 +973,61 @@ export class StartupService {
     }
 
     return false;
+  }
+
+  private derivePhaseIssue(
+    phase: PipelinePhase,
+    result: unknown,
+  ): string | undefined {
+    if (!result || typeof result !== "object") {
+      return undefined;
+    }
+
+    if (phase === PipelinePhase.EXTRACTION) {
+      return this.firstIssueMessage(
+        (result as { warnings?: unknown }).warnings,
+      );
+    }
+
+    if (phase === PipelinePhase.SCRAPING) {
+      return this.firstIssueMessage(
+        (result as { scrapeErrors?: unknown }).scrapeErrors,
+      );
+    }
+
+    if (phase === PipelinePhase.RESEARCH) {
+      return this.firstIssueMessage((result as { errors?: unknown }).errors);
+    }
+
+    if (phase === PipelinePhase.EVALUATION) {
+      return this.firstIssueMessage(
+        (result as { summary?: { errors?: unknown } }).summary?.errors,
+      );
+    }
+
+    return undefined;
+  }
+
+  private firstIssueMessage(issues: unknown): string | undefined {
+    if (!Array.isArray(issues)) {
+      return undefined;
+    }
+
+    for (const issue of issues) {
+      if (typeof issue === "string" && issue.trim()) {
+        return issue.trim();
+      }
+
+      if (!issue || typeof issue !== "object") {
+        continue;
+      }
+
+      const message = (issue as { error?: unknown }).error;
+      if (typeof message === "string" && message.trim()) {
+        return message.trim();
+      }
+    }
+
+    return undefined;
   }
 }

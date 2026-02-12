@@ -23,6 +23,7 @@ describe("ScrapingService", () => {
     mockDb.limit.mockResolvedValue([
       {
         id: "startup-1",
+        userId: "user-123",
         website: "https://inside-line.test",
         name: "Inside Line",
         industry: "SaaS",
@@ -82,6 +83,11 @@ describe("ScrapingService", () => {
 
     expect(websiteScraper.deepScrape).toHaveBeenCalledWith("https://inside-line.test");
     expect(linkedin.enrichTeamMembers).toHaveBeenCalledTimes(1);
+    expect(linkedin.enrichTeamMembers).toHaveBeenCalledWith(
+      "user-123",
+      expect.any(Array),
+      expect.any(Object),
+    );
     expect(result.websiteUrl).toBe("https://inside-line.test/");
     expect(result.teamMembers[0]?.enrichmentStatus).toBe("success");
     expect(result.scrapeErrors).toHaveLength(0);

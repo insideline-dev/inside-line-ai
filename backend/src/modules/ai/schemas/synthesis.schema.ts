@@ -7,7 +7,7 @@ export const SynthesisSchema = z.object({
   strengths: z.array(z.string()).min(1),
   concerns: z.array(z.string()).min(1),
   investmentThesis: z.string().min(1),
-  nextSteps: z.array(z.string()).default([]),
+  nextSteps: z.array(z.string()),
   confidenceLevel: z.enum(["High", "Medium", "Low"]),
   investorMemo: z.string().min(1),
   founderReport: z.string().min(1),

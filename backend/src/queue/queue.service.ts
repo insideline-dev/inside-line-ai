@@ -1,14 +1,16 @@
-import { Injectable, OnModuleDestroy, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { Queue, QueueEvents, ConnectionOptions } from 'bullmq';
+import { Injectable, OnModuleDestroy, Logger } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import { Queue, QueueEvents, ConnectionOptions } from "bullmq";
+import Redis, { type RedisOptions } from "ioredis";
 import {
   QUEUE_NAMES,
   DEFAULT_JOB_OPTIONS,
   resolveQueueDepthLimits,
   type QueueDepthLimits,
   QueueName,
-} from './queue.config';
-import type { JobData, JobResult } from './interfaces';
+} from "./queue.config";
+import type { JobData, JobResult } from "./interfaces";
+import { buildBullRedisConnection } from "./redis-connection.util";
 
 export interface QueueDepthInfo {
   waiting: number;
@@ -24,54 +26,47 @@ export class QueueService implements OnModuleDestroy {
   private queues: Map<QueueName, Queue> = new Map();
   private queueEvents: Map<QueueName, QueueEvents> = new Map();
   private readonly queueDepthLimits: QueueDepthLimits;
+  private readonly redisConnectionOptions: ConnectionOptions;
+  private readonly queueConnection: Redis;
 
   constructor(private config: ConfigService) {
     this.queueDepthLimits = resolveQueueDepthLimits((key, defaultValue) =>
       this.config.get<number>(key, defaultValue),
     );
+    this.redisConnectionOptions = this.resolveRedisConnection();
+    this.queueConnection = this.createQueueConnection();
     this.initializeQueues();
   }
 
   get redisConnection(): ConnectionOptions {
-    const redisUrl = this.config.get<string>('REDIS_URL');
+    return this.redisConnectionOptions;
+  }
 
-    if (redisUrl) {
-      // Parse REDIS_URL (e.g., redis://localhost:6379 or redis://user:pass@host:port)
-      try {
-        const url = new URL(redisUrl);
-        return {
-          host: url.hostname,
-          port: parseInt(url.port || '6379', 10),
-          password: url.password || undefined,
-          username: url.username || undefined,
-          tls: url.protocol === 'rediss:' ? {} : undefined,
-        };
-      } catch (error) {
-        this.logger.error(`Failed to parse REDIS_URL: ${error}`);
-      }
-    }
+  private resolveRedisConnection(): ConnectionOptions {
+    return buildBullRedisConnection(this.config.get<string>("REDIS_URL"), {
+      host: this.config.get<string>("REDIS_HOST", "localhost"),
+      port: this.config.get<number>("REDIS_PORT", 6379),
+      username: this.config.get<string>("REDIS_USERNAME"),
+      password: this.config.get<string>("REDIS_PASSWORD"),
+      tls: Boolean(this.config.get<boolean>("REDIS_TLS")),
+    });
+  }
 
-    // Fallback to individual env vars (legacy)
-    return {
-      host: this.config.get('REDIS_HOST', 'localhost'),
-      port: this.config.get('REDIS_PORT', 6379),
-      password: this.config.get('REDIS_PASSWORD'),
-      tls: this.config.get('REDIS_TLS') ? {} : undefined,
-    };
+  private createQueueConnection(): Redis {
+    const client = new Redis(this.redisConnectionOptions as RedisOptions);
+    client.on("error", (error) => {
+      this.logger.warn(`Queue Redis connection error: ${String(error)}`);
+    });
+    return client;
   }
 
   private initializeQueues() {
     Object.values(QUEUE_NAMES).forEach((name) => {
       const queue = new Queue(name, {
-        connection: this.redisConnection,
+        connection: this.queueConnection as unknown as ConnectionOptions,
         defaultJobOptions: DEFAULT_JOB_OPTIONS,
       });
       this.queues.set(name, queue);
-
-      const events = new QueueEvents(name, {
-        connection: this.redisConnection,
-      });
-      this.queueEvents.set(name, events);
 
       this.logger.log(`Initialized queue: ${name}`);
     });
@@ -131,8 +126,7 @@ export class QueueService implements OnModuleDestroy {
     jobId: string,
     timeout = 300000, // 5 minutes default
   ): Promise<T> {
-    const events = this.queueEvents.get(queueName);
-    if (!events) throw new Error(`Queue events ${queueName} not found`);
+    const events = await this.getOrCreateQueueEvents(queueName);
 
     return new Promise((resolve, reject) => {
       let cleaned = false;
@@ -200,12 +194,8 @@ export class QueueService implements OnModuleDestroy {
    */
   async checkHealth(): Promise<{ status: 'ok' | 'error'; latency?: number }> {
     try {
-      const queue = this.queues.get(QUEUE_NAMES.TASK);
-      if (!queue) return { status: 'error' };
-
       const start = Date.now();
-      const client = await queue.client;
-      await client.ping();
+      await this.queueConnection.ping();
       const latency = Date.now() - start;
 
       return { status: 'ok', latency };
@@ -324,7 +314,28 @@ export class QueueService implements OnModuleDestroy {
     for (const events of this.queueEvents.values()) {
       await events.close();
     }
+    this.queueEvents.clear();
+    await this.queueConnection.quit().catch(() => undefined);
 
     this.logger.log('Queue connections closed');
+  }
+
+  private async getOrCreateQueueEvents(queueName: QueueName): Promise<QueueEvents> {
+    const existing = this.queueEvents.get(queueName);
+    if (existing) {
+      return existing;
+    }
+
+    const events = new QueueEvents(queueName, {
+      connection: this.redisConnectionOptions,
+    });
+    events.on("error", (error) => {
+      this.logger.warn(
+        `Queue events error for ${queueName}: ${String(error)}`,
+      );
+    });
+    await events.waitUntilReady();
+    this.queueEvents.set(queueName, events);
+    return events;
   }
 }

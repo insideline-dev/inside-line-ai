@@ -107,8 +107,10 @@ export class PhaseTransitionService {
   }
 
   private hasNoActiveWork(state: PipelineState): boolean {
-    return Object.values(state.phases).every((phase) =>
-      isPhaseTerminal(phase.status),
+    return Object.values(state.phases).every(
+      (phase) =>
+        phase.status !== PhaseStatus.RUNNING &&
+        phase.status !== PhaseStatus.WAITING,
     );
   }
 }

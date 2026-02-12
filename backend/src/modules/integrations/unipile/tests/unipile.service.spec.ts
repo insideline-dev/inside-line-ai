@@ -177,6 +177,51 @@ describe('UnipileService', () => {
       );
     });
 
+    it('should return profile even if cache write fails', async () => {
+      cacheService.getCached.mockResolvedValueOnce(null);
+      cacheService.setCache.mockRejectedValueOnce(new Error('db write failed'));
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          id: 'profile-123',
+          first_name: 'John',
+          last_name: 'Doe',
+          headline: 'Software Engineer at TechCorp',
+          location: 'San Francisco, CA',
+          profile_url: 'https://linkedin.com/in/john-doe-123',
+          profile_image_url: 'https://example.com/photo.jpg',
+          summary: 'Experienced software engineer...',
+          current_company: {
+            name: 'TechCorp',
+            title: 'Senior Engineer',
+          },
+          experience: [
+            {
+              company: 'TechCorp',
+              title: 'Senior Engineer',
+              start_date: '2020-01',
+              end_date: null,
+              current: true,
+            },
+          ],
+          education: [
+            {
+              school: 'MIT',
+              degree: 'BS',
+              field_of_study: 'Computer Science',
+              start_year: 2012,
+              end_year: 2016,
+            },
+          ],
+        }),
+      });
+
+      const result = await service.getProfile('user-1', 'https://linkedin.com/in/john-doe-123');
+
+      expect(result).toEqual(mockProfile);
+      expect(cacheService.setCache).toHaveBeenCalledTimes(1);
+    });
+
     it('should return null if profile not found (404)', async () => {
       cacheService.getCached.mockResolvedValueOnce(null);
       (global.fetch as jest.Mock).mockResolvedValueOnce({

@@ -239,6 +239,7 @@ function AdminReviewPage() {
               evaluation={evaluation}
               teamMembers={startup.teamMembers || []}
               teamWeight={stageWeights?.team}
+              companyName={startup.name}
             />
           </TabsContent>
 

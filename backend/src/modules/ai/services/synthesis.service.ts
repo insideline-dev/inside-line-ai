@@ -255,6 +255,7 @@ export class SynthesisService {
         background: member.background,
         strengths: member.strengths,
         concerns: member.concerns,
+        scrapedCandidate: Boolean(scraped),
         linkedinUrl: scraped?.linkedinUrl,
         enrichmentStatus: scraped?.enrichmentStatus ?? "not_found",
         linkedinAnalysis: linkedinProfile
@@ -281,6 +282,7 @@ export class SynthesisService {
         background: "Background pending team evaluation analysis.",
         strengths: [],
         concerns: [],
+        scrapedCandidate: true,
         linkedinUrl: scraped.linkedinUrl,
         enrichmentStatus: scraped.enrichmentStatus,
         linkedinAnalysis: scraped.linkedinProfile

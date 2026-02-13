@@ -21,6 +21,13 @@ interface TeamMemberInput {
   linkedinUrl?: string;
 }
 
+interface TeamBioInput {
+  name: string;
+  role: string;
+  bio: string;
+  imageUrl?: string;
+}
+
 @Injectable()
 export class ScrapingService {
   private readonly logger = new Logger(ScrapingService.name);
@@ -57,12 +64,28 @@ export class ScrapingService {
     }
 
     const scrapeErrors: ScrapeError[] = [];
-    const teamMembers = this.mapTeamMembers(record.teamMembers ?? []);
+    const submittedTeamMembers = this.mapTeamMembers(record.teamMembers ?? []);
     this.logger.debug(
-      `[Scraping] Loaded startup context | website=${record.website ?? "none"} | teamMembers=${teamMembers.length}`,
+      `[Scraping] Loaded startup context | website=${record.website ?? "none"} | submittedTeamMembers=${submittedTeamMembers.length}`,
     );
 
     const website = await this.scrapeWebsite(record.website, scrapeErrors);
+    const discoveredWebsiteLeaders = this.extractLeadershipCandidates(
+      website?.teamBios ?? [],
+    );
+    const discoveredLinkedinLeaders = await this.discoverCompanyLinkedinLeadership(
+      record.name,
+      [...submittedTeamMembers, ...discoveredWebsiteLeaders],
+    );
+    const teamMembers = this.mergeTeamMembers(
+      submittedTeamMembers,
+      discoveredWebsiteLeaders,
+      discoveredLinkedinLeaders,
+    );
+    this.logger.log(
+      `[Scraping] Team member seed built | submitted=${submittedTeamMembers.length} | discoveredWebsiteLeaders=${discoveredWebsiteLeaders.length} | discoveredLinkedinLeaders=${discoveredLinkedinLeaders.length} | final=${teamMembers.length}`,
+    );
+
     const enrichedTeam = await this.enrichTeamMembers(
       record.userId,
       teamMembers,
@@ -110,6 +133,9 @@ export class ScrapingService {
       startupId,
       startupName: record.name,
       startupWebsite: record.website ?? null,
+      submittedTeamMembers,
+      discoveredWebsiteLeadershipTeamMembers: discoveredWebsiteLeaders,
+      discoveredLinkedinLeadershipTeamMembers: discoveredLinkedinLeaders,
       requestedTeamMembers: teamMembers,
       scrapingResult: {
         websiteUrl: result.websiteUrl ?? null,
@@ -136,6 +162,78 @@ export class ScrapingService {
       role: member.role,
       linkedinUrl: member.linkedinUrl || undefined,
     }));
+  }
+
+  private extractLeadershipCandidates(teamBios: TeamBioInput[]): TeamMemberInput[] {
+    const leadershipRolePattern =
+      /\b(founder|co[\s-]?founder|chief|ceo|cto|coo|cfo|cmo|cpo|president|vice president|vp|head|director|managing director|general manager|partner)\b/i;
+
+    const results: TeamMemberInput[] = [];
+    for (const bio of teamBios) {
+      const name = bio.name?.trim();
+      const role = bio.role?.trim();
+      if (!name || name.length < 3) {
+        continue;
+      }
+      if (!role || !leadershipRolePattern.test(role)) {
+        continue;
+      }
+
+      results.push({
+        name,
+        role,
+      });
+    }
+
+    return results.slice(0, 8);
+  }
+
+  private mergeTeamMembers(
+    submitted: TeamMemberInput[],
+    discoveredFromWebsite: TeamMemberInput[],
+    discoveredFromLinkedin: TeamMemberInput[],
+  ): TeamMemberInput[] {
+    const byName = new Map<string, TeamMemberInput>();
+
+    const upsert = (member: TeamMemberInput) => {
+      const key = member.name.trim().toLowerCase();
+      const existing = byName.get(key);
+      if (!existing) {
+        byName.set(key, member);
+        return;
+      }
+
+      byName.set(key, {
+        ...existing,
+        ...member,
+        role: existing.role || member.role,
+        linkedinUrl: existing.linkedinUrl || member.linkedinUrl,
+      });
+    };
+
+    submitted.forEach(upsert);
+    discoveredFromWebsite.forEach(upsert);
+    discoveredFromLinkedin.forEach(upsert);
+
+    return Array.from(byName.values());
+  }
+
+  private async discoverCompanyLinkedinLeadership(
+    companyName: string,
+    existingMembers: TeamMemberInput[],
+  ): Promise<TeamMemberInput[]> {
+    try {
+      return await this.linkedinEnrichment.discoverCompanyLeadershipMembers(
+        companyName,
+        existingMembers,
+      );
+    } catch (error) {
+      const message = this.asMessage(error);
+      this.logger.warn(
+        `[Scraping] Company LinkedIn leadership discovery failed for ${companyName}: ${message}`,
+      );
+      return [];
+    }
   }
 
   private async scrapeWebsite(

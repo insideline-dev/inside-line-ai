@@ -161,7 +161,7 @@ describe('UnipileService', () => {
 
       expect(result).toEqual(mockProfile);
       expect(global.fetch).toHaveBeenCalledWith(
-        'https://api.unipile.com/api/v1/users/john-doe-123?account_id=test-account-id',
+        'https://api.unipile.com/api/v1/users/john-doe-123?account_id=test-account-id&linkedin_sections=*',
         expect.objectContaining({
           method: 'GET',
           headers: expect.objectContaining({

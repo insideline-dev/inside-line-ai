@@ -12,6 +12,7 @@ import type {
   EvaluationResult,
   ExtractionResult,
   ResearchResult,
+  ScrapingResult,
   SynthesisResult,
 } from "../interfaces/phase-results.interface";
 import {
@@ -71,7 +72,7 @@ export class SynthesisService {
       evaluation,
     );
 
-    await this.persistResults(startupId, synthesis, evaluation, research);
+    await this.persistResults(startupId, synthesis, evaluation, scraping, research);
 
     this.logger.log(
       `[Synthesis] ✅ Results persisted | Score: ${synthesis.overallScore} | KeyStrengths: ${synthesis.strengths?.length} | KeyRisks: ${synthesis.concerns?.length}`,
@@ -137,6 +138,7 @@ export class SynthesisService {
     startupId: string,
     synthesis: SynthesisResult,
     evaluation: EvaluationResult,
+    scraping: ScrapingResult,
     research: ResearchResult,
   ): Promise<void> {
     const { overallScore, sectionScores } = synthesis;
@@ -145,6 +147,10 @@ export class SynthesisService {
 
     const evaluationValues = {
       teamData: evaluation.team,
+      teamMemberEvaluations: this.buildTeamMemberEvaluations(
+        evaluation.team.teamMembers,
+        scraping.teamMembers,
+      ),
       marketData: evaluation.market,
       productData: evaluation.product,
       tractionData: evaluation.traction,
@@ -193,6 +199,103 @@ export class SynthesisService {
         .set({ overallScore, percentileRank })
         .where(eq(startup.id, startupId));
     });
+  }
+
+  private buildTeamMemberEvaluations(
+    evaluatedMembers: Array<{
+      name: string;
+      role: string;
+      background: string;
+      strengths: string[];
+      concerns: string[];
+    }>,
+    scrapedMembers: Array<{
+      name: string;
+      role?: string;
+      linkedinUrl?: string;
+      enrichmentStatus: "success" | "not_configured" | "not_found" | "error";
+      linkedinProfile?: {
+        headline: string;
+        summary: string;
+        currentCompany?: {
+          name: string;
+          title: string;
+        } | null;
+        experience: Array<{
+          title: string;
+          company: string;
+          duration: string;
+          location?: string;
+          description?: string;
+          startDate?: string;
+          endDate?: string | null;
+        }>;
+        education: Array<{
+          school: string;
+          degree: string;
+          field: string;
+          startDate?: string | null;
+          endDate?: string | null;
+          description?: string;
+        }>;
+      };
+    }>,
+  ): Array<Record<string, unknown>> {
+    const scrapedByName = new Map(
+      scrapedMembers.map((member) => [member.name.trim().toLowerCase(), member] as const),
+    );
+
+    const merged = evaluatedMembers.map((member) => {
+      const scraped = scrapedByName.get(member.name.trim().toLowerCase());
+      const linkedinProfile = scraped?.linkedinProfile;
+
+      return {
+        name: member.name,
+        role: member.role || scraped?.role || "Team Member",
+        background: member.background,
+        strengths: member.strengths,
+        concerns: member.concerns,
+        linkedinUrl: scraped?.linkedinUrl,
+        enrichmentStatus: scraped?.enrichmentStatus ?? "not_found",
+        linkedinAnalysis: linkedinProfile
+          ? {
+              headline: linkedinProfile.headline,
+              summary: linkedinProfile.summary,
+              currentCompany: linkedinProfile.currentCompany,
+              experience: linkedinProfile.experience,
+              education: linkedinProfile.education,
+            }
+          : undefined,
+      };
+    });
+
+    for (const scraped of scrapedMembers) {
+      const key = scraped.name.trim().toLowerCase();
+      if (merged.some((member) => String(member.name).trim().toLowerCase() === key)) {
+        continue;
+      }
+
+      merged.push({
+        name: scraped.name,
+        role: scraped.role || "Team Member",
+        background: "Background pending team evaluation analysis.",
+        strengths: [],
+        concerns: [],
+        linkedinUrl: scraped.linkedinUrl,
+        enrichmentStatus: scraped.enrichmentStatus,
+        linkedinAnalysis: scraped.linkedinProfile
+          ? {
+              headline: scraped.linkedinProfile.headline,
+              summary: scraped.linkedinProfile.summary,
+              currentCompany: scraped.linkedinProfile.currentCompany,
+              experience: scraped.linkedinProfile.experience,
+              education: scraped.linkedinProfile.education,
+            }
+          : undefined,
+      });
+    }
+
+    return merged;
   }
 
   private async performPostSynthesisOps(

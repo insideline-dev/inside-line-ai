@@ -125,15 +125,26 @@ export interface EnrichedTeamMember {
   linkedinProfile?: {
     headline: string;
     summary: string;
+    currentCompany?: {
+      name: string;
+      title: string;
+    } | null;
     experience: Array<{
       title: string;
       company: string;
       duration: string;
+      location?: string;
+      description?: string;
+      startDate?: string;
+      endDate?: string | null;
     }>;
     education: Array<{
       school: string;
       degree: string;
       field: string;
+      startDate?: string | null;
+      endDate?: string | null;
+      description?: string;
     }>;
   };
   enrichmentStatus: "success" | "not_configured" | "not_found" | "error";

@@ -136,15 +136,28 @@ export class LinkedinEnrichmentService {
     return {
       headline: profile.headline || "",
       summary: profile.summary || "",
+      currentCompany: profile.currentCompany
+        ? {
+            name: profile.currentCompany.name || "",
+            title: profile.currentCompany.title || "",
+          }
+        : null,
       experience: profile.experience.map((entry) => ({
         title: entry.title,
         company: entry.company,
         duration: this.formatDuration(entry.startDate, entry.endDate, entry.current),
+        location: entry.location || "",
+        description: entry.description || "",
+        startDate: this.formatTimelineDate(entry.startDate) || undefined,
+        endDate: entry.current ? null : this.formatTimelineDate(entry.endDate),
       })),
       education: profile.education.map((entry) => ({
         school: entry.school,
         degree: entry.degree,
         field: entry.fieldOfStudy,
+        startDate: entry.startDate || (entry.startYear ? String(entry.startYear) : null),
+        endDate: entry.endDate || (entry.endYear ? String(entry.endYear) : null),
+        description: entry.description || "",
       })),
     };
   }
@@ -154,13 +167,27 @@ export class LinkedinEnrichmentService {
     endDate: string | null,
     current: boolean,
   ): string {
-    const start = startDate?.trim() || "Unknown";
+    const start = this.formatTimelineDate(startDate) || "Unknown";
     if (current) {
       return `${start} - Present`;
     }
-    if (endDate?.trim()) {
-      return `${start} - ${endDate}`;
+    const end = this.formatTimelineDate(endDate);
+    if (end) {
+      return `${start} - ${end}`;
     }
     return start;
+  }
+
+  private formatTimelineDate(value: string | null | undefined): string | null {
+    if (!value || value.trim().length === 0) {
+      return null;
+    }
+
+    const yearMatch = value.match(/\b(19|20)\d{2}\b/);
+    if (yearMatch) {
+      return yearMatch[0];
+    }
+
+    return value.trim();
   }
 }

@@ -104,6 +104,8 @@ export const envSchema = z.object({
   SCRAPING_BATCH_SIZE: z.coerce.number().default(5),
   WEBSITE_CACHE_TTL_HOURS: z.coerce.number().default(24),
   LINKEDIN_CACHE_TTL_DAYS: z.coerce.number().default(7),
+  AI_SCRAPING_DEBUG_LOG_ENABLED: z.coerce.boolean().default(true),
+  AI_SCRAPING_DEBUG_LOG_PATH: z.string().default("logs/ai-scraping-debug.jsonl"),
   SCRAPING_MAX_LINKS_PER_PAGE: z.coerce.number().default(100),
   SCRAPING_MAX_PATH_DEPTH: z.coerce.number().default(4),
   SCRAPING_BATCH_DELAY_MS: z.coerce.number().default(500),

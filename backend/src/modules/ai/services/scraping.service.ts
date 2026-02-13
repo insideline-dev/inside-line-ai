@@ -1,5 +1,8 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, Optional } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { eq } from "drizzle-orm";
+import { appendFile, mkdir } from "fs/promises";
+import { dirname, resolve } from "path";
 import { DrizzleService } from "../../../database";
 import { startup } from "../../startup/entities";
 import type {
@@ -21,13 +24,24 @@ interface TeamMemberInput {
 @Injectable()
 export class ScrapingService {
   private readonly logger = new Logger(ScrapingService.name);
+  private readonly debugLogEnabled: boolean;
+  private readonly debugLogPath: string;
 
   constructor(
     private drizzle: DrizzleService,
     private websiteScraper: WebsiteScraperService,
     private linkedinEnrichment: LinkedinEnrichmentService,
     private scrapingCache: ScrapingCacheService,
-  ) {}
+    @Optional() private config?: ConfigService,
+  ) {
+    this.debugLogEnabled =
+      this.config?.get<boolean>("AI_SCRAPING_DEBUG_LOG_ENABLED", true) ?? true;
+    this.debugLogPath =
+      this.config?.get<string>(
+        "AI_SCRAPING_DEBUG_LOG_PATH",
+        "logs/ai-scraping-debug.jsonl",
+      ) ?? "logs/ai-scraping-debug.jsonl";
+  }
 
   async run(startupId: string): Promise<ScrapingResult> {
     this.logger.log(`[Scraping] Starting scraping phase for startup ${startupId}`);
@@ -91,6 +105,25 @@ export class ScrapingService {
     } else {
       this.logger.warn(`[Scraping] No website data scraped for ${record.website || "unknown URL"}`);
     }
+
+    await this.writeDebugLog({
+      startupId,
+      startupName: record.name,
+      startupWebsite: record.website ?? null,
+      requestedTeamMembers: teamMembers,
+      scrapingResult: {
+        websiteUrl: result.websiteUrl ?? null,
+        websiteSummary: result.websiteSummary ?? null,
+        websiteCaptured: Boolean(result.website),
+        enrichedTeamMembers: result.teamMembers,
+        scrapeErrors: result.scrapeErrors,
+      },
+      counts: {
+        requestedTeamMembers: teamMembers.length,
+        enrichedTeamMembers: result.teamMembers.length,
+        scrapeErrors: result.scrapeErrors.length,
+      },
+    });
 
     return result;
   }
@@ -320,5 +353,36 @@ export class ScrapingService {
 
   private asMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
+  }
+
+  private async writeDebugLog(payload: Record<string, unknown>): Promise<void> {
+    if (!this.debugLogEnabled) {
+      return;
+    }
+
+    try {
+      const resolvedPath = this.resolveLogPath(this.debugLogPath);
+      await mkdir(dirname(resolvedPath), { recursive: true });
+
+      await appendFile(
+        resolvedPath,
+        `${JSON.stringify({
+          timestamp: new Date().toISOString(),
+          ...payload,
+        })}\n`,
+        "utf8",
+      );
+    } catch (error) {
+      const message = this.asMessage(error);
+      this.logger.warn(`[Scraping] Failed to write debug log: ${message}`);
+    }
+  }
+
+  private resolveLogPath(filePath: string): string {
+    if (filePath.startsWith("/")) {
+      return filePath;
+    }
+
+    return resolve(process.cwd(), filePath);
   }
 }

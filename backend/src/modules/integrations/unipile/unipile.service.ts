@@ -100,7 +100,9 @@ export class UnipileService {
   private async fetchProfileFromAPI(profileUrl: string): Promise<LinkedInProfile | null> {
     const { dsn, apiKey, accountId } = this.config!;
     const identifier = this.extractIdentifierFromUrl(profileUrl);
-    const url = `https://${dsn}/api/v1/users/${identifier}?account_id=${accountId}`;
+    // linkedin_sections=* is required by Unipile to return extended profile data
+    // such as experience/education instead of only basic identity fields.
+    const url = `https://${dsn}/api/v1/users/${identifier}?account_id=${accountId}&linkedin_sections=*`;
 
     const response = await fetch(url, {
       method: 'GET',
@@ -162,6 +164,10 @@ export class UnipileService {
    * Map Unipile API response to our LinkedInProfile interface
    */
   private mapUnipileProfileToLinkedInProfile(data: any): LinkedInProfile {
+    const experienceEntries =
+      data.work_experience || data.experience || data.experiences || data.positions || [];
+    const educationEntries = data.education || data.educations || [];
+
     return {
       id: data.id || data.profile_id || '',
       firstName: data.first_name || data.firstName || '',
@@ -177,21 +183,53 @@ export class UnipileService {
             title: data.current_company.title || '',
           }
         : null,
-      experience: (data.experience || []).map((exp: any) => ({
+      experience: experienceEntries.map((exp: any) => ({
         company: exp.company || '',
-        title: exp.title || '',
-        startDate: exp.start_date || exp.startDate || '',
-        endDate: exp.end_date || exp.endDate || null,
-        current: exp.current || false,
+        title: exp.title || exp.position || '',
+        startDate: exp.start_date || exp.startDate || exp.start || '',
+        endDate: exp.end_date || exp.endDate || exp.end || null,
+        current:
+          typeof exp.current === 'boolean'
+            ? exp.current
+            : !(exp.end_date || exp.endDate || exp.end),
+        location: exp.location || '',
+        description: exp.description || '',
+        companyPictureUrl: exp.company_picture_url || exp.companyPictureUrl || null,
       })),
-      education: (data.education || []).map((edu: any) => ({
+      education: educationEntries.map((edu: any) => ({
         school: edu.school || '',
         degree: edu.degree || '',
         fieldOfStudy: edu.field_of_study || edu.fieldOfStudy || '',
-        startYear: edu.start_year || edu.startYear || 0,
-        endYear: edu.end_year || edu.endYear || null,
+        startYear:
+          edu.start_year ||
+          edu.startYear ||
+          this.extractYear(edu.start || edu.startDate) ||
+          0,
+        endYear:
+          edu.end_year ||
+          edu.endYear ||
+          this.extractYear(edu.end || edu.endDate) ||
+          null,
+        startDate: edu.start || edu.startDate || null,
+        endDate: edu.end || edu.endDate || null,
+        description: edu.description || '',
+        schoolPictureUrl: edu.school_picture_url || edu.schoolPictureUrl || null,
       })),
     };
+  }
+
+  private extractYear(value: unknown): number | null {
+    if (typeof value !== 'string' || value.trim().length === 0) {
+      return null;
+    }
+
+    const match = value.match(/\b(19|20)\d{2}\b/);
+    if (!match) {
+      return null;
+    }
+
+    const year = Number(match[0]);
+    return Number.isFinite(year) ? year : null;
   }
 
   /**

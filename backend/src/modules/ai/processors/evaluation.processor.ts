@@ -38,17 +38,22 @@ export class EvaluationProcessor
     private notificationGateway: NotificationGateway,
   ) {
     const redisUrl = config.get<string>("REDIS_URL", "redis://localhost:6379");
+    const queuePrefix = config.get<string>("QUEUE_PREFIX");
     super(
       QUEUE_NAMES.AI_EVALUATION,
       parseRedisUrl(redisUrl),
       QUEUE_CONCURRENCY[QUEUE_NAMES.AI_EVALUATION],
+      queuePrefix,
     );
   }
 
   async onModuleInit() {
     await this.initialize();
     if (!this.worker) {
-      throw new Error('EvaluationProcessor failed to initialize: Worker is null');
+      this.logger.warn(
+        "EvaluationProcessor initialized without an active worker; recovery will retry automatically.",
+      );
+      return;
     }
     this.logger.log(`✅ EvaluationProcessor ready | Queue: ${QUEUE_NAMES.AI_EVALUATION} | Concurrency: ${QUEUE_CONCURRENCY[QUEUE_NAMES.AI_EVALUATION]}`);
   }

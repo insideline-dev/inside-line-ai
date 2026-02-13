@@ -36,6 +36,7 @@ export const envSchema = z.object({
   QUEUE_MAX_PER_USER_AI_EVALUATION: z.coerce.number().default(5),
   QUEUE_MAX_DEPTH_AI_SYNTHESIS: z.coerce.number().default(500),
   QUEUE_MAX_PER_USER_AI_SYNTHESIS: z.coerce.number().default(5),
+  QUEUE_PREFIX: z.string().optional(),
   AI_QUEUE_CONCURRENCY_EXTRACTION: z.coerce.number().default(4),
   AI_QUEUE_CONCURRENCY_SCRAPING: z.coerce.number().default(4),
   AI_QUEUE_CONCURRENCY_RESEARCH: z.coerce.number().default(6),

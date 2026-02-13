@@ -15,7 +15,13 @@ export class TaskProcessor
 
   constructor(private config: ConfigService) {
     const redisUrl = config.get<string>('REDIS_URL', 'redis://localhost:6379');
-    super(QUEUE_NAMES.TASK, parseRedisUrl(redisUrl), QUEUE_CONCURRENCY[QUEUE_NAMES.TASK]);
+    const queuePrefix = config.get<string>('QUEUE_PREFIX');
+    super(
+      QUEUE_NAMES.TASK,
+      parseRedisUrl(redisUrl),
+      QUEUE_CONCURRENCY[QUEUE_NAMES.TASK],
+      queuePrefix,
+    );
   }
 
   async onModuleDestroy() {

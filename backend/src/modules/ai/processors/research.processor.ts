@@ -38,17 +38,22 @@ export class ResearchProcessor
     private notificationGateway: NotificationGateway,
   ) {
     const redisUrl = config.get<string>("REDIS_URL", "redis://localhost:6379");
+    const queuePrefix = config.get<string>("QUEUE_PREFIX");
     super(
       QUEUE_NAMES.AI_RESEARCH,
       parseRedisUrl(redisUrl),
       QUEUE_CONCURRENCY[QUEUE_NAMES.AI_RESEARCH],
+      queuePrefix,
     );
   }
 
   async onModuleInit() {
     await this.initialize();
     if (!this.worker) {
-      throw new Error('ResearchProcessor failed to initialize: Worker is null');
+      this.logger.warn(
+        "ResearchProcessor initialized without an active worker; recovery will retry automatically.",
+      );
+      return;
     }
     this.logger.log(`✅ ResearchProcessor ready | Queue: ${QUEUE_NAMES.AI_RESEARCH} | Concurrency: ${QUEUE_CONCURRENCY[QUEUE_NAMES.AI_RESEARCH]}`);
   }

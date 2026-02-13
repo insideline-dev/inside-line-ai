@@ -1,6 +1,6 @@
-import { Job, Worker, ConnectionOptions, UnrecoverableError } from "bullmq";
+import { Job, Worker, Queue, ConnectionOptions, UnrecoverableError } from "bullmq";
 import { Logger, BadRequestException } from "@nestjs/common";
-import Redis, { type RedisOptions } from "ioredis";
+import type { RedisOptions } from "ioredis";
 import type { BaseJobData } from "../interfaces/job-data.interface";
 import type { BaseJobResult } from "../interfaces/job-result.interface";
 import { buildBullRedisConnection } from "../redis-connection.util";
@@ -20,6 +20,10 @@ const NON_RETRYABLE_PATTERNS = [
   'out of range',
 ];
 
+const HEALTH_CHECK_INTERVAL_MS = 15_000;
+const STALLED_CONSUMPTION_THRESHOLD_MS = 45_000;
+const RECOVERY_DELAY_MS = 5_000;
+
 /**
  * Parse REDIS_URL into ConnectionOptions
  */
@@ -35,11 +39,6 @@ export abstract class BaseProcessor<
   TData extends BaseJobData,
   TResult extends BaseJobResult,
 > {
-  private static readonly sharedRedisConnections = new Map<
-    string,
-    { client: unknown; refCount: number }
-  >();
-
   protected abstract readonly logger: Logger;
   protected worker?: Worker;
   private initialized = false;
@@ -47,13 +46,18 @@ export abstract class BaseProcessor<
   private recovering = false;
   private restartTimer?: NodeJS.Timeout;
   private healthCheckTimer?: NodeJS.Timeout;
-  private sharedConnectionKey?: string;
-  private sharedConnectionClient?: { status?: string };
+  private probeQueue?: Queue;
+  private probeQueueConnectionClient?: {
+    quit: () => Promise<unknown>;
+    disconnect: () => void;
+  };
+  private lastJobActivityAt = Date.now();
 
   constructor(
     protected readonly queueName: string,
     protected readonly redisConnection: ConnectionOptions,
     protected readonly concurrency: number,
+    protected readonly queuePrefix?: string,
   ) {}
 
   /**
@@ -70,6 +74,7 @@ export abstract class BaseProcessor<
         async (job: Job<TData>) => this.processJob(job),
         {
           connection: workerConnection,
+          ...(this.queuePrefix ? { prefix: this.queuePrefix } : {}),
           concurrency: this.concurrency,
           // Don't auto-run if connection fails - wait for manual retry
           autorun: true,
@@ -77,11 +82,21 @@ export abstract class BaseProcessor<
       );
 
       this.worker.on('completed', (job) => {
+        this.lastJobActivityAt = Date.now();
         this.logger.log(`Job ${job.id} completed`);
       });
 
       this.worker.on('failed', (job, err) => {
+        this.lastJobActivityAt = Date.now();
         this.logger.error(`Job ${job?.id} failed: ${err.message}`);
+      });
+
+      this.worker.on('active', () => {
+        this.lastJobActivityAt = Date.now();
+      });
+
+      this.worker.on('stalled', (jobId) => {
+        this.logger.warn(`Job ${jobId} stalled in queue ${this.queueName}`);
       });
 
       // Only log connection errors once, not continuously
@@ -106,22 +121,35 @@ export abstract class BaseProcessor<
         this.scheduleRecovery('worker closed');
       });
 
-      this.initialized = true;
       this.shuttingDown = false;
+      this.lastJobActivityAt = Date.now();
 
       // Wait for worker to be ready before marking as initialized
       // This ensures the worker has connected to Redis and is polling for jobs
-      await this.worker.waitUntilReady().catch((err) => {
-        this.logger.warn(`Worker ready check failed for ${this.queueName}: ${String(err)}`);
-      });
+      const waitUntilReady = (
+        this.worker as { waitUntilReady?: () => Promise<unknown> }
+      ).waitUntilReady;
+      if (typeof waitUntilReady === "function") {
+        await waitUntilReady.call(this.worker);
+      }
 
+      this.initialized = true;
       this.startHealthChecks();
       this.logger.log(
         `Worker initialized for queue ${this.queueName} with concurrency ${this.concurrency}`,
       );
     } catch (error) {
+      if (this.worker) {
+        await this.worker.close().catch(() => undefined);
+        this.worker = undefined;
+      }
+      this.initialized = false;
+      const message = error instanceof Error ? error.message : String(error);
+      if (!this.shuttingDown && !this.recovering) {
+        this.scheduleRecovery(`initialization failed: ${message}`);
+      }
       this.logger.warn(
-        `Failed to initialize worker for ${this.queueName}: Redis unavailable. Queue processing disabled.`,
+        `Failed to initialize worker for ${this.queueName}: ${message}.`,
       );
     }
   }
@@ -202,7 +230,17 @@ export abstract class BaseProcessor<
       this.logger.log(`Worker closed for queue ${this.queueName}`);
       this.worker = undefined;
     }
-    await this.releaseWorkerConnection();
+    if (this.probeQueue) {
+      await this.probeQueue.close().catch(() => undefined);
+      this.probeQueue = undefined;
+    }
+    if (this.probeQueueConnectionClient) {
+      const client = this.probeQueueConnectionClient;
+      this.probeQueueConnectionClient = undefined;
+      await client.quit().catch(() => {
+        client.disconnect();
+      });
+    }
     this.initialized = false;
   }
 
@@ -229,7 +267,7 @@ export abstract class BaseProcessor<
     this.restartTimer = setTimeout(() => {
       this.restartTimer = undefined;
       void this.recoverWorker(reason);
-    }, 1000);
+    }, RECOVERY_DELAY_MS);
   }
 
   private async recoverWorker(reason: string): Promise<void> {
@@ -238,6 +276,7 @@ export abstract class BaseProcessor<
     }
 
     this.recovering = true;
+    let recovered = false;
     this.logger.warn(`Recovering worker for ${this.queueName}: ${reason}`);
 
     try {
@@ -248,10 +287,15 @@ export abstract class BaseProcessor<
       this.initialized = false;
 
       if (!this.shuttingDown) {
-        this.initialize();
+        await this.initialize();
+        recovered = this.initialized;
       }
     } finally {
       this.recovering = false;
+    }
+
+    if (!recovered && !this.shuttingDown) {
+      this.scheduleRecovery(`recovery attempt failed: ${reason}`);
     }
   }
 
@@ -262,7 +306,7 @@ export abstract class BaseProcessor<
 
     this.healthCheckTimer = setInterval(() => {
       void this.runHealthCheck();
-    }, 30_000);
+    }, HEALTH_CHECK_INTERVAL_MS);
   }
 
   private clearHealthChecks(): void {
@@ -285,19 +329,34 @@ export abstract class BaseProcessor<
     try {
       const client = await this.worker.client;
       await client.ping();
-      if (
-        this.sharedConnectionClient &&
-        (this.sharedConnectionClient.status === "end" ||
-          this.sharedConnectionClient.status === "close")
-      ) {
-        this.scheduleRecovery(
-          `shared redis client status is ${this.sharedConnectionClient.status}`,
-        );
-      }
+      await this.checkQueueConsumptionLag();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.scheduleRecovery(`health check ping failed: ${message}`);
     }
+  }
+
+  private async checkQueueConsumptionLag(): Promise<void> {
+    const queue = this.getOrCreateProbeQueue();
+    const counts = await queue.getJobCounts("waiting", "prioritized", "active");
+    const waiting = counts.waiting ?? 0;
+    const prioritized = counts.prioritized ?? 0;
+    const active = counts.active ?? 0;
+    const pending = waiting + prioritized;
+
+    if (pending === 0 || active > 0) {
+      this.lastJobActivityAt = Date.now();
+      return;
+    }
+
+    const idleForMs = Date.now() - this.lastJobActivityAt;
+    if (idleForMs < STALLED_CONSUMPTION_THRESHOLD_MS) {
+      return;
+    }
+
+    this.scheduleRecovery(
+      `queue appears stalled (pending=${pending}, active=${active}, idle=${idleForMs}ms)`,
+    );
   }
 
   private acquireWorkerConnection(): ConnectionOptions {
@@ -305,51 +364,42 @@ export abstract class BaseProcessor<
       return this.redisConnection;
     }
 
-    const normalized = this.normalizeRedisOptions(this.redisConnection);
-    const key = this.connectionKey(normalized);
-    const existing = BaseProcessor.sharedRedisConnections.get(key);
-    if (existing) {
-      existing.refCount += 1;
-      this.sharedConnectionKey = key;
-      this.sharedConnectionClient = existing.client as { status?: string };
-      return existing.client as ConnectionOptions;
-    }
-
-    const client = new Redis(normalized);
-    const entry = { client, refCount: 1 };
-    BaseProcessor.sharedRedisConnections.set(key, entry);
-    this.sharedConnectionKey = key;
-    this.sharedConnectionClient = client;
-    return client as unknown as ConnectionOptions;
+    return this.normalizeRedisOptions(this.redisConnection);
   }
 
-  private async releaseWorkerConnection(): Promise<void> {
-    if (!this.sharedConnectionKey) {
-      return;
+  private getOrCreateProbeQueue(): Queue {
+    if (this.probeQueue) {
+      return this.probeQueue;
     }
 
-    const key = this.sharedConnectionKey;
-    const entry = BaseProcessor.sharedRedisConnections.get(key);
-    this.sharedConnectionKey = undefined;
-    this.sharedConnectionClient = undefined;
-
-    if (!entry) {
-      return;
-    }
-
-    entry.refCount -= 1;
-    if (entry.refCount > 0) {
-      return;
-    }
-
-    BaseProcessor.sharedRedisConnections.delete(key);
-    const client = entry.client as {
-      quit: () => Promise<unknown>;
-      disconnect: () => void;
-    };
-    await client.quit().catch(() => {
-      client.disconnect();
+    const probeConnection = this.acquireProbeQueueConnection();
+    this.probeQueue = new Queue(this.queueName, {
+      connection: probeConnection,
+      ...(this.queuePrefix ? { prefix: this.queuePrefix } : {}),
     });
+    this.probeQueue.on("error", (error) => {
+      this.logger.warn(
+        `Queue probe error for ${this.queueName}: ${String(error)}`,
+      );
+    });
+    return this.probeQueue;
+  }
+
+  private acquireProbeQueueConnection(): ConnectionOptions {
+    if (this.hasRedisLikeShape(this.redisConnection)) {
+      const duplicate = (
+        this.redisConnection as {
+          duplicate: () => unknown;
+        }
+      ).duplicate() as {
+        quit: () => Promise<unknown>;
+        disconnect: () => void;
+      };
+      this.probeQueueConnectionClient = duplicate;
+      return duplicate as unknown as ConnectionOptions;
+    }
+
+    return this.normalizeRedisOptions(this.redisConnection);
   }
 
   private hasRedisLikeShape(connection: ConnectionOptions): boolean {
@@ -376,12 +426,4 @@ export abstract class BaseProcessor<
     return options;
   }
 
-  private connectionKey(options: RedisOptions): string {
-    const host = options.host ?? "localhost";
-    const port = options.port ?? 6379;
-    const db = options.db ?? 0;
-    const username = options.username ?? "";
-    const tlsEnabled = options.tls ? "tls" : "plain";
-    return `${host}:${port}:${db}:${username}:${tlsEnabled}`;
-  }
 }

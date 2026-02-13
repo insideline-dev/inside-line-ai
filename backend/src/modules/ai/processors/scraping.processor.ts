@@ -37,17 +37,22 @@ export class ScrapingProcessor
     private notificationGateway: NotificationGateway,
   ) {
     const redisUrl = config.get<string>("REDIS_URL", "redis://localhost:6379");
+    const queuePrefix = config.get<string>("QUEUE_PREFIX");
     super(
       QUEUE_NAMES.AI_SCRAPING,
       parseRedisUrl(redisUrl),
       QUEUE_CONCURRENCY[QUEUE_NAMES.AI_SCRAPING],
+      queuePrefix,
     );
   }
 
   async onModuleInit() {
     await this.initialize();
     if (!this.worker) {
-      throw new Error('ScrapingProcessor failed to initialize: Worker is null');
+      this.logger.warn(
+        "ScrapingProcessor initialized without an active worker; recovery will retry automatically.",
+      );
+      return;
     }
     this.logger.log(`✅ ScrapingProcessor ready | Queue: ${QUEUE_NAMES.AI_SCRAPING} | Concurrency: ${QUEUE_CONCURRENCY[QUEUE_NAMES.AI_SCRAPING]}`);
   }

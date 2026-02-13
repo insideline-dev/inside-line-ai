@@ -35,7 +35,13 @@ export class PdfProcessor
     private storageService: StorageService,
   ) {
     const redisUrl = config.get<string>('REDIS_URL', 'redis://localhost:6379');
-    super(ANALYSIS_QUEUE_NAME, parseRedisUrl(redisUrl), ANALYSIS_QUEUE_CONFIG.concurrency);
+    const queuePrefix = config.get<string>('QUEUE_PREFIX');
+    super(
+      ANALYSIS_QUEUE_NAME,
+      parseRedisUrl(redisUrl),
+      ANALYSIS_QUEUE_CONFIG.concurrency,
+      queuePrefix,
+    );
   }
 
   onModuleInit() {

@@ -28,11 +28,13 @@ export class QueueService implements OnModuleDestroy {
   private readonly queueDepthLimits: QueueDepthLimits;
   private readonly redisConnectionOptions: ConnectionOptions;
   private readonly queueConnection: Redis;
+  private readonly queuePrefix?: string;
 
   constructor(private config: ConfigService) {
     this.queueDepthLimits = resolveQueueDepthLimits((key, defaultValue) =>
       this.config.get<number>(key, defaultValue),
     );
+    this.queuePrefix = this.resolveQueuePrefix();
     this.redisConnectionOptions = this.resolveRedisConnection();
     this.queueConnection = this.createQueueConnection();
     this.initializeQueues();
@@ -60,10 +62,17 @@ export class QueueService implements OnModuleDestroy {
     return client;
   }
 
+  private resolveQueuePrefix(): string | undefined {
+    const value = this.config.get<string>("QUEUE_PREFIX");
+    const trimmed = value?.trim();
+    return trimmed ? trimmed : undefined;
+  }
+
   private initializeQueues() {
     Object.values(QUEUE_NAMES).forEach((name) => {
       const queue = new Queue(name, {
-        connection: this.queueConnection as unknown as ConnectionOptions,
+        connection: this.redisConnectionOptions,
+        ...(this.queuePrefix ? { prefix: this.queuePrefix } : {}),
         defaultJobOptions: DEFAULT_JOB_OPTIONS,
       });
       this.queues.set(name, queue);
@@ -328,6 +337,7 @@ export class QueueService implements OnModuleDestroy {
 
     const events = new QueueEvents(queueName, {
       connection: this.redisConnectionOptions,
+      ...(this.queuePrefix ? { prefix: this.queuePrefix } : {}),
     });
     events.on("error", (error) => {
       this.logger.warn(

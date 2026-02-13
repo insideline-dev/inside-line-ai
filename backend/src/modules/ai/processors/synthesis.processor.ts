@@ -37,17 +37,22 @@ export class SynthesisProcessor
     private notificationGateway: NotificationGateway,
   ) {
     const redisUrl = config.get<string>("REDIS_URL", "redis://localhost:6379");
+    const queuePrefix = config.get<string>("QUEUE_PREFIX");
     super(
       QUEUE_NAMES.AI_SYNTHESIS,
       parseRedisUrl(redisUrl),
       QUEUE_CONCURRENCY[QUEUE_NAMES.AI_SYNTHESIS],
+      queuePrefix,
     );
   }
 
   async onModuleInit() {
     await this.initialize();
     if (!this.worker) {
-      throw new Error('SynthesisProcessor failed to initialize: Worker is null');
+      this.logger.warn(
+        "SynthesisProcessor initialized without an active worker; recovery will retry automatically.",
+      );
+      return;
     }
     this.logger.log(`✅ SynthesisProcessor ready | Queue: ${QUEUE_NAMES.AI_SYNTHESIS} | Concurrency: ${QUEUE_CONCURRENCY[QUEUE_NAMES.AI_SYNTHESIS]}`);
   }

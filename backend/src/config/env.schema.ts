@@ -99,6 +99,7 @@ export const envSchema = z.object({
   UNIPILE_ACCOUNT_ID: z.string().optional(),
   WEBSITE_SCRAPE_TIMEOUT_MS: z.coerce.number().default(30000),
   LINKEDIN_BATCH_SIZE: z.coerce.number().default(10),
+  LINKEDIN_COMPANY_DISCOVERY_MAX: z.coerce.number().default(6),
   SCRAPING_RATE_LIMIT_MS: z.coerce.number().default(1000),
   SCRAPING_MAX_SUBPAGES: z.coerce.number().default(20),
   SCRAPING_BATCH_SIZE: z.coerce.number().default(5),

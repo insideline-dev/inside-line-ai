@@ -14,6 +14,7 @@ import type { Evaluation } from "@/types/evaluation";
 interface TeamMember {
   name: string;
   role: string;
+  discovered?: boolean;
   linkedinUrl?: string;
   headline?: string;
   summary?: string;
@@ -51,32 +52,100 @@ interface TeamTabContentProps {
   teamMembers: TeamMember[];
   showScores?: boolean;
   teamWeight?: number;
+  companyName?: string;
 }
 
 function normalizeKey(value?: string) {
   return value?.trim().toLowerCase() || "";
 }
 
+function parseDuration(duration?: string) {
+  if (!duration) return { startDate: undefined, endDate: undefined, isCurrent: undefined };
+  const [startRaw, endRaw] = duration.split("-").map((part) => part?.trim());
+  if (!startRaw) return { startDate: undefined, endDate: undefined, isCurrent: undefined };
+  const isCurrent = !endRaw || /present/i.test(endRaw);
+  return {
+    startDate: startRaw,
+    endDate: isCurrent ? undefined : endRaw,
+    isCurrent,
+  };
+}
+
+function normalizeExperienceItems(
+  experience: Array<Record<string, unknown>> | undefined,
+) {
+  if (!experience || experience.length === 0) return [];
+
+  return experience.map((item) => {
+    const duration = typeof item.duration === "string" ? item.duration : undefined;
+    const parsed = parseDuration(duration);
+    return {
+      title: (item.title as string) || (item.position as string) || "Role",
+      position: (item.position as string) || (item.title as string) || "Role",
+      company: (item.company as string) || "",
+      location: (item.location as string) || "",
+      startDate: (item.startDate as string) || (item.start as string) || parsed.startDate,
+      endDate: (item.endDate as string) || (item.end as string) || parsed.endDate,
+      description: (item.description as string) || "",
+      isCurrent:
+        typeof item.isCurrent === "boolean" ? (item.isCurrent as boolean) : parsed.isCurrent,
+    };
+  });
+}
+
+function normalizeEducationItems(
+  education: Array<Record<string, unknown>> | undefined,
+) {
+  if (!education || education.length === 0) return [];
+
+  return education.map((item) => ({
+    school: (item.school as string) || "",
+    degree: (item.degree as string) || "",
+    fieldOfStudy: (item.fieldOfStudy as string) || (item.field as string) || "",
+    startDate:
+      (item.startDate as string) ||
+      (typeof item.startYear === "number" ? String(item.startYear) : undefined),
+    endDate:
+      (item.endDate as string) ||
+      (typeof item.endYear === "number" ? String(item.endYear) : undefined),
+  }));
+}
+
 function buildTeamMembers(
   evaluation: Evaluation | null,
   submittedMembers: TeamMember[],
+  companyName?: string,
 ): TeamMember[] {
   const teamData = evaluation?.teamData as any;
   const teamEvals = (evaluation?.teamMemberEvaluations as any[]) || [];
   const extractedFounders = teamData?.enrichedMembers || teamData?.founders || [];
-  const teamEvalMembers = teamData?.members || teamData?.teamEvaluation?.members || [];
+  const teamEvalMembers =
+    teamData?.teamMembers || teamData?.members || teamData?.teamEvaluation?.members || [];
   const researchTeamMembers =
     (evaluation as any)?.comprehensiveResearchData?.extractedData?.teamMembers ||
     [];
+  const submittedKeys = new Set(
+    (submittedMembers || []).map((member) => normalizeKey(member.name)).filter(Boolean),
+  );
+  const restrictToSubmitted = submittedKeys.size > 0;
+  const shouldInclude = (name?: string, candidate?: Record<string, unknown>) => {
+    const key = normalizeKey(name);
+    if (!key) return false;
+    if (!restrictToSubmitted) return true;
+    if (submittedKeys.has(key)) return true;
+    return candidate?.scrapedCandidate === true;
+  };
 
   const memberMap = new Map<string, any>();
 
   for (const evalMember of teamEvals) {
+    if (!shouldInclude(evalMember.name, evalMember)) continue;
     const key = normalizeKey(evalMember.name);
     if (key) memberMap.set(key, { ...evalMember, source: "evaluation" });
   }
 
   for (const researchMember of researchTeamMembers) {
+    if (!shouldInclude(researchMember.name)) continue;
     const key = normalizeKey(researchMember.name);
     if (key) {
       const existing = memberMap.get(key);
@@ -99,6 +168,7 @@ function buildTeamMembers(
   }
 
   for (const founder of extractedFounders) {
+    if (!shouldInclude(founder.name)) continue;
     const key = normalizeKey(founder.name);
     if (key) {
       const existing = memberMap.get(key);
@@ -117,14 +187,16 @@ function buildTeamMembers(
   }
 
   return merged.map((member: any) => {
+    const memberKey = normalizeKey(member.name);
+    const isSubmittedMember = submittedKeys.has(memberKey);
     const memberEval = teamEvals.find(
-      (e: any) => normalizeKey(e.name) === normalizeKey(member.name),
+      (e: any) => normalizeKey(e.name) === memberKey,
     );
     const founderData = extractedFounders.find(
-      (f: any) => normalizeKey(f.name) === normalizeKey(member.name),
+      (f: any) => normalizeKey(f.name) === memberKey,
     );
     const teamEvalData = teamEvalMembers.find(
-      (f: any) => normalizeKey(f.name) === normalizeKey(member.name),
+      (f: any) => normalizeKey(f.name) === memberKey,
     );
 
     const linkedinData =
@@ -133,6 +205,7 @@ function buildTeamMembers(
     return {
       name: member.name || "Unknown",
       role: memberEval?.role || member.role || founderData?.role || "Team Member",
+      discovered: !isSubmittedMember && Boolean(memberEval?.scrapedCandidate),
       linkedinUrl:
         memberEval?.linkedinUrl || member.linkedinUrl || founderData?.linkedinUrl,
       headline:
@@ -157,11 +230,27 @@ function buildTeamMembers(
       location: linkedinData.location || founderData?.location || "",
       experience:
         linkedinData.experienceDetails && linkedinData.experienceDetails.length > 0
-          ? linkedinData.experienceDetails
+          ? normalizeExperienceItems(linkedinData.experienceDetails)
           : linkedinData.positions && linkedinData.positions.length > 0
-          ? linkedinData.positions
+          ? normalizeExperienceItems(linkedinData.positions)
           : linkedinData.experience && linkedinData.experience.length > 0
-          ? linkedinData.experience
+          ? normalizeExperienceItems(linkedinData.experience)
+          : linkedinData.currentCompany?.name || linkedinData.currentCompany?.title
+          ? [
+              {
+                title: linkedinData.currentCompany?.title || member.role || "Current role",
+                company: linkedinData.currentCompany?.name || "",
+                isCurrent: true,
+              },
+            ]
+          : member.role
+          ? [
+              {
+                title: member.role,
+                company: companyName || "Current Company",
+                isCurrent: true,
+              },
+            ]
           : memberEval?.previousCompanies &&
             memberEval.previousCompanies.length > 0
           ? memberEval.previousCompanies.map((c: string) => ({
@@ -176,11 +265,12 @@ function buildTeamMembers(
             }))
           : [],
       education:
-        linkedinData.educationDetails ||
-        linkedinData.education ||
-        memberEval?.education ||
-        founderData?.education ||
-        [],
+        normalizeEducationItems(
+          linkedinData.educationDetails ||
+            linkedinData.education ||
+            memberEval?.education ||
+            founderData?.education,
+        ),
       skills: linkedinData.skills || founderData?.skills || [],
       fmfScore:
         teamEvalData?.fmfScore ||
@@ -198,10 +288,11 @@ export function TeamTabContent({
   teamMembers,
   showScores = true,
   teamWeight,
+  companyName,
 }: TeamTabContentProps) {
   const mergedMembers = useMemo(
-    () => buildTeamMembers(evaluation, teamMembers),
-    [evaluation, teamMembers],
+    () => buildTeamMembers(evaluation, teamMembers, companyName),
+    [evaluation, teamMembers, companyName],
   );
 
   return (

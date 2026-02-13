@@ -249,6 +249,7 @@ function StartupDetail() {
               evaluation={evaluation}
               teamMembers={teamMembers}
               teamWeight={undefined}
+              companyName={startup.name}
             />
           ) : (
             <Card className="border-dashed">

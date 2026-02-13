@@ -1,4 +1,4 @@
-import { Injectable, Optional } from "@nestjs/common";
+import { Injectable, Logger, Optional } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { UnipileService } from "../../integrations/unipile/unipile.service";
 import type { LinkedInProfile } from "../../integrations/unipile/entities";
@@ -17,13 +17,91 @@ interface StartupContextInput {
 
 @Injectable()
 export class LinkedinEnrichmentService {
+  private readonly logger = new Logger(LinkedinEnrichmentService.name);
   private readonly batchSize: number;
+  private readonly maxCompanyLeadershipCandidates: number;
+  private readonly companyLeadershipQueries = [
+    "founder",
+    "co-founder",
+    "ceo",
+    "cto",
+    "coo",
+    "cfo",
+    "cpo",
+    "vp",
+    "head",
+    "director",
+  ] as const;
 
   constructor(
     private unipileService: UnipileService,
     @Optional() private config?: ConfigService,
   ) {
     this.batchSize = this.config?.get<number>("LINKEDIN_BATCH_SIZE", 10) ?? 10;
+    this.maxCompanyLeadershipCandidates =
+      this.config?.get<number>("LINKEDIN_COMPANY_DISCOVERY_MAX", 6) ?? 6;
+  }
+
+  async discoverCompanyLeadershipMembers(
+    companyName: string,
+    existingMembers: TeamMemberInput[],
+  ): Promise<TeamMemberInput[]> {
+    const normalizedCompany = companyName?.trim();
+    if (!normalizedCompany || !this.unipileService.isConfigured()) {
+      return [];
+    }
+
+    const existingNames = new Set(
+      existingMembers.map((member) => member.name.trim().toLowerCase()),
+    );
+    const existingUrls = new Set(
+      existingMembers
+        .map((member) => member.linkedinUrl?.trim().toLowerCase())
+        .filter((url): url is string => Boolean(url)),
+    );
+
+    const candidates = new Map<string, TeamMemberInput>();
+    for (const query of this.companyLeadershipQueries) {
+      let matches: LinkedInProfile[] = [];
+      try {
+        matches = await this.unipileService.searchProfiles(query, normalizedCompany);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.debug(
+          `[LinkedInDiscovery] query=${query} company=${normalizedCompany} failed: ${message}`,
+        );
+        continue;
+      }
+
+      for (const profile of matches) {
+        const member = this.toCandidate(profile, normalizedCompany);
+        if (!member) {
+          continue;
+        }
+
+        const nameKey = member.name.toLowerCase();
+        const urlKey = member.linkedinUrl?.toLowerCase();
+        if (existingNames.has(nameKey)) continue;
+        if (urlKey && existingUrls.has(urlKey)) continue;
+
+        const dedupeKey = urlKey || nameKey;
+        if (!candidates.has(dedupeKey)) {
+          candidates.set(dedupeKey, member);
+        }
+      }
+    }
+
+    const output = Array.from(candidates.values()).slice(
+      0,
+      this.maxCompanyLeadershipCandidates,
+    );
+    if (output.length > 0) {
+      this.logger.log(
+        `[LinkedInDiscovery] company=${normalizedCompany} discoveredLeadershipMembers=${output.length}`,
+      );
+    }
+
+    return output;
   }
 
   async enrichTeamMembers(
@@ -189,5 +267,67 @@ export class LinkedinEnrichmentService {
     }
 
     return value.trim();
+  }
+
+  private toCandidate(
+    profile: LinkedInProfile,
+    companyName: string,
+  ): TeamMemberInput | null {
+    const fullName = `${profile.firstName || ""} ${profile.lastName || ""}`.trim();
+    if (!fullName) {
+      return null;
+    }
+
+    const headline = profile.headline || "";
+    if (!this.isRelevantLeadershipProfile(profile, companyName, headline)) {
+      return null;
+    }
+
+    const role = this.extractRoleFromHeadline(headline);
+    return {
+      name: fullName,
+      role,
+      linkedinUrl: profile.profileUrl || undefined,
+    };
+  }
+
+  private isRelevantLeadershipProfile(
+    profile: LinkedInProfile,
+    companyName: string,
+    headline: string,
+  ): boolean {
+    const leadershipPattern =
+      /\b(founder|co[\s-]?founder|chief|ceo|cto|coo|cfo|cmo|cpo|president|vice president|vp|head|director|managing director|general manager|partner)\b/i;
+    if (!leadershipPattern.test(headline)) {
+      return false;
+    }
+
+    const companyTokens = companyName
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((token) => token.length >= 4);
+
+    if (companyTokens.length === 0) {
+      return true;
+    }
+
+    const haystack = `${headline} ${profile.currentCompany?.name || ""}`.toLowerCase();
+    return companyTokens.some((token) => haystack.includes(token));
+  }
+
+  private extractRoleFromHeadline(headline: string): string {
+    if (!headline) {
+      return "Leadership";
+    }
+
+    const roleFragment = headline.split(/[|@,-]/)[0]?.trim();
+    if (!roleFragment) {
+      return "Leadership";
+    }
+
+    if (roleFragment.length > 80) {
+      return roleFragment.slice(0, 80).trim();
+    }
+    return roleFragment;
   }
 }

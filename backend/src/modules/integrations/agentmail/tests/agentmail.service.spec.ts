@@ -3,10 +3,12 @@ import { NotFoundException } from '@nestjs/common';
 import { AgentMailService } from '../agentmail.service';
 import { AttachmentService } from '../attachment.service';
 import { AgentMailClientService } from '../agentmail-client.service';
+import { InvestorInboxBridgeService } from '../investor-inbox-bridge.service';
 import { DrizzleService } from '../../../../database';
 import { NotificationService } from '../../../../notification/notification.service';
 import { WebhookSource } from '../../../integration/entities';
 import { NotificationType } from '../../../../notification/entities';
+import { ClaraService } from '../../../clara/clara.service';
 
 describe('AgentMailService', () => {
   let service: AgentMailService;
@@ -14,6 +16,8 @@ describe('AgentMailService', () => {
   let notificationService: { create: jest.Mock };
   let attachmentService: { downloadMultiple: jest.Mock; downloadFromSdk: jest.Mock };
   let agentMailClient: Record<string, jest.Mock>;
+  let claraService: { isClaraInbox: jest.Mock; handleIncomingMessage: jest.Mock };
+  let investorInboxBridge: { evaluate: jest.Mock };
 
   const mockThread = {
     id: 'thread-1',
@@ -97,6 +101,13 @@ describe('AgentMailService', () => {
       listThreads: jest.fn().mockResolvedValue({ count: 0, threads: [] }),
       getMessageAttachment: jest.fn().mockResolvedValue({ downloadUrl: 'https://example.com/att' }),
     };
+    claraService = {
+      isClaraInbox: jest.fn().mockReturnValue(false),
+      handleIncomingMessage: jest.fn().mockResolvedValue(undefined),
+    };
+    investorInboxBridge = {
+      evaluate: jest.fn().mockResolvedValue(undefined),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -105,6 +116,8 @@ describe('AgentMailService', () => {
         { provide: NotificationService, useValue: notificationService },
         { provide: AttachmentService, useValue: attachmentService },
         { provide: AgentMailClientService, useValue: agentMailClient },
+        { provide: ClaraService, useValue: claraService },
+        { provide: InvestorInboxBridgeService, useValue: investorInboxBridge },
       ],
     }).compile();
 

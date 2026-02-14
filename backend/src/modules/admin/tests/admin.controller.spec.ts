@@ -7,10 +7,12 @@ import { ScoringConfigService } from '../scoring-config.service';
 import { DataImportService } from '../data-import.service';
 import { QueueManagementService } from '../queue-management.service';
 import { StartupService } from '../../startup/startup.service';
+import { StartupIntakeService } from '../../startup/startup-intake.service';
 import { IntegrationHealthService } from '../integration-health.service';
 import { SystemConfigService } from '../system-config.service';
 import { BulkDataService } from '../bulk-data.service';
 import { AiPromptService } from '../../ai/services/ai-prompt.service';
+import { EarlyAccessService } from '../../early-access';
 import { UserRole } from '../../../auth/entities/auth.schema';
 import { StartupStatus } from '../../startup/entities/startup.schema';
 import { PipelinePhase } from '../../ai/interfaces/pipeline.interface';
@@ -23,7 +25,9 @@ describe('AdminController', () => {
   let dataImportService: jest.Mocked<DataImportService>;
   let queueManagementService: jest.Mocked<QueueManagementService>;
   let startupService: jest.Mocked<StartupService>;
+  let startupIntakeService: jest.Mocked<StartupIntakeService>;
   let aiPromptService: jest.Mocked<AiPromptService>;
+  let earlyAccessService: jest.Mocked<EarlyAccessService>;
 
   const mockAdmin = {
     id: 'admin-id',
@@ -85,12 +89,19 @@ describe('AdminController', () => {
         {
           provide: StartupService,
           useValue: {
+            adminFindAll: jest.fn(),
             adminFindPending: jest.fn(),
             approve: jest.fn(),
             reject: jest.fn(),
             reanalyze: jest.fn(),
             adminRetryPhase: jest.fn(),
             adminRetryAgent: jest.fn(),
+          },
+        },
+        {
+          provide: StartupIntakeService,
+          useValue: {
+            quickCreateStartup: jest.fn(),
           },
         },
         {
@@ -124,6 +135,15 @@ describe('AdminController', () => {
             seedFromCode: jest.fn(),
           },
         },
+        {
+          provide: EarlyAccessService,
+          useValue: {
+            createInvite: jest.fn(),
+            listInvites: jest.fn(),
+            revokeInvite: jest.fn(),
+            listWaitlist: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
@@ -134,7 +154,9 @@ describe('AdminController', () => {
     dataImportService = module.get(DataImportService);
     queueManagementService = module.get(QueueManagementService);
     startupService = module.get(StartupService);
+    startupIntakeService = module.get(StartupIntakeService);
     aiPromptService = module.get(AiPromptService);
+    earlyAccessService = module.get(EarlyAccessService);
   });
 
   afterEach(() => {

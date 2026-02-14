@@ -55,8 +55,145 @@ interface TeamTabContentProps {
   companyName?: string;
 }
 
+interface TeamCompositionShape {
+  hasBusinessLeader?: boolean;
+  hasTechnicalLeader?: boolean;
+  hasIndustryExpert?: boolean;
+  hasOperationsLeader?: boolean;
+  teamBalance?: string;
+}
+
 function normalizeKey(value?: string) {
   return value?.trim().toLowerCase() || "";
+}
+
+function toStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => (typeof item === "string" ? item.trim() : ""))
+    .filter(Boolean);
+}
+
+function dedupeStrings(values: string[]): string[] {
+  const seen = new Set<string>();
+  const output: string[] = [];
+  for (const value of values) {
+    const key = value.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    output.push(value);
+  }
+  return output;
+}
+
+function normalizeBoolean(value: unknown): boolean | undefined {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value > 0;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["true", "yes", "present", "filled"].includes(normalized)) return true;
+    if (["false", "no", "missing", "absent"].includes(normalized)) return false;
+  }
+  return undefined;
+}
+
+function extractTeamStrengths(evaluation: Evaluation | null): string[] {
+  if (!evaluation) return [];
+  const teamData = (evaluation.teamData as Record<string, unknown>) || {};
+  const memberEvals = (evaluation.teamMemberEvaluations as unknown as any[]) || [];
+
+  const explicit =
+    toStringArray((teamData as any).keyStrengths).length > 0
+      ? toStringArray((teamData as any).keyStrengths)
+      : toStringArray((teamData as any).keyFindings);
+  if (explicit.length > 0) {
+    return dedupeStrings(explicit).slice(0, 5);
+  }
+
+  const memberStrengths = memberEvals.flatMap((member) =>
+    toStringArray((member as any).strengths),
+  );
+  return dedupeStrings(memberStrengths).slice(0, 5);
+}
+
+function extractTeamRisks(evaluation: Evaluation | null): string[] {
+  if (!evaluation) return [];
+  const teamData = (evaluation.teamData as Record<string, unknown>) || {};
+  const memberEvals = (evaluation.teamMemberEvaluations as unknown as any[]) || [];
+
+  const explicit =
+    toStringArray((teamData as any).keyRisks).length > 0
+      ? toStringArray((teamData as any).keyRisks)
+      : toStringArray((teamData as any).risks);
+  if (explicit.length > 0) {
+    return dedupeStrings(explicit).slice(0, 5);
+  }
+
+  const memberConcerns = memberEvals.flatMap((member) =>
+    toStringArray((member as any).concerns),
+  );
+  const dataGaps = toStringArray((teamData as any).dataGaps);
+  return dedupeStrings([...memberConcerns, ...dataGaps]).slice(0, 5);
+}
+
+function inferRoleCoverage(members: TeamMember[]): Omit<TeamCompositionShape, "teamBalance"> {
+  const combined = members
+    .map((member) => `${member.role || ""} ${member.headline || ""}`.toLowerCase())
+    .join(" ");
+
+  const hasBusinessLeader =
+    /\b(ceo|chief executive|founder|co-founder|president|business|commercial|growth|sales)\b/.test(
+      combined,
+    );
+  const hasTechnicalLeader =
+    /\b(cto|chief technology|technical|engineering|engineer|architect|product|tech)\b/.test(
+      combined,
+    );
+  const hasOperationsLeader =
+    /\b(coo|chief operating|operations|ops|supply chain|logistics|general manager)\b/.test(
+      combined,
+    );
+  const hasIndustryExpert =
+    /\b(industry|domain|sector|advisor|expert|veteran|former)\b/.test(combined);
+
+  return {
+    hasBusinessLeader,
+    hasTechnicalLeader,
+    hasIndustryExpert,
+    hasOperationsLeader,
+  };
+}
+
+function resolveTeamComposition(
+  evaluation: Evaluation | null,
+  members: TeamMember[],
+): TeamCompositionShape | undefined {
+  if (!evaluation) return undefined;
+  const teamData = (evaluation.teamData as Record<string, unknown>) || {};
+  const raw =
+    (teamData as any).teamComposition ||
+    (evaluation.teamComposition as Record<string, unknown> | undefined);
+
+  const inferred = inferRoleCoverage(members);
+  const teamBalance =
+    (typeof (raw as any)?.teamBalance === "string" && (raw as any).teamBalance.trim()) ||
+    (typeof (teamData as any).executionCapability === "string" &&
+      (teamData as any).executionCapability.trim()) ||
+    (typeof (teamData as any).founderQuality === "string" &&
+      (teamData as any).founderQuality.trim()) ||
+    undefined;
+
+  return {
+    hasBusinessLeader:
+      normalizeBoolean((raw as any)?.hasBusinessLeader) ?? inferred.hasBusinessLeader,
+    hasTechnicalLeader:
+      normalizeBoolean((raw as any)?.hasTechnicalLeader) ?? inferred.hasTechnicalLeader,
+    hasIndustryExpert:
+      normalizeBoolean((raw as any)?.hasIndustryExpert) ?? inferred.hasIndustryExpert,
+    hasOperationsLeader:
+      normalizeBoolean((raw as any)?.hasOperationsLeader) ?? inferred.hasOperationsLeader,
+    teamBalance,
+  };
 }
 
 function parseDuration(duration?: string) {
@@ -294,18 +431,21 @@ export function TeamTabContent({
     () => buildTeamMembers(evaluation, teamMembers, companyName),
     [evaluation, teamMembers, companyName],
   );
+  const teamComposition = useMemo(
+    () => resolveTeamComposition(evaluation, mergedMembers),
+    [evaluation, mergedMembers],
+  );
+  const teamStrengths = useMemo(() => extractTeamStrengths(evaluation), [evaluation]);
+  const teamRisks = useMemo(() => extractTeamRisks(evaluation), [evaluation]);
 
   return (
     <div className="space-y-6" data-testid="container-team-tab">
       {evaluation && showScores && (
         <TeamCompositionSummary
           teamScore={evaluation.teamScore || 0}
-          teamComposition={
-            (evaluation.teamData as any)?.teamComposition ||
-            evaluation.teamComposition
-          }
-          keyStrengths={(evaluation.teamData as any)?.keyStrengths}
-          keyRisks={(evaluation.teamData as any)?.keyRisks}
+          teamComposition={teamComposition}
+          keyStrengths={teamStrengths}
+          keyRisks={teamRisks}
           weight={teamWeight}
         />
       )}

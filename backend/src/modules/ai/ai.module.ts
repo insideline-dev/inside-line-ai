@@ -20,6 +20,7 @@ import {
   TractionEvaluationAgent,
 } from "./agents/evaluation";
 import { AiConfigService } from "./services/ai-config.service";
+import { AiDebugLogService } from "./services/ai-debug-log.service";
 import { AiPromptService } from "./services/ai-prompt.service";
 import {
   EvaluationProcessor,
@@ -63,6 +64,7 @@ import { WebsiteScraperService } from "./services/website-scraper.service";
   providers: [
     AiProviderService,
     AiConfigService,
+    AiDebugLogService,
     AiPromptService,
     PipelineStateService,
     PipelineFeedbackService,

@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Optional } from "@nestjs/common";
 import { RESEARCH_AGENTS } from "../agents/research";
 import type {
   ResearchAgentConfig,
@@ -16,6 +16,7 @@ import { GeminiResearchService } from "./gemini-research.service";
 import { PipelineFeedbackService } from "./pipeline-feedback.service";
 import { AiPromptService } from "./ai-prompt.service";
 import { RESEARCH_PROMPT_KEY_BY_AGENT } from "./ai-prompt-catalog";
+import { AiDebugLogService } from "./ai-debug-log.service";
 
 type ResearchAgentOutput =
   | NonNullable<ResearchResult["team"]>
@@ -34,6 +35,7 @@ export class ResearchService {
     private geminiResearchService: GeminiResearchService,
     private pipelineFeedback: PipelineFeedbackService,
     private promptService: AiPromptService,
+    @Optional() private aiDebugLog?: AiDebugLogService,
   ) {}
 
   async run(startupId: string, options?: ResearchRunOptions): Promise<ResearchResult> {
@@ -82,12 +84,19 @@ export class ResearchService {
       result.errors = result.errors.filter((item) => item.agent !== key);
 
       if (settledResult.status === "rejected") {
+        const errorMessage =
+          settledResult.reason instanceof Error
+            ? settledResult.reason.message
+            : String(settledResult.reason);
         result.errors.push({
           agent: key,
-          error:
-            settledResult.reason instanceof Error
-              ? settledResult.reason.message
-              : String(settledResult.reason),
+          error: errorMessage,
+        });
+        await this.aiDebugLog?.logAgentFailure({
+          startupId,
+          phase: PipelinePhase.RESEARCH,
+          agentKey: key,
+          error: errorMessage,
         });
         continue;
       }
@@ -114,6 +123,15 @@ export class ResearchService {
       if (error) {
         result.errors.push({ agent: key, error });
       }
+
+      await this.aiDebugLog?.logAgentResult({
+        startupId,
+        phase: PipelinePhase.RESEARCH,
+        agentKey: key,
+        usedFallback,
+        error,
+        output,
+      });
 
       if (!usedFallback) {
         await this.pipelineFeedback.markConsumedByScope({

@@ -30,6 +30,9 @@ describe('UnipileService', () => {
         startDate: '2020-01',
         endDate: null,
         current: true,
+        location: '',
+        description: '',
+        companyPictureUrl: null,
       },
     ],
     education: [
@@ -39,6 +42,10 @@ describe('UnipileService', () => {
         fieldOfStudy: 'Computer Science',
         startYear: 2012,
         endYear: 2016,
+        startDate: null,
+        endDate: null,
+        description: '',
+        schoolPictureUrl: null,
       },
     ],
   };
@@ -305,7 +312,12 @@ describe('UnipileService', () => {
         'https://api.unipile.com/api/v1/linkedin/search?account_id=test-account-id',
         expect.objectContaining({
           method: 'POST',
-          body: JSON.stringify({ api: 'classic', category: 'people', keywords: 'John Doe', company: 'TechCorp' }),
+          body: JSON.stringify({
+            api: 'classic',
+            category: 'people',
+            keywords: 'John Doe',
+            advanced_keywords: { company: 'TechCorp' },
+          }),
         }),
       );
     });

@@ -1,4 +1,9 @@
-import { Injectable, Logger, ServiceUnavailableException, BadRequestException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { LinkedInCacheService } from './linkedin-cache.service';
 import type { LinkedInProfile } from './entities';
@@ -7,6 +12,17 @@ interface UnipileConfig {
   dsn: string;
   apiKey: string;
   accountId: string;
+}
+
+interface CompanySearchItem {
+  id?: string;
+  name?: string;
+  profile_url?: string;
+  followers_count?: number;
+}
+
+interface UnipileSearchResponse {
+  items?: unknown[];
 }
 
 @Injectable()
@@ -72,7 +88,9 @@ export class UnipileService {
 
       return profile;
     } catch (error) {
-      this.logger.error(`Failed to fetch LinkedIn profile: ${error.message}`, error.stack);
+      const message = this.asMessage(error);
+      const stack = error instanceof Error ? error.stack : undefined;
+      this.logger.error(`Failed to fetch LinkedIn profile: ${message}`, stack);
       throw error;
     }
   }
@@ -89,16 +107,44 @@ export class UnipileService {
       const profiles = await this.searchProfilesFromAPI(name, company);
       return profiles;
     } catch (error) {
-      this.logger.error(`Failed to search LinkedIn profiles: ${error.message}`, error.stack);
+      const message = this.asMessage(error);
+      const stack = error instanceof Error ? error.stack : undefined;
+      this.logger.error(`Failed to search LinkedIn profiles: ${message}`, stack);
       throw error;
     }
+  }
+
+  /**
+   * Search people in a specific company by resolving the best matching company ID first.
+   * This avoids broad text matches that pull unrelated similarly-named companies.
+   */
+  async searchProfilesInCompany(
+    name: string,
+    companyName: string,
+    companyWebsite?: string,
+  ): Promise<LinkedInProfile[]> {
+    const companyId = await this.resolveBestCompanyId(companyName, companyWebsite);
+    if (!companyId) {
+      return [];
+    }
+
+    const body: Record<string, unknown> = {
+      api: 'classic',
+      category: 'people',
+      keywords: name,
+      company: [companyId],
+    };
+    const items = await this.executeLinkedinSearch(body);
+    return items.map((profile) =>
+      this.mapUnipileProfileToLinkedInProfile(profile as Record<string, unknown>),
+    );
   }
 
   /**
    * Fetch profile from Unipile API
    */
   private async fetchProfileFromAPI(profileUrl: string): Promise<LinkedInProfile | null> {
-    const { dsn, apiKey, accountId } = this.config!;
+    const { dsn, apiKey, accountId } = this.getConfigOrThrow();
     const identifier = this.extractIdentifierFromUrl(profileUrl);
     // linkedin_sections=* is required by Unipile to return extended profile data
     // such as experience/education instead of only basic identity fields.
@@ -128,53 +174,46 @@ export class UnipileService {
    * Search profiles from Unipile API
    */
   private async searchProfilesFromAPI(name: string, company?: string): Promise<LinkedInProfile[]> {
-    const { dsn, apiKey, accountId } = this.config!;
-    const url = `https://${dsn}/api/v1/linkedin/search?account_id=${accountId}`;
-
     const body: Record<string, unknown> = {
       api: 'classic',
       category: 'people',
       keywords: name,
     };
     if (company) {
-      body.company = company;
+      body.advanced_keywords = {
+        company,
+      };
     }
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'X-API-KEY': apiKey,
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
-      body: JSON.stringify(body),
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      throw new BadRequestException(`Unipile API error: ${error}`);
-    }
-
-    const data = await response.json();
-    const results = data.items || [];
-    return results.map((profile: any) => this.mapUnipileProfileToLinkedInProfile(profile));
+    const items = await this.executeLinkedinSearch(body);
+    return items.map((profile) =>
+      this.mapUnipileProfileToLinkedInProfile(profile as Record<string, unknown>),
+    );
   }
 
   /**
    * Map Unipile API response to our LinkedInProfile interface
    */
-  private mapUnipileProfileToLinkedInProfile(data: any): LinkedInProfile {
+  private mapUnipileProfileToLinkedInProfile(data: Record<string, any>): LinkedInProfile {
+    const fullName =
+      typeof data.name === 'string'
+        ? data.name.trim()
+        : typeof data.full_name === 'string'
+          ? data.full_name.trim()
+          : '';
+    const [derivedFirstName, ...rest] = fullName ? fullName.split(/\s+/) : [];
+    const derivedLastName = rest.join(' ');
     const experienceEntries =
       data.work_experience || data.experience || data.experiences || data.positions || [];
     const educationEntries = data.education || data.educations || [];
 
     return {
       id: data.id || data.profile_id || '',
-      firstName: data.first_name || data.firstName || '',
-      lastName: data.last_name || data.lastName || '',
-      headline: data.headline || '',
+      firstName: data.first_name || data.firstName || derivedFirstName || '',
+      lastName: data.last_name || data.lastName || derivedLastName || '',
+      headline: data.headline || data.title || '',
       location: data.location || '',
-      profileUrl: data.profile_url || data.profileUrl || '',
+      profileUrl: data.profile_url || data.profileUrl || data.url || '',
       profileImageUrl: data.profile_image_url || data.profileImageUrl || null,
       summary: data.summary || null,
       currentCompany: data.current_company
@@ -182,6 +221,11 @@ export class UnipileService {
             name: data.current_company.name || '',
             title: data.current_company.title || '',
           }
+        : data.company
+          ? {
+              name: data.company,
+              title: data.title || '',
+            }
         : null,
       experience: experienceEntries.map((exp: any) => ({
         company: exp.company || '',
@@ -218,6 +262,57 @@ export class UnipileService {
     };
   }
 
+  private async resolveBestCompanyId(
+    companyName: string,
+    companyWebsite?: string,
+  ): Promise<string | null> {
+    const body = {
+      api: 'classic',
+      category: 'companies',
+      keywords: companyName,
+    };
+    const items = (await this.executeLinkedinSearch(body)) as CompanySearchItem[];
+    if (items.length === 0) {
+      return null;
+    }
+
+    const companyToken = this.normalizeCompanyToken(companyName);
+    const websiteToken = this.extractWebsiteToken(companyWebsite);
+
+    const ranked = items
+      .filter((item) => typeof item.id === 'string' && /^\d+$/.test(item.id))
+      .map((item) => {
+        const name = (item.name || '').toLowerCase();
+        const profileUrl = (item.profile_url || '').toLowerCase();
+        let score = 0;
+        if (companyToken && name.includes(companyToken)) score += 10;
+        if (websiteToken && profileUrl.includes(websiteToken)) score += 8;
+        score += Math.log10((item.followers_count || 0) + 1);
+        return { id: item.id as string, score };
+      })
+      .sort((a, b) => b.score - a.score);
+
+    return ranked[0]?.id ?? null;
+  }
+
+  private normalizeCompanyToken(value: string): string {
+    return value.trim().toLowerCase();
+  }
+
+  private extractWebsiteToken(website?: string): string | null {
+    if (!website) {
+      return null;
+    }
+
+    const candidate = /^https?:\/\//i.test(website) ? website : `https://${website}`;
+    try {
+      const host = new URL(candidate).hostname.toLowerCase().replace(/^www\./, '');
+      return host.split('.')[0] || null;
+    } catch {
+      return null;
+    }
+  }
+
   private extractYear(value: unknown): number | null {
     if (typeof value !== 'string' || value.trim().length === 0) {
       return null;
@@ -239,5 +334,40 @@ export class UnipileService {
   private extractIdentifierFromUrl(url: string): string {
     const match = url.match(/linkedin\.com\/in\/([^/?]+)/i);
     return match?.[1] || 'unknown';
+  }
+
+  private async executeLinkedinSearch(body: Record<string, unknown>): Promise<unknown[]> {
+    const { dsn, apiKey, accountId } = this.getConfigOrThrow();
+    const url = `https://${dsn}/api/v1/linkedin/search?account_id=${accountId}`;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'X-API-KEY': apiKey,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new BadRequestException(`Unipile API error: ${error}`);
+    }
+
+    const data = (await response.json()) as UnipileSearchResponse;
+    return Array.isArray(data.items) ? data.items : [];
+  }
+
+  private getConfigOrThrow(): UnipileConfig {
+    if (!this.config) {
+      throw new ServiceUnavailableException('LinkedIn integration not configured');
+    }
+
+    return this.config;
+  }
+
+  private asMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
   }
 }

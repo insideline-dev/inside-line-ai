@@ -50,6 +50,7 @@ describe("GeminiResearchService", () => {
     aiConfig = {
       getModelForPurpose: jest.fn(() => "gemini-3.0-flash"),
       getResearchTemperature: jest.fn(() => 0.2),
+      getResearchTimeoutMs: jest.fn(() => 30000),
     } as unknown as jest.Mocked<AiConfigService>;
 
     service = new GeminiResearchServiceClass(
@@ -375,6 +376,7 @@ describe("GeminiResearchService JSON extraction", () => {
     aiConfig = {
       getModelForPurpose: jest.fn(() => "gemini-3.0-flash"),
       getResearchTemperature: jest.fn(() => 0.2),
+      getResearchTimeoutMs: jest.fn(() => 30000),
     } as unknown as jest.Mocked<AiConfigService>;
 
     service = new GeminiResearchServiceClass(

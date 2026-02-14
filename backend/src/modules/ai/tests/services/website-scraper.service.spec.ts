@@ -331,8 +331,8 @@ describe("WebsiteScraperService", () => {
 
       expect(fetchMock).toHaveBeenCalled();
       const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
-      expect(url).toContain("93.184.216.34");
-      expect(options.headers).toHaveProperty("Host", "example.test");
+      expect(url).toBe("https://example.test/path");
+      expect((options.headers as Record<string, string>).Host).toBe("example.test");
     });
 
     it("uses literal IP directly without DNS lookup", async () => {

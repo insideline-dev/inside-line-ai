@@ -94,6 +94,7 @@ describe("EvaluationService", () => {
         research: pipelineInput.research,
       },
       expect.any(Function),
+      expect.any(Function),
     );
     expect(result).toBe(evaluationResult);
   });
@@ -111,9 +112,10 @@ describe("EvaluationService", () => {
         research: pipelineInput.research,
       },
       expect.any(Function),
+      expect.any(Function),
     );
 
-    const callback = registry.runAll.mock.calls[0]?.[2];
+    const callback = registry.runAll.mock.calls[0]?.[3];
     expect(typeof callback).toBe("function");
     callback?.({
       agent: "team",
@@ -164,6 +166,7 @@ describe("EvaluationService", () => {
       expect.objectContaining({
         extraction: pipelineInput.extraction,
       }),
+      expect.any(Function),
     );
     expect(result.market).toEqual({ score: 91 });
     expect(result.summary.failedAgents).toBe(0);

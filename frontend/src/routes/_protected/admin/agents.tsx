@@ -693,7 +693,7 @@ function AdminAgentsPage() {
       </Tabs>
 
       <Sheet open={Boolean(selectedNode) && isSheetOpen} onOpenChange={setIsSheetOpen}>
-        <SheetContent side="right" className="w-full overflow-hidden sm:max-w-[780px]">
+        <SheetContent side="right" className="flex h-full w-full flex-col overflow-hidden sm:max-w-[780px]">
           {!selectedNode ? null : (
             <>
               <SheetHeader>
@@ -706,50 +706,51 @@ function AdminAgentsPage() {
                 <SheetDescription>{selectedNode.description}</SheetDescription>
               </SheetHeader>
 
-              {selectedNode.promptKeys.length === 0 ? (
-                <div className="mt-4 space-y-4">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-base">Graph Context (Static)</CardTitle>
-                      <CardDescription>This node is runtime logic, not prompt-configured.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div>
-                        <p className="mb-2 text-sm font-medium">Inputs</p>
-                        <div className="flex flex-wrap gap-2">
-                          {selectedNode.inputs.map((input) => (
-                            <Badge key={input} variant="outline">
-                              {input}
-                            </Badge>
-                          ))}
+              <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-1">
+                {selectedNode.promptKeys.length === 0 ? (
+                  <div className="space-y-4">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-base">Graph Context (Static)</CardTitle>
+                        <CardDescription>This node is runtime logic, not prompt-configured.</CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div>
+                          <p className="mb-2 text-sm font-medium">Inputs</p>
+                          <div className="flex flex-wrap gap-2">
+                            {selectedNode.inputs.map((input) => (
+                              <Badge key={input} variant="outline">
+                                {input}
+                              </Badge>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                      <div>
-                        <p className="mb-2 text-sm font-medium">Outputs</p>
-                        <div className="flex flex-wrap gap-2">
-                          {selectedNode.outputs.map((output) => (
-                            <Badge key={output}>{output}</Badge>
-                          ))}
+                        <div>
+                          <p className="mb-2 text-sm font-medium">Outputs</p>
+                          <div className="flex flex-wrap gap-2">
+                            {selectedNode.outputs.map((output) => (
+                              <Badge key={output}>{output}</Badge>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                      <div>
-                        <p className="mb-2 text-sm font-medium">Incoming Nodes</p>
-                        <p className="text-sm text-muted-foreground">
-                          {incomingNodeLabels.length > 0 ? incomingNodeLabels.join(", ") : "None"}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="mb-2 text-sm font-medium">Outgoing Nodes</p>
-                        <p className="text-sm text-muted-foreground">
-                          {outgoingNodeLabels.length > 0 ? outgoingNodeLabels.join(", ") : "None"}
-                        </p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              ) : (
-                <div className="mt-4 space-y-4 overflow-y-auto pb-24">
-                  <Tabs defaultValue="prompts" className="space-y-4">
+                        <div>
+                          <p className="mb-2 text-sm font-medium">Incoming Nodes</p>
+                          <p className="text-sm text-muted-foreground">
+                            {incomingNodeLabels.length > 0 ? incomingNodeLabels.join(", ") : "None"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="mb-2 text-sm font-medium">Outgoing Nodes</p>
+                          <p className="text-sm text-muted-foreground">
+                            {outgoingNodeLabels.length > 0 ? outgoingNodeLabels.join(", ") : "None"}
+                          </p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                ) : (
+                  <div className="space-y-4 pb-6">
+                    <Tabs defaultValue="prompts" className="space-y-4">
                     <TabsList>
                       <TabsTrigger value="prompts">Prompts</TabsTrigger>
                       <TabsTrigger value="variables">Variables</TabsTrigger>
@@ -1182,9 +1183,10 @@ function AdminAgentsPage() {
                         </CardContent>
                       </Card>
                     </TabsContent>
-                  </Tabs>
-                </div>
-              )}
+                    </Tabs>
+                  </div>
+                )}
+              </div>
 
               <SheetFooter className="mt-4 border-t pt-4">
                 <p className="text-xs text-muted-foreground">

@@ -269,36 +269,69 @@ export function AnalysisProgress({
   const overallProgress = isAnalyzing
     ? Math.max(0, Math.min(100, progress?.overallProgress ?? 0))
     : 100;
-  const evaluationAgents = useMemo(() => {
-    const agents = progress?.phases?.evaluation?.agents;
-    if (!agents) {
-      return [];
+  const agentPhaseSections = useMemo(() => {
+    const phaseConfig = [
+      {
+        phase: "research",
+        label: "Research Agents",
+        order: ["team", "market", "product", "news", "competitor"],
+      },
+      {
+        phase: "evaluation",
+        label: "Evaluation Agents",
+        order: [
+          "team",
+          "market",
+          "product",
+          "traction",
+          "businessModel",
+          "gtm",
+          "financials",
+          "competitiveAdvantage",
+          "legal",
+          "dealTerms",
+          "exitPotential",
+        ],
+      },
+    ] as const;
+
+    const sections: Array<{
+      phase: "research" | "evaluation";
+      label: string;
+      agents: Array<[string, NonNullable<PipelineProgressData["phases"][string]["agents"]>[string]]>;
+    }> = [];
+
+    for (const config of phaseConfig) {
+      const agents = progress?.phases?.[config.phase]?.agents;
+      if (!agents) {
+        continue;
+      }
+
+      const sortIndex = new Map<string, number>(
+        config.order.map((key, idx) => [String(key), idx]),
+      );
+      const entries = Object.entries(agents).sort(([a], [b]) => {
+        const ai = sortIndex.get(a);
+        const bi = sortIndex.get(b);
+        if (ai !== undefined && bi !== undefined) return ai - bi;
+        if (ai !== undefined) return -1;
+        if (bi !== undefined) return 1;
+        return a.localeCompare(b);
+      });
+
+      if (entries.length === 0) {
+        continue;
+      }
+
+      sections.push({
+        phase: config.phase,
+        label: config.label,
+        agents: entries,
+      });
     }
 
-    const order = [
-      "team",
-      "market",
-      "product",
-      "traction",
-      "businessModel",
-      "gtm",
-      "financials",
-      "competitiveAdvantage",
-      "legal",
-      "dealTerms",
-      "exitPotential",
-    ];
-    const sortIndex = new Map(order.map((key, idx) => [key, idx]));
-
-    return Object.entries(agents).sort(([a], [b]) => {
-      const ai = sortIndex.get(a);
-      const bi = sortIndex.get(b);
-      if (ai !== undefined && bi !== undefined) return ai - bi;
-      if (ai !== undefined) return -1;
-      if (bi !== undefined) return 1;
-      return a.localeCompare(b);
-    });
-  }, [progress?.phases?.evaluation?.agents]);
+    return sections;
+  }, [progress?.phases]);
 
   const formatTimestamp = (value?: string) => {
     if (!value) return "—";
@@ -364,34 +397,38 @@ export function AnalysisProgress({
           </div>
         )}
 
-        {showAgentDetails && evaluationAgents.length > 0 && (
+        {showAgentDetails && agentPhaseSections.length > 0 && (
           <div className="space-y-2 pt-2">
-            <p className="text-sm font-medium">Evaluation Agents</p>
-            <div className="space-y-2">
-              {evaluationAgents.map(([agentKey, agentData]) => (
-                <div
-                  key={agentKey}
-                  className="rounded-md border px-3 py-2 text-sm"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-medium">{agentData.key || agentKey}</span>
-                    <Badge
-                      variant={agentData.status === "completed" ? "default" : "outline"}
+            {agentPhaseSections.map((section) => (
+              <div key={section.phase} className="space-y-2">
+                <p className="text-sm font-medium">{section.label}</p>
+                <div className="space-y-2">
+                  {section.agents.map(([agentKey, agentData]) => (
+                    <div
+                      key={`${section.phase}-${agentKey}`}
+                      className="rounded-md border px-3 py-2 text-sm"
                     >
-                      {agentData.status}
-                    </Badge>
-                  </div>
-                  <div className="mt-1 text-xs text-muted-foreground flex flex-wrap gap-3">
-                    <span>Start: {formatTimestamp(agentData.startedAt)}</span>
-                    <span>End: {formatTimestamp(agentData.completedAt)}</span>
-                    <span>Duration: {formatDuration(agentData.startedAt, agentData.completedAt)}</span>
-                  </div>
-                  {agentData.error && (
-                    <p className="mt-1 text-xs text-destructive">{agentData.error}</p>
-                  )}
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-medium">{agentData.key || agentKey}</span>
+                        <Badge
+                          variant={agentData.status === "completed" ? "default" : "outline"}
+                        >
+                          {agentData.status}
+                        </Badge>
+                      </div>
+                      <div className="mt-1 text-xs text-muted-foreground flex flex-wrap gap-3">
+                        <span>Start: {formatTimestamp(agentData.startedAt)}</span>
+                        <span>End: {formatTimestamp(agentData.completedAt)}</span>
+                        <span>Duration: {formatDuration(agentData.startedAt, agentData.completedAt)}</span>
+                      </div>
+                      {agentData.error && (
+                        <p className="mt-1 text-xs text-destructive">{agentData.error}</p>
+                      )}
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
           </div>
         )}
       </CardContent>

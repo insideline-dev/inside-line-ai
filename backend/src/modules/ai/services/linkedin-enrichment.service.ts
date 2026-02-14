@@ -1,8 +1,8 @@
-import { Injectable, Logger, Optional } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
-import { UnipileService } from "../../integrations/unipile/unipile.service";
-import type { LinkedInProfile } from "../../integrations/unipile/entities";
-import type { EnrichedTeamMember } from "../interfaces/phase-results.interface";
+import { Injectable, Logger, Optional } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { UnipileService } from '../../integrations/unipile/unipile.service';
+import type { LinkedInProfile } from '../../integrations/unipile/entities';
+import type { EnrichedTeamMember } from '../interfaces/phase-results.interface';
 
 interface TeamMemberInput {
   name: string;
@@ -21,30 +21,31 @@ export class LinkedinEnrichmentService {
   private readonly batchSize: number;
   private readonly maxCompanyLeadershipCandidates: number;
   private readonly companyLeadershipQueries = [
-    "founder",
-    "co-founder",
-    "ceo",
-    "cto",
-    "coo",
-    "cfo",
-    "cpo",
-    "vp",
-    "head",
-    "director",
+    'founder',
+    'co-founder',
+    'ceo',
+    'cto',
+    'coo',
+    'cfo',
+    'cpo',
+    'vp',
+    'head',
+    'director',
   ] as const;
 
   constructor(
     private unipileService: UnipileService,
     @Optional() private config?: ConfigService,
   ) {
-    this.batchSize = this.config?.get<number>("LINKEDIN_BATCH_SIZE", 10) ?? 10;
+    this.batchSize = this.config?.get<number>('LINKEDIN_BATCH_SIZE', 10) ?? 10;
     this.maxCompanyLeadershipCandidates =
-      this.config?.get<number>("LINKEDIN_COMPANY_DISCOVERY_MAX", 6) ?? 6;
+      this.config?.get<number>('LINKEDIN_COMPANY_DISCOVERY_MAX', 6) ?? 6;
   }
 
   async discoverCompanyLeadershipMembers(
     companyName: string,
     existingMembers: TeamMemberInput[],
+    companyWebsite?: string,
   ): Promise<TeamMemberInput[]> {
     const normalizedCompany = companyName?.trim();
     if (!normalizedCompany || !this.unipileService.isConfigured()) {
@@ -64,7 +65,11 @@ export class LinkedinEnrichmentService {
     for (const query of this.companyLeadershipQueries) {
       let matches: LinkedInProfile[] = [];
       try {
-        matches = await this.unipileService.searchProfiles(query, normalizedCompany);
+        matches = await this.unipileService.searchProfilesInCompany(
+          query,
+          normalizedCompany,
+          companyWebsite,
+        );
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         this.logger.debug(
@@ -118,7 +123,7 @@ export class LinkedinEnrichmentService {
         name: member.name,
         role: member.role,
         linkedinUrl: member.linkedinUrl,
-        enrichmentStatus: "not_configured",
+        enrichmentStatus: 'not_configured',
       }));
     }
 
@@ -132,7 +137,7 @@ export class LinkedinEnrichmentService {
 
       for (let batchIndex = 0; batchIndex < settled.length; batchIndex += 1) {
         const result = settled[batchIndex];
-        if (result.status === "fulfilled") {
+        if (result.status === 'fulfilled') {
           enriched.push(result.value);
           continue;
         }
@@ -142,7 +147,7 @@ export class LinkedinEnrichmentService {
           name: member.name,
           role: member.role,
           linkedinUrl: member.linkedinUrl,
-          enrichmentStatus: "error",
+          enrichmentStatus: 'error',
         });
       }
     }
@@ -169,7 +174,7 @@ export class LinkedinEnrichmentService {
       return {
         name: member.name,
         role: member.role,
-        enrichmentStatus: "not_found",
+        enrichmentStatus: 'not_found',
       };
     }
 
@@ -181,7 +186,7 @@ export class LinkedinEnrichmentService {
           name: member.name,
           role: member.role,
           linkedinUrl,
-          enrichmentStatus: "not_found",
+          enrichmentStatus: 'not_found',
         };
       }
 
@@ -190,7 +195,7 @@ export class LinkedinEnrichmentService {
         role: member.role,
         linkedinUrl,
         linkedinProfile: this.mapProfile(profile),
-        enrichmentStatus: "success",
+        enrichmentStatus: 'success',
         enrichedAt: new Date().toISOString(),
       };
     } catch (error) {
@@ -203,29 +208,29 @@ export class LinkedinEnrichmentService {
         name: member.name,
         role: member.role,
         linkedinUrl,
-        enrichmentStatus: "error",
+        enrichmentStatus: 'error',
       };
     }
   }
 
   private mapProfile(
     profile: LinkedInProfile,
-  ): NonNullable<EnrichedTeamMember["linkedinProfile"]> {
+  ): NonNullable<EnrichedTeamMember['linkedinProfile']> {
     return {
-      headline: profile.headline || "",
-      summary: profile.summary || "",
+      headline: profile.headline || '',
+      summary: profile.summary || '',
       currentCompany: profile.currentCompany
         ? {
-            name: profile.currentCompany.name || "",
-            title: profile.currentCompany.title || "",
+            name: profile.currentCompany.name || '',
+            title: profile.currentCompany.title || '',
           }
         : null,
       experience: profile.experience.map((entry) => ({
         title: entry.title,
         company: entry.company,
         duration: this.formatDuration(entry.startDate, entry.endDate, entry.current),
-        location: entry.location || "",
-        description: entry.description || "",
+        location: entry.location || '',
+        description: entry.description || '',
         startDate: this.formatTimelineDate(entry.startDate) || undefined,
         endDate: entry.current ? null : this.formatTimelineDate(entry.endDate),
       })),
@@ -235,7 +240,7 @@ export class LinkedinEnrichmentService {
         field: entry.fieldOfStudy,
         startDate: entry.startDate || (entry.startYear ? String(entry.startYear) : null),
         endDate: entry.endDate || (entry.endYear ? String(entry.endYear) : null),
-        description: entry.description || "",
+        description: entry.description || '',
       })),
     };
   }
@@ -245,7 +250,7 @@ export class LinkedinEnrichmentService {
     endDate: string | null,
     current: boolean,
   ): string {
-    const start = this.formatTimelineDate(startDate) || "Unknown";
+    const start = this.formatTimelineDate(startDate) || 'Unknown';
     if (current) {
       return `${start} - Present`;
     }
@@ -273,12 +278,18 @@ export class LinkedinEnrichmentService {
     profile: LinkedInProfile,
     companyName: string,
   ): TeamMemberInput | null {
-    const fullName = `${profile.firstName || ""} ${profile.lastName || ""}`.trim();
+    const fullName = `${profile.firstName || ''} ${profile.lastName || ''}`.trim();
     if (!fullName) {
       return null;
     }
+    if (/^linkedin member$/i.test(fullName)) {
+      return null;
+    }
+    if (!profile.profileUrl) {
+      return null;
+    }
 
-    const headline = profile.headline || "";
+    const headline = profile.headline || '';
     if (!this.isRelevantLeadershipProfile(profile, companyName, headline)) {
       return null;
     }
@@ -287,7 +298,7 @@ export class LinkedinEnrichmentService {
     return {
       name: fullName,
       role,
-      linkedinUrl: profile.profileUrl || undefined,
+      linkedinUrl: profile.profileUrl,
     };
   }
 
@@ -311,18 +322,18 @@ export class LinkedinEnrichmentService {
       return true;
     }
 
-    const haystack = `${headline} ${profile.currentCompany?.name || ""}`.toLowerCase();
+    const haystack = `${headline} ${profile.currentCompany?.name || ''}`.toLowerCase();
     return companyTokens.some((token) => haystack.includes(token));
   }
 
   private extractRoleFromHeadline(headline: string): string {
     if (!headline) {
-      return "Leadership";
+      return 'Leadership';
     }
 
     const roleFragment = headline.split(/[|@,-]/)[0]?.trim();
     if (!roleFragment) {
-      return "Leadership";
+      return 'Leadership';
     }
 
     if (roleFragment.length > 80) {

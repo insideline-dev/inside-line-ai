@@ -1,6 +1,7 @@
 import type {
   BusinessModelEvaluation,
   CompetitiveAdvantageEvaluation,
+  CompetitorResearch,
   DealTermsEvaluation,
   ExitPotentialEvaluation,
   FinancialsEvaluation,
@@ -125,15 +126,26 @@ export interface EnrichedTeamMember {
   linkedinProfile?: {
     headline: string;
     summary: string;
+    currentCompany?: {
+      name: string;
+      title: string;
+    } | null;
     experience: Array<{
       title: string;
       company: string;
       duration: string;
+      location?: string;
+      description?: string;
+      startDate?: string;
+      endDate?: string | null;
     }>;
     education: Array<{
       school: string;
       degree: string;
       field: string;
+      startDate?: string | null;
+      endDate?: string | null;
+      description?: string;
     }>;
   };
   enrichmentStatus: "success" | "not_configured" | "not_found" | "error";
@@ -159,7 +171,7 @@ export interface SourceEntry {
   name: string;
   url?: string;
   type: "document" | "website" | "linkedin" | "api" | "search";
-  agent: "team" | "market" | "product" | "news";
+  agent: "team" | "market" | "product" | "news" | "competitor";
   timestamp: string;
 }
 
@@ -168,8 +180,9 @@ export interface ResearchResult {
   market: MarketResearch | null;
   product: ProductResearch | null;
   news: NewsResearch | null;
+  competitor: CompetitorResearch | null;
   sources: SourceEntry[];
-  errors: Array<{ agent: "team" | "market" | "product" | "news"; error: string }>;
+  errors: Array<{ agent: "team" | "market" | "product" | "news" | "competitor"; error: string }>;
 }
 
 export interface EvaluationSummary {

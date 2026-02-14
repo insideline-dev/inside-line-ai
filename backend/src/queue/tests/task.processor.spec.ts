@@ -21,6 +21,22 @@ mock.module('bullmq', () => ({
   Job: mock(() => ({})),
 }));
 
+const mockRedisClient: {
+  quit: ReturnType<typeof mock>;
+  disconnect: ReturnType<typeof mock>;
+  duplicate: ReturnType<typeof mock>;
+  status: string;
+} = {
+  quit: mock(() => Promise.resolve()),
+  disconnect: mock(() => undefined),
+  duplicate: mock(() => mockRedisClient),
+  status: 'ready',
+};
+
+mock.module('ioredis', () => ({
+  default: mock(() => mockRedisClient),
+}));
+
 import { Worker, Job } from 'bullmq';
 
 // Test processor that mimics TaskProcessor behavior
@@ -58,6 +74,9 @@ describe('TaskProcessor', () => {
 
   beforeEach(() => {
     (Worker as any).mockClear();
+    mockRedisClient.quit.mockClear();
+    mockRedisClient.disconnect.mockClear();
+    mockRedisClient.duplicate.mockClear();
     processor = new TestTaskProcessor();
   });
 
@@ -77,10 +96,7 @@ describe('TaskProcessor', () => {
       expect.any(Function),
       expect.objectContaining({
         concurrency: 5,
-        connection: {
-          host: 'localhost',
-          port: 6379,
-        },
+        connection: expect.any(Object),
       }),
     );
   });

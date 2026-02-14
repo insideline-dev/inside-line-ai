@@ -4,6 +4,7 @@ import { GoogleStrategy } from '../strategies/google.strategy';
 import { AuthService } from '../auth.service';
 import { DbUser } from '../user-auth.service';
 import { UserRole } from '../entities/auth.schema';
+import { EarlyAccessService } from '../../modules/early-access';
 import type { Profile } from 'passport-google-oauth20';
 
 describe('GoogleStrategy', () => {
@@ -50,10 +51,16 @@ describe('GoogleStrategy', () => {
       }),
     };
 
+    const mockEarlyAccessService = {
+      addFounderFromGoogleAttempt: jest.fn().mockResolvedValue(undefined),
+      bindRedeemedInviteToUser: jest.fn().mockResolvedValue(undefined),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         GoogleStrategy,
         { provide: AuthService, useValue: mockAuthService },
+        { provide: EarlyAccessService, useValue: mockEarlyAccessService },
         { provide: ConfigService, useValue: mockConfigService },
       ],
     }).compile();

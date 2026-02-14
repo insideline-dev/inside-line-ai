@@ -1,4 +1,9 @@
-import { Injectable, Logger, ServiceUnavailableException, BadRequestException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { LinkedInCacheService } from './linkedin-cache.service';
 import type { LinkedInProfile } from './entities';
@@ -7,6 +12,17 @@ interface UnipileConfig {
   dsn: string;
   apiKey: string;
   accountId: string;
+}
+
+interface CompanySearchItem {
+  id?: string;
+  name?: string;
+  profile_url?: string;
+  followers_count?: number;
+}
+
+interface UnipileSearchResponse {
+  items?: unknown[];
 }
 
 @Injectable()
@@ -59,12 +75,22 @@ export class UnipileService {
       if (profile) {
         // Extract identifier from URL (e.g., "john-doe-123" from linkedin.com/in/john-doe-123/)
         const identifier = this.extractIdentifierFromUrl(linkedinUrl);
-        await this.cacheService.setCache(userId, linkedinUrl, identifier, profile);
+        try {
+          await this.cacheService.setCache(userId, linkedinUrl, identifier, profile);
+        } catch (cacheError) {
+          const cacheMessage =
+            cacheError instanceof Error ? cacheError.message : String(cacheError);
+          this.logger.warn(
+            `Fetched LinkedIn profile but failed to cache ${linkedinUrl}: ${cacheMessage}`,
+          );
+        }
       }
 
       return profile;
     } catch (error) {
-      this.logger.error(`Failed to fetch LinkedIn profile: ${error.message}`, error.stack);
+      const message = this.asMessage(error);
+      const stack = error instanceof Error ? error.stack : undefined;
+      this.logger.error(`Failed to fetch LinkedIn profile: ${message}`, stack);
       throw error;
     }
   }
@@ -81,18 +107,48 @@ export class UnipileService {
       const profiles = await this.searchProfilesFromAPI(name, company);
       return profiles;
     } catch (error) {
-      this.logger.error(`Failed to search LinkedIn profiles: ${error.message}`, error.stack);
+      const message = this.asMessage(error);
+      const stack = error instanceof Error ? error.stack : undefined;
+      this.logger.error(`Failed to search LinkedIn profiles: ${message}`, stack);
       throw error;
     }
+  }
+
+  /**
+   * Search people in a specific company by resolving the best matching company ID first.
+   * This avoids broad text matches that pull unrelated similarly-named companies.
+   */
+  async searchProfilesInCompany(
+    name: string,
+    companyName: string,
+    companyWebsite?: string,
+  ): Promise<LinkedInProfile[]> {
+    const companyId = await this.resolveBestCompanyId(companyName, companyWebsite);
+    if (!companyId) {
+      return [];
+    }
+
+    const body: Record<string, unknown> = {
+      api: 'classic',
+      category: 'people',
+      keywords: name,
+      company: [companyId],
+    };
+    const items = await this.executeLinkedinSearch(body);
+    return items.map((profile) =>
+      this.mapUnipileProfileToLinkedInProfile(profile as Record<string, unknown>),
+    );
   }
 
   /**
    * Fetch profile from Unipile API
    */
   private async fetchProfileFromAPI(profileUrl: string): Promise<LinkedInProfile | null> {
-    const { dsn, apiKey, accountId } = this.config!;
+    const { dsn, apiKey, accountId } = this.getConfigOrThrow();
     const identifier = this.extractIdentifierFromUrl(profileUrl);
-    const url = `https://${dsn}/api/v1/users/${identifier}?account_id=${accountId}`;
+    // linkedin_sections=* is required by Unipile to return extended profile data
+    // such as experience/education instead of only basic identity fields.
+    const url = `https://${dsn}/api/v1/users/${identifier}?account_id=${accountId}&linkedin_sections=*`;
 
     const response = await fetch(url, {
       method: 'GET',
@@ -118,17 +174,171 @@ export class UnipileService {
    * Search profiles from Unipile API
    */
   private async searchProfilesFromAPI(name: string, company?: string): Promise<LinkedInProfile[]> {
-    const { dsn, apiKey, accountId } = this.config!;
-    const url = `https://${dsn}/api/v1/linkedin/search?account_id=${accountId}`;
-
     const body: Record<string, unknown> = {
       api: 'classic',
       category: 'people',
       keywords: name,
     };
     if (company) {
-      body.company = company;
+      body.advanced_keywords = {
+        company,
+      };
     }
+
+    const items = await this.executeLinkedinSearch(body);
+    return items.map((profile) =>
+      this.mapUnipileProfileToLinkedInProfile(profile as Record<string, unknown>),
+    );
+  }
+
+  /**
+   * Map Unipile API response to our LinkedInProfile interface
+   */
+  private mapUnipileProfileToLinkedInProfile(data: Record<string, any>): LinkedInProfile {
+    const fullName =
+      typeof data.name === 'string'
+        ? data.name.trim()
+        : typeof data.full_name === 'string'
+          ? data.full_name.trim()
+          : '';
+    const [derivedFirstName, ...rest] = fullName ? fullName.split(/\s+/) : [];
+    const derivedLastName = rest.join(' ');
+    const experienceEntries =
+      data.work_experience || data.experience || data.experiences || data.positions || [];
+    const educationEntries = data.education || data.educations || [];
+
+    return {
+      id: data.id || data.profile_id || '',
+      firstName: data.first_name || data.firstName || derivedFirstName || '',
+      lastName: data.last_name || data.lastName || derivedLastName || '',
+      headline: data.headline || data.title || '',
+      location: data.location || '',
+      profileUrl: data.profile_url || data.profileUrl || data.url || '',
+      profileImageUrl: data.profile_image_url || data.profileImageUrl || null,
+      summary: data.summary || null,
+      currentCompany: data.current_company
+        ? {
+            name: data.current_company.name || '',
+            title: data.current_company.title || '',
+          }
+        : data.company
+          ? {
+              name: data.company,
+              title: data.title || '',
+            }
+        : null,
+      experience: experienceEntries.map((exp: any) => ({
+        company: exp.company || '',
+        title: exp.title || exp.position || '',
+        startDate: exp.start_date || exp.startDate || exp.start || '',
+        endDate: exp.end_date || exp.endDate || exp.end || null,
+        current:
+          typeof exp.current === 'boolean'
+            ? exp.current
+            : !(exp.end_date || exp.endDate || exp.end),
+        location: exp.location || '',
+        description: exp.description || '',
+        companyPictureUrl: exp.company_picture_url || exp.companyPictureUrl || null,
+      })),
+      education: educationEntries.map((edu: any) => ({
+        school: edu.school || '',
+        degree: edu.degree || '',
+        fieldOfStudy: edu.field_of_study || edu.fieldOfStudy || '',
+        startYear:
+          edu.start_year ||
+          edu.startYear ||
+          this.extractYear(edu.start || edu.startDate) ||
+          0,
+        endYear:
+          edu.end_year ||
+          edu.endYear ||
+          this.extractYear(edu.end || edu.endDate) ||
+          null,
+        startDate: edu.start || edu.startDate || null,
+        endDate: edu.end || edu.endDate || null,
+        description: edu.description || '',
+        schoolPictureUrl: edu.school_picture_url || edu.schoolPictureUrl || null,
+      })),
+    };
+  }
+
+  private async resolveBestCompanyId(
+    companyName: string,
+    companyWebsite?: string,
+  ): Promise<string | null> {
+    const body = {
+      api: 'classic',
+      category: 'companies',
+      keywords: companyName,
+    };
+    const items = (await this.executeLinkedinSearch(body)) as CompanySearchItem[];
+    if (items.length === 0) {
+      return null;
+    }
+
+    const companyToken = this.normalizeCompanyToken(companyName);
+    const websiteToken = this.extractWebsiteToken(companyWebsite);
+
+    const ranked = items
+      .filter((item) => typeof item.id === 'string' && /^\d+$/.test(item.id))
+      .map((item) => {
+        const name = (item.name || '').toLowerCase();
+        const profileUrl = (item.profile_url || '').toLowerCase();
+        let score = 0;
+        if (companyToken && name.includes(companyToken)) score += 10;
+        if (websiteToken && profileUrl.includes(websiteToken)) score += 8;
+        score += Math.log10((item.followers_count || 0) + 1);
+        return { id: item.id as string, score };
+      })
+      .sort((a, b) => b.score - a.score);
+
+    return ranked[0]?.id ?? null;
+  }
+
+  private normalizeCompanyToken(value: string): string {
+    return value.trim().toLowerCase();
+  }
+
+  private extractWebsiteToken(website?: string): string | null {
+    if (!website) {
+      return null;
+    }
+
+    const candidate = /^https?:\/\//i.test(website) ? website : `https://${website}`;
+    try {
+      const host = new URL(candidate).hostname.toLowerCase().replace(/^www\./, '');
+      return host.split('.')[0] || null;
+    } catch {
+      return null;
+    }
+  }
+
+  private extractYear(value: unknown): number | null {
+    if (typeof value !== 'string' || value.trim().length === 0) {
+      return null;
+    }
+
+    const match = value.match(/\b(19|20)\d{2}\b/);
+    if (!match) {
+      return null;
+    }
+
+    const year = Number(match[0]);
+    return Number.isFinite(year) ? year : null;
+  }
+
+  /**
+   * Extract LinkedIn identifier from URL
+   * e.g., "https://linkedin.com/in/john-doe-123/" -> "john-doe-123"
+   */
+  private extractIdentifierFromUrl(url: string): string {
+    const match = url.match(/linkedin\.com\/in\/([^/?]+)/i);
+    return match?.[1] || 'unknown';
+  }
+
+  private async executeLinkedinSearch(body: Record<string, unknown>): Promise<unknown[]> {
+    const { dsn, apiKey, accountId } = this.getConfigOrThrow();
+    const url = `https://${dsn}/api/v1/linkedin/search?account_id=${accountId}`;
 
     const response = await fetch(url, {
       method: 'POST',
@@ -145,53 +355,19 @@ export class UnipileService {
       throw new BadRequestException(`Unipile API error: ${error}`);
     }
 
-    const data = await response.json();
-    const results = data.items || [];
-    return results.map((profile: any) => this.mapUnipileProfileToLinkedInProfile(profile));
+    const data = (await response.json()) as UnipileSearchResponse;
+    return Array.isArray(data.items) ? data.items : [];
   }
 
-  /**
-   * Map Unipile API response to our LinkedInProfile interface
-   */
-  private mapUnipileProfileToLinkedInProfile(data: any): LinkedInProfile {
-    return {
-      id: data.id || data.profile_id || '',
-      firstName: data.first_name || data.firstName || '',
-      lastName: data.last_name || data.lastName || '',
-      headline: data.headline || '',
-      location: data.location || '',
-      profileUrl: data.profile_url || data.profileUrl || '',
-      profileImageUrl: data.profile_image_url || data.profileImageUrl || null,
-      summary: data.summary || null,
-      currentCompany: data.current_company
-        ? {
-            name: data.current_company.name || '',
-            title: data.current_company.title || '',
-          }
-        : null,
-      experience: (data.experience || []).map((exp: any) => ({
-        company: exp.company || '',
-        title: exp.title || '',
-        startDate: exp.start_date || exp.startDate || '',
-        endDate: exp.end_date || exp.endDate || null,
-        current: exp.current || false,
-      })),
-      education: (data.education || []).map((edu: any) => ({
-        school: edu.school || '',
-        degree: edu.degree || '',
-        fieldOfStudy: edu.field_of_study || edu.fieldOfStudy || '',
-        startYear: edu.start_year || edu.startYear || 0,
-        endYear: edu.end_year || edu.endYear || null,
-      })),
-    };
+  private getConfigOrThrow(): UnipileConfig {
+    if (!this.config) {
+      throw new ServiceUnavailableException('LinkedIn integration not configured');
+    }
+
+    return this.config;
   }
 
-  /**
-   * Extract LinkedIn identifier from URL
-   * e.g., "https://linkedin.com/in/john-doe-123/" -> "john-doe-123"
-   */
-  private extractIdentifierFromUrl(url: string): string {
-    const match = url.match(/linkedin\.com\/in\/([^/?]+)/i);
-    return match?.[1] || 'unknown';
+  private asMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
   }
 }

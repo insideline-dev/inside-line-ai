@@ -191,6 +191,21 @@ export function createEvaluationPipelineInput(): EvaluationPipelineInput {
             url: "https://opspilot.example.com",
           },
         ],
+        indirectCompetitors: ["Internal ERP custom workflows", "Manual spreadsheet operations"],
+        indirectCompetitorsDetailed: [
+          {
+            name: "Internal ERP custom workflows",
+            description: "Enterprises extending ERP modules instead of adopting dedicated tools",
+            whyIndirect: "Competes for same workflow automation budget",
+            threatLevel: "medium",
+          },
+          {
+            name: "Manual spreadsheet operations",
+            description: "Ops teams relying on spreadsheet-based compliance tracking",
+            whyIndirect: "Low-cost substitute with poor scalability",
+            threatLevel: "low",
+          },
+        ],
         marketTrends: [
           "Regulatory pressure increasing for digital compliance evidence",
           "M&A activity accelerating in industrial workflow software",
@@ -244,6 +259,49 @@ export function createEvaluationPipelineInput(): EvaluationPipelineInput {
         sentiment: "positive",
         recentEvents: ["Partner program launch", "New enterprise logos"],
         sources: ["https://news.example.com/clipaf-enterprise"],
+      },
+      competitor: {
+        competitors: [
+          {
+            name: "FactoryCloud",
+            description: "Industrial analytics and compliance workflows",
+            website: "https://factorycloud.example.com",
+            fundingRaised: 45_000_000,
+            fundingStage: "Series B",
+            employeeCount: 200,
+            productOverview: "Cloud-based industrial analytics platform with compliance reporting modules",
+            keyFeatures: ["Analytics dashboard", "Compliance reporting", "IoT integration"],
+            pricing: "Enterprise annual contracts starting at $50K/yr",
+            targetMarket: "Enterprise manufacturing and industrial operations",
+            differentiators: ["Larger integration ecosystem", "More mature analytics"],
+            weaknesses: ["Generic platform, not AI-native", "Complex implementation"],
+            threatLevel: "high",
+          },
+          {
+            name: "OpsPilot",
+            description: "Workflow orchestration for operations teams",
+            website: "https://opspilot.example.com",
+            fundingRaised: 28_000_000,
+            fundingStage: "Series A",
+            productOverview: "Workflow orchestration tool focused on operations team productivity",
+            keyFeatures: ["Drag-and-drop workflows", "Team collaboration"],
+            targetMarket: "Mid-market operations teams",
+            differentiators: ["Simpler UX", "Faster deployment"],
+            weaknesses: ["No compliance focus", "Limited to workflow orchestration"],
+            threatLevel: "medium",
+          },
+        ],
+        indirectCompetitors: [
+          {
+            name: "Internal ERP custom workflows",
+            description: "Enterprises extending ERP modules instead of adopting dedicated tools",
+            whyIndirect: "Competes for same workflow automation budget",
+            threatLevel: "medium",
+          },
+        ],
+        marketPositioning: "Positioned as AI-native vertical specialist for industrial compliance",
+        competitiveLandscapeSummary: "Fragmented market with horizontal players and limited vertical AI-native competition",
+        sources: ["https://crunchbase.example.com/factorycloud"],
       },
       sources: [
         {

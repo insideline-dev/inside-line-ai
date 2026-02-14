@@ -36,6 +36,7 @@ interface Education {
 interface TeamMember {
   name: string;
   role: string;
+  discovered?: boolean;
   linkedinUrl?: string;
   headline?: string;
   summary?: string;
@@ -94,7 +95,14 @@ export function TeamProfileCard({
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <h3 className="text-lg font-semibold">{member.name}</h3>
-                  <p className="text-sm text-primary font-medium">{member.role}</p>
+                  <div className="mt-0.5 flex items-center gap-2">
+                    <p className="text-sm text-primary font-medium">{member.role}</p>
+                    {member.discovered && (
+                      <Badge variant="secondary" className="h-5 px-2 text-[10px] uppercase tracking-wide">
+                        Discovered
+                      </Badge>
+                    )}
+                  </div>
                 </div>
                 {member.fmfScore !== undefined && member.fmfScore !== null && (
                   <Badge
@@ -163,9 +171,7 @@ export function TeamProfileCard({
 
         {showTimelines && (hasExperience || hasEducation) && (
           <div className="p-6 space-y-6">
-            {hasExperience && (
-              <ExperienceTimeline experiences={member.experience!} />
-            )}
+            <ExperienceTimeline experiences={member.experience || []} />
 
             {hasEducation && (
               <EducationTimeline education={member.education!} />
@@ -202,7 +208,19 @@ interface ExperienceTimelineProps {
 }
 
 export function ExperienceTimeline({ experiences }: ExperienceTimelineProps) {
-  if (!experiences || experiences.length === 0) return null;
+  if (!experiences || experiences.length === 0) {
+    return (
+      <div className="space-y-3">
+        <h4 className="text-sm font-semibold flex items-center gap-2">
+          <Briefcase className="w-4 h-4 text-primary" />
+          Experience
+        </h4>
+        <p className="text-xs text-muted-foreground">
+          No experience data was returned by the LinkedIn provider for this profile.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3">

@@ -109,9 +109,25 @@ export class ProgressTrackerService {
     if (params.status === PhaseStatus.RUNNING && !phase.startedAt) {
       phase.startedAt = now;
       payload.currentPhase = params.phase;
+      this.logger.log(
+        `[Pipeline] 🚀 STARTING ${params.phase} phase | Startup: ${params.startupId}`,
+      );
     }
     if (isPhaseTerminal(params.status)) {
       phase.completedAt = now;
+      const duration =
+        (new Date(now).getTime() -
+          new Date(phase.startedAt || now).getTime()) /
+        1000;
+      if (params.status === PhaseStatus.COMPLETED) {
+        this.logger.log(
+          `[Pipeline] ✅ COMPLETED ${params.phase} phase in ${duration}s | Startup: ${params.startupId}`,
+        );
+      } else if (params.status === PhaseStatus.FAILED) {
+        this.logger.error(
+          `[Pipeline] ❌ FAILED ${params.phase} phase after ${duration}s | Error: ${params.error} | Startup: ${params.startupId}`,
+        );
+      }
     }
     if (params.error) {
       phase.error = params.error;
@@ -129,8 +145,13 @@ export class ProgressTrackerService {
       (payload.phasesCompleted.length / Object.keys(payload.phases).length) *
         100,
     );
+    payload.currentPhase = this.resolveCurrentPhase(payload, params.phase);
     payload.estimatedTimeRemaining = this.estimateTimeRemaining(payload);
     payload.updatedAt = now;
+
+    this.logger.debug(
+      `[Pipeline] Progress: ${payload.overallProgress}% | Completed: ${payload.phasesCompleted.join(", ") || "none"} | Next: ${payload.currentPhase}`,
+    );
 
     await this.persistProgress(params.startupId, payload);
     this.emitPhaseEvent(params.userId, params.startupId, params.phase, phase);
@@ -169,12 +190,31 @@ export class ProgressTrackerService {
 
     if (params.status === "running" && !next.startedAt) {
       next.startedAt = now;
+      this.logger.log(
+        `[Pipeline] 🤖 Agent running: ${params.key} | Phase: ${params.phase}`,
+      );
     }
     if (params.status === "completed" || params.status === "failed") {
       next.completedAt = now;
+      const duration =
+        (new Date(now).getTime() -
+          new Date(next.startedAt || now).getTime()) /
+        1000;
+      if (params.status === "completed") {
+        this.logger.log(
+          `[Pipeline] ✅ Agent completed: ${params.key} in ${duration}s | Phase: ${params.phase}`,
+        );
+      } else {
+        this.logger.error(
+          `[Pipeline] ❌ Agent failed: ${params.key} | Error: ${params.error} | Phase: ${params.phase}`,
+        );
+      }
     }
     if (typeof params.progress === "number") {
       next.progress = params.progress;
+      this.logger.debug(
+        `[Pipeline] Agent ${params.key} progress: ${params.progress}%`,
+      );
     }
     if (params.error) {
       next.error = params.error;
@@ -211,9 +251,28 @@ export class ProgressTrackerService {
     payload.currentPhase = params.currentPhase ?? payload.currentPhase;
     if (params.status === PipelineStatus.COMPLETED) {
       payload.overallProgress = 100;
+      const totalTime = Object.values(payload.phases).reduce(
+        (sum, phase) => {
+          if (phase.startedAt && phase.completedAt) {
+            return (
+              sum +
+              (new Date(phase.completedAt).getTime() -
+                new Date(phase.startedAt).getTime())
+            );
+          }
+          return sum;
+        },
+        0,
+      ) / 1000;
+      this.logger.log(
+        `[Pipeline] 🎉 PIPELINE COMPLETED | Total time: ${totalTime}s | Overall score: ${params.overallScore ?? "N/A"} | Startup: ${params.startupId}`,
+      );
     }
     if (params.error) {
       payload.error = params.error;
+      this.logger.error(
+        `[Pipeline] ❌ PIPELINE FAILED | Error: ${params.error} | Startup: ${params.startupId}`,
+      );
     } else if (params.status === PipelineStatus.COMPLETED) {
       delete payload.error;
     }
@@ -242,7 +301,7 @@ export class ProgressTrackerService {
       return null;
     }
 
-    const parsed = this.parseProgressPayload(row.analysisProgress);
+    const parsed = this.parseProgressPayload(row.analysisProgress, startupId);
     if ("error" in parsed) {
       this.logger.warn(
         `Invalid analysisProgress for startup ${startupId}: ${parsed.error}`,
@@ -326,6 +385,39 @@ export class ProgressTrackerService {
     return Math.max(0, Math.round((avgDuration * remainingCount) / 1000));
   }
 
+  private resolveCurrentPhase(
+    payload: PipelineProgressPayload,
+    fallback: PipelinePhase,
+  ): PipelinePhase {
+    const orderedPhases = Object.values(PipelinePhase);
+
+    const running = orderedPhases.find(
+      (phase) => payload.phases[phase]?.status === PhaseStatus.RUNNING,
+    );
+    if (running) {
+      return running;
+    }
+
+    const waiting = orderedPhases.find(
+      (phase) => payload.phases[phase]?.status === PhaseStatus.WAITING,
+    );
+    if (waiting) {
+      return waiting;
+    }
+
+    const pending = orderedPhases.find(
+      (phase) => payload.phases[phase]?.status === PhaseStatus.PENDING,
+    );
+    if (pending) {
+      return pending;
+    }
+
+    const completed = [...orderedPhases].reverse().find(
+      (phase) => payload.phases[phase]?.status === PhaseStatus.COMPLETED,
+    );
+    return completed ?? fallback;
+  }
+
   private emitPhaseEvent(
     userId: string,
     startupId: string,
@@ -386,9 +478,358 @@ export class ProgressTrackerService {
       .returning({ startupId: startupEvaluation.startupId });
   }
 
-  private parseProgressPayload(value: unknown): { data: PipelineProgressPayload } | { error: string } {
+  private parseProgressPayload(
+    value: unknown,
+    startupId: string,
+  ): { data: PipelineProgressPayload } | { error: string } {
     const result = PipelineProgressPayloadSchema.safeParse(value);
     if (result.success) return { data: result.data };
+
+    const normalized = this.normalizeLegacyProgressPayload(value, startupId);
+    if (normalized) {
+      const normalizedResult = PipelineProgressPayloadSchema.safeParse(normalized);
+      if (normalizedResult.success) {
+        return { data: normalizedResult.data };
+      }
+    }
+
     return { error: result.error.message };
+  }
+
+  private normalizeLegacyProgressPayload(
+    value: unknown,
+    startupId: string,
+  ): PipelineProgressPayload | null {
+    if (!value || typeof value !== "object") {
+      return null;
+    }
+
+    const record = value as Record<string, unknown>;
+
+    const hasLegacyShape =
+      typeof record.currentStage === "number" ||
+      Array.isArray(record.stageProgress) ||
+      (!!record.phases && typeof record.phases === "object") ||
+      typeof record.pipelineStatus === "string" ||
+      typeof record.status === "string" ||
+      typeof record.currentPhase === "string" ||
+      typeof record.overallProgress === "number" ||
+      Array.isArray(record.phasesCompleted) ||
+      typeof record.lastUpdatedAt === "string" ||
+      typeof record.startedAt === "string" ||
+      Array.isArray(record.completedAgents) ||
+      typeof record.currentAgent === "string";
+    if (!hasLegacyShape) {
+      return null;
+    }
+
+    const nowIso = new Date().toISOString();
+    const phases = this.createInitialPhases(new Set(Object.values(PipelinePhase)));
+
+    const stageProgress = record.stageProgress;
+    if (Array.isArray(stageProgress)) {
+      for (const item of stageProgress) {
+        if (!item || typeof item !== "object") {
+          continue;
+        }
+
+        const phase = this.stageToPhase((item as { stage?: unknown }).stage);
+        if (!phase) {
+          continue;
+        }
+
+        const stageRecord = item as Record<string, unknown>;
+        phases[phase] = {
+          ...phases[phase],
+          status: this.coercePhaseStatus(stageRecord.status),
+          startedAt:
+            typeof stageRecord.startedAt === "string"
+              ? stageRecord.startedAt
+              : undefined,
+          completedAt:
+            typeof stageRecord.completedAt === "string"
+              ? stageRecord.completedAt
+              : undefined,
+        };
+      }
+    }
+
+    if (record.phases && typeof record.phases === "object") {
+      const phaseEntries = Object.entries(
+        record.phases as Record<string, unknown>,
+      );
+      for (const [legacyKey, value] of phaseEntries) {
+        if (!value || typeof value !== "object") {
+          continue;
+        }
+        const phase = this.mapLegacyPhaseKey(legacyKey);
+        if (!phase) {
+          continue;
+        }
+
+        const phaseRecord = value as Record<string, unknown>;
+        const currentAgents = phases[phase].agents;
+        const mappedAgents = this.mapLegacyAgents(phaseRecord.agents);
+        phases[phase] = {
+          ...phases[phase],
+          status: this.coercePhaseStatus(phaseRecord.status),
+          startedAt:
+            typeof phaseRecord.startedAt === "string"
+              ? phaseRecord.startedAt
+              : phases[phase].startedAt,
+          completedAt:
+            typeof phaseRecord.completedAt === "string"
+              ? phaseRecord.completedAt
+              : phases[phase].completedAt,
+          error:
+            typeof phaseRecord.error === "string" ? phaseRecord.error : undefined,
+          agents:
+            mappedAgents && Object.keys(mappedAgents).length > 0
+              ? mappedAgents
+              : currentAgents,
+        };
+      }
+    }
+
+    if (Array.isArray(record.phasesCompleted)) {
+      for (const item of record.phasesCompleted) {
+        if (typeof item !== "string") {
+          continue;
+        }
+        const phase = this.mapLegacyPhaseKey(item);
+        if (!phase) {
+          continue;
+        }
+        phases[phase] = {
+          ...phases[phase],
+          status: PhaseStatus.COMPLETED,
+        };
+      }
+    }
+
+    const phasesCompleted = (
+      Object.entries(phases) as Array<[PipelinePhase, PhaseProgress]>
+    )
+      .filter(([, phase]) => phase.status === PhaseStatus.COMPLETED)
+      .map(([phase]) => phase);
+
+    const currentStagePhase = this.stageToPhase(record.currentStage);
+    const currentPhase =
+      currentStagePhase ??
+      this.coercePipelinePhase(record.currentPhase, phases) ??
+      PipelinePhase.EXTRACTION;
+
+    const overallProgress =
+      typeof record.overallProgress === "number"
+        ? this.normalizePercent(record.overallProgress)
+        : this.normalizePercent(
+            (phasesCompleted.length / Object.keys(phases).length) * 100,
+          );
+
+    const status =
+      this.coercePipelineStatus(record.status) ??
+      this.coercePipelineStatus(record.pipelineStatus) ??
+      (overallProgress >= 100
+        ? PipelineStatus.COMPLETED
+        : PipelineStatus.RUNNING);
+
+    const pipelineRunId =
+      typeof record.pipelineRunId === "string" && record.pipelineRunId.trim()
+        ? record.pipelineRunId
+        : `legacy-${startupId}`;
+
+    const resolvedStartupId =
+      typeof record.startupId === "string" && record.startupId.trim()
+        ? record.startupId
+        : startupId;
+
+    const updatedAt =
+      typeof record.updatedAt === "string" && record.updatedAt.trim()
+        ? record.updatedAt
+        : typeof record.lastUpdatedAt === "string" && record.lastUpdatedAt.trim()
+          ? record.lastUpdatedAt
+          : nowIso;
+
+    const error =
+      typeof record.error === "string" && record.error.trim()
+        ? record.error
+        : undefined;
+
+    return {
+      pipelineRunId,
+      startupId: resolvedStartupId,
+      status,
+      currentPhase,
+      overallProgress,
+      phasesCompleted,
+      phases,
+      updatedAt,
+      error,
+    };
+  }
+
+  private mapLegacyAgents(
+    value: unknown,
+  ): Record<string, AgentProgress> | null {
+    if (!value || typeof value !== "object") {
+      return null;
+    }
+
+    const entries = Object.entries(value as Record<string, unknown>);
+    if (!entries.length) {
+      return {};
+    }
+
+    const mapped: Record<string, AgentProgress> = {};
+
+    for (const [key, raw] of entries) {
+      if (!raw || typeof raw !== "object") {
+        continue;
+      }
+
+      const record = raw as Record<string, unknown>;
+      const status = this.coerceAgentStatus(record.status);
+      mapped[key] = {
+        key: typeof record.key === "string" ? record.key : key,
+        status,
+        progress:
+          typeof record.progress === "number"
+            ? this.normalizePercent(record.progress)
+            : undefined,
+        startedAt:
+          typeof record.startedAt === "string" ? record.startedAt : undefined,
+        completedAt:
+          typeof record.completedAt === "string" ? record.completedAt : undefined,
+        error: typeof record.error === "string" ? record.error : undefined,
+      };
+    }
+
+    return mapped;
+  }
+
+  private mapLegacyPhaseKey(value: string): PipelinePhase | null {
+    if (value === PipelinePhase.EXTRACTION) return PipelinePhase.EXTRACTION;
+    if (value === PipelinePhase.SCRAPING) return PipelinePhase.SCRAPING;
+    if (value === PipelinePhase.RESEARCH) return PipelinePhase.RESEARCH;
+    if (value === PipelinePhase.EVALUATION) return PipelinePhase.EVALUATION;
+    if (value === PipelinePhase.SYNTHESIS) return PipelinePhase.SYNTHESIS;
+
+    const normalized = value.trim().toLowerCase().replace(/[\s_]/g, "-");
+    if (normalized.includes("extract")) return PipelinePhase.EXTRACTION;
+    if (normalized.includes("scrap") || normalized.includes("website")) {
+      return PipelinePhase.SCRAPING;
+    }
+    if (normalized.includes("research")) return PipelinePhase.RESEARCH;
+    if (normalized.includes("evaluat") || normalized.includes("analysis")) {
+      return PipelinePhase.EVALUATION;
+    }
+    if (normalized.includes("synth")) return PipelinePhase.SYNTHESIS;
+
+    return null;
+  }
+
+  private stageToPhase(value: unknown): PipelinePhase | null {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      return null;
+    }
+    if (value <= 1) return PipelinePhase.EXTRACTION;
+    if (value === 2) return PipelinePhase.SCRAPING;
+    if (value === 3) return PipelinePhase.RESEARCH;
+    if (value === 4) return PipelinePhase.EVALUATION;
+    if (value >= 5) return PipelinePhase.SYNTHESIS;
+    return null;
+  }
+
+  private coercePipelineStatus(value: unknown): PipelineStatus | null {
+    if (value === PipelineStatus.RUNNING) return PipelineStatus.RUNNING;
+    if (value === PipelineStatus.COMPLETED) return PipelineStatus.COMPLETED;
+    if (value === PipelineStatus.FAILED) return PipelineStatus.FAILED;
+    if (value === PipelineStatus.CANCELLED) return PipelineStatus.CANCELLED;
+    return null;
+  }
+
+  private coercePipelinePhase(
+    value: unknown,
+    phases: Record<PipelinePhase, PhaseProgress>,
+  ): PipelinePhase | null {
+    if (value === PipelinePhase.EXTRACTION) return PipelinePhase.EXTRACTION;
+    if (value === PipelinePhase.SCRAPING) return PipelinePhase.SCRAPING;
+    if (value === PipelinePhase.RESEARCH) return PipelinePhase.RESEARCH;
+    if (value === PipelinePhase.EVALUATION) return PipelinePhase.EVALUATION;
+    if (value === PipelinePhase.SYNTHESIS) return PipelinePhase.SYNTHESIS;
+    if (typeof value === "string") {
+      const mapped = this.mapLegacyPhaseKey(value);
+      if (mapped) {
+        return mapped;
+      }
+    }
+
+    const running = (
+      Object.entries(phases) as Array<[PipelinePhase, PhaseProgress]>
+    ).find(([, phase]) => phase.status === PhaseStatus.RUNNING);
+    if (running) {
+      return running[0];
+    }
+
+    const waiting = (
+      Object.entries(phases) as Array<[PipelinePhase, PhaseProgress]>
+    ).find(([, phase]) => phase.status === PhaseStatus.WAITING);
+    if (waiting) {
+      return waiting[0];
+    }
+
+    const pending = (
+      Object.entries(phases) as Array<[PipelinePhase, PhaseProgress]>
+    ).find(([, phase]) => phase.status === PhaseStatus.PENDING);
+    if (pending) {
+      return pending[0];
+    }
+
+    return null;
+  }
+
+  private coercePhaseStatus(value: unknown): PhaseStatus {
+    if (value === PhaseStatus.PENDING) return PhaseStatus.PENDING;
+    if (value === PhaseStatus.WAITING) return PhaseStatus.WAITING;
+    if (value === PhaseStatus.RUNNING) return PhaseStatus.RUNNING;
+    if (value === PhaseStatus.COMPLETED) return PhaseStatus.COMPLETED;
+    if (value === PhaseStatus.FAILED) return PhaseStatus.FAILED;
+    if (value === PhaseStatus.SKIPPED) return PhaseStatus.SKIPPED;
+
+    if (typeof value !== "string") {
+      return PhaseStatus.PENDING;
+    }
+
+    const normalized = value.toLowerCase().replace(/[\s_]/g, "-");
+    if (normalized === "in-progress" || normalized === "processing") {
+      return PhaseStatus.RUNNING;
+    }
+    if (normalized === "done" || normalized === "success") {
+      return PhaseStatus.COMPLETED;
+    }
+    if (normalized === "queued") {
+      return PhaseStatus.WAITING;
+    }
+    return PhaseStatus.PENDING;
+  }
+
+  private coerceAgentStatus(
+    value: unknown,
+  ): "pending" | "running" | "completed" | "failed" {
+    if (value === "pending") return "pending";
+    if (value === "running") return "running";
+    if (value === "completed") return "completed";
+    if (value === "failed") return "failed";
+    if (typeof value === "string" && value.toLowerCase() === "in-progress") {
+      return "running";
+    }
+    return "pending";
+  }
+
+  private normalizePercent(value: number): number {
+    if (!Number.isFinite(value)) {
+      return 0;
+    }
+    return Math.max(0, Math.min(100, Math.round(value)));
   }
 }

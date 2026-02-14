@@ -40,16 +40,30 @@ export class LegalEvaluationAgent extends BaseEvaluationAgent<LegalEvaluation> {
       ),
     );
 
-    const regulatoryLandscape =
-      research.market?.marketTrends.filter((trend) =>
-        /(regulat|compliance|policy|audit|risk)/i.test(trend),
-      ) ?? [];
+    const regulatoryLandscape = research.market?.marketTrends ?? [];
+
+    const newsContext = research.news
+      ? {
+          regulatoryNews: research.news.articles
+            .filter((a) => /(regulat|compliance|legal|policy)/i.test(a.title + " " + a.summary))
+            .map((a) => ({ title: a.title, summary: a.summary })),
+        }
+      : undefined;
+
+    const corporateStructure = extraction.startupContext
+      ? {
+          sectorIndustryGroup: extraction.startupContext.sectorIndustryGroup,
+          sectorIndustry: extraction.startupContext.sectorIndustry,
+        }
+      : undefined;
 
     return {
       location: extraction.location,
       industry: extraction.industry,
       complianceMentions,
       regulatoryLandscape,
+      newsContext,
+      corporateStructure,
     };
   }
 

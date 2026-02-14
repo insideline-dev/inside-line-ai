@@ -38,15 +38,24 @@ export class EvaluationProcessor
     private notificationGateway: NotificationGateway,
   ) {
     const redisUrl = config.get<string>("REDIS_URL", "redis://localhost:6379");
+    const queuePrefix = config.get<string>("QUEUE_PREFIX");
     super(
       QUEUE_NAMES.AI_EVALUATION,
       parseRedisUrl(redisUrl),
       QUEUE_CONCURRENCY[QUEUE_NAMES.AI_EVALUATION],
+      queuePrefix,
     );
   }
 
-  onModuleInit() {
-    this.initialize();
+  async onModuleInit() {
+    await this.initialize();
+    if (!this.worker) {
+      this.logger.warn(
+        "EvaluationProcessor initialized without an active worker; recovery will retry automatically.",
+      );
+      return;
+    }
+    this.logger.log(`✅ EvaluationProcessor ready | Queue: ${QUEUE_NAMES.AI_EVALUATION} | Concurrency: ${QUEUE_CONCURRENCY[QUEUE_NAMES.AI_EVALUATION]}`);
   }
 
   async onModuleDestroy() {
@@ -73,6 +82,27 @@ export class EvaluationProcessor
       run: () =>
         this.evaluationService.run(startupId, {
           agentKey,
+          onAgentStart: (agent) => {
+            this.pipelineService
+              .onAgentProgress({
+                startupId,
+                userId,
+                pipelineRunId,
+                phase: PipelinePhase.EVALUATION,
+                key: agent,
+                status: "running",
+                progress: 0,
+              })
+              .catch((progressError) => {
+                this.logger.warn(
+                  `Failed to mark evaluation agent running for ${agent}: ${
+                    progressError instanceof Error
+                      ? progressError.message
+                      : String(progressError)
+                  }`,
+                );
+              });
+          },
           onAgentComplete: ({ agent, output, usedFallback, error }) => {
             this.pipelineService
               .onAgentProgress({

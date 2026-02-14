@@ -24,6 +24,7 @@ export function baseEvaluation(
   return {
     score: normalized,
     confidence: 0.1,
+    feedback: `${finding}. Automated evaluation could not be completed — this section requires manual review by the investment team.`,
     keyFindings: [finding, "Automated evaluation failed — requires manual review"],
     risks: ["Unable to complete automated assessment"],
     dataGaps: ["Evaluation failed — used heuristic fallback"],
@@ -45,5 +46,5 @@ export function fundingScore(fundingTarget: number): number {
   if (fundingTarget <= 500_000) return 5;
   if (fundingTarget <= 2_000_000) return 10;
   if (fundingTarget <= 5_000_000) return 14;
-  return 12;
+  return 16;
 }

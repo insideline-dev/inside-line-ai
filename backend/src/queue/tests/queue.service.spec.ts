@@ -17,11 +17,22 @@ const mockQueueEvents = {
   on: jest.fn(),
   off: jest.fn(),
   close: jest.fn(),
+  waitUntilReady: jest.fn().mockResolvedValue(undefined),
+};
+
+const mockRedisClient = {
+  on: jest.fn(),
+  ping: jest.fn().mockResolvedValue('PONG'),
+  quit: jest.fn().mockResolvedValue(undefined),
 };
 
 mock.module('bullmq', () => ({
   Queue: jest.fn(() => mockQueue),
   QueueEvents: jest.fn(() => mockQueueEvents),
+}));
+
+mock.module('ioredis', () => ({
+  default: jest.fn(() => mockRedisClient),
 }));
 
 // Import after mocking
@@ -41,6 +52,10 @@ describe('QueueService', () => {
     mockQueueEvents.on.mockClear();
     mockQueueEvents.off.mockClear();
     mockQueueEvents.close.mockClear();
+    mockQueueEvents.waitUntilReady.mockClear();
+    mockRedisClient.on.mockClear();
+    mockRedisClient.ping.mockClear();
+    mockRedisClient.quit.mockClear();
 
     configService = {
       get: jest.fn((key: string, defaultValue?: any) => {

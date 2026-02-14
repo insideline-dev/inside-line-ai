@@ -64,6 +64,20 @@
       "when": 1770905196396,
       "tag": "0008_noisy_gabe_jones",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1771085373347,
+      "tag": "0009_violet_black_crow",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1771091006750,
+      "tag": "0010_military_frightful_four",
+      "breakpoints": true
     }
   ]
 }

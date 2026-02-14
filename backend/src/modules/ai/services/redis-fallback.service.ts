@@ -35,7 +35,9 @@ export class RedisFallbackClient {
     }
 
     try {
-      return await this.redis.get(key);
+      const result = await this.redis.get(key);
+      // Fall back to memory if Redis returns null — key may have been written during fallback
+      return result ?? this.readMemory(key);
     } catch (error) {
       this.markRedisUnavailable(`redis read failed: ${String(error)}`);
       return this.readMemory(key);
@@ -78,11 +80,7 @@ export class RedisFallbackClient {
 
   private initializeRedis(): void {
     try {
-      const redis = new Redis(this.options.redisUrl, {
-        lazyConnect: true,
-        maxRetriesPerRequest: 1,
-        retryStrategy: () => null,
-      });
+      const redis = this.createRedisClient();
 
       redis
         .connect()
@@ -94,10 +92,6 @@ export class RedisFallbackClient {
         .catch((error) => {
           this.markRedisUnavailable(`initial connect failed: ${String(error)}`);
         });
-
-      redis.on("error", (error) => {
-        this.markRedisUnavailable(`redis error: ${String(error)}`);
-      });
     } catch {
       this.markRedisUnavailable("redis init failed");
     }
@@ -135,26 +129,70 @@ export class RedisFallbackClient {
       const oldRedis = this.redis;
       this.redis = null;
       if (oldRedis) {
+        if (typeof oldRedis.removeAllListeners === "function") {
+          oldRedis.removeAllListeners("error");
+        }
         await oldRedis.quit().catch(() => undefined);
       }
 
-      const redis = new Redis(this.options.redisUrl, {
-        lazyConnect: true,
-        maxRetriesPerRequest: 1,
-        retryStrategy: () => null,
-      });
-      redis.on("error", (error) => {
-        this.markRedisUnavailable(`redis error: ${String(error)}`);
-      });
+      const redis = this.createRedisClient();
       await redis.connect();
       this.redis = redis;
       this.useMemory = false;
       this.logger.log("Redis recovered");
+      await this.syncMemoryToRedis();
     } catch (error) {
       this.logger.warn(`Redis recovery failed: ${String(error)}`);
       this.useMemory = true;
     } finally {
       this.reconnectInFlight = false;
+    }
+  }
+
+  private createRedisClient(): Redis {
+    const redis = new Redis(this.options.redisUrl, {
+      lazyConnect: true,
+      maxRetriesPerRequest: null,
+      connectTimeout: 10_000,
+      keepAlive: 30_000,
+      retryStrategy: (attempt) => Math.min(Math.max(attempt, 1) * 100, 2000),
+      reconnectOnError: () => true,
+    });
+
+    redis.on("error", (error) => {
+      if (this.isBenignConnectionCloseError(error)) {
+        return;
+      }
+      this.markRedisUnavailable(`redis error: ${String(error)}`);
+    });
+
+    return redis;
+  }
+
+  private isBenignConnectionCloseError(error: unknown): boolean {
+    const message = String(error).toLowerCase();
+    return (
+      message.includes("connection is closed") ||
+      message.includes("connection closed")
+    );
+  }
+
+  private async syncMemoryToRedis(): Promise<void> {
+    if (!this.redis || this.memoryStore.size === 0) return;
+    const now = Date.now();
+    let synced = 0;
+    for (const [key, entry] of this.memoryStore) {
+      if (entry.expiresAt <= now) continue;
+      const remainingTtl = Math.ceil((entry.expiresAt - now) / 1000);
+      try {
+        await this.redis.set(key, entry.value, "EX", remainingTtl);
+        synced++;
+      } catch {
+        break;
+      }
+    }
+    if (synced > 0) {
+      this.logger.log(`Synced ${synced} entries from memory to Redis`);
     }
   }
 

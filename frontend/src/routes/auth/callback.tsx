@@ -25,7 +25,15 @@ function AuthCallbackPage() {
     async function handleCallback() {
       if (error) {
         // OAuth failed
-        navigate({ to: "/login", search: { error }, replace: true });
+        const waitlistOnly = /waitlist/i.test(error);
+        navigate({
+          to: "/login",
+          search: {
+            error,
+            view: waitlistOnly ? "waitlist" : undefined,
+          },
+          replace: true,
+        });
         return;
       }
 

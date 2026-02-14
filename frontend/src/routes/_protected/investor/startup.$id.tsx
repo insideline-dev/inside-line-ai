@@ -104,6 +104,7 @@ function InvestorStartupDetailPage() {
           <TeamTabContent
             evaluation={evaluation as any}
             teamMembers={(startup.teamMembers || []) as any}
+            companyName={startup.name as string}
           />
         </TabsContent>
 

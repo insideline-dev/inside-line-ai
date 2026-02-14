@@ -27,9 +27,11 @@ import type {
 import type {
   AuthResponseDto,
   EmailVerifyDto,
+  JoinWaitlistDto,
   LoginDto,
   MagicLinkRequestDto,
   MagicLinkVerifyDto,
+  RedeemEarlyAccessInviteDto,
   RegisterDto,
   ResendVerificationDto,
   SelectRoleDto,
@@ -411,6 +413,189 @@ export const useAuthControllerResendVerification = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getAuthControllerResendVerificationMutationOptions(options), queryClient);
+    }
+    /**
+ * @summary Join early-access waitlist
+ */
+export type authControllerJoinWaitlistResponse200 = {
+  data: void
+  status: 200
+}
+
+export type authControllerJoinWaitlistResponse429 = {
+  data: void
+  status: 429
+}
+    
+export type authControllerJoinWaitlistResponseSuccess = (authControllerJoinWaitlistResponse200) & {
+  headers: Headers;
+};
+export type authControllerJoinWaitlistResponseError = (authControllerJoinWaitlistResponse429) & {
+  headers: Headers;
+};
+
+export type authControllerJoinWaitlistResponse = (authControllerJoinWaitlistResponseSuccess | authControllerJoinWaitlistResponseError)
+
+export const getAuthControllerJoinWaitlistUrl = () => {
+
+
+  
+
+  return `/auth/waitlist`
+}
+
+export const authControllerJoinWaitlist = async (joinWaitlistDto: JoinWaitlistDto, options?: RequestInit): Promise<authControllerJoinWaitlistResponse> => {
+  
+  return customFetch<authControllerJoinWaitlistResponse>(getAuthControllerJoinWaitlistUrl(),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      joinWaitlistDto,)
+  }
+);}
+
+
+
+
+export const getAuthControllerJoinWaitlistMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof authControllerJoinWaitlist>>, TError,{data: BodyType<JoinWaitlistDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof authControllerJoinWaitlist>>, TError,{data: BodyType<JoinWaitlistDto>}, TContext> => {
+
+const mutationKey = ['authControllerJoinWaitlist'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof authControllerJoinWaitlist>>, {data: BodyType<JoinWaitlistDto>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  authControllerJoinWaitlist(data,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AuthControllerJoinWaitlistMutationResult = NonNullable<Awaited<ReturnType<typeof authControllerJoinWaitlist>>>
+    export type AuthControllerJoinWaitlistMutationBody = BodyType<JoinWaitlistDto>
+    export type AuthControllerJoinWaitlistMutationError = ErrorType<void>
+
+    /**
+ * @summary Join early-access waitlist
+ */
+export const useAuthControllerJoinWaitlist = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof authControllerJoinWaitlist>>, TError,{data: BodyType<JoinWaitlistDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof authControllerJoinWaitlist>>,
+        TError,
+        {data: BodyType<JoinWaitlistDto>},
+        TContext
+      > => {
+      return useMutation(getAuthControllerJoinWaitlistMutationOptions(options), queryClient);
+    }
+    /**
+ * @summary Redeem an early-access invitation link
+ */
+export type authControllerRedeemInviteResponse200 = {
+  data: void
+  status: 200
+}
+
+export type authControllerRedeemInviteResponse401 = {
+  data: void
+  status: 401
+}
+
+export type authControllerRedeemInviteResponse429 = {
+  data: void
+  status: 429
+}
+    
+export type authControllerRedeemInviteResponseSuccess = (authControllerRedeemInviteResponse200) & {
+  headers: Headers;
+};
+export type authControllerRedeemInviteResponseError = (authControllerRedeemInviteResponse401 | authControllerRedeemInviteResponse429) & {
+  headers: Headers;
+};
+
+export type authControllerRedeemInviteResponse = (authControllerRedeemInviteResponseSuccess | authControllerRedeemInviteResponseError)
+
+export const getAuthControllerRedeemInviteUrl = () => {
+
+
+  
+
+  return `/auth/invite/redeem`
+}
+
+export const authControllerRedeemInvite = async (redeemEarlyAccessInviteDto: RedeemEarlyAccessInviteDto, options?: RequestInit): Promise<authControllerRedeemInviteResponse> => {
+  
+  return customFetch<authControllerRedeemInviteResponse>(getAuthControllerRedeemInviteUrl(),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      redeemEarlyAccessInviteDto,)
+  }
+);}
+
+
+
+
+export const getAuthControllerRedeemInviteMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof authControllerRedeemInvite>>, TError,{data: BodyType<RedeemEarlyAccessInviteDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof authControllerRedeemInvite>>, TError,{data: BodyType<RedeemEarlyAccessInviteDto>}, TContext> => {
+
+const mutationKey = ['authControllerRedeemInvite'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof authControllerRedeemInvite>>, {data: BodyType<RedeemEarlyAccessInviteDto>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  authControllerRedeemInvite(data,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AuthControllerRedeemInviteMutationResult = NonNullable<Awaited<ReturnType<typeof authControllerRedeemInvite>>>
+    export type AuthControllerRedeemInviteMutationBody = BodyType<RedeemEarlyAccessInviteDto>
+    export type AuthControllerRedeemInviteMutationError = ErrorType<void>
+
+    /**
+ * @summary Redeem an early-access invitation link
+ */
+export const useAuthControllerRedeemInvite = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof authControllerRedeemInvite>>, TError,{data: BodyType<RedeemEarlyAccessInviteDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof authControllerRedeemInvite>>,
+        TError,
+        {data: BodyType<RedeemEarlyAccessInviteDto>},
+        TContext
+      > => {
+      return useMutation(getAuthControllerRedeemInviteMutationOptions(options), queryClient);
     }
     /**
  * @summary Request magic link (sends email)

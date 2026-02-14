@@ -30,6 +30,9 @@ describe('UnipileService', () => {
         startDate: '2020-01',
         endDate: null,
         current: true,
+        location: '',
+        description: '',
+        companyPictureUrl: null,
       },
     ],
     education: [
@@ -39,6 +42,10 @@ describe('UnipileService', () => {
         fieldOfStudy: 'Computer Science',
         startYear: 2012,
         endYear: 2016,
+        startDate: null,
+        endDate: null,
+        description: '',
+        schoolPictureUrl: null,
       },
     ],
   };
@@ -161,7 +168,7 @@ describe('UnipileService', () => {
 
       expect(result).toEqual(mockProfile);
       expect(global.fetch).toHaveBeenCalledWith(
-        'https://api.unipile.com/api/v1/users/john-doe-123?account_id=test-account-id',
+        'https://api.unipile.com/api/v1/users/john-doe-123?account_id=test-account-id&linkedin_sections=*',
         expect.objectContaining({
           method: 'GET',
           headers: expect.objectContaining({
@@ -175,6 +182,51 @@ describe('UnipileService', () => {
         'john-doe-123',
         mockProfile,
       );
+    });
+
+    it('should return profile even if cache write fails', async () => {
+      cacheService.getCached.mockResolvedValueOnce(null);
+      cacheService.setCache.mockRejectedValueOnce(new Error('db write failed'));
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          id: 'profile-123',
+          first_name: 'John',
+          last_name: 'Doe',
+          headline: 'Software Engineer at TechCorp',
+          location: 'San Francisco, CA',
+          profile_url: 'https://linkedin.com/in/john-doe-123',
+          profile_image_url: 'https://example.com/photo.jpg',
+          summary: 'Experienced software engineer...',
+          current_company: {
+            name: 'TechCorp',
+            title: 'Senior Engineer',
+          },
+          experience: [
+            {
+              company: 'TechCorp',
+              title: 'Senior Engineer',
+              start_date: '2020-01',
+              end_date: null,
+              current: true,
+            },
+          ],
+          education: [
+            {
+              school: 'MIT',
+              degree: 'BS',
+              field_of_study: 'Computer Science',
+              start_year: 2012,
+              end_year: 2016,
+            },
+          ],
+        }),
+      });
+
+      const result = await service.getProfile('user-1', 'https://linkedin.com/in/john-doe-123');
+
+      expect(result).toEqual(mockProfile);
+      expect(cacheService.setCache).toHaveBeenCalledTimes(1);
     });
 
     it('should return null if profile not found (404)', async () => {
@@ -260,7 +312,12 @@ describe('UnipileService', () => {
         'https://api.unipile.com/api/v1/linkedin/search?account_id=test-account-id',
         expect.objectContaining({
           method: 'POST',
-          body: JSON.stringify({ api: 'classic', category: 'people', keywords: 'John Doe', company: 'TechCorp' }),
+          body: JSON.stringify({
+            api: 'classic',
+            category: 'people',
+            keywords: 'John Doe',
+            advanced_keywords: { company: 'TechCorp' },
+          }),
         }),
       );
     });

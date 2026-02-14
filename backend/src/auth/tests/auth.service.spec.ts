@@ -6,6 +6,7 @@ import { DrizzleService } from '../../database';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { UserRole } from '../entities/auth.schema';
+import { EarlyAccessService } from '../../modules/early-access';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -63,6 +64,13 @@ describe('AuthService', () => {
       get: jest.fn().mockImplementation((key, defaultValue) => defaultValue),
     };
 
+    const mockEarlyAccessService = {
+      isEmailAllowed: jest.fn().mockResolvedValue(true),
+      assertEmailAllowed: jest.fn().mockResolvedValue(undefined),
+      addFounderFromGoogleAttempt: jest.fn().mockResolvedValue(undefined),
+      bindRedeemedInviteToUser: jest.fn().mockResolvedValue(undefined),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
@@ -70,6 +78,7 @@ describe('AuthService', () => {
         { provide: JwtService, useValue: mockJwtService },
         { provide: ConfigService, useValue: mockConfigService },
         { provide: DrizzleService, useValue: drizzleService },
+        { provide: EarlyAccessService, useValue: mockEarlyAccessService },
       ],
     }).compile();
 
@@ -92,7 +101,7 @@ describe('AuthService', () => {
       expect(result).toBe('mock-jwt-token');
       expect(jwtService.sign).toHaveBeenCalledWith(
         { sub: mockDbUser.id, email: mockDbUser.email },
-        expect.objectContaining({ expiresIn: '7d' }),
+        expect.objectContaining({ expiresIn: '15m' }),
       );
     });
 

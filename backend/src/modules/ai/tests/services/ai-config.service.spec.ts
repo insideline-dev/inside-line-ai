@@ -22,7 +22,7 @@ describe("AiConfigService", () => {
     );
 
     expect(service.getModelForPurpose(ModelPurpose.EXTRACTION)).toBe(
-      "gemini-3.0-flash",
+      "gemini-3.0-flash-preview",
     );
     expect(service.getModelForPurpose(ModelPurpose.SYNTHESIS)).toBe("gpt-5.2");
     expect(service.getModelForPurpose(ModelPurpose.OCR)).toBe(
@@ -73,6 +73,6 @@ describe("AiConfigService", () => {
     );
 
     expect(service.getEvaluationTemperature()).toBe(0.1);
-    expect(service.getEvaluationMaxOutputTokens()).toBe(4000);
+    expect(service.getEvaluationMaxOutputTokens()).toBe(8000);
   });
 });

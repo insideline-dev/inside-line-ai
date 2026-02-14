@@ -3,12 +3,14 @@ import { NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AgentMailController } from '../agentmail.controller';
 import { AgentMailService } from '../agentmail.service';
+import { InvestorInboxBridgeService } from '../investor-inbox-bridge.service';
 import { AgentMailSignatureGuard } from '../guards';
 import type { DbUser } from '../../../../auth/user-auth.service';
 
 describe('AgentMailController', () => {
   let controller: AgentMailController;
   let service: Record<string, jest.Mock>;
+  let inboxBridgeService: Record<string, jest.Mock>;
 
   const mockUser: DbUser = {
     id: 'user-1',
@@ -71,10 +73,17 @@ describe('AgentMailController', () => {
       listUserSdkThreads: jest.fn().mockResolvedValue({ count: 0, threads: [] }),
     };
 
+    inboxBridgeService = {
+      listPending: jest.fn().mockResolvedValue([]),
+      confirm: jest.fn().mockResolvedValue({ id: 'submission-1', status: 'confirmed' }),
+      dismiss: jest.fn().mockResolvedValue({ id: 'submission-1', status: 'dismissed' }),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AgentMailController],
       providers: [
         { provide: AgentMailService, useValue: service },
+        { provide: InvestorInboxBridgeService, useValue: inboxBridgeService },
         { provide: ConfigService, useValue: { get: jest.fn().mockReturnValue('test-secret') } },
         AgentMailSignatureGuard,
       ],
@@ -176,6 +185,32 @@ describe('AgentMailController', () => {
     it('should delete thread', async () => {
       const result = await controller.deleteThread(mockUser, 'thread-1');
       expect(result).toBeUndefined();
+    });
+  });
+
+  // ============ INBOX SUBMISSION TESTS ============
+
+  describe('listInboxSubmissions', () => {
+    it('should list pending submissions', async () => {
+      const result = await controller.listInboxSubmissions(mockUser);
+      expect(result).toEqual([]);
+      expect(inboxBridgeService.listPending).toHaveBeenCalledWith('user-1');
+    });
+  });
+
+  describe('confirmSubmission', () => {
+    it('should confirm submission', async () => {
+      const result = await controller.confirmSubmission(mockUser, 'submission-1');
+      expect(result).toEqual({ id: 'submission-1', status: 'confirmed' });
+      expect(inboxBridgeService.confirm).toHaveBeenCalledWith('submission-1', 'user-1');
+    });
+  });
+
+  describe('dismissSubmission', () => {
+    it('should dismiss submission', async () => {
+      const result = await controller.dismissSubmission(mockUser, 'submission-1');
+      expect(result).toEqual({ id: 'submission-1', status: 'dismissed' });
+      expect(inboxBridgeService.dismiss).toHaveBeenCalledWith('submission-1', 'user-1');
     });
   });
 

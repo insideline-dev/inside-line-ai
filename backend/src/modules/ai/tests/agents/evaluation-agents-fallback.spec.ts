@@ -46,6 +46,7 @@ function createSparseInput(): EvaluationPipelineInput {
       market: null,
       product: null,
       news: null,
+      competitor: null,
     },
     extraction: {
       ...input.extraction,

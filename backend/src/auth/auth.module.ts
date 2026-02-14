@@ -10,6 +10,7 @@ import { ProfileService } from "./profile.service";
 import { AuthController } from "./auth.controller";
 import { JwtStrategy, GoogleStrategy } from "./strategies";
 import { JwtAuthGuard } from "./guards";
+import { EarlyAccessModule } from "../modules/early-access";
 
 @Global()
 @Module({
@@ -33,6 +34,7 @@ import { JwtAuthGuard } from "./guards";
         limit: 100,
       },
     ]),
+    EarlyAccessModule,
   ],
   controllers: [AuthController],
   providers: [

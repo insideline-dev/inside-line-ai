@@ -1,11 +1,13 @@
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScoreRing } from "@/components/analysis/ScoreRing";
 import { StatusBadge } from "@/components/analysis/StatusBadge";
+import { AnalysisProgressBar } from "@/components/AnalysisProgressBar";
 import { ExternalLink, MapPin, Calendar, DollarSign, ChevronRight } from "lucide-react";
-import type { Startup } from "@/types";
+import type { Startup, StartupStatus } from "@/types";
 import { cn } from "@/lib/utils";
 
 interface StartupCardProps {
@@ -42,6 +44,16 @@ function formatDate(date: string): string {
 }
 
 export function StartupCard({ startup, basePath, showScore = true, showActions = true, className }: StartupCardProps) {
+  const [effectiveStatus, setEffectiveStatus] = useState<StartupStatus>(startup.status);
+
+  useEffect(() => {
+    setEffectiveStatus(startup.status);
+  }, [startup.status]);
+
+  const handleTerminalStatus = useCallback((status: "pending_review" | "submitted") => {
+    setEffectiveStatus((current) => (current === status ? current : status));
+  }, []);
+
   return (
     <Card className={cn("hover:shadow-md transition-shadow", className)}>
       <CardHeader className="pb-2">
@@ -92,8 +104,15 @@ export function StartupCard({ startup, basePath, showScore = true, showActions =
           </span>
         </div>
 
+        {(effectiveStatus === "analyzing" || effectiveStatus === "submitted") && (
+          <AnalysisProgressBar
+            startupId={startup.id}
+            onTerminalStatus={handleTerminalStatus}
+          />
+        )}
+
         <div className="flex items-center justify-between pt-2 border-t">
-          <StatusBadge status={startup.status} />
+          <StatusBadge status={effectiveStatus} />
           {showActions && (
             <Button asChild variant="ghost" size="sm" className="gap-1">
               <Link to={`${basePath}/startup/${startup.id}` as any}>

@@ -139,6 +139,10 @@ export class PipelineService {
     return this.pipelineState.get(startupId);
   }
 
+  async getTrackedProgress(startupId: string) {
+    return this.progressTracker.getProgress(startupId);
+  }
+
   async retryPhase(startupId: string, phase: PipelinePhase): Promise<void> {
     const state = await this.pipelineState.get(startupId);
     if (!state) {
@@ -510,8 +514,22 @@ export class PipelineService {
     }
 
     const decision = this.phaseTransition.decideNextPhases(refreshed);
+
+    this.logger.debug(
+      `[Pipeline] Phase transition decision | Startup: ${startupId} | NextPhases: ${decision.queue.join(", ") || "none"} | Degraded: ${decision.degraded} | Complete: ${decision.pipelineComplete}`,
+    );
+    this.logger.debug(
+      `[Pipeline] Phase statuses: ${JSON.stringify(Object.fromEntries(Object.entries(refreshed.phases).map(([k, v]) => [k, v.status])))}`,
+    );
+
     if (decision.degraded) {
       await this.pipelineState.setQuality(startupId, "degraded");
+    }
+
+    if (decision.queue.length > 0) {
+      this.logger.log(
+        `[Pipeline] Queueing ${decision.queue.length} next phase(s): ${decision.queue.join(", ")}`,
+      );
     }
 
     for (const phase of decision.queue) {

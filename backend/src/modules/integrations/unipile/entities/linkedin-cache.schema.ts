@@ -62,6 +62,9 @@ export interface LinkedInProfile {
     startDate: string;
     endDate: string | null;
     current: boolean;
+    location?: string;
+    description?: string;
+    companyPictureUrl?: string | null;
   }>;
   education: Array<{
     school: string;
@@ -69,6 +72,10 @@ export interface LinkedInProfile {
     fieldOfStudy: string;
     startYear: number;
     endYear: number | null;
+    startDate?: string;
+    endDate?: string | null;
+    description?: string;
+    schoolPictureUrl?: string | null;
   }>;
 }
 

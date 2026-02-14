@@ -17,16 +17,15 @@ export interface AuthState {
   isAuthenticated: boolean;
 }
 
-// Request DTOs (match backend)
 export interface LoginRequest {
   email: string;
   password: string;
 }
 
 export interface RegisterRequest {
+  name: string;
   email: string;
   password: string;
-  name: string;
 }
 
 export interface MagicLinkRequest {
@@ -43,6 +42,25 @@ export interface EmailVerifyRequest {
 
 export interface ResendVerificationRequest {
   email: string;
+}
+
+export interface RedeemInviteRequest {
+  token: string;
+}
+
+export interface RedeemInviteResponse {
+  message: string;
+  email: string;
+}
+
+export interface JoinWaitlistRequest {
+  name: string;
+  email: string;
+  companyName: string;
+  role: string;
+  website: string;
+  consentToShareInfo: boolean;
+  consentToEarlyAccess: boolean;
 }
 
 // Response DTOs

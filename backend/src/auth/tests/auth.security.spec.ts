@@ -5,6 +5,7 @@ import { DrizzleService } from '../../database';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { UserRole } from '../entities/auth.schema';
+import { EarlyAccessService } from '../../modules/early-access';
 import * as bcrypt from 'bcrypt';
 
 /**
@@ -57,6 +58,13 @@ describe('Auth Security Tests', () => {
       get: jest.fn((key, defaultValue) => defaultValue),
     };
 
+    const mockEarlyAccessService = {
+      isEmailAllowed: jest.fn().mockResolvedValue(true),
+      assertEmailAllowed: jest.fn().mockResolvedValue(undefined),
+      addFounderFromGoogleAttempt: jest.fn().mockResolvedValue(undefined),
+      bindRedeemedInviteToUser: jest.fn().mockResolvedValue(undefined),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         UserAuthService,
@@ -64,6 +72,7 @@ describe('Auth Security Tests', () => {
         { provide: DrizzleService, useValue: drizzleService },
         { provide: JwtService, useValue: mockJwtService },
         { provide: ConfigService, useValue: mockConfigService },
+        { provide: EarlyAccessService, useValue: mockEarlyAccessService },
       ],
     }).compile();
 

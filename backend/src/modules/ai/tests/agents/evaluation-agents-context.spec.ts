@@ -95,8 +95,11 @@ describe("Evaluation agent context engineering", () => {
     const context = agent.buildContext(pipelineData);
 
     expect(Object.keys(context).sort()).toEqual([
+      "competitorContext",
       "deckBusinessModelSection",
+      "marketContext",
       "pricing",
+      "productContext",
       "revenueModel",
       "unitEconomics",
     ]);
@@ -109,8 +112,11 @@ describe("Evaluation agent context engineering", () => {
     const context = agent.buildContext(pipelineData);
 
     expect(Object.keys(context).sort()).toEqual([
+      "competitorContext",
       "customerAcquisitionStrategy",
       "distributionChannels",
+      "marketContext",
+      "productContext",
       "targetMarket",
       "websiteMarketingPages",
     ]);
@@ -138,7 +144,9 @@ describe("Evaluation agent context engineering", () => {
     const context = agent.buildContext(pipelineData);
 
     expect(Object.keys(context).sort()).toEqual([
+      "competitiveLandscape",
       "extractedFeatures",
+      "marketResearch",
       "patents",
       "productResearch",
       "techStack",
@@ -153,8 +161,10 @@ describe("Evaluation agent context engineering", () => {
 
     expect(Object.keys(context).sort()).toEqual([
       "complianceMentions",
+      "corporateStructure",
       "industry",
       "location",
+      "newsContext",
       "regulatoryLandscape",
     ]);
     expect(context).not.toHaveProperty("linkedinProfiles");
@@ -166,11 +176,14 @@ describe("Evaluation agent context engineering", () => {
     const context = agent.buildContext(pipelineData);
 
     expect(Object.keys(context).sort()).toEqual([
+      "competitorFunding",
       "currentValuation",
       "fundingTarget",
       "investorRights",
       "leadInvestorStatus",
+      "marketSizeContext",
       "raiseType",
+      "startupFormContext",
     ]);
     expect(context).not.toHaveProperty("teamResearch");
     expect(context).not.toHaveProperty("competitorFeatures");

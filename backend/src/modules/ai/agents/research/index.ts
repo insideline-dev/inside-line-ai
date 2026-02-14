@@ -1,10 +1,12 @@
 import type { ResearchAgentConfig } from "../../interfaces/agent.interface";
 import type {
+  CompetitorResearch,
   MarketResearch,
   NewsResearch,
   ProductResearch,
   TeamResearch,
 } from "../../schemas";
+import { CompetitorResearchAgent } from "./competitor-research.agent";
 import { MarketResearchAgent } from "./market-research.agent";
 import { NewsResearchAgent } from "./news-research.agent";
 import { ProductResearchAgent } from "./product-research.agent";
@@ -14,8 +16,10 @@ export type ResearchAgentOutput =
   | TeamResearch
   | MarketResearch
   | ProductResearch
-  | NewsResearch;
+  | NewsResearch
+  | CompetitorResearch;
 
+/** Phase 1 agents run in parallel */
 export const RESEARCH_AGENTS: Record<
   "team" | "market" | "product" | "news",
   ResearchAgentConfig<ResearchAgentOutput>
@@ -26,4 +30,23 @@ export const RESEARCH_AGENTS: Record<
   news: NewsResearchAgent,
 };
 
-export { TeamResearchAgent, MarketResearchAgent, ProductResearchAgent, NewsResearchAgent };
+/** Phase 2 agents run after phase 1 completes */
+export const PHASE_2_RESEARCH_AGENTS: Record<
+  "competitor",
+  ResearchAgentConfig<ResearchAgentOutput>
+> = {
+  competitor: CompetitorResearchAgent,
+};
+
+export const ALL_RESEARCH_AGENTS = {
+  ...RESEARCH_AGENTS,
+  ...PHASE_2_RESEARCH_AGENTS,
+} as const;
+
+export {
+  TeamResearchAgent,
+  MarketResearchAgent,
+  ProductResearchAgent,
+  NewsResearchAgent,
+  CompetitorResearchAgent,
+};

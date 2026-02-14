@@ -1695,6 +1695,50 @@ export function CompetitorAnalysis({
           weight={competitiveAdvantageWeight}
         />
       )}
+
+      {directCompetitors.length > 0 && (
+        <section className="space-y-4" data-testid="section-direct-competitor-details">
+          <h3 className="text-xl font-semibold flex items-center gap-2">
+            <Target className="h-5 w-5 text-destructive" />
+            Direct Competitor Details
+          </h3>
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            {directCompetitors.map((competitor, index) => (
+              <DirectCompetitorCard
+                key={`${competitor.name}-${index}`}
+                competitor={competitor as DirectCompetitor}
+                index={index}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {indirectCompetitors.length > 0 ? (
+        <section className="space-y-4" data-testid="section-indirect-competitor-details">
+          <h3 className="text-xl font-semibold flex items-center gap-2">
+            <Shield className="h-5 w-5 text-amber-500" />
+            Indirect Competitor Details
+          </h3>
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            {indirectCompetitors.map((competitor, index) => (
+              <IndirectCompetitorCard
+                key={`${(competitor as IndirectCompetitor).name || (competitor as AlternativeIndirectCompetitor).category || "indirect"}-${index}`}
+                competitor={competitor as IndirectCompetitor}
+                index={index}
+              />
+            ))}
+          </div>
+        </section>
+      ) : (
+        <Card data-testid="card-no-indirect-competitors">
+          <CardContent className="py-5">
+            <p className="text-sm text-muted-foreground">
+              No indirect competitor profiles were returned in this analysis run.
+            </p>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

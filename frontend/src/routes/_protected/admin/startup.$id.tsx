@@ -23,6 +23,7 @@ import { ProductTabContent } from "@/components/startup-view/ProductTabContent";
 import { MemoTabContent } from "@/components/startup-view/MemoTabContent";
 import { CompetitorsTabContent } from "@/components/startup-view/CompetitorsTabContent";
 import { SourcesTabContent } from "@/components/startup-view/SourcesTabContent";
+import { AdminEditTab } from "@/components/startup-view/AdminEditTab";
 import { AnalysisProgress } from "@/components/AnalysisProgress";
 import {
   RefreshCw,
@@ -268,13 +269,7 @@ function AdminReviewPage() {
             </TabsContent>
 
             <TabsContent value="edit" className="mt-6">
-              <Card>
-                <CardContent className="p-6">
-                  <p className="text-sm text-muted-foreground">
-                    Inline edit tools will live here.
-                  </p>
-                </CardContent>
-              </Card>
+              <AdminEditTab startup={startup} />
             </TabsContent>
 
             <TabsContent value="raw" className="mt-6">

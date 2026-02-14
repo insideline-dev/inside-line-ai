@@ -57,7 +57,7 @@ function InvestorStartupDetailPage() {
       <div className="text-center py-12">
         <h2 className="text-xl font-semibold mb-2">Startup not found</h2>
         <Button asChild>
-          <Link to="/investor">Back to Deal Flow</Link>
+          <Link to="/investor">Back to Pipeline</Link>
         </Button>
       </div>
     );

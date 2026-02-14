@@ -149,6 +149,10 @@ export const investorThesis = pgTable(
     website: text('website'),
     fundSize: doublePrecision('fund_size'),
 
+    // Matching thresholds (0-100)
+    minThesisFitScore: integer('min_thesis_fit_score'),
+    minStartupScore: integer('min_startup_score'),
+
     // AI-generated summary
     thesisSummary: text('thesis_summary'),
     portfolioCompanies: jsonb('portfolio_companies'),
@@ -280,6 +284,7 @@ export const investorScoringPreference = pgTable(
     stage: startupStageEnum('stage').notNull(),
     useCustomWeights: boolean('use_custom_weights').default(false).notNull(),
     customWeights: jsonb('custom_weights').$type<ScoringWeights>(),
+    customRationale: jsonb('custom_rationale').$type<ScoringRationale>(),
 
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at')

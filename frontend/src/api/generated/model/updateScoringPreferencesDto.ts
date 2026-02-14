@@ -5,10 +5,13 @@
  * Inside Line API Documentation
  * OpenAPI spec version: 2.0
  */
+import type { UpdateScoringPreferencesDtoCustomRationale } from './updateScoringPreferencesDtoCustomRationale';
 import type { UpdateScoringPreferencesDtoCustomWeights } from './updateScoringPreferencesDtoCustomWeights';
 
 export interface UpdateScoringPreferencesDto {
   useCustomWeights: boolean;
   /** @nullable */
   customWeights?: UpdateScoringPreferencesDtoCustomWeights;
+  /** @nullable */
+  customRationale?: UpdateScoringPreferencesDtoCustomRationale;
 }

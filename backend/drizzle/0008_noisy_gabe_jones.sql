@@ -1,0 +1,1 @@
+ALTER TABLE "investor_scoring_preferences" ADD COLUMN "custom_rationale" jsonb;

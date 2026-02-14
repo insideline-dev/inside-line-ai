@@ -22,5 +22,10 @@ limit?: number;
  * @maximum 100
  */
 minScore?: number;
+/**
+ * @minimum 0
+ * @maximum 100
+ */
+minThesisFitScore?: number;
 isSaved?: boolean;
 };

@@ -1,11 +1,30 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { useAdminControllerGetAllScoringWeights } from "@/api/generated/admin/admin";
-import { useInvestorControllerGetScoringPreferences } from "@/api/generated/investor/investor";
+import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Filter, Info, Save } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import type {
+  UpdateScoringPreferencesDtoCustomWeights,
+  UpdateScoringPreferencesDtoCustomRationale,
+} from "@/api/generated/model";
+import {
+  useInvestorControllerGetScoringDefaults,
+  useInvestorControllerGetScoringPreferences,
+  useInvestorControllerGetThesis,
+  useInvestorControllerCreateOrUpdateThesis,
+  useInvestorControllerUpdateScoringPreference,
+  getInvestorControllerGetThesisQueryKey,
+  getInvestorControllerGetScoringPreferencesQueryKey,
+} from "@/api/generated/investor/investor";
 import type { FundingStage } from "@/types";
 
 export const Route = createFileRoute("/_protected/investor/scoring")({
@@ -37,16 +56,95 @@ const weightLabels: Record<string, string> = {
   exitPotential: "Exit Potential",
 };
 
-type StageWeightEntry = { stage: string; weights: Record<string, number>; rationale: Record<string, string>; overallRationale?: string };
-type ScoringPref = { stage: string; useCustomWeights: boolean; customWeights?: Record<string, number> | null };
+const WEIGHT_KEYS = [
+  "team",
+  "market",
+  "product",
+  "traction",
+  "businessModel",
+  "gtm",
+  "financials",
+  "competitiveAdvantage",
+  "legal",
+  "dealTerms",
+  "exitPotential",
+] as const;
+
+type StageWeightEntry = {
+  stage: string;
+  weights: Record<string, number>;
+  rationale: Record<string, string>;
+  overallRationale?: string;
+};
+type ScoringPref = {
+  stage: string;
+  useCustomWeights: boolean;
+  customWeights?: Record<string, number> | null;
+  customRationale?: Record<string, string> | null;
+};
+
+type SavedCustomStageData = {
+  customWeights: Record<string, number>;
+  customRationale: Record<string, string>;
+};
+
+const CUSTOM_STAGE_STORAGE_KEY = "investor-scoring-custom-cache:v1";
+
+function readSavedCustomCache(): Record<string, SavedCustomStageData> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(CUSTOM_STAGE_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, SavedCustomStageData>;
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeSavedCustomCache(cache: Record<string, SavedCustomStageData>) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(CUSTOM_STAGE_STORAGE_KEY, JSON.stringify(cache));
+  } catch {
+    // Ignore storage failures; in-memory state still works for current session.
+  }
+}
 
 function InvestorScoringPage() {
+  const queryClient = useQueryClient();
   const [activeStage, setActiveStage] = useState<FundingStage>("seed");
-  const { data: defaultsResponse, isLoading: loadingDefaults, error: defaultsError } = useAdminControllerGetAllScoringWeights();
-  const { data: prefsResponse, isLoading: loadingPrefs } = useInvestorControllerGetScoringPreferences();
+  const [minThesisFitScore, setMinThesisFitScore] = useState(0);
+  const [minStartupScore, setMinStartupScore] = useState(0);
+  const [thresholdsSaved, setThresholdsSaved] = useState(false);
+  const [editingWeights, setEditingWeights] = useState<Record<string, Record<string, number>>>({});
+  const [editingRationale, setEditingRationale] = useState<
+    Record<string, Record<string, string>>
+  >({});
+  const [savedCustomByStage, setSavedCustomByStage] = useState<
+    Record<string, SavedCustomStageData>
+  >(() => readSavedCustomCache());
 
-  const scoringWeights = (defaultsResponse?.data as StageWeightEntry[] | undefined) ?? [];
-  const preferences = (prefsResponse?.data as ScoringPref[] | undefined) ?? [];
+  const { data: defaultsResponse, isLoading: loadingDefaults, error: defaultsError } =
+    useInvestorControllerGetScoringDefaults();
+  const { data: prefsResponse, isLoading: loadingPrefs } =
+    useInvestorControllerGetScoringPreferences();
+  const { data: thesisResponse } = useInvestorControllerGetThesis();
+
+  const createOrUpdateThesis = useInvestorControllerCreateOrUpdateThesis();
+  const updateScoringPreference = useInvestorControllerUpdateScoringPreference();
+
+  const thesis = Array.isArray(thesisResponse) ? null : thesisResponse;
+  const thesisThresholds = thesis && "minThesisFitScore" in thesis ? thesis : null;
+
+  const scoringWeights: StageWeightEntry[] =
+    (Array.isArray(defaultsResponse)
+      ? defaultsResponse
+      : (defaultsResponse as { data?: StageWeightEntry[] })?.data) ?? [];
+  const preferences: ScoringPref[] =
+    (Array.isArray(prefsResponse)
+      ? prefsResponse
+      : (prefsResponse as { data?: ScoringPref[] })?.data) ?? [];
 
   const isLoading = loadingDefaults || loadingPrefs;
 
@@ -59,17 +157,247 @@ function InvestorScoringPage() {
     return defaults?.weights ?? null;
   };
 
+  const getEffectiveRationale = (stage: string): Record<string, string> => {
+    const pref = preferences.find((p) => p.stage === stage);
+    if (pref?.useCustomWeights && pref.customRationale) {
+      return pref.customRationale;
+    }
+    const defaults = scoringWeights.find((sw) => sw.stage === stage);
+    return defaults?.rationale ?? {};
+  };
+
   const isCustomized = (stage: string): boolean => {
     const pref = preferences.find((p) => p.stage === stage);
     return pref?.useCustomWeights === true && pref?.customWeights != null;
   };
 
+  const getUseCustomWeights = (stage: string): boolean => {
+    const pref = preferences.find((p) => p.stage === stage);
+    return pref?.useCustomWeights === true;
+  };
+
+  const handleSaveThresholds = () => {
+    createOrUpdateThesis.mutate(
+      {
+        data: {
+          minThesisFitScore: minThesisFitScore || undefined,
+          minStartupScore: minStartupScore || undefined,
+        },
+      },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getInvestorControllerGetThesisQueryKey() });
+          setThresholdsSaved(true);
+          setTimeout(() => setThresholdsSaved(false), 2000);
+        },
+      },
+    );
+  };
+
+  const getEditingWeightsForStage = (stage: string): Record<string, number> => {
+    const effective = getEffectiveWeights(stage);
+    if (editingWeights[stage]) return editingWeights[stage];
+    return effective ?? {};
+  };
+
+  const setWeightForStage = (stage: string, key: string, value: number) => {
+    setEditingWeights((prev) => {
+      const current = prev[stage] ?? getEffectiveWeights(stage) ?? {};
+      return {
+        ...prev,
+        [stage]: { ...current, [key]: Math.max(0, Math.min(100, value)) },
+      };
+    });
+  };
+
+  const getEditingRationaleForStage = (stage: string): Record<string, string> => {
+    if (editingRationale[stage]) return editingRationale[stage];
+    return getEffectiveRationale(stage);
+  };
+
+  const setRationaleForStage = (stage: string, key: string, value: string) => {
+    setEditingRationale((prev) => {
+      const current = prev[stage] ?? getEffectiveRationale(stage);
+      return {
+        ...prev,
+        [stage]: { ...current, [key]: value.slice(0, 2000) },
+      };
+    });
+  };
+
+  const getWeightsSum = (weights: Record<string, number>): number =>
+    Object.values(weights).reduce((a, b) => a + b, 0);
+
+  useEffect(() => {
+    setSavedCustomByStage((prev) => {
+      const next = { ...prev };
+      for (const pref of preferences) {
+        if (pref.customWeights && pref.customRationale) {
+          next[pref.stage] = {
+            customWeights: pref.customWeights,
+            customRationale: pref.customRationale,
+          };
+        }
+      }
+      return next;
+    });
+  }, [preferences]);
+
+  useEffect(() => {
+    writeSavedCustomCache(savedCustomByStage);
+  }, [savedCustomByStage]);
+
+  const handleSaveCustomWeights = (stage: string) => {
+    const weights = getEditingWeightsForStage(stage);
+    const sum = getWeightsSum(weights);
+    if (sum !== 100) return;
+    const fullWeights = Object.fromEntries(
+      WEIGHT_KEYS.map((k) => [k, weights[k] ?? 0]),
+    ) as UpdateScoringPreferencesDtoCustomWeights;
+    const rationale = getEditingRationaleForStage(stage);
+    const fullRationale = Object.fromEntries(
+      WEIGHT_KEYS.map((k) => [k, rationale[k] ?? ""]),
+    ) as UpdateScoringPreferencesDtoCustomRationale;
+    updateScoringPreference.mutate(
+      {
+        stage,
+        data: {
+          useCustomWeights: true,
+          customWeights: fullWeights,
+          customRationale: fullRationale,
+        },
+      },
+      {
+        onSuccess: async () => {
+          const queryKey = getInvestorControllerGetScoringPreferencesQueryKey();
+          setSavedCustomByStage((prev) => ({
+            ...prev,
+            [stage]: {
+              customWeights: fullWeights as Record<string, number>,
+              customRationale: fullRationale as Record<string, string>,
+            },
+          }));
+          // Update cache immediately so Scoring Weights + Weight Rationale cards show saved data
+          queryClient.setQueryData(queryKey, (old: unknown) => {
+            const list = Array.isArray(old) ? old : (old as { data?: ScoringPref[] })?.data ?? [];
+            const arr = [...(list as ScoringPref[])];
+            const idx = arr.findIndex((p) => p.stage === stage);
+            const updated: ScoringPref = {
+              stage,
+              useCustomWeights: true,
+              customWeights: fullWeights as Record<string, number>,
+              customRationale: fullRationale as Record<string, string>,
+            };
+            if (idx >= 0) arr[idx] = { ...arr[idx], ...updated };
+            else arr.push(updated);
+            return Array.isArray(old) ? arr : { ...(old as object), data: arr };
+          });
+          await queryClient.refetchQueries({ queryKey });
+          setEditingWeights((prev) => ({ ...prev, [stage]: fullWeights as Record<string, number> }));
+          setEditingRationale((prev) => ({
+            ...prev,
+            [stage]: fullRationale as Record<string, string>,
+          }));
+        },
+      },
+    );
+  };
+
+  const handleToggleCustomWeights = (stage: string, enabled: boolean) => {
+    const defaults = scoringWeights.find((sw) => sw.stage === stage);
+    const pref = preferences.find((p) => p.stage === stage);
+
+    if (enabled) {
+      // Use saved custom values if they exist, otherwise use defaults
+      const persisted = readSavedCustomCache();
+      const saved = savedCustomByStage[stage] ?? persisted[stage];
+      const weights =
+        saved?.customWeights ?? pref?.customWeights ?? defaults?.weights;
+      const rationale =
+        saved?.customRationale ?? pref?.customRationale ?? defaults?.rationale;
+
+      if (!weights || !rationale) return;
+
+      updateScoringPreference.mutate(
+        {
+          stage,
+          data: {
+            useCustomWeights: true,
+            customWeights: weights as UpdateScoringPreferencesDtoCustomWeights,
+            customRationale: rationale as UpdateScoringPreferencesDtoCustomRationale,
+          },
+        },
+        {
+          onSuccess: () => {
+            queryClient.invalidateQueries({
+              queryKey: getInvestorControllerGetScoringPreferencesQueryKey(),
+            });
+          },
+        },
+      );
+    } else {
+      // Preserve current custom data when toggled off so it restores when toggled back on.
+      const currentWeights = getEditingWeightsForStage(stage);
+      const currentRationale = getEditingRationaleForStage(stage);
+      const persisted = readSavedCustomCache();
+      const saved = savedCustomByStage[stage] ?? persisted[stage];
+      const weightsToSave =
+        Object.keys(currentWeights).length > 0 && getWeightsSum(currentWeights) === 100
+          ? (Object.fromEntries(
+              WEIGHT_KEYS.map((k) => [k, currentWeights[k] ?? 0]),
+            ) as UpdateScoringPreferencesDtoCustomWeights)
+          : (saved?.customWeights ?? pref?.customWeights ?? null) as UpdateScoringPreferencesDtoCustomWeights | null;
+      const rationaleToSave =
+        Object.keys(currentRationale).length > 0
+          ? (Object.fromEntries(
+              WEIGHT_KEYS.map((k) => [k, currentRationale[k] ?? ""]),
+            ) as UpdateScoringPreferencesDtoCustomRationale)
+          : (saved?.customRationale ?? pref?.customRationale ?? null) as UpdateScoringPreferencesDtoCustomRationale | null;
+      if (weightsToSave && rationaleToSave) {
+        setSavedCustomByStage((prev) => ({
+          ...prev,
+          [stage]: {
+            customWeights: weightsToSave as Record<string, number>,
+            customRationale: rationaleToSave as Record<string, string>,
+          },
+        }));
+      }
+      updateScoringPreference.mutate(
+        {
+          stage,
+          data: {
+            useCustomWeights: false,
+            customWeights: weightsToSave,
+            customRationale: rationaleToSave,
+          },
+        },
+        {
+          onSuccess: async () => {
+            await queryClient.refetchQueries({
+              queryKey: getInvestorControllerGetScoringPreferencesQueryKey(),
+            });
+          },
+        },
+      );
+    }
+  };
+
+  useEffect(() => {
+    if (thesisThresholds && typeof thesisThresholds === "object") {
+      const t = thesisThresholds as { minThesisFitScore?: number | null; minStartupScore?: number | null };
+      if (t.minThesisFitScore != null) setMinThesisFitScore(t.minThesisFitScore);
+      if (t.minStartupScore != null) setMinStartupScore(t.minStartupScore);
+    }
+  }, [thesisThresholds]);
+
   if (isLoading) {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold">Scoring Preferences</h1>
-          <p className="text-muted-foreground">View how startups are scored at each stage</p>
+          <h1 className="text-2xl font-bold">Scoring Methodology</h1>
+          <p className="text-muted-foreground">
+            View default scoring weights and optionally customize them for your personal view
+          </p>
         </div>
         <Skeleton className="h-10 w-full" />
         <Skeleton className="h-96 w-full" />
@@ -81,8 +409,10 @@ function InvestorScoringPage() {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold">Scoring Preferences</h1>
-          <p className="text-muted-foreground">View how startups are scored at each stage</p>
+          <h1 className="text-2xl font-bold">Scoring Methodology</h1>
+          <p className="text-muted-foreground">
+            View default scoring weights and optionally customize them for your personal view
+          </p>
         </div>
         <div className="text-center py-12 text-destructive">
           Failed to load scoring weights: {(defaultsError as Error).message}
@@ -94,9 +424,84 @@ function InvestorScoringPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Scoring Preferences</h1>
-        <p className="text-muted-foreground">View how startups are scored at each stage</p>
+        <h1 className="text-2xl font-bold">Scoring Methodology</h1>
+        <p className="text-muted-foreground">
+          View default scoring weights and optionally customize them for your personal view
+        </p>
       </div>
+
+      {/* Matching Thresholds */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Filter className="h-5 w-5 text-primary" />
+            <CardTitle>Matching Thresholds</CardTitle>
+          </div>
+          <CardDescription>
+            Only show startups that meet your minimum score requirements
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-medium">Minimum Thesis Fit Score</Label>
+              <span className="text-sm font-medium">{minThesisFitScore}%</span>
+            </div>
+            <Slider
+              value={[minThesisFitScore]}
+              onValueChange={([v]) => setMinThesisFitScore(v ?? 0)}
+              min={0}
+              max={100}
+              step={5}
+              className="w-full"
+            />
+            <p className="text-xs text-muted-foreground">
+              Only show matches with thesis fit at or above this score
+            </p>
+          </div>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-medium">Minimum Startup Score</Label>
+              <span className="text-sm font-medium">{minStartupScore}%</span>
+            </div>
+            <Slider
+              value={[minStartupScore]}
+              onValueChange={([v]) => setMinStartupScore(v ?? 0)}
+              min={0}
+              max={100}
+              step={5}
+              className="w-full"
+            />
+            <p className="text-xs text-muted-foreground">
+              Only show startups with overall score at or above this score
+            </p>
+          </div>
+          <div className="flex justify-end">
+            <Button
+              onClick={handleSaveThresholds}
+              disabled={createOrUpdateThesis.isPending}
+              className="gap-2"
+            >
+              <Save className="h-4 w-4" />
+              {thresholdsSaved ? "Saved" : "Save Thresholds"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* How Custom Scoring Works */}
+      <Card className="border-primary/20 bg-primary/5">
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Info className="h-5 w-5 text-primary" />
+            <CardTitle>How Custom Scoring Works</CardTitle>
+          </div>
+          <CardDescription>
+            When you enable custom weights, startups will be re-scored using your weights in your
+            view.
+          </CardDescription>
+        </CardHeader>
+      </Card>
 
       <Tabs value={activeStage} onValueChange={(v) => setActiveStage(v as FundingStage)}>
         <TabsList>
@@ -104,7 +509,9 @@ function InvestorScoringPage() {
             <TabsTrigger key={sw.stage} value={sw.stage}>
               {stageLabels[sw.stage] || sw.stage}
               {isCustomized(sw.stage) && (
-                <Badge variant="secondary" className="ml-1.5 text-[10px] px-1 py-0">Custom</Badge>
+                <Badge variant="secondary" className="ml-1.5 text-[10px] px-1 py-0">
+                  Custom
+                </Badge>
               )}
             </TabsTrigger>
           ))}
@@ -113,9 +520,159 @@ function InvestorScoringPage() {
         {scoringWeights.map((sw) => {
           const effective = getEffectiveWeights(sw.stage);
           const customized = isCustomized(sw.stage);
+          const useCustomWeights = getUseCustomWeights(sw.stage);
 
           return (
-            <TabsContent key={sw.stage} value={sw.stage} className="mt-6">
+            <TabsContent key={sw.stage} value={sw.stage} className="mt-6 space-y-6">
+              {/* Stage Philosophy */}
+              {sw.overallRationale && (
+                <Card className="border-primary/20 bg-primary/5">
+                  <CardHeader>
+                    <div className="flex items-center gap-2">
+                      <Info className="h-5 w-5 text-primary" />
+                      <CardTitle>Stage Philosophy</CardTitle>
+                    </div>
+                    <CardDescription>{sw.overallRationale}</CardDescription>
+                  </CardHeader>
+                </Card>
+              )}
+
+              {/* Use Custom Weights */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Use Custom Weights</CardTitle>
+                  <CardDescription>
+                    {useCustomWeights
+                      ? "Using your custom weights"
+                      : "Using default platform weights"}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          id={`custom-weights-${sw.stage}`}
+                          checked={useCustomWeights}
+                          onCheckedChange={(checked) =>
+                            handleToggleCustomWeights(sw.stage, checked)
+                          }
+                          disabled={updateScoringPreference.isPending}
+                        />
+                        <Label htmlFor={`custom-weights-${sw.stage}`} className="font-medium">
+                          Use Custom Weights
+                        </Label>
+                      </div>
+                    </div>
+                    {useCustomWeights && (
+                      <Button
+                        onClick={() => handleSaveCustomWeights(sw.stage)}
+                        disabled={
+                          updateScoringPreference.isPending ||
+                          getWeightsSum(getEditingWeightsForStage(sw.stage)) !== 100
+                        }
+                        className="gap-2 shrink-0"
+                      >
+                        <Save className="h-4 w-4" />
+                        Save
+                      </Button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Weight editor - shown when custom weights enabled */}
+              {useCustomWeights && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Customize Weights</CardTitle>
+                    <CardDescription>
+                      Adjust weights for each criterion. Total must equal 100%.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="rounded-md border overflow-x-auto">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="border-b bg-muted/50">
+                            <th className="text-left py-3 px-4 font-medium align-top w-32">
+                              Criterion
+                            </th>
+                            <th className="text-left py-3 px-4 font-medium align-top w-20">
+                              Default
+                            </th>
+                            <th className="text-left py-3 px-4 font-medium align-top w-28">
+                              Your Weight
+                            </th>
+                            <th className="text-left py-3 px-4 font-medium align-top min-w-[200px]">
+                              Rationale
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {WEIGHT_KEYS.map((key) => {
+                            const defaultVal = sw.weights[key] ?? 0;
+                            const editingVal =
+                              getEditingWeightsForStage(sw.stage)[key] ?? defaultVal;
+                            const rationaleVal =
+                              getEditingRationaleForStage(sw.stage)[key] ?? "";
+                            return (
+                              <tr key={key} className="border-b last:border-0">
+                                <td className="py-3 px-4 text-sm font-medium align-top">
+                                  {weightLabels[key] || key}
+                                </td>
+                                <td className="py-3 px-4 align-top">
+                                  <Badge variant="secondary" className="font-normal">
+                                    {defaultVal}%
+                                  </Badge>
+                                </td>
+                                <td className="py-3 px-4 align-top">
+                                  <div className="flex items-center gap-1 w-20">
+                                    <Input
+                                      type="number"
+                                      min={0}
+                                      max={100}
+                                      value={editingVal}
+                                      onChange={(e) => {
+                                        const v = parseInt(e.target.value, 10);
+                                        setWeightForStage(
+                                          sw.stage,
+                                          key,
+                                          Number.isNaN(v) ? 0 : v,
+                                        );
+                                      }}
+                                      className="h-9 text-sm"
+                                    />
+                                    <span className="text-sm text-muted-foreground">%</span>
+                                  </div>
+                                </td>
+                                <td className="py-3 px-4 align-top">
+                                  <Textarea
+                                    value={rationaleVal}
+                                    onChange={(e) =>
+                                      setRationaleForStage(sw.stage, key, e.target.value)
+                                    }
+                                    placeholder="Why this matters..."
+                                    className="min-h-[60px] resize-y text-sm w-full"
+                                    maxLength={2000}
+                                  />
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                    <p className="mt-3 text-sm text-muted-foreground">
+                      Total: {getWeightsSum(getEditingWeightsForStage(sw.stage))}%
+                      {getWeightsSum(getEditingWeightsForStage(sw.stage)) !== 100 && (
+                        <span className="text-destructive ml-1"> (must equal 100%)</span>
+                      )}
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+
               <div className="grid gap-6 lg:grid-cols-2">
                 <Card>
                   <CardHeader>
@@ -130,20 +687,24 @@ function InvestorScoringPage() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    {effective && Object.entries(effective).map(([key, value]) => (
-                      <div key={key} className="space-y-1">
-                        <div className="flex justify-between text-sm">
-                          <span>{weightLabels[key] || key}</span>
-                          <span className="font-medium">{value}%</span>
-                        </div>
-                        <div className="h-2 rounded-full bg-muted overflow-hidden">
-                          <div
-                            className="h-full bg-primary rounded-full transition-all"
-                            style={{ width: `${value}%` }}
-                          />
-                        </div>
-                      </div>
-                    ))}
+                    {effective &&
+                      WEIGHT_KEYS.map((key) => {
+                        const value = effective[key] ?? 0;
+                        return (
+                          <div key={key} className="space-y-1">
+                            <div className="flex justify-between text-sm">
+                              <span>{weightLabels[key] || key}</span>
+                              <span className="font-medium">{value}%</span>
+                            </div>
+                            <div className="h-2 rounded-full bg-muted overflow-hidden">
+                              <div
+                                className="h-full bg-primary rounded-full transition-all"
+                                style={{ width: `${value}%` }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
                   </CardContent>
                 </Card>
 
@@ -153,12 +714,19 @@ function InvestorScoringPage() {
                     <CardDescription>Why these weights matter at this stage</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    {Object.entries(sw.rationale).slice(0, 5).map(([key, value]) => (
-                      <div key={key} className="space-y-1">
-                        <h4 className="font-medium text-sm">{weightLabels[key] || key}</h4>
-                        <p className="text-sm text-muted-foreground">{value}</p>
-                      </div>
-                    ))}
+                    {WEIGHT_KEYS.map((key) => {
+                      const rationale =
+                        useCustomWeights
+                          ? getEditingRationaleForStage(sw.stage)
+                          : sw.rationale;
+                      const value = rationale[key] ?? "";
+                      return (
+                        <div key={key} className="space-y-1">
+                          <h4 className="font-medium text-sm">{weightLabels[key] || key}</h4>
+                          <p className="text-sm text-muted-foreground">{value || "—"}</p>
+                        </div>
+                      );
+                    })}
                   </CardContent>
                 </Card>
               </div>

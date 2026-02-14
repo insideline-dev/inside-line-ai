@@ -118,7 +118,14 @@ export class PortalService {
 
   async update(id: string, userId: string, dto: UpdatePortal): Promise<Portal> {
     return this.drizzle.withRLS(userId, async (db) => {
-      await this.findOne(id, userId);
+      const existing = await this.findOne(id, userId);
+
+      if (dto.slug && dto.slug !== existing.slug) {
+        const isTaken = await this.isSlugTaken(dto.slug);
+        if (isTaken) {
+          throw new ConflictException(`Slug "${dto.slug}" is already taken`);
+        }
+      }
 
       const [updated] = await db
         .update(portal)

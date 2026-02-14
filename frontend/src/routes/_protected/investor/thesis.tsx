@@ -7,7 +7,19 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ChevronDown, ChevronRight, Loader2, Save } from "lucide-react";
+import {
+  Briefcase,
+  Building2,
+  ChevronDown,
+  ChevronRight,
+  DollarSign,
+  Globe,
+  Lightbulb,
+  Loader2,
+  Save,
+  TrendingUp,
+  Wallet,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -16,6 +28,7 @@ import {
   useInvestorControllerCreateOrUpdateThesis,
   getInvestorControllerGetThesisQueryKey,
 } from "@/api/generated/investor/investor";
+import { industryGroups } from "@/data/industries";
 import {
   buildThesisSavePayload,
   extractResponseData,
@@ -35,16 +48,40 @@ const stages = [
   { id: "series_a", label: "Series A" },
   { id: "series_b", label: "Series B" },
   { id: "series_c", label: "Series C+" },
+  { id: "growth", label: "Growth" },
 ];
 
-const sectors = [
-  { id: "software", label: "Software/SaaS" },
-  { id: "artificial_intelligence", label: "AI/ML" },
-  { id: "fintech", label: "FinTech" },
-  { id: "health_care", label: "HealthTech" },
-  { id: "climate_tech", label: "Climate Tech" },
-  { id: "ecommerce", label: "E-Commerce" },
+// Legacy industry IDs to map to new industry group values (backward compatibility)
+const LEGACY_INDUSTRY_MAP: Record<string, string> = {
+  fintech: "financial_services",
+  climate_tech: "sustainability",
+  ecommerce: "commerce_shopping",
+};
+
+const businessModelOptions = [
+  { id: "b2b_saas", label: "B2B SaaS" },
+  { id: "fintech_lending", label: "Fintech/Lending" },
+  { id: "enterprise_sales", label: "Enterprise Sales" },
+  { id: "b2c_saas", label: "B2C SaaS" },
+  { id: "hardware", label: "Hardware" },
+  { id: "api_infrastructure", label: "API/Infrastructure" },
+  { id: "marketplace", label: "Marketplace" },
+  { id: "consumer_app", label: "Consumer App" },
 ];
+
+function formatNumberWithCommas(value: number | null | undefined): string {
+  if (value === undefined || value === null) return "";
+  const num = typeof value === "number" ? value : parseFloat(String(value));
+  if (Number.isNaN(num)) return "";
+  return num.toLocaleString("en-US");
+}
+
+function parseFormattedNumber(value: string): number | null {
+  if (!value.trim()) return null;
+  const cleaned = value.replace(/[,$\s]/g, "");
+  const num = parseFloat(cleaned);
+  return Number.isNaN(num) ? null : num;
+}
 
 function buildParentNodeMap(
   nodes: GeographyNode[],
@@ -94,12 +131,18 @@ function InvestorThesisPage() {
   );
 
   const [formData, setFormData] = useState<ThesisFormData>({
-    stages: ["seed", "series_a"],
-    industries: ["software", "artificial_intelligence"],
+    stages: [],
+    industries: [],
     geographicFocusNodes: [],
-    checkSizeMin: 500000,
-    checkSizeMax: 3000000,
+    businessModels: [],
+    checkSizeMin: 100000,
+    checkSizeMax: 5000000,
+    minRevenue: null,
     notes: "",
+    thesisNarrative: "",
+    antiPortfolio: "",
+    website: "",
+    fundSize: null,
   });
   const [expandedGeographyNodes, setExpandedGeographyNodes] = useState<string[]>([]);
   const parentNodeMap = useMemo(() => buildParentNodeMap(taxonomyNodes), [taxonomyNodes]);
@@ -119,17 +162,32 @@ function InvestorThesisPage() {
       setFormData({
         stages: Array.isArray(t.stages)
           ? t.stages.filter((value): value is string => typeof value === "string")
-          : ["seed", "series_a"],
+          : [],
         industries: Array.isArray(t.industries)
-          ? t.industries.filter((value): value is string => typeof value === "string")
-          : ["software", "artificial_intelligence"],
+          ? t.industries
+              .filter((value): value is string => typeof value === "string")
+              .map((v) => LEGACY_INDUSTRY_MAP[v] ?? v)
+          : [],
         geographicFocusNodes:
           savedGeoNodes.length > 0
             ? savedGeoNodes
             : mapLegacyLabelsToNodeIds(legacyGeo, taxonomyNodes),
-        checkSizeMin: typeof t.checkSizeMin === "number" ? t.checkSizeMin : 500000,
-        checkSizeMax: typeof t.checkSizeMax === "number" ? t.checkSizeMax : 3000000,
+        businessModels: Array.isArray(t.businessModels)
+          ? t.businessModels.filter((value): value is string => typeof value === "string")
+          : [],
+        checkSizeMin: typeof t.checkSizeMin === "number" ? t.checkSizeMin : 100000,
+        checkSizeMax: typeof t.checkSizeMax === "number" ? t.checkSizeMax : 5000000,
+        minRevenue: typeof t.minRevenue === "number" ? t.minRevenue : null,
         notes: typeof t.notes === "string" ? t.notes : "",
+        thesisNarrative:
+          typeof t.thesisNarrative === "string"
+            ? t.thesisNarrative
+            : typeof t.notes === "string"
+              ? t.notes
+              : "",
+        antiPortfolio: typeof t.antiPortfolio === "string" ? t.antiPortfolio : "",
+        website: typeof t.website === "string" ? t.website : "",
+        fundSize: typeof t.fundSize === "number" ? t.fundSize : null,
       });
     }
   }, [thesis, taxonomyNodes]);
@@ -185,6 +243,15 @@ function InvestorThesisPage() {
     }));
   };
 
+  const handleBusinessModelToggle = (modelId: string, checked: boolean) => {
+    setFormData((prev) => ({
+      ...prev,
+      businessModels: checked
+        ? [...prev.businessModels, modelId]
+        : prev.businessModels.filter((m) => m !== modelId),
+    }));
+  };
+
   const handleGeoToggle = (nodeId: string, checked: boolean) => {
     setFormData((prev) => ({
       ...prev,
@@ -216,6 +283,22 @@ function InvestorThesisPage() {
     saveThesis({
       data: buildThesisSavePayload(formData),
     });
+  };
+
+  const handleCancelNarrative = () => {
+    if (thesis) {
+      setFormData((prev) => ({
+        ...prev,
+        thesisNarrative:
+          typeof thesis.thesisNarrative === "string"
+            ? thesis.thesisNarrative
+            : typeof thesis.notes === "string"
+              ? thesis.notes
+              : "",
+        antiPortfolio:
+          typeof thesis.antiPortfolio === "string" ? thesis.antiPortfolio : "",
+      }));
+    }
   };
 
   const renderGeographyNode = (node: GeographyNode, depth = 0) => (
@@ -294,70 +377,219 @@ function InvestorThesisPage() {
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Funding Stages</CardTitle>
-            <CardDescription>Select the stages you invest in</CardDescription>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5" />
+              Stage Preferences
+            </CardTitle>
+            <CardDescription>What stages do you invest in?</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            {stages.map((stage) => (
-              <div key={stage.id} className="flex items-center space-x-2">
-                <Checkbox
-                  id={stage.id}
-                  checked={formData.stages.includes(stage.id)}
-                  onCheckedChange={(checked) => handleStageToggle(stage.id, !!checked)}
-                />
-                <Label htmlFor={stage.id}>{stage.label}</Label>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Check Size</CardTitle>
-            <CardDescription>Your typical investment range</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="min">Minimum ($)</Label>
-                <Input
-                  id="min"
-                  type="number"
-                  placeholder="500,000"
-                  value={formData.checkSizeMin}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, checkSizeMin: Number(e.target.value) }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="max">Maximum ($)</Label>
-                <Input
-                  id="max"
-                  type="number"
-                  placeholder="3,000,000"
-                  value={formData.checkSizeMax}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, checkSizeMax: Number(e.target.value) }))}
-                />
-              </div>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {stages.map((stage) => (
+                <div
+                  key={stage.id}
+                  className="flex items-center space-x-2 rounded-md border border-border/60 p-3 hover:bg-muted/40"
+                >
+                  <Checkbox
+                    id={stage.id}
+                    checked={formData.stages.includes(stage.id)}
+                    onCheckedChange={(checked) => handleStageToggle(stage.id, !!checked)}
+                  />
+                  <Label htmlFor={stage.id} className="cursor-pointer font-normal">
+                    {stage.label}
+                  </Label>
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>Sectors</CardTitle>
-            <CardDescription>Industries you focus on</CardDescription>
+            <CardTitle className="flex items-center gap-2">
+              <DollarSign className="h-5 w-5" />
+              $ Check Size
+            </CardTitle>
+            <CardDescription>Typical investment range per deal (optional)</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {sectors.map((sector) => (
-              <div key={sector.id} className="flex items-center space-x-2">
-                <Checkbox
-                  id={sector.id}
-                  checked={formData.industries.includes(sector.id)}
-                  onCheckedChange={(checked) => handleSectorToggle(sector.id, !!checked)}
-                />
-                <Label htmlFor={sector.id}>{sector.label}</Label>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="checkSizeMin">Minimum</Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
+                  <Input
+                    id="checkSizeMin"
+                    type="text"
+                    placeholder="100,000"
+                    className="pl-7"
+                    value={formatNumberWithCommas(formData.checkSizeMin)}
+                    onChange={(e) => {
+                      const val = parseFormattedNumber(e.target.value);
+                      setFormData((prev) => ({
+                        ...prev,
+                        checkSizeMin: val ?? prev.checkSizeMin,
+                      }));
+                    }}
+                  />
+                </div>
               </div>
-            ))}
+              <div className="space-y-2">
+                <Label htmlFor="checkSizeMax">Maximum</Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
+                  <Input
+                    id="checkSizeMax"
+                    type="text"
+                    placeholder="5,000,000"
+                    className="pl-7"
+                    value={formatNumberWithCommas(formData.checkSizeMax)}
+                    onChange={(e) => {
+                      const val = parseFormattedNumber(e.target.value);
+                      setFormData((prev) => ({
+                        ...prev,
+                        checkSizeMax: val ?? prev.checkSizeMax,
+                      }));
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="minRevenue">Minimum ARR (optional)</Label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
+                <Input
+                  id="minRevenue"
+                  type="text"
+                  placeholder="1,000,000"
+                  className="pl-7"
+                  value={formatNumberWithCommas(formData.minRevenue)}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      minRevenue: parseFormattedNumber(e.target.value),
+                    }))
+                  }
+                />
+              </div>
+              <p className="text-sm text-muted-foreground">Minimum annual recurring revenue</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Building2 className="h-5 w-5" />
+              Industry Groups
+            </CardTitle>
+            <CardDescription>Which industry groups are you focused on?</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+              {industryGroups.map((group) => (
+                <div
+                  key={group.value}
+                  className="flex items-center space-x-2 rounded-md border border-border/60 p-3 hover:bg-muted/40"
+                >
+                  <Checkbox
+                    id={group.value}
+                    checked={formData.industries.includes(group.value)}
+                    onCheckedChange={(checked) => handleSectorToggle(group.value, !!checked)}
+                  />
+                  <Label htmlFor={group.value} className="cursor-pointer font-normal">
+                    {group.label}
+                  </Label>
+                </div>
+              ))}
+            </div>
+            <p className="mt-4 text-sm text-muted-foreground">
+              Select all that apply ({industryGroups.length} categories available)
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Briefcase className="h-5 w-5" />
+              Business Models
+            </CardTitle>
+            <CardDescription>What business models do you prefer?</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {businessModelOptions.map((model) => (
+                <div
+                  key={model.id}
+                  className="flex items-center space-x-2 rounded-md border border-border/60 p-3 hover:bg-muted/40"
+                >
+                  <Checkbox
+                    id={model.id}
+                    checked={formData.businessModels.includes(model.id)}
+                    onCheckedChange={(checked) => handleBusinessModelToggle(model.id, !!checked)}
+                  />
+                  <Label htmlFor={model.id} className="cursor-pointer font-normal">
+                    {model.label}
+                  </Label>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Wallet className="h-5 w-5" />
+              Fund Information
+            </CardTitle>
+            <CardDescription>Details about your fund (optional)</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="website">Website</Label>
+                <div className="relative">
+                  <Globe className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="website"
+                    type="url"
+                    placeholder="https://yourfund.com"
+                    className="pl-9"
+                    value={formData.website}
+                    onChange={(e) =>
+                      setFormData((prev) => ({ ...prev, website: e.target.value }))
+                    }
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="fundSize">Fund Size (AUM)</Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                    $
+                  </span>
+                  <Input
+                    id="fundSize"
+                    type="text"
+                    placeholder="50,000,000"
+                    className="pl-7"
+                    value={formatNumberWithCommas(formData.fundSize)}
+                    onChange={(e) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        fundSize: parseFormattedNumber(e.target.value),
+                      }))
+                    }
+                  />
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Total assets under management
+                </p>
+              </div>
+            </div>
           </CardContent>
         </Card>
 
@@ -409,16 +641,47 @@ function InvestorThesisPage() {
 
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle>Thesis Narrative</CardTitle>
-            <CardDescription>Describe your investment thesis in detail</CardDescription>
+            <CardTitle className="flex items-center gap-2">
+              <Lightbulb className="h-5 w-5" />
+              Thesis Narrative
+            </CardTitle>
+            <CardDescription>Describe your investment thesis in your own words.</CardDescription>
           </CardHeader>
-          <CardContent>
-            <Textarea
-              placeholder="We invest in early-stage B2B SaaS companies with strong technical founders..."
-              className="min-h-[150px]"
-              value={formData.notes}
-              onChange={(e) => setFormData((prev) => ({ ...prev, notes: e.target.value }))}
-            />
+          <CardContent className="space-y-6">
+            <div className="space-y-2">
+              <p className="font-medium">What makes a company interesting to you?</p>
+              <Textarea
+                placeholder="We look for companies that..."
+                className="min-h-[120px] resize-none"
+                value={formData.thesisNarrative}
+                onChange={(e) =>
+                  setFormData((prev) => ({ ...prev, thesisNarrative: e.target.value }))
+                }
+              />
+              <p className="text-sm text-muted-foreground">
+                Our AI will use this to better match you with relevant opportunities.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <p className="font-medium">What would you NOT invest in?</p>
+              <Textarea
+                placeholder="We avoid companies that..."
+                className="min-h-[120px] resize-none"
+                value={formData.antiPortfolio}
+                onChange={(e) =>
+                  setFormData((prev) => ({ ...prev, antiPortfolio: e.target.value }))
+                }
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={handleCancelNarrative}>
+                Cancel
+              </Button>
+              <Button onClick={handleSave} disabled={isSaving} className="gap-2">
+                {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                Save Thesis
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>

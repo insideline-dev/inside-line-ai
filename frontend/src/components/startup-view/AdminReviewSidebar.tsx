@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Link2 } from "lucide-react";
+import { CheckCircle2, Link2, Trash2, XCircle } from "lucide-react";
 import type { Startup } from "@/types/startup";
 import type { Evaluation } from "@/types/evaluation";
 
@@ -65,27 +65,50 @@ export function AdminReviewSidebar({
               value={adminNotes}
               onChange={(e) => onAdminNotesChange(e.target.value)}
               placeholder="Add notes about this review..."
-              className="min-h-24"
+              className="min-h-24 text-sm"
             />
           </div>
 
           <div className="space-y-1.5">
             <Label htmlFor="score-override">Score Override</Label>
-            <Input id="score-override" placeholder="Leave empty to use AI score" disabled />
+            <Input
+              id="score-override"
+              type="number"
+              min={0}
+              max={100}
+              placeholder="Leave empty to use AI score"
+              className="h-9 text-sm focus-visible:ring-1"
+            />
           </div>
 
           {canApproveReject && (
-            <div className="grid grid-cols-2 gap-2">
-              <Button onClick={onApprove} disabled={approveDisabled}>
+            <div className="grid grid-cols-2 gap-3">
+              <Button
+                onClick={onApprove}
+                disabled={approveDisabled}
+                className="h-10 rounded-md bg-gradient-to-r from-fuchsia-500 to-violet-600 text-sm font-medium text-white hover:opacity-95"
+              >
+                <CheckCircle2 className="h-4 w-4 mr-2" />
                 Approve
               </Button>
-              <Button variant="destructive" onClick={onReject} disabled={rejectDisabled}>
+              <Button
+                variant="destructive"
+                onClick={onReject}
+                disabled={rejectDisabled}
+                className="h-10 rounded-md text-sm font-medium"
+              >
+                <XCircle className="h-4 w-4 mr-2" />
                 Reject
               </Button>
             </div>
           )}
 
-          <Button variant="ghost" className="w-full text-destructive hover:text-destructive" disabled>
+          <Button
+            variant="outline"
+            className="h-10 w-full rounded-md border-destructive/20 text-sm font-medium text-destructive hover:text-destructive"
+            disabled
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
             Delete Submission
           </Button>
         </CardContent>

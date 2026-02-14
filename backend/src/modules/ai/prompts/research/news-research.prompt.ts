@@ -11,8 +11,6 @@ export const NEWS_RESEARCH_HUMAN_PROMPT = `Research public news and announcement
 Capture notable articles, press releases, and high-signal events.
 Only include articles from the last 12 months. If no recent news exists, return empty arrays.
 
-If gap analysis top priorities are provided in the context, focus news research on filling those specific information gaps.
-
 Context:
 {{contextJson}}
 

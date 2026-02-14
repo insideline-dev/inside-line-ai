@@ -20,6 +20,7 @@ import {
   TractionEvaluationAgent,
 } from "./agents/evaluation";
 import { AiConfigService } from "./services/ai-config.service";
+import { AiDebugLogService } from "./services/ai-debug-log.service";
 import { AiPromptService } from "./services/ai-prompt.service";
 import {
   EvaluationProcessor,
@@ -42,7 +43,6 @@ import { LinkedinEnrichmentService } from "./services/linkedin-enrichment.servic
 import { InvestorMatchingService } from "./services/investor-matching.service";
 import { LocationNormalizerService } from "./services/location-normalizer.service";
 import { MemoGeneratorService } from "./services/memo-generator.service";
-import { GapAnalysisService } from "./services/gap-analysis.service";
 import { ResearchService } from "./services/research.service";
 import { ScoreComputationService } from "./services/score-computation.service";
 import { ScrapingCacheService } from "./services/scraping-cache.service";
@@ -64,6 +64,7 @@ import { WebsiteScraperService } from "./services/website-scraper.service";
   providers: [
     AiProviderService,
     AiConfigService,
+    AiDebugLogService,
     AiPromptService,
     PipelineStateService,
     PipelineFeedbackService,
@@ -77,7 +78,6 @@ import { WebsiteScraperService } from "./services/website-scraper.service";
     WebsiteScraperService,
     LinkedinEnrichmentService,
     ScrapingCacheService,
-    GapAnalysisService,
     ResearchService,
     SynthesisAgent,
     ScoreComputationService,

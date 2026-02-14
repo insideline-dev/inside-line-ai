@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
+import { Injectable, Logger, OnModuleDestroy, Optional } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { customAlphabet } from "nanoid";
 import { z } from "zod";
@@ -13,6 +13,7 @@ import {
 } from "../interfaces/pipeline.interface";
 import { AI_PIPELINE_REDIS_KEY_PREFIX } from "../ai.config";
 import { RedisFallbackClient } from "./redis-fallback.service";
+import { AiDebugLogService } from "./ai-debug-log.service";
 
 const nanoid = customAlphabet("abcdefghijklmnopqrstuvwxyz0123456789", 16);
 
@@ -74,7 +75,10 @@ export class PipelineStateService implements OnModuleDestroy {
   private readonly logger = new Logger(PipelineStateService.name);
   private readonly redisClient: RedisFallbackClient;
 
-  constructor(private config: ConfigService) {
+  constructor(
+    private config: ConfigService,
+    @Optional() private aiDebugLog?: AiDebugLogService,
+  ) {
     this.redisClient = new RedisFallbackClient({
       redisUrl: this.config.get<string>("REDIS_URL", "redis://localhost:6379"),
       recoveryIntervalMs: this.config.get<number>(
@@ -202,6 +206,15 @@ export class PipelineStateService implements OnModuleDestroy {
 
     current.updatedAt = now;
     await this.persist(current);
+
+    if (status === PhaseStatus.FAILED) {
+      await this.aiDebugLog?.logPhaseFailure({
+        startupId,
+        pipelineRunId: current.pipelineRunId,
+        phase,
+        error,
+      });
+    }
   }
 
   async setStatus(startupId: string, status: PipelineStatus): Promise<void> {
@@ -306,6 +319,12 @@ export class PipelineStateService implements OnModuleDestroy {
     (current.results as Record<PipelinePhase, unknown>)[phase] = result;
     current.updatedAt = new Date().toISOString();
     await this.persist(current);
+    await this.aiDebugLog?.logPhaseResult({
+      startupId,
+      pipelineRunId: current.pipelineRunId,
+      phase,
+      result,
+    });
   }
 
   async getPhaseResult<P extends PipelinePhase>(

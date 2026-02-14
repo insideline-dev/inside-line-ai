@@ -1,4 +1,3 @@
-import type { GapReport } from "./gap-analysis.interface";
 import type {
   BusinessModelEvaluation,
   CompetitiveAdvantageEvaluation,
@@ -182,7 +181,6 @@ export interface ResearchResult {
   news: NewsResearch | null;
   sources: SourceEntry[];
   errors: Array<{ agent: "team" | "market" | "product" | "news"; error: string }>;
-  gapReport?: GapReport;
 }
 
 export interface EvaluationSummary {

@@ -9,15 +9,9 @@ export interface ThesisFormData {
   stages: string[];
   industries: string[];
   geographicFocusNodes: string[];
-  businessModels: string[];
   checkSizeMin: number;
   checkSizeMax: number;
-  minRevenue: number | null;
   notes: string;
-  thesisNarrative: string;
-  antiPortfolio: string;
-  website: string;
-  fundSize: number | null;
 }
 
 export function extractResponseData<T>(payload: unknown): T | null {
@@ -105,13 +99,7 @@ export function buildThesisSavePayload(formData: ThesisFormData) {
     industries: formData.industries,
     checkSizeMin: formData.checkSizeMin,
     checkSizeMax: formData.checkSizeMax,
-    minRevenue: formData.minRevenue ?? undefined,
     geographicFocusNodes: formData.geographicFocusNodes,
-    businessModels: formData.businessModels,
     notes: formData.notes,
-    thesisNarrative: formData.thesisNarrative || undefined,
-    antiPortfolio: formData.antiPortfolio || undefined,
-    website: formData.website || undefined,
-    fundSize: formData.fundSize,
   };
 }

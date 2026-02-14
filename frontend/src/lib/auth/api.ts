@@ -2,6 +2,8 @@ import { customFetch } from "@/api/client";
 import { env } from "@/env";
 import type {
   AuthResponse,
+  LoginRequest,
+  RegisterRequest,
   MagicLinkRequest,
   EmailVerifyRequest,
   ResendVerificationRequest,
@@ -13,6 +15,19 @@ import type {
 } from "./types";
 
 export const authApi = {
+  // Email / Password
+  login: (data: LoginRequest) =>
+    customFetch<AuthResponse>("/auth/login", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  register: (data: RegisterRequest) =>
+    customFetch<AuthResponse>("/auth/register", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
   // Magic Link
   requestMagicLink: (data: MagicLinkRequest) =>
     customFetch<MessageResponse>("/auth/magic-link/request", {

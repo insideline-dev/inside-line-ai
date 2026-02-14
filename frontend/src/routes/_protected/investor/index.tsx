@@ -6,10 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScoreRing } from "@/components/analysis/ScoreRing";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SearchAndFilters, useFilteredStartups, defaultFilters, type FilterState } from "@/components/SearchAndFilters";
-import {
-  useInvestorControllerGetMatches,
-  useInvestorControllerGetThesis,
-} from "@/api/generated/investor/investor";
+import { useInvestorControllerGetMatches } from "@/api/generated/investor/investor";
 import { useStartupControllerFindAll } from "@/api/generated/startup/startup";
 import {
   Target,
@@ -97,19 +94,7 @@ function formatDateSafe(
 function InvestorDashboard() {
   const [filters, setFilters] = useState<FilterState>(defaultFilters);
 
-  const { data: thesisData } = useInvestorControllerGetThesis();
-  const thesis = Array.isArray(thesisData) ? null : thesisData;
-  const thesisParams =
-    thesis && typeof thesis === "object" && "minThesisFitScore" in thesis
-      ? (thesis as { minThesisFitScore?: number | null; minStartupScore?: number | null })
-      : null;
-
-  const matchParams = {
-    minScore: thesisParams?.minStartupScore ?? undefined,
-    minThesisFitScore: thesisParams?.minThesisFitScore ?? undefined,
-  };
-
-  const { data: matchesData, isLoading } = useInvestorControllerGetMatches(matchParams);
+  const { data: matchesData, isLoading } = useInvestorControllerGetMatches();
   const matches = extractList<MatchedStartup>(matchesData);
 
   const { data: myStartupsData, isLoading: isLoadingMyStartups } = useStartupControllerFindAll();
@@ -147,7 +132,7 @@ function InvestorDashboard() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Pipeline</h1>
+          <h1 className="text-2xl font-bold">Deal Flow</h1>
           <p className="text-muted-foreground">
             Startups matched to your investment thesis
           </p>

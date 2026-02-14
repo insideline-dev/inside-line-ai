@@ -10,8 +10,6 @@ IMPORTANT RULES:
 export const MARKET_RESEARCH_HUMAN_PROMPT = `Research the startup's market context.
 Focus on market reports, TAM/SAM/SOM indicators, competitor positioning, and trend signals.
 
-If gap analysis directives are provided in the context, prioritize researching those specific gaps before general exploration.
-
 Context:
 {{contextJson}}
 
@@ -26,6 +24,13 @@ Expected structure:
   - description: REQUIRED string
   - fundingRaised: optional number (USD). Do NOT estimate — omit if not from a reliable source.
   - url: REQUIRED valid URL
+- indirectCompetitors: array of indirect competitor names (default [])
+- indirectCompetitorsDetailed: array of objects with:
+  - name: REQUIRED string
+  - description: REQUIRED string
+  - whyIndirect: optional string explaining substitution/adjacent competition
+  - threatLevel: optional one of "high" | "medium" | "low"
+  - url: optional valid URL
 - marketTrends: array of market trend strings (default [])
 - marketSize: REQUIRED object with:
   - tam: optional number (USD). If unavailable from reliable sources, omit.
@@ -43,6 +48,10 @@ Example:
   "marketReports": ["Gartner 2024: SaaS market projected at $300B by 2026"],
   "competitors": [
     { "name": "CompetitorX", "description": "Series B competitor in same vertical", "fundingRaised": 50000000, "url": "https://competitorx.com" }
+  ],
+  "indirectCompetitors": ["Adjacent substitute category"],
+  "indirectCompetitorsDetailed": [
+    { "name": "SubstituteY", "description": "Alternative workflow used by same buyer", "whyIndirect": "Competes for same budget", "threatLevel": "medium", "url": "https://substitutey.example.com" }
   ],
   "marketTrends": ["Shift toward vertical SaaS solutions"],
   "marketSize": { "tam": 300000000000 },

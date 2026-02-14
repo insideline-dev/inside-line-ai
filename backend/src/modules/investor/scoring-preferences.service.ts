@@ -88,7 +88,6 @@ export class ScoringPreferencesService {
           .set({
             useCustomWeights: dto.useCustomWeights,
             customWeights: dto.customWeights ?? null,
-            customRationale: dto.customRationale ?? null,
             updatedAt: new Date(),
           })
           .where(
@@ -110,7 +109,6 @@ export class ScoringPreferencesService {
           stage,
           useCustomWeights: dto.useCustomWeights,
           customWeights: dto.customWeights ?? null,
-          customRationale: dto.customRationale ?? null,
         })
         .returning();
 

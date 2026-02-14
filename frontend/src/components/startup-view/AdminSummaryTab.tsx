@@ -1,10 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
 import { ScoreRing } from "@/components/analysis/ScoreRing";
-import { CheckCircle2, AlertTriangle, ChevronRight, Link2, Sparkles } from "lucide-react";
+import { CheckCircle2, AlertTriangle, ChevronRight, Sparkles } from "lucide-react";
 import type { Startup } from "@/types/startup";
 import type { Evaluation } from "@/types/evaluation";
 import type { ScoringWeights } from "@/lib/score-utils";
@@ -13,13 +9,6 @@ interface AdminSummaryTabProps {
   startup: Startup;
   evaluation?: Evaluation;
   weights?: ScoringWeights | null;
-  adminNotes: string;
-  onAdminNotesChange: (value: string) => void;
-  onApprove: () => void;
-  onReject: () => void;
-  approveDisabled?: boolean;
-  rejectDisabled?: boolean;
-  canApproveReject: boolean;
 }
 
 interface SectionScoreRow {
@@ -82,20 +71,21 @@ function getSectionRows(evaluation: Evaluation, weights?: ScoringWeights | null)
   ];
 }
 
-function InfoMetric({ label, value }: { label: string; value: string }) {
+function InfoMetric({
+  label,
+  value,
+  accent = false,
+}: {
+  label: string;
+  value: string;
+  accent?: boolean;
+}) {
   return (
-    <div className="rounded-md border bg-muted/20 px-3 py-2">
+    <div className="rounded-md border bg-muted/20 px-3 py-2.5">
       <p className="text-[11px] text-muted-foreground">{label}</p>
-      <p className="mt-0.5 text-sm font-medium">{value}</p>
-    </div>
-  );
-}
-
-function StatRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between text-sm">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="font-medium">{value}</span>
+      <p className={`mt-1 text-sm leading-tight font-medium break-words ${accent ? "text-violet-600" : ""}`}>
+        {value}
+      </p>
     </div>
   );
 }
@@ -104,16 +94,10 @@ export function AdminSummaryTab({
   startup,
   evaluation,
   weights,
-  adminNotes,
-  onAdminNotesChange,
-  onApprove,
-  onReject,
-  approveDisabled,
-  rejectDisabled,
-  canApproveReject,
 }: AdminSummaryTabProps) {
   const score = evaluation?.overallScore ?? startup.overallScore ?? 0;
-  const percentile = startup.percentileRank != null ? `Top ${100 - startup.percentileRank}%` : "N/A";
+  const percentile =
+    startup.percentileRank != null ? `Top ${100 - startup.percentileRank}%` : "N/A";
   const strengths = evaluation?.keyStrengths ?? [];
   const risks = evaluation?.keyRisks ?? [];
   const sectionRows = evaluation ? getSectionRows(evaluation, weights) : [];
@@ -124,23 +108,32 @@ export function AdminSummaryTab({
     "No summary generated yet.";
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
-      <div className="space-y-6">
+    <div className="space-y-6">
         <Card>
           <CardContent className="p-4 sm:p-5">
-            <div className="grid gap-5 md:grid-cols-[170px_minmax(0,1fr)]">
-              <div className="flex flex-col items-center justify-center rounded-md border bg-muted/15 py-3">
-                <ScoreRing score={score} size="md" showLabel={false} variant="secondary" />
-                <p className="mt-2 text-xs font-semibold">{percentile}</p>
+            <div className="grid gap-5 md:grid-cols-[220px_minmax(0,1fr)]">
+              <div className="flex flex-col items-center justify-center rounded-xl border bg-muted/15 px-4 py-6">
+                <ScoreRing score={score} size="lg" showLabel={false} variant="secondary" />
+                <div className="mt-3 rounded-xl border bg-background px-3 py-1">
+                  <p className="text-[13px] font-semibold">{percentile}</p>
+                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
                 <InfoMetric label="Stage" value={formatStage(startup.stage)} />
                 <InfoMetric label="Industry Group" value={startup.sectorIndustryGroup || "N/A"} />
                 <InfoMetric label="Industry" value={startup.sectorIndustry || startup.industry || "N/A"} />
                 <InfoMetric label="Location" value={startup.location || "N/A"} />
-                <InfoMetric label="Round Size" value={formatCompactCurrency(startup.fundingTarget)} />
-                <InfoMetric label="Valuation (Post-money)" value={formatCompactCurrency(startup.valuation)} />
+                <InfoMetric
+                  label="Round Size"
+                  value={formatCompactCurrency(startup.fundingTarget)}
+                  accent
+                />
+                <InfoMetric
+                  label="Valuation (Post-money)"
+                  value={formatCompactCurrency(startup.valuation)}
+                  accent
+                />
                 <InfoMetric label="Raise Type" value={formatRaiseType(startup.raiseType)} />
                 <InfoMetric label="Lead Investor" value={startup.leadInvestorName || "No"} />
               </div>
@@ -232,80 +225,6 @@ export function AdminSummaryTab({
             </CardContent>
           </Card>
         )}
-      </div>
-
-      <div className="space-y-4">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Admin Actions</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="admin-notes">Notes</Label>
-              <Textarea
-                id="admin-notes"
-                value={adminNotes}
-                onChange={(e) => onAdminNotesChange(e.target.value)}
-                placeholder="Add notes about this review..."
-                className="min-h-24"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="score-override">Score Override</Label>
-              <Input id="score-override" placeholder="Leave empty to use AI score" disabled />
-            </div>
-
-            {canApproveReject && (
-              <div className="grid grid-cols-2 gap-2">
-                <Button onClick={onApprove} disabled={approveDisabled}>
-                  Approve
-                </Button>
-                <Button variant="destructive" onClick={onReject} disabled={rejectDisabled}>
-                  Reject
-                </Button>
-              </div>
-            )}
-
-            <Button variant="ghost" className="w-full text-destructive hover:text-destructive" disabled>
-              Delete Submission
-            </Button>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Quick Stats</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2.5">
-            <StatRow label="Score" value={`${score}/100`} />
-            <StatRow label="Percentile" value={percentile} />
-            <StatRow label="Round" value={formatCompactCurrency(startup.fundingTarget)} />
-            <StatRow label="Valuation" value={formatCompactCurrency(startup.valuation)} />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Links & Docs</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {startup.website ? (
-              <a
-                href={startup.website}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 text-sm text-primary hover:underline"
-              >
-                <Link2 className="h-4 w-4" />
-                Website
-              </a>
-            ) : (
-              <p className="text-sm text-muted-foreground">No links available.</p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
     </div>
   );
 }

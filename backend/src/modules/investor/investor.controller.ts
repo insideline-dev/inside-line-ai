@@ -25,7 +25,6 @@ import { PortfolioService } from './portfolio.service';
 import { DealPipelineService } from './deal-pipeline.service';
 import { MessagingService } from './messaging.service';
 import { ScoringPreferencesService } from './scoring-preferences.service';
-import { ScoringConfigService } from '../admin/scoring-config.service';
 import {
   CreateThesisDto,
   UpdateThesisDto,
@@ -60,7 +59,6 @@ export class InvestorController {
     private pipelineService: DealPipelineService,
     private messagingService: MessagingService,
     private scoringPreferencesService: ScoringPreferencesService,
-    private scoringConfigService: ScoringConfigService,
   ) {}
 
   // ============ THESIS ENDPOINTS ============
@@ -190,11 +188,6 @@ export class InvestorController {
   }
 
   // ============ SCORING PREFERENCES ENDPOINTS ============
-
-  @Get('scoring/defaults')
-  async getScoringDefaults() {
-    return this.scoringConfigService.getAll();
-  }
 
   @Get('scoring/preferences')
   async getScoringPreferences(@CurrentUser() user: User) {

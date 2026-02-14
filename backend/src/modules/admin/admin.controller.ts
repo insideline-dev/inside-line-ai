@@ -34,7 +34,6 @@ import { SystemConfigService } from './system-config.service';
 import { BulkDataService } from './bulk-data.service';
 import { AiPromptService } from '../ai/services/ai-prompt.service';
 import { QUEUE_NAMES, QueueName } from '../../queue';
-import { EarlyAccessService } from '../early-access';
 import {
   GetUsersQueryDto,
   UpdateUserDto,
@@ -52,7 +51,6 @@ import {
   AiPromptSeedResultDto,
   AiPromptFlowResponseDto,
 } from './dto';
-import { CreateEarlyAccessInviteDto } from '../early-access';
 import { GetStartupsQueryDto } from '../startup/dto';
 
 type User = {
@@ -80,7 +78,6 @@ export class AdminController {
     private systemConfigService: SystemConfigService,
     private bulkDataService: BulkDataService,
     private aiPromptService: AiPromptService,
-    private earlyAccessService: EarlyAccessService,
   ) {}
 
   // ============ ANALYTICS ENDPOINTS ============
@@ -144,32 +141,6 @@ export class AdminController {
     @Param('id', ParseUUIDPipe) id: string,
   ) {
     return this.userManagementService.impersonate(admin.id, id);
-  }
-
-  // ============ EARLY ACCESS ENDPOINTS ============
-
-  @Post('early-access/invites')
-  async createEarlyAccessInvite(
-    @CurrentUser() admin: User,
-    @Body() dto: CreateEarlyAccessInviteDto,
-  ) {
-    return this.earlyAccessService.createInvite(admin.id, dto);
-  }
-
-  @Get('early-access/invites')
-  async listEarlyAccessInvites() {
-    return this.earlyAccessService.listInvites();
-  }
-
-  @Post('early-access/invites/:id/revoke')
-  async revokeEarlyAccessInvite(@Param('id', ParseUUIDPipe) id: string) {
-    await this.earlyAccessService.revokeInvite(id);
-    return { success: true, message: 'Invite revoked' };
-  }
-
-  @Get('early-access/waitlist')
-  async getWaitlistEntries() {
-    return this.earlyAccessService.listWaitlist();
   }
 
   // ============ STARTUP MANAGEMENT ENDPOINTS ============

@@ -86,11 +86,15 @@ describe("EvaluationService", () => {
       "startup-1",
       PipelinePhase.RESEARCH,
     );
-    expect(registry.runAll).toHaveBeenCalledWith("startup-1", {
-      extraction: pipelineInput.extraction,
-      scraping: pipelineInput.scraping,
-      research: pipelineInput.research,
-    }, undefined);
+    expect(registry.runAll).toHaveBeenCalledWith(
+      "startup-1",
+      {
+        extraction: pipelineInput.extraction,
+        scraping: pipelineInput.scraping,
+        research: pipelineInput.research,
+      },
+      expect.any(Function),
+    );
     expect(result).toBe(evaluationResult);
   });
 
@@ -106,8 +110,18 @@ describe("EvaluationService", () => {
         scraping: pipelineInput.scraping,
         research: pipelineInput.research,
       },
-      onAgentComplete,
+      expect.any(Function),
     );
+
+    const callback = registry.runAll.mock.calls[0]?.[2];
+    expect(typeof callback).toBe("function");
+    callback?.({
+      agent: "team",
+      output: { score: 80 },
+      usedFallback: false,
+      error: undefined,
+    });
+    expect(onAgentComplete).toHaveBeenCalledTimes(1);
   });
 
   it("throws when required upstream phase results are missing", async () => {

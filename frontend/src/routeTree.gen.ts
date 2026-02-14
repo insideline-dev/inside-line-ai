@@ -9,9 +9,11 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as WaitlistRouteImport } from './routes/waitlist'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ProtectedRouteImport } from './routes/_protected'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthMagicLinkRouteImport } from './routes/auth/magic-link'
 import { Route as AuthCallbackRouteImport } from './routes/auth/callback'
 import { Route as ApplySlugRouteImport } from './routes/apply.$slug'
 import { Route as ProtectedScoutRouteImport } from './routes/_protected/scout'
@@ -55,6 +57,11 @@ import { Route as ProtectedInvestorStartupIdRouteImport } from './routes/_protec
 import { Route as ProtectedFounderStartupIdRouteImport } from './routes/_protected/founder/startup.$id'
 import { Route as ProtectedAdminStartupIdRouteImport } from './routes/_protected/admin/startup.$id'
 
+const WaitlistRoute = WaitlistRouteImport.update({
+  id: '/waitlist',
+  path: '/waitlist',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
@@ -67,6 +74,11 @@ const ProtectedRoute = ProtectedRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthMagicLinkRoute = AuthMagicLinkRouteImport.update({
+  id: '/auth/magic-link',
+  path: '/auth/magic-link',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthCallbackRoute = AuthCallbackRouteImport.update({
@@ -296,6 +308,7 @@ const ProtectedAdminStartupIdRoute = ProtectedAdminStartupIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/waitlist': typeof WaitlistRoute
   '/admin': typeof ProtectedAdminRouteWithChildren
   '/founder': typeof ProtectedFounderRouteWithChildren
   '/investor': typeof ProtectedInvestorRouteWithChildren
@@ -304,6 +317,7 @@ export interface FileRoutesByFullPath {
   '/scout': typeof ProtectedScoutRouteWithChildren
   '/apply/$slug': typeof ApplySlugRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/auth/magic-link': typeof AuthMagicLinkRoute
   '/admin/agents': typeof ProtectedAdminAgentsRoute
   '/admin/analytics': typeof ProtectedAdminAnalyticsRoute
   '/admin/bulk-data': typeof ProtectedAdminBulkDataRoute
@@ -342,10 +356,12 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/waitlist': typeof WaitlistRoute
   '/profile': typeof ProtectedProfileRoute
   '/role-select': typeof ProtectedRoleSelectRoute
   '/apply/$slug': typeof ApplySlugRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/auth/magic-link': typeof AuthMagicLinkRoute
   '/admin/agents': typeof ProtectedAdminAgentsRoute
   '/admin/analytics': typeof ProtectedAdminAnalyticsRoute
   '/admin/bulk-data': typeof ProtectedAdminBulkDataRoute
@@ -386,6 +402,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_protected': typeof ProtectedRouteWithChildren
   '/login': typeof LoginRoute
+  '/waitlist': typeof WaitlistRoute
   '/_protected/admin': typeof ProtectedAdminRouteWithChildren
   '/_protected/founder': typeof ProtectedFounderRouteWithChildren
   '/_protected/investor': typeof ProtectedInvestorRouteWithChildren
@@ -394,6 +411,7 @@ export interface FileRoutesById {
   '/_protected/scout': typeof ProtectedScoutRouteWithChildren
   '/apply/$slug': typeof ApplySlugRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/auth/magic-link': typeof AuthMagicLinkRoute
   '/_protected/admin/agents': typeof ProtectedAdminAgentsRoute
   '/_protected/admin/analytics': typeof ProtectedAdminAnalyticsRoute
   '/_protected/admin/bulk-data': typeof ProtectedAdminBulkDataRoute
@@ -434,6 +452,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/login'
+    | '/waitlist'
     | '/admin'
     | '/founder'
     | '/investor'
@@ -442,6 +461,7 @@ export interface FileRouteTypes {
     | '/scout'
     | '/apply/$slug'
     | '/auth/callback'
+    | '/auth/magic-link'
     | '/admin/agents'
     | '/admin/analytics'
     | '/admin/bulk-data'
@@ -480,10 +500,12 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/login'
+    | '/waitlist'
     | '/profile'
     | '/role-select'
     | '/apply/$slug'
     | '/auth/callback'
+    | '/auth/magic-link'
     | '/admin/agents'
     | '/admin/analytics'
     | '/admin/bulk-data'
@@ -523,6 +545,7 @@ export interface FileRouteTypes {
     | '/'
     | '/_protected'
     | '/login'
+    | '/waitlist'
     | '/_protected/admin'
     | '/_protected/founder'
     | '/_protected/investor'
@@ -531,6 +554,7 @@ export interface FileRouteTypes {
     | '/_protected/scout'
     | '/apply/$slug'
     | '/auth/callback'
+    | '/auth/magic-link'
     | '/_protected/admin/agents'
     | '/_protected/admin/analytics'
     | '/_protected/admin/bulk-data'
@@ -571,12 +595,21 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ProtectedRoute: typeof ProtectedRouteWithChildren
   LoginRoute: typeof LoginRoute
+  WaitlistRoute: typeof WaitlistRoute
   ApplySlugRoute: typeof ApplySlugRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
+  AuthMagicLinkRoute: typeof AuthMagicLinkRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/waitlist': {
+      id: '/waitlist'
+      path: '/waitlist'
+      fullPath: '/waitlist'
+      preLoaderRoute: typeof WaitlistRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
@@ -596,6 +629,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth/magic-link': {
+      id: '/auth/magic-link'
+      path: '/auth/magic-link'
+      fullPath: '/auth/magic-link'
+      preLoaderRoute: typeof AuthMagicLinkRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/auth/callback': {
@@ -1027,8 +1067,10 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ProtectedRoute: ProtectedRouteWithChildren,
   LoginRoute: LoginRoute,
+  WaitlistRoute: WaitlistRoute,
   ApplySlugRoute: ApplySlugRoute,
   AuthCallbackRoute: AuthCallbackRoute,
+  AuthMagicLinkRoute: AuthMagicLinkRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

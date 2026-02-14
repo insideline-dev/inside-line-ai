@@ -33,12 +33,17 @@ import type {
   AdminControllerGetStartupStatsParams,
   AdminControllerGetUsersParams,
   AdminControllerRetryJobParams,
+  AiPromptContextSchemaResponseDto,
   AiPromptDefinitionsResponseDto,
   AiPromptFlowResponseDto,
+  AiPromptPreviewResponseDto,
   AiPromptRevisionResponseDto,
   AiPromptRevisionsResponseDto,
   AiPromptSeedResultDto,
   CreateAiPromptRevisionDto,
+  CreateEarlyAccessInviteDto,
+  PreviewAiPromptRequestDto,
+  QuickCreateStartupDto,
   RetryAgentDto,
   RetryPhaseDto,
   UpdateAiPromptRevisionDto,
@@ -1023,7 +1028,366 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getAdminControllerImpersonateUserMutationOptions(options), queryClient);
     }
-    export type adminControllerGetAllStartupsResponse200 = {
+    export type adminControllerCreateEarlyAccessInviteResponse201 = {
+  data: void
+  status: 201
+}
+    
+export type adminControllerCreateEarlyAccessInviteResponseSuccess = (adminControllerCreateEarlyAccessInviteResponse201) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerCreateEarlyAccessInviteResponse = (adminControllerCreateEarlyAccessInviteResponseSuccess)
+
+export const getAdminControllerCreateEarlyAccessInviteUrl = () => {
+
+
+  
+
+  return `/admin/early-access/invites`
+}
+
+export const adminControllerCreateEarlyAccessInvite = async (createEarlyAccessInviteDto: CreateEarlyAccessInviteDto, options?: RequestInit): Promise<adminControllerCreateEarlyAccessInviteResponse> => {
+  
+  return customFetch<adminControllerCreateEarlyAccessInviteResponse>(getAdminControllerCreateEarlyAccessInviteUrl(),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      createEarlyAccessInviteDto,)
+  }
+);}
+
+
+
+
+export const getAdminControllerCreateEarlyAccessInviteMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerCreateEarlyAccessInvite>>, TError,{data: BodyType<CreateEarlyAccessInviteDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminControllerCreateEarlyAccessInvite>>, TError,{data: BodyType<CreateEarlyAccessInviteDto>}, TContext> => {
+
+const mutationKey = ['adminControllerCreateEarlyAccessInvite'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminControllerCreateEarlyAccessInvite>>, {data: BodyType<CreateEarlyAccessInviteDto>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  adminControllerCreateEarlyAccessInvite(data,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminControllerCreateEarlyAccessInviteMutationResult = NonNullable<Awaited<ReturnType<typeof adminControllerCreateEarlyAccessInvite>>>
+    export type AdminControllerCreateEarlyAccessInviteMutationBody = BodyType<CreateEarlyAccessInviteDto>
+    export type AdminControllerCreateEarlyAccessInviteMutationError = ErrorType<unknown>
+
+    export const useAdminControllerCreateEarlyAccessInvite = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerCreateEarlyAccessInvite>>, TError,{data: BodyType<CreateEarlyAccessInviteDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof adminControllerCreateEarlyAccessInvite>>,
+        TError,
+        {data: BodyType<CreateEarlyAccessInviteDto>},
+        TContext
+      > => {
+      return useMutation(getAdminControllerCreateEarlyAccessInviteMutationOptions(options), queryClient);
+    }
+    export type adminControllerListEarlyAccessInvitesResponse200 = {
+  data: void
+  status: 200
+}
+    
+export type adminControllerListEarlyAccessInvitesResponseSuccess = (adminControllerListEarlyAccessInvitesResponse200) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerListEarlyAccessInvitesResponse = (adminControllerListEarlyAccessInvitesResponseSuccess)
+
+export const getAdminControllerListEarlyAccessInvitesUrl = () => {
+
+
+  
+
+  return `/admin/early-access/invites`
+}
+
+export const adminControllerListEarlyAccessInvites = async ( options?: RequestInit): Promise<adminControllerListEarlyAccessInvitesResponse> => {
+  
+  return customFetch<adminControllerListEarlyAccessInvitesResponse>(getAdminControllerListEarlyAccessInvitesUrl(),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getAdminControllerListEarlyAccessInvitesQueryKey = () => {
+    return [
+    `/admin/early-access/invites`
+    ] as const;
+    }
+
+    
+export const getAdminControllerListEarlyAccessInvitesQueryOptions = <TData = Awaited<ReturnType<typeof adminControllerListEarlyAccessInvites>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerListEarlyAccessInvites>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAdminControllerListEarlyAccessInvitesQueryKey();
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof adminControllerListEarlyAccessInvites>>> = ({ signal }) => adminControllerListEarlyAccessInvites({ signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof adminControllerListEarlyAccessInvites>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type AdminControllerListEarlyAccessInvitesQueryResult = NonNullable<Awaited<ReturnType<typeof adminControllerListEarlyAccessInvites>>>
+export type AdminControllerListEarlyAccessInvitesQueryError = ErrorType<unknown>
+
+
+export function useAdminControllerListEarlyAccessInvites<TData = Awaited<ReturnType<typeof adminControllerListEarlyAccessInvites>>, TError = ErrorType<unknown>>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerListEarlyAccessInvites>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof adminControllerListEarlyAccessInvites>>,
+          TError,
+          Awaited<ReturnType<typeof adminControllerListEarlyAccessInvites>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAdminControllerListEarlyAccessInvites<TData = Awaited<ReturnType<typeof adminControllerListEarlyAccessInvites>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerListEarlyAccessInvites>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof adminControllerListEarlyAccessInvites>>,
+          TError,
+          Awaited<ReturnType<typeof adminControllerListEarlyAccessInvites>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAdminControllerListEarlyAccessInvites<TData = Awaited<ReturnType<typeof adminControllerListEarlyAccessInvites>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerListEarlyAccessInvites>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useAdminControllerListEarlyAccessInvites<TData = Awaited<ReturnType<typeof adminControllerListEarlyAccessInvites>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerListEarlyAccessInvites>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getAdminControllerListEarlyAccessInvitesQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+export type adminControllerRevokeEarlyAccessInviteResponse201 = {
+  data: void
+  status: 201
+}
+    
+export type adminControllerRevokeEarlyAccessInviteResponseSuccess = (adminControllerRevokeEarlyAccessInviteResponse201) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerRevokeEarlyAccessInviteResponse = (adminControllerRevokeEarlyAccessInviteResponseSuccess)
+
+export const getAdminControllerRevokeEarlyAccessInviteUrl = (id: string,) => {
+
+
+  
+
+  return `/admin/early-access/invites/${id}/revoke`
+}
+
+export const adminControllerRevokeEarlyAccessInvite = async (id: string, options?: RequestInit): Promise<adminControllerRevokeEarlyAccessInviteResponse> => {
+  
+  return customFetch<adminControllerRevokeEarlyAccessInviteResponse>(getAdminControllerRevokeEarlyAccessInviteUrl(id),
+  {      
+    ...options,
+    method: 'POST'
+    
+    
+  }
+);}
+
+
+
+
+export const getAdminControllerRevokeEarlyAccessInviteMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerRevokeEarlyAccessInvite>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminControllerRevokeEarlyAccessInvite>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['adminControllerRevokeEarlyAccessInvite'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminControllerRevokeEarlyAccessInvite>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  adminControllerRevokeEarlyAccessInvite(id,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminControllerRevokeEarlyAccessInviteMutationResult = NonNullable<Awaited<ReturnType<typeof adminControllerRevokeEarlyAccessInvite>>>
+    
+    export type AdminControllerRevokeEarlyAccessInviteMutationError = ErrorType<unknown>
+
+    export const useAdminControllerRevokeEarlyAccessInvite = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerRevokeEarlyAccessInvite>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof adminControllerRevokeEarlyAccessInvite>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getAdminControllerRevokeEarlyAccessInviteMutationOptions(options), queryClient);
+    }
+    export type adminControllerGetWaitlistEntriesResponse200 = {
+  data: void
+  status: 200
+}
+    
+export type adminControllerGetWaitlistEntriesResponseSuccess = (adminControllerGetWaitlistEntriesResponse200) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerGetWaitlistEntriesResponse = (adminControllerGetWaitlistEntriesResponseSuccess)
+
+export const getAdminControllerGetWaitlistEntriesUrl = () => {
+
+
+  
+
+  return `/admin/early-access/waitlist`
+}
+
+export const adminControllerGetWaitlistEntries = async ( options?: RequestInit): Promise<adminControllerGetWaitlistEntriesResponse> => {
+  
+  return customFetch<adminControllerGetWaitlistEntriesResponse>(getAdminControllerGetWaitlistEntriesUrl(),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getAdminControllerGetWaitlistEntriesQueryKey = () => {
+    return [
+    `/admin/early-access/waitlist`
+    ] as const;
+    }
+
+    
+export const getAdminControllerGetWaitlistEntriesQueryOptions = <TData = Awaited<ReturnType<typeof adminControllerGetWaitlistEntries>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetWaitlistEntries>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAdminControllerGetWaitlistEntriesQueryKey();
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof adminControllerGetWaitlistEntries>>> = ({ signal }) => adminControllerGetWaitlistEntries({ signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetWaitlistEntries>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type AdminControllerGetWaitlistEntriesQueryResult = NonNullable<Awaited<ReturnType<typeof adminControllerGetWaitlistEntries>>>
+export type AdminControllerGetWaitlistEntriesQueryError = ErrorType<unknown>
+
+
+export function useAdminControllerGetWaitlistEntries<TData = Awaited<ReturnType<typeof adminControllerGetWaitlistEntries>>, TError = ErrorType<unknown>>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetWaitlistEntries>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof adminControllerGetWaitlistEntries>>,
+          TError,
+          Awaited<ReturnType<typeof adminControllerGetWaitlistEntries>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAdminControllerGetWaitlistEntries<TData = Awaited<ReturnType<typeof adminControllerGetWaitlistEntries>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetWaitlistEntries>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof adminControllerGetWaitlistEntries>>,
+          TError,
+          Awaited<ReturnType<typeof adminControllerGetWaitlistEntries>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAdminControllerGetWaitlistEntries<TData = Awaited<ReturnType<typeof adminControllerGetWaitlistEntries>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetWaitlistEntries>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useAdminControllerGetWaitlistEntries<TData = Awaited<ReturnType<typeof adminControllerGetWaitlistEntries>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetWaitlistEntries>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getAdminControllerGetWaitlistEntriesQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+export type adminControllerGetAllStartupsResponse200 = {
   data: void
   status: 200
 }
@@ -1245,7 +1609,89 @@ export function useAdminControllerGetPendingStartups<TData = Awaited<ReturnType<
 
 
 
-export type adminControllerApproveStartupResponse201 = {
+/**
+ * @summary Quick-create a startup and trigger the AI pipeline
+ */
+export type adminControllerQuickCreateStartupResponse201 = {
+  data: void
+  status: 201
+}
+    
+export type adminControllerQuickCreateStartupResponseSuccess = (adminControllerQuickCreateStartupResponse201) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerQuickCreateStartupResponse = (adminControllerQuickCreateStartupResponseSuccess)
+
+export const getAdminControllerQuickCreateStartupUrl = () => {
+
+
+  
+
+  return `/admin/startups/quick-create`
+}
+
+export const adminControllerQuickCreateStartup = async (quickCreateStartupDto: QuickCreateStartupDto, options?: RequestInit): Promise<adminControllerQuickCreateStartupResponse> => {
+  
+  return customFetch<adminControllerQuickCreateStartupResponse>(getAdminControllerQuickCreateStartupUrl(),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      quickCreateStartupDto,)
+  }
+);}
+
+
+
+
+export const getAdminControllerQuickCreateStartupMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerQuickCreateStartup>>, TError,{data: BodyType<QuickCreateStartupDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminControllerQuickCreateStartup>>, TError,{data: BodyType<QuickCreateStartupDto>}, TContext> => {
+
+const mutationKey = ['adminControllerQuickCreateStartup'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminControllerQuickCreateStartup>>, {data: BodyType<QuickCreateStartupDto>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  adminControllerQuickCreateStartup(data,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminControllerQuickCreateStartupMutationResult = NonNullable<Awaited<ReturnType<typeof adminControllerQuickCreateStartup>>>
+    export type AdminControllerQuickCreateStartupMutationBody = BodyType<QuickCreateStartupDto>
+    export type AdminControllerQuickCreateStartupMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Quick-create a startup and trigger the AI pipeline
+ */
+export const useAdminControllerQuickCreateStartup = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerQuickCreateStartup>>, TError,{data: BodyType<QuickCreateStartupDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof adminControllerQuickCreateStartup>>,
+        TError,
+        {data: BodyType<QuickCreateStartupDto>},
+        TContext
+      > => {
+      return useMutation(getAdminControllerQuickCreateStartupMutationOptions(options), queryClient);
+    }
+    export type adminControllerApproveStartupResponse201 = {
   data: void
   status: 201
 }
@@ -2396,6 +2842,199 @@ export const useAdminControllerCreateAiPromptRevision = <TError = ErrorType<unkn
         TContext
       > => {
       return useMutation(getAdminControllerCreateAiPromptRevisionMutationOptions(options), queryClient);
+    }
+    /**
+ * @summary Get runtime context schema and variable provenance for a prompt key
+ */
+export type adminControllerGetAiPromptContextSchemaResponse200 = {
+  data: AiPromptContextSchemaResponseDto
+  status: 200
+}
+    
+export type adminControllerGetAiPromptContextSchemaResponseSuccess = (adminControllerGetAiPromptContextSchemaResponse200) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerGetAiPromptContextSchemaResponse = (adminControllerGetAiPromptContextSchemaResponseSuccess)
+
+export const getAdminControllerGetAiPromptContextSchemaUrl = (key: string,) => {
+
+
+  
+
+  return `/admin/ai-prompts/${key}/context-schema`
+}
+
+export const adminControllerGetAiPromptContextSchema = async (key: string, options?: RequestInit): Promise<adminControllerGetAiPromptContextSchemaResponse> => {
+  
+  return customFetch<adminControllerGetAiPromptContextSchemaResponse>(getAdminControllerGetAiPromptContextSchemaUrl(key),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getAdminControllerGetAiPromptContextSchemaQueryKey = (key: string,) => {
+    return [
+    `/admin/ai-prompts/${key}/context-schema`
+    ] as const;
+    }
+
+    
+export const getAdminControllerGetAiPromptContextSchemaQueryOptions = <TData = Awaited<ReturnType<typeof adminControllerGetAiPromptContextSchema>>, TError = ErrorType<unknown>>(key: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiPromptContextSchema>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAdminControllerGetAiPromptContextSchemaQueryKey(key);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof adminControllerGetAiPromptContextSchema>>> = ({ signal }) => adminControllerGetAiPromptContextSchema(key, { signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(key), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiPromptContextSchema>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type AdminControllerGetAiPromptContextSchemaQueryResult = NonNullable<Awaited<ReturnType<typeof adminControllerGetAiPromptContextSchema>>>
+export type AdminControllerGetAiPromptContextSchemaQueryError = ErrorType<unknown>
+
+
+export function useAdminControllerGetAiPromptContextSchema<TData = Awaited<ReturnType<typeof adminControllerGetAiPromptContextSchema>>, TError = ErrorType<unknown>>(
+ key: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiPromptContextSchema>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof adminControllerGetAiPromptContextSchema>>,
+          TError,
+          Awaited<ReturnType<typeof adminControllerGetAiPromptContextSchema>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAdminControllerGetAiPromptContextSchema<TData = Awaited<ReturnType<typeof adminControllerGetAiPromptContextSchema>>, TError = ErrorType<unknown>>(
+ key: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiPromptContextSchema>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof adminControllerGetAiPromptContextSchema>>,
+          TError,
+          Awaited<ReturnType<typeof adminControllerGetAiPromptContextSchema>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAdminControllerGetAiPromptContextSchema<TData = Awaited<ReturnType<typeof adminControllerGetAiPromptContextSchema>>, TError = ErrorType<unknown>>(
+ key: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiPromptContextSchema>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get runtime context schema and variable provenance for a prompt key
+ */
+
+export function useAdminControllerGetAiPromptContextSchema<TData = Awaited<ReturnType<typeof adminControllerGetAiPromptContextSchema>>, TError = ErrorType<unknown>>(
+ key: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiPromptContextSchema>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getAdminControllerGetAiPromptContextSchemaQueryOptions(key,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+/**
+ * @summary Preview rendered prompt, resolved variables, and effective model config
+ */
+export type adminControllerPreviewAiPromptResponse200 = {
+  data: AiPromptPreviewResponseDto
+  status: 200
+}
+    
+export type adminControllerPreviewAiPromptResponseSuccess = (adminControllerPreviewAiPromptResponse200) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerPreviewAiPromptResponse = (adminControllerPreviewAiPromptResponseSuccess)
+
+export const getAdminControllerPreviewAiPromptUrl = (key: string,) => {
+
+
+  
+
+  return `/admin/ai-prompts/${key}/preview`
+}
+
+export const adminControllerPreviewAiPrompt = async (key: string,
+    previewAiPromptRequestDto: PreviewAiPromptRequestDto, options?: RequestInit): Promise<adminControllerPreviewAiPromptResponse> => {
+  
+  return customFetch<adminControllerPreviewAiPromptResponse>(getAdminControllerPreviewAiPromptUrl(key),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      previewAiPromptRequestDto,)
+  }
+);}
+
+
+
+
+export const getAdminControllerPreviewAiPromptMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerPreviewAiPrompt>>, TError,{key: string;data: BodyType<PreviewAiPromptRequestDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminControllerPreviewAiPrompt>>, TError,{key: string;data: BodyType<PreviewAiPromptRequestDto>}, TContext> => {
+
+const mutationKey = ['adminControllerPreviewAiPrompt'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminControllerPreviewAiPrompt>>, {key: string;data: BodyType<PreviewAiPromptRequestDto>}> = (props) => {
+          const {key,data} = props ?? {};
+
+          return  adminControllerPreviewAiPrompt(key,data,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminControllerPreviewAiPromptMutationResult = NonNullable<Awaited<ReturnType<typeof adminControllerPreviewAiPrompt>>>
+    export type AdminControllerPreviewAiPromptMutationBody = BodyType<PreviewAiPromptRequestDto>
+    export type AdminControllerPreviewAiPromptMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Preview rendered prompt, resolved variables, and effective model config
+ */
+export const useAdminControllerPreviewAiPrompt = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerPreviewAiPrompt>>, TError,{key: string;data: BodyType<PreviewAiPromptRequestDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof adminControllerPreviewAiPrompt>>,
+        TError,
+        {key: string;data: BodyType<PreviewAiPromptRequestDto>},
+        TContext
+      > => {
+      return useMutation(getAdminControllerPreviewAiPromptMutationOptions(options), queryClient);
     }
     /**
  * @summary Update prompt draft revision

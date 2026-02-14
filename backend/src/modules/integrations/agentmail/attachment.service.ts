@@ -101,9 +101,9 @@ export class AttachmentService {
 
   isPitchDeck(filename: string, contentType: string): boolean {
     const lowerFilename = filename.toLowerCase();
-    return (
-      (contentType === 'application/pdf' || lowerFilename.endsWith('.pdf')) &&
-      (lowerFilename.includes('pitch') || lowerFilename.includes('deck'))
-    );
+    const isPdf = contentType === 'application/pdf' || lowerFilename.endsWith('.pdf');
+    if (!isPdf) return false;
+    const signals = ['pitch', 'deck', 'overview', 'presentation', 'fundrais', 'series', 'invest', 'round'];
+    return signals.some(signal => lowerFilename.includes(signal));
   }
 }

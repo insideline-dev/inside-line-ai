@@ -20,6 +20,13 @@ export class AiConfigService {
     return this.config.get<number>("AI_PIPELINE_TIMEOUT", 600000);
   }
 
+  getResearchTimeoutMs(): number {
+    return this.config.get<number>(
+      "AI_RESEARCH_TIMEOUT_MS",
+      this.getPipelineTimeoutMs(),
+    );
+  }
+
   getMaxRetries(): number {
     return this.config.get<number>("AI_MAX_RETRIES", 3);
   }
@@ -37,11 +44,11 @@ export class AiConfigService {
   }
 
   getEvaluationMaxOutputTokens(): number {
-    return this.config.get<number>("AI_EVALUATION_MAX_OUTPUT_TOKENS", 4000);
+    return this.config.get<number>("AI_EVALUATION_MAX_OUTPUT_TOKENS", 8000);
   }
 
   getSynthesisMaxOutputTokens(): number {
-    return this.config.get<number>("AI_SYNTHESIS_MAX_OUTPUT_TOKENS", 4000);
+    return this.config.get<number>("AI_SYNTHESIS_MAX_OUTPUT_TOKENS", 16000);
   }
 
   getModelForPurpose(purpose: ModelPurpose): string {

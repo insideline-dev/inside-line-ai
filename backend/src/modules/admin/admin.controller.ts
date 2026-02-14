@@ -24,6 +24,7 @@ import { UserRole } from '../../auth/entities/auth.schema';
 import { RolesGuard } from '../startup/guards';
 import { Roles } from '../startup/decorators/roles.decorator';
 import { StartupService } from '../startup/startup.service';
+import { StartupIntakeService } from '../startup/startup-intake.service';
 import { AnalyticsService } from './analytics.service';
 import { UserManagementService } from './user-management.service';
 import { ScoringConfigService } from './scoring-config.service';
@@ -33,7 +34,9 @@ import { IntegrationHealthService } from './integration-health.service';
 import { SystemConfigService } from './system-config.service';
 import { BulkDataService } from './bulk-data.service';
 import { AiPromptService } from '../ai/services/ai-prompt.service';
+import { AiPromptRuntimeService } from '../ai/services/ai-prompt-runtime.service';
 import { QUEUE_NAMES, QueueName } from '../../queue';
+import { EarlyAccessService, CreateEarlyAccessInviteDto } from '../early-access';
 import {
   GetUsersQueryDto,
   UpdateUserDto,
@@ -50,6 +53,10 @@ import {
   AiPromptRevisionResponseDto,
   AiPromptSeedResultDto,
   AiPromptFlowResponseDto,
+  AiPromptContextSchemaResponseDto,
+  PreviewAiPromptRequestDto,
+  AiPromptPreviewResponseDto,
+  QuickCreateStartupDto,
 } from './dto';
 import { GetStartupsQueryDto } from '../startup/dto';
 
@@ -74,10 +81,13 @@ export class AdminController {
     private dataImportService: DataImportService,
     private queueManagementService: QueueManagementService,
     private startupService: StartupService,
+    private startupIntakeService: StartupIntakeService,
     private integrationHealthService: IntegrationHealthService,
     private systemConfigService: SystemConfigService,
     private bulkDataService: BulkDataService,
     private aiPromptService: AiPromptService,
+    private aiPromptRuntimeService: AiPromptRuntimeService,
+    private earlyAccessService: EarlyAccessService,
   ) {}
 
   // ============ ANALYTICS ENDPOINTS ============
@@ -143,6 +153,32 @@ export class AdminController {
     return this.userManagementService.impersonate(admin.id, id);
   }
 
+  // ============ EARLY ACCESS ENDPOINTS ============
+
+  @Post('early-access/invites')
+  async createEarlyAccessInvite(
+    @CurrentUser() admin: User,
+    @Body() dto: CreateEarlyAccessInviteDto,
+  ) {
+    return this.earlyAccessService.createInvite(admin.id, dto);
+  }
+
+  @Get('early-access/invites')
+  async listEarlyAccessInvites() {
+    return this.earlyAccessService.listInvites();
+  }
+
+  @Post('early-access/invites/:id/revoke')
+  async revokeEarlyAccessInvite(@Param('id', ParseUUIDPipe) id: string) {
+    await this.earlyAccessService.revokeInvite(id);
+    return { success: true, message: 'Invite revoked' };
+  }
+
+  @Get('early-access/waitlist')
+  async getWaitlistEntries() {
+    return this.earlyAccessService.listWaitlist();
+  }
+
   // ============ STARTUP MANAGEMENT ENDPOINTS ============
   // These reuse existing StartupService methods that already have admin logic
 
@@ -154,6 +190,18 @@ export class AdminController {
   @Get('startups/pending')
   async getPendingStartups(@Query() query: GetStartupsQueryDto) {
     return this.startupService.adminFindPending(query);
+  }
+
+  @Post('startups/quick-create')
+  @ApiOperation({ summary: 'Quick-create a startup and trigger the AI pipeline' })
+  async quickCreateStartup(
+    @CurrentUser() admin: User,
+    @Body() dto: QuickCreateStartupDto,
+  ) {
+    return this.startupIntakeService.quickCreateStartup({
+      adminUserId: admin.id,
+      ...dto,
+    });
   }
 
   @Post('startups/:id/approve')
@@ -251,6 +299,23 @@ export class AdminController {
   @ApiResponse({ status: 200, type: AiPromptRevisionsResponseDto })
   async getAiPromptRevisions(@Param('key') key: string) {
     return this.aiPromptService.getRevisionsByKey(key);
+  }
+
+  @Get('ai-prompts/:key/context-schema')
+  @ApiOperation({ summary: "Get runtime context schema and variable provenance for a prompt key" })
+  @ApiResponse({ status: 200, type: AiPromptContextSchemaResponseDto })
+  async getAiPromptContextSchema(@Param('key') key: string) {
+    return this.aiPromptRuntimeService.getContextSchema(key);
+  }
+
+  @Post('ai-prompts/:key/preview')
+  @ApiOperation({ summary: "Preview rendered prompt, resolved variables, and effective model config" })
+  @ApiResponse({ status: 200, type: AiPromptPreviewResponseDto })
+  async previewAiPrompt(
+    @Param('key') key: string,
+    @Body() dto: PreviewAiPromptRequestDto,
+  ) {
+    return this.aiPromptRuntimeService.previewPrompt(key, dto);
   }
 
   @Post('ai-prompts/:key/revisions')

@@ -109,6 +109,7 @@ describe("StartupService", () => {
     pipelineService = {
       startPipeline: jest.fn().mockResolvedValue("pipeline-run-id"),
       getPipelineStatus: jest.fn().mockResolvedValue(null),
+      getTrackedProgress: jest.fn().mockResolvedValue(null),
       retryPhase: jest.fn().mockResolvedValue(undefined),
       rerunFromPhase: jest.fn().mockResolvedValue(undefined),
       retryAgent: jest.fn().mockResolvedValue(undefined),

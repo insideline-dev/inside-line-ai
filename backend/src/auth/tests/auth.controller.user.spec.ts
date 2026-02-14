@@ -17,7 +17,9 @@ import {
   createMockUserAuthService,
   createMockEmailService,
   createMockProfileService,
+  createMockEarlyAccessService,
 } from './auth.test-utils';
+import { EarlyAccessService } from '../../modules/early-access';
 
 describe('AuthController User Management', () => {
   let controller: AuthController;
@@ -42,6 +44,7 @@ describe('AuthController User Management', () => {
         { provide: UserAuthService, useValue: userAuthService },
         { provide: ProfileService, useValue: profileService },
         { provide: EmailService, useValue: emailService },
+        { provide: EarlyAccessService, useValue: createMockEarlyAccessService() },
         { provide: ConfigService, useValue: { get: () => undefined } },
       ],
     }).compile();
@@ -89,8 +92,14 @@ describe('AuthController User Management', () => {
       const result = await controller.logout(mockUser, res);
 
       expect(authService.revokeAllUserTokens).toHaveBeenCalledWith(mockUser.id);
-      expect(res.clearCookie).toHaveBeenCalledWith('access_token');
-      expect(res.clearCookie).toHaveBeenCalledWith('refresh_token');
+      expect(res.clearCookie).toHaveBeenCalledWith(
+        'access_token',
+        expect.objectContaining({ path: '/', httpOnly: true }),
+      );
+      expect(res.clearCookie).toHaveBeenCalledWith(
+        'refresh_token',
+        expect.objectContaining({ path: '/', httpOnly: true }),
+      );
       expect(result).toEqual({ message: 'Logged out successfully' });
     });
   });

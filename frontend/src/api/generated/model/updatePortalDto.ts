@@ -13,6 +13,12 @@ export interface UpdatePortalDto {
    */
   name?: string;
   /**
+   * @minLength 3
+   * @maxLength 50
+   * @pattern ^[a-z0-9-]+$
+   */
+  slug?: string;
+  /**
    * @minLength 1
    * @maxLength 1000
    */

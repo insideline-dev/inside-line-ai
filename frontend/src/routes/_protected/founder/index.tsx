@@ -17,7 +17,18 @@ export const Route = createFileRoute("/_protected/founder/")({
 });
 
 function FounderDashboard() {
-  const { data: response, isLoading, error } = useStartupControllerFindAll();
+  const { data: response, isLoading, error } = useStartupControllerFindAll(undefined, {
+    query: {
+      refetchInterval: (query) => {
+        const payload = query.state.data;
+        const rows = (payload?.data as Array<{ status?: string }> | undefined) ?? [];
+        const hasInFlight = rows.some(
+          (row) => row.status === "submitted" || row.status === "analyzing",
+        );
+        return hasInFlight ? 5000 : false;
+      },
+    },
+  });
   const startups = (response?.data as StartupItem[] | undefined) ?? [];
 
   return (

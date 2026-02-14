@@ -14,15 +14,25 @@ export class CacheService implements OnModuleDestroy {
 
     try {
       const redis = redisUrl
-        ? new Redis(redisUrl, { lazyConnect: true, maxRetriesPerRequest: 1, retryStrategy: () => null })
+        ? new Redis(redisUrl, {
+            lazyConnect: true,
+            maxRetriesPerRequest: null,
+            connectTimeout: 10_000,
+            keepAlive: 30_000,
+            retryStrategy: (attempt) => Math.min(Math.max(attempt, 1) * 100, 2000),
+            reconnectOnError: () => true,
+          })
         : new Redis({
             host: this.config.get('REDIS_HOST', 'localhost'),
             port: this.config.get('REDIS_PORT', 6379),
             password: this.config.get('REDIS_PASSWORD'),
             tls: this.config.get('REDIS_TLS') ? {} : undefined,
             lazyConnect: true,
-            maxRetriesPerRequest: 1,
-            retryStrategy: () => null,
+            maxRetriesPerRequest: null,
+            connectTimeout: 10_000,
+            keepAlive: 30_000,
+            retryStrategy: (attempt) => Math.min(Math.max(attempt, 1) * 100, 2000),
+            reconnectOnError: () => true,
           });
 
       redis.on('error', () => {

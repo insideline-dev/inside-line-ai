@@ -37,6 +37,7 @@ describe("ResearchProcessor", () => {
         market: null,
         product: null,
         news: null,
+        competitor: null,
         sources: [],
         errors: [],
       }),
@@ -106,6 +107,7 @@ describe("ResearchProcessor", () => {
     pipelineService = {
       onPhaseCompleted: jest.fn().mockResolvedValue(undefined),
       onPhaseFailed: jest.fn().mockResolvedValue(undefined),
+      onAgentProgress: jest.fn().mockResolvedValue(undefined),
     } as unknown as jest.Mocked<PipelineService>;
 
     notificationGateway = {
@@ -139,7 +141,13 @@ describe("ResearchProcessor", () => {
       PipelinePhase.RESEARCH,
       PhaseStatus.RUNNING,
     );
-    expect(researchService.run).toHaveBeenCalledWith("startup-1", undefined);
+    expect(researchService.run).toHaveBeenCalledWith(
+      "startup-1",
+      expect.objectContaining({
+        onAgentStart: expect.any(Function),
+        onAgentComplete: expect.any(Function),
+      }),
+    );
     expect(pipelineState.setPhaseResult).toHaveBeenCalledWith(
       "startup-1",
       PipelinePhase.RESEARCH,

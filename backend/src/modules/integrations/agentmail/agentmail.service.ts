@@ -14,6 +14,7 @@ import { NotificationType } from '../../../notification/entities';
 import { AttachmentService } from './attachment.service';
 import { AgentMailClientService } from './agentmail-client.service';
 import { ClaraService } from '../../clara/clara.service';
+import { InvestorInboxBridgeService } from './investor-inbox-bridge.service';
 import type {
   AgentMailWebhook,
   GetThreadsQuery,
@@ -43,6 +44,7 @@ export class AgentMailService {
     private attachmentService: AttachmentService,
     private agentMailClient: AgentMailClientService,
     @Optional() @Inject(forwardRef(() => ClaraService)) private claraService: ClaraService | null,
+    private investorInboxBridge: InvestorInboxBridgeService,
   ) {}
 
   // ============================================================================
@@ -145,6 +147,7 @@ export class AgentMailService {
     }
 
     // Download attachments asynchronously
+    let attachmentKeys: string[] = [];
     if (message.attachments && message.attachments.length > 0) {
       const attachmentDownloads = message.attachments.map((att) => ({
         filename: att.filename ?? 'attachment',
@@ -153,7 +156,7 @@ export class AgentMailService {
         inboxId: inbox_id,
         messageId: message_id,
       }));
-      await this.attachmentService.downloadFromSdk(
+      attachmentKeys = await this.attachmentService.downloadFromSdk(
         userId,
         inbox_id,
         message_id,
@@ -161,6 +164,24 @@ export class AgentMailService {
         this.agentMailClient,
       );
     }
+
+    // Evaluate for potential startup submission
+    const attachmentMetas = message.attachments?.map((att, idx) => ({
+      filename: att.filename ?? 'attachment',
+      contentType: att.contentType ?? 'application/octet-stream',
+      storageKey: attachmentKeys[idx] ?? '',
+    })) ?? [];
+
+    await this.investorInboxBridge.evaluate({
+      userId,
+      threadId: thread_id,
+      messageId: message_id,
+      inboxId: inbox_id,
+      subject: message.subject ?? '',
+      bodyText: typeof message.text === 'string' ? message.text : null,
+      fromEmail: message.from,
+      attachments: attachmentMetas,
+    });
 
     // Create notification
     const subject = message.subject ?? '(no subject)';

@@ -349,6 +349,65 @@
         ]
       }
     },
+    "/auth/waitlist": {
+      "post": {
+        "operationId": "AuthController_joinWaitlist",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JoinWaitlistDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Waitlist request accepted"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        },
+        "summary": "Join early-access waitlist",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/invite/redeem": {
+      "post": {
+        "operationId": "AuthController_redeemInvite",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RedeemEarlyAccessInviteDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Invitation redeemed"
+          },
+          "401": {
+            "description": "Invalid invite token"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        },
+        "summary": "Redeem an early-access invitation link",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
     "/auth/magic-link/request": {
       "post": {
         "operationId": "AuthController_requestMagicLink",
@@ -775,8 +834,13 @@
             "description": ""
           }
         },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
         "tags": [
-          "Startup"
+          "Startups"
         ]
       },
       "get": {
@@ -862,8 +926,13 @@
             "description": ""
           }
         },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
         "tags": [
-          "Startup"
+          "Startups"
         ]
       }
     },
@@ -885,8 +954,13 @@
             "description": ""
           }
         },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
         "tags": [
-          "Startup"
+          "Startups"
         ]
       },
       "patch": {
@@ -916,8 +990,13 @@
             "description": ""
           }
         },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
         "tags": [
-          "Startup"
+          "Startups"
         ]
       },
       "delete": {
@@ -937,8 +1016,13 @@
             "description": ""
           }
         },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
         "tags": [
-          "Startup"
+          "Startups"
         ]
       }
     },
@@ -970,8 +1054,13 @@
             "description": ""
           }
         },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
         "tags": [
-          "Startup"
+          "Startups"
         ]
       }
     },
@@ -1003,8 +1092,13 @@
             "description": ""
           }
         },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
         "tags": [
-          "Startup"
+          "Startups"
         ]
       }
     },
@@ -1026,8 +1120,13 @@
             "description": ""
           }
         },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
         "tags": [
-          "Startup"
+          "Startups"
         ]
       }
     },
@@ -1059,8 +1158,13 @@
             "description": ""
           }
         },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
         "tags": [
-          "Startup"
+          "Startups"
         ]
       }
     },
@@ -1092,8 +1196,13 @@
             "description": ""
           }
         },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
         "tags": [
-          "Startup"
+          "Startups"
         ]
       },
       "get": {
@@ -1113,8 +1222,13 @@
             "description": ""
           }
         },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
         "tags": [
-          "Startup"
+          "Startups"
         ]
       }
     },
@@ -1133,11 +1247,24 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetProgressResponseDto"
+                }
+              }
+            }
           }
         },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Get startup analysis progress",
         "tags": [
-          "Startup"
+          "Startups"
         ]
       }
     },
@@ -1159,8 +1286,13 @@
             "description": ""
           }
         },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
         "tags": [
-          "Startup"
+          "Startups"
         ]
       }
     },
@@ -1182,8 +1314,13 @@
             "description": ""
           }
         },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
         "tags": [
-          "Startup"
+          "Startups"
         ]
       }
     },
@@ -1215,8 +1352,13 @@
             "description": ""
           }
         },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
         "tags": [
-          "Startup"
+          "Startups"
         ]
       },
       "get": {
@@ -1236,8 +1378,13 @@
             "description": ""
           }
         },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
         "tags": [
-          "Startup"
+          "Startups"
         ]
       }
     },
@@ -1277,8 +1424,13 @@
             "description": ""
           }
         },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
         "tags": [
-          "Startup"
+          "Startups"
         ]
       }
     },
@@ -1308,8 +1460,13 @@
             "description": ""
           }
         },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
         "tags": [
-          "Startup"
+          "Startups"
         ]
       }
     },
@@ -1331,8 +1488,13 @@
             "description": ""
           }
         },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
         "tags": [
-          "Startup"
+          "Startups"
         ]
       }
     },
@@ -1372,8 +1534,13 @@
             "description": ""
           }
         },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
         "tags": [
-          "Startup"
+          "Startups"
         ]
       }
     },
@@ -1405,8 +1572,13 @@
             "description": ""
           }
         },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
         "tags": [
-          "Startup"
+          "Startups"
         ]
       },
       "get": {
@@ -1426,8 +1598,13 @@
             "description": ""
           }
         },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
         "tags": [
-          "Startup"
+          "Startups"
         ]
       }
     },
@@ -1507,8 +1684,13 @@
             "description": ""
           }
         },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
         "tags": [
-          "Startup"
+          "Startups"
         ]
       }
     },
@@ -1530,8 +1712,13 @@
             "description": ""
           }
         },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
         "tags": [
-          "Startup"
+          "Startups"
         ]
       }
     },
@@ -1553,8 +1740,13 @@
             "description": ""
           }
         },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
         "tags": [
-          "Startup"
+          "Startups"
         ]
       }
     },
@@ -1642,8 +1834,13 @@
             "description": ""
           }
         },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
         "tags": [
-          "Startup"
+          "Startups"
         ]
       }
     },
@@ -1731,8 +1928,13 @@
             "description": ""
           }
         },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
         "tags": [
-          "Startup"
+          "Startups"
         ]
       }
     },
@@ -1764,8 +1966,13 @@
             "description": ""
           }
         },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
         "tags": [
-          "Startup"
+          "Startups"
         ]
       }
     },
@@ -1797,8 +2004,13 @@
             "description": ""
           }
         },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
         "tags": [
-          "Startup"
+          "Startups"
         ]
       }
     },
@@ -1820,8 +2032,13 @@
             "description": ""
           }
         },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
         "tags": [
-          "Startup"
+          "Startups"
         ]
       }
     },
@@ -1853,8 +2070,13 @@
             "description": ""
           }
         },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
         "tags": [
-          "Startup"
+          "Startups"
         ]
       },
       "delete": {
@@ -1874,8 +2096,13 @@
             "description": ""
           }
         },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
         "tags": [
-          "Startup"
+          "Startups"
         ]
       }
     },
@@ -1897,8 +2124,13 @@
             "description": ""
           }
         },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
         "tags": [
-          "Startup"
+          "Startups"
         ]
       }
     },
@@ -2818,6 +3050,79 @@
         ]
       }
     },
+    "/admin/early-access/invites": {
+      "post": {
+        "operationId": "AdminController_createEarlyAccessInvite",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateEarlyAccessInviteDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ]
+      },
+      "get": {
+        "operationId": "AdminController_listEarlyAccessInvites",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/early-access/invites/{id}/revoke": {
+      "post": {
+        "operationId": "AdminController_revokeEarlyAccessInvite",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/early-access/waitlist": {
+      "get": {
+        "operationId": "AdminController_getWaitlistEntries",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
     "/admin/startups": {
       "get": {
         "operationId": "AdminController_getAllStartups",
@@ -2991,6 +3296,31 @@
             "description": ""
           }
         },
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/startups/quick-create": {
+      "post": {
+        "operationId": "AdminController_quickCreateStartup",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuickCreateStartupDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Quick-create a startup and trigger the AI pipeline",
         "tags": [
           "Admin"
         ]
@@ -3322,6 +3652,78 @@
           }
         },
         "summary": "Create prompt draft revision",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/ai-prompts/{key}/context-schema": {
+      "get": {
+        "operationId": "AdminController_getAiPromptContextSchema",
+        "parameters": [
+          {
+            "name": "key",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiPromptContextSchemaResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get runtime context schema and variable provenance for a prompt key",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/ai-prompts/{key}/preview": {
+      "post": {
+        "operationId": "AdminController_previewAiPrompt",
+        "parameters": [
+          {
+            "name": "key",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreviewAiPromptRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiPromptPreviewResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Preview rendered prompt, resolved variables, and effective model config",
         "tags": [
           "Admin"
         ]
@@ -5050,6 +5452,99 @@
         ]
       }
     },
+    "/integrations/agentmail/inbox-submissions": {
+      "get": {
+        "operationId": "AgentMailController_listInboxSubmissions",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Pending submissions"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "List pending inbox submissions",
+        "tags": [
+          "integrations/agentmail"
+        ]
+      }
+    },
+    "/integrations/agentmail/inbox-submissions/{id}/confirm": {
+      "post": {
+        "operationId": "AgentMailController_confirmSubmission",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Submission confirmed"
+          },
+          "404": {
+            "description": "Submission not found"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Confirm submission and trigger pipeline",
+        "tags": [
+          "integrations/agentmail"
+        ]
+      }
+    },
+    "/integrations/agentmail/inbox-submissions/{id}/dismiss": {
+      "post": {
+        "operationId": "AgentMailController_dismissSubmission",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Submission dismissed"
+          },
+          "404": {
+            "description": "Submission not found"
+          },
+          "429": {
+            "description": "Rate limit exceeded"
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Dismiss submission",
+        "tags": [
+          "integrations/agentmail"
+        ]
+      }
+    },
     "/integrations/agentmail/config": {
       "get": {
         "operationId": "AgentMailController_getConfig",
@@ -5379,6 +5874,70 @@
         },
         "required": [
           "email"
+        ]
+      },
+      "JoinWaitlistDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          },
+          "companyName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 180
+          },
+          "role": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "website": {
+            "type": "string",
+            "maxLength": 500,
+            "format": "uri"
+          },
+          "consentToShareInfo": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "consentToEarlyAccess": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "email",
+          "companyName",
+          "role",
+          "website",
+          "consentToShareInfo",
+          "consentToEarlyAccess"
+        ]
+      },
+      "RedeemEarlyAccessInviteDto": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "minLength": 20,
+            "maxLength": 256
+          }
+        },
+        "required": [
+          "token"
         ]
       },
       "MagicLinkRequestDto": {
@@ -6070,6 +6629,128 @@
           "draftData"
         ]
       },
+      "GetProgressResponseDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "submitted",
+              "analyzing",
+              "pending_review",
+              "approved",
+              "rejected"
+            ]
+          },
+          "progress": {
+            "type": "object",
+            "properties": {
+              "overallProgress": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "currentPhase": {
+                "type": "string"
+              },
+              "phasesCompleted": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "pipelineStatus": {
+                "type": "string"
+              },
+              "pipelineRunId": {
+                "type": "string"
+              },
+              "estimatedTimeRemaining": {
+                "type": "number"
+              },
+              "error": {
+                "type": "string"
+              },
+              "updatedAt": {
+                "type": "string"
+              },
+              "phases": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "progress": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 100
+                    },
+                    "startedAt": {
+                      "type": "string"
+                    },
+                    "completedAt": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "agents": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string"
+                          },
+                          "progress": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 100
+                          },
+                          "startedAt": {
+                            "type": "string"
+                          },
+                          "completedAt": {
+                            "type": "string"
+                          },
+                          "error": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "status"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "progress"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "overallProgress",
+              "currentPhase",
+              "phasesCompleted",
+              "phases"
+            ],
+            "nullable": true
+          }
+        },
+        "required": [
+          "status",
+          "progress"
+        ]
+      },
       "UploadDataRoomDto": {
         "type": "object",
         "properties": {
@@ -6209,6 +6890,12 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 200
+          },
+          "slug": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 50,
+            "pattern": "^[a-z0-9-]+$"
           },
           "description": {
             "type": "string",
@@ -6672,6 +7359,125 @@
           }
         }
       },
+      "CreateEarlyAccessInviteDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          },
+          "expiresInDays": {
+            "default": 7,
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 90
+          }
+        },
+        "required": [
+          "email"
+        ]
+      },
+      "QuickCreateStartupDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "tagline": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "description": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 5000
+          },
+          "website": {
+            "type": "string",
+            "format": "uri"
+          },
+          "location": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "industry": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "stage": {
+            "type": "string",
+            "enum": [
+              "pre_seed",
+              "seed",
+              "series_a",
+              "series_b",
+              "series_c",
+              "series_d",
+              "series_e",
+              "series_f_plus"
+            ]
+          },
+          "fundingTarget": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "teamSize": {
+            "type": "integer",
+            "exclusiveMinimum": true,
+            "maximum": 9007199254740991,
+            "minimum": 0
+          },
+          "teamMembers": {
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "role": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "linkedinUrl": {
+                  "type": "string",
+                  "format": "uri"
+                }
+              },
+              "required": [
+                "name",
+                "role"
+              ]
+            }
+          },
+          "pitchDeckUrl": {
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "required": [
+          "name",
+          "tagline",
+          "description",
+          "website",
+          "location",
+          "industry",
+          "stage",
+          "fundingTarget",
+          "teamSize"
+        ]
+      },
       "RetryPhaseDto": {
         "type": "object",
         "properties": {
@@ -6878,6 +7684,7 @@
                 "research.market",
                 "research.product",
                 "research.news",
+                "research.competitor",
                 "evaluation.team",
                 "evaluation.market",
                 "evaluation.product",
@@ -7136,6 +7943,7 @@
                             "research.market",
                             "research.product",
                             "research.news",
+                            "research.competitor",
                             "evaluation.team",
                             "evaluation.market",
                             "evaluation.product",
@@ -7234,6 +8042,7 @@
                   "research.market",
                   "research.product",
                   "research.news",
+                  "research.competitor",
                   "evaluation.team",
                   "evaluation.market",
                   "evaluation.product",
@@ -7548,6 +8357,367 @@
           "allowedVariables",
           "requiredVariables",
           "variableDefinitions"
+        ]
+      },
+      "AiPromptContextSchemaResponseDto": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "enum": [
+              "extraction.fields",
+              "research.team",
+              "research.market",
+              "research.product",
+              "research.news",
+              "research.competitor",
+              "evaluation.team",
+              "evaluation.market",
+              "evaluation.product",
+              "evaluation.traction",
+              "evaluation.businessModel",
+              "evaluation.gtm",
+              "evaluation.financials",
+              "evaluation.competitiveAdvantage",
+              "evaluation.legal",
+              "evaluation.dealTerms",
+              "evaluation.exitPotential",
+              "synthesis.final",
+              "matching.thesis",
+              "clara.intent",
+              "clara.response"
+            ]
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "allowedVariables": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "requiredVariables": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "variableDefinitions": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "description": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string"
+                },
+                "example": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "description",
+                "source"
+              ]
+            }
+          },
+          "requiredPhases": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "contextFields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "string",
+                    "number",
+                    "boolean",
+                    "array",
+                    "object",
+                    "unknown"
+                  ]
+                },
+                "sourceVariable": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "description": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path",
+                "label",
+                "type"
+              ]
+            }
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "key",
+          "displayName",
+          "description",
+          "allowedVariables",
+          "requiredVariables",
+          "variableDefinitions",
+          "requiredPhases",
+          "contextFields",
+          "notes"
+        ]
+      },
+      "PreviewAiPromptRequestDto": {
+        "type": "object",
+        "properties": {
+          "startupId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "stage": {
+            "type": "string",
+            "enum": [
+              "pre_seed",
+              "seed",
+              "series_a",
+              "series_b",
+              "series_c",
+              "series_d",
+              "series_e",
+              "series_f_plus"
+            ],
+            "nullable": true
+          },
+          "investorThesis": {
+            "type": "string",
+            "minLength": 1
+          },
+          "fromEmail": {
+            "type": "string",
+            "format": "email",
+            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "hasLinkedStartup": {
+            "type": "boolean"
+          },
+          "historyBlock": {
+            "type": "string"
+          },
+          "investorName": {
+            "type": "string"
+          },
+          "intent": {
+            "type": "string"
+          },
+          "startupBlock": {
+            "type": "string"
+          },
+          "intentInstructions": {
+            "type": "string"
+          }
+        }
+      },
+      "AiPromptPreviewResponseDto": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "enum": [
+              "extraction.fields",
+              "research.team",
+              "research.market",
+              "research.product",
+              "research.news",
+              "research.competitor",
+              "evaluation.team",
+              "evaluation.market",
+              "evaluation.product",
+              "evaluation.traction",
+              "evaluation.businessModel",
+              "evaluation.gtm",
+              "evaluation.financials",
+              "evaluation.competitiveAdvantage",
+              "evaluation.legal",
+              "evaluation.dealTerms",
+              "evaluation.exitPotential",
+              "synthesis.final",
+              "matching.thesis",
+              "clara.intent",
+              "clara.response"
+            ]
+          },
+          "source": {
+            "type": "object",
+            "properties": {
+              "promptSource": {
+                "type": "string",
+                "enum": [
+                  "db",
+                  "code"
+                ]
+              },
+              "promptRevisionId": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "nullable": true
+              },
+              "effectiveStage": {
+                "type": "string",
+                "enum": [
+                  "pre_seed",
+                  "seed",
+                  "series_a",
+                  "series_b",
+                  "series_c",
+                  "series_d",
+                  "series_e",
+                  "series_f_plus"
+                ],
+                "nullable": true
+              },
+              "startupId": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "nullable": true
+              }
+            },
+            "required": [
+              "promptSource",
+              "promptRevisionId",
+              "effectiveStage",
+              "startupId"
+            ]
+          },
+          "prompt": {
+            "type": "object",
+            "properties": {
+              "systemPromptTemplate": {
+                "type": "string"
+              },
+              "userPromptTemplate": {
+                "type": "string"
+              },
+              "renderedSystemPrompt": {
+                "type": "string"
+              },
+              "renderedUserPrompt": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "systemPromptTemplate",
+              "userPromptTemplate",
+              "renderedSystemPrompt",
+              "renderedUserPrompt"
+            ]
+          },
+          "model": {
+            "type": "object",
+            "properties": {
+              "purpose": {
+                "type": "string"
+              },
+              "modelName": {
+                "type": "string"
+              },
+              "provider": {
+                "type": "string"
+              },
+              "searchMode": {
+                "type": "string",
+                "enum": [
+                  "off",
+                  "provider_grounded_search"
+                ]
+              },
+              "supportedSearchModes": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "off",
+                    "provider_grounded_search"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "purpose",
+              "modelName",
+              "provider",
+              "searchMode",
+              "supportedSearchModes"
+            ]
+          },
+          "resolvedVariables": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "hashes": {
+            "type": "object",
+            "properties": {
+              "renderedSystemPrompt": {
+                "type": "string"
+              },
+              "renderedUserPrompt": {
+                "type": "string"
+              },
+              "variables": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "renderedSystemPrompt",
+              "renderedUserPrompt",
+              "variables"
+            ]
+          }
+        },
+        "required": [
+          "key",
+          "source",
+          "prompt",
+          "model",
+          "resolvedVariables",
+          "hashes"
         ]
       },
       "CreateAiPromptRevisionDto": {

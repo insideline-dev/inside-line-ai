@@ -6,6 +6,7 @@ describe("BaseEvaluationSchema", () => {
     const parsed = BaseEvaluationSchema.parse({
       score: 85,
       confidence: 0.9,
+      feedback: "The team demonstrates strong execution capability with proven domain expertise.",
       keyFindings: ["Strong team"],
       risks: [],
       dataGaps: [],
@@ -13,6 +14,7 @@ describe("BaseEvaluationSchema", () => {
     });
 
     expect(parsed.score).toBe(85);
+    expect(parsed.feedback).toBeTruthy();
   });
 
   it("rejects invalid scores and confidence", () => {
@@ -55,6 +57,7 @@ describe("BaseEvaluationSchema", () => {
     const parsed = BaseEvaluationSchema.parse({
       score: 75,
       confidence: 0.8,
+      feedback: "Evaluation narrative for this dimension.",
     });
 
     expect(parsed.keyFindings).toEqual([]);
@@ -67,6 +70,7 @@ describe("BaseEvaluationSchema", () => {
     const parsed = BaseEvaluationSchema.parse({
       score: 60,
       confidence: 0.5,
+      feedback: "Evaluation narrative for this dimension.",
       keyFindings: ["Finding 1"],
     });
 

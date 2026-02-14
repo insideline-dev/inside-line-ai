@@ -1,14 +1,33 @@
+import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
+
+export const ProgressAgentSchema = z.object({
+  key: z.string(),
+  status: z.string(),
+  progress: z.number().min(0).max(100).optional(),
+  startedAt: z.string().optional(),
+  completedAt: z.string().optional(),
+  error: z.string().optional(),
+});
 
 export const ProgressPhaseSchema = z.object({
   status: z.string(),
   progress: z.number().min(0).max(100),
+  startedAt: z.string().optional(),
+  completedAt: z.string().optional(),
+  error: z.string().optional(),
+  agents: z.record(z.string(), ProgressAgentSchema).optional(),
 });
 
 export const ProgressSchema = z.object({
   overallProgress: z.number().min(0).max(100),
   currentPhase: z.string(),
   phasesCompleted: z.array(z.string()),
+  pipelineStatus: z.string().optional(),
+  pipelineRunId: z.string().optional(),
+  estimatedTimeRemaining: z.number().optional(),
+  error: z.string().optional(),
+  updatedAt: z.string().optional(),
   phases: z.record(z.string(), ProgressPhaseSchema),
 });
 
@@ -18,3 +37,11 @@ export const GetProgressResponseSchema = z.object({
 });
 
 export type GetProgressResponse = z.infer<typeof GetProgressResponseSchema>;
+
+export class ProgressPhaseDto extends createZodDto(ProgressPhaseSchema) {}
+
+export class ProgressDto extends createZodDto(ProgressSchema) {}
+
+export class GetProgressResponseDto extends createZodDto(
+  GetProgressResponseSchema,
+) {}

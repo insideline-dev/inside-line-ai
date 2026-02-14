@@ -1,7 +1,9 @@
-import { Job, Worker, ConnectionOptions, UnrecoverableError } from 'bullmq';
-import { Logger, BadRequestException } from '@nestjs/common';
-import type { BaseJobData } from '../interfaces/job-data.interface';
-import type { BaseJobResult } from '../interfaces/job-result.interface';
+import { Job, Worker, Queue, ConnectionOptions, UnrecoverableError } from "bullmq";
+import { Logger, BadRequestException } from "@nestjs/common";
+import type { RedisOptions } from "ioredis";
+import type { BaseJobData } from "../interfaces/job-data.interface";
+import type { BaseJobResult } from "../interfaces/job-result.interface";
+import { buildBullRedisConnection } from "../redis-connection.util";
 
 // Patterns that indicate a validation/input error (should not retry)
 const NON_RETRYABLE_PATTERNS = [
@@ -18,23 +20,15 @@ const NON_RETRYABLE_PATTERNS = [
   'out of range',
 ];
 
+const HEALTH_CHECK_INTERVAL_MS = 15_000;
+const STALLED_CONSUMPTION_THRESHOLD_MS = 45_000;
+const RECOVERY_DELAY_MS = 5_000;
+
 /**
  * Parse REDIS_URL into ConnectionOptions
  */
 export function parseRedisUrl(redisUrl: string): ConnectionOptions {
-  try {
-    const url = new URL(redisUrl);
-    return {
-      host: url.hostname,
-      port: parseInt(url.port || '6379', 10),
-      password: url.password || undefined,
-      username: url.username || undefined,
-      tls: url.protocol === 'rediss:' ? {} : undefined,
-    };
-  } catch {
-    // Fallback to localhost if URL parsing fails
-    return { host: 'localhost', port: 6379 };
-  }
+  return buildBullRedisConnection(redisUrl);
 }
 
 /**
@@ -48,26 +42,39 @@ export abstract class BaseProcessor<
   protected abstract readonly logger: Logger;
   protected worker?: Worker;
   private initialized = false;
+  private shuttingDown = false;
+  private recovering = false;
+  private restartTimer?: NodeJS.Timeout;
+  private healthCheckTimer?: NodeJS.Timeout;
+  private probeQueue?: Queue;
+  private probeQueueConnectionClient?: {
+    quit: () => Promise<unknown>;
+    disconnect: () => void;
+  };
+  private lastJobActivityAt = Date.now();
 
   constructor(
     protected readonly queueName: string,
     protected readonly redisConnection: ConnectionOptions,
     protected readonly concurrency: number,
+    protected readonly queuePrefix?: string,
   ) {}
 
   /**
    * Initialize the worker - call this in the concrete processor's onModuleInit
    * Gracefully skips if Redis is unavailable
    */
-  protected initialize() {
+  protected async initialize() {
     if (this.initialized) return;
 
     try {
+      const workerConnection = this.acquireWorkerConnection();
       this.worker = new Worker(
         this.queueName,
         async (job: Job<TData>) => this.processJob(job),
         {
-          connection: this.redisConnection,
+          connection: workerConnection,
+          ...(this.queuePrefix ? { prefix: this.queuePrefix } : {}),
           concurrency: this.concurrency,
           // Don't auto-run if connection fails - wait for manual retry
           autorun: true,
@@ -75,31 +82,74 @@ export abstract class BaseProcessor<
       );
 
       this.worker.on('completed', (job) => {
+        this.lastJobActivityAt = Date.now();
         this.logger.log(`Job ${job.id} completed`);
       });
 
       this.worker.on('failed', (job, err) => {
+        this.lastJobActivityAt = Date.now();
         this.logger.error(`Job ${job?.id} failed: ${err.message}`);
+      });
+
+      this.worker.on('active', () => {
+        this.lastJobActivityAt = Date.now();
+      });
+
+      this.worker.on('stalled', (jobId) => {
+        this.logger.warn(`Job ${jobId} stalled in queue ${this.queueName}`);
       });
 
       // Only log connection errors once, not continuously
       let errorLogged = false;
       this.worker.on('error', (err) => {
+        const message = err?.message ?? String(err);
         if (!errorLogged) {
           this.logger.warn(
-            `Worker for ${this.queueName} cannot connect to Redis: ${err.message}. Queue processing disabled.`,
+            `Worker for ${this.queueName} cannot connect to Redis: ${message}. Queue processing disabled.`,
           );
           errorLogged = true;
         }
+        if (this.shouldRecoverFromError(message)) {
+          this.scheduleRecovery(`worker error: ${message}`);
+        }
       });
 
+      this.worker.on('closed', () => {
+        if (this.shuttingDown || this.recovering) {
+          return;
+        }
+        this.scheduleRecovery('worker closed');
+      });
+
+      this.shuttingDown = false;
+      this.lastJobActivityAt = Date.now();
+
+      // Wait for worker to be ready before marking as initialized
+      // This ensures the worker has connected to Redis and is polling for jobs
+      const waitUntilReady = (
+        this.worker as { waitUntilReady?: () => Promise<unknown> }
+      ).waitUntilReady;
+      if (typeof waitUntilReady === "function") {
+        await waitUntilReady.call(this.worker);
+      }
+
       this.initialized = true;
+      this.startHealthChecks();
       this.logger.log(
         `Worker initialized for queue ${this.queueName} with concurrency ${this.concurrency}`,
       );
     } catch (error) {
+      if (this.worker) {
+        await this.worker.close().catch(() => undefined);
+        this.worker = undefined;
+      }
+      this.initialized = false;
+      const message = error instanceof Error ? error.message : String(error);
+      if (!this.shuttingDown && !this.recovering) {
+        this.scheduleRecovery(`initialization failed: ${message}`);
+      }
       this.logger.warn(
-        `Failed to initialize worker for ${this.queueName}: Redis unavailable. Queue processing disabled.`,
+        `Failed to initialize worker for ${this.queueName}: ${message}.`,
       );
     }
   }
@@ -169,9 +219,211 @@ export abstract class BaseProcessor<
    * Close the worker gracefully
    */
   async close() {
+    this.shuttingDown = true;
+    this.clearHealthChecks();
+    if (this.restartTimer) {
+      clearTimeout(this.restartTimer);
+      this.restartTimer = undefined;
+    }
     if (this.worker) {
       await this.worker.close();
       this.logger.log(`Worker closed for queue ${this.queueName}`);
+      this.worker = undefined;
+    }
+    if (this.probeQueue) {
+      await this.probeQueue.close().catch(() => undefined);
+      this.probeQueue = undefined;
+    }
+    if (this.probeQueueConnectionClient) {
+      const client = this.probeQueueConnectionClient;
+      this.probeQueueConnectionClient = undefined;
+      await client.quit().catch(() => {
+        client.disconnect();
+      });
+    }
+    this.initialized = false;
+  }
+
+  private shouldRecoverFromError(message: string): boolean {
+    const normalized = message.toLowerCase();
+    return (
+      normalized.includes('connection is closed') ||
+      normalized.includes('connection closed') ||
+      normalized.includes('econnreset') ||
+      normalized.includes('econnrefused') ||
+      normalized.includes('etimedout') ||
+      normalized.includes('socket hang up')
+    );
+  }
+
+  private scheduleRecovery(reason: string): void {
+    if (this.shuttingDown || this.recovering || this.restartTimer) {
+      return;
+    }
+
+    this.logger.warn(
+      `Scheduling worker recovery for ${this.queueName}: ${reason}`,
+    );
+    this.restartTimer = setTimeout(() => {
+      this.restartTimer = undefined;
+      void this.recoverWorker(reason);
+    }, RECOVERY_DELAY_MS);
+  }
+
+  private async recoverWorker(reason: string): Promise<void> {
+    if (this.shuttingDown || this.recovering) {
+      return;
+    }
+
+    this.recovering = true;
+    let recovered = false;
+    this.logger.warn(`Recovering worker for ${this.queueName}: ${reason}`);
+
+    try {
+      if (this.worker) {
+        await this.worker.close().catch(() => undefined);
+      }
+      this.worker = undefined;
+      this.initialized = false;
+
+      if (!this.shuttingDown) {
+        await this.initialize();
+        recovered = this.initialized;
+      }
+    } finally {
+      this.recovering = false;
+    }
+
+    if (!recovered && !this.shuttingDown) {
+      this.scheduleRecovery(`recovery attempt failed: ${reason}`);
     }
   }
+
+  private startHealthChecks(): void {
+    if (this.healthCheckTimer) {
+      return;
+    }
+
+    this.healthCheckTimer = setInterval(() => {
+      void this.runHealthCheck();
+    }, HEALTH_CHECK_INTERVAL_MS);
+  }
+
+  private clearHealthChecks(): void {
+    if (this.healthCheckTimer) {
+      clearInterval(this.healthCheckTimer);
+      this.healthCheckTimer = undefined;
+    }
+  }
+
+  private async runHealthCheck(): Promise<void> {
+    if (this.shuttingDown || this.recovering || !this.worker) {
+      return;
+    }
+
+    if (!this.worker.isRunning()) {
+      this.scheduleRecovery('worker is not running');
+      return;
+    }
+
+    try {
+      const client = await this.worker.client;
+      await client.ping();
+      await this.checkQueueConsumptionLag();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.scheduleRecovery(`health check ping failed: ${message}`);
+    }
+  }
+
+  private async checkQueueConsumptionLag(): Promise<void> {
+    const queue = this.getOrCreateProbeQueue();
+    const counts = await queue.getJobCounts("waiting", "prioritized", "active");
+    const waiting = counts.waiting ?? 0;
+    const prioritized = counts.prioritized ?? 0;
+    const active = counts.active ?? 0;
+    const pending = waiting + prioritized;
+
+    if (pending === 0 || active > 0) {
+      this.lastJobActivityAt = Date.now();
+      return;
+    }
+
+    const idleForMs = Date.now() - this.lastJobActivityAt;
+    if (idleForMs < STALLED_CONSUMPTION_THRESHOLD_MS) {
+      return;
+    }
+
+    this.scheduleRecovery(
+      `queue appears stalled (pending=${pending}, active=${active}, idle=${idleForMs}ms)`,
+    );
+  }
+
+  private acquireWorkerConnection(): ConnectionOptions {
+    if (this.hasRedisLikeShape(this.redisConnection)) {
+      return this.redisConnection;
+    }
+
+    return this.normalizeRedisOptions(this.redisConnection);
+  }
+
+  private getOrCreateProbeQueue(): Queue {
+    if (this.probeQueue) {
+      return this.probeQueue;
+    }
+
+    const probeConnection = this.acquireProbeQueueConnection();
+    this.probeQueue = new Queue(this.queueName, {
+      connection: probeConnection,
+      ...(this.queuePrefix ? { prefix: this.queuePrefix } : {}),
+    });
+    this.probeQueue.on("error", (error) => {
+      this.logger.warn(
+        `Queue probe error for ${this.queueName}: ${String(error)}`,
+      );
+    });
+    return this.probeQueue;
+  }
+
+  private acquireProbeQueueConnection(): ConnectionOptions {
+    if (this.hasRedisLikeShape(this.redisConnection)) {
+      const duplicate = (
+        this.redisConnection as {
+          duplicate: () => unknown;
+        }
+      ).duplicate() as {
+        quit: () => Promise<unknown>;
+        disconnect: () => void;
+      };
+      this.probeQueueConnectionClient = duplicate;
+      return duplicate as unknown as ConnectionOptions;
+    }
+
+    return this.normalizeRedisOptions(this.redisConnection);
+  }
+
+  private hasRedisLikeShape(connection: ConnectionOptions): boolean {
+    return Boolean(
+      connection &&
+        typeof connection === "object" &&
+        "duplicate" in (connection as object) &&
+        typeof (connection as { duplicate?: unknown }).duplicate === "function",
+    );
+  }
+
+  private normalizeRedisOptions(connection: ConnectionOptions): RedisOptions {
+    const options = { ...(connection as RedisOptions) };
+    if (options.maxRetriesPerRequest !== null) {
+      options.maxRetriesPerRequest = null;
+    }
+    if (!options.retryStrategy) {
+      options.retryStrategy = (attempt) =>
+        Math.min(Math.max(attempt, 1) * 100, 2000);
+    }
+    options.lazyConnect = true;
+    options.connectTimeout = options.connectTimeout ?? 10_000;
+    options.keepAlive = options.keepAlive ?? 30_000;
+    return options;
+  }
+
 }

@@ -1,10 +1,8 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -17,24 +15,18 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ScoreRing } from "@/components/analysis/ScoreRing";
 import { StartupHeader } from "@/components/startup-view/StartupHeader";
-import { SummaryCard } from "@/components/startup-view/SummaryCard";
+import { AdminSummaryTab } from "@/components/startup-view/AdminSummaryTab";
+import { AdminReviewSidebar } from "@/components/startup-view/AdminReviewSidebar";
 import { TeamTabContent } from "@/components/startup-view/TeamTabContent";
 import { ProductTabContent } from "@/components/startup-view/ProductTabContent";
 import { MemoTabContent } from "@/components/startup-view/MemoTabContent";
 import { CompetitorsTabContent } from "@/components/startup-view/CompetitorsTabContent";
-import { InsightsTabContent } from "@/components/startup-view/InsightsTabContent";
+import { SourcesTabContent } from "@/components/startup-view/SourcesTabContent";
+import { AdminEditTab } from "@/components/startup-view/AdminEditTab";
 import { AnalysisProgress } from "@/components/AnalysisProgress";
 import {
-  CheckCircle,
-  XCircle,
   RefreshCw,
-  ArrowLeft,
-  DollarSign,
-  MapPin,
-  Calendar,
-  Building2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useStartupControllerFindOne, getStartupControllerFindOneQueryKey } from "@/api/generated/startup/startup";
@@ -76,35 +68,6 @@ function unwrapApiResponse<T>(payload: unknown): T {
   }
 
   return payload as T;
-}
-
-const stageLabels: Record<string, string> = {
-  pre_seed: "Pre-Seed",
-  seed: "Seed",
-  series_a: "Series A",
-  series_b: "Series B",
-  series_c: "Series C",
-  series_d: "Series D",
-  series_e: "Series E",
-  series_f_plus: "Series F+",
-};
-
-function formatCurrency(amount: number, currency = "USD"): string {
-  if (amount >= 1_000_000) {
-    return `${(amount / 1_000_000).toFixed(1)}M ${currency}`;
-  }
-  if (amount >= 1_000) {
-    return `${(amount / 1_000).toFixed(0)}K ${currency}`;
-  }
-  return `${amount.toLocaleString()} ${currency}`;
-}
-
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("en-US", {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
 }
 
 function AdminReviewPage() {
@@ -215,191 +178,124 @@ function AdminReviewPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" asChild>
-          <Link to="/admin">
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-        </Button>
-        <div className="flex-1">
-          <h1 className="text-2xl font-bold">{startup.name}</h1>
-          <p className="text-sm text-muted-foreground">Review startup submission</p>
-        </div>
-        {evaluation && evaluation.overallScore && <ScoreRing score={evaluation.overallScore} size="lg" />}
-      </div>
+      <StartupHeader
+        startup={startup}
+        backLink="/admin"
+        actions={
+          <Button
+            variant="outline"
+            onClick={() => reanalyzeMutation.mutate({ id })}
+            disabled={reanalyzeMutation.isPending}
+          >
+            {reanalyzeMutation.isPending ? (
+              <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <RefreshCw className="w-4 h-4 mr-2" />
+            )}
+            Re-evaluate
+          </Button>
+        }
+      />
 
-      <div className="flex gap-2 flex-wrap">
-        {canApproveReject && (
-          <>
-            <Button
-              onClick={() => setShowApproveDialog(true)}
-              disabled={approveMutation.isPending || rejectMutation.isPending}
-            >
-              <CheckCircle className="w-4 h-4 mr-2" />
-              Approve
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => setShowRejectDialog(true)}
-              disabled={approveMutation.isPending || rejectMutation.isPending}
-            >
-              <XCircle className="w-4 h-4 mr-2" />
-              Reject
-            </Button>
-          </>
-        )}
-        <Button
-          variant="outline"
-          onClick={() => reanalyzeMutation.mutate({ id })}
-          disabled={reanalyzeMutation.isPending}
-        >
-          {reanalyzeMutation.isPending ? (
-            <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-          ) : (
-            <RefreshCw className="w-4 h-4 mr-2" />
-          )}
-          Re-analyze
-        </Button>
-      </div>
-
-      <StartupHeader startup={startup} backLink="/admin" />
-
-      {startup.status === "analyzing" && stageWeights && (
+      {startup.status === "analyzing" && (
         <Card className="mb-6">
           <CardContent className="p-6">
             <AnalysisProgress
               startupId={startup.id}
               isAnalyzing={true}
-              weights={stageWeights}
+              weights={stageWeights ?? undefined}
               progress={evaluation?.analysisProgress as any}
+              showAgentDetails
             />
           </CardContent>
         </Card>
       )}
 
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Company Details</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {startup.description && (
-              <div>
-                <h4 className="text-sm font-medium mb-1">Description</h4>
-                <p className="text-sm text-muted-foreground">{startup.description}</p>
-              </div>
-            )}
-            <div className="space-y-2">
-              {startup.location && (
-                <div className="flex items-center gap-2 text-sm">
-                  <MapPin className="h-4 w-4 text-muted-foreground" />
-                  <span>{startup.location}</span>
-                </div>
-              )}
-              {startup.fundingTarget && (
-                <div className="flex items-center gap-2 text-sm">
-                  <DollarSign className="h-4 w-4 text-muted-foreground" />
-                  <span>
-                    Raising {formatCurrency(startup.fundingTarget, startup.roundCurrency || "USD")}
-                  </span>
-                </div>
-              )}
-              {startup.valuation && (
-                <div className="flex items-center gap-2 text-sm">
-                  <DollarSign className="h-4 w-4 text-muted-foreground" />
-                  <span>
-                    Valuation: {formatCurrency(startup.valuation, startup.roundCurrency || "USD")}{" "}
-                    ({startup.valuationType === "pre_money" ? "Pre-money" : "Post-money"})
-                  </span>
-                </div>
-              )}
-              {startup.stage && (
-                <div className="flex items-center gap-2 text-sm">
-                  <Building2 className="h-4 w-4 text-muted-foreground" />
-                  <span>{stageLabels[startup.stage] || startup.stage}</span>
-                </div>
-              )}
-              <div className="flex items-center gap-2 text-sm">
-                <Calendar className="h-4 w-4 text-muted-foreground" />
-                <span>Submitted {formatDate(startup.createdAt)}</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Admin Notes</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Label htmlFor="admin-notes" className="sr-only">
-              Admin notes
-            </Label>
-            <Textarea
-              id="admin-notes"
-              value={adminNotes}
-              onChange={(e) => setAdminNotes(e.target.value)}
-              className="min-h-[120px]"
-              placeholder="Add internal notes about this startup (required for rejection)..."
-            />
-          </CardContent>
-        </Card>
-      </div>
-
       {evaluation && (
-        <Tabs defaultValue="summary" className="w-full">
-          <TabsList>
-            <TabsTrigger value="summary">Summary</TabsTrigger>
-            <TabsTrigger value="team">Team</TabsTrigger>
-            <TabsTrigger value="product">Product</TabsTrigger>
-            <TabsTrigger value="memo">Memo</TabsTrigger>
-            <TabsTrigger value="competitors">Competitors</TabsTrigger>
-            <TabsTrigger value="insights">Insights</TabsTrigger>
-          </TabsList>
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+          <Tabs defaultValue="summary" className="w-full min-w-0">
+            <TabsList className="grid h-auto w-full grid-cols-8 rounded-xl bg-muted/60 p-2">
+              <TabsTrigger value="summary" className="w-full">Summary</TabsTrigger>
+              <TabsTrigger value="memo" className="w-full">Memo</TabsTrigger>
+              <TabsTrigger value="product" className="w-full">Product</TabsTrigger>
+              <TabsTrigger value="team" className="w-full">Team</TabsTrigger>
+              <TabsTrigger value="competitors" className="w-full">Competitors</TabsTrigger>
+              <TabsTrigger value="sources" className="w-full">Sources</TabsTrigger>
+              <TabsTrigger value="edit" className="w-full">Edit</TabsTrigger>
+              <TabsTrigger value="raw" className="w-full">Raw</TabsTrigger>
+            </TabsList>
 
-          <TabsContent value="summary" className="mt-6">
-            <SummaryCard
-              startup={startup}
-              evaluation={evaluation}
-              weights={stageWeights}
-            />
-          </TabsContent>
+            <TabsContent value="summary" className="mt-6">
+              <AdminSummaryTab
+                startup={startup}
+                evaluation={evaluation}
+                weights={stageWeights}
+              />
+            </TabsContent>
 
-          <TabsContent value="team" className="mt-6">
-            <TeamTabContent
-              evaluation={evaluation}
-              teamMembers={startup.teamMembers || []}
-              teamWeight={stageWeights?.team}
-            />
-          </TabsContent>
+            <TabsContent value="team" className="mt-6">
+              <TeamTabContent
+                evaluation={evaluation}
+                teamMembers={startup.teamMembers || []}
+                teamWeight={stageWeights?.team}
+                companyName={startup.name}
+              />
+            </TabsContent>
 
-          <TabsContent value="product" className="mt-6">
-            <ProductTabContent
-              startup={startup}
-              evaluation={evaluation}
-              productWeight={stageWeights?.product}
-            />
-          </TabsContent>
+            <TabsContent value="product" className="mt-6">
+              <ProductTabContent
+                startup={startup}
+                evaluation={evaluation}
+                productWeight={stageWeights?.product}
+              />
+            </TabsContent>
 
-          <TabsContent value="memo" className="mt-6">
-            <MemoTabContent
-              startup={startup}
-              evaluation={evaluation}
-              weights={stageWeights}
-            />
-          </TabsContent>
+            <TabsContent value="memo" className="mt-6">
+              <MemoTabContent
+                startup={startup}
+                evaluation={evaluation}
+                weights={stageWeights}
+              />
+            </TabsContent>
 
-          <TabsContent value="competitors" className="mt-6">
-            <CompetitorsTabContent
-              evaluation={evaluation}
-              companyName={startup.name}
-            />
-          </TabsContent>
+            <TabsContent value="competitors" className="mt-6">
+              <CompetitorsTabContent
+                evaluation={evaluation}
+                companyName={startup.name}
+              />
+            </TabsContent>
 
-          <TabsContent value="insights" className="mt-6">
-            <InsightsTabContent evaluation={evaluation} />
-          </TabsContent>
-        </Tabs>
+            <TabsContent value="sources" className="mt-6">
+              <SourcesTabContent startup={startup} evaluation={evaluation} />
+            </TabsContent>
+
+            <TabsContent value="edit" className="mt-6">
+              <AdminEditTab startup={startup} />
+            </TabsContent>
+
+            <TabsContent value="raw" className="mt-6">
+              <Card>
+                <CardContent className="p-0">
+                  <pre className="max-h-[620px] overflow-auto rounded-lg bg-muted/30 p-4 text-xs leading-relaxed">
+                    {JSON.stringify({ startup, evaluation }, null, 2)}
+                  </pre>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+
+          <AdminReviewSidebar
+            startup={startup}
+            evaluation={evaluation}
+            adminNotes={adminNotes}
+            onAdminNotesChange={setAdminNotes}
+            onApprove={() => setShowApproveDialog(true)}
+            onReject={() => setShowRejectDialog(true)}
+            approveDisabled={approveMutation.isPending || rejectMutation.isPending}
+            rejectDisabled={approveMutation.isPending || rejectMutation.isPending}
+            canApproveReject={canApproveReject}
+          />
+        </div>
       )}
 
       <AlertDialog open={showApproveDialog} onOpenChange={setShowApproveDialog}>

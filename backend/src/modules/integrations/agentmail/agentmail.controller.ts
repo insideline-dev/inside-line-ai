@@ -20,6 +20,7 @@ import {
 } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { AgentMailService } from './agentmail.service';
+import { InvestorInboxBridgeService } from './investor-inbox-bridge.service';
 import { AgentMailSignatureGuard } from './guards';
 import { CurrentUser } from '../../../auth/decorators';
 import { Public } from '../../../auth/decorators';
@@ -37,7 +38,10 @@ import type {
 @Controller('integrations/agentmail')
 @ApiTooManyRequestsResponse({ description: 'Rate limit exceeded' })
 export class AgentMailController {
-  constructor(private agentMailService: AgentMailService) {}
+  constructor(
+    private agentMailService: AgentMailService,
+    private investorInboxBridge: InvestorInboxBridgeService,
+  ) {}
 
   // ============================================================================
   // WEBHOOK (Public, signature-validated via global AGENTMAIL_WEBHOOK_SECRET)
@@ -224,6 +228,47 @@ export class AgentMailController {
     @Param('id', ParseUUIDPipe) id: string,
   ) {
     await this.agentMailService.deleteThread(id, user.id);
+  }
+
+  // ============================================================================
+  // INBOX SUBMISSIONS (Authenticated)
+  // ============================================================================
+
+  @Get('inbox-submissions')
+  @ApiBearerAuth('JWT')
+  @Throttle({ default: { limit: 100, ttl: 60000 } })
+  @ApiOperation({ summary: 'List pending inbox submissions' })
+  @ApiResponse({ status: 200, description: 'Pending submissions' })
+  async listInboxSubmissions(@CurrentUser() user: DbUser) {
+    return this.investorInboxBridge.listPending(user.id);
+  }
+
+  @Post('inbox-submissions/:id/confirm')
+  @ApiBearerAuth('JWT')
+  @Throttle({ default: { limit: 50, ttl: 60000 } })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Confirm submission and trigger pipeline' })
+  @ApiResponse({ status: 200, description: 'Submission confirmed' })
+  @ApiResponse({ status: 404, description: 'Submission not found' })
+  async confirmSubmission(
+    @CurrentUser() user: DbUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.investorInboxBridge.confirm(id, user.id);
+  }
+
+  @Post('inbox-submissions/:id/dismiss')
+  @ApiBearerAuth('JWT')
+  @Throttle({ default: { limit: 50, ttl: 60000 } })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Dismiss submission' })
+  @ApiResponse({ status: 200, description: 'Submission dismissed' })
+  @ApiResponse({ status: 404, description: 'Submission not found' })
+  async dismissSubmission(
+    @CurrentUser() user: DbUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.investorInboxBridge.dismiss(id, user.id);
   }
 
   // ============================================================================

@@ -37,15 +37,24 @@ export class ExtractionProcessor
     private notificationGateway: NotificationGateway,
   ) {
     const redisUrl = config.get<string>("REDIS_URL", "redis://localhost:6379");
+    const queuePrefix = config.get<string>("QUEUE_PREFIX");
     super(
       QUEUE_NAMES.AI_EXTRACTION,
       parseRedisUrl(redisUrl),
       QUEUE_CONCURRENCY[QUEUE_NAMES.AI_EXTRACTION],
+      queuePrefix,
     );
   }
 
-  onModuleInit() {
-    this.initialize();
+  async onModuleInit() {
+    await this.initialize();
+    if (!this.worker) {
+      this.logger.warn(
+        "ExtractionProcessor initialized without an active worker; recovery will retry automatically.",
+      );
+      return;
+    }
+    this.logger.log(`✅ ExtractionProcessor ready | Queue: ${QUEUE_NAMES.AI_EXTRACTION} | Concurrency: ${QUEUE_CONCURRENCY[QUEUE_NAMES.AI_EXTRACTION]}`);
   }
 
   async onModuleDestroy() {

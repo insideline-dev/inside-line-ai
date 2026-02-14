@@ -43,17 +43,21 @@ export class GeminiResearchService {
       const model = this.providers.resolveModelForPurpose(ModelPurpose.RESEARCH);
       const canUseGoogleSearchTool = this.isGeminiModel(modelName);
 
-      const response = await generateText({
-        model,
-        system: request.systemPrompt,
-        prompt: request.prompt,
-        tools: canUseGoogleSearchTool
-          ? {
-              google_search: google.tools.googleSearch({}),
-            }
-          : undefined,
-        temperature: this.aiConfig.getResearchTemperature(),
-      });
+      const response = await this.withTimeout(
+        generateText({
+          model,
+          system: request.systemPrompt,
+          prompt: request.prompt,
+          tools: canUseGoogleSearchTool
+            ? {
+                google_search: google.tools.googleSearch({}),
+              }
+            : undefined,
+          temperature: this.aiConfig.getResearchTemperature(),
+        }),
+        this.getResearchTimeoutMs(),
+        `Research agent ${request.agent} timed out`,
+      );
 
       const extractedSources = this.extractSources(response, request.agent);
       const sourceUrls = extractedSources
@@ -236,5 +240,33 @@ export class GeminiResearchService {
 
   private isGeminiModel(modelName: string): boolean {
     return modelName.toLowerCase().startsWith("gemini");
+  }
+
+  private getResearchTimeoutMs(): number {
+    // Use explicit override when set; otherwise fall back to global pipeline timeout.
+    return this.aiConfig.getResearchTimeoutMs();
+  }
+
+  private async withTimeout<T>(
+    promise: Promise<T>,
+    timeoutMs: number,
+    message: string,
+  ): Promise<T> {
+    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+      return promise;
+    }
+
+    return await new Promise<T>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+      promise
+        .then((result) => {
+          clearTimeout(timer);
+          resolve(result);
+        })
+        .catch((error) => {
+          clearTimeout(timer);
+          reject(error);
+        });
+    });
   }
 }

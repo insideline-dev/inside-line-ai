@@ -7,12 +7,15 @@ import type {
   MagicLinkRequest,
   EmailVerifyRequest,
   ResendVerificationRequest,
+  JoinWaitlistRequest,
+  RedeemInviteRequest,
+  RedeemInviteResponse,
   User,
   MessageResponse,
 } from "./types";
 
 export const authApi = {
-  // Email/Password
+  // Email / Password
   login: (data: LoginRequest) =>
     customFetch<AuthResponse>("/auth/login", {
       method: "POST",
@@ -36,6 +39,18 @@ export const authApi = {
     customFetch<AuthResponse>("/auth/magic-link/verify", {
       method: "POST",
       body: JSON.stringify({ token }),
+    }),
+
+  redeemInvite: (data: RedeemInviteRequest) =>
+    customFetch<RedeemInviteResponse>("/auth/invite/redeem", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  joinWaitlist: (data: JoinWaitlistRequest) =>
+    customFetch<MessageResponse>("/auth/waitlist", {
+      method: "POST",
+      body: JSON.stringify(data),
     }),
 
   // Google OAuth (redirect-based)

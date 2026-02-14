@@ -5,5 +5,6 @@ export * from './draft.service';
 export * from './data-room.service';
 export * from './investor-interest.service';
 export * from './meeting.service';
+export * from './startup-intake.service';
 export * from './dto';
 export * from './entities';

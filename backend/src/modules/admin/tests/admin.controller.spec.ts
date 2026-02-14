@@ -7,10 +7,13 @@ import { ScoringConfigService } from '../scoring-config.service';
 import { DataImportService } from '../data-import.service';
 import { QueueManagementService } from '../queue-management.service';
 import { StartupService } from '../../startup/startup.service';
+import { StartupIntakeService } from '../../startup/startup-intake.service';
 import { IntegrationHealthService } from '../integration-health.service';
 import { SystemConfigService } from '../system-config.service';
 import { BulkDataService } from '../bulk-data.service';
 import { AiPromptService } from '../../ai/services/ai-prompt.service';
+import { AiPromptRuntimeService } from '../../ai/services/ai-prompt-runtime.service';
+import { EarlyAccessService } from '../../early-access';
 import { UserRole } from '../../../auth/entities/auth.schema';
 import { StartupStatus } from '../../startup/entities/startup.schema';
 import { PipelinePhase } from '../../ai/interfaces/pipeline.interface';
@@ -23,7 +26,10 @@ describe('AdminController', () => {
   let dataImportService: jest.Mocked<DataImportService>;
   let queueManagementService: jest.Mocked<QueueManagementService>;
   let startupService: jest.Mocked<StartupService>;
+  let startupIntakeService: jest.Mocked<StartupIntakeService>;
   let aiPromptService: jest.Mocked<AiPromptService>;
+  let aiPromptRuntimeService: jest.Mocked<AiPromptRuntimeService>;
+  let earlyAccessService: jest.Mocked<EarlyAccessService>;
 
   const mockAdmin = {
     id: 'admin-id',
@@ -85,12 +91,19 @@ describe('AdminController', () => {
         {
           provide: StartupService,
           useValue: {
+            adminFindAll: jest.fn(),
             adminFindPending: jest.fn(),
             approve: jest.fn(),
             reject: jest.fn(),
             reanalyze: jest.fn(),
             adminRetryPhase: jest.fn(),
             adminRetryAgent: jest.fn(),
+          },
+        },
+        {
+          provide: StartupIntakeService,
+          useValue: {
+            quickCreateStartup: jest.fn(),
           },
         },
         {
@@ -124,6 +137,22 @@ describe('AdminController', () => {
             seedFromCode: jest.fn(),
           },
         },
+        {
+          provide: AiPromptRuntimeService,
+          useValue: {
+            getContextSchema: jest.fn(),
+            previewPrompt: jest.fn(),
+          },
+        },
+        {
+          provide: EarlyAccessService,
+          useValue: {
+            createInvite: jest.fn(),
+            listInvites: jest.fn(),
+            revokeInvite: jest.fn(),
+            listWaitlist: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
@@ -134,7 +163,10 @@ describe('AdminController', () => {
     dataImportService = module.get(DataImportService);
     queueManagementService = module.get(QueueManagementService);
     startupService = module.get(StartupService);
+    startupIntakeService = module.get(StartupIntakeService);
     aiPromptService = module.get(AiPromptService);
+    aiPromptRuntimeService = module.get(AiPromptRuntimeService);
+    earlyAccessService = module.get(EarlyAccessService);
   });
 
   afterEach(() => {
@@ -630,6 +662,39 @@ describe('AdminController', () => {
 
       expect(result).toEqual(payload);
       expect(aiPromptService.seedFromCode).toHaveBeenCalledWith(mockAdmin.id);
+    });
+
+    it('should return prompt runtime context schema', async () => {
+      const payload = {
+        key: 'research.team',
+        allowedVariables: ['contextJson'],
+        requiredVariables: ['contextJson'],
+        requiredPhases: ['extraction', 'scraping'],
+        contextFields: [],
+      };
+
+      aiPromptRuntimeService.getContextSchema.mockReturnValueOnce(payload as any);
+
+      const result = await controller.getAiPromptContextSchema('research.team');
+
+      expect(result).toEqual(payload);
+      expect(aiPromptRuntimeService.getContextSchema).toHaveBeenCalledWith('research.team');
+    });
+
+    it('should return prompt preview payload', async () => {
+      const payload = {
+        key: 'research.team',
+        source: { promptSource: 'db', promptRevisionId: 'r1', effectiveStage: 'seed' },
+        resolvedVariables: { contextJson: '{}' },
+      };
+      const body = { startupId: 'ed8f8dcb-4145-4af3-92ce-c8d879ec43db', stage: 'seed' };
+
+      aiPromptRuntimeService.previewPrompt.mockResolvedValueOnce(payload as any);
+
+      const result = await controller.previewAiPrompt('research.team', body as any);
+
+      expect(result).toEqual(payload);
+      expect(aiPromptRuntimeService.previewPrompt).toHaveBeenCalledWith('research.team', body);
     });
   });
 });

@@ -4,6 +4,7 @@ import {
   ConflictException,
   InternalServerErrorException,
   Logger,
+  ForbiddenException,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { ConfigService } from "@nestjs/config";
@@ -12,6 +13,7 @@ import { randomBytes } from "node:crypto";
 import { DrizzleService } from "../database";
 import { account, refreshToken as refreshTokenTable } from "../database/schema";
 import { UserAuthService, DbUser } from "./user-auth.service";
+import { EarlyAccessService } from "../modules/early-access";
 
 export type JwtPayload = {
   sub: string;
@@ -39,9 +41,6 @@ export type OAuthProfile = {
   expiresAt?: Date;
 };
 
-// Refresh token expiry in days
-const REFRESH_TOKEN_EXPIRY_DAYS = 30;
-
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -51,6 +50,7 @@ export class AuthService {
     private jwt: JwtService,
     private config: ConfigService,
     private userAuth: UserAuthService,
+    private earlyAccess: EarlyAccessService,
   ) {}
 
   // ============ OAUTH ============
@@ -95,6 +95,13 @@ export class AuthService {
       let foundUser = await this.userAuth.findUserByEmail(profile.email);
 
       if (!foundUser) {
+        const isAllowed = await this.earlyAccess.isEmailAllowed(profile.email);
+        if (!isAllowed) {
+          throw new ForbiddenException(
+            "Access is restricted. You have been added to the waitlist as Founder.",
+          );
+        }
+
         foundUser = await this.userAuth.createUser({
           email: profile.email,
           name: profile.name,
@@ -138,7 +145,7 @@ export class AuthService {
    */
   generateAccessToken(foundUser: DbUser): string {
     const payload: JwtPayload = { sub: foundUser.id, email: foundUser.email };
-    const accessExpiresIn = this.config.get("JWT_ACCESS_EXPIRES", "7d");
+    const accessExpiresIn = this.config.get("JWT_ACCESS_EXPIRES", "15m");
     return this.jwt.sign(payload, { expiresIn: accessExpiresIn });
   }
 
@@ -152,9 +159,7 @@ export class AuthService {
     // Generate opaque refresh token (not JWT)
     const refreshTokenValue = randomBytes(32).toString("hex");
     const family = randomBytes(16).toString("hex");
-    const expiresAt = new Date(
-      Date.now() + REFRESH_TOKEN_EXPIRY_DAYS * 24 * 60 * 60 * 1000,
-    );
+    const expiresAt = new Date(Date.now() + this.getRefreshTokenTtlMs());
 
     // Store refresh token in database
     await this.drizzle.db.insert(refreshTokenTable).values({
@@ -226,9 +231,7 @@ export class AuthService {
     // Generate new tokens in same family
     const accessToken = this.generateAccessToken(foundUser);
     const newRefreshTokenValue = randomBytes(32).toString("hex");
-    const expiresAt = new Date(
-      Date.now() + REFRESH_TOKEN_EXPIRY_DAYS * 24 * 60 * 60 * 1000,
-    );
+    const expiresAt = new Date(Date.now() + this.getRefreshTokenTtlMs());
 
     // Store new refresh token in same family
     await this.drizzle.db.insert(refreshTokenTable).values({
@@ -265,6 +268,11 @@ export class AuthService {
     return result.length;
   }
 
+  getRefreshTokenTtlMs(): number {
+    const raw = this.config.get<string>("JWT_REFRESH_EXPIRES", "30d");
+    return parseDurationToMs(raw, 30 * 24 * 60 * 60 * 1000);
+  }
+
   // Delegate methods for backward compatibility with AuthController
   async registerWithPassword(email: string, pass: string, name: string) {
     return this.userAuth.registerWithPassword(email, pass, name);
@@ -285,4 +293,28 @@ export class AuthService {
   async findUserById(id: string) {
     return this.userAuth.findUserById(id);
   }
+}
+
+function parseDurationToMs(raw: string, fallback: number): number {
+  const value = raw.trim().toLowerCase();
+  const match = value.match(/^(\d+)(ms|s|m|h|d)$/);
+  if (!match) {
+    return fallback;
+  }
+
+  const amount = Number(match[1]);
+  const unit = match[2];
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return fallback;
+  }
+
+  const multipliers: Record<string, number> = {
+    ms: 1,
+    s: 1000,
+    m: 60 * 1000,
+    h: 60 * 60 * 1000,
+    d: 24 * 60 * 60 * 1000,
+  };
+
+  return amount * multipliers[unit];
 }

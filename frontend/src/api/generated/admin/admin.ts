@@ -33,13 +33,16 @@ import type {
   AdminControllerGetStartupStatsParams,
   AdminControllerGetUsersParams,
   AdminControllerRetryJobParams,
+  AiPromptContextSchemaResponseDto,
   AiPromptDefinitionsResponseDto,
   AiPromptFlowResponseDto,
+  AiPromptPreviewResponseDto,
   AiPromptRevisionResponseDto,
   AiPromptRevisionsResponseDto,
   AiPromptSeedResultDto,
   CreateAiPromptRevisionDto,
   CreateEarlyAccessInviteDto,
+  PreviewAiPromptRequestDto,
   QuickCreateStartupDto,
   RetryAgentDto,
   RetryPhaseDto,
@@ -2839,6 +2842,199 @@ export const useAdminControllerCreateAiPromptRevision = <TError = ErrorType<unkn
         TContext
       > => {
       return useMutation(getAdminControllerCreateAiPromptRevisionMutationOptions(options), queryClient);
+    }
+    /**
+ * @summary Get runtime context schema and variable provenance for a prompt key
+ */
+export type adminControllerGetAiPromptContextSchemaResponse200 = {
+  data: AiPromptContextSchemaResponseDto
+  status: 200
+}
+    
+export type adminControllerGetAiPromptContextSchemaResponseSuccess = (adminControllerGetAiPromptContextSchemaResponse200) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerGetAiPromptContextSchemaResponse = (adminControllerGetAiPromptContextSchemaResponseSuccess)
+
+export const getAdminControllerGetAiPromptContextSchemaUrl = (key: string,) => {
+
+
+  
+
+  return `/admin/ai-prompts/${key}/context-schema`
+}
+
+export const adminControllerGetAiPromptContextSchema = async (key: string, options?: RequestInit): Promise<adminControllerGetAiPromptContextSchemaResponse> => {
+  
+  return customFetch<adminControllerGetAiPromptContextSchemaResponse>(getAdminControllerGetAiPromptContextSchemaUrl(key),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getAdminControllerGetAiPromptContextSchemaQueryKey = (key: string,) => {
+    return [
+    `/admin/ai-prompts/${key}/context-schema`
+    ] as const;
+    }
+
+    
+export const getAdminControllerGetAiPromptContextSchemaQueryOptions = <TData = Awaited<ReturnType<typeof adminControllerGetAiPromptContextSchema>>, TError = ErrorType<unknown>>(key: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiPromptContextSchema>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAdminControllerGetAiPromptContextSchemaQueryKey(key);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof adminControllerGetAiPromptContextSchema>>> = ({ signal }) => adminControllerGetAiPromptContextSchema(key, { signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(key), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiPromptContextSchema>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type AdminControllerGetAiPromptContextSchemaQueryResult = NonNullable<Awaited<ReturnType<typeof adminControllerGetAiPromptContextSchema>>>
+export type AdminControllerGetAiPromptContextSchemaQueryError = ErrorType<unknown>
+
+
+export function useAdminControllerGetAiPromptContextSchema<TData = Awaited<ReturnType<typeof adminControllerGetAiPromptContextSchema>>, TError = ErrorType<unknown>>(
+ key: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiPromptContextSchema>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof adminControllerGetAiPromptContextSchema>>,
+          TError,
+          Awaited<ReturnType<typeof adminControllerGetAiPromptContextSchema>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAdminControllerGetAiPromptContextSchema<TData = Awaited<ReturnType<typeof adminControllerGetAiPromptContextSchema>>, TError = ErrorType<unknown>>(
+ key: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiPromptContextSchema>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof adminControllerGetAiPromptContextSchema>>,
+          TError,
+          Awaited<ReturnType<typeof adminControllerGetAiPromptContextSchema>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAdminControllerGetAiPromptContextSchema<TData = Awaited<ReturnType<typeof adminControllerGetAiPromptContextSchema>>, TError = ErrorType<unknown>>(
+ key: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiPromptContextSchema>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get runtime context schema and variable provenance for a prompt key
+ */
+
+export function useAdminControllerGetAiPromptContextSchema<TData = Awaited<ReturnType<typeof adminControllerGetAiPromptContextSchema>>, TError = ErrorType<unknown>>(
+ key: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiPromptContextSchema>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getAdminControllerGetAiPromptContextSchemaQueryOptions(key,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+/**
+ * @summary Preview rendered prompt, resolved variables, and effective model config
+ */
+export type adminControllerPreviewAiPromptResponse200 = {
+  data: AiPromptPreviewResponseDto
+  status: 200
+}
+    
+export type adminControllerPreviewAiPromptResponseSuccess = (adminControllerPreviewAiPromptResponse200) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerPreviewAiPromptResponse = (adminControllerPreviewAiPromptResponseSuccess)
+
+export const getAdminControllerPreviewAiPromptUrl = (key: string,) => {
+
+
+  
+
+  return `/admin/ai-prompts/${key}/preview`
+}
+
+export const adminControllerPreviewAiPrompt = async (key: string,
+    previewAiPromptRequestDto: PreviewAiPromptRequestDto, options?: RequestInit): Promise<adminControllerPreviewAiPromptResponse> => {
+  
+  return customFetch<adminControllerPreviewAiPromptResponse>(getAdminControllerPreviewAiPromptUrl(key),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      previewAiPromptRequestDto,)
+  }
+);}
+
+
+
+
+export const getAdminControllerPreviewAiPromptMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerPreviewAiPrompt>>, TError,{key: string;data: BodyType<PreviewAiPromptRequestDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminControllerPreviewAiPrompt>>, TError,{key: string;data: BodyType<PreviewAiPromptRequestDto>}, TContext> => {
+
+const mutationKey = ['adminControllerPreviewAiPrompt'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminControllerPreviewAiPrompt>>, {key: string;data: BodyType<PreviewAiPromptRequestDto>}> = (props) => {
+          const {key,data} = props ?? {};
+
+          return  adminControllerPreviewAiPrompt(key,data,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminControllerPreviewAiPromptMutationResult = NonNullable<Awaited<ReturnType<typeof adminControllerPreviewAiPrompt>>>
+    export type AdminControllerPreviewAiPromptMutationBody = BodyType<PreviewAiPromptRequestDto>
+    export type AdminControllerPreviewAiPromptMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Preview rendered prompt, resolved variables, and effective model config
+ */
+export const useAdminControllerPreviewAiPrompt = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerPreviewAiPrompt>>, TError,{key: string;data: BodyType<PreviewAiPromptRequestDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof adminControllerPreviewAiPrompt>>,
+        TError,
+        {key: string;data: BodyType<PreviewAiPromptRequestDto>},
+        TContext
+      > => {
+      return useMutation(getAdminControllerPreviewAiPromptMutationOptions(options), queryClient);
     }
     /**
  * @summary Update prompt draft revision

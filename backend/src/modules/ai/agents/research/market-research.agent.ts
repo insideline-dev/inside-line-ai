@@ -13,11 +13,13 @@ export const MarketResearchAgent: ResearchAgentConfig<MarketResearch> = {
   systemPrompt: MARKET_RESEARCH_SYSTEM_PROMPT,
   humanPromptTemplate: MARKET_RESEARCH_HUMAN_PROMPT,
   schema: MarketResearchSchema,
-  contextBuilder: ({ extraction, scraping }) => ({
+  contextBuilder: ({ extraction, scraping, gapReport }) => ({
     industry: extraction.industry,
     geographicFocus: extraction.location ? [extraction.location] : [],
     companyDescription: extraction.rawText,
     targetMarket: scraping.notableClaims[0] ?? extraction.tagline,
+    gapDirectives: gapReport?.categories.find(c => c.category === "market")?.researchDirectives ?? [],
+    gapPriority: gapReport?.categories.find(c => c.category === "market")?.priority ?? "medium",
   }),
   fallback: ({ extraction }) => {
     const websiteUrl = toValidUrl(extraction.website);

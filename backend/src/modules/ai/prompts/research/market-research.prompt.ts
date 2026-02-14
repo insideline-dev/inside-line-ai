@@ -10,6 +10,8 @@ IMPORTANT RULES:
 export const MARKET_RESEARCH_HUMAN_PROMPT = `Research the startup's market context.
 Focus on market reports, TAM/SAM/SOM indicators, competitor positioning, and trend signals.
 
+If gap analysis directives are provided in the context, prioritize researching those specific gaps before general exploration.
+
 Context:
 {{contextJson}}
 

@@ -53,7 +53,7 @@ export const envSchema = z.object({
   // JWT Authentication
   JWT_SECRET: z.string().min(32, "JWT_SECRET must be at least 32 characters"),
   JWT_ACCESS_EXPIRES: z.string().default("15m"),
-  JWT_REFRESH_EXPIRES: z.string().default("7d"),
+  JWT_REFRESH_EXPIRES: z.string().default("30d"),
   // OAuth Providers (optional)
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),

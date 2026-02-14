@@ -2,29 +2,17 @@ import { customFetch } from "@/api/client";
 import { env } from "@/env";
 import type {
   AuthResponse,
-  LoginRequest,
-  RegisterRequest,
   MagicLinkRequest,
   EmailVerifyRequest,
   ResendVerificationRequest,
+  JoinWaitlistRequest,
+  RedeemInviteRequest,
+  RedeemInviteResponse,
   User,
   MessageResponse,
 } from "./types";
 
 export const authApi = {
-  // Email/Password
-  login: (data: LoginRequest) =>
-    customFetch<AuthResponse>("/auth/login", {
-      method: "POST",
-      body: JSON.stringify(data),
-    }),
-
-  register: (data: RegisterRequest) =>
-    customFetch<AuthResponse>("/auth/register", {
-      method: "POST",
-      body: JSON.stringify(data),
-    }),
-
   // Magic Link
   requestMagicLink: (data: MagicLinkRequest) =>
     customFetch<MessageResponse>("/auth/magic-link/request", {
@@ -36,6 +24,18 @@ export const authApi = {
     customFetch<AuthResponse>("/auth/magic-link/verify", {
       method: "POST",
       body: JSON.stringify({ token }),
+    }),
+
+  redeemInvite: (data: RedeemInviteRequest) =>
+    customFetch<RedeemInviteResponse>("/auth/invite/redeem", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  joinWaitlist: (data: JoinWaitlistRequest) =>
+    customFetch<MessageResponse>("/auth/waitlist", {
+      method: "POST",
+      body: JSON.stringify(data),
     }),
 
   // Google OAuth (redirect-based)

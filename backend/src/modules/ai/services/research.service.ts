@@ -15,6 +15,7 @@ import { PipelineStateService } from "./pipeline-state.service";
 import { GeminiResearchService } from "./gemini-research.service";
 import { PipelineFeedbackService } from "./pipeline-feedback.service";
 import { AiPromptService } from "./ai-prompt.service";
+import { GapAnalysisService } from "./gap-analysis.service";
 import { RESEARCH_PROMPT_KEY_BY_AGENT } from "./ai-prompt-catalog";
 
 type ResearchAgentOutput =
@@ -34,6 +35,7 @@ export class ResearchService {
     private geminiResearchService: GeminiResearchService,
     private pipelineFeedback: PipelineFeedbackService,
     private promptService: AiPromptService,
+    private gapAnalysis: GapAnalysisService,
   ) {}
 
   async run(startupId: string, options?: ResearchRunOptions): Promise<ResearchResult> {
@@ -50,7 +52,8 @@ export class ResearchService {
       throw new Error("Research requires extraction and scraping results");
     }
 
-    const pipelineInput: ResearchPipelineInput = { extraction, scraping };
+    const gapReport = this.gapAnalysis.analyze(extraction, scraping);
+    const pipelineInput: ResearchPipelineInput = { extraction, scraping, gapReport };
     const keys = options?.agentKey
       ? [options.agentKey]
       : (Object.keys(RESEARCH_AGENTS) as ResearchAgentKey[]);
@@ -133,6 +136,7 @@ export class ResearchService {
     }
 
     result.sources = Array.from(dedupeSources.values());
+    result.gapReport = gapReport;
 
     return result;
   }

@@ -4,6 +4,7 @@ import { DatabaseModule } from "../../database";
 import { StorageModule } from "../../storage";
 import { NotificationModule } from "../../notification/notification.module";
 import { AgentMailModule } from "../integrations/agentmail/agentmail.module";
+import { StartupModule } from "../startup";
 import { ClaraService } from "./clara.service";
 import { ClaraAiService } from "./clara-ai.service";
 import { ClaraSubmissionService } from "./clara-submission.service";
@@ -16,6 +17,7 @@ import { ClaraConversationService } from "./clara-conversation.service";
     StorageModule,
     NotificationModule,
     forwardRef(() => AgentMailModule),
+    StartupModule,
   ],
   providers: [
     ClaraService,

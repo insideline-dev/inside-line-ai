@@ -41,3 +41,6 @@ export * from '../modules/ai/entities';
 
 // Clara
 export * from '../modules/clara/entities';
+
+// Early Access
+export * from '../modules/early-access/entities';

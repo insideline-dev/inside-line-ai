@@ -13,7 +13,7 @@ export const NewsResearchAgent: ResearchAgentConfig<NewsResearch> = {
   systemPrompt: NEWS_RESEARCH_SYSTEM_PROMPT,
   humanPromptTemplate: NEWS_RESEARCH_HUMAN_PROMPT,
   schema: NewsResearchSchema,
-  contextBuilder: ({ extraction }) => ({
+  contextBuilder: ({ extraction, gapReport }) => ({
     companyName: extraction.companyName,
     industry: extraction.industry,
     geographicFocus: extraction.location,
@@ -22,6 +22,7 @@ export const NewsResearchAgent: ResearchAgentConfig<NewsResearch> = {
       typeof extraction.fundingAsk === "number"
         ? [{ date: "unknown", amount: extraction.fundingAsk }]
         : [],
+    gapTopPriorities: gapReport?.topPriorities ?? [],
   }),
   fallback: ({ extraction }) => {
     const websiteUrl = toValidUrl(extraction.website);

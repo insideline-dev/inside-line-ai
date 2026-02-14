@@ -4,3 +4,4 @@ export * from './agentmail-config.dto';
 export * from './send-email.dto';
 export * from './reply-email.dto';
 export * from './create-inbox.dto';
+export * from './inbox-submission.dto';

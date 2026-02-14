@@ -5,6 +5,7 @@ export const RESEARCH_AGENT_KEYS = [
   "market",
   "product",
   "news",
+  "competitor",
 ] as const satisfies readonly ResearchAgentKey[];
 
 export const EVALUATION_AGENT_KEYS = [

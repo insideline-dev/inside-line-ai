@@ -5,7 +5,7 @@ import {
   ScrapingResult,
 } from "./phase-results.interface";
 
-export type ResearchAgentKey = "team" | "market" | "product" | "news";
+export type ResearchAgentKey = "team" | "market" | "product" | "news" | "competitor";
 
 export type EvaluationAgentKey =
   | "team"

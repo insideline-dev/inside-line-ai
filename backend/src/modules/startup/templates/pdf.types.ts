@@ -62,6 +62,7 @@ export function getSummaryFromData(data: unknown): string | null {
   }
 
   const summaryFields = [
+    'feedback',
     'memoNarrative',
     'summary',
     'assessment',

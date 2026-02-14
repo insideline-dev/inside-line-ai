@@ -1558,6 +1558,309 @@ export const useAgentMailControllerArchiveThread = <TError = ErrorType<void>,
       return useMutation(getAgentMailControllerArchiveThreadMutationOptions(options), queryClient);
     }
     /**
+ * @summary List pending inbox submissions
+ */
+export type agentMailControllerListInboxSubmissionsResponse200 = {
+  data: void
+  status: 200
+}
+
+export type agentMailControllerListInboxSubmissionsResponse429 = {
+  data: void
+  status: 429
+}
+    
+export type agentMailControllerListInboxSubmissionsResponseSuccess = (agentMailControllerListInboxSubmissionsResponse200) & {
+  headers: Headers;
+};
+export type agentMailControllerListInboxSubmissionsResponseError = (agentMailControllerListInboxSubmissionsResponse429) & {
+  headers: Headers;
+};
+
+export type agentMailControllerListInboxSubmissionsResponse = (agentMailControllerListInboxSubmissionsResponseSuccess | agentMailControllerListInboxSubmissionsResponseError)
+
+export const getAgentMailControllerListInboxSubmissionsUrl = () => {
+
+
+  
+
+  return `/integrations/agentmail/inbox-submissions`
+}
+
+export const agentMailControllerListInboxSubmissions = async ( options?: RequestInit): Promise<agentMailControllerListInboxSubmissionsResponse> => {
+  
+  return customFetch<agentMailControllerListInboxSubmissionsResponse>(getAgentMailControllerListInboxSubmissionsUrl(),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getAgentMailControllerListInboxSubmissionsQueryKey = () => {
+    return [
+    `/integrations/agentmail/inbox-submissions`
+    ] as const;
+    }
+
+    
+export const getAgentMailControllerListInboxSubmissionsQueryOptions = <TData = Awaited<ReturnType<typeof agentMailControllerListInboxSubmissions>>, TError = ErrorType<void>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof agentMailControllerListInboxSubmissions>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAgentMailControllerListInboxSubmissionsQueryKey();
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof agentMailControllerListInboxSubmissions>>> = ({ signal }) => agentMailControllerListInboxSubmissions({ signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof agentMailControllerListInboxSubmissions>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type AgentMailControllerListInboxSubmissionsQueryResult = NonNullable<Awaited<ReturnType<typeof agentMailControllerListInboxSubmissions>>>
+export type AgentMailControllerListInboxSubmissionsQueryError = ErrorType<void>
+
+
+export function useAgentMailControllerListInboxSubmissions<TData = Awaited<ReturnType<typeof agentMailControllerListInboxSubmissions>>, TError = ErrorType<void>>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof agentMailControllerListInboxSubmissions>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof agentMailControllerListInboxSubmissions>>,
+          TError,
+          Awaited<ReturnType<typeof agentMailControllerListInboxSubmissions>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAgentMailControllerListInboxSubmissions<TData = Awaited<ReturnType<typeof agentMailControllerListInboxSubmissions>>, TError = ErrorType<void>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof agentMailControllerListInboxSubmissions>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof agentMailControllerListInboxSubmissions>>,
+          TError,
+          Awaited<ReturnType<typeof agentMailControllerListInboxSubmissions>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAgentMailControllerListInboxSubmissions<TData = Awaited<ReturnType<typeof agentMailControllerListInboxSubmissions>>, TError = ErrorType<void>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof agentMailControllerListInboxSubmissions>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List pending inbox submissions
+ */
+
+export function useAgentMailControllerListInboxSubmissions<TData = Awaited<ReturnType<typeof agentMailControllerListInboxSubmissions>>, TError = ErrorType<void>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof agentMailControllerListInboxSubmissions>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getAgentMailControllerListInboxSubmissionsQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+/**
+ * @summary Confirm submission and trigger pipeline
+ */
+export type agentMailControllerConfirmSubmissionResponse200 = {
+  data: void
+  status: 200
+}
+
+export type agentMailControllerConfirmSubmissionResponse404 = {
+  data: void
+  status: 404
+}
+
+export type agentMailControllerConfirmSubmissionResponse429 = {
+  data: void
+  status: 429
+}
+    
+export type agentMailControllerConfirmSubmissionResponseSuccess = (agentMailControllerConfirmSubmissionResponse200) & {
+  headers: Headers;
+};
+export type agentMailControllerConfirmSubmissionResponseError = (agentMailControllerConfirmSubmissionResponse404 | agentMailControllerConfirmSubmissionResponse429) & {
+  headers: Headers;
+};
+
+export type agentMailControllerConfirmSubmissionResponse = (agentMailControllerConfirmSubmissionResponseSuccess | agentMailControllerConfirmSubmissionResponseError)
+
+export const getAgentMailControllerConfirmSubmissionUrl = (id: string,) => {
+
+
+  
+
+  return `/integrations/agentmail/inbox-submissions/${id}/confirm`
+}
+
+export const agentMailControllerConfirmSubmission = async (id: string, options?: RequestInit): Promise<agentMailControllerConfirmSubmissionResponse> => {
+  
+  return customFetch<agentMailControllerConfirmSubmissionResponse>(getAgentMailControllerConfirmSubmissionUrl(id),
+  {      
+    ...options,
+    method: 'POST'
+    
+    
+  }
+);}
+
+
+
+
+export const getAgentMailControllerConfirmSubmissionMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof agentMailControllerConfirmSubmission>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof agentMailControllerConfirmSubmission>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['agentMailControllerConfirmSubmission'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof agentMailControllerConfirmSubmission>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  agentMailControllerConfirmSubmission(id,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AgentMailControllerConfirmSubmissionMutationResult = NonNullable<Awaited<ReturnType<typeof agentMailControllerConfirmSubmission>>>
+    
+    export type AgentMailControllerConfirmSubmissionMutationError = ErrorType<void>
+
+    /**
+ * @summary Confirm submission and trigger pipeline
+ */
+export const useAgentMailControllerConfirmSubmission = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof agentMailControllerConfirmSubmission>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof agentMailControllerConfirmSubmission>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getAgentMailControllerConfirmSubmissionMutationOptions(options), queryClient);
+    }
+    /**
+ * @summary Dismiss submission
+ */
+export type agentMailControllerDismissSubmissionResponse200 = {
+  data: void
+  status: 200
+}
+
+export type agentMailControllerDismissSubmissionResponse404 = {
+  data: void
+  status: 404
+}
+
+export type agentMailControllerDismissSubmissionResponse429 = {
+  data: void
+  status: 429
+}
+    
+export type agentMailControllerDismissSubmissionResponseSuccess = (agentMailControllerDismissSubmissionResponse200) & {
+  headers: Headers;
+};
+export type agentMailControllerDismissSubmissionResponseError = (agentMailControllerDismissSubmissionResponse404 | agentMailControllerDismissSubmissionResponse429) & {
+  headers: Headers;
+};
+
+export type agentMailControllerDismissSubmissionResponse = (agentMailControllerDismissSubmissionResponseSuccess | agentMailControllerDismissSubmissionResponseError)
+
+export const getAgentMailControllerDismissSubmissionUrl = (id: string,) => {
+
+
+  
+
+  return `/integrations/agentmail/inbox-submissions/${id}/dismiss`
+}
+
+export const agentMailControllerDismissSubmission = async (id: string, options?: RequestInit): Promise<agentMailControllerDismissSubmissionResponse> => {
+  
+  return customFetch<agentMailControllerDismissSubmissionResponse>(getAgentMailControllerDismissSubmissionUrl(id),
+  {      
+    ...options,
+    method: 'POST'
+    
+    
+  }
+);}
+
+
+
+
+export const getAgentMailControllerDismissSubmissionMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof agentMailControllerDismissSubmission>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof agentMailControllerDismissSubmission>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['agentMailControllerDismissSubmission'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof agentMailControllerDismissSubmission>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  agentMailControllerDismissSubmission(id,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AgentMailControllerDismissSubmissionMutationResult = NonNullable<Awaited<ReturnType<typeof agentMailControllerDismissSubmission>>>
+    
+    export type AgentMailControllerDismissSubmissionMutationError = ErrorType<void>
+
+    /**
+ * @summary Dismiss submission
+ */
+export const useAgentMailControllerDismissSubmission = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof agentMailControllerDismissSubmission>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof agentMailControllerDismissSubmission>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getAgentMailControllerDismissSubmissionMutationOptions(options), queryClient);
+    }
+    /**
  * @summary Get my AgentMail config
  */
 export type agentMailControllerGetConfigResponse200 = {

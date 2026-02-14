@@ -70,3 +70,12 @@ export const createMockProfileService = () => ({
   getProfile: mock(() => Promise.resolve(mockUserProfile)),
   updateProfile: mock(() => Promise.resolve(mockUserProfile)),
 });
+
+export const createMockEarlyAccessService = () => ({
+  assertEmailAllowed: mock(() => Promise.resolve()),
+  isEmailAllowed: mock(() => Promise.resolve(true)),
+  joinWaitlist: mock(() => Promise.resolve()),
+  redeemInviteToken: mock(() => Promise.resolve({ message: 'ok', email: 'test@example.com' })),
+  bindRedeemedInviteToUser: mock(() => Promise.resolve()),
+  addFounderFromGoogleAttempt: mock(() => Promise.resolve()),
+});

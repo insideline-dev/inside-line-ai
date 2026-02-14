@@ -29,6 +29,7 @@ import { AuthService } from "./auth.service";
 import { UserAuthService, type DbUser } from "./user-auth.service";
 import { ProfileService } from "./profile.service";
 import { EmailService } from "../email";
+import { EarlyAccessService } from "../modules/early-access";
 import { GoogleAuthGuard } from "./guards";
 import { Public, CurrentUser } from "./decorators";
 import { JWT_COOKIE_NAME, REFRESH_COOKIE_NAME } from "./auth.constants";
@@ -46,6 +47,10 @@ import {
   UserProfileDto,
   SelectRoleDto,
 } from "./dto";
+import {
+  JoinWaitlistDto,
+  RedeemEarlyAccessInviteDto,
+} from "../modules/early-access";
 
 // Rate limit configs (requests per TTL window in seconds)
 const AUTH_RATE_LIMIT = { limit: 5, ttl: 60000 }; // 5 requests per minute
@@ -62,6 +67,7 @@ export class AuthController {
     private userAuthService: UserAuthService,
     private profileService: ProfileService,
     private emailService: EmailService,
+    private earlyAccess: EarlyAccessService,
     config: ConfigService,
   ) {
     this.isGoogleOAuthConfigured = !!(
@@ -166,6 +172,32 @@ export class AuthController {
     };
   }
 
+  // ============ EARLY ACCESS ============
+
+  @Public()
+  @Post("waitlist")
+  @Throttle({ default: MAGIC_LINK_RATE_LIMIT })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Join early-access waitlist" })
+  @ApiResponse({ status: 200, description: "Waitlist request accepted" })
+  async joinWaitlist(@Body() dto: JoinWaitlistDto) {
+    await this.earlyAccess.joinWaitlist(dto);
+    return {
+      message: "You're on the waitlist. We'll reach out when access opens.",
+    };
+  }
+
+  @Public()
+  @Post("invite/redeem")
+  @Throttle({ default: AUTH_RATE_LIMIT })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Redeem an early-access invitation link" })
+  @ApiResponse({ status: 200, description: "Invitation redeemed" })
+  @ApiUnauthorizedResponse({ description: "Invalid invite token" })
+  async redeemInvite(@Body() dto: RedeemEarlyAccessInviteDto) {
+    return this.earlyAccess.redeemInviteToken(dto.token);
+  }
+
   // ============ MAGIC LINK ============
 
   @Public()
@@ -176,6 +208,8 @@ export class AuthController {
   @ApiBody({ type: MagicLinkRequestDto })
   @ApiResponse({ status: 200, description: "Magic link sent" })
   async requestMagicLink(@Body() dto: MagicLinkRequestDto) {
+    await this.earlyAccess.assertEmailAllowed(dto.email);
+
     const token = await this.authService.createMagicLink(dto.email);
 
     // Send magic link email
@@ -207,6 +241,10 @@ export class AuthController {
     if (!foundUser) {
       throw new UnauthorizedException("Invalid or expired magic link");
     }
+    await this.earlyAccess.bindRedeemedInviteToUser(
+      foundUser.id,
+      foundUser.email,
+    );
     return this.setTokensAndRespond(res, foundUser);
   }
 
@@ -238,7 +276,25 @@ export class AuthController {
         "Google OAuth is not configured on this server",
       );
     }
-    const foundUser = req.user as DbUser;
+    const authResult = req.user as
+      | DbUser
+      | { __earlyAccessRejected: true; error: string };
+
+    if (
+      typeof authResult === "object" &&
+      authResult !== null &&
+      "__earlyAccessRejected" in authResult
+    ) {
+      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3030";
+      const error = encodeURIComponent(authResult.error);
+      return res.redirect(`${frontendUrl}/auth/callback?error=${error}`);
+    }
+
+    const foundUser = authResult as DbUser;
+    await this.earlyAccess.bindRedeemedInviteToUser(
+      foundUser.id,
+      foundUser.email,
+    );
     const tokens = await this.authService.generateTokens(foundUser);
     this.setTokenCookies(res, tokens.accessToken, tokens.refreshToken);
 

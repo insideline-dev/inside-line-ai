@@ -17,7 +17,9 @@ import {
   createMockUserAuthService,
   createMockEmailService,
   createMockProfileService,
+  createMockEarlyAccessService,
 } from './auth.test-utils';
+import { EarlyAccessService } from '../../modules/early-access';
 
 describe('AuthController Registration', () => {
   let controller: AuthController;
@@ -42,6 +44,7 @@ describe('AuthController Registration', () => {
         { provide: UserAuthService, useValue: userAuthService },
         { provide: ProfileService, useValue: profileService },
         { provide: EmailService, useValue: emailService },
+        { provide: EarlyAccessService, useValue: createMockEarlyAccessService() },
         { provide: ConfigService, useValue: { get: () => undefined } },
       ],
     }).compile();

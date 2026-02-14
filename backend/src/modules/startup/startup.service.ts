@@ -873,7 +873,76 @@ export class StartupService {
       progress: null,
     };
 
-    const pipelineState = await this.aiPipeline.getPipelineStatus(startupId);
+    const [pipelineState, trackedProgress] = await Promise.all([
+      this.aiPipeline.getPipelineStatus(startupId),
+      this.aiPipeline.getTrackedProgress(startupId),
+    ]);
+
+    if (trackedProgress) {
+      const phaseResults = pipelineState?.results ?? {};
+
+      response.progress = {
+        overallProgress: this.normalizePercent(trackedProgress.overallProgress),
+        currentPhase: trackedProgress.currentPhase,
+        pipelineStatus: trackedProgress.status,
+        pipelineRunId: trackedProgress.pipelineRunId,
+        estimatedTimeRemaining: trackedProgress.estimatedTimeRemaining,
+        updatedAt: trackedProgress.updatedAt,
+        error:
+          trackedProgress.error ??
+          (trackedProgress.status === "failed"
+            ? "Pipeline failed"
+            : undefined),
+        phasesCompleted: trackedProgress.phasesCompleted,
+        phases: Object.fromEntries(
+          Object.entries(trackedProgress.phases).map(([phase, value]) => {
+            const phaseKey = this.isValidPipelinePhase(phase)
+              ? phase
+              : undefined;
+            const phaseIssue = phaseKey
+              ? this.derivePhaseIssue(phaseKey, phaseResults[phaseKey])
+              : undefined;
+            const shouldExposeIssue =
+              value.status === "failed" ||
+              value.status === "running" ||
+              value.status === "waiting";
+
+            const agents = Object.fromEntries(
+              Object.entries(value.agents ?? {}).map(([agentKey, agent]) => [
+                agentKey,
+                {
+                  key: agent.key,
+                  status: agent.status,
+                  progress:
+                    typeof agent.progress === "number"
+                      ? this.normalizePercent(agent.progress)
+                      : undefined,
+                  startedAt: agent.startedAt,
+                  completedAt: agent.completedAt,
+                  error: agent.error,
+                },
+              ]),
+            );
+
+            return [
+              phase,
+              {
+                status: value.status,
+                progress: this.resolvePhaseProgress(value.status, agents),
+                startedAt: value.startedAt,
+                completedAt: value.completedAt,
+                error: shouldExposeIssue
+                  ? (value.error ?? phaseIssue)
+                  : undefined,
+                agents: Object.keys(agents).length > 0 ? agents : undefined,
+              },
+            ];
+          }),
+        ),
+      };
+      return response;
+    }
+
     if (pipelineState) {
       const totalPhases = Object.keys(pipelineState.phases).length;
       const completedCount = Object.values(pipelineState.phases).filter(
@@ -889,7 +958,13 @@ export class StartupService {
         overallProgress,
         currentPhase: pipelineState.currentPhase,
         pipelineStatus: pipelineState.status,
-        error: pipelineState.status === "failed" ? (pipelineState.phases[pipelineState.currentPhase]?.error ?? "Pipeline failed") : undefined,
+        pipelineRunId: pipelineState.pipelineRunId,
+        updatedAt: pipelineState.updatedAt,
+        error:
+          pipelineState.status === "failed"
+            ? (pipelineState.phases[pipelineState.currentPhase]?.error ??
+              "Pipeline failed")
+            : undefined,
         phasesCompleted: Object.entries(pipelineState.phases)
           .filter(([, phase]) => phase.status === "completed")
           .map(([phase]) => phase),
@@ -911,9 +986,13 @@ export class StartupService {
                 progress:
                   value.status === "completed"
                     ? 100
+                    : value.status === "skipped"
+                      ? 100
                     : value.status === "running"
                       ? 50
                       : 0,
+                startedAt: value.startedAt,
+                completedAt: value.completedAt,
                 error: shouldExposeIssue ? (value.error ?? phaseIssue) : undefined,
               };
             })(),
@@ -947,6 +1026,47 @@ export class StartupService {
     }
 
     return response;
+  }
+
+  private resolvePhaseProgress(
+    status: string,
+    agents: Record<
+      string,
+      { status: string; progress?: number | undefined }
+    >,
+  ): number {
+    if (status === "completed" || status === "skipped") {
+      return 100;
+    }
+
+    const agentValues = Object.values(agents);
+    if (!agentValues.length) {
+      return status === "running" ? 50 : 0;
+    }
+
+    const total = agentValues.reduce((sum, agent) => {
+      if (typeof agent.progress === "number") {
+        return sum + this.normalizePercent(agent.progress);
+      }
+
+      if (agent.status === "completed") {
+        return sum + 100;
+      }
+      if (agent.status === "running") {
+        return sum + 50;
+      }
+      return sum;
+    }, 0);
+
+    return this.normalizePercent(Math.round(total / agentValues.length));
+  }
+
+  private normalizePercent(value: number): number {
+    if (!Number.isFinite(value)) {
+      return 0;
+    }
+
+    return Math.max(0, Math.min(100, Math.round(value)));
   }
 
   private isValidPipelinePhase(phase: unknown): phase is PipelinePhase {

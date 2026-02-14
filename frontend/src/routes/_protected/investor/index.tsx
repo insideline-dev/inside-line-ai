@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScoreRing } from "@/components/analysis/ScoreRing";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SearchAndFilters, useFilteredStartups, defaultFilters, type FilterState } from "@/components/SearchAndFilters";
+import { AnalysisProgressBar } from "@/components/AnalysisProgressBar";
 import { useInvestorControllerGetMatches } from "@/api/generated/investor/investor";
 import { useStartupControllerFindAll } from "@/api/generated/startup/startup";
 import {
@@ -91,13 +92,91 @@ function formatDateSafe(
   return format(date, dateFormat);
 }
 
+function PrivateStartupCard({
+  startup,
+  getStatusBadge,
+}: {
+  startup: PrivateStartup;
+  getStatusBadge: (status: string) => ReactNode;
+}) {
+  const [effectiveStatus, setEffectiveStatus] = useState(startup.status);
+
+  useEffect(() => {
+    setEffectiveStatus(startup.status);
+  }, [startup.status]);
+
+  const handleTerminalStatus = useCallback(
+    (status: "pending_review" | "submitted") => {
+      setEffectiveStatus((current) => (current === status ? current : status));
+    },
+    [],
+  );
+
+  return (
+    <Card className="hover-elevate" data-testid={`card-my-startup-${startup.id}`}>
+      <CardContent className="p-4">
+        <div className="flex items-start gap-4">
+          {effectiveStatus === "approved" && startup.overallScore ? (
+            <ScoreRing score={startup.overallScore} size="sm" showLabel={false} />
+          ) : (
+            <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+              <FileSearch className="w-5 h-5 text-muted-foreground" />
+            </div>
+          )}
+          <div className="flex-1 min-w-0 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="font-medium truncate">{startup.name}</h3>
+              {getStatusBadge(effectiveStatus)}
+            </div>
+            <p className="text-sm text-muted-foreground line-clamp-2">
+              {startup.description || "No description"}
+            </p>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Clock className="w-3 h-3" />
+              {formatDateSafe(startup.createdAt, "MMM d, yyyy")}
+            </div>
+          </div>
+        </div>
+
+        {(effectiveStatus === "submitted" || effectiveStatus === "analyzing") && (
+          <div className="mt-3">
+            <AnalysisProgressBar
+              startupId={startup.id}
+              onTerminalStatus={handleTerminalStatus}
+            />
+          </div>
+        )}
+
+        {effectiveStatus === "approved" && (
+          <Button className="w-full mt-4" size="sm" asChild>
+            <Link to="/investor/startup/$id" params={{ id: String(startup.id) }}>
+              View Analysis
+              <ArrowRight className="w-4 h-4 ml-2" />
+            </Link>
+          </Button>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function InvestorDashboard() {
   const [filters, setFilters] = useState<FilterState>(defaultFilters);
 
   const { data: matchesData, isLoading } = useInvestorControllerGetMatches();
   const matches = extractList<MatchedStartup>(matchesData);
 
-  const { data: myStartupsData, isLoading: isLoadingMyStartups } = useStartupControllerFindAll();
+  const { data: myStartupsData, isLoading: isLoadingMyStartups } = useStartupControllerFindAll(undefined, {
+    query: {
+      refetchInterval: (query) => {
+        const rows = extractList<PrivateStartup>(query.state.data);
+        const hasInFlight = rows.some(
+          (row) => row.status === "submitted" || row.status === "analyzing",
+        );
+        return hasInFlight ? 5000 : false;
+      },
+    },
+  });
   const myStartups = extractList<PrivateStartup>(myStartupsData);
 
   // Calculate stats from matches
@@ -118,6 +197,8 @@ function InvestorDashboard() {
 
   const getStatusBadge = (status: string) => {
     switch (status) {
+      case "submitted":
+        return <Badge variant="outline" className="gap-1"><Clock className="w-3 h-3" />Queued</Badge>;
       case "analyzing":
         return <Badge variant="outline" className="gap-1"><Loader2 className="w-3 h-3 animate-spin" />Analyzing</Badge>;
       case "approved":
@@ -185,40 +266,11 @@ function InvestorDashboard() {
           </div>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {myStartups.map((startup) => (
-              <Card key={startup.id} className="hover-elevate" data-testid={`card-my-startup-${startup.id}`}>
-                <CardContent className="p-4">
-                  <div className="flex items-start gap-4">
-                    {startup.status === "approved" && startup.overallScore ? (
-                      <ScoreRing score={startup.overallScore} size="sm" showLabel={false} />
-                    ) : (
-                      <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
-                        <FileSearch className="w-5 h-5 text-muted-foreground" />
-                      </div>
-                    )}
-                    <div className="flex-1 min-w-0 space-y-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <h3 className="font-medium truncate">{startup.name}</h3>
-                        {getStatusBadge(startup.status)}
-                      </div>
-                      <p className="text-sm text-muted-foreground line-clamp-2">
-                        {startup.description || "No description"}
-                      </p>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <Clock className="w-3 h-3" />
-                        {formatDateSafe(startup.createdAt, "MMM d, yyyy")}
-                      </div>
-                    </div>
-                  </div>
-                  {startup.status === "approved" && (
-                    <Button className="w-full mt-4" size="sm" asChild>
-                      <Link to="/investor/startup/$id" params={{ id: String(startup.id) }}>
-                        View Analysis
-                        <ArrowRight className="w-4 h-4 ml-2" />
-                      </Link>
-                    </Button>
-                  )}
-                </CardContent>
-              </Card>
+              <PrivateStartupCard
+                key={startup.id}
+                startup={startup}
+                getStatusBadge={getStatusBadge}
+              />
             ))}
           </div>
         </div>

@@ -1,16 +1,18 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScoreRing } from "@/components/analysis/ScoreRing";
+import { AnalysisProgressBar } from "@/components/AnalysisProgressBar";
 import { useAdminControllerGetStats, useAdminControllerGetAllStartups } from "@/api/generated/admin/admin";
 import type { AdminControllerGetAllStartupsStatus } from "@/api/generated/model";
 import { Clock, Sparkles, CheckCircle, XCircle, Users, Target, Building2, Eye } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { QuickAddStartupDialog } from "./-components/QuickAddStartupDialog";
 
 export const Route = createFileRoute("/_protected/admin/")({
   component: AdminDashboard,
@@ -45,6 +47,103 @@ const TAB_TO_STATUS: Record<string, AdminControllerGetAllStartupsStatus | undefi
   rejected: "rejected",
   all: undefined,
 };
+
+function getStatusBadge(status: string) {
+  const variants: Record<string, { label: string; className: string }> = {
+    submitted: { label: "Pending", className: "bg-chart-4/10 text-chart-4 border-chart-4/20" },
+    pending_review: { label: "Pending", className: "bg-chart-4/10 text-chart-4 border-chart-4/20" },
+    analyzing: { label: "Analyzing", className: "bg-chart-5/10 text-chart-5 border-chart-5/20" },
+    approved: { label: "Approved", className: "bg-chart-2/10 text-chart-2 border-chart-2/20" },
+    rejected: { label: "Rejected", className: "bg-destructive/10 text-destructive border-destructive/20" },
+  };
+
+  const variant = variants[status] || { label: status, className: "" };
+  return (
+    <Badge variant="outline" className={variant.className}>
+      {variant.label}
+    </Badge>
+  );
+}
+
+function formatStage(stage: string) {
+  return stage
+    .split("_")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
+function AdminStartupRow({ startup }: { startup: StartupItem }) {
+  const [effectiveStatus, setEffectiveStatus] = useState(startup.status);
+
+  useEffect(() => {
+    setEffectiveStatus(startup.status);
+  }, [startup.status]);
+
+  const handleTerminalStatus = useCallback(
+    (status: "pending_review" | "submitted") => {
+      setEffectiveStatus((current) => (current === status ? current : status));
+    },
+    [],
+  );
+
+  return (
+    <Card className="hover:shadow-md transition-shadow">
+      <CardContent className="p-6">
+        <div className="flex flex-col lg:flex-row items-start gap-6">
+          {startup.overallScore ? (
+            <ScoreRing score={startup.overallScore} size="sm" showLabel={false} />
+          ) : (
+            <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+              <Clock className="w-6 h-6 text-muted-foreground" />
+            </div>
+          )}
+          <div className="flex-1 min-w-0 space-y-2">
+            <div className="flex flex-wrap items-center gap-3">
+              <h3 className="text-lg font-semibold">{startup.name}</h3>
+              {getStatusBadge(effectiveStatus)}
+              {startup.stage && <Badge variant="outline">{formatStage(startup.stage)}</Badge>}
+              {startup.industry && <Badge variant="secondary">{startup.industry}</Badge>}
+            </div>
+            {startup.description && (
+              <p className="text-muted-foreground line-clamp-2">{startup.description}</p>
+            )}
+            <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+              {startup.website && (
+                <span className="flex items-center gap-1">
+                  <Building2 className="w-4 h-4" />
+                  {startup.website}
+                </span>
+              )}
+              <span className="flex items-center gap-1">
+                <Clock className="w-4 h-4" />
+                Submitted {format(new Date(startup.createdAt), "MMM d, yyyy")}
+              </span>
+              {startup.percentileRank && (
+                <span className="flex items-center gap-1">
+                  Top {Math.round(100 - startup.percentileRank)}%
+                </span>
+              )}
+            </div>
+            {(effectiveStatus === "submitted" || effectiveStatus === "analyzing") && (
+              <AnalysisProgressBar
+                startupId={startup.id}
+                onTerminalStatus={handleTerminalStatus}
+              />
+            )}
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" asChild>
+              <Link to="/admin/startup/$id" params={{ id: startup.id }}>
+                <Eye className="w-4 h-4 mr-2" />
+                Review
+              </Link>
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 function AdminDashboard() {
   const prevAnalyzingCountRef = useRef<number>(0);
@@ -102,30 +201,6 @@ function AdminDashboard() {
     setPage(1);
   };
 
-  const getStatusBadge = (status: string) => {
-    const variants: Record<string, { label: string; className: string }> = {
-      submitted: { label: "Pending", className: "bg-chart-4/10 text-chart-4 border-chart-4/20" },
-      pending_review: { label: "Pending", className: "bg-chart-4/10 text-chart-4 border-chart-4/20" },
-      analyzing: { label: "Analyzing", className: "bg-chart-5/10 text-chart-5 border-chart-5/20" },
-      approved: { label: "Approved", className: "bg-chart-2/10 text-chart-2 border-chart-2/20" },
-      rejected: { label: "Rejected", className: "bg-destructive/10 text-destructive border-destructive/20" },
-    };
-
-    const variant = variants[status] || { label: status, className: "" };
-    return (
-      <Badge variant="outline" className={variant.className}>
-        {variant.label}
-      </Badge>
-    );
-  };
-
-  const formatStage = (stage: string) => {
-    return stage
-      .split("_")
-      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(" ");
-  };
-
   const stats = [
     {
       label: "Pending",
@@ -181,9 +256,12 @@ function AdminDashboard() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold">Admin Dashboard</h1>
-        <p className="text-muted-foreground">Review and manage startup submissions</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Admin Dashboard</h1>
+          <p className="text-muted-foreground">Review and manage startup submissions</p>
+        </div>
+        <QuickAddStartupDialog />
       </div>
 
       {/* Stats */}
@@ -235,55 +313,7 @@ function AdminDashboard() {
             ) : startups.length > 0 ? (
               <div className="grid gap-4">
                 {startups.map((startup) => (
-                  <Card key={startup.id} className="hover:shadow-md transition-shadow">
-                    <CardContent className="p-6">
-                      <div className="flex flex-col lg:flex-row items-start gap-6">
-                        {startup.overallScore ? (
-                          <ScoreRing score={startup.overallScore} size="sm" showLabel={false} />
-                        ) : (
-                          <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
-                            <Clock className="w-6 h-6 text-muted-foreground" />
-                          </div>
-                        )}
-                        <div className="flex-1 min-w-0 space-y-2">
-                          <div className="flex flex-wrap items-center gap-3">
-                            <h3 className="text-lg font-semibold">{startup.name}</h3>
-                            {getStatusBadge(startup.status)}
-                            {startup.stage && <Badge variant="outline">{formatStage(startup.stage)}</Badge>}
-                            {startup.industry && <Badge variant="secondary">{startup.industry}</Badge>}
-                          </div>
-                          {startup.description && (
-                            <p className="text-muted-foreground line-clamp-2">{startup.description}</p>
-                          )}
-                          <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
-                            {startup.website && (
-                              <span className="flex items-center gap-1">
-                                <Building2 className="w-4 h-4" />
-                                {startup.website}
-                              </span>
-                            )}
-                            <span className="flex items-center gap-1">
-                              <Clock className="w-4 h-4" />
-                              Submitted {format(new Date(startup.createdAt), "MMM d, yyyy")}
-                            </span>
-                            {startup.percentileRank && (
-                              <span className="flex items-center gap-1">
-                                Top {Math.round(100 - startup.percentileRank)}%
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button variant="outline" asChild>
-                            <Link to="/admin/startup/$id" params={{ id: startup.id }}>
-                              <Eye className="w-4 h-4 mr-2" />
-                              Review
-                            </Link>
-                          </Button>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
+                  <AdminStartupRow key={startup.id} startup={startup} />
                 ))}
 
                 {startups.length >= PAGE_SIZE && (

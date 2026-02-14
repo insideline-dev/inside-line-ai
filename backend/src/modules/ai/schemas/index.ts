@@ -15,6 +15,7 @@ import {
 import { ExtractionSchema } from "./extraction.schema";
 import { ThesisAlignmentSchema } from "./matching";
 import {
+  CompetitorResearchSchema,
   MarketResearchSchema,
   NewsResearchSchema,
   ProductResearchSchema,
@@ -41,6 +42,7 @@ export const RESEARCH_SCHEMAS = {
   market: MarketResearchSchema,
   product: ProductResearchSchema,
   news: NewsResearchSchema,
+  competitor: CompetitorResearchSchema,
 } as const;
 
 export type EvaluationAgentKey = keyof typeof EVALUATION_SCHEMAS;

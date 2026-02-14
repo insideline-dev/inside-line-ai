@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as WaitlistRouteImport } from './routes/waitlist'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ProtectedRouteImport } from './routes/_protected'
 import { Route as IndexRouteImport } from './routes/index'
@@ -56,6 +57,11 @@ import { Route as ProtectedInvestorStartupIdRouteImport } from './routes/_protec
 import { Route as ProtectedFounderStartupIdRouteImport } from './routes/_protected/founder/startup.$id'
 import { Route as ProtectedAdminStartupIdRouteImport } from './routes/_protected/admin/startup.$id'
 
+const WaitlistRoute = WaitlistRouteImport.update({
+  id: '/waitlist',
+  path: '/waitlist',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
@@ -302,6 +308,7 @@ const ProtectedAdminStartupIdRoute = ProtectedAdminStartupIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/waitlist': typeof WaitlistRoute
   '/admin': typeof ProtectedAdminRouteWithChildren
   '/founder': typeof ProtectedFounderRouteWithChildren
   '/investor': typeof ProtectedInvestorRouteWithChildren
@@ -349,6 +356,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/waitlist': typeof WaitlistRoute
   '/profile': typeof ProtectedProfileRoute
   '/role-select': typeof ProtectedRoleSelectRoute
   '/apply/$slug': typeof ApplySlugRoute
@@ -394,6 +402,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_protected': typeof ProtectedRouteWithChildren
   '/login': typeof LoginRoute
+  '/waitlist': typeof WaitlistRoute
   '/_protected/admin': typeof ProtectedAdminRouteWithChildren
   '/_protected/founder': typeof ProtectedFounderRouteWithChildren
   '/_protected/investor': typeof ProtectedInvestorRouteWithChildren
@@ -443,6 +452,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/login'
+    | '/waitlist'
     | '/admin'
     | '/founder'
     | '/investor'
@@ -490,6 +500,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/login'
+    | '/waitlist'
     | '/profile'
     | '/role-select'
     | '/apply/$slug'
@@ -534,6 +545,7 @@ export interface FileRouteTypes {
     | '/'
     | '/_protected'
     | '/login'
+    | '/waitlist'
     | '/_protected/admin'
     | '/_protected/founder'
     | '/_protected/investor'
@@ -583,6 +595,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ProtectedRoute: typeof ProtectedRouteWithChildren
   LoginRoute: typeof LoginRoute
+  WaitlistRoute: typeof WaitlistRoute
   ApplySlugRoute: typeof ApplySlugRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
   AuthMagicLinkRoute: typeof AuthMagicLinkRoute
@@ -590,6 +603,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/waitlist': {
+      id: '/waitlist'
+      path: '/waitlist'
+      fullPath: '/waitlist'
+      preLoaderRoute: typeof WaitlistRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
@@ -1047,6 +1067,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ProtectedRoute: ProtectedRouteWithChildren,
   LoginRoute: LoginRoute,
+  WaitlistRoute: WaitlistRoute,
   ApplySlugRoute: ApplySlugRoute,
   AuthCallbackRoute: AuthCallbackRoute,
   AuthMagicLinkRoute: AuthMagicLinkRoute,

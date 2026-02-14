@@ -201,6 +201,8 @@ export class EarlyAccessService {
         companyName: data.companyName.trim(),
         role: data.role.trim(),
         website: data.website.trim(),
+        consentToShareInfo: data.consentToShareInfo,
+        consentToEarlyAccess: data.consentToEarlyAccess,
       })
       .onConflictDoUpdate({
         target: waitlistEntry.email,
@@ -209,9 +211,32 @@ export class EarlyAccessService {
           companyName: data.companyName.trim(),
           role: data.role.trim(),
           website: data.website.trim(),
+          consentToShareInfo: data.consentToShareInfo,
+          consentToEarlyAccess: data.consentToEarlyAccess,
           updatedAt: new Date(),
         },
       });
+  }
+
+  async addFounderFromGoogleAttempt(params: {
+    name: string;
+    email: string;
+  }): Promise<void> {
+    const normalizedEmail = this.normalizeEmail(params.email);
+    const normalizedName = params.name.trim() || normalizedEmail.split("@")[0];
+
+    await this.drizzle.db
+      .insert(waitlistEntry)
+      .values({
+        name: normalizedName,
+        email: normalizedEmail,
+        companyName: "Not provided",
+        role: "Founder",
+        website: "",
+        consentToShareInfo: false,
+        consentToEarlyAccess: false,
+      })
+      .onConflictDoNothing({ target: waitlistEntry.email });
   }
 
   async listWaitlist(): Promise<WaitlistEntryResponse[]> {
@@ -227,6 +252,8 @@ export class EarlyAccessService {
       companyName: entry.companyName,
       role: entry.role,
       website: entry.website,
+      consentToShareInfo: entry.consentToShareInfo,
+      consentToEarlyAccess: entry.consentToEarlyAccess,
       createdAt: entry.createdAt.toISOString(),
       updatedAt: entry.updatedAt.toISOString(),
     }));

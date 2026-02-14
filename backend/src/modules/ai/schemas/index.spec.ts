@@ -4,7 +4,7 @@ import { EVALUATION_SCHEMAS, isZodSchema, RESEARCH_SCHEMAS } from "./index";
 describe("AI schema registry", () => {
   it("contains expected schema counts", () => {
     expect(Object.keys(EVALUATION_SCHEMAS)).toHaveLength(11);
-    expect(Object.keys(RESEARCH_SCHEMAS)).toHaveLength(4);
+    expect(Object.keys(RESEARCH_SCHEMAS)).toHaveLength(5);
   });
 
   it("registers valid zod schemas", () => {

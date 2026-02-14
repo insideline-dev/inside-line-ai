@@ -106,7 +106,8 @@ export class ResearchProcessor
       agentKey === "team" ||
       agentKey === "market" ||
       agentKey === "product" ||
-      agentKey === "news"
+      agentKey === "news" ||
+      agentKey === "competitor"
     ) {
       return agentKey;
     }

@@ -4,6 +4,7 @@ import {
   ConflictException,
   InternalServerErrorException,
   Logger,
+  ForbiddenException,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { ConfigService } from "@nestjs/config";
@@ -56,8 +57,6 @@ export class AuthService {
 
   async findOrCreateOAuthUser(profile: OAuthProfile): Promise<DbUser> {
     try {
-      await this.earlyAccess.assertEmailAllowed(profile.email);
-
       // Check if OAuth account already exists
       const [existingAccount] = await this.drizzle.db
         .select()
@@ -96,6 +95,13 @@ export class AuthService {
       let foundUser = await this.userAuth.findUserByEmail(profile.email);
 
       if (!foundUser) {
+        const isAllowed = await this.earlyAccess.isEmailAllowed(profile.email);
+        if (!isAllowed) {
+          throw new ForbiddenException(
+            "Access is restricted. You have been added to the waitlist as Founder.",
+          );
+        }
+
         foundUser = await this.userAuth.createUser({
           email: profile.email,
           name: profile.name,

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo, useCallback } from "react";
+import { useEffect, useRef, useMemo, useCallback, useState } from "react";
 import { io, Socket } from "socket.io-client";
 import { useCurrentUser } from "./hooks";
 
@@ -94,6 +94,8 @@ export interface AgentProgressEvent {
     key: string;
     status: "pending" | "running" | "completed" | "failed";
     progress?: number;
+    startedAt?: string;
+    completedAt?: string;
     error?: string;
   };
 }
@@ -101,22 +103,25 @@ export interface AgentProgressEvent {
 // ── Hooks ────────────────────────────────────────────────────────────
 
 function useSocket(): Socket | null {
-  const socketRef = useRef<Socket | null>(null);
+  const [socket, setSocket] = useState<Socket | null>(null);
   const { data: user } = useCurrentUser();
 
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      setSocket(null);
+      return;
+    }
 
-    const socket = acquireSocket();
-    socketRef.current = socket;
+    const nextSocket = acquireSocket();
+    setSocket(nextSocket);
 
     return () => {
       releaseSocket();
-      socketRef.current = null;
+      setSocket(null);
     };
   }, [user?.id]);
 
-  return socketRef.current;
+  return socket;
 }
 
 export function useNotificationSocket(

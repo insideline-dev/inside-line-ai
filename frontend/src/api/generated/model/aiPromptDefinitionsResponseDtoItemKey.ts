@@ -15,6 +15,7 @@ export const AiPromptDefinitionsResponseDtoItemKey = {
   researchmarket: 'research.market',
   researchproduct: 'research.product',
   researchnews: 'research.news',
+  researchcompetitor: 'research.competitor',
   evaluationteam: 'evaluation.team',
   evaluationmarket: 'evaluation.market',
   evaluationproduct: 'evaluation.product',

@@ -1,6 +1,7 @@
 import type {
   BusinessModelEvaluation,
   CompetitiveAdvantageEvaluation,
+  CompetitorResearch,
   DealTermsEvaluation,
   ExitPotentialEvaluation,
   FinancialsEvaluation,
@@ -170,7 +171,7 @@ export interface SourceEntry {
   name: string;
   url?: string;
   type: "document" | "website" | "linkedin" | "api" | "search";
-  agent: "team" | "market" | "product" | "news";
+  agent: "team" | "market" | "product" | "news" | "competitor";
   timestamp: string;
 }
 
@@ -179,8 +180,9 @@ export interface ResearchResult {
   market: MarketResearch | null;
   product: ProductResearch | null;
   news: NewsResearch | null;
+  competitor: CompetitorResearch | null;
   sources: SourceEntry[];
-  errors: Array<{ agent: "team" | "market" | "product" | "news"; error: string }>;
+  errors: Array<{ agent: "team" | "market" | "product" | "news" | "competitor"; error: string }>;
 }
 
 export interface EvaluationSummary {

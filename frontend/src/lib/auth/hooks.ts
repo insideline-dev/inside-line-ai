@@ -2,7 +2,13 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { authApi } from "./api";
 import { setAccessToken } from "./token";
-import type { LoginRequest, RegisterRequest, MagicLinkRequest } from "./types";
+import type {
+  LoginRequest,
+  RegisterRequest,
+  MagicLinkRequest,
+  JoinWaitlistRequest,
+  RedeemInviteRequest,
+} from "./types";
 
 export const authKeys = {
   user: ["auth", "user"] as const,
@@ -68,6 +74,18 @@ export function useRegister() {
 export function useRequestMagicLink() {
   return useMutation({
     mutationFn: (data: MagicLinkRequest) => authApi.requestMagicLink(data),
+  });
+}
+
+export function useRedeemInvite() {
+  return useMutation({
+    mutationFn: (data: RedeemInviteRequest) => authApi.redeemInvite(data),
+  });
+}
+
+export function useJoinWaitlist() {
+  return useMutation({
+    mutationFn: (data: JoinWaitlistRequest) => authApi.joinWaitlist(data),
   });
 }
 

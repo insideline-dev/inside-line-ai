@@ -1,27 +1,9 @@
 import { useEffect, useRef } from "react";
 import { Progress } from "@/components/ui/progress";
 import { Loader2, Check, X, FileSearch, Globe, Search, BarChart3, Sparkles, AlertTriangle, Clock3 } from "lucide-react";
-import { useStartupControllerGetProgress } from "@/api/generated/startup/startup";
 import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
-
-interface PhaseProgressData {
-  status: string;
-  progress: number;
-  error?: string;
-}
-
-interface PipelineProgressData {
-  overallProgress: number;
-  currentPhase: string;
-  pipelineStatus?: string;
-  error?: string;
-  phases: Record<string, PhaseProgressData>;
-}
-
-interface GetProgressResponse {
-  progress: PipelineProgressData | null;
-}
+import { useStartupRealtimeProgress } from "@/lib/startup/useStartupRealtimeProgress";
 
 interface AnalysisProgressBarProps {
   startupId: number | string;
@@ -37,19 +19,6 @@ const PHASE_META: Record<string, { label: string; icon: typeof FileSearch }> = {
   evaluation: { label: "Evaluating", icon: BarChart3 },
   synthesis: { label: "Synthesizing", icon: Sparkles },
 };
-
-function unwrapApiResponse<T>(payload: unknown): T {
-  if (
-    payload &&
-    typeof payload === "object" &&
-    "data" in (payload as Record<string, unknown>) &&
-    (payload as Record<string, unknown>).data !== undefined
-  ) {
-    return (payload as Record<string, unknown>).data as T;
-  }
-
-  return payload as T;
-}
 
 function PhaseIcon({
   status,
@@ -74,28 +43,10 @@ export function AnalysisProgressBar({
   const queryClient = useQueryClient();
   const terminalNotified = useRef(false);
 
-  const { data: progressResponse } = useStartupControllerGetProgress(String(startupId), {
-    query: {
-      refetchInterval: (query) => {
-        const raw = query.state.data;
-        if (!raw) return 3000;
-
-        const data = unwrapApiResponse<GetProgressResponse>(raw);
-        const status = data?.progress?.pipelineStatus;
-        if (status === "completed" || status === "failed" || status === "cancelled") {
-          return false;
-        }
-
-        return 3000;
-      },
-    },
+  const { progress } = useStartupRealtimeProgress(String(startupId), {
+    pollMs: 3000,
+    useSocket: true,
   });
-
-  const progressData = progressResponse
-    ? unwrapApiResponse<GetProgressResponse>(progressResponse)
-    : null;
-
-  const progress = progressData?.progress;
   const overallProgress = Math.max(0, Math.min(100, progress?.overallProgress ?? 0));
   const pipelineStatus = progress?.pipelineStatus;
   const isFailed = pipelineStatus === "failed" || PHASE_ORDER.some((p) => progress?.phases?.[p]?.status === "failed");

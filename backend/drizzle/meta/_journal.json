@@ -50,6 +50,20 @@
       "when": 1770672230192,
       "tag": "0006_tidy_garia",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1770902170032,
+      "tag": "0007_goofy_grey_gargoyle",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1770905196396,
+      "tag": "0008_noisy_gabe_jones",
+      "breakpoints": true
     }
   ]
 }

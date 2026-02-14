@@ -19,13 +19,39 @@ export interface CreateThesisDto {
    * @exclusiveMinimum 0
    */
   checkSizeMax?: number;
+  /**
+   * @minimum 0
+   * @nullable
+   */
+  minRevenue?: number | null;
   geographicFocus?: string[];
   /** @maxItems 300 */
   geographicFocusNodes?: string[];
+  businessModels?: string[];
   mustHaveFeatures?: string[];
   dealBreakers?: string[];
   /** @maxLength 5000 */
   notes?: string;
   /** @maxLength 10000 */
   thesisNarrative?: string;
+  /** @maxLength 5000 */
+  antiPortfolio?: string;
+  website?: string;
+  /**
+   * @minimum 0
+   * @nullable
+   */
+  fundSize?: number | null;
+  /**
+   * @minimum 0
+   * @maximum 100
+   * @nullable
+   */
+  minThesisFitScore?: number | null;
+  /**
+   * @minimum 0
+   * @maximum 100
+   * @nullable
+   */
+  minStartupScore?: number | null;
 }

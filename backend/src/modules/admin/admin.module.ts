@@ -50,6 +50,6 @@ import { QueueModule } from '../../queue';
     SystemConfigService,
     BulkDataService,
   ],
-  exports: [AnalyticsService, UserManagementService],
+  exports: [AnalyticsService, UserManagementService, ScoringConfigService],
 })
 export class AdminModule {}

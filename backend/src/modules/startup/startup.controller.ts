@@ -74,13 +74,13 @@ export class StartupController {
   }
 
   @Get()
-  @Roles(UserRole.FOUNDER, UserRole.ADMIN)
+  @Roles(UserRole.FOUNDER, UserRole.INVESTOR, UserRole.ADMIN)
   async findAll(@CurrentUser() user: User, @Query() query: GetStartupsQueryDto) {
     return this.startupService.findAll(user.id, query);
   }
 
   @Get(':id')
-  @Roles(UserRole.FOUNDER, UserRole.ADMIN)
+  @Roles(UserRole.FOUNDER, UserRole.INVESTOR, UserRole.ADMIN)
   async findOne(@CurrentUser() user: User, @Param('id') id: string) {
     if (user.role === UserRole.ADMIN) {
       return this.startupService.adminFindOne(id);

@@ -228,7 +228,7 @@ describe("ProgressTrackerService", () => {
     expect(result).toBeNull();
   });
 
-  it("returns null when analysisProgress has invalid enum values", async () => {
+  it("normalizes analysisProgress when enum-like fields are invalid", async () => {
     storedProgress = {
       pipelineRunId: "run-1",
       startupId: "startup-1",
@@ -242,7 +242,9 @@ describe("ProgressTrackerService", () => {
 
     const result = await service.getProgress("startup-1");
 
-    expect(result).toBeNull();
+    expect(result).not.toBeNull();
+    expect(result?.status).toBe(PipelineStatus.RUNNING);
+    expect(result?.currentPhase).toBe(PipelinePhase.EXTRACTION);
   });
 
   it("returns null when analysisProgress is missing required fields", async () => {
@@ -251,5 +253,79 @@ describe("ProgressTrackerService", () => {
     const result = await service.getProgress("startup-1");
 
     expect(result).toBeNull();
+  });
+
+  it("normalizes legacy stage-based analysis progress payloads", async () => {
+    storedProgress = {
+      currentStage: 4,
+      currentStageLabel: "AI evaluation",
+      completedAgents: ["web", "deck", "team"],
+      currentAgent: "market",
+      startedAt: "2026-02-14T00:00:00.000Z",
+      lastUpdatedAt: "2026-02-14T00:05:00.000Z",
+      stageProgress: [
+        { stage: 1, status: "completed", startedAt: "2026-02-14T00:00:00.000Z", completedAt: "2026-02-14T00:01:00.000Z" },
+        { stage: 2, status: "completed", startedAt: "2026-02-14T00:01:00.000Z", completedAt: "2026-02-14T00:02:00.000Z" },
+        { stage: 3, status: "completed", startedAt: "2026-02-14T00:02:00.000Z", completedAt: "2026-02-14T00:03:00.000Z" },
+        { stage: 4, status: "running", startedAt: "2026-02-14T00:03:00.000Z" },
+      ],
+    };
+
+    const result = await service.getProgress("startup-1");
+
+    expect(result).not.toBeNull();
+    expect(result?.startupId).toBe("startup-1");
+    expect(result?.status).toBe(PipelineStatus.RUNNING);
+    expect(result?.currentPhase).toBe(PipelinePhase.EVALUATION);
+    expect(result?.phases.extraction.status).toBe(PhaseStatus.COMPLETED);
+    expect(result?.phases.evaluation.status).toBe(PhaseStatus.RUNNING);
+  });
+
+  it("normalizes legacy phase-based payloads with agent maps", async () => {
+    storedProgress = {
+      overallProgress: 60,
+      currentPhase: "evaluation",
+      pipelineStatus: "running",
+      phasesCompleted: ["extraction", "scraping", "research"],
+      phases: {
+        extraction: { status: "completed" },
+        scraping: { status: "completed" },
+        research: { status: "completed" },
+        evaluation: {
+          status: "running",
+          agents: {
+            team: { status: "completed", progress: 100 },
+            market: { status: "running", progress: 50 },
+          },
+        },
+      },
+      updatedAt: "2026-02-14T00:05:00.000Z",
+    };
+
+    const result = await service.getProgress("startup-1");
+
+    expect(result).not.toBeNull();
+    expect(result?.currentPhase).toBe(PipelinePhase.EVALUATION);
+    expect(result?.phases.evaluation.agents.team.status).toBe("completed");
+    expect(result?.phases.evaluation.agents.market.progress).toBe(50);
+  });
+
+  it("normalizes minimal legacy payloads with missing required fields", async () => {
+    storedProgress = {
+      status: "INVALID_STATUS",
+      currentPhase: "analysis",
+      phasesCompleted: ["extraction", "research"],
+      lastUpdatedAt: "2026-02-14T00:05:00.000Z",
+    };
+
+    const result = await service.getProgress("startup-1");
+
+    expect(result).not.toBeNull();
+    expect(result?.pipelineRunId).toBe("legacy-startup-1");
+    expect(result?.startupId).toBe("startup-1");
+    expect(result?.status).toBe(PipelineStatus.RUNNING);
+    expect(result?.currentPhase).toBe(PipelinePhase.EVALUATION);
+    expect(result?.phases.extraction.status).toBe(PhaseStatus.COMPLETED);
+    expect(result?.phases.research.status).toBe(PhaseStatus.COMPLETED);
   });
 });

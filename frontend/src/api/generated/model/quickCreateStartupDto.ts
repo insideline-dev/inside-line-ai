@@ -46,6 +46,7 @@ export interface QuickCreateStartupDto {
    * @exclusiveMinimum 0
    */
   teamSize: number;
+  /** @maxItems 50 */
   teamMembers?: QuickCreateStartupDtoTeamMembersItem[];
   pitchDeckUrl?: string;
 }

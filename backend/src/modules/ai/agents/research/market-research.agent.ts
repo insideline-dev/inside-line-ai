@@ -27,6 +27,8 @@ export const MarketResearchAgent: ResearchAgentConfig<MarketResearch> = {
         `${extraction.industry} benchmarks should be validated with external reports`,
       ],
       competitors: [],
+      indirectCompetitors: [],
+      indirectCompetitorsDetailed: [],
       marketTrends: [
         `Early-stage ${extraction.industry} investment interest remains selective`,
       ],

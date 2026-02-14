@@ -20,6 +20,13 @@ export class AiConfigService {
     return this.config.get<number>("AI_PIPELINE_TIMEOUT", 600000);
   }
 
+  getResearchTimeoutMs(): number {
+    return this.config.get<number>(
+      "AI_RESEARCH_TIMEOUT_MS",
+      this.getPipelineTimeoutMs(),
+    );
+  }
+
   getMaxRetries(): number {
     return this.config.get<number>("AI_MAX_RETRIES", 3);
   }

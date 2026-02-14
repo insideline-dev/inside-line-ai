@@ -28,6 +28,8 @@ export class CompetitiveAdvantageEvaluationAgent extends BaseEvaluationAgent<Com
       ) ?? [];
 
     return {
+      marketResearch: research.market,
+      competitiveLandscape: research.market?.competitors ?? [],
       productResearch: research.product,
       extractedFeatures: research.product?.features ?? [],
       patents,

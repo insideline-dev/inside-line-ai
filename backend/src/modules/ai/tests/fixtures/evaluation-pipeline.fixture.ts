@@ -191,6 +191,21 @@ export function createEvaluationPipelineInput(): EvaluationPipelineInput {
             url: "https://opspilot.example.com",
           },
         ],
+        indirectCompetitors: ["Internal ERP custom workflows", "Manual spreadsheet operations"],
+        indirectCompetitorsDetailed: [
+          {
+            name: "Internal ERP custom workflows",
+            description: "Enterprises extending ERP modules instead of adopting dedicated tools",
+            whyIndirect: "Competes for same workflow automation budget",
+            threatLevel: "medium",
+          },
+          {
+            name: "Manual spreadsheet operations",
+            description: "Ops teams relying on spreadsheet-based compliance tracking",
+            whyIndirect: "Low-cost substitute with poor scalability",
+            threatLevel: "low",
+          },
+        ],
         marketTrends: [
           "Regulatory pressure increasing for digital compliance evidence",
           "M&A activity accelerating in industrial workflow software",

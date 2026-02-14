@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Optional } from "@nestjs/common";
 import { EvaluationAgentRegistryService } from "./evaluation-agent-registry.service";
 import { PipelineStateService } from "./pipeline-state.service";
 import { PipelinePhase } from "../interfaces/pipeline.interface";
@@ -10,6 +10,7 @@ import type {
 import type { EvaluationResult } from "../interfaces/phase-results.interface";
 import { EVALUATION_SCHEMAS } from "../schemas";
 import { EVALUATION_AGENT_KEYS } from "../constants/agent-keys";
+import { AiDebugLogService } from "./ai-debug-log.service";
 
 export interface EvaluationRunOptions {
   onAgentComplete?: (payload: EvaluationAgentCompletion) => void;
@@ -21,12 +22,26 @@ export class EvaluationService {
   constructor(
     private pipelineState: PipelineStateService,
     private registry: EvaluationAgentRegistryService,
+    @Optional() private aiDebugLog?: AiDebugLogService,
   ) {}
 
   async run(
     startupId: string,
     options?: EvaluationRunOptions,
   ): Promise<EvaluationResult> {
+    const handleAgentComplete = (payload: EvaluationAgentCompletion) => {
+      void this.aiDebugLog?.logAgentResult({
+        startupId,
+        phase: PipelinePhase.EVALUATION,
+        agentKey: payload.agent,
+        usedFallback: payload.usedFallback,
+        error: payload.error,
+        output: payload.output,
+      });
+
+      options?.onAgentComplete?.(payload);
+    };
+
     const pipelineInput = await this.loadPipelineInput(startupId);
     if (options?.agentKey) {
       const current = await this.pipelineState.getPhaseResult(
@@ -38,7 +53,7 @@ export class EvaluationService {
         return this.registry.runAll(
           startupId,
           pipelineInput,
-          options.onAgentComplete,
+          handleAgentComplete,
         );
       }
 
@@ -47,14 +62,12 @@ export class EvaluationService {
         options.agentKey,
         pipelineInput,
       );
-      if (options.onAgentComplete) {
-        options.onAgentComplete(rerun);
-      }
+      handleAgentComplete(rerun);
 
       return this.mergeAgentResult(current, rerun);
     }
 
-    return this.registry.runAll(startupId, pipelineInput, options?.onAgentComplete);
+    return this.registry.runAll(startupId, pipelineInput, handleAgentComplete);
   }
 
   private async loadPipelineInput(startupId: string): Promise<EvaluationPipelineInput> {

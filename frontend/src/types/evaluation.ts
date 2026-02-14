@@ -34,6 +34,7 @@ export interface TeamComposition {
   hasBusinessLeader: boolean;
   hasTechnicalLeader: boolean;
   hasIndustryExpert: boolean;
+  hasOperationsLeader?: boolean;
   teamBalance: string;
   gapsIdentified: string[];
 }

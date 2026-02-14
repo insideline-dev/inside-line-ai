@@ -36,6 +36,10 @@ export function createMockEvaluationResult(
       tamEstimate: 8_500_000_000,
       marketTiming: "Favorable regulatory and tooling cycle",
       credibilityScore: 74,
+      directCompetitors: ["FactoryCloud", "OpsPilot"],
+      indirectCompetitors: ["Internal ERP custom workflows"],
+      directCompetitorsDetailed: [],
+      indirectCompetitorsDetailed: [],
     },
     product: {
       ...base,
@@ -82,6 +86,10 @@ export function createMockEvaluationResult(
       moats: ["Domain workflow specialization"],
       competitivePosition: "Strong category entrant",
       barriers: ["Integration depth", "Operational data loops"],
+      directCompetitors: ["FactoryCloud", "OpsPilot"],
+      indirectCompetitors: ["Internal ERP custom workflows"],
+      directCompetitorsDetailed: [],
+      indirectCompetitorsDetailed: [],
     },
     legal: {
       ...base,

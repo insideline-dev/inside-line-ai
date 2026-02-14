@@ -17,11 +17,13 @@ import {
 } from "@/components/ui/alert-dialog";
 import { StartupHeader } from "@/components/startup-view/StartupHeader";
 import { AdminSummaryTab } from "@/components/startup-view/AdminSummaryTab";
+import { AdminReviewSidebar } from "@/components/startup-view/AdminReviewSidebar";
 import { TeamTabContent } from "@/components/startup-view/TeamTabContent";
 import { ProductTabContent } from "@/components/startup-view/ProductTabContent";
 import { MemoTabContent } from "@/components/startup-view/MemoTabContent";
 import { CompetitorsTabContent } from "@/components/startup-view/CompetitorsTabContent";
-import { InsightsTabContent } from "@/components/startup-view/InsightsTabContent";
+import { SourcesTabContent } from "@/components/startup-view/SourcesTabContent";
+import { AdminEditTab } from "@/components/startup-view/AdminEditTab";
 import { AnalysisProgress } from "@/components/AnalysisProgress";
 import {
   RefreshCw,
@@ -209,67 +211,90 @@ function AdminReviewPage() {
       )}
 
       {evaluation && (
-        <Tabs defaultValue="summary" className="w-full">
-          <TabsList>
-            <TabsTrigger value="summary">Summary</TabsTrigger>
-            <TabsTrigger value="team">Team</TabsTrigger>
-            <TabsTrigger value="product">Product</TabsTrigger>
-            <TabsTrigger value="memo">Memo</TabsTrigger>
-            <TabsTrigger value="competitors">Competitors</TabsTrigger>
-            <TabsTrigger value="insights">Insights</TabsTrigger>
-          </TabsList>
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+          <Tabs defaultValue="summary" className="w-full min-w-0">
+            <TabsList className="grid h-auto w-full grid-cols-8 rounded-xl bg-muted/60 p-2">
+              <TabsTrigger value="summary" className="w-full">Summary</TabsTrigger>
+              <TabsTrigger value="memo" className="w-full">Memo</TabsTrigger>
+              <TabsTrigger value="product" className="w-full">Product</TabsTrigger>
+              <TabsTrigger value="team" className="w-full">Team</TabsTrigger>
+              <TabsTrigger value="competitors" className="w-full">Competitors</TabsTrigger>
+              <TabsTrigger value="sources" className="w-full">Sources</TabsTrigger>
+              <TabsTrigger value="edit" className="w-full">Edit</TabsTrigger>
+              <TabsTrigger value="raw" className="w-full">Raw</TabsTrigger>
+            </TabsList>
 
-          <TabsContent value="summary" className="mt-6">
-            <AdminSummaryTab
-              startup={startup}
-              evaluation={evaluation}
-              weights={stageWeights}
-              adminNotes={adminNotes}
-              onAdminNotesChange={setAdminNotes}
-              onApprove={() => setShowApproveDialog(true)}
-              onReject={() => setShowRejectDialog(true)}
-              approveDisabled={approveMutation.isPending || rejectMutation.isPending}
-              rejectDisabled={approveMutation.isPending || rejectMutation.isPending}
-              canApproveReject={canApproveReject}
-            />
-          </TabsContent>
+            <TabsContent value="summary" className="mt-6">
+              <AdminSummaryTab
+                startup={startup}
+                evaluation={evaluation}
+                weights={stageWeights}
+              />
+            </TabsContent>
 
-          <TabsContent value="team" className="mt-6">
-            <TeamTabContent
-              evaluation={evaluation}
-              teamMembers={startup.teamMembers || []}
-              teamWeight={stageWeights?.team}
-              companyName={startup.name}
-            />
-          </TabsContent>
+            <TabsContent value="team" className="mt-6">
+              <TeamTabContent
+                evaluation={evaluation}
+                teamMembers={startup.teamMembers || []}
+                teamWeight={stageWeights?.team}
+                companyName={startup.name}
+              />
+            </TabsContent>
 
-          <TabsContent value="product" className="mt-6">
-            <ProductTabContent
-              startup={startup}
-              evaluation={evaluation}
-              productWeight={stageWeights?.product}
-            />
-          </TabsContent>
+            <TabsContent value="product" className="mt-6">
+              <ProductTabContent
+                startup={startup}
+                evaluation={evaluation}
+                productWeight={stageWeights?.product}
+              />
+            </TabsContent>
 
-          <TabsContent value="memo" className="mt-6">
-            <MemoTabContent
-              startup={startup}
-              evaluation={evaluation}
-              weights={stageWeights}
-            />
-          </TabsContent>
+            <TabsContent value="memo" className="mt-6">
+              <MemoTabContent
+                startup={startup}
+                evaluation={evaluation}
+                weights={stageWeights}
+              />
+            </TabsContent>
 
-          <TabsContent value="competitors" className="mt-6">
-            <CompetitorsTabContent
-              evaluation={evaluation}
-              companyName={startup.name}
-            />
-          </TabsContent>
+            <TabsContent value="competitors" className="mt-6">
+              <CompetitorsTabContent
+                evaluation={evaluation}
+                companyName={startup.name}
+              />
+            </TabsContent>
 
-          <TabsContent value="insights" className="mt-6">
-            <InsightsTabContent evaluation={evaluation} />
-          </TabsContent>
-        </Tabs>
+            <TabsContent value="sources" className="mt-6">
+              <SourcesTabContent startup={startup} evaluation={evaluation} />
+            </TabsContent>
+
+            <TabsContent value="edit" className="mt-6">
+              <AdminEditTab startup={startup} />
+            </TabsContent>
+
+            <TabsContent value="raw" className="mt-6">
+              <Card>
+                <CardContent className="p-0">
+                  <pre className="max-h-[620px] overflow-auto rounded-lg bg-muted/30 p-4 text-xs leading-relaxed">
+                    {JSON.stringify({ startup, evaluation }, null, 2)}
+                  </pre>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+
+          <AdminReviewSidebar
+            startup={startup}
+            evaluation={evaluation}
+            adminNotes={adminNotes}
+            onAdminNotesChange={setAdminNotes}
+            onApprove={() => setShowApproveDialog(true)}
+            onReject={() => setShowRejectDialog(true)}
+            approveDisabled={approveMutation.isPending || rejectMutation.isPending}
+            rejectDisabled={approveMutation.isPending || rejectMutation.isPending}
+            canApproveReject={canApproveReject}
+          />
+        </div>
       )}
 
       <AlertDialog open={showApproveDialog} onOpenChange={setShowApproveDialog}>

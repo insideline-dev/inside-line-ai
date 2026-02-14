@@ -76,6 +76,7 @@ export class ScrapingService {
     const discoveredLinkedinLeaders = await this.discoverCompanyLinkedinLeadership(
       record.name,
       [...submittedTeamMembers, ...discoveredWebsiteLeaders],
+      record.website ?? undefined,
     );
     const teamMembers = this.mergeTeamMembers(
       submittedTeamMembers,
@@ -221,11 +222,13 @@ export class ScrapingService {
   private async discoverCompanyLinkedinLeadership(
     companyName: string,
     existingMembers: TeamMemberInput[],
+    companyWebsite?: string,
   ): Promise<TeamMemberInput[]> {
     try {
       return await this.linkedinEnrichment.discoverCompanyLeadershipMembers(
         companyName,
         existingMembers,
+        companyWebsite,
       );
     } catch (error) {
       const message = this.asMessage(error);

@@ -3,42 +3,8 @@ import { getAccessToken, setAccessToken } from "@/lib/auth/token";
 
 const API_BASE_URL = env.VITE_API_BASE_URL;
 
+// Token refresh state (prevents concurrent refresh calls)
 let refreshPromise: Promise<boolean> | null = null;
-
-type ApiError = Error & {
-  status?: number;
-  data?: unknown;
-};
-
-function createApiError(message: string, status?: number, data?: unknown): ApiError {
-  const err = new Error(message) as ApiError;
-  err.status = status;
-  err.data = data;
-  return err;
-}
-
-function stripQuery(url: string): string {
-  return url.split("?")[0] || url;
-}
-
-function shouldAttemptRefresh(url: string): boolean {
-  const path = stripQuery(url);
-  return path !== "/auth/refresh" && path !== "/auth/me";
-}
-
-function redirectToLogin(): void {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  if (window.location.pathname === "/login") {
-    return;
-  }
-
-  const redirectPath = `${window.location.pathname}${window.location.search}`;
-  sessionStorage.setItem("redirectAfterAuth", redirectPath);
-  window.location.href = `/login?redirect=${encodeURIComponent(redirectPath)}`;
-}
 
 async function refreshToken(): Promise<boolean> {
   try {
@@ -46,16 +12,12 @@ async function refreshToken(): Promise<boolean> {
       method: "POST",
       credentials: "include",
     });
-
-    if (!res.ok) {
-      return false;
+    if (res.ok) {
+      const data = await res.json();
+      if (data.accessToken) setAccessToken(data.accessToken);
+      return true;
     }
-
-    const data = await res.json().catch(() => ({}));
-    if (data.accessToken) {
-      setAccessToken(data.accessToken);
-    }
-    return true;
+    return false;
   } catch {
     return false;
   }
@@ -63,33 +25,29 @@ async function refreshToken(): Promise<boolean> {
 
 export async function customFetch<T>(
   url: string,
-  options: RequestInit = {},
+  options: RequestInit = {}
 ): Promise<T> {
   const headers: Record<string, string> = {
+    "Content-Type": "application/json",
     ...(options.headers as Record<string, string>),
   };
 
-  const hasBody = options.body !== undefined && options.body !== null;
-  const isFormData =
-    typeof FormData !== "undefined" && options.body instanceof FormData;
-  if (hasBody && !isFormData && !headers["Content-Type"]) {
-    headers["Content-Type"] = "application/json";
-  }
-
   const token = getAccessToken();
   if (token) {
-    headers.Authorization = `Bearer ${token}`;
+    headers["Authorization"] = `Bearer ${token}`;
   }
 
   const config: RequestInit = {
     ...options,
-    credentials: "include",
+    credentials: "include", // Cookies as fallback
     headers,
   };
 
   let response = await fetch(`${API_BASE_URL}${url}`, config);
 
-  if (response.status === 401 && shouldAttemptRefresh(url)) {
+  // Handle 401 - attempt token refresh (skip for the refresh endpoint itself)
+  if (response.status === 401 && url !== "/auth/refresh") {
+    // Deduplicate: reuse in-flight refresh, or start a new one
     if (!refreshPromise) {
       refreshPromise = refreshToken().finally(() => {
         refreshPromise = null;
@@ -99,35 +57,28 @@ export async function customFetch<T>(
     const refreshed = await refreshPromise;
 
     if (refreshed) {
+      // Retry with new token
       const retryToken = getAccessToken();
       if (retryToken) {
-        headers.Authorization = `Bearer ${retryToken}`;
+        headers["Authorization"] = `Bearer ${retryToken}`;
       }
-      response = await fetch(`${API_BASE_URL}${url}`, {
-        ...config,
-        headers,
-      });
+      response = await fetch(`${API_BASE_URL}${url}`, { ...config, headers });
     } else {
       setAccessToken(null);
-      if (token) {
-        redirectToLogin();
-        throw createApiError("Session expired", 401);
-      }
+      throw new Error("Session expired");
     }
   }
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    const message =
-      typeof error?.message === "string"
-        ? error.message
-        : `HTTP ${response.status}`;
-    throw createApiError(message, response.status, error);
+    throw new Error(error.message || `HTTP ${response.status}`);
   }
 
+  // Handle empty responses (204, etc.)
   const text = await response.text();
-  return text ? (JSON.parse(text) as T) : (null as T);
+  return text ? JSON.parse(text) : (null as T);
 }
 
+// Orval mutator signature exports
 export type ErrorType<E> = E;
 export type BodyType<B> = B;

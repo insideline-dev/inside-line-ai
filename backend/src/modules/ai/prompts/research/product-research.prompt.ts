@@ -10,8 +10,6 @@ IMPORTANT RULES:
 export const PRODUCT_RESEARCH_HUMAN_PROMPT = `Research the startup's product and technology signals.
 Focus on product pages, features, integrations, technical stack clues, and customer review sentiment.
 
-If gap analysis directives are provided in the context, prioritize researching those specific gaps before general exploration.
-
 Context:
 {{contextJson}}
 

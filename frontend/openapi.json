@@ -3813,16 +3813,6 @@
             }
           },
           {
-            "name": "minThesisFitScore",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "minimum": 0,
-              "maximum": 100,
-              "type": "integer"
-            }
-          },
-          {
             "name": "isSaved",
             "required": false,
             "in": "query",
@@ -4086,20 +4076,6 @@
     "/investor/messaging/conversations": {
       "get": {
         "operationId": "InvestorController_getConversations",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "Investor"
-        ]
-      }
-    },
-    "/investor/scoring/defaults": {
-      "get": {
-        "operationId": "InvestorController_getScoringDefaults",
         "parameters": [],
         "responses": {
           "200": {
@@ -7770,11 +7746,6 @@
             "maximum": 9007199254740991,
             "minimum": 0
           },
-          "minRevenue": {
-            "type": "integer",
-            "minimum": 0,
-            "nullable": true
-          },
           "geographicFocus": {
             "type": "array",
             "items": {
@@ -7788,12 +7759,6 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 100
-            }
-          },
-          "businessModels": {
-            "type": "array",
-            "items": {
-              "type": "string"
             }
           },
           "mustHaveFeatures": {
@@ -7815,31 +7780,6 @@
           "thesisNarrative": {
             "type": "string",
             "maxLength": 10000
-          },
-          "antiPortfolio": {
-            "type": "string",
-            "maxLength": 5000
-          },
-          "website": {
-            "type": "string",
-            "format": "uri"
-          },
-          "fundSize": {
-            "type": "number",
-            "minimum": 0,
-            "nullable": true
-          },
-          "minThesisFitScore": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 100,
-            "nullable": true
-          },
-          "minStartupScore": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 100,
-            "nullable": true
           }
         }
       },
@@ -8043,24 +7983,6 @@
               "dealTerms",
               "exitPotential"
             ],
-            "nullable": true
-          },
-          "customRationale": {
-            "type": "object",
-            "properties": {
-              "team": { "type": "string", "maxLength": 2000 },
-              "market": { "type": "string", "maxLength": 2000 },
-              "product": { "type": "string", "maxLength": 2000 },
-              "traction": { "type": "string", "maxLength": 2000 },
-              "businessModel": { "type": "string", "maxLength": 2000 },
-              "gtm": { "type": "string", "maxLength": 2000 },
-              "financials": { "type": "string", "maxLength": 2000 },
-              "competitiveAdvantage": { "type": "string", "maxLength": 2000 },
-              "legal": { "type": "string", "maxLength": 2000 },
-              "dealTerms": { "type": "string", "maxLength": 2000 },
-              "exitPotential": { "type": "string", "maxLength": 2000 }
-            },
-            "required": ["team", "market", "product", "traction", "businessModel", "gtm", "financials", "competitiveAdvantage", "legal", "dealTerms", "exitPotential"],
             "nullable": true
           }
         },

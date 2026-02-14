@@ -7,9 +7,19 @@ export const MarketCompetitorSchema = z.object({
   url: z.string().url().optional(),
 });
 
+export const MarketIndirectCompetitorSchema = z.object({
+  name: z.string().min(1),
+  description: z.string().min(1),
+  whyIndirect: z.string().min(1).optional(),
+  threatLevel: z.enum(["high", "medium", "low"]).optional(),
+  url: z.string().url().optional(),
+});
+
 export const MarketResearchSchema = z.object({
   marketReports: z.array(z.string()).default([]),
   competitors: z.array(MarketCompetitorSchema).default([]),
+  indirectCompetitors: z.array(z.string()).default([]),
+  indirectCompetitorsDetailed: z.array(MarketIndirectCompetitorSchema).default([]),
   marketTrends: z.array(z.string()).default([]),
   marketSize: z
     .object({

@@ -4,7 +4,6 @@ import {
   ResearchResult,
   ScrapingResult,
 } from "./phase-results.interface";
-import type { GapReport } from "./gap-analysis.interface";
 
 export type ResearchAgentKey = "team" | "market" | "product" | "news";
 
@@ -24,7 +23,6 @@ export type EvaluationAgentKey =
 export interface ResearchPipelineInput {
   extraction: ExtractionResult;
   scraping: ScrapingResult;
-  gapReport?: GapReport;
 }
 
 export interface EvaluationPipelineInput {

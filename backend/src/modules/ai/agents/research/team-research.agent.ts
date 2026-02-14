@@ -13,14 +13,12 @@ export const TeamResearchAgent: ResearchAgentConfig<TeamResearch> = {
   systemPrompt: TEAM_RESEARCH_SYSTEM_PROMPT,
   humanPromptTemplate: TEAM_RESEARCH_HUMAN_PROMPT,
   schema: TeamResearchSchema,
-  contextBuilder: ({ extraction, scraping, gapReport }) => ({
+  contextBuilder: ({ extraction, scraping }) => ({
     companyName: extraction.companyName,
     teamMembers: scraping.teamMembers,
     companyDescription: extraction.rawText,
     industry: extraction.industry,
     websiteUrl: extraction.website,
-    gapDirectives: gapReport?.categories.find(c => c.category === "team")?.researchDirectives ?? [],
-    gapPriority: gapReport?.categories.find(c => c.category === "team")?.priority ?? "medium",
   }),
   fallback: ({ extraction, scraping }) => {
     const websiteUrl = toValidUrl(extraction.website);

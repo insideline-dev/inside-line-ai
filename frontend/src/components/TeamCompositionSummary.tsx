@@ -45,16 +45,16 @@ function RoleIndicator({
     <div
       className={`flex items-center gap-2 p-3 rounded-lg border ${
         hasRole
-          ? "bg-chart-2/10 border-chart-2/30"
-          : "bg-chart-5/10 border-chart-5/30"
+          ? "bg-violet-500/10 border-violet-400/35"
+          : "bg-rose-500/10 border-rose-400/35"
       }`}
     >
-      <Icon className={`w-5 h-5 ${hasRole ? "text-chart-2" : "text-chart-5"}`} />
+      <Icon className={`w-5 h-5 ${hasRole ? "text-violet-500" : "text-rose-500"}`} />
       <span className="text-sm font-medium flex-1">{label}</span>
       {hasRole ? (
-        <CheckCircle2 className="w-4 h-4 text-chart-2" />
+        <CheckCircle2 className="w-4 h-4 text-violet-500" />
       ) : (
-        <XCircle className="w-4 h-4 text-chart-5" />
+        <XCircle className="w-4 h-4 text-rose-500" />
       )}
     </div>
   );
@@ -148,7 +148,7 @@ export function TeamCompositionSummary({
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
-                <CheckCircle2 className="w-5 h-5 text-chart-2" />
+                <CheckCircle2 className="w-5 h-5 text-violet-500" />
                 Team Strengths
               </CardTitle>
             </CardHeader>
@@ -156,7 +156,7 @@ export function TeamCompositionSummary({
               <ul className="space-y-2">
                 {keyStrengths.slice(0, 5).map((strength, idx) => (
                   <li key={idx} className="flex items-start gap-2 text-sm">
-                    <CheckCircle2 className="w-4 h-4 mt-0.5 text-chart-2 shrink-0" />
+                    <CheckCircle2 className="w-4 h-4 mt-0.5 text-violet-500 shrink-0" />
                     <span>{strength}</span>
                   </li>
                 ))}
@@ -169,7 +169,7 @@ export function TeamCompositionSummary({
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
-                <AlertTriangle className="w-5 h-5 text-chart-5" />
+                <AlertTriangle className="w-5 h-5 text-rose-500" />
                 Team Risks
               </CardTitle>
             </CardHeader>
@@ -177,7 +177,7 @@ export function TeamCompositionSummary({
               <ul className="space-y-2">
                 {keyRisks.slice(0, 5).map((risk, idx) => (
                   <li key={idx} className="flex items-start gap-2 text-sm">
-                    <AlertTriangle className="w-4 h-4 mt-0.5 text-chart-5 shrink-0" />
+                    <AlertTriangle className="w-4 h-4 mt-0.5 text-rose-500 shrink-0" />
                     <span>{risk}</span>
                   </li>
                 ))}

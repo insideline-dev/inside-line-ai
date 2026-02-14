@@ -21,7 +21,7 @@ export const ProductResearchAgent: ResearchAgentConfig<ProductResearch> = {
   systemPrompt: PRODUCT_RESEARCH_SYSTEM_PROMPT,
   humanPromptTemplate: PRODUCT_RESEARCH_HUMAN_PROMPT,
   schema: ProductResearchSchema,
-  contextBuilder: ({ extraction, scraping, gapReport }) => ({
+  contextBuilder: ({ extraction, scraping }) => ({
     productDescription: extraction.rawText,
     knownCompetitors: [],
     websiteProductPages:
@@ -36,8 +36,6 @@ export const ProductResearchAgent: ResearchAgentConfig<ProductResearch> = {
     // Page headings provided as context signals, not confirmed product features
     websiteHeadings:
       scraping.website?.headings.filter((heading) => heading.trim().length > 0) ?? [],
-    gapDirectives: gapReport?.categories.find(c => c.category === "product")?.researchDirectives ?? [],
-    gapPriority: gapReport?.categories.find(c => c.category === "product")?.priority ?? "medium",
   }),
   fallback: ({ extraction }) => {
     const websiteUrl = toValidUrl(extraction.website);

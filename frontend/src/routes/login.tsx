@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -23,42 +23,35 @@ import {
 } from "@/components/ui/form";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  useLogin,
-  useRegister,
   useRequestMagicLink,
-  useGoogleAuth,
   useCurrentUser,
+  useGoogleAuth,
+  useRedeemInvite,
+  useJoinWaitlist,
 } from "@/lib/auth";
 import { env } from "@/env";
 import { safeRedirect } from "@/lib/utils";
-
-const loginSchema = z.object({
-  email: z.string().min(1, "Email is required").email("Invalid email address"),
-  password: z.string().min(1, "Password is required"),
-});
-
-const registerSchema = z.object({
-  name: z.string().min(1, "Name is required").max(100),
-  email: z.string().min(1, "Email is required").email("Invalid email address"),
-  password: z
-    .string()
-    .min(8, "Password must be at least 8 characters")
-    .regex(/[a-zA-Z]/, "Password must contain at least one letter")
-    .regex(/[0-9]/, "Password must contain at least one number"),
-});
 
 const magicLinkSchema = z.object({
   email: z.string().min(1, "Email is required").email("Invalid email address"),
 });
 
+const waitlistSchema = z.object({
+  name: z.string().min(1, "Name is required").max(120),
+  email: z.string().min(1, "Email is required").email("Invalid email address"),
+  companyName: z.string().min(1, "Company name is required").max(180),
+  role: z.string().min(1, "Role is required").max(120),
+  website: z.string().url("Must be a valid URL").max(500),
+});
+
 const searchSchema = z.object({
   redirect: z.string().optional(),
   error: z.string().optional(),
+  invite: z.string().optional(),
 });
 
-type LoginFormValues = z.infer<typeof loginSchema>;
-type RegisterFormValues = z.infer<typeof registerSchema>;
 type MagicLinkFormValues = z.infer<typeof magicLinkSchema>;
+type WaitlistFormValues = z.infer<typeof waitlistSchema>;
 
 export const Route = createFileRoute("/login")({
   validateSearch: searchSchema,
@@ -68,94 +61,120 @@ export const Route = createFileRoute("/login")({
 function LoginPage() {
   const navigate = useNavigate();
   const { data: user, isLoading: isCheckingAuth } = useCurrentUser();
-  const [authMode, setAuthMode] = useState<"signin" | "signup" | "magic">(
-    "signin"
-  );
-  const { redirect, error } = Route.useSearch();
+  const [authMode, setAuthMode] = useState<"magic" | "waitlist">("magic");
+  const { redirect, error, invite } = Route.useSearch();
 
-  const loginMutation = useLogin();
-  const registerMutation = useRegister();
   const magicLinkMutation = useRequestMagicLink();
+  const waitlistMutation = useJoinWaitlist();
+  const redeemInviteMutation = useRedeemInvite();
   const { signIn: googleSignIn } = useGoogleAuth();
+  const didRedeemInvite = useRef(false);
 
-  // Show error from OAuth callback
   useEffect(() => {
     if (error) {
       toast.error(error);
     }
   }, [error]);
 
-  // Persist redirect intent to sessionStorage (survives OAuth full-page redirects)
   useEffect(() => {
     if (redirect) {
       sessionStorage.setItem("redirectAfterAuth", safeRedirect(redirect, "/"));
     }
   }, [redirect]);
 
-  // Only auto-redirect if user was already logged in on page load.
-  // Skip when a mutation just completed — hooks handle their own navigation.
-  const skipAutoRedirect = loginMutation.isSuccess || registerMutation.isSuccess;
+  const magicLinkForm = useForm<MagicLinkFormValues>({
+    resolver: zodResolver(magicLinkSchema),
+    defaultValues: { email: "" },
+  });
+
+  const waitlistForm = useForm<WaitlistFormValues>({
+    resolver: zodResolver(waitlistSchema),
+    defaultValues: {
+      name: "",
+      email: "",
+      companyName: "",
+      role: "",
+      website: "",
+    },
+  });
+
+  useEffect(() => {
+    if (!invite || didRedeemInvite.current) {
+      return;
+    }
+
+    didRedeemInvite.current = true;
+    redeemInviteMutation.mutate(
+      { token: invite },
+      {
+        onSuccess: (data) => {
+          toast.success(data.message);
+          magicLinkForm.setValue("email", data.email);
+          waitlistForm.setValue("email", data.email);
+          setAuthMode("magic");
+          navigate({
+            to: "/login",
+            search: (prev) => ({
+              ...prev,
+              invite: undefined,
+            }),
+            replace: true,
+          });
+        },
+        onError: (err) => {
+          toast.error(err.message || "Invalid or expired invite link");
+        },
+      },
+    );
+  }, [
+    invite,
+    redeemInviteMutation,
+    magicLinkForm,
+    waitlistForm,
+    navigate,
+  ]);
 
   useEffect(() => {
     if (env.VITE_MOCK_AUTH) {
       navigate({ to: safeRedirect(redirect, "/role-select"), replace: true });
       return;
     }
-    if (!isCheckingAuth && user && !skipAutoRedirect) {
+    if (!isCheckingAuth && user) {
       const defaultRoute = user.onboardingCompleted
         ? `/${user.role}`
         : "/role-select";
       navigate({ to: safeRedirect(redirect, defaultRoute), replace: true });
     }
-  }, [isCheckingAuth, user, redirect, navigate, skipAutoRedirect]);
-
-  const loginForm = useForm<LoginFormValues>({
-    resolver: zodResolver(loginSchema),
-    defaultValues: { email: "", password: "" },
-  });
-
-  const registerForm = useForm<RegisterFormValues>({
-    resolver: zodResolver(registerSchema),
-    defaultValues: { name: "", email: "", password: "" },
-  });
-
-  const magicLinkForm = useForm<MagicLinkFormValues>({
-    resolver: zodResolver(magicLinkSchema),
-    defaultValues: { email: "" },
-  });
-
-  const onLogin = (values: LoginFormValues) => {
-    loginMutation.mutate(values, {
-      onSuccess: () => toast.success("Signed in successfully!"),
-      onError: (err) => toast.error(err.message || "Sign in failed"),
-    });
-  };
-
-  const onRegister = (values: RegisterFormValues) => {
-    registerMutation.mutate(values, {
-      onSuccess: () => toast.success("Account created! Check your email to verify."),
-      onError: (err) => toast.error(err.message || "Sign up failed"),
-    });
-  };
+  }, [isCheckingAuth, user, redirect, navigate]);
 
   const onMagicLink = (values: MagicLinkFormValues) => {
     magicLinkMutation.mutate(values, {
       onSuccess: () => {
         toast.success("Magic link sent! Check your email.");
-        magicLinkForm.reset();
+        magicLinkForm.reset({ email: values.email });
       },
       onError: (err) => toast.error(err.message || "Failed to send magic link"),
     });
   };
 
+  const onJoinWaitlist = (values: WaitlistFormValues) => {
+    waitlistMutation.mutate(values, {
+      onSuccess: (res) => {
+        toast.success(res.message || "You have been added to the waitlist");
+      },
+      onError: (err) => {
+        toast.error(err.message || "Failed to join waitlist");
+      },
+    });
+  };
+
   const isLoading =
-    loginMutation.isPending ||
-    registerMutation.isPending ||
-    magicLinkMutation.isPending;
+    magicLinkMutation.isPending ||
+    waitlistMutation.isPending ||
+    redeemInviteMutation.isPending;
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
-      {/* Logo */}
       <div className="mb-8 text-center">
         <div className="flex flex-wrap items-center justify-center gap-1.5">
           <span className="text-4xl font-bold tracking-tight text-foreground">
@@ -170,23 +189,12 @@ function LoginPage() {
 
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle>
-            {authMode === "signup"
-              ? "Create Account"
-              : authMode === "magic"
-                ? "Magic Link"
-                : "Welcome Back"}
-          </CardTitle>
+          <CardTitle>Sign In</CardTitle>
           <CardDescription>
-            {authMode === "signup"
-              ? "Sign up to get started"
-              : authMode === "magic"
-                ? "Sign in with a magic link"
-                : "Sign in to your account"}
+            Magic link only. Request access if you are not invited yet.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Google Sign In */}
           <Button
             type="button"
             variant="outline"
@@ -202,149 +210,18 @@ function LoginPage() {
               <span className="w-full border-t" />
             </div>
             <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-background px-2 text-muted-foreground">
-                Or
-              </span>
+              <span className="bg-background px-2 text-muted-foreground">Or</span>
             </div>
           </div>
 
           <Tabs
             value={authMode}
-            onValueChange={(v) =>
-              setAuthMode(v as "signin" | "signup" | "magic")
-            }
+            onValueChange={(v) => setAuthMode(v as "magic" | "waitlist")}
           >
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="signin">Sign In</TabsTrigger>
-              <TabsTrigger value="signup">Sign Up</TabsTrigger>
+            <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="magic">Magic Link</TabsTrigger>
+              <TabsTrigger value="waitlist">Join Waitlist</TabsTrigger>
             </TabsList>
-
-            <TabsContent value="signin" className="mt-4">
-              <Form {...loginForm}>
-                <form
-                  onSubmit={loginForm.handleSubmit(onLogin)}
-                  className="space-y-4"
-                >
-                  <FormField
-                    control={loginForm.control}
-                    name="email"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Email</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="email"
-                            placeholder="you@example.com"
-                            disabled={isLoading}
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={loginForm.control}
-                    name="password"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Password</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="password"
-                            placeholder="••••••••"
-                            disabled={isLoading}
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <Button
-                    type="submit"
-                    className="w-full"
-                    disabled={isLoading}
-                  >
-                    {loginMutation.isPending ? "Signing in..." : "Sign In"}
-                  </Button>
-                </form>
-              </Form>
-            </TabsContent>
-
-            <TabsContent value="signup" className="mt-4">
-              <Form {...registerForm}>
-                <form
-                  onSubmit={registerForm.handleSubmit(onRegister)}
-                  className="space-y-4"
-                >
-                  <FormField
-                    control={registerForm.control}
-                    name="name"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Name</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="text"
-                            placeholder="Your name"
-                            disabled={isLoading}
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={registerForm.control}
-                    name="email"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Email</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="email"
-                            placeholder="you@example.com"
-                            disabled={isLoading}
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={registerForm.control}
-                    name="password"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Password</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="password"
-                            placeholder="••••••••"
-                            disabled={isLoading}
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <Button
-                    type="submit"
-                    className="w-full"
-                    disabled={isLoading}
-                  >
-                    {registerMutation.isPending
-                      ? "Creating account..."
-                      : "Create Account"}
-                  </Button>
-                </form>
-              </Form>
-            </TabsContent>
 
             <TabsContent value="magic" className="mt-4">
               <Form {...magicLinkForm}>
@@ -375,13 +252,99 @@ function LoginPage() {
                     className="w-full"
                     disabled={isLoading}
                   >
-                    {magicLinkMutation.isPending
-                      ? "Sending..."
-                      : "Send Magic Link"}
+                    {magicLinkMutation.isPending ? "Sending..." : "Send Magic Link"}
                   </Button>
                   <p className="text-xs text-muted-foreground text-center">
-                    We'll email you a link to sign in instantly
+                    We&apos;ll email you a secure sign-in link.
                   </p>
+                </form>
+              </Form>
+            </TabsContent>
+
+            <TabsContent value="waitlist" className="mt-4">
+              <Form {...waitlistForm}>
+                <form
+                  onSubmit={waitlistForm.handleSubmit(onJoinWaitlist)}
+                  className="space-y-4"
+                >
+                  <FormField
+                    control={waitlistForm.control}
+                    name="name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Name</FormLabel>
+                        <FormControl>
+                          <Input disabled={isLoading} {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={waitlistForm.control}
+                    name="email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Email</FormLabel>
+                        <FormControl>
+                          <Input type="email" disabled={isLoading} {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={waitlistForm.control}
+                    name="companyName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Company Name</FormLabel>
+                        <FormControl>
+                          <Input disabled={isLoading} {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={waitlistForm.control}
+                    name="role"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Role</FormLabel>
+                        <FormControl>
+                          <Input disabled={isLoading} {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={waitlistForm.control}
+                    name="website"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Website</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="url"
+                            placeholder="https://example.com"
+                            disabled={isLoading}
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <Button type="submit" className="w-full" disabled={isLoading}>
+                    {waitlistMutation.isPending ? "Submitting..." : "Join Waitlist"}
+                  </Button>
                 </form>
               </Form>
             </TabsContent>

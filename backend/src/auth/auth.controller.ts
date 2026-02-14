@@ -29,13 +29,12 @@ import { AuthService } from "./auth.service";
 import { UserAuthService, type DbUser } from "./user-auth.service";
 import { ProfileService } from "./profile.service";
 import { EmailService } from "../email";
+import { EarlyAccessService } from "../modules/early-access";
 import { GoogleAuthGuard } from "./guards";
 import { Public, CurrentUser } from "./decorators";
 import { JWT_COOKIE_NAME, REFRESH_COOKIE_NAME } from "./auth.constants";
 import { UserRole } from "./entities/auth.schema";
 import {
-  LoginDto,
-  RegisterDto,
   MagicLinkRequestDto,
   MagicLinkVerifyDto,
   AuthResponseDto,
@@ -46,6 +45,7 @@ import {
   UserProfileDto,
   SelectRoleDto,
 } from "./dto";
+import { JoinWaitlistDto, RedeemEarlyAccessInviteDto } from "../modules/early-access";
 
 // Rate limit configs (requests per TTL window in seconds)
 const AUTH_RATE_LIMIT = { limit: 5, ttl: 60000 }; // 5 requests per minute
@@ -62,62 +62,13 @@ export class AuthController {
     private userAuthService: UserAuthService,
     private profileService: ProfileService,
     private emailService: EmailService,
+    private earlyAccess: EarlyAccessService,
     config: ConfigService,
   ) {
     this.isGoogleOAuthConfigured = !!(
       config.get<string>("GOOGLE_CLIENT_ID") &&
       config.get<string>("GOOGLE_CLIENT_SECRET")
     );
-  }
-
-  // ============ EMAIL/PASSWORD ============
-
-  @Public()
-  @Post("register")
-  @Throttle({ default: AUTH_RATE_LIMIT })
-  @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: "Register with email and password" })
-  @ApiBody({ type: RegisterDto })
-  @ApiResponse({ status: 201, type: AuthResponseDto })
-  async register(
-    @Body() dto: RegisterDto,
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    const newUser = await this.authService.registerWithPassword(
-      dto.email,
-      dto.password,
-      dto.name,
-    );
-
-    // Send verification email
-    const token = await this.userAuthService.createEmailVerificationToken(
-      dto.email,
-    );
-    await this.emailService.sendVerificationEmail(dto.email, token, dto.name);
-
-    return this.setTokensAndRespond(res, newUser);
-  }
-
-  @Public()
-  @Post("login")
-  @Throttle({ default: AUTH_RATE_LIMIT })
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: "Login with email and password" })
-  @ApiBody({ type: LoginDto })
-  @ApiResponse({ status: 200, type: AuthResponseDto })
-  @ApiUnauthorizedResponse({ description: "Invalid credentials" })
-  async login(
-    @Body() dto: LoginDto,
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    const foundUser = await this.authService.validatePassword(
-      dto.email,
-      dto.password,
-    );
-    if (!foundUser) {
-      throw new UnauthorizedException("Invalid credentials");
-    }
-    return this.setTokensAndRespond(res, foundUser);
   }
 
   // ============ EMAIL VERIFICATION ============
@@ -166,6 +117,32 @@ export class AuthController {
     };
   }
 
+  // ============ EARLY ACCESS ============
+
+  @Public()
+  @Post("waitlist")
+  @Throttle({ default: MAGIC_LINK_RATE_LIMIT })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Join early-access waitlist" })
+  @ApiResponse({ status: 200, description: "Waitlist request accepted" })
+  async joinWaitlist(@Body() dto: JoinWaitlistDto) {
+    await this.earlyAccess.joinWaitlist(dto);
+    return {
+      message: "You're on the waitlist. We'll reach out when access opens.",
+    };
+  }
+
+  @Public()
+  @Post("invite/redeem")
+  @Throttle({ default: AUTH_RATE_LIMIT })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Redeem an early-access invitation link" })
+  @ApiResponse({ status: 200, description: "Invitation redeemed" })
+  @ApiUnauthorizedResponse({ description: "Invalid invite token" })
+  async redeemInvite(@Body() dto: RedeemEarlyAccessInviteDto) {
+    return this.earlyAccess.redeemInviteToken(dto.token);
+  }
+
   // ============ MAGIC LINK ============
 
   @Public()
@@ -176,6 +153,8 @@ export class AuthController {
   @ApiBody({ type: MagicLinkRequestDto })
   @ApiResponse({ status: 200, description: "Magic link sent" })
   async requestMagicLink(@Body() dto: MagicLinkRequestDto) {
+    await this.earlyAccess.assertEmailAllowed(dto.email);
+
     const token = await this.authService.createMagicLink(dto.email);
 
     // Send magic link email
@@ -207,6 +186,7 @@ export class AuthController {
     if (!foundUser) {
       throw new UnauthorizedException("Invalid or expired magic link");
     }
+    await this.earlyAccess.bindRedeemedInviteToUser(foundUser.id, foundUser.email);
     return this.setTokensAndRespond(res, foundUser);
   }
 
@@ -239,6 +219,7 @@ export class AuthController {
       );
     }
     const foundUser = req.user as DbUser;
+    await this.earlyAccess.bindRedeemedInviteToUser(foundUser.id, foundUser.email);
     const tokens = await this.authService.generateTokens(foundUser);
     this.setTokenCookies(res, tokens.accessToken, tokens.refreshToken);
 
@@ -274,7 +255,7 @@ export class AuthController {
 
   @Public()
   @Post("refresh")
-  @Throttle({ default: { limit: 3, ttl: 60000 } }) // 3 refreshes per minute
+  @Throttle({ default: { limit: 30, ttl: 60000 } }) // 30 refreshes per minute
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "Refresh access token" })
   @ApiResponse({ status: 200, type: AuthResponseDto })
@@ -412,7 +393,7 @@ export class AuthController {
       secure,
       sameSite,
       path: "/",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
+      maxAge: this.authService.getRefreshTokenTtlMs(),
     });
   }
 

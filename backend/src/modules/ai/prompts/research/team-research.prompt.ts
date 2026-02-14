@@ -10,6 +10,8 @@ IMPORTANT RULES:
 export const TEAM_RESEARCH_HUMAN_PROMPT = `Research the founding team and leadership for the following startup.
 Prioritize founder backgrounds, notable prior companies, education signals, and public professional profiles.
 
+If gap analysis directives are provided in the context, prioritize researching those specific gaps before general exploration.
+
 Context:
 {{contextJson}}
 

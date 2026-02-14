@@ -16,6 +16,7 @@ import { StartupModule } from '../startup';
 import { UnipileModule } from '../integrations/unipile/unipile.module';
 import { DatabaseModule } from '../../database';
 import { QueueModule } from '../../queue';
+import { EarlyAccessModule } from '../early-access';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { QueueModule } from '../../queue';
     QueueModule,
     StartupModule,
     UnipileModule,
+    EarlyAccessModule,
     MulterModule.register({
       limits: {
         fileSize: 10 * 1024 * 1024, // 10MB limit

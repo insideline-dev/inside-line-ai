@@ -17,18 +17,6 @@ export interface AuthState {
   isAuthenticated: boolean;
 }
 
-// Request DTOs (match backend)
-export interface LoginRequest {
-  email: string;
-  password: string;
-}
-
-export interface RegisterRequest {
-  email: string;
-  password: string;
-  name: string;
-}
-
 export interface MagicLinkRequest {
   email: string;
 }
@@ -43,6 +31,23 @@ export interface EmailVerifyRequest {
 
 export interface ResendVerificationRequest {
   email: string;
+}
+
+export interface RedeemInviteRequest {
+  token: string;
+}
+
+export interface RedeemInviteResponse {
+  message: string;
+  email: string;
+}
+
+export interface JoinWaitlistRequest {
+  name: string;
+  email: string;
+  companyName: string;
+  role: string;
+  website: string;
 }
 
 // Response DTOs

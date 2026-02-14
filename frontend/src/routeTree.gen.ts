@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ProtectedRouteImport } from './routes/_protected'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthMagicLinkRouteImport } from './routes/auth/magic-link'
 import { Route as AuthCallbackRouteImport } from './routes/auth/callback'
 import { Route as ApplySlugRouteImport } from './routes/apply.$slug'
 import { Route as ProtectedScoutRouteImport } from './routes/_protected/scout'
@@ -67,6 +68,11 @@ const ProtectedRoute = ProtectedRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthMagicLinkRoute = AuthMagicLinkRouteImport.update({
+  id: '/auth/magic-link',
+  path: '/auth/magic-link',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthCallbackRoute = AuthCallbackRouteImport.update({
@@ -304,6 +310,7 @@ export interface FileRoutesByFullPath {
   '/scout': typeof ProtectedScoutRouteWithChildren
   '/apply/$slug': typeof ApplySlugRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/auth/magic-link': typeof AuthMagicLinkRoute
   '/admin/agents': typeof ProtectedAdminAgentsRoute
   '/admin/analytics': typeof ProtectedAdminAnalyticsRoute
   '/admin/bulk-data': typeof ProtectedAdminBulkDataRoute
@@ -346,6 +353,7 @@ export interface FileRoutesByTo {
   '/role-select': typeof ProtectedRoleSelectRoute
   '/apply/$slug': typeof ApplySlugRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/auth/magic-link': typeof AuthMagicLinkRoute
   '/admin/agents': typeof ProtectedAdminAgentsRoute
   '/admin/analytics': typeof ProtectedAdminAnalyticsRoute
   '/admin/bulk-data': typeof ProtectedAdminBulkDataRoute
@@ -394,6 +402,7 @@ export interface FileRoutesById {
   '/_protected/scout': typeof ProtectedScoutRouteWithChildren
   '/apply/$slug': typeof ApplySlugRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/auth/magic-link': typeof AuthMagicLinkRoute
   '/_protected/admin/agents': typeof ProtectedAdminAgentsRoute
   '/_protected/admin/analytics': typeof ProtectedAdminAnalyticsRoute
   '/_protected/admin/bulk-data': typeof ProtectedAdminBulkDataRoute
@@ -442,6 +451,7 @@ export interface FileRouteTypes {
     | '/scout'
     | '/apply/$slug'
     | '/auth/callback'
+    | '/auth/magic-link'
     | '/admin/agents'
     | '/admin/analytics'
     | '/admin/bulk-data'
@@ -484,6 +494,7 @@ export interface FileRouteTypes {
     | '/role-select'
     | '/apply/$slug'
     | '/auth/callback'
+    | '/auth/magic-link'
     | '/admin/agents'
     | '/admin/analytics'
     | '/admin/bulk-data'
@@ -531,6 +542,7 @@ export interface FileRouteTypes {
     | '/_protected/scout'
     | '/apply/$slug'
     | '/auth/callback'
+    | '/auth/magic-link'
     | '/_protected/admin/agents'
     | '/_protected/admin/analytics'
     | '/_protected/admin/bulk-data'
@@ -573,6 +585,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   ApplySlugRoute: typeof ApplySlugRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
+  AuthMagicLinkRoute: typeof AuthMagicLinkRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -596,6 +609,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth/magic-link': {
+      id: '/auth/magic-link'
+      path: '/auth/magic-link'
+      fullPath: '/auth/magic-link'
+      preLoaderRoute: typeof AuthMagicLinkRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/auth/callback': {
@@ -1029,6 +1049,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   ApplySlugRoute: ApplySlugRoute,
   AuthCallbackRoute: AuthCallbackRoute,
+  AuthMagicLinkRoute: AuthMagicLinkRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

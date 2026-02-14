@@ -115,6 +115,20 @@ describe("ResearchService", () => {
           });
         }
 
+        if (agent === "competitor") {
+          return Promise.resolve({
+            output: {
+              competitors: [],
+              indirectCompetitors: [],
+              marketPositioning: "Positioned as vertical specialist",
+              competitiveLandscapeSummary: "Fragmented market",
+              sources: ["https://competitor.example.com"],
+            },
+            sources: [source("competitor")],
+            usedFallback: false,
+          });
+        }
+
         return Promise.resolve({
           output: {
             articles: [],
@@ -160,14 +174,15 @@ describe("ResearchService", () => {
     );
   });
 
-  it("runs all 4 research agents and aggregates results with deduped sources", async () => {
+  it("runs all 5 research agents and aggregates results with deduped sources", async () => {
     const result = await service.run("startup-1");
 
-    expect(geminiResearch.research).toHaveBeenCalledTimes(4);
+    expect(geminiResearch.research).toHaveBeenCalledTimes(5);
     expect(result.team).not.toBeNull();
     expect(result.market).not.toBeNull();
     expect(result.product).not.toBeNull();
     expect(result.news).not.toBeNull();
+    expect(result.competitor).not.toBeNull();
     expect(result.errors).toEqual([
       { agent: "market", error: "Market provider timeout" },
     ]);
@@ -241,6 +256,7 @@ describe("ResearchService", () => {
         recentEvents: [],
         sources: [],
       },
+      competitor: null,
       sources: [source("team")],
       errors: [],
     };
@@ -274,6 +290,7 @@ describe("ResearchService", () => {
       market: null,
       product: null,
       news: null,
+      competitor: null,
       sources: [
         {
           ...source("market"),
@@ -338,6 +355,7 @@ describe("ResearchService", () => {
             market: null,
             product: null,
             news: null,
+            competitor: null,
             sources: [],
             errors: [],
           } satisfies ResearchResult);
@@ -388,6 +406,7 @@ describe("ResearchService", () => {
             market: null,
             product: null,
             news: null,
+            competitor: null,
             sources: [],
             errors: [],
           } satisfies ResearchResult);

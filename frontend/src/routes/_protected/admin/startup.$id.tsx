@@ -197,14 +197,15 @@ function AdminReviewPage() {
         }
       />
 
-      {startup.status === "analyzing" && stageWeights && (
+      {startup.status === "analyzing" && (
         <Card className="mb-6">
           <CardContent className="p-6">
             <AnalysisProgress
               startupId={startup.id}
               isAnalyzing={true}
-              weights={stageWeights}
+              weights={stageWeights ?? undefined}
               progress={evaluation?.analysisProgress as any}
+              showAgentDetails
             />
           </CardContent>
         </Card>

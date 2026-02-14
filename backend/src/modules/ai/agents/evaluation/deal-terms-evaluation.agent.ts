@@ -18,16 +18,20 @@ export class DealTermsEvaluationAgent extends BaseEvaluationAgent<DealTermsEvalu
     super(providers, aiConfig, promptService);
   }
 
-  buildContext({ extraction, scraping }: EvaluationPipelineInput) {
+  buildContext({ extraction, scraping, research }: EvaluationPipelineInput) {
+    const rawText = extraction.rawText;
+    const ctx = extraction.startupContext;
+
     const raiseType: "equity" | "safe" | "convertible" =
-      /\bsafe\b/i.test(extraction.rawText)
+      ctx?.raiseType === "safe" || /\bsafe\b/i.test(rawText)
         ? "safe"
-        : /(convertible|note)/i.test(extraction.rawText)
+        : ctx?.raiseType === "convertible" || /(convertible|note)/i.test(rawText)
           ? "convertible"
           : "equity";
 
     const leadInvestorStatus =
-      /(lead investor|lead committed|anchor investor)/i.test(extraction.rawText) ||
+      ctx?.leadSecured === true ||
+      /(lead investor|lead committed|anchor investor)/i.test(rawText) ||
       scraping.notableClaims.some((claim) =>
         /(lead investor|lead committed|anchor investor)/i.test(claim),
       )
@@ -36,7 +40,7 @@ export class DealTermsEvaluationAgent extends BaseEvaluationAgent<DealTermsEvalu
 
     const investorRights = Array.from(
       new Set(
-        extraction.rawText
+        rawText
           .split(/[.,]/)
           .map((value) => value.trim())
           .filter((value) =>
@@ -47,12 +51,39 @@ export class DealTermsEvaluationAgent extends BaseEvaluationAgent<DealTermsEvalu
       ),
     );
 
+    const competitorFunding = research.competitor
+      ? research.competitor.competitors
+          .filter((c) => c.fundingRaised || c.fundingStage)
+          .map((c) => ({
+            name: c.name,
+            fundingRaised: c.fundingRaised,
+            fundingStage: c.fundingStage,
+          }))
+      : undefined;
+
+    const marketSizeContext = research.market?.marketSize ?? undefined;
+
+    const startupFormContext = ctx
+      ? {
+          raiseType: ctx.raiseType,
+          leadSecured: ctx.leadSecured,
+          leadInvestorName: ctx.leadInvestorName,
+          previousFundingAmount: ctx.previousFundingAmount,
+          previousRoundType: ctx.previousRoundType,
+          valuationKnown: ctx.valuationKnown,
+          valuationType: ctx.valuationType,
+        }
+      : undefined;
+
     return {
       fundingTarget: extraction.fundingAsk,
       currentValuation: extraction.valuation,
       raiseType,
       leadInvestorStatus,
       investorRights,
+      competitorFunding,
+      marketSizeContext,
+      startupFormContext,
     };
   }
 

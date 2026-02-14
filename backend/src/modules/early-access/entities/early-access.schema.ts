@@ -1,4 +1,12 @@
-import { index, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  index,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+} from "drizzle-orm/pg-core";
 import { user } from "../../../auth/entities/auth.schema";
 
 export const earlyAccessInviteStatusEnum = pgEnum("early_access_invite_status", [
@@ -44,6 +52,12 @@ export const waitlistEntry = pgTable(
     companyName: text("company_name").notNull(),
     role: text("role").notNull(),
     website: text("website").notNull(),
+    consentToShareInfo: boolean("consent_to_share_info")
+      .notNull()
+      .default(false),
+    consentToEarlyAccess: boolean("consent_to_early_access")
+      .notNull()
+      .default(false),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()

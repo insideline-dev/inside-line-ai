@@ -1,11 +1,26 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { eq, ilike } from 'drizzle-orm';
+import { ilike } from 'drizzle-orm';
 import { DrizzleService } from '../../database';
 import { PipelineService } from '../ai/services/pipeline.service';
 import { NotificationService } from '../../notification/notification.service';
 import { NotificationType } from '../../notification/entities';
 import { startup, StartupStatus, StartupStage } from './entities/startup.schema';
 import { deriveStartupGeography } from '../geography';
+
+export interface QuickCreateParams {
+  adminUserId: string;
+  name: string;
+  tagline: string;
+  description: string;
+  website: string;
+  location: string;
+  industry: string;
+  stage: StartupStage;
+  fundingTarget: number;
+  teamSize: number;
+  teamMembers?: { name: string; role: string; linkedinUrl?: string }[];
+  pitchDeckUrl?: string;
+}
 
 export interface StartupIntakeParams {
   adminUserId: string;
@@ -74,19 +89,12 @@ export class StartupIntakeService {
         contactEmail: fromEmail,
         contactName: fromName ?? undefined,
         pitchDeckPath: pitchDeckPath ?? undefined,
-        status: StartupStatus.DRAFT,
+        status: StartupStatus.SUBMITTED,
+        submittedAt: new Date(),
       })
       .returning();
 
     this.logger.log(`Created startup ${created.id} (${companyName}) from ${source} by ${fromEmail}`);
-
-    await this.drizzle.db
-      .update(startup)
-      .set({
-        status: StartupStatus.SUBMITTED,
-        submittedAt: new Date(),
-      })
-      .where(eq(startup.id, created.id));
 
     await this.pipeline.startPipeline(created.id, adminUserId);
 
@@ -101,6 +109,71 @@ export class StartupIntakeService {
     return {
       startupId: created.id,
       startupName: companyName,
+      isDuplicate: false,
+      status: StartupStatus.SUBMITTED,
+    };
+  }
+
+  async quickCreateStartup(params: QuickCreateParams): Promise<StartupIntakeResult> {
+    const duplicate = await this.findDuplicate(params.name);
+    if (duplicate) {
+      return {
+        startupId: duplicate.id,
+        startupName: duplicate.name,
+        isDuplicate: true,
+        status: duplicate.status,
+      };
+    }
+
+    const geography = deriveStartupGeography(params.location);
+    const slug = this.generateSlug(params.name);
+
+    const [created] = await this.drizzle.db
+      .insert(startup)
+      .values({
+        userId: params.adminUserId,
+        name: params.name,
+        slug,
+        tagline: params.tagline,
+        description: params.description,
+        website: params.website,
+        location: params.location,
+        normalizedRegion: geography.normalizedRegion,
+        geoCountryCode: geography.countryCode,
+        geoLevel1: geography.level1,
+        geoLevel2: geography.level2,
+        geoLevel3: geography.level3,
+        geoPath: geography.path,
+        industry: params.industry,
+        stage: params.stage,
+        fundingTarget: params.fundingTarget,
+        teamSize: params.teamSize,
+        teamMembers: (params.teamMembers ?? []).map((m) => ({
+          name: m.name,
+          role: m.role,
+          linkedinUrl: m.linkedinUrl ?? '',
+        })),
+        pitchDeckUrl: params.pitchDeckUrl ?? undefined,
+        status: StartupStatus.SUBMITTED,
+        submittedAt: new Date(),
+      })
+      .returning();
+
+    this.logger.log(`Quick-created startup ${created.id} (${params.name}) by admin ${params.adminUserId}`);
+
+    await this.pipeline.startPipeline(created.id, params.adminUserId);
+
+    await this.notifications.create(
+      params.adminUserId,
+      'Startup quick-created',
+      `${params.name} was quick-created and pipeline started`,
+      NotificationType.INFO,
+      `/admin/startups/${created.id}`,
+    );
+
+    return {
+      startupId: created.id,
+      startupName: params.name,
       isDuplicate: false,
       status: StartupStatus.SUBMITTED,
     };

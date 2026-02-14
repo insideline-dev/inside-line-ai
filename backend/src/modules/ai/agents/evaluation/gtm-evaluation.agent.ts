@@ -19,7 +19,7 @@ export class GtmEvaluationAgent extends BaseEvaluationAgent<GtmEvaluation> {
     super(providers, aiConfig, promptService);
   }
 
-  buildContext({ extraction, scraping }: EvaluationPipelineInput) {
+  buildContext({ extraction, scraping, research }: EvaluationPipelineInput) {
     const websiteMarketingPages =
       scraping.website?.subpages
         .filter((page) => URL_PATH_PATTERNS.MARKETING.test(tryPathname(page.url)))
@@ -34,6 +34,31 @@ export class GtmEvaluationAgent extends BaseEvaluationAgent<GtmEvaluation> {
       ]),
     );
 
+    const marketContext = research.market
+      ? {
+          customerSegments: research.market.competitors.map((c) => c.name),
+          marketTrends: research.market.marketTrends,
+        }
+      : undefined;
+
+    const productContext = research.product
+      ? {
+          integrations: research.product.integrations,
+          features: research.product.features,
+        }
+      : undefined;
+
+    const competitorContext = research.competitor
+      ? {
+          competitorPositioning: research.competitor.competitors.map((c) => ({
+            name: c.name,
+            targetMarket: c.targetMarket,
+            pricing: c.pricing,
+          })),
+          marketPositioning: research.competitor.marketPositioning,
+        }
+      : undefined;
+
     return {
       targetMarket: extraction.industry,
       websiteMarketingPages,
@@ -41,6 +66,9 @@ export class GtmEvaluationAgent extends BaseEvaluationAgent<GtmEvaluation> {
       customerAcquisitionStrategy:
         scraping.websiteSummary ||
         "Blend of inbound education and founder-led outbound outreach",
+      marketContext,
+      productContext,
+      competitorContext,
     };
   }
 

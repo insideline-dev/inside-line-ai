@@ -6,6 +6,8 @@ export function createMockEvaluationResult(
   const base = {
     score: 78,
     confidence: 0.78,
+    feedback:
+      "This dimension shows solid performance with moderate confidence. The evidence supports the assessment, though additional third-party validation would strengthen the analysis. Overall, the signals align with stage-appropriate expectations and demonstrate reasonable progress toward key milestones.",
     keyFindings: ["Signal is acceptable"],
     risks: ["Evidence depth is moderate"],
     dataGaps: ["More third-party benchmarks needed"],

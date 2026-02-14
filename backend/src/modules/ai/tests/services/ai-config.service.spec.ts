@@ -73,6 +73,6 @@ describe("AiConfigService", () => {
     );
 
     expect(service.getEvaluationTemperature()).toBe(0.1);
-    expect(service.getEvaluationMaxOutputTokens()).toBe(4000);
+    expect(service.getEvaluationMaxOutputTokens()).toBe(8000);
   });
 });

@@ -60,6 +60,7 @@ import {
   RefreshCw,
   Rocket,
   Save,
+  Target,
   Workflow,
 } from "lucide-react";
 
@@ -126,6 +127,7 @@ function pickNodeIcon(nodeId: string) {
   if (nodeId.includes("scrape")) return Globe;
   if (nodeId.includes("linkedin")) return Linkedin;
   if (nodeId.includes("news")) return Newspaper;
+  if (nodeId.includes("competitor")) return Target;
   if (nodeId.includes("synthesis")) return Layers;
   if (nodeId.includes("matching") || nodeId.includes("thesis")) return Handshake;
   if (nodeId.includes("orchestrator")) return Workflow;

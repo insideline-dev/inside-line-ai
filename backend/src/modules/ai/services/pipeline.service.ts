@@ -139,6 +139,10 @@ export class PipelineService {
     return this.pipelineState.get(startupId);
   }
 
+  async getTrackedProgress(startupId: string) {
+    return this.progressTracker.getProgress(startupId);
+  }
+
   async retryPhase(startupId: string, phase: PipelinePhase): Promise<void> {
     const state = await this.pipelineState.get(startupId);
     if (!state) {

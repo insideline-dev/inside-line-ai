@@ -203,6 +203,24 @@ export class SynthesisAgent {
       );
     }
 
+    if (research.competitor) {
+      sections.push(
+        [
+          "## Competitor Research",
+          research.competitor.competitors.length
+            ? `Direct competitors: ${research.competitor.competitors.map((c) => `${c.name}${c.threatLevel ? ` (${c.threatLevel} threat)` : ""}`).join(", ")}`
+            : "",
+          research.competitor.indirectCompetitors.length
+            ? `Indirect competitors: ${research.competitor.indirectCompetitors.map((c) => c.name).join(", ")}`
+            : "",
+          research.competitor.marketPositioning || "",
+          research.competitor.competitiveLandscapeSummary || "",
+        ]
+          .filter(Boolean)
+          .join("\n"),
+      );
+    }
+
     const evalEntries = Object.entries(evaluation).filter(
       ([key]) => key !== "summary",
     );
@@ -214,6 +232,7 @@ export class SynthesisAgent {
         const ev = val as {
           score: number;
           confidence: number;
+          feedback?: string;
           keyFindings?: string[];
           risks?: string[];
         };
@@ -231,7 +250,11 @@ export class SynthesisAgent {
         const risks = ev.risks?.length
           ? ` | Risks: ${ev.risks.join("; ")}`
           : "";
-        return `- ${key}${weightLabel}: Score ${ev.score}/100 (confidence ${ev.confidence})${findings}${risks}`;
+        const scoreLine = `- ${key}${weightLabel}: Score ${ev.score}/100 (confidence ${ev.confidence})${findings}${risks}`;
+        const feedbackBlock = ev.feedback
+          ? `\n  ### ${key} — Section Narrative\n  ${ev.feedback}`
+          : "";
+        return `${scoreLine}${feedbackBlock}`;
       });
 
       const weightedScore =

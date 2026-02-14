@@ -59,6 +59,8 @@ export interface JoinWaitlistRequest {
   companyName: string;
   role: string;
   website: string;
+  consentToShareInfo: boolean;
+  consentToEarlyAccess: boolean;
 }
 
 // Response DTOs

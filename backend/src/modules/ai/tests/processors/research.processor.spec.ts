@@ -37,6 +37,7 @@ describe("ResearchProcessor", () => {
         market: null,
         product: null,
         news: null,
+        competitor: null,
         sources: [],
         errors: [],
       }),

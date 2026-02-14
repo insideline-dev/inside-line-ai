@@ -5,6 +5,7 @@ describe("TeamEvaluationSchema", () => {
   const valid = {
     score: 85,
     confidence: 0.9,
+    feedback: "The founding team demonstrates strong technical depth with complementary skill sets across engineering and product. The CEO brings prior startup experience and domain expertise that aligns well with the target market.",
     keyFindings: ["Strong technical team"],
     risks: ["No dedicated sales leader"],
     dataGaps: [],

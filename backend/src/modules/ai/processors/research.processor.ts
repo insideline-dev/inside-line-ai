@@ -65,7 +65,7 @@ export class ResearchProcessor
   protected async process(
     job: Job<AiResearchJobData>,
   ): Promise<Omit<AiResearchJobResult, "jobId" | "duration" | "success">> {
-    const { startupId } = job.data;
+    const { startupId, pipelineRunId, userId } = job.data;
     const agentKey = this.readAgentRetryKey(job.data.metadata);
 
     if (job.data.type !== "ai_research") {
@@ -82,7 +82,68 @@ export class ResearchProcessor
       run: () =>
         this.researchService.run(
           startupId,
-          agentKey ? { agentKey } : undefined,
+          {
+            ...(agentKey ? { agentKey } : {}),
+            onAgentStart: (agent) => {
+              this.pipelineService
+                .onAgentProgress({
+                  startupId,
+                  userId,
+                  pipelineRunId,
+                  phase: PipelinePhase.RESEARCH,
+                  key: agent,
+                  status: "running",
+                  progress: 0,
+                })
+                .catch((progressError) => {
+                  this.logger.warn(
+                    `Failed to mark research agent running for ${agent}: ${
+                      progressError instanceof Error
+                        ? progressError.message
+                        : String(progressError)
+                    }`,
+                  );
+                });
+            },
+            onAgentComplete: ({ agent, output, usedFallback, error, rejected }) => {
+              const isFailed = rejected || usedFallback || Boolean(error);
+              this.pipelineService
+                .onAgentProgress({
+                  startupId,
+                  userId,
+                  pipelineRunId,
+                  phase: PipelinePhase.RESEARCH,
+                  key: agent,
+                  status: isFailed ? "failed" : "completed",
+                  progress: isFailed ? 0 : 100,
+                  error,
+                })
+                .catch((progressError) => {
+                  this.logger.warn(
+                    `Failed to update research agent progress for ${agent}: ${
+                      progressError instanceof Error
+                        ? progressError.message
+                        : String(progressError)
+                    }`,
+                  );
+                });
+
+              this.notificationGateway.sendJobStatus(userId, {
+                jobId: String(job.id),
+                jobType: "ai_research",
+                status: "processing",
+                startupId,
+                pipelineRunId,
+                result: {
+                  agent,
+                  output,
+                  usedFallback,
+                  error,
+                  rejected,
+                },
+              });
+            },
+          },
         ),
     });
 

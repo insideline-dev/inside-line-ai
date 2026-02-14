@@ -29,13 +29,16 @@ export class MatchService {
 
   async findAll(investorId: string, query: GetMatchesQuery) {
     return this.drizzle.withRLS(investorId, async (db) => {
-      const { page, limit, minScore, isSaved } = query;
+      const { page, limit, minScore, minThesisFitScore, isSaved } = query;
       const offset = (page - 1) * limit;
 
       const conditions = [eq(startupMatch.investorId, investorId)];
 
       if (minScore !== undefined) {
         conditions.push(gte(startupMatch.overallScore, minScore));
+      }
+      if (minThesisFitScore !== undefined) {
+        conditions.push(sql`coalesce(${startupMatch.thesisFitScore}, 0) >= ${minThesisFitScore}`);
       }
       if (isSaved !== undefined) {
         conditions.push(eq(startupMatch.isSaved, isSaved));

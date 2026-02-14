@@ -8,10 +8,12 @@ import {
   useStartupControllerCreate,
   useStartupControllerSubmit,
 } from "@/api/generated/startup/startup";
+import { usePortalControllerSubmitToPortal } from "@/api/generated/portal/portal";
 import { useStorageControllerGetUploadUrl } from "@/api/generated/storage/storage";
 import type {
   CreateStartupDto,
   GetUploadUrlDtoContentType,
+  SubmitToPortalDto,
 } from "@/api/generated/model";
 
 // Simple debounce hook
@@ -273,6 +275,7 @@ export function StartupSubmitForm({
   const submitSchema = createSubmitSchema(userRole, isWebsiteRequired);
   const createStartupMutation = useStartupControllerCreate();
   const submitStartupMutation = useStartupControllerSubmit();
+  const portalSubmitMutation = usePortalControllerSubmitToPortal();
   const uploadUrlMutation = useStorageControllerGetUploadUrl();
 
   const form = useForm<SubmitFormData>({
@@ -441,10 +444,6 @@ export function StartupSubmitForm({
 
   const submitMutation = useMutation({
     mutationFn: async (data: SubmitFormData) => {
-      if (isPortalSubmission) {
-        throw new Error("Portal submission is handled in the dedicated portal form");
-      }
-
       const fundingTarget = parsePositiveNumberInput(data.fundingTarget);
       if (fundingTarget === undefined) {
         throw new Error("Round size must be a positive number");
@@ -493,6 +492,43 @@ export function StartupSubmitForm({
 
       if (!website) {
         throw new Error("Website is required");
+      }
+
+      if (isPortalSubmission) {
+        if (!portalSlug) {
+          throw new Error("Portal slug is missing");
+        }
+
+        const founderEmail = normalizeOptionalText(data.contactEmail);
+        if (!founderEmail) {
+          throw new Error("Contact email is required");
+        }
+
+        const submitPayload: SubmitToPortalDto = {
+          name: data.name.trim(),
+          tagline: data.tagline.trim(),
+          description: data.description.trim(),
+          website,
+          location: data.location.trim(),
+          industry:
+            data.sectorIndustry?.trim() ||
+            data.sectorIndustryGroup?.trim() ||
+            "general",
+          stage: data.stage as SubmitToPortalDto["stage"],
+          fundingTarget: Math.round(fundingTarget),
+          teamSize: Math.max(validTeamMembers.length, 1),
+          pitchDeckUrl: pitchDeckFile?.publicUrl,
+          demoUrl: demoVideoUrl,
+          founderEmail,
+          founderName: normalizeOptionalText(data.contactName),
+        };
+
+        await portalSubmitMutation.mutateAsync({
+          slug: portalSlug,
+          data: submitPayload,
+        });
+
+        return { id: "portal-submission" };
       }
 
       if (isPitchDeckRequired && !pitchDeckFile) {

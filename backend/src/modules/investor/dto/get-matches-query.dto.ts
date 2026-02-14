@@ -5,6 +5,7 @@ export const GetMatchesQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(100).default(20),
   minScore: z.coerce.number().int().min(0).max(100).optional(),
+  minThesisFitScore: z.coerce.number().int().min(0).max(100).optional(),
   isSaved: z.coerce.boolean().optional(),
 });
 

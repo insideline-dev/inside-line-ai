@@ -52,6 +52,6 @@ import { EarlyAccessModule } from '../early-access';
     SystemConfigService,
     BulkDataService,
   ],
-  exports: [AnalyticsService, UserManagementService],
+  exports: [AnalyticsService, UserManagementService, ScoringConfigService],
 })
 export class AdminModule {}

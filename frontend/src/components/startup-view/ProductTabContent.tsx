@@ -39,6 +39,33 @@ interface ExtractedTech {
   source: string;
 }
 
+function toStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => (typeof item === "string" ? item.trim() : ""))
+    .filter(Boolean);
+}
+
+function dedupeStrings(values: string[]): string[] {
+  const seen = new Set<string>();
+  const output: string[] = [];
+  for (const value of values) {
+    const key = value.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    output.push(value);
+  }
+  return output;
+}
+
+function normalizeTrlStage(value?: string): string | undefined {
+  if (!value) return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (["idea", "mvp", "scaling", "mature"].includes(normalized)) return normalized;
+  if (normalized.includes("ga") || normalized.includes("production")) return "mature";
+  return undefined;
+}
+
 function getTechCategoryIcon(category: string | undefined) {
   switch (category?.toLowerCase()) {
     case "frontend":
@@ -71,7 +98,36 @@ export function ProductTabContent({ startup, evaluation, showScores = true, prod
   
   const productData = evaluation?.productData as any;
   const productScore = evaluation?.productScore;
-  const trlStage = startup.technologyReadinessLevel || productData?.technologyReadiness?.stage;
+  const competitiveData = (evaluation?.competitiveAdvantageData as any) || {};
+  const trlStage = normalizeTrlStage(
+    startup.technologyReadinessLevel ||
+      productData?.technologyReadiness?.stage ||
+      productData?.technologyStage ||
+      productData?.productMaturity,
+  );
+  const moatType =
+    productData?.competitiveMoat?.moatType ||
+    productData?.moatType ||
+    (Array.isArray(competitiveData?.moats) && competitiveData.moats.length > 0
+      ? String(competitiveData.moats[0])
+      : undefined);
+  const moatStrength =
+    productData?.competitiveMoat?.strength ??
+    productData?.moatStrength ??
+    null;
+  const productStrengths = dedupeStrings(
+    [
+      ...toStringArray(productData?.keyStrengths),
+      ...toStringArray(productData?.keyFindings),
+    ].filter(Boolean),
+  );
+  const productRisks = dedupeStrings(
+    [
+      ...toStringArray(productData?.keyRisks),
+      ...toStringArray(productData?.risks),
+      ...toStringArray(productData?.dataGaps),
+    ].filter(Boolean),
+  );
   const productSummary = evaluation?.productSummary || productData?.productSummary || productData?.one_liner;
   
   const hasContent = allScreenshots.length > 0 || 
@@ -102,10 +158,10 @@ export function ProductTabContent({ startup, evaluation, showScores = true, prod
           productScore={productScore || 0}
           productSummary={productSummary}
           trlStage={trlStage}
-          moatType={productData?.competitiveMoat?.moatType}
-          moatStrength={productData?.competitiveMoat?.strength}
-          keyStrengths={productData?.keyStrengths}
-          keyRisks={productData?.keyRisks}
+          moatType={moatType}
+          moatStrength={moatStrength}
+          keyStrengths={productStrengths}
+          keyRisks={productRisks}
           weight={productWeight}
         />
       )}

@@ -60,10 +60,13 @@ export interface FounderReport {
 }
 
 export interface Source {
-  url: string;
-  title: string;
-  type: "website" | "linkedin" | "news" | "research";
-  relevance: string;
+  url?: string;
+  title?: string;
+  name?: string;
+  type?: "website" | "linkedin" | "news" | "research" | string;
+  relevance?: string;
+  agent?: string;
+  timestamp?: string;
 }
 
 export interface AnalysisProgress {

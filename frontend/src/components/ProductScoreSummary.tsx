@@ -46,6 +46,9 @@ export function ProductScoreSummary({
   weight,
 }: ProductScoreSummaryProps) {
   const trlInfo = getTRLLabel(trlStage);
+  const normalizedMoatType = moatType && moatType.trim().length > 0 ? moatType : "none";
+  const normalizedMoatStrength =
+    typeof moatStrength === "number" && Number.isFinite(moatStrength) ? moatStrength : 0;
 
   return (
     <div className="space-y-6">
@@ -112,35 +115,31 @@ export function ProductScoreSummary({
               )}
             </div>
 
-            {moatType && (
-              <div className="flex items-center gap-3 p-3 rounded-lg border bg-muted/30">
-                <Shield className="w-5 h-5 text-muted-foreground" />
-                <div className="flex-1">
-                  <span className="text-sm font-medium">Moat Type</span>
-                </div>
-                <Badge variant="outline" className="shrink-0 capitalize" data-testid="badge-moat">
-                  {moatType.replace(/_/g, ' ')}
-                </Badge>
+            <div className="flex items-center gap-3 p-3 rounded-lg border bg-muted/30">
+              <Shield className="w-5 h-5 text-muted-foreground" />
+              <div className="flex-1">
+                <span className="text-sm font-medium">Moat Type</span>
               </div>
-            )}
+              <Badge variant="outline" className="shrink-0 capitalize" data-testid="badge-moat">
+                {normalizedMoatType.replace(/_/g, ' ')}
+              </Badge>
+            </div>
           </div>
 
-          {moatStrength !== undefined && moatStrength !== null && (
-            <div className="flex items-center gap-3">
-              <span className="text-sm text-muted-foreground">Moat Strength:</span>
-              <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                <div
-                  className={`h-full rounded-full ${
-                    moatStrength >= 70 ? "bg-green-500" :
-                    moatStrength >= 40 ? "bg-amber-500" :
-                    "bg-red-500"
-                  }`}
-                  style={{ width: `${moatStrength}%` }}
-                />
-              </div>
-              <span className="text-sm font-medium">{moatStrength}/100</span>
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-muted-foreground">Moat Strength:</span>
+            <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full ${
+                  normalizedMoatStrength >= 70 ? "bg-green-500" :
+                  normalizedMoatStrength >= 40 ? "bg-amber-500" :
+                  "bg-red-500"
+                }`}
+                style={{ width: `${normalizedMoatStrength}%` }}
+              />
             </div>
-          )}
+            <span className="text-sm font-medium">{normalizedMoatStrength}/100</span>
+          </div>
         </CardContent>
       </Card>
 
@@ -149,7 +148,7 @@ export function ProductScoreSummary({
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
-                <CheckCircle2 className="w-5 h-5 text-chart-2" />
+                <CheckCircle2 className="w-5 h-5 text-violet-500" />
                 Product Strengths
               </CardTitle>
             </CardHeader>
@@ -157,7 +156,7 @@ export function ProductScoreSummary({
               <ul className="space-y-2">
                 {keyStrengths.slice(0, 5).map((strength, idx) => (
                   <li key={idx} className="flex items-start gap-2 text-sm">
-                    <CheckCircle2 className="w-4 h-4 mt-0.5 text-chart-2 shrink-0" />
+                    <CheckCircle2 className="w-4 h-4 mt-0.5 text-violet-500 shrink-0" />
                     <span>{strength}</span>
                   </li>
                 ))}
@@ -170,7 +169,7 @@ export function ProductScoreSummary({
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
-                <AlertTriangle className="w-5 h-5 text-chart-5" />
+                <AlertTriangle className="w-5 h-5 text-rose-500" />
                 Product Risks
               </CardTitle>
             </CardHeader>
@@ -178,7 +177,7 @@ export function ProductScoreSummary({
               <ul className="space-y-2">
                 {keyRisks.slice(0, 5).map((risk, idx) => (
                   <li key={idx} className="flex items-start gap-2 text-sm">
-                    <AlertTriangle className="w-4 h-4 mt-0.5 text-chart-5 shrink-0" />
+                    <AlertTriangle className="w-4 h-4 mt-0.5 text-rose-500 shrink-0" />
                     <span>{risk}</span>
                   </li>
                 ))}

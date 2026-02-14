@@ -6,18 +6,16 @@ import { BaseProcessor, parseRedisUrl } from '../../../queue/processors/base.pro
 import { ANALYSIS_QUEUE_NAME, ANALYSIS_QUEUE_CONFIG } from '../analysis.config';
 import { DrizzleService } from '../../../database';
 import { AnalysisService } from '../analysis.service';
-import { AnalysisJobStatus } from '../entities';
+import { AnalysisJobStatus, startupEvaluation } from '../entities';
 import { NotificationService } from '../../../notification/notification.service';
 import { NotificationGateway } from '../../../notification/notification.gateway';
 import { NotificationType } from '../../../notification/entities';
 import { StorageService } from '../../../storage/storage.service';
 import { user } from '../../../auth/entities/auth.schema';
 import { startup, Startup } from '../../startup/entities';
-import {
-  generateMemoDocument,
-  StartupWithAnalysis,
-} from '../../startup/templates/memo.template';
-import type { PdfJobData, PdfJobResult, StartupScores } from '../interfaces';
+import { generateMemoDocument } from '../../startup/templates/memo.template';
+import type { PdfJobData, PdfJobResult } from '../interfaces';
+import type { PdfContext } from '../../startup/templates/pdf.types';
 
 @Injectable()
 export class PdfProcessor
@@ -78,14 +76,16 @@ export class PdfProcessor
         throw new Error(`Startup ${startupId} not found`);
       }
 
-      const scoringJob = await this.analysisService.getLatestScoringJob(startupId);
-      const scores = scoringJob?.result
-        ? (scoringJob.result as { scores: StartupScores }).scores
-        : null;
+      // Fetch the full evaluation from startupEvaluation table
+      const [evaluation] = await this.drizzle.db
+        .select()
+        .from(startupEvaluation)
+        .where(eq(startupEvaluation.startupId, startupId))
+        .limit(1);
 
       const { pdfUrl, pdfKey } = await this.generateAndUploadPdf(
         startupData,
-        scores,
+        evaluation ?? null,
         requestedBy,
       );
 
@@ -145,22 +145,19 @@ export class PdfProcessor
 
   private async generateAndUploadPdf(
     startupData: Startup,
-    scores: StartupScores | null,
+    evaluation: typeof startupEvaluation.$inferSelect | null,
     userId: string,
   ): Promise<{ pdfUrl: string; pdfKey: string }> {
     const userEmail = await this.getUserEmail(userId);
-    const analysis = scores ? this.mapScores(scores) : undefined;
-    const startupWithAnalysis: StartupWithAnalysis = {
-      ...startupData,
-      analysis,
-    };
 
-    const doc = generateMemoDocument({
-      startup: startupWithAnalysis,
+    const ctx: PdfContext = {
+      startup: startupData,
+      evaluation,
       userEmail,
       generatedAt: new Date(),
-    });
+    };
 
+    const doc = generateMemoDocument(ctx);
     const pdfBuffer = await this.pdfToBuffer(doc);
 
     const result = await this.storageService.uploadGeneratedContent(
@@ -179,25 +176,6 @@ export class PdfProcessor
     return {
       pdfUrl: result.url,
       pdfKey: result.key,
-    };
-  }
-
-  private mapScores(scores: StartupScores): StartupWithAnalysis['analysis'] {
-    const total =
-      scores.marketScore +
-      scores.teamScore +
-      scores.productScore +
-      scores.tractionScore +
-      scores.financialsScore;
-    const overallScore = Math.round(total / 5);
-
-    return {
-      overallScore,
-      marketScore: scores.marketScore,
-      teamScore: scores.teamScore,
-      productScore: scores.productScore,
-      tractionScore: scores.tractionScore,
-      financialScore: scores.financialsScore,
     };
   }
 

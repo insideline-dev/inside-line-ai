@@ -229,6 +229,64 @@ describe('UnipileService', () => {
       expect(cacheService.setCache).toHaveBeenCalledTimes(1);
     });
 
+    it('should extract profile image from LinkedIn vector image object', async () => {
+      cacheService.getCached.mockResolvedValueOnce(null);
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          id: 'profile-123',
+          first_name: 'John',
+          last_name: 'Doe',
+          headline: 'Software Engineer at TechCorp',
+          location: 'San Francisco, CA',
+          profile_url: 'https://linkedin.com/in/john-doe-123',
+          profile_picture: {
+            rootUrl: 'https://media.licdn.com/dms/image/',
+            artifacts: [
+              { width: 100, height: 100, fileIdentifyingUrlPathSegment: 'v1/100.jpg' },
+              { width: 400, height: 400, fileIdentifyingUrlPathSegment: 'v1/400.jpg' },
+            ],
+          },
+          summary: 'Experienced software engineer...',
+          experience: [],
+          education: [],
+        }),
+      });
+
+      const result = await service.getProfile('user-1', 'https://linkedin.com/in/john-doe-123');
+
+      expect(result?.profileImageUrl).toBe('https://media.licdn.com/dms/image/v1/400.jpg');
+    });
+
+    it('should extract profile image from nested image fields', async () => {
+      cacheService.getCached.mockResolvedValueOnce(null);
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          id: 'profile-123',
+          first_name: 'John',
+          last_name: 'Doe',
+          headline: 'Software Engineer at TechCorp',
+          location: 'San Francisco, CA',
+          profile_url: 'https://linkedin.com/in/john-doe-123',
+          summary: 'Experienced software engineer...',
+          media: {
+            profile: {
+              avatar: {
+                url: '//media.licdn.com/dms/image/C4D03AQ.jpg',
+              },
+            },
+          },
+          experience: [],
+          education: [],
+        }),
+      });
+
+      const result = await service.getProfile('user-1', 'https://linkedin.com/in/john-doe-123');
+
+      expect(result?.profileImageUrl).toBe('https://media.licdn.com/dms/image/C4D03AQ.jpg');
+    });
+
     it('should return null if profile not found (404)', async () => {
       cacheService.getCached.mockResolvedValueOnce(null);
       (global.fetch as jest.Mock).mockResolvedValueOnce({

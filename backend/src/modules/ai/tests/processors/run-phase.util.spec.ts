@@ -98,6 +98,7 @@ describe("runPipelinePhase", () => {
     } as unknown as jest.Mocked<PipelineStateService>;
 
     pipelineService = {
+      onPhaseStarted: jest.fn().mockResolvedValue(undefined),
       onPhaseCompleted: jest.fn().mockResolvedValue(undefined),
       onPhaseFailed: jest.fn().mockResolvedValue(undefined),
     } as unknown as jest.Mocked<PipelineService>;
@@ -224,6 +225,10 @@ describe("runPipelinePhase", () => {
       "startup-1",
       PipelinePhase.RESEARCH,
       PhaseStatus.RUNNING,
+    );
+    expect(pipelineService.onPhaseStarted).toHaveBeenCalledWith(
+      "startup-1",
+      PipelinePhase.RESEARCH,
     );
     expect(pipelineState.setPhaseResult).toHaveBeenCalledWith(
       "startup-1",

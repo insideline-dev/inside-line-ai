@@ -18,6 +18,8 @@ import { PipelineService } from "../ai/services/pipeline.service";
 import { PipelinePhase } from "../ai/interfaces/pipeline.interface";
 import { PipelineFeedbackService } from "../ai/services/pipeline-feedback.service";
 import { startup, StartupStatus } from "./entities/startup.schema";
+import { agentConversation } from "../agent/entities/agent.schema";
+import { investorInboxSubmission } from "../integrations/agentmail/entities/investor-inbox-submission.schema";
 import {
   CreateStartup,
   UpdateStartup,
@@ -571,7 +573,19 @@ export class StartupService {
       throw new NotFoundException(`Startup with ID ${id} not found`);
     }
 
-    await this.drizzle.db.delete(startup).where(eq(startup.id, id));
+    await this.drizzle.db.transaction(async (tx) => {
+      // Non-cascading references: clear these before deleting startup.
+      await tx
+        .update(agentConversation)
+        .set({ currentStartupId: null, updatedAt: new Date() })
+        .where(eq(agentConversation.currentStartupId, id));
+
+      await tx
+        .delete(investorInboxSubmission)
+        .where(eq(investorInboxSubmission.startupId, id));
+
+      await tx.delete(startup).where(eq(startup.id, id));
+    });
 
     this.logger.log(`Admin deleted startup ${id}`);
   }

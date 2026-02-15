@@ -20,6 +20,7 @@ export class LinkedinEnrichmentService {
   private readonly logger = new Logger(LinkedinEnrichmentService.name);
   private readonly batchSize: number;
   private readonly maxCompanyLeadershipCandidates: number;
+  private readonly maxProfileCandidates = 3;
   private readonly companyLeadershipQueries = [
     'founder',
     'co-founder',
@@ -160,17 +161,15 @@ export class LinkedinEnrichmentService {
     member: TeamMemberInput,
     startupContext?: StartupContextInput,
   ): Promise<EnrichedTeamMember> {
-    let linkedinUrl = member.linkedinUrl;
+    const attemptedUrls: string[] = [];
+    let candidateUrls: string[] = member.linkedinUrl
+      ? [member.linkedinUrl]
+      : await this.getSearchCandidateUrls(member, startupContext);
+    let usedSearchFallback = !member.linkedinUrl;
+    let sawRecoverableFetchError = false;
+    let lastAttemptedUrl: string | undefined;
 
-    if (!linkedinUrl) {
-      const matches = await this.unipileService.searchProfiles(
-        member.name,
-        startupContext?.companyName,
-      );
-      linkedinUrl = matches[0]?.profileUrl;
-    }
-
-    if (!linkedinUrl) {
+    if (candidateUrls.length === 0) {
       return {
         name: member.name,
         role: member.role,
@@ -178,39 +177,141 @@ export class LinkedinEnrichmentService {
       };
     }
 
-    try {
-      const profile = await this.unipileService.getProfile(userId, linkedinUrl);
+    for (let index = 0; index < candidateUrls.length; index += 1) {
+      const linkedinUrl = candidateUrls[index];
+      lastAttemptedUrl = linkedinUrl;
+      attemptedUrls.push(linkedinUrl);
 
-      if (!profile) {
-        return {
-          name: member.name,
-          role: member.role,
-          linkedinUrl,
-          enrichmentStatus: 'not_found',
-        };
+      try {
+        const profile = await this.unipileService.getProfile(userId, linkedinUrl);
+        if (profile) {
+          return {
+            name: member.name,
+            role: member.role,
+            linkedinUrl,
+            linkedinProfile: this.mapProfile(profile),
+            enrichmentStatus: 'success',
+            enrichedAt: new Date().toISOString(),
+          };
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (this.isRateLimitError(message)) {
+          throw error;
+        }
+
+        if (!this.isRecoverableFetchError(message)) {
+          return {
+            name: member.name,
+            role: member.role,
+            linkedinUrl,
+            enrichmentStatus: 'error',
+          };
+        }
+
+        sawRecoverableFetchError = true;
       }
 
+      const consumedAllCandidates = index === candidateUrls.length - 1;
+      if (consumedAllCandidates && !usedSearchFallback) {
+        usedSearchFallback = true;
+        const fallbackUrls = await this.getSearchCandidateUrls(
+          member,
+          startupContext,
+          attemptedUrls,
+        );
+        if (fallbackUrls.length > 0) {
+          this.logger.debug(
+            `[LinkedInEnrichment] retrying ${member.name} with ${fallbackUrls.length} fallback profile candidates`,
+          );
+          candidateUrls = [...candidateUrls, ...fallbackUrls];
+        }
+      }
+    }
+
+    if (sawRecoverableFetchError) {
       return {
         name: member.name,
         role: member.role,
-        linkedinUrl,
-        linkedinProfile: this.mapProfile(profile),
-        enrichmentStatus: 'success',
-        enrichedAt: new Date().toISOString(),
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (/\b429\b/.test(message)) {
-        throw error;
-      }
-
-      return {
-        name: member.name,
-        role: member.role,
-        linkedinUrl,
+        linkedinUrl: lastAttemptedUrl ?? member.linkedinUrl,
         enrichmentStatus: 'error',
       };
     }
+
+    return {
+      name: member.name,
+      role: member.role,
+      linkedinUrl: lastAttemptedUrl ?? member.linkedinUrl,
+      enrichmentStatus: 'not_found',
+    };
+  }
+
+  private async getSearchCandidateUrls(
+    member: TeamMemberInput,
+    startupContext?: StartupContextInput,
+    excludeUrls: string[] = [],
+  ): Promise<string[]> {
+    const matches = await this.unipileService.searchProfiles(
+      member.name,
+      startupContext?.companyName,
+    );
+    const excluded = new Set(excludeUrls.map((url) => this.normalizeLinkedinUrl(url)));
+    const deduped = new Set<string>();
+    const candidates: string[] = [];
+
+    for (const match of matches) {
+      const profileUrl = match.profileUrl?.trim();
+      if (!profileUrl) {
+        continue;
+      }
+
+      const normalized = this.normalizeLinkedinUrl(profileUrl);
+      if (!normalized || excluded.has(normalized) || deduped.has(normalized)) {
+        continue;
+      }
+
+      deduped.add(normalized);
+      candidates.push(profileUrl);
+      if (candidates.length >= this.maxProfileCandidates) {
+        break;
+      }
+    }
+
+    return candidates;
+  }
+
+  private normalizeLinkedinUrl(url: string): string {
+    const value = url.trim();
+    if (!value) {
+      return '';
+    }
+
+    const candidate = /^https?:\/\//i.test(value) ? value : `https://${value}`;
+    try {
+      const parsed = new URL(candidate);
+      const host = parsed.hostname.toLowerCase().replace(/^www\./, '');
+      const pathname = parsed.pathname.toLowerCase().replace(/\/+$/, '');
+      return `${host}${pathname}`;
+    } catch {
+      return value
+        .toLowerCase()
+        .replace(/^https?:\/\//, '')
+        .replace(/^www\./, '')
+        .replace(/\/+$/, '');
+    }
+  }
+
+  private isRecoverableFetchError(message: string): boolean {
+    const normalized = message.toLowerCase();
+    return (
+      normalized.includes('invalid_recipient') ||
+      normalized.includes('recipient cannot be reached') ||
+      normalized.includes('"status":422')
+    );
+  }
+
+  private isRateLimitError(message: string): boolean {
+    return /\b429\b/.test(message);
   }
 
   private mapProfile(
@@ -219,6 +320,7 @@ export class LinkedinEnrichmentService {
     return {
       headline: profile.headline || '',
       summary: profile.summary || '',
+      profilePictureUrl: profile.profileImageUrl || undefined,
       currentCompany: profile.currentCompany
         ? {
             name: profile.currentCompany.name || '',
@@ -309,21 +411,15 @@ export class LinkedinEnrichmentService {
   ): boolean {
     const leadershipPattern =
       /\b(founder|co[\s-]?founder|chief|ceo|cto|coo|cfo|cmo|cpo|president|vice president|vp|head|director|managing director|general manager|partner)\b/i;
-    if (!leadershipPattern.test(headline)) {
+    const currentRoleTexts = this.getCurrentRoleTexts(profile, companyName);
+    const hasLeadershipSignal =
+      leadershipPattern.test(headline) ||
+      currentRoleTexts.some((text) => leadershipPattern.test(text));
+    if (!hasLeadershipSignal) {
       return false;
     }
 
-    const companyTokens = companyName
-      .toLowerCase()
-      .split(/[^a-z0-9]+/)
-      .filter((token) => token.length >= 4);
-
-    if (companyTokens.length === 0) {
-      return true;
-    }
-
-    const haystack = `${headline} ${profile.currentCompany?.name || ''}`.toLowerCase();
-    return companyTokens.some((token) => haystack.includes(token));
+    return this.isCurrentAtTargetCompany(profile, companyName);
   }
 
   private extractRoleFromHeadline(headline: string): string {
@@ -340,5 +436,83 @@ export class LinkedinEnrichmentService {
       return roleFragment.slice(0, 80).trim();
     }
     return roleFragment;
+  }
+
+  private isCurrentAtTargetCompany(
+    profile: LinkedInProfile,
+    companyName: string,
+  ): boolean {
+    if (this.matchesTargetCompany(profile.currentCompany?.name, companyName)) {
+      return true;
+    }
+
+    return profile.experience.some(
+      (entry) =>
+        entry.current &&
+        this.matchesTargetCompany(entry.company, companyName),
+    );
+  }
+
+  private getCurrentRoleTexts(
+    profile: LinkedInProfile,
+    companyName: string,
+  ): string[] {
+    const roleTexts: string[] = [];
+
+    if (
+      this.matchesTargetCompany(profile.currentCompany?.name, companyName) &&
+      profile.currentCompany?.title
+    ) {
+      roleTexts.push(profile.currentCompany.title);
+    }
+
+    for (const entry of profile.experience) {
+      if (
+        entry.current &&
+        this.matchesTargetCompany(entry.company, companyName) &&
+        entry.title
+      ) {
+        roleTexts.push(entry.title);
+      }
+    }
+
+    return roleTexts;
+  }
+
+  private matchesTargetCompany(
+    candidateCompany: string | null | undefined,
+    targetCompany: string,
+  ): boolean {
+    const candidate = this.normalizeCompanyText(candidateCompany);
+    if (!candidate) {
+      return false;
+    }
+
+    const target = this.normalizeCompanyText(targetCompany);
+    if (!target) {
+      return false;
+    }
+
+    if (candidate.includes(target) || target.includes(candidate)) {
+      return true;
+    }
+
+    const targetTokens = target.split(" ").filter((token) => token.length >= 3);
+    if (targetTokens.length === 0) {
+      return false;
+    }
+
+    return targetTokens.some((token) => candidate.includes(token));
+  }
+
+  private normalizeCompanyText(value: string | null | undefined): string {
+    if (!value) {
+      return "";
+    }
+
+    return value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
   }
 }

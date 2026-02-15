@@ -126,6 +126,7 @@ export interface EnrichedTeamMember {
   linkedinProfile?: {
     headline: string;
     summary: string;
+    profilePictureUrl?: string;
     currentCompany?: {
       name: string;
       title: string;

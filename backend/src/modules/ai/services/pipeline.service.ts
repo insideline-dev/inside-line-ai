@@ -332,6 +332,24 @@ export class PipelineService {
     await this.applyTransitions(startupId);
   }
 
+  async onPhaseStarted(
+    startupId: string,
+    phase: PipelinePhase,
+  ): Promise<void> {
+    const state = await this.pipelineState.get(startupId);
+    if (!state) {
+      return;
+    }
+
+    await this.progressTracker.updatePhaseProgress({
+      startupId,
+      userId: state.userId,
+      pipelineRunId: state.pipelineRunId,
+      phase,
+      status: PhaseStatus.RUNNING,
+    });
+  }
+
   async onPhaseFailed(
     startupId: string,
     phase: PipelinePhase,

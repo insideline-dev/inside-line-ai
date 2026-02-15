@@ -64,8 +64,10 @@ export interface Source {
   title?: string;
   name?: string;
   type?: "website" | "linkedin" | "news" | "research" | string;
+  category?: string;
   relevance?: string;
   agent?: string;
+  model?: string;
   timestamp?: string;
 }
 

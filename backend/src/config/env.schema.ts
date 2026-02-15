@@ -126,7 +126,7 @@ export const envSchema = z.object({
   AI_MODEL_EXTRACTION: z.string().default("gemini-3-flash-preview"),
   AI_MODEL_RESEARCH: z.string().default("gemini-3-flash-preview"),
   AI_MODEL_EVALUATION: z.string().default("gemini-3-flash-preview"),
-  AI_MODEL_SYNTHESIS: z.string().default("gpt-5.2"),
+  AI_MODEL_SYNTHESIS: z.string().default("gemini-3-flash-preview"),
   AI_MODEL_THESIS_ALIGNMENT: z.string().default("gemini-3-flash-preview"),
   AI_MODEL_LOCATION_NORMALIZATION: z.string().default("gemini-3-flash-preview"),
   AI_MODEL_OCR: z.string().default("mistral-ocr-latest"),

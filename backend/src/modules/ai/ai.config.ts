@@ -21,7 +21,7 @@ export const DEFAULT_MODEL_BY_PURPOSE: Record<ModelPurpose, string> = {
   [ModelPurpose.EXTRACTION]: "gemini-3.0-flash-preview",
   [ModelPurpose.RESEARCH]: "gemini-3.0-flash-preview",
   [ModelPurpose.EVALUATION]: "gemini-3.0-flash-preview",
-  [ModelPurpose.SYNTHESIS]: "gpt-5.2",
+  [ModelPurpose.SYNTHESIS]: "gemini-3-flash-preview",
   [ModelPurpose.THESIS_ALIGNMENT]: "gemini-3.0-flash-preview",
   [ModelPurpose.LOCATION_NORMALIZATION]: "gemini-3.0-flash-preview",
   [ModelPurpose.OCR]: "mistral-ocr-latest",

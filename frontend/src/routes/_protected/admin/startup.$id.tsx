@@ -37,6 +37,7 @@ import {
 import {
   useAdminControllerApproveStartup,
   useAdminControllerReanalyzeStartup,
+  useAdminControllerRetryStartupAgent,
   useAdminControllerGetAllScoringWeights,
   getAdminControllerRejectStartupUrl,
   getAdminControllerGetStatsQueryKey,
@@ -82,6 +83,7 @@ function AdminReviewPage() {
   const [showApproveDialog, setShowApproveDialog] = useState(false);
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [reanalyzingSection, setReanalyzingSection] = useState<string | null>(null);
 
   const { data: startupResponse, isLoading } = useStartupControllerFindOne(id);
   const startup = startupResponse
@@ -157,6 +159,24 @@ function AdminReviewPage() {
     },
   });
 
+  const retryAgentMutation = useAdminControllerRetryStartupAgent({
+    mutation: {
+      onSuccess: (_result, variables) => {
+        queryClient.invalidateQueries({ queryKey: getStartupControllerFindOneQueryKey(id) });
+        queryClient.invalidateQueries({ queryKey: getAdminControllerGetAllStartupsQueryKey() });
+        toast.success("Section re-analysis triggered", {
+          description: `${variables.data.agent} has been queued for re-analysis.`,
+        });
+      },
+      onError: (error: Error) => {
+        toast.error("Failed to re-analyze section", { description: error.message });
+      },
+      onSettled: () => {
+        setReanalyzingSection(null);
+      },
+    },
+  });
+
   const deleteMutation = useStartupControllerAdminDelete({
     mutation: {
       onSuccess: () => {
@@ -196,6 +216,22 @@ function AdminReviewPage() {
   const canApproveReject = ["pending_review", "analyzing", "analyzed"].includes(
     startup.status
   );
+
+  const handleSectionReanalyze = async (
+    sectionKey: string,
+    _evaluationId: string,
+    comment: string,
+  ) => {
+    setReanalyzingSection(sectionKey);
+    await retryAgentMutation.mutateAsync({
+      id,
+      data: {
+        phase: "evaluation",
+        agent: sectionKey,
+        feedback: comment,
+      },
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -276,6 +312,10 @@ function AdminReviewPage() {
                 startup={startup}
                 evaluation={evaluation}
                 weights={stageWeights}
+                adminFeedback={{
+                  onReanalyze: handleSectionReanalyze,
+                  reanalyzingSection,
+                }}
               />
             </TabsContent>
 

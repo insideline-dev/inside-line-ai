@@ -79,10 +79,16 @@ export function MemoSection({
   }, [summary, score, animateOnChange, animateOnMount]);
 
   const getScoreColor = (score: number) => {
-    if (score >= 80) return "text-chart-2 bg-chart-2/10";
-    if (score >= 60) return "text-chart-3 bg-chart-3/10";
-    if (score >= 40) return "text-chart-4 bg-chart-4/10";
-    return "text-chart-5 bg-chart-5/10";
+    if (score >= 80) {
+      return "text-emerald-700 bg-emerald-50 border-emerald-200 dark:text-emerald-300 dark:bg-emerald-950/30 dark:border-emerald-800";
+    }
+    if (score >= 60) {
+      return "text-amber-700 bg-amber-50 border-amber-200 dark:text-amber-300 dark:bg-amber-950/30 dark:border-amber-800";
+    }
+    if (score >= 40) {
+      return "text-orange-700 bg-orange-50 border-orange-200 dark:text-orange-300 dark:bg-orange-950/30 dark:border-orange-800";
+    }
+    return "text-rose-700 bg-rose-50 border-rose-200 dark:text-rose-300 dark:bg-rose-950/30 dark:border-rose-800";
   };
 
   const TrendIcon = trend === "up" ? TrendingUp : trend === "down" ? TrendingDown : Minus;
@@ -108,7 +114,7 @@ export function MemoSection({
             </Badge>
           )}
           {score !== null && score !== undefined && (
-            <Badge className={`${getScoreColor(score)} border-0 py-0 h-5`}>
+            <Badge variant="outline" className={`${getScoreColor(score)} py-0 h-5`}>
               Score: {score}/100
             </Badge>
           )}

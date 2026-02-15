@@ -59,26 +59,65 @@ interface MemoTabContentProps {
   animateOnMount?: boolean;
 }
 
-function getSummaryFromData(data: any): string | null {
+function toStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    .map((item) => item.trim());
+}
+
+function getSummaryFromData(data: unknown): string | null {
   if (!data) return null;
-  
-  if (typeof data.narrativeSummary === 'string' && data.narrativeSummary.length > 50) {
-    return data.narrativeSummary;
+  if (typeof data === "string") {
+    const text = data.trim();
+    return text.length > 0 ? text : null;
   }
-  
-  if (typeof data.memoNarrative === 'string' && data.memoNarrative.length > 50) {
-    return data.memoNarrative;
+  if (typeof data !== "object") return null;
+
+  const record = data as Record<string, unknown>;
+
+  const summaryFields = [
+    "narrativeSummary",
+    "memoNarrative",
+    "summary",
+    "assessment",
+    "feedback",
+    "overview",
+    "analysis",
+    "description",
+    "detailedAnalysis",
+    "investmentThesis",
+    "financialHealth",
+    "competitivePosition",
+    "termsQuality",
+    "legalStructure",
+  ] as const;
+
+  for (const field of summaryFields) {
+    const value = record[field];
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
   }
-  
-  if (typeof data.summary === 'string' && data.summary.length > 50) {
-    return data.summary;
+
+  const findings = toStringArray(record.keyFindings);
+  const risks = toStringArray(record.risks);
+  if (findings.length > 0 || risks.length > 0) {
+    const findingsText = findings.length > 0 ? `Key findings: ${findings.slice(0, 3).join("; ")}` : "";
+    const risksText = risks.length > 0 ? `Risks: ${risks.slice(0, 2).join("; ")}` : "";
+    return [findingsText, risksText].filter(Boolean).join("\n\n") || null;
   }
-  
-  if (typeof data.assessment === 'string' && data.assessment.length > 50) {
-    return data.assessment;
-  }
-  
-  return null;
+
+  const nestedSummaries = Object.values(record)
+    .filter((value): value is Record<string, unknown> => Boolean(value) && typeof value === "object" && !Array.isArray(value))
+    .flatMap((value) =>
+      ["summary", "assessment", "feedback"]
+        .map((field) => value[field])
+        .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+        .map((item) => item.trim()),
+    );
+
+  return nestedSummaries[0] ?? null;
 }
 
 function formatCurrency(value: number | null | undefined): string {
@@ -127,6 +166,12 @@ export function MemoTabContent({
     };
   };
 
+  const executiveSummaryText =
+    (evaluation as any)?.executiveSummary ||
+    investorMemo?.summary ||
+    founderReport?.summary ||
+    "This startup is currently under evaluation.";
+
   return (
     <Card data-testid="card-investment-memo">
       <CardHeader className="pb-4">
@@ -140,7 +185,7 @@ export function MemoTabContent({
           title="Executive Summary"
           icon={FileText}
           animateOnMount={animateOnMount}
-          summary={(evaluation as any)?.executiveSummary || investorMemo?.summary || founderReport?.summary || "This startup is currently under evaluation."}
+          summary={executiveSummaryText}
           defaultExpanded={true}
           details={
             <div className="space-y-4">
@@ -175,7 +220,11 @@ export function MemoTabContent({
           animateOnMount={animateOnMount}
           score={showScores ? evaluation.teamScore : undefined}
           weight={`${weights?.team ?? 0}%`}
-          summary={(evaluation.teamData as any)?.memoNarrative || getSummaryFromData(evaluation.teamData)}
+          summary={
+            (evaluation.teamData as any)?.memoNarrative ||
+            getSummaryFromData(evaluation.teamData) ||
+            "Team analysis is being compiled."
+          }
           evaluationNote="Evaluates founding team backgrounds, relevant experience, founder-market fit, and execution capability."
           adminFeedback={getAdminFeedbackProps("team")}
         />
@@ -186,7 +235,7 @@ export function MemoTabContent({
           animateOnMount={animateOnMount}
           score={showScores ? evaluation.marketScore : undefined}
           weight={`${weights?.market ?? 0}%`}
-          summary={getSummaryFromData(evaluation.marketData)}
+          summary={getSummaryFromData(evaluation.marketData) || "Market opportunity analysis is being compiled."}
           evaluationNote="Analyzes TAM/SAM/SOM, market timing, growth dynamics, and competitive landscape."
           adminFeedback={getAdminFeedbackProps("market")}
           details={
@@ -213,7 +262,7 @@ export function MemoTabContent({
           animateOnMount={animateOnMount}
           score={showScores ? evaluation.productScore : undefined}
           weight={`${weights?.product ?? 0}%`}
-          summary={getSummaryFromData(evaluation.productData)}
+          summary={getSummaryFromData(evaluation.productData) || "Product and technology analysis is being compiled."}
           evaluationNote="Assesses product differentiation, technology readiness, scalability, and defensive moat."
           adminFeedback={getAdminFeedbackProps("product")}
         />
@@ -224,7 +273,7 @@ export function MemoTabContent({
           animateOnMount={animateOnMount}
           score={showScores ? evaluation.businessModelScore : undefined}
           weight={`${weights?.businessModel ?? 0}%`}
-          summary={getSummaryFromData(evaluation.businessModelData)}
+          summary={getSummaryFromData(evaluation.businessModelData) || "Business model analysis is being compiled."}
           evaluationNote="Evaluates unit economics, revenue model sustainability, pricing strategy."
           adminFeedback={getAdminFeedbackProps("businessModel")}
         />
@@ -235,7 +284,7 @@ export function MemoTabContent({
           animateOnMount={animateOnMount}
           score={showScores ? evaluation.tractionScore : undefined}
           weight={`${weights?.traction ?? 0}%`}
-          summary={getSummaryFromData(evaluation.tractionData)}
+          summary={getSummaryFromData(evaluation.tractionData) || "Traction and metrics analysis is being compiled."}
           evaluationNote="Reviews revenue stage, growth signals, customer acquisition metrics."
           adminFeedback={getAdminFeedbackProps("traction")}
         />
@@ -246,7 +295,7 @@ export function MemoTabContent({
           animateOnMount={animateOnMount}
           score={showScores ? evaluation.gtmScore : undefined}
           weight={`${weights?.gtm ?? 0}%`}
-          summary={getSummaryFromData(evaluation.gtmData)}
+          summary={getSummaryFromData(evaluation.gtmData) || "Go-to-market analysis is being compiled."}
           evaluationNote="Analyzes sales motion, distribution channels, customer acquisition strategy."
           adminFeedback={getAdminFeedbackProps("gtm")}
         />
@@ -257,7 +306,7 @@ export function MemoTabContent({
           animateOnMount={animateOnMount}
           score={showScores ? evaluation.competitiveAdvantageScore : undefined}
           weight={`${weights?.competitiveAdvantage ?? 0}%`}
-          summary={getSummaryFromData(evaluation.competitiveAdvantageData)}
+          summary={getSummaryFromData(evaluation.competitiveAdvantageData) || "Competitive advantage analysis is being compiled."}
           evaluationNote="Analyzes competitive landscape, moat durability, barriers to entry, and network effects."
           adminFeedback={getAdminFeedbackProps("competitiveAdvantage")}
         />
@@ -268,7 +317,7 @@ export function MemoTabContent({
           animateOnMount={animateOnMount}
           score={showScores ? evaluation.financialsScore : undefined}
           weight={`${weights?.financials ?? 0}%`}
-          summary={getSummaryFromData(evaluation.financialsData)}
+          summary={getSummaryFromData(evaluation.financialsData) || "Financial analysis is being compiled."}
           evaluationNote="Reviews capital efficiency, burn rate, runway."
           adminFeedback={getAdminFeedbackProps("financials")}
         />
@@ -277,18 +326,42 @@ export function MemoTabContent({
           title="Funding History"
           icon={Wallet}
           animateOnMount={animateOnMount}
-          summary="Previous fundraising rounds and cap table structure."
+          summary={
+            startup.hasPreviousFunding
+              ? "Historical fundraising rounds and prior investor participation."
+              : "No prior funding rounds reported; current round details are shown below."
+          }
           details={
             <div className="space-y-4">
               <div className="p-4 border border-dashed rounded-lg text-center text-muted-foreground">
                 <Wallet className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">Funding history data coming soon.</p>
+                <p className="text-sm">
+                  {startup.hasPreviousFunding
+                    ? "Prior funding details are partially available."
+                    : "No previous funding rounds disclosed."}
+                </p>
               </div>
               {(startup.fundingTarget || startup.valuation) && (
                 <FundingRoundCard
                   round={formatStage(startup.stage) || "Current Round"}
                   amount={formatCurrency(startup.fundingTarget)}
                   valuation={formatCurrency(startup.valuation)}
+                  leadInvestor={startup.leadInvestorName || undefined}
+                />
+              )}
+              {startup.hasPreviousFunding && (
+                <FundingRoundCard
+                  round={startup.previousRoundType || "Previous Round"}
+                  amount={formatCurrency(startup.previousFundingAmount)}
+                  valuation={undefined}
+                  investors={
+                    startup.previousInvestors
+                      ? startup.previousInvestors
+                          .split(",")
+                          .map((name) => name.trim())
+                          .filter((name) => name.length > 0)
+                      : undefined
+                  }
                 />
               )}
             </div>
@@ -301,7 +374,7 @@ export function MemoTabContent({
           animateOnMount={animateOnMount}
           score={showScores ? evaluation.dealTermsScore : undefined}
           weight={`${weights?.dealTerms ?? 0}%`}
-          summary={getSummaryFromData(evaluation.dealTermsData)}
+          summary={getSummaryFromData(evaluation.dealTermsData) || "Deal terms analysis is being compiled."}
           evaluationNote="Analyzes valuation, deal structure, investor protections."
           adminFeedback={getAdminFeedbackProps("dealTerms")}
         />
@@ -312,7 +385,7 @@ export function MemoTabContent({
           animateOnMount={animateOnMount}
           score={showScores ? evaluation.legalScore : undefined}
           weight={`${weights?.legal ?? 0}%`}
-          summary={getSummaryFromData(evaluation.legalData)}
+          summary={getSummaryFromData(evaluation.legalData) || "Legal and regulatory analysis is being compiled."}
           evaluationNote="Assesses IP position, regulatory compliance, legal risks."
           adminFeedback={getAdminFeedbackProps("legal")}
         />
@@ -323,9 +396,40 @@ export function MemoTabContent({
           animateOnMount={animateOnMount}
           score={showScores ? evaluation.exitPotentialScore : undefined}
           weight={`${weights?.exitPotential ?? 0}%`}
-          summary={getSummaryFromData(evaluation.exitPotentialData)}
+          summary={getSummaryFromData(evaluation.exitPotentialData) || "Exit potential analysis is being compiled."}
           evaluationNote="Evaluates M&A activity, IPO feasibility, strategic acquirers."
           adminFeedback={getAdminFeedbackProps("exitPotential")}
+        />
+
+        <MemoSection
+          title="Executive Summary"
+          icon={FileText}
+          animateOnMount={animateOnMount}
+          summary={executiveSummaryText}
+          details={
+            <div className="space-y-4">
+              {((evaluation.keyStrengths as string[]) || []).length > 0 && (
+                <div>
+                  <h4 className="font-medium mb-2">Top Strengths</h4>
+                  <ul className="space-y-1">
+                    {((evaluation.keyStrengths as string[]) || []).slice(0, 3).map((item, idx) => (
+                      <li key={idx} className="text-sm">• {item}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {((evaluation.keyRisks as string[]) || []).length > 0 && (
+                <div>
+                  <h4 className="font-medium mb-2">Key Risks</h4>
+                  <ul className="space-y-1">
+                    {((evaluation.keyRisks as string[]) || []).slice(0, 3).map((item, idx) => (
+                      <li key={idx} className="text-sm">• {item}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          }
         />
 
         {/* Key Due Diligence Areas */}

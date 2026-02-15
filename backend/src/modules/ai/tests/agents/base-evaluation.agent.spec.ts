@@ -137,6 +137,27 @@ describe("BaseEvaluationAgent", () => {
     });
   });
 
+  it("retries once when model returns no output", async () => {
+    generateTextMock
+      .mockRejectedValueOnce(new Error("No output generated."))
+      .mockResolvedValueOnce({
+        output: {
+          score: 78,
+          verdict: "Recovered on retry",
+        },
+      });
+
+    const result = await agent.run(pipelineData);
+
+    expect(generateTextMock).toHaveBeenCalledTimes(2);
+    expect(result).toEqual({
+      key: "team",
+      output: { score: 78, verdict: "Recovered on retry" },
+      usedFallback: false,
+    });
+    expect(agent.fallback).not.toHaveBeenCalled();
+  });
+
   it("uses fallback when model output fails schema validation", async () => {
     generateTextMock.mockResolvedValueOnce({
       output: {

@@ -226,6 +226,59 @@ describe("EvaluationProcessor", () => {
     expect(result.type).toBe("ai_evaluation");
   });
 
+  it("marks fallback agent completions as completed in progress tracking", async () => {
+    evaluationService.run.mockImplementationOnce(
+      async (
+        _startupId: string,
+        options?: {
+          onAgentComplete?: (payload: {
+            agent: string;
+            output: unknown;
+            usedFallback: boolean;
+            error?: string;
+          }) => void;
+        },
+      ) => {
+        options?.onAgentComplete?.({
+          agent: "traction",
+          output: { score: 20 },
+          usedFallback: true,
+          error: "No output generated.",
+        });
+        return {
+          ...evaluationResult,
+          summary: {
+            ...evaluationResult.summary,
+            failedAgents: 1,
+            failedKeys: ["traction"],
+            errors: [{ agent: "traction", error: "No output generated." }],
+          },
+        };
+      },
+    );
+
+    const job = {
+      id: "job-1",
+      data: {
+        type: "ai_evaluation",
+        startupId: "startup-1",
+        pipelineRunId: "run-1",
+        userId: "user-1",
+      } satisfies AiEvaluationJobData,
+    } as unknown as Job<AiEvaluationJobData>;
+
+    await (processor as unknown as { process: (job: Job<AiEvaluationJobData>) => Promise<{ type: string }> }).process(job);
+
+    expect(pipelineService.onAgentProgress).toHaveBeenCalledWith(
+      expect.objectContaining({
+        key: "traction",
+        status: "completed",
+        progress: 100,
+        error: undefined,
+      }),
+    );
+  });
+
   it("throws for invalid evaluation job type", async () => {
     const job = {
       id: "job-1",

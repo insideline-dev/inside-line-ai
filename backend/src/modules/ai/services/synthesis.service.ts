@@ -217,6 +217,7 @@ export class SynthesisService {
       linkedinProfile?: {
         headline: string;
         summary: string;
+        profilePictureUrl?: string;
         currentCompany?: {
           name: string;
           title: string;
@@ -262,6 +263,7 @@ export class SynthesisService {
           ? {
               headline: linkedinProfile.headline,
               summary: linkedinProfile.summary,
+              profilePictureUrl: linkedinProfile.profilePictureUrl,
               currentCompany: linkedinProfile.currentCompany,
               experience: linkedinProfile.experience,
               education: linkedinProfile.education,
@@ -289,6 +291,7 @@ export class SynthesisService {
           ? {
               headline: scraped.linkedinProfile.headline,
               summary: scraped.linkedinProfile.summary,
+              profilePictureUrl: scraped.linkedinProfile.profilePictureUrl,
               currentCompany: scraped.linkedinProfile.currentCompany,
               experience: scraped.linkedinProfile.experience,
               education: scraped.linkedinProfile.education,

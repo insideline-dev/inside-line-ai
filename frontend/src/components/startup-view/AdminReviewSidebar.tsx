@@ -14,8 +14,10 @@ interface AdminReviewSidebarProps {
   onAdminNotesChange: (value: string) => void;
   onApprove: () => void;
   onReject: () => void;
+  onDeleteSubmission: () => void;
   approveDisabled?: boolean;
   rejectDisabled?: boolean;
+  deleteDisabled?: boolean;
   canApproveReject: boolean;
 }
 
@@ -43,8 +45,10 @@ export function AdminReviewSidebar({
   onAdminNotesChange,
   onApprove,
   onReject,
+  onDeleteSubmission,
   approveDisabled,
   rejectDisabled,
+  deleteDisabled,
   canApproveReject,
 }: AdminReviewSidebarProps) {
   const score = evaluation?.overallScore ?? startup.overallScore ?? 0;
@@ -106,7 +110,8 @@ export function AdminReviewSidebar({
           <Button
             variant="outline"
             className="h-10 w-full rounded-md border-destructive/20 text-sm font-medium text-destructive hover:text-destructive"
-            disabled
+            onClick={onDeleteSubmission}
+            disabled={deleteDisabled}
           >
             <Trash2 className="h-4 w-4 mr-2" />
             Delete Submission

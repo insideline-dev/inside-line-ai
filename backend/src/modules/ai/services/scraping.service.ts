@@ -304,6 +304,19 @@ export class ScrapingService {
           member.linkedinUrl,
         );
         if (cached) {
+          const hasImage = Boolean(
+            cached.linkedinProfile &&
+              "profilePictureUrl" in cached.linkedinProfile &&
+              cached.linkedinProfile.profilePictureUrl,
+          );
+          if (cached.enrichmentStatus === "success" && !hasImage) {
+            this.logger.debug(
+              `[Scraping] LinkedIn cache stale (missing profile image) for ${member.linkedinUrl}; refreshing live`,
+            );
+            membersToEnrich.push(member);
+            continue;
+          }
+
           cacheHitsByUrl.set(member.linkedinUrl, {
             ...member,
             ...cached,

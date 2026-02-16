@@ -1,8 +1,9 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { eq, ilike } from "drizzle-orm";
+import { and, eq, ilike } from "drizzle-orm";
 import { DrizzleService } from "../../database";
 import { StorageService } from "../../storage";
 import { ASSET_TYPES } from "../../storage/storage.config";
+import { UserRole } from "../../auth/entities/auth.schema";
 import { AgentMailClientService } from "../integrations/agentmail/agentmail-client.service";
 import { startup, StartupStatus, StartupStage } from "../startup/entities/startup.schema";
 import { PipelineService } from "../ai/services/pipeline.service";
@@ -41,11 +42,14 @@ export class ClaraSubmissionService {
     adminUserId: string,
     extractedCompanyName?: string,
   ): Promise<SubmissionResult> {
+    const ownerUserId = ctx.investorUserId ?? adminUserId;
+    const isInvestorSubmission = Boolean(ctx.investorUserId);
+
     const processedAttachments = await this.processAttachments(
       ctx.inboxId,
       ctx.messageId,
       ctx.attachments,
-      adminUserId,
+      ownerUserId,
     );
 
     const companyName =
@@ -56,7 +60,7 @@ export class ClaraSubmissionService {
       ) ??
       "Untitled Startup";
 
-    const duplicate = await this.findDuplicate(companyName);
+    const duplicate = await this.findDuplicate(companyName, ownerUserId);
     if (duplicate) {
       return {
         startupId: duplicate.id,
@@ -76,7 +80,9 @@ export class ClaraSubmissionService {
     const [created] = await this.drizzle.db
       .insert(startup)
       .values({
-        userId: adminUserId,
+        userId: ownerUserId,
+        submittedByRole: isInvestorSubmission ? UserRole.INVESTOR : UserRole.ADMIN,
+        isPrivate: isInvestorSubmission,
         name: companyName,
         slug,
         tagline: `Submitted via email by ${ctx.fromEmail}`,
@@ -96,7 +102,8 @@ export class ClaraSubmissionService {
         contactEmail: ctx.fromEmail,
         contactName: ctx.fromName ?? undefined,
         pitchDeckPath: deckAttachment?.storagePath ?? undefined,
-        status: StartupStatus.DRAFT,
+        status: StartupStatus.SUBMITTED,
+        submittedAt: new Date(),
       })
       .returning();
 
@@ -104,22 +111,16 @@ export class ClaraSubmissionService {
       `Created startup ${created.id} (${companyName}) from email by ${ctx.fromEmail}`,
     );
 
-    await this.drizzle.db
-      .update(startup)
-      .set({
-        status: StartupStatus.SUBMITTED,
-        submittedAt: new Date(),
-      })
-      .where(eq(startup.id, created.id));
-
-    await this.pipeline.startPipeline(created.id, adminUserId);
+    await this.pipeline.startPipeline(created.id, ownerUserId);
 
     await this.notifications.create(
-      adminUserId,
+      ownerUserId,
       "Clara: New startup submitted",
       `${companyName} was submitted via email by ${ctx.fromEmail}`,
       NotificationType.INFO,
-      `/admin/startups/${created.id}`,
+      isInvestorSubmission
+        ? `/investor/startup/${created.id}`
+        : `/admin/startups/${created.id}`,
     );
 
     return {
@@ -260,12 +261,13 @@ export class ClaraSubmissionService {
 
   private async findDuplicate(
     companyName: string,
+    ownerUserId: string,
   ): Promise<{ id: string; name: string; status: string } | null> {
     const escaped = companyName.replace(/[%_\\]/g, (ch) => `\\${ch}`);
     const [match] = await this.drizzle.db
       .select({ id: startup.id, name: startup.name, status: startup.status })
       .from(startup)
-      .where(ilike(startup.name, escaped))
+      .where(and(eq(startup.userId, ownerUserId), ilike(startup.name, escaped)))
       .limit(1);
     return match ?? null;
   }

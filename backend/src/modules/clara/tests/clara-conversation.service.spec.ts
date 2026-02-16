@@ -128,6 +128,39 @@ describe("ClaraConversationService", () => {
       expect(mockDb.returning).toHaveBeenCalled();
     });
 
+    it("should refresh investor identity on existing conversation when data is missing", async () => {
+      const staleConversation = {
+        ...mockConversation,
+        investorEmail: '"John Doe" <investor@example.com>',
+        investorUserId: null,
+      };
+      const refreshedConversation = {
+        ...mockConversation,
+        investorEmail: "investor@example.com",
+        investorUserId: "user-789",
+      };
+
+      mockDb.limit.mockResolvedValueOnce([staleConversation]);
+      mockDb.returning.mockResolvedValueOnce([refreshedConversation]);
+
+      const result = await service.findOrCreate(
+        "thread-456",
+        "investor@example.com",
+        "John Doe",
+        "user-789",
+      );
+
+      expect(mockDb.update).toHaveBeenCalled();
+      expect(mockDb.set).toHaveBeenCalledWith(
+        expect.objectContaining({
+          investorEmail: "investor@example.com",
+          investorName: "John Doe",
+          investorUserId: "user-789",
+        }),
+      );
+      expect(result).toEqual(refreshedConversation);
+    });
+
     it("should handle null investorName and investorUserId", async () => {
       const newConversation = {
         ...mockConversation,

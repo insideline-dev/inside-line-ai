@@ -234,7 +234,7 @@ describe('ClaraService', () => {
       expect(agentMailClient.getMessage).toHaveBeenCalledWith('inbox-1', 'msg-123');
       expect(conversationService.findOrCreate).toHaveBeenCalledWith(
         'thread-123',
-        '"John Doe" <investor@example.com>',
+        'investor@example.com',
         'John Doe',
         null,
       );
@@ -242,7 +242,7 @@ describe('ClaraService', () => {
       expect(submissionService.handleSubmission).toHaveBeenCalledWith(
         expect.objectContaining({
           messageId: 'msg-123',
-          fromEmail: '"John Doe" <investor@example.com>',
+          fromEmail: 'investor@example.com',
           attachments: expect.arrayContaining([
             expect.objectContaining({
               filename: 'pitch-deck.pdf',

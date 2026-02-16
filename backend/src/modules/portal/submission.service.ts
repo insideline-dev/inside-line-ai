@@ -8,6 +8,7 @@ import { eq, and, desc, sql } from 'drizzle-orm';
 import { DrizzleService } from '../../database';
 import { NotificationService } from '../../notification';
 import { UserAuthService } from '../../auth/user-auth.service';
+import { QueueService, QUEUE_NAMES } from '../../queue';
 import {
   portalSubmission,
   PortalSubmission,
@@ -18,6 +19,8 @@ import { startup, StartupStatus } from '../startup/entities/startup.schema';
 import { deriveStartupGeography } from '../geography';
 import { SubmitToPortal, GetSubmissionsQuery } from './dto';
 import { NotificationType } from '../../notification/entities';
+import { PipelineService } from '../ai/services/pipeline.service';
+import { AiConfigService } from '../ai/services/ai-config.service';
 
 @Injectable()
 export class SubmissionService {
@@ -27,6 +30,9 @@ export class SubmissionService {
     private drizzle: DrizzleService,
     private notification: NotificationService,
     private userAuth: UserAuthService,
+    private queue: QueueService,
+    private aiPipeline: PipelineService,
+    private aiConfig: AiConfigService,
   ) {}
 
   private generateSlug(name: string): string {
@@ -95,7 +101,7 @@ export class SubmissionService {
           teamSize: dto.teamSize,
           pitchDeckUrl: dto.pitchDeckUrl,
           demoUrl: dto.demoUrl,
-          status: StartupStatus.SUBMITTED,
+          status: StartupStatus.ANALYZING,
           submittedAt: new Date(),
         })
         .returning();
@@ -117,13 +123,33 @@ export class SubmissionService {
         `/portals/${portalId}/submissions`,
       );
 
-      return submission;
+      return {
+        submission,
+        startupId: createdStartup.id,
+        startupUserId: foundUser.id,
+      };
     });
 
+    if (this.aiConfig.isPipelineEnabled()) {
+      await this.aiPipeline.startPipeline(result.startupId, result.startupUserId);
+    } else {
+      await this.queue.addJob(
+        QUEUE_NAMES.TASK,
+        {
+          type: 'task',
+          userId: result.startupUserId,
+          name: 'score-startup',
+          priority: 1,
+          payload: { startupId: result.startupId },
+        },
+        { priority: 1 },
+      );
+    }
+
     this.logger.log(
-      `Created submission ${result.id} to portal ${portalId} from ${foundUser.email}`,
+      `Created submission ${result.submission.id} to portal ${portalId} from ${foundUser.email} and started analysis`,
     );
-    return result;
+    return result.submission;
   }
 
   async findAll(portalId: string, userId: string, query: GetSubmissionsQuery) {

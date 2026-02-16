@@ -65,8 +65,9 @@ export class ClaraService {
         messageId,
       );
 
-      const fromEmail = message.from;
-      const fromName = this.parseNameFromEmail(fromEmail);
+      const rawFrom = message.from;
+      const fromEmail = this.extractEmailAddress(rawFrom);
+      const fromName = this.parseNameFromEmail(rawFrom);
       const investorUserId = await this.findInvestorByEmail(fromEmail);
 
       const conversation = await this.conversationService.findOrCreate(
@@ -324,6 +325,15 @@ export class ClaraService {
 
     if (investor) return investor.id;
     return null;
+  }
+
+  private extractEmailAddress(from: string): string {
+    const angleMatch = from.match(/<([^>]+)>/);
+    if (angleMatch?.[1]) {
+      return angleMatch[1].trim().toLowerCase();
+    }
+
+    return from.trim().toLowerCase();
   }
 
   private parseNameFromEmail(email: string): string | null {

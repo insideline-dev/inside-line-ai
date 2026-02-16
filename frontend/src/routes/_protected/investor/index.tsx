@@ -11,7 +11,9 @@ import {
   useInvestorControllerGetThesis,
 } from "@/api/generated/investor/investor";
 import { AnalysisProgressBar } from "@/components/AnalysisProgressBar";
-import { useStartupControllerFindAll } from "@/api/generated/startup/startup";
+import {
+  useStartupControllerFindAll,
+} from "@/api/generated/startup/startup";
 import {
   Target,
   MapPin,
@@ -150,10 +152,10 @@ function PrivateStartupCard({
           </div>
         )}
 
-        {effectiveStatus === "approved" && (
+        {(effectiveStatus === "approved" || effectiveStatus === "pending_review") && (
           <Button className="w-full mt-4" size="sm" asChild>
             <Link to="/investor/startup/$id" params={{ id: String(startup.id) }}>
-              View Analysis
+              {effectiveStatus === "pending_review" ? "Review Analysis" : "View Analysis"}
               <ArrowRight className="w-4 h-4 ml-2" />
             </Link>
           </Button>

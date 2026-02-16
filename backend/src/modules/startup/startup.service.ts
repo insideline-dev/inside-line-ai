@@ -6,6 +6,7 @@ import {
   BadRequestException,
 } from "@nestjs/common";
 import { eq, and, or, ilike, sql, desc } from "drizzle-orm";
+import { UserRole } from "../../auth/entities/auth.schema";
 import { DrizzleService } from "../../database";
 import { QueueService, QUEUE_NAMES } from "../../queue";
 import { StorageService } from "../../storage";
@@ -89,15 +90,22 @@ export class StartupService {
       .replace(/^-+|-+$/g, "");
   }
 
-  async create(userId: string, dto: CreateStartup) {
+  async create(
+    userId: string,
+    dto: CreateStartup,
+    submittedByRole: UserRole = UserRole.FOUNDER,
+  ) {
     return this.drizzle.withRLS(userId, async (db) => {
       const slug = this.generateSlug(dto.name);
       const geography = deriveStartupGeography(dto.location);
+      const isInvestorSubmission = submittedByRole === UserRole.INVESTOR;
 
       const [created] = await db
         .insert(startup)
         .values({
           userId,
+          submittedByRole,
+          isPrivate: isInvestorSubmission,
           slug,
           ...dto,
           normalizedRegion: geography.normalizedRegion,
@@ -307,7 +315,11 @@ export class StartupService {
     });
   }
 
-  async approve(id: string, adminId: string) {
+  async approve(
+    id: string,
+    actorId: string,
+    actorRole: UserRole = UserRole.ADMIN,
+  ) {
     const [found] = await this.drizzle.db
       .select()
       .from(startup)
@@ -318,8 +330,25 @@ export class StartupService {
       throw new NotFoundException(`Startup with ID ${id} not found`);
     }
 
-    if (found.status !== StartupStatus.SUBMITTED) {
-      throw new BadRequestException("Can only approve submitted startups");
+    if (
+      found.status !== StartupStatus.SUBMITTED &&
+      found.status !== StartupStatus.PENDING_REVIEW
+    ) {
+      throw new BadRequestException(
+        "Can only approve submitted or pending review startups",
+      );
+    }
+
+    if (actorRole === UserRole.INVESTOR) {
+      const isOwner = found.userId === actorId;
+      const isPrivateInvestorSubmission =
+        found.isPrivate === true && found.submittedByRole === UserRole.INVESTOR;
+
+      if (!isOwner || !isPrivateInvestorSubmission) {
+        throw new ForbiddenException(
+          "Investors can only approve their own private startups",
+        );
+      }
     }
 
     const [updated] = await this.drizzle.db
@@ -335,7 +364,7 @@ export class StartupService {
       QUEUE_NAMES.TASK,
       {
         type: "task",
-        userId: adminId,
+        userId: actorId,
         name: "match-startup",
         priority: 2,
         payload: { startupId: id },
@@ -343,11 +372,16 @@ export class StartupService {
       { priority: 2 },
     );
 
-    this.logger.log(`Approved startup ${id} by admin ${adminId}`);
+    this.logger.log(`Approved startup ${id} by ${actorRole} ${actorId}`);
     return updated;
   }
 
-  async reject(id: string, adminId: string, rejectionReason: string) {
+  async reject(
+    id: string,
+    actorId: string,
+    rejectionReason: string,
+    actorRole: UserRole = UserRole.ADMIN,
+  ) {
     const [found] = await this.drizzle.db
       .select()
       .from(startup)
@@ -358,8 +392,25 @@ export class StartupService {
       throw new NotFoundException(`Startup with ID ${id} not found`);
     }
 
-    if (found.status !== StartupStatus.SUBMITTED) {
-      throw new BadRequestException("Can only reject submitted startups");
+    if (
+      found.status !== StartupStatus.SUBMITTED &&
+      found.status !== StartupStatus.PENDING_REVIEW
+    ) {
+      throw new BadRequestException(
+        "Can only reject submitted or pending review startups",
+      );
+    }
+
+    if (actorRole === UserRole.INVESTOR) {
+      const isOwner = found.userId === actorId;
+      const isPrivateInvestorSubmission =
+        found.isPrivate === true && found.submittedByRole === UserRole.INVESTOR;
+
+      if (!isOwner || !isPrivateInvestorSubmission) {
+        throw new ForbiddenException(
+          "Investors can only reject their own private startups",
+        );
+      }
     }
 
     const [updated] = await this.drizzle.db
@@ -372,7 +423,7 @@ export class StartupService {
       .where(eq(startup.id, id))
       .returning();
 
-    this.logger.log(`Rejected startup ${id} by admin ${adminId}`);
+    this.logger.log(`Rejected startup ${id} by ${actorRole} ${actorId}`);
     return updated;
   }
 

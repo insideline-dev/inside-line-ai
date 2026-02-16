@@ -48,6 +48,27 @@ describe('AgentMailService', () => {
     message_id: 'msg-123',
   };
 
+  const mockWebhookEnvelopePayload = {
+    body_included: true,
+    event_id: 'evt-123',
+    event_type: 'message.received',
+    message: {
+      inbox_id: 'inbox-1',
+      thread_id: 'ext-thread-123',
+      message_id: 'msg-envelope-123',
+      from: 'founder@startup.com',
+      to: ['investor@example.com'],
+      subject: 'Pitch from email',
+      extracted_text: 'Pitch content',
+      created_at: '2026-02-15T18:38:03.283Z',
+    },
+    thread: {
+      inbox_id: 'inbox-1',
+      thread_id: 'ext-thread-123',
+    },
+    type: 'event',
+  };
+
   const mockSdkMessage = {
     inboxId: 'inbox-1',
     threadId: 'ext-thread-123',
@@ -157,6 +178,17 @@ describe('AgentMailService', () => {
       );
     });
 
+    it('should process wrapped webhook payload with nested message/thread fields', async () => {
+      drizzleService.db.limit
+        .mockResolvedValueOnce([mockConfig]) // findUserByInbox
+        .mockResolvedValueOnce([]); // no existing thread
+
+      await service.handleWebhook(mockWebhookEnvelopePayload as any);
+
+      expect(agentMailClient.getMessage).not.toHaveBeenCalled();
+      expect(notificationService.create).toHaveBeenCalled();
+    });
+
     it('should skip if no user found for inbox', async () => {
       drizzleService.db.limit.mockResolvedValueOnce([]);
 
@@ -225,7 +257,7 @@ describe('AgentMailService', () => {
       expect(agentMailClient.getMessage).not.toHaveBeenCalled();
     });
 
-    it('should handle webhook with missing message_id by passing to SDK', async () => {
+    it('should fail webhook with missing message_id when payload has no message body', async () => {
       const invalidPayload = {
         organization_id: 'org-123',
         inbox_id: 'inbox-1',
@@ -234,9 +266,11 @@ describe('AgentMailService', () => {
       };
 
       drizzleService.db.limit.mockResolvedValueOnce([mockConfig]);
-      agentMailClient.getMessage.mockRejectedValueOnce(new Error('Invalid message_id'));
 
-      await expect(service.handleWebhook(invalidPayload as any)).rejects.toThrow('SDK getMessage failed');
+      await expect(service.handleWebhook(invalidPayload as any)).rejects.toThrow(
+        'SDK getMessage failed: missing message_id in webhook payload',
+      );
+      expect(agentMailClient.getMessage).not.toHaveBeenCalled();
     });
   });
 

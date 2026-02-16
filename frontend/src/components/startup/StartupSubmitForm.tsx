@@ -160,6 +160,7 @@ interface StartupSubmitFormProps {
   portalRequiredFields?: string[];
   enableDraftSaving?: boolean;
   draftId?: string | null;
+  showPrimaryContactSection?: boolean;
 }
 
 interface StoredDraft {
@@ -249,12 +250,16 @@ export function StartupSubmitForm({
   portalRequiredFields = [],
   enableDraftSaving = false,
   draftId: draftIdProp,
+  showPrimaryContactSection,
 }: StartupSubmitFormProps) {
   void apiEndpoint;
   void draftIdProp;
   const isPortalSubmission = !!portalSlug;
   const isWebsiteRequired = isPortalSubmission ? portalRequiredFields.includes("website") : true;
   const isPitchDeckRequired = isPortalSubmission ? portalRequiredFields.includes("pitchDeck") : false;
+  const primaryContactRequired = userRole === "founder" || userRole === "portal";
+  const shouldShowPrimaryContactSection =
+    showPrimaryContactSection ?? primaryContactRequired;
   const draftStorageKey = "startup-submit-draft-v1";
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -1422,7 +1427,7 @@ export function StartupSubmitForm({
           </CardContent>
         </Card>
 
-        {(userRole === "founder" || userRole === "portal") && (
+        {shouldShowPrimaryContactSection && (
           <Card>
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
@@ -1430,7 +1435,7 @@ export function StartupSubmitForm({
                 Primary Contact
               </CardTitle>
               <CardDescription>
-                Your contact information for investor outreach (required)
+                Your contact information for investor outreach ({primaryContactRequired ? "required" : "optional"})
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -1439,7 +1444,7 @@ export function StartupSubmitForm({
                 name="contactName"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Full Name *</FormLabel>
+                    <FormLabel>Full Name {primaryContactRequired ? "*" : ""}</FormLabel>
                     <FormControl>
                       <div className="relative">
                         <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -1461,7 +1466,7 @@ export function StartupSubmitForm({
                 name="contactEmail"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Email Address *</FormLabel>
+                    <FormLabel>Email Address {primaryContactRequired ? "*" : ""}</FormLabel>
                     <FormControl>
                       <div className="relative">
                         <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />

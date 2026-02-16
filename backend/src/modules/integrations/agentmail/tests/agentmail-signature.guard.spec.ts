@@ -36,12 +36,23 @@ describe('AgentMailSignatureGuard', () => {
     expect(guard).toBeDefined();
   });
 
-  const createMockContext = (signature: string | undefined, body: unknown): ExecutionContext => {
+  const createMockContext = (
+    signature: string | undefined,
+    body: unknown,
+    extraHeaders?: Record<string, string>,
+    rawBody?: Buffer,
+  ): ExecutionContext => {
+    const headers: Record<string, string> = { ...(extraHeaders ?? {}) };
+    if (signature) {
+      headers['x-agentmail-signature'] = signature;
+    }
+
     return {
       switchToHttp: () => ({
         getRequest: () => ({
-          headers: signature ? { 'x-agentmail-signature': signature } : {},
+          headers,
           body,
+          rawBody,
         }),
       }),
     } as ExecutionContext;
@@ -51,6 +62,21 @@ describe('AgentMailSignatureGuard', () => {
     const hmac = crypto.createHmac('sha256', secret);
     hmac.update(JSON.stringify(payload));
     return `sha256=${hmac.digest('hex')}`;
+  };
+
+  const generateSvixSignature = (
+    payload: unknown,
+    secret: string,
+    id: string,
+    timestamp: string,
+  ): string => {
+    const secretPart = secret.replace(/^whsec_/, '');
+    const secretBytes = Buffer.from(secretPart, 'base64');
+    const signedContent = `${id}.${timestamp}.${JSON.stringify(payload)}`;
+    return crypto
+      .createHmac('sha256', secretBytes)
+      .update(signedContent)
+      .digest('base64');
   };
 
   // ============ VALID SIGNATURE TESTS ============
@@ -79,6 +105,54 @@ describe('AgentMailSignatureGuard', () => {
       const context = createMockContext(signature, mockPayload);
 
       expect(() => guard.canActivate(context)).not.toThrow();
+    });
+
+    it('should allow request with Svix-style headers (svix-*)', () => {
+      const svixSecret = `whsec_${Buffer.from('svix-secret-key').toString('base64')}`;
+      configService.get.mockReturnValueOnce(svixSecret);
+
+      const id = 'msg_123';
+      const timestamp = '1739644800';
+      const sig = generateSvixSignature(mockPayload, svixSecret, id, timestamp);
+
+      const context = createMockContext(
+        undefined,
+        mockPayload,
+        {
+          'svix-id': id,
+          'svix-timestamp': timestamp,
+          'svix-signature': `v1,${sig}`,
+        },
+        Buffer.from(JSON.stringify(mockPayload), 'utf8'),
+      );
+
+      const result = guard.canActivate(context);
+
+      expect(result).toBe(true);
+    });
+
+    it('should allow request with webhook-* Svix-compatible headers', () => {
+      const svixSecret = `whsec_${Buffer.from('svix-secret-key').toString('base64')}`;
+      configService.get.mockReturnValueOnce(svixSecret);
+
+      const id = 'msg_456';
+      const timestamp = '1739644801';
+      const sig = generateSvixSignature(mockPayload, svixSecret, id, timestamp);
+
+      const context = createMockContext(
+        undefined,
+        mockPayload,
+        {
+          'webhook-id': id,
+          'webhook-timestamp': timestamp,
+          'x-webhook-signature': `v1=${sig}`,
+        },
+        Buffer.from(JSON.stringify(mockPayload), 'utf8'),
+      );
+
+      const result = guard.canActivate(context);
+
+      expect(result).toBe(true);
     });
   });
 
@@ -114,13 +188,14 @@ describe('AgentMailSignatureGuard', () => {
       expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
     });
 
-    it('should reject signature without sha256 prefix', () => {
+    it('should allow signature without sha256 prefix (hex-only)', () => {
       const hmac = crypto.createHmac('sha256', mockSecret);
       hmac.update(JSON.stringify(mockPayload));
-      const signature = hmac.digest('hex'); // Missing 'sha256=' prefix
+      const signature = hmac.digest('hex');
       const context = createMockContext(signature, mockPayload);
 
-      expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
+      const result = guard.canActivate(context);
+      expect(result).toBe(true);
     });
   });
 
@@ -286,13 +361,14 @@ describe('AgentMailSignatureGuard', () => {
       expect(result).toBe(true);
     });
 
-    it('should fail on signature with uppercase hex characters', () => {
+    it('should allow signature with uppercase hex characters', () => {
       const hmac = crypto.createHmac('sha256', mockSecret);
       hmac.update(JSON.stringify(mockPayload));
       const upperCaseSignature = `sha256=${hmac.digest('hex').toUpperCase()}`;
       const context = createMockContext(upperCaseSignature, mockPayload);
 
-      expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
+      const result = guard.canActivate(context);
+      expect(result).toBe(true);
     });
 
     it('should reject signature with special characters', () => {
@@ -322,12 +398,13 @@ describe('AgentMailSignatureGuard', () => {
       expect(result).toBe(true);
     });
 
-    it('should reject signature with whitespace padding', () => {
+    it('should allow signature with surrounding whitespace', () => {
       const signature = generateValidSignature(mockPayload, mockSecret);
       const paddedSignature = ` ${signature} `;
       const context = createMockContext(paddedSignature, mockPayload);
 
-      expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
+      const result = guard.canActivate(context);
+      expect(result).toBe(true);
     });
 
     it('should handle array payload correctly', () => {

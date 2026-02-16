@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScoreRing } from "@/components/analysis/ScoreRing";
@@ -73,6 +74,24 @@ export function SummaryCard({
   showSectionScores = true,
   weights,
 }: SummaryCardProps) {
+  const [animateBars, setAnimateBars] = useState(false);
+
+  useEffect(() => {
+    setAnimateBars(false);
+    const frame = requestAnimationFrame(() => setAnimateBars(true));
+    return () => cancelAnimationFrame(frame);
+  }, [evaluation?.id, startup?.id]);
+
+  const getSectionBarClass = (name: string, score: number) => {
+    if (name === "Go-to-Market") {
+      return "bg-gradient-to-r from-violet-600 to-indigo-500";
+    }
+    if (score < 40) {
+      return "bg-gradient-to-r from-pink-600 to-rose-500";
+    }
+    return "bg-gradient-to-r from-orange-500 to-amber-500";
+  };
+
   return (
     <div className="space-y-6">
       <Card>
@@ -173,29 +192,28 @@ export function SummaryCard({
                 { name: "Traction", score: evaluation.tractionScore, weight: `${weights?.traction ?? 0}%` },
                 { name: "Business Model", score: evaluation.businessModelScore, weight: `${weights?.businessModel ?? 0}%` },
                 { name: "Go-to-Market", score: evaluation.gtmScore, weight: `${weights?.gtm ?? 0}%` },
-                { name: "Competitive Adv.", score: evaluation.competitiveAdvantageScore, weight: `${weights?.competitiveAdvantage ?? 0}%` },
+                { name: "Competitive Advantage", score: evaluation.competitiveAdvantageScore, weight: `${weights?.competitiveAdvantage ?? 0}%` },
                 { name: "Financials", score: evaluation.financialsScore, weight: `${weights?.financials ?? 0}%` },
                 { name: "Legal", score: evaluation.legalScore, weight: `${weights?.legal ?? 0}%` },
                 { name: "Deal Terms", score: evaluation.dealTermsScore, weight: `${weights?.dealTerms ?? 0}%` },
                 { name: "Exit Potential", score: evaluation.exitPotentialScore, weight: `${weights?.exitPotential ?? 0}%` },
-              ].map((section) => {
+              ].map((section, index) => {
                 const sectionId = section.name.toLowerCase().replace(/\s+/g, '-');
+                const sectionScore = Math.max(0, Math.min(100, Number(section.score || 0)));
                 return (
                   <div key={section.name} className="flex items-center gap-2" data-testid={`row-section-score-${sectionId}`}>
                     <span className="text-xs w-28 shrink-0" data-testid={`text-section-name-${sectionId}`}>{section.name}</span>
                     <span className="text-xs text-muted-foreground w-8 shrink-0 text-right" data-testid={`text-section-weight-${sectionId}`}>{section.weight}</span>
                     <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden min-w-0">
                       <div 
-                        className={`h-full rounded-full transition-all ${
-                          (section.score || 0) >= 80 ? "bg-chart-2" :
-                          (section.score || 0) >= 60 ? "bg-chart-3" :
-                          (section.score || 0) >= 40 ? "bg-chart-4" :
-                          "bg-chart-5"
-                        }`}
-                        style={{ width: `${section.score || 0}%` }}
+                        className={`h-full rounded-full transition-[width] duration-700 ease-out ${getSectionBarClass(section.name, sectionScore)}`}
+                        style={{
+                          width: animateBars ? `${sectionScore}%` : "0%",
+                          transitionDelay: `${index * 55}ms`,
+                        }}
                       />
                     </div>
-                    <span className="text-xs font-medium w-8 text-right shrink-0" data-testid={`text-section-score-${sectionId}`}>{section.score || 0}</span>
+                    <span className="text-xs font-medium w-8 text-right shrink-0" data-testid={`text-section-score-${sectionId}`}>{sectionScore}</span>
                   </div>
                 );
               })}

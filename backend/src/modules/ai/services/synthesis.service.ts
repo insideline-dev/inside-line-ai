@@ -447,7 +447,7 @@ export class SynthesisService {
             title: "New Startup Match",
             message: `A startup matched your thesis with ${match.thesisFitScore}% alignment.`,
             type: NotificationType.MATCH,
-            link: `/investor/matches/${startupId}`,
+            link: `/investor/startup/${startupId}`,
           })),
         );
       }

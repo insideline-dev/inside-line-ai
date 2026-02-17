@@ -32,6 +32,7 @@ export async function runPipelinePhase<P extends PipelinePhase>(
   result: PhaseResultMap[P] | null;
 }> {
   const { startupId, pipelineRunId, userId } = options.job.data;
+  const jobRetryCount = readJobRetryCount(options.job);
   logger.log(`[${options.phase}] Job picked up | Startup: ${startupId} | Run: ${pipelineRunId}`);
 
   const state = await options.pipelineState.get(startupId);
@@ -51,6 +52,18 @@ export async function runPipelinePhase<P extends PipelinePhase>(
   ) {
     logger.warn(
       `[${options.phase}] SKIPPED — stale state | Expected run: ${pipelineRunId}, got: ${state.pipelineRunId} | Status: ${state.status}`,
+    );
+    return {
+      startupId,
+      pipelineRunId,
+      userId,
+      result: (state.results[options.phase] as PhaseResultMap[P] | undefined) ?? null,
+    };
+  }
+
+  if (jobRetryCount < (state.retryCounts[options.phase] ?? 0)) {
+    logger.warn(
+      `[${options.phase}] SKIPPED — stale retry attempt | Startup: ${startupId} | Job retry: ${jobRetryCount} | Current retry: ${state.retryCounts[options.phase] ?? 0}`,
     );
     return {
       startupId,
@@ -81,6 +94,7 @@ export async function runPipelinePhase<P extends PipelinePhase>(
       options.phase,
       PhaseStatus.RUNNING,
     );
+    await options.pipelineService.onPhaseStarted?.(startupId, options.phase);
     options.notificationGateway.sendJobStatus(userId, {
       jobId: String(options.job.id),
       jobType: options.jobType,
@@ -91,6 +105,35 @@ export async function runPipelinePhase<P extends PipelinePhase>(
 
     logger.log(`[${options.phase}] Executing phase logic... | Startup: ${startupId}`);
     const result = await options.run();
+
+    const latestState = await options.pipelineState.get(startupId);
+    if (!latestState) {
+      logger.warn(
+        `[${options.phase}] SKIPPED — pipeline state missing after execution | Startup: ${startupId}`,
+      );
+      return {
+        startupId,
+        pipelineRunId,
+        userId,
+        result: null,
+      };
+    }
+
+    if (
+      latestState.pipelineRunId !== pipelineRunId ||
+      latestState.status !== PipelineStatus.RUNNING ||
+      jobRetryCount < (latestState.retryCounts[options.phase] ?? 0)
+    ) {
+      logger.warn(
+        `[${options.phase}] SKIPPED — stale completion ignored | Startup: ${startupId} | Job retry: ${jobRetryCount} | Current retry: ${latestState.retryCounts[options.phase] ?? 0} | State run: ${latestState.pipelineRunId} | State status: ${latestState.status}`,
+      );
+      return {
+        startupId,
+        pipelineRunId,
+        userId,
+        result: (latestState.results[options.phase] as PhaseResultMap[P] | undefined) ?? null,
+      };
+    }
 
     await options.pipelineState.setPhaseResult(startupId, options.phase, result);
     await options.pipelineState.updatePhase(
@@ -134,4 +177,14 @@ export async function runPipelinePhase<P extends PipelinePhase>(
     });
     throw error;
   }
+}
+
+function readJobRetryCount(
+  job: Job<{ startupId: string; pipelineRunId: string; userId: string }>,
+): number {
+  const retryCount = (job.data as { metadata?: { retryCount?: unknown } }).metadata?.retryCount;
+  if (typeof retryCount === "number" && Number.isFinite(retryCount) && retryCount >= 0) {
+    return Math.floor(retryCount);
+  }
+  return 0;
 }

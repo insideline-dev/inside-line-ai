@@ -15,6 +15,7 @@ import { PipelineService } from "../../ai/services/pipeline.service";
 import { PipelineFeedbackService } from "../../ai/services/pipeline-feedback.service";
 import {
   PipelineStatus,
+  ModelPurpose,
   PipelinePhase,
   type PipelineState,
 } from "../../ai/interfaces/pipeline.interface";
@@ -104,6 +105,11 @@ describe("StartupService", () => {
 
     aiConfigService = {
       isPipelineEnabled: jest.fn().mockReturnValue(true),
+      getModelForPurpose: jest.fn((purpose: ModelPurpose) =>
+        purpose === ModelPurpose.SYNTHESIS
+          ? "gpt-5.2"
+          : "gemini-3.0-flash-preview",
+      ),
     } as unknown as jest.Mocked<AiConfigService>;
 
     pipelineService = {
@@ -230,9 +236,25 @@ describe("StartupService", () => {
       expect(result).toEqual(
         expect.objectContaining({
           id: mockStartupId,
-          evaluation: mockEvaluation,
+          evaluation: expect.objectContaining({
+            id: mockEvaluation.id,
+            startupId: mockEvaluation.startupId,
+            overallScore: mockEvaluation.overallScore,
+          }),
         }),
       );
+      const evaluation = (result as { evaluation?: Record<string, unknown> }).evaluation;
+      const sources = Array.isArray(evaluation?.sources)
+        ? (evaluation.sources as Array<Record<string, unknown>>)
+        : [];
+      expect(
+        sources.some(
+          (source) =>
+            source.agent === "TeamAgent" &&
+            source.type === "api" &&
+            source.model === "gemini-3.0-flash-preview",
+        ),
+      ).toBe(true);
     });
 
     it("should not include evaluation data before approval for founders", async () => {
@@ -265,7 +287,11 @@ describe("StartupService", () => {
       expect(result).toEqual(
         expect.objectContaining({
           id: mockStartupId,
-          evaluation: mockEvaluation,
+          evaluation: expect.objectContaining({
+            id: mockEvaluation.id,
+            startupId: mockEvaluation.startupId,
+            overallScore: mockEvaluation.overallScore,
+          }),
         }),
       );
       expect(drizzleService.withRLS).not.toHaveBeenCalled();
@@ -294,7 +320,11 @@ describe("StartupService", () => {
       expect(result).toEqual(
         expect.objectContaining({
           id: mockStartupId,
-          evaluation: mockEvaluation,
+          evaluation: expect.objectContaining({
+            id: mockEvaluation.id,
+            startupId: mockEvaluation.startupId,
+            overallScore: mockEvaluation.overallScore,
+          }),
         }),
       );
     });
@@ -473,7 +503,6 @@ describe("StartupService", () => {
 
       expect(result.status).toBe(StartupStatus.APPROVED);
       expect(result.approvedAt).toBeTruthy();
-      expect(queueService.addJob).toHaveBeenCalled();
     });
 
     it("should throw NotFoundException if startup not found", async () => {

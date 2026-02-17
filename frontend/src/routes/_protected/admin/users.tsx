@@ -10,6 +10,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { customFetch } from "@/api/client";
 import { useAdminControllerGetUsers } from "@/api/generated/admin/admin";
@@ -33,6 +41,7 @@ interface User {
 interface EarlyAccessInvite {
   id: string;
   email: string;
+  role: "founder" | "investor" | "scout";
   status: "pending" | "redeemed" | "revoked" | "expired";
   expiresAt: string;
   redeemedAt: string | null;
@@ -64,6 +73,12 @@ const inviteStatusColors: Record<EarlyAccessInvite["status"], string> = {
   expired: "bg-red-100 text-red-800",
 };
 
+const inviteRoleLabels: Record<EarlyAccessInvite["role"], string> = {
+  founder: "Founder",
+  investor: "Investor",
+  scout: "Scout",
+};
+
 function formatDate(date: string): string {
   return new Date(date).toLocaleDateString("en-US", {
     month: "short",
@@ -75,6 +90,7 @@ function formatDate(date: string): string {
 function UserManagement() {
   const queryClient = useQueryClient();
   const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState<EarlyAccessInvite["role"]>("founder");
   const [expiresInDays, setExpiresInDays] = useState("7");
   const [latestInviteUrl, setLatestInviteUrl] = useState<string | null>(null);
 
@@ -100,6 +116,7 @@ function UserManagement() {
         method: "POST",
         body: JSON.stringify({
           email: inviteEmail,
+          role: inviteRole,
           expiresInDays: Number(expiresInDays || "7"),
         }),
       }),
@@ -158,27 +175,63 @@ function UserManagement() {
           <CardTitle>Generate Early-Access Invite</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-3 md:grid-cols-[1fr_140px_auto]">
-            <Input
-              type="email"
-              value={inviteEmail}
-              placeholder="invitee@example.com"
-              onChange={(e) => setInviteEmail(e.target.value)}
-            />
-            <Input
-              type="number"
-              min={1}
-              max={90}
-              value={expiresInDays}
-              onChange={(e) => setExpiresInDays(e.target.value)}
-            />
-            <Button
-              disabled={!inviteEmail || createInviteMutation.isPending}
-              onClick={() => createInviteMutation.mutate()}
-            >
-              {createInviteMutation.isPending ? "Generating..." : "Generate Link"}
-            </Button>
+          <div className="grid gap-3 md:grid-cols-[1.2fr_180px_180px_auto]">
+            <div className="space-y-2">
+              <Label htmlFor="invite-email">Invitee email</Label>
+              <Input
+                id="invite-email"
+                type="email"
+                value={inviteEmail}
+                placeholder="invitee@example.com"
+                onChange={(e) => setInviteEmail(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="invite-role">Role</Label>
+              <Select
+                value={inviteRole}
+                onValueChange={(value) =>
+                  setInviteRole(value as EarlyAccessInvite["role"])
+                }
+              >
+                <SelectTrigger id="invite-role">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="founder">Founder</SelectItem>
+                  <SelectItem value="investor">Investor</SelectItem>
+                  <SelectItem value="scout">Scout</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="invite-expiry">Invite expiry (days)</Label>
+              <Input
+                id="invite-expiry"
+                type="number"
+                min={1}
+                max={90}
+                value={expiresInDays}
+                onChange={(e) => setExpiresInDays(e.target.value)}
+              />
+            </div>
+
+            <div className="flex items-end">
+              <Button
+                disabled={!inviteEmail || createInviteMutation.isPending}
+                onClick={() => createInviteMutation.mutate()}
+              >
+                {createInviteMutation.isPending ? "Generating..." : "Generate Link"}
+              </Button>
+            </div>
           </div>
+
+          <p className="text-sm text-muted-foreground">
+            Example: <code>7</code> means the invite link expires 7 days after it is
+            created.
+          </p>
 
           {latestInviteUrl && (
             <div className="rounded-md border p-3 space-y-2">
@@ -219,6 +272,9 @@ function UserManagement() {
                       Status
                     </th>
                     <th className="text-left py-3 px-3 font-medium text-muted-foreground">
+                      Role
+                    </th>
+                    <th className="text-left py-3 px-3 font-medium text-muted-foreground">
                       Expires
                     </th>
                     <th className="text-left py-3 px-3 font-medium text-muted-foreground">
@@ -241,6 +297,7 @@ function UserManagement() {
                           {invite.status}
                         </Badge>
                       </td>
+                      <td className="py-3 px-3">{inviteRoleLabels[invite.role]}</td>
                       <td className="py-3 px-3">{formatDate(invite.expiresAt)}</td>
                       <td className="py-3 px-3">{formatDate(invite.createdAt)}</td>
                       <td className="py-3 px-3">

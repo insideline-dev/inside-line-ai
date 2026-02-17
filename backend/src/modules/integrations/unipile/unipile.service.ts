@@ -65,7 +65,26 @@ export class UnipileService {
     // Check cache first
     const cached = await this.cacheService.getCached(linkedinUrl);
     if (cached) {
-      return cached;
+      if (cached.profileImageUrl) {
+        return cached;
+      }
+
+      // Cached profile is missing an image; attempt a live refresh.
+      this.logger.debug(
+        `Cached LinkedIn profile missing image, refreshing from API: ${linkedinUrl}`,
+      );
+      try {
+        const refreshed = await this.fetchProfileFromAPI(linkedinUrl);
+        if (refreshed) {
+          const identifier = this.extractIdentifierFromUrl(linkedinUrl);
+          await this.cacheService
+            .setCache(userId, linkedinUrl, identifier, refreshed)
+            .catch(() => undefined);
+        }
+        return refreshed ?? cached;
+      } catch {
+        return cached;
+      }
     }
 
     // Fetch from Unipile API
@@ -207,6 +226,8 @@ export class UnipileService {
       data.work_experience || data.experience || data.experiences || data.positions || [];
     const educationEntries = data.education || data.educations || [];
 
+    const extractedProfileImage = this.extractProfileImageUrl(data);
+
     return {
       id: data.id || data.profile_id || '',
       firstName: data.first_name || data.firstName || derivedFirstName || '',
@@ -214,7 +235,7 @@ export class UnipileService {
       headline: data.headline || data.title || '',
       location: data.location || '',
       profileUrl: data.profile_url || data.profileUrl || data.url || '',
-      profileImageUrl: data.profile_image_url || data.profileImageUrl || null,
+      profileImageUrl: extractedProfileImage,
       summary: data.summary || null,
       currentCompany: data.current_company
         ? {
@@ -262,6 +283,165 @@ export class UnipileService {
     };
   }
 
+  private extractProfileImageUrl(data: Record<string, any>): string | null {
+    const directCandidates = [
+      data.profile_image_url,
+      data.profileImageUrl,
+      data.profile_picture_url,
+      data.profilePictureUrl,
+      data.profile_picture,
+      data.profilePicture,
+      data.picture_url,
+      data.pictureUrl,
+      data.picture,
+      data.photo_url,
+      data.photoUrl,
+      data.photo,
+      data.image_url,
+      data.imageUrl,
+      data.image,
+      data.avatar_url,
+      data.avatarUrl,
+      data.avatar,
+    ];
+
+    for (const candidate of directCandidates) {
+      const normalizedDirect = this.normalizeImageUrl(candidate);
+      if (normalizedDirect) return normalizedDirect;
+
+      const vectorDirect = this.extractLinkedinVectorImageUrl(candidate);
+      if (vectorDirect) return vectorDirect;
+
+      if (
+        candidate &&
+        typeof candidate === 'object' &&
+        typeof candidate.url === 'string' &&
+        candidate.url.trim()
+      ) {
+        return this.normalizeImageUrl(candidate.url);
+      }
+    }
+
+    const arrayCandidates = [data.photos, data.profile_photos, data.images, data.pictures];
+    for (const candidate of arrayCandidates) {
+      if (!Array.isArray(candidate)) continue;
+      for (const item of candidate) {
+        const normalizedItem = this.normalizeImageUrl(item);
+        if (normalizedItem) return normalizedItem;
+
+        const vectorItem = this.extractLinkedinVectorImageUrl(item);
+        if (vectorItem) return vectorItem;
+
+        if (
+          item &&
+          typeof item === 'object' &&
+          typeof item.url === 'string' &&
+          item.url.trim()
+        ) {
+          return this.normalizeImageUrl(item.url);
+        }
+      }
+    }
+
+    // Last-resort deep scan for nested image fields often returned by providers.
+    const visited = new Set<unknown>();
+    const stack: unknown[] = [data];
+    while (stack.length > 0) {
+      const current = stack.pop();
+      if (!current || typeof current !== 'object' || visited.has(current)) continue;
+      visited.add(current);
+
+      const vectorCurrent = this.extractLinkedinVectorImageUrl(current);
+      if (vectorCurrent) return vectorCurrent;
+
+      if (Array.isArray(current)) {
+        for (const entry of current) stack.push(entry);
+        continue;
+      }
+
+      const currentRecord = current as Record<string, unknown>;
+      if ('url' in currentRecord) {
+        const maybeUrl = this.normalizeImageUrl(currentRecord.url);
+        if (maybeUrl && this.looksLikeImageUrl(maybeUrl)) {
+          return maybeUrl;
+        }
+      }
+
+      for (const [key, value] of Object.entries(currentRecord)) {
+        const lowerKey = key.toLowerCase();
+        if (
+          lowerKey.includes('image') ||
+          lowerKey.includes('photo') ||
+          lowerKey.includes('avatar') ||
+          lowerKey.includes('picture')
+        ) {
+          const normalized = this.normalizeImageUrl(value);
+          if (normalized) return normalized;
+
+          const vector = this.extractLinkedinVectorImageUrl(value);
+          if (vector) return vector;
+        }
+
+        stack.push(value);
+      }
+    }
+
+    return null;
+  }
+
+  private normalizeImageUrl(candidate: unknown): string | null {
+    if (typeof candidate !== 'string') return null;
+    const value = candidate.trim();
+    if (!value) return null;
+    if (value.startsWith('http://') || value.startsWith('https://')) return value;
+    if (value.startsWith('//')) return `https:${value}`;
+    return null;
+  }
+
+  private looksLikeImageUrl(url: string): boolean {
+    const lower = url.toLowerCase();
+    return (
+      lower.includes('media.licdn.com/') ||
+      lower.includes('/dms/image/') ||
+      /\.(jpg|jpeg|png|webp|gif)(\?|$)/.test(lower)
+    );
+  }
+
+  private extractLinkedinVectorImageUrl(candidate: unknown): string | null {
+    if (!candidate || typeof candidate !== 'object') return null;
+
+    const value = candidate as Record<string, unknown>;
+    const rootRaw = value.rootUrl ?? value.root_url;
+    const root = this.normalizeImageUrl(rootRaw);
+    const artifactsRaw = value.artifacts;
+    if (!root || !Array.isArray(artifactsRaw) || artifactsRaw.length === 0) {
+      return null;
+    }
+
+    let bestSegment: string | null = null;
+    let bestArea = -1;
+    for (const artifact of artifactsRaw) {
+      if (!artifact || typeof artifact !== 'object') continue;
+      const art = artifact as Record<string, unknown>;
+      const segmentRaw =
+        art.fileIdentifyingUrlPathSegment ??
+        art.file_identifying_url_path_segment ??
+        art.pathSegment ??
+        art.path_segment;
+      if (typeof segmentRaw !== 'string' || !segmentRaw.trim()) continue;
+
+      const width = typeof art.width === 'number' ? art.width : 0;
+      const height = typeof art.height === 'number' ? art.height : 0;
+      const area = width * height;
+      if (area >= bestArea) {
+        bestArea = area;
+        bestSegment = segmentRaw.trim();
+      }
+    }
+
+    if (!bestSegment) return null;
+    return `${root}${bestSegment}`;
+  }
   private async resolveBestCompanyId(
     companyName: string,
     companyWebsite?: string,

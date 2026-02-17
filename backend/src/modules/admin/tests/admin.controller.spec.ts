@@ -11,6 +11,7 @@ import { StartupIntakeService } from '../../startup/startup-intake.service';
 import { IntegrationHealthService } from '../integration-health.service';
 import { SystemConfigService } from '../system-config.service';
 import { BulkDataService } from '../bulk-data.service';
+import { AdminMatchingService } from '../admin-matching.service';
 import { AiPromptService } from '../../ai/services/ai-prompt.service';
 import { AiPromptRuntimeService } from '../../ai/services/ai-prompt-runtime.service';
 import { EarlyAccessService } from '../../early-access';
@@ -123,6 +124,12 @@ describe('AdminController', () => {
           useValue: {
             importStartups: jest.fn(),
             exportStartups: jest.fn(),
+          },
+        },
+        {
+          provide: AdminMatchingService,
+          useValue: {
+            triggerMatchForStartup: jest.fn(),
           },
         },
         {

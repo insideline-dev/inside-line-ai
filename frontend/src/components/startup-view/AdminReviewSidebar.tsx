@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { CheckCircle2, Link2, Trash2, XCircle } from "lucide-react";
+import { CheckCircle2, Link2, Trash2, Users, XCircle } from "lucide-react";
 import type { Startup } from "@/types/startup";
 import type { Evaluation } from "@/types/evaluation";
 
@@ -15,9 +15,11 @@ interface AdminReviewSidebarProps {
   onApprove: () => void;
   onReject: () => void;
   onDeleteSubmission: () => void;
+  onMatchInvestors?: () => void;
   approveDisabled?: boolean;
   rejectDisabled?: boolean;
   deleteDisabled?: boolean;
+  matchDisabled?: boolean;
   canApproveReject: boolean;
 }
 
@@ -46,9 +48,11 @@ export function AdminReviewSidebar({
   onApprove,
   onReject,
   onDeleteSubmission,
+  onMatchInvestors,
   approveDisabled,
   rejectDisabled,
   deleteDisabled,
+  matchDisabled,
   canApproveReject,
 }: AdminReviewSidebarProps) {
   const score = evaluation?.overallScore ?? startup.overallScore ?? 0;
@@ -105,6 +109,17 @@ export function AdminReviewSidebar({
                 Reject
               </Button>
             </div>
+          )}
+
+          {startup.status === "approved" && onMatchInvestors && (
+            <Button
+              onClick={onMatchInvestors}
+              disabled={matchDisabled}
+              className="h-10 w-full rounded-md bg-gradient-to-r from-blue-500 to-cyan-600 text-sm font-medium text-white hover:opacity-95"
+            >
+              <Users className="h-4 w-4 mr-2" />
+              {matchDisabled ? "Matching..." : "Match Investors"}
+            </Button>
           )}
 
           <Button

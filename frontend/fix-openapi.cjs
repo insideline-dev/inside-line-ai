@@ -31,6 +31,13 @@ function fixSchema(obj, parentKey = '') {
   if (obj.propertyNames !== undefined) {
     delete obj.propertyNames;
   }
+
+  // Fix anyOf without $ref — flatten to first type (orval requires $ref in anyOf)
+  if (Array.isArray(obj.anyOf) && obj.anyOf.every(item => !item.$ref)) {
+    const first = obj.anyOf.find(item => item.type) || obj.anyOf[0];
+    delete obj.anyOf;
+    Object.assign(obj, first);
+  }
   
   for (const key in obj) {
     fixSchema(obj[key], key);

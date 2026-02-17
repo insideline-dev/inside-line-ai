@@ -430,18 +430,6 @@ export class StartupService {
       .where(eq(startup.id, id))
       .returning();
 
-    await this.queue.addJob(
-      QUEUE_NAMES.TASK,
-      {
-        type: "task",
-        userId: actorId,
-        name: "match-startup",
-        priority: 2,
-        payload: { startupId: id },
-      },
-      { priority: 2 },
-    );
-
     this.logger.log(`Approved startup ${id} by ${actorRole} ${actorId}`);
     return updated;
   }

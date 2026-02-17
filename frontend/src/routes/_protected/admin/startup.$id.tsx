@@ -39,6 +39,7 @@ import {
   useAdminControllerReanalyzeStartup,
   useAdminControllerRetryStartupAgent,
   useAdminControllerGetAllScoringWeights,
+  useAdminControllerMatchStartupInvestors,
   getAdminControllerRejectStartupUrl,
   getAdminControllerGetStatsQueryKey,
   getAdminControllerGetAllStartupsQueryKey,
@@ -83,6 +84,7 @@ function AdminReviewPage() {
   const [showApproveDialog, setShowApproveDialog] = useState(false);
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showMatchDialog, setShowMatchDialog] = useState(false);
   const [reanalyzingSection, setReanalyzingSection] = useState<string | null>(null);
 
   const { data: startupResponse, isLoading } = useStartupControllerFindOne(id);
@@ -188,6 +190,21 @@ function AdminReviewPage() {
       },
       onError: (error: Error) => {
         toast.error("Failed to delete submission", { description: error.message });
+      },
+    },
+  });
+
+  const matchMutation = useAdminControllerMatchStartupInvestors({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getStartupControllerFindOneQueryKey(id) });
+        toast.success("Investor matching complete", {
+          description: "Matching results have been sent to investors.",
+        });
+        setShowMatchDialog(false);
+      },
+      onError: (error: Error) => {
+        toast.error("Failed to match investors", { description: error.message });
       },
     },
   });
@@ -353,9 +370,11 @@ function AdminReviewPage() {
             onApprove={() => setShowApproveDialog(true)}
             onReject={() => setShowRejectDialog(true)}
             onDeleteSubmission={() => setShowDeleteDialog(true)}
+            onMatchInvestors={() => setShowMatchDialog(true)}
             approveDisabled={approveMutation.isPending || rejectMutation.isPending}
             rejectDisabled={approveMutation.isPending || rejectMutation.isPending}
             deleteDisabled={deleteMutation.isPending}
+            matchDisabled={matchMutation.isPending}
             canApproveReject={canApproveReject}
           />
         </div>
@@ -412,6 +431,27 @@ function AdminReviewPage() {
               className="bg-destructive text-destructive-foreground"
             >
               {rejectMutation.isPending ? "Rejecting..." : "Reject"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={showMatchDialog} onOpenChange={setShowMatchDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Match investors for this startup?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will run thesis alignment against all investor profiles and notify
+              matched investors.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => matchMutation.mutate({ id })}
+              disabled={matchMutation.isPending}
+            >
+              {matchMutation.isPending ? "Matching..." : "Match Investors"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

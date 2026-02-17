@@ -21,6 +21,7 @@ export interface CreateThesisDto {
   checkSizeMax?: number;
   /**
    * @minimum 0
+   * @maximum 9007199254740991
    * @nullable
    */
   minRevenue?: number | null;

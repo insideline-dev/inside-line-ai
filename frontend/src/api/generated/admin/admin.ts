@@ -1841,6 +1841,87 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getAdminControllerRejectStartupMutationOptions(options), queryClient);
     }
+    /**
+ * @summary Trigger investor thesis matching for an approved startup
+ */
+export type adminControllerMatchStartupInvestorsResponse201 = {
+  data: void
+  status: 201
+}
+    
+export type adminControllerMatchStartupInvestorsResponseSuccess = (adminControllerMatchStartupInvestorsResponse201) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerMatchStartupInvestorsResponse = (adminControllerMatchStartupInvestorsResponseSuccess)
+
+export const getAdminControllerMatchStartupInvestorsUrl = (id: string,) => {
+
+
+  
+
+  return `/admin/startups/${id}/match`
+}
+
+export const adminControllerMatchStartupInvestors = async (id: string, options?: RequestInit): Promise<adminControllerMatchStartupInvestorsResponse> => {
+  
+  return customFetch<adminControllerMatchStartupInvestorsResponse>(getAdminControllerMatchStartupInvestorsUrl(id),
+  {      
+    ...options,
+    method: 'POST'
+    
+    
+  }
+);}
+
+
+
+
+export const getAdminControllerMatchStartupInvestorsMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerMatchStartupInvestors>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminControllerMatchStartupInvestors>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['adminControllerMatchStartupInvestors'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminControllerMatchStartupInvestors>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  adminControllerMatchStartupInvestors(id,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminControllerMatchStartupInvestorsMutationResult = NonNullable<Awaited<ReturnType<typeof adminControllerMatchStartupInvestors>>>
+    
+    export type AdminControllerMatchStartupInvestorsMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Trigger investor thesis matching for an approved startup
+ */
+export const useAdminControllerMatchStartupInvestors = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerMatchStartupInvestors>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof adminControllerMatchStartupInvestors>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getAdminControllerMatchStartupInvestorsMutationOptions(options), queryClient);
+    }
     export type adminControllerReanalyzeStartupResponse201 = {
   data: void
   status: 201

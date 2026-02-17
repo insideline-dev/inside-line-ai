@@ -7,6 +7,7 @@ import type { SynthesisAgent } from "../../agents/synthesis";
 import type { ScoreComputationService } from "../../services/score-computation.service";
 import type { InvestorMatchingService } from "../../services/investor-matching.service";
 import type { MemoGeneratorService } from "../../services/memo-generator.service";
+import type { AiConfigService } from "../../services/ai-config.service";
 import { SynthesisService } from "../../services/synthesis.service";
 import { createEvaluationPipelineInput } from "../fixtures/evaluation-pipeline.fixture";
 import { createMockEvaluationResult } from "../fixtures/mock-evaluation.fixture";
@@ -18,6 +19,7 @@ describe("SynthesisService", () => {
   let pipelineState: jest.Mocked<PipelineStateService>;
   let synthesisAgent: jest.Mocked<SynthesisAgent>;
   let scoreComputation: jest.Mocked<ScoreComputationService>;
+  let aiConfig: jest.Mocked<AiConfigService>;
   let investorMatching: jest.Mocked<InvestorMatchingService>;
   let memoGenerator: jest.Mocked<MemoGeneratorService>;
   let notifications: jest.Mocked<NotificationService>;
@@ -80,6 +82,10 @@ describe("SynthesisService", () => {
       computePercentileRank: jest.fn().mockResolvedValue(88),
     } as unknown as jest.Mocked<ScoreComputationService>;
 
+    aiConfig = {
+      getModelForPurpose: jest.fn().mockReturnValue("gpt-4"),
+    } as unknown as jest.Mocked<AiConfigService>;
+
     investorMatching = {
       matchStartup: jest.fn().mockResolvedValue({
         candidatesEvaluated: 2,
@@ -109,6 +115,7 @@ describe("SynthesisService", () => {
       pipelineState as unknown as PipelineStateService,
       synthesisAgent as unknown as SynthesisAgent,
       scoreComputation as unknown as ScoreComputationService,
+      aiConfig as unknown as AiConfigService,
       investorMatching as unknown as InvestorMatchingService,
       memoGenerator as unknown as MemoGeneratorService,
       notifications as unknown as NotificationService,

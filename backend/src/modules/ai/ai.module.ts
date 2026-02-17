@@ -114,6 +114,7 @@ import { WebsiteScraperService } from "./services/website-scraper.service";
     PipelineStateService,
     PipelineFeedbackService,
     PipelineService,
+    InvestorMatchingService,
   ],
 })
 export class AiModule {}

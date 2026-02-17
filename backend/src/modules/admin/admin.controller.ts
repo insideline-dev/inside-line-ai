@@ -33,6 +33,7 @@ import { QueueManagementService } from './queue-management.service';
 import { IntegrationHealthService } from './integration-health.service';
 import { SystemConfigService } from './system-config.service';
 import { BulkDataService } from './bulk-data.service';
+import { AdminMatchingService } from './admin-matching.service';
 import { AiPromptService } from '../ai/services/ai-prompt.service';
 import { AiPromptRuntimeService } from '../ai/services/ai-prompt-runtime.service';
 import { QUEUE_NAMES, QueueName } from '../../queue';
@@ -85,6 +86,7 @@ export class AdminController {
     private integrationHealthService: IntegrationHealthService,
     private systemConfigService: SystemConfigService,
     private bulkDataService: BulkDataService,
+    private adminMatchingService: AdminMatchingService,
     private aiPromptService: AiPromptService,
     private aiPromptRuntimeService: AiPromptRuntimeService,
     private earlyAccessService: EarlyAccessService,
@@ -224,6 +226,14 @@ export class AdminController {
       );
     }
     return this.startupService.reject(id, admin.id, reason);
+  }
+
+  @Post('startups/:id/match')
+  @ApiOperation({ summary: 'Trigger investor thesis matching for an approved startup' })
+  async matchStartupInvestors(
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.adminMatchingService.triggerMatchForStartup(id);
   }
 
   @Post('startups/:id/reanalyze')

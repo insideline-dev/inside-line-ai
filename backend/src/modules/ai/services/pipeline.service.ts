@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, Logger } from "@nestjs/common";
+import { Optional } from "@nestjs/common";
 import { ModuleRef } from "@nestjs/core";
 import { randomUUID } from "crypto";
 import { eq } from "drizzle-orm";
@@ -13,6 +14,7 @@ import type {
 import { EVALUATION_AGENT_KEYS, RESEARCH_AGENT_KEYS } from "../constants/agent-keys";
 import { AiConfigService } from "./ai-config.service";
 import { PipelineFeedbackService } from "./pipeline-feedback.service";
+import { PipelineAgentTraceService } from "./pipeline-agent-trace.service";
 import { PipelineStateService } from "./pipeline-state.service";
 import {
   PhaseStatus,
@@ -89,6 +91,7 @@ export class PipelineService {
     private phaseTransition: PhaseTransitionService,
     private errorRecovery: ErrorRecoveryService,
     private moduleRef: ModuleRef,
+    @Optional() private pipelineAgentTrace?: PipelineAgentTraceService,
   ) {}
 
   private getClaraService(): ClaraService | null {
@@ -116,6 +119,10 @@ export class PipelineService {
     }
 
     const state = await this.pipelineState.init(startupId, userId);
+    await this.pipelineAgentTrace?.cleanupExpired().catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Failed to clean up expired agent traces: ${message}`);
+    });
     await this.createPipelineRunRecord(state);
     await this.updateStartupStatus(startupId, StartupStatus.ANALYZING);
     await this.progressTracker.initProgress({
@@ -569,21 +576,23 @@ export class PipelineService {
     }
 
     if (decision.blockedByRequiredFailure) {
-      await this.pipelineState.setStatus(startupId, PipelineStatus.FAILED);
+      await this.pipelineState.setQuality(startupId, "degraded");
+      const degradedReason = lastError ?? "Critical phase failed, completed with degraded output";
       await this.updatePipelineRunStatus(
         refreshed.pipelineRunId,
-        PipelineStatus.FAILED,
-        lastError ?? "Critical phase failed",
+        PipelineStatus.COMPLETED,
+        degradedReason,
       );
+      await this.pipelineState.setStatus(startupId, PipelineStatus.COMPLETED);
       await this.progressTracker.setPipelineStatus({
         startupId,
         userId: refreshed.userId,
         pipelineRunId: refreshed.pipelineRunId,
-        status: PipelineStatus.FAILED,
+        status: PipelineStatus.COMPLETED,
         currentPhase: refreshed.currentPhase,
-        error: lastError ?? "Critical phase failed",
+        error: degradedReason,
       });
-      await this.updateStartupStatus(startupId, StartupStatus.SUBMITTED);
+      await this.updateStartupStatus(startupId, StartupStatus.PENDING_REVIEW);
       return;
     }
 

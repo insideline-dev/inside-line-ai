@@ -155,7 +155,7 @@ describe("GeminiResearchService", () => {
   });
 
   it("returns deterministic fallback when provider call throws", async () => {
-    generateTextMock.mockRejectedValueOnce(new Error("provider timeout"));
+    generateTextMock.mockRejectedValue(new Error("provider timeout"));
 
     const result = await service.research({
       agent: "team",

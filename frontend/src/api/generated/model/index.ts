@@ -83,6 +83,7 @@ export * from './authResponseDtoUserRole';
 export * from './createAiPromptRevisionDto';
 export * from './createAiPromptRevisionDtoStage';
 export * from './createEarlyAccessInviteDto';
+export * from './createEarlyAccessInviteDtoRole';
 export * from './createNoteDto';
 export * from './createPortalDto';
 export * from './createStartupDto';

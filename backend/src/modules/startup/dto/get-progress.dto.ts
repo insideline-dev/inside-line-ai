@@ -38,6 +38,23 @@ export const ProgressAgentEventSchema = z.object({
   error: z.string().optional(),
 });
 
+export const ProgressAgentTraceSchema = z.object({
+  id: z.string(),
+  pipelineRunId: z.string(),
+  phase: z.string(),
+  agentKey: z.string(),
+  status: z.enum(["running", "completed", "failed", "fallback"]),
+  attempt: z.number().int().min(0).optional(),
+  retryCount: z.number().int().min(0).optional(),
+  usedFallback: z.boolean().optional(),
+  inputPrompt: z.string().nullable().optional(),
+  outputText: z.string().nullable().optional(),
+  outputJson: z.unknown().optional(),
+  error: z.string().nullable().optional(),
+  startedAt: z.string().optional(),
+  completedAt: z.string().nullable().optional(),
+});
+
 export const ProgressSchema = z.object({
   overallProgress: z.number().min(0).max(100),
   currentPhase: z.string(),
@@ -49,6 +66,7 @@ export const ProgressSchema = z.object({
   updatedAt: z.string().optional(),
   phases: z.record(z.string(), ProgressPhaseSchema),
   agentEvents: z.array(ProgressAgentEventSchema).optional(),
+  agentTraces: z.array(ProgressAgentTraceSchema).optional(),
 });
 
 export const GetProgressResponseSchema = z.object({

@@ -18,6 +18,7 @@ import type {
 import { PipelineService } from "../ai/services/pipeline.service";
 import { ModelPurpose, PipelinePhase } from "../ai/interfaces/pipeline.interface";
 import { PipelineFeedbackService } from "../ai/services/pipeline-feedback.service";
+import { pipelineAgentRun } from "../ai/entities";
 import { startup, StartupStatus } from "./entities/startup.schema";
 import { agentConversation } from "../agent/entities/agent.schema";
 import { investorInboxSubmission } from "../integrations/agentmail/entities/investor-inbox-submission.schema";
@@ -1314,6 +1315,9 @@ export class StartupService {
 
     if (trackedProgress) {
       const phaseResults = pipelineState?.results ?? {};
+      const agentTraces = includeAdminDetails
+        ? await this.loadAgentTraces(startupId, trackedProgress.pipelineRunId)
+        : [];
 
       response.progress = {
         overallProgress: this.normalizePercent(trackedProgress.overallProgress),
@@ -1395,6 +1399,7 @@ export class StartupService {
                 retryCount: event.retryCount,
                 error: event.error,
               })),
+              agentTraces,
             }
           : {}),
       };
@@ -1402,6 +1407,9 @@ export class StartupService {
     }
 
     if (pipelineState) {
+      const agentTraces = includeAdminDetails
+        ? await this.loadAgentTraces(startupId, pipelineState.pipelineRunId)
+        : [];
       const totalPhases = Object.keys(pipelineState.phases).length;
       const completedCount = Object.values(pipelineState.phases).filter(
         (phase) => phase.status === "completed",
@@ -1462,6 +1470,7 @@ export class StartupService {
             })(),
           ]),
         ),
+        ...(includeAdminDetails ? { agentTraces } : {}),
       };
       return response;
     }
@@ -1490,6 +1499,67 @@ export class StartupService {
     }
 
     return response;
+  }
+
+  private async loadAgentTraces(
+    startupId: string,
+    pipelineRunId?: string,
+  ): Promise<
+    Array<{
+      id: string;
+      pipelineRunId: string;
+      phase: string;
+      agentKey: string;
+      status: "running" | "completed" | "failed" | "fallback";
+      attempt?: number;
+      retryCount?: number;
+      usedFallback?: boolean;
+      inputPrompt?: string | null;
+      outputText?: string | null;
+      outputJson?: unknown;
+      error?: string | null;
+      startedAt?: string;
+      completedAt?: string | null;
+    }>
+  > {
+    const rows = pipelineRunId
+      ? await this.drizzle.db
+          .select()
+          .from(pipelineAgentRun)
+          .where(
+            and(
+              eq(pipelineAgentRun.startupId, startupId),
+              eq(pipelineAgentRun.pipelineRunId, pipelineRunId),
+            ),
+          )
+          .orderBy(desc(pipelineAgentRun.startedAt))
+          .limit(200)
+      : await this.drizzle.db
+          .select()
+          .from(pipelineAgentRun)
+          .where(eq(pipelineAgentRun.startupId, startupId))
+          .orderBy(desc(pipelineAgentRun.startedAt))
+          .limit(200);
+    if (!Array.isArray(rows)) {
+      return [];
+    }
+
+    return rows.map((row) => ({
+      id: row.id,
+      pipelineRunId: row.pipelineRunId,
+      phase: row.phase,
+      agentKey: row.agentKey,
+      status: row.status,
+      attempt: row.attempt,
+      retryCount: row.retryCount,
+      usedFallback: row.usedFallback,
+      inputPrompt: row.inputPrompt ?? null,
+      outputText: row.outputText ?? null,
+      outputJson: row.outputJson,
+      error: row.error ?? null,
+      startedAt: row.startedAt ? row.startedAt.toISOString() : undefined,
+      completedAt: row.completedAt ? row.completedAt.toISOString() : null,
+    }));
   }
 
   private resolvePhaseProgress(

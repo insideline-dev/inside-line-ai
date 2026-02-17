@@ -1,6 +1,20 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 
+const WebsiteSchema = z
+  .string()
+  .max(2048)
+  .optional()
+  .refine(
+    (value) => {
+      if (!value || value.trim().length === 0) {
+        return true;
+      }
+      return z.string().url().safeParse(value).success;
+    },
+    { message: 'website must be a valid URL or empty' },
+  );
+
 export const CreateThesisSchema = z.object({
   industries: z.array(z.string()).optional(),
   stages: z.array(z.string()).optional(),
@@ -15,7 +29,7 @@ export const CreateThesisSchema = z.object({
   notes: z.string().max(5000).optional(),
   thesisNarrative: z.string().max(10000).optional(),
   antiPortfolio: z.string().max(5000).optional(),
-  website: z.string().url().optional().or(z.literal('')),
+  website: WebsiteSchema,
   fundSize: z.number().min(0).optional().nullable(),
   minThesisFitScore: z.number().int().min(0).max(100).optional().nullable(),
   minStartupScore: z.number().int().min(0).max(100).optional().nullable(),

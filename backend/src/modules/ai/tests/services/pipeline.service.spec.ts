@@ -343,7 +343,7 @@ describe("PipelineService", () => {
     expect(errorRecovery.recordFailure).toHaveBeenCalledTimes(1);
   });
 
-  it("marks pipeline failed when required phase fails after retries", async () => {
+  it("completes pipeline in degraded mode when required phase fails after retries", async () => {
     const state = createState();
     stateService.get.mockResolvedValue(state);
     stateService.incrementRetryCount.mockResolvedValueOnce(3);
@@ -364,13 +364,17 @@ describe("PipelineService", () => {
       "too many failures",
     );
 
+    expect(stateService.setQuality).toHaveBeenCalledWith(
+      "startup-1",
+      "degraded",
+    );
     expect(stateService.setStatus).toHaveBeenCalledWith(
       "startup-1",
-      PipelineStatus.FAILED,
+      PipelineStatus.COMPLETED,
     );
     expect(progressTracker.setPipelineStatus).toHaveBeenCalledWith(
       expect.objectContaining({
-        status: PipelineStatus.FAILED,
+        status: PipelineStatus.COMPLETED,
       }),
     );
   });

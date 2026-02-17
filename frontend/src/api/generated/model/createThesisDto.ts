@@ -37,6 +37,7 @@ export interface CreateThesisDto {
   thesisNarrative?: string;
   /** @maxLength 5000 */
   antiPortfolio?: string;
+  /** @maxLength 2048 */
   website?: string;
   /**
    * @minimum 0

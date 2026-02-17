@@ -251,6 +251,9 @@ function cloneProgress(progress: PipelineProgressData): PipelineProgressData {
     agentEvents: Array.isArray(progress.agentEvents)
       ? [...progress.agentEvents]
       : progress.agentEvents,
+    agentTraces: Array.isArray(progress.agentTraces)
+      ? [...progress.agentTraces]
+      : progress.agentTraces,
   };
 }
 

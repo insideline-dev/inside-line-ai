@@ -69,9 +69,22 @@ export interface EvaluationAgentLifecycleEvent {
   error?: string;
 }
 
+export interface EvaluationAgentTraceEvent {
+  agent: EvaluationAgentKey;
+  status: "completed" | "fallback" | "failed";
+  inputPrompt: string;
+  outputText?: string;
+  outputJson?: unknown;
+  attempt: number;
+  retryCount: number;
+  usedFallback: boolean;
+  error?: string;
+}
+
 export interface EvaluationAgentRunOptions {
   feedbackNotes?: EvaluationFeedbackNote[];
   onLifecycle?: (event: EvaluationAgentLifecycleEvent) => void;
+  onTrace?: (event: EvaluationAgentTraceEvent) => void;
 }
 
 export interface EvaluationAgentCompletion {

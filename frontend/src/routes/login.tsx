@@ -25,7 +25,6 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   useRequestMagicLink,
-  useGoogleAuth,
   useCurrentUser,
   useRedeemInvite,
   useJoinWaitlist,
@@ -47,7 +46,8 @@ const waitlistSchema = z.object({
     message: "You must consent to sharing your submitted company information",
   }),
   consentToEarlyAccess: z.boolean().refine((value) => value, {
-    message: "You must confirm you are requesting early access to the public beta",
+    message:
+      "You must confirm you are requesting early access to the public beta",
   }),
 });
 
@@ -79,7 +79,6 @@ function LoginPage() {
   const magicLinkMutation = useRequestMagicLink();
   const waitlistMutation = useJoinWaitlist();
   const redeemInviteMutation = useRedeemInvite();
-  const { signIn: googleSignIn } = useGoogleAuth();
   const didRedeemInvite = useRef(false);
 
   const magicLinkForm = useForm<MagicLinkFormValues>({
@@ -286,12 +285,15 @@ function LoginPage() {
               <FormControl>
                 <Checkbox
                   checked={field.value}
-                  onCheckedChange={(checked) => field.onChange(Boolean(checked))}
+                  onCheckedChange={(checked) =>
+                    field.onChange(Boolean(checked))
+                  }
                 />
               </FormControl>
               <div className="space-y-1 leading-none">
                 <FormLabel>
-                  I agree to share the company information I provide for waitlist review.
+                  I agree to share the company information I provide for
+                  waitlist review.
                 </FormLabel>
                 <FormMessage />
               </div>
@@ -307,12 +309,15 @@ function LoginPage() {
               <FormControl>
                 <Checkbox
                   checked={field.value}
-                  onCheckedChange={(checked) => field.onChange(Boolean(checked))}
+                  onCheckedChange={(checked) =>
+                    field.onChange(Boolean(checked))
+                  }
                 />
               </FormControl>
               <div className="space-y-1 leading-none">
                 <FormLabel>
-                  I want early access to the public beta and accept that access is not guaranteed.
+                  I want early access to the public beta and accept that access
+                  is not guaranteed.
                 </FormLabel>
                 <FormMessage />
               </div>
@@ -351,35 +356,37 @@ function LoginPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {!waitlistOnly && (
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={googleSignIn}
-                disabled={isLoading}
-                className="w-full"
-              >
-                Continue with Google
-              </Button>
-
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t" />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-background px-2 text-muted-foreground">Or</span>
-                </div>
-              </div>
-            </>
-          )}
+          {/* {!waitlistOnly && ( */}
+          {/*   <> */}
+          {/*     <Button */}
+          {/*       type="button" */}
+          {/*       variant="outline" */}
+          {/*       onClick={googleSignIn} */}
+          {/*       disabled={isLoading} */}
+          {/*       className="w-full" */}
+          {/*     > */}
+          {/*       Continue with Google */}
+          {/*     </Button> */}
+          {/**/}
+          {/*     <div className="relative"> */}
+          {/*       <div className="absolute inset-0 flex items-center"> */}
+          {/*         <span className="w-full border-t" /> */}
+          {/*       </div> */}
+          {/*       <div className="relative flex justify-center text-xs uppercase"> */}
+          {/*         <span className="bg-background px-2 text-muted-foreground">Or</span> */}
+          {/*       </div> */}
+          {/*     </div> */}
+          {/*   </> */}
+          {/* )} */}
 
           {waitlistOnly ? (
             waitlistFormContent
           ) : (
             <Tabs
               value={authMode}
-              onValueChange={(value) => setAuthMode(value as "magic" | "waitlist")}
+              onValueChange={(value) =>
+                setAuthMode(value as "magic" | "waitlist")
+              }
             >
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="magic">Magic Link</TabsTrigger>
@@ -410,8 +417,14 @@ function LoginPage() {
                         </FormItem>
                       )}
                     />
-                    <Button type="submit" className="w-full" disabled={isLoading}>
-                      {magicLinkMutation.isPending ? "Sending..." : "Send Magic Link"}
+                    <Button
+                      type="submit"
+                      className="w-full"
+                      disabled={isLoading}
+                    >
+                      {magicLinkMutation.isPending
+                        ? "Sending..."
+                        : "Send Magic Link"}
                     </Button>
                     <p className="text-xs text-muted-foreground text-center">
                       We&apos;ll email you a secure sign-in link.

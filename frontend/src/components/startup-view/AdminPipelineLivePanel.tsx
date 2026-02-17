@@ -1,16 +1,20 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   Activity,
   AlertTriangle,
   CheckCircle2,
   Clock3,
+  Eye,
+  FileText,
   Loader2,
   RefreshCw,
   RotateCcw,
   XCircle,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useStartupRealtimeProgress } from "@/lib/startup/useStartupRealtimeProgress";
@@ -19,6 +23,7 @@ import {
   type PipelineAgentEvent,
   type PipelineAgentEventType,
   type PipelineAgentProgress,
+  type PipelineAgentTrace,
   type PipelinePhaseProgress,
 } from "@/types/pipeline-progress";
 
@@ -192,6 +197,34 @@ function runHealthText(tone: SignalTone): string {
   return "Idle";
 }
 
+function previewText(value: string | null | undefined, limit = 160): string {
+  if (!value || value.trim().length === 0) {
+    return "Not captured";
+  }
+  const compact = value.replace(/\s+/g, " ").trim();
+  if (compact.length <= limit) {
+    return compact;
+  }
+  return `${compact.slice(0, limit)}...`;
+}
+
+function toPrettyOutput(trace: PipelineAgentTrace | null): string {
+  if (!trace) {
+    return "";
+  }
+  if (typeof trace.outputText === "string" && trace.outputText.trim().length > 0) {
+    return trace.outputText;
+  }
+  if (trace.outputJson !== undefined && trace.outputJson !== null) {
+    try {
+      return JSON.stringify(trace.outputJson, null, 2);
+    } catch {
+      return String(trace.outputJson);
+    }
+  }
+  return "Output not captured";
+}
+
 function phaseSortKey(phase: string): number {
   const index = PIPELINE_PHASE_ORDER.indexOf(phase as (typeof PIPELINE_PHASE_ORDER)[number]);
   return index >= 0 ? index : Number.MAX_SAFE_INTEGER;
@@ -215,6 +248,7 @@ export function AdminPipelineLivePanel({
   startupId,
   startupStatus,
 }: AdminPipelineLivePanelProps) {
+  const [selectedTrace, setSelectedTrace] = useState<PipelineAgentTrace | null>(null);
   const { progress, isLoading, isFetching } = useStartupRealtimeProgress(startupId, {
     enabled: true,
     pollMs: 1500,
@@ -292,6 +326,16 @@ export function AdminPipelineLivePanel({
     );
     return events.slice(0, 80);
   }, [progress?.agentEvents]);
+
+  const agentTraceTimeline = useMemo<PipelineAgentTrace[]>(() => {
+    const traces = Array.isArray(progress?.agentTraces) ? [...progress.agentTraces] : [];
+    traces.sort(
+      (a, b) =>
+        new Date(b.startedAt ?? b.completedAt ?? 0).getTime() -
+        new Date(a.startedAt ?? a.completedAt ?? 0).getTime(),
+    );
+    return traces.slice(0, 100);
+  }, [progress?.agentTraces]);
 
   const runningAgentsCount = flattenedAgents.filter(
     (agent) => agent.data.status === "running",
@@ -634,6 +678,79 @@ export function AdminPipelineLivePanel({
           </div>
         </div>
 
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold">Agent Traces</h3>
+          <ScrollArea className="h-[280px] rounded-lg border">
+            <div className="space-y-2 p-3">
+              {agentTraceTimeline.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Prompt/output traces are not available yet for this run.
+                </p>
+              ) : (
+                agentTraceTimeline.map((trace) => (
+                  <div
+                    key={trace.id}
+                    className={`rounded-md border p-2.5 ${SURFACE_TONE_CLASS[
+                      trace.status === "failed"
+                        ? "danger"
+                        : trace.status === "fallback"
+                          ? "warning"
+                          : trace.status === "running"
+                            ? "info"
+                            : "success"
+                    ]}`}
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-medium">
+                        {formatLabel(trace.agentKey)} · {formatLabel(String(trace.phase))}
+                      </p>
+                      <Badge variant="outline" className={statusClass(trace.status)}>
+                        {trace.status}
+                      </Badge>
+                    </div>
+                    <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted-foreground">
+                      <span>Attempt: {trace.attempt ?? 1}</span>
+                      <span>Retries: {trace.retryCount ?? 0}</span>
+                      <span>Started: {formatTime(trace.startedAt)}</span>
+                    </div>
+                    {trace.error && (
+                      <p className="mt-1 text-xs text-destructive">{trace.error}</p>
+                    )}
+                    <div className="mt-2 grid gap-2 md:grid-cols-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="justify-start gap-2 text-xs"
+                        onClick={() => setSelectedTrace(trace)}
+                      >
+                        <FileText className="h-3.5 w-3.5" />
+                        Input Prompt
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="justify-start gap-2 text-xs"
+                        onClick={() => setSelectedTrace(trace)}
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                        Output
+                      </Button>
+                    </div>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Prompt: {previewText(trace.inputPrompt)}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Output: {previewText(toPrettyOutput(trace))}
+                    </p>
+                  </div>
+                ))
+              )}
+            </div>
+          </ScrollArea>
+        </div>
+
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Clock3 className="h-3.5 w-3.5" />
           <span>Pipeline status: {progress?.pipelineStatus ?? startupStatus}</span>
@@ -646,6 +763,39 @@ export function AdminPipelineLivePanel({
             Polling every 1.5s with websocket updates
           </span>
         </div>
+
+        <Dialog
+          open={Boolean(selectedTrace)}
+          onOpenChange={(open) => {
+            if (!open) {
+              setSelectedTrace(null);
+            }
+          }}
+        >
+          <DialogContent className="max-w-5xl">
+            <DialogHeader>
+              <DialogTitle>
+                {selectedTrace
+                  ? `${formatLabel(selectedTrace.agentKey)} · ${formatLabel(String(selectedTrace.phase))} Trace`
+                  : "Agent Trace"}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-muted-foreground">Input Prompt</p>
+                <pre className="max-h-[440px] overflow-auto rounded-md border bg-muted/30 p-3 text-xs leading-relaxed whitespace-pre-wrap">
+                  {selectedTrace?.inputPrompt?.trim() || "Input prompt not captured."}
+                </pre>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-muted-foreground">Output</p>
+                <pre className="max-h-[440px] overflow-auto rounded-md border bg-muted/30 p-3 text-xs leading-relaxed whitespace-pre-wrap">
+                  {toPrettyOutput(selectedTrace)}
+                </pre>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </CardContent>
     </Card>
   );

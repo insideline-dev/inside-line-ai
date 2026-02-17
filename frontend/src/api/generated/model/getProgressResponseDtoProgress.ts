@@ -32,6 +32,11 @@ export type GetProgressResponseDtoProgress = {
   startedAt?: string;
   completedAt?: string;
   error?: string;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  retryCount?: number;
   agents?: {[key: string]: {
   key: string;
   status: string;
@@ -43,6 +48,65 @@ export type GetProgressResponseDtoProgress = {
   startedAt?: string;
   completedAt?: string;
   error?: string;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  attempts?: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  retryCount?: number;
+  usedFallback?: boolean;
+  lastEvent?: 'started' | 'retrying' | 'completed' | 'failed' | 'fallback';
+  lastEventAt?: string;
 }};
 }};
+  agentEvents?: ({
+  id: string;
+  phase: string;
+  agentKey: string;
+  event: 'started' | 'retrying' | 'completed' | 'failed' | 'fallback';
+  timestamp: string;
+  /**
+   * @minimum 1
+   * @maximum 9007199254740991
+   */
+  attempt?: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  retryCount?: number;
+  error?: string;
+})[];
+  agentTraces?: ({
+  id: string;
+  pipelineRunId: string;
+  phase: string;
+  agentKey: string;
+  status: 'running' | 'completed' | 'failed' | 'fallback';
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  attempt?: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  retryCount?: number;
+  usedFallback?: boolean;
+  /** @nullable */
+  inputPrompt?: string | null;
+  /** @nullable */
+  outputText?: string | null;
+  outputJson?: unknown;
+  /** @nullable */
+  error?: string | null;
+  startedAt?: string;
+  /** @nullable */
+  completedAt?: string | null;
+})[];
 } | null;

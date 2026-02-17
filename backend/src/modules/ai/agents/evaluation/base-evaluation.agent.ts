@@ -7,6 +7,7 @@ import type {
   EvaluationAgentResult,
   EvaluationPipelineInput,
   EvaluationAgentRunOptions,
+  EvaluationAgentTraceEvent,
 } from "../../interfaces/agent.interface";
 import { ModelPurpose } from "../../interfaces/pipeline.interface";
 import { AiProviderService } from "../../providers/ai-provider.service";
@@ -61,6 +62,13 @@ export abstract class BaseEvaluationAgent<TOutput>
       stage: pipelineData.extraction.stage,
     });
     const contextSections = this.formatContext(promptContext);
+    const renderedPrompt = this.promptService.renderTemplate(
+      promptConfig.userPrompt,
+      {
+        contextSections,
+        contextJson: JSON.stringify(promptContext),
+      },
+    );
 
     for (
       let attempt = 1;
@@ -110,15 +118,24 @@ export abstract class BaseEvaluationAgent<TOutput>
             "- Set `memoNarrative` equal to `narrativeSummary`.",
             "- If evidence is limited, write a detailed but cautious narrative and call out data gaps explicitly.",
           ].join("\n"),
-          prompt: this.promptService.renderTemplate(
-            promptConfig.userPrompt,
-            {
-              contextSections,
-              contextJson: JSON.stringify(promptContext),
-            },
-          ),
+          prompt: renderedPrompt,
           temperature: this.aiConfig.getEvaluationTemperature(),
           maxOutputTokens: this.aiConfig.getEvaluationMaxOutputTokens(),
+        });
+
+        const normalizedOutput = this.normalizeNarrativeFields(
+          this.schema.parse(output),
+        );
+
+        this.emitTraceEvent(options, {
+          agent: this.key,
+          status: "completed",
+          inputPrompt: renderedPrompt,
+          outputText: this.safeStringify(normalizedOutput),
+          outputJson: normalizedOutput,
+          attempt,
+          retryCount: Math.max(0, attempt - 1),
+          usedFallback: false,
         });
 
         this.emitLifecycleEvent(options, {
@@ -129,7 +146,7 @@ export abstract class BaseEvaluationAgent<TOutput>
         });
         return {
           key: this.key,
-          output: this.normalizeNarrativeFields(this.schema.parse(output)),
+          output: normalizedOutput,
           usedFallback: false,
         };
       } catch (error) {
@@ -163,6 +180,17 @@ export abstract class BaseEvaluationAgent<TOutput>
         const fallbackOutput = this.normalizeNarrativeFields(
           this.fallback(pipelineData),
         );
+        this.emitTraceEvent(options, {
+          agent: this.key,
+          status: "fallback",
+          inputPrompt: renderedPrompt,
+          outputText: this.safeStringify(fallbackOutput),
+          outputJson: fallbackOutput,
+          attempt,
+          retryCount: Math.max(0, attempt - 1),
+          usedFallback: true,
+          error: message,
+        });
         return {
           key: this.key,
           output: fallbackOutput,
@@ -182,6 +210,17 @@ export abstract class BaseEvaluationAgent<TOutput>
     const fallbackOutput = this.normalizeNarrativeFields(
       this.fallback(pipelineData),
     );
+    this.emitTraceEvent(options, {
+      agent: this.key,
+      status: "fallback",
+      inputPrompt: renderedPrompt,
+      outputText: this.safeStringify(fallbackOutput),
+      outputJson: fallbackOutput,
+      attempt: NO_OUTPUT_RETRY_ATTEMPTS,
+      retryCount: Math.max(0, NO_OUTPUT_RETRY_ATTEMPTS - 1),
+      usedFallback: true,
+      error: "Evaluation failed after retries",
+    });
     return {
       key: this.key,
       output: fallbackOutput,
@@ -205,6 +244,30 @@ export abstract class BaseEvaluationAgent<TOutput>
       this.logger.warn(
         `${this.key} evaluation lifecycle callback failed: ${message}`,
       );
+    }
+  }
+
+  private emitTraceEvent(
+    options: EvaluationAgentRunOptions | undefined,
+    event: EvaluationAgentTraceEvent,
+  ): void {
+    if (!options?.onTrace) {
+      return;
+    }
+
+    try {
+      options.onTrace(event);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`${this.key} evaluation trace callback failed: ${message}`);
+    }
+  }
+
+  private safeStringify(value: unknown): string {
+    try {
+      return JSON.stringify(value, null, 2);
+    } catch {
+      return String(value);
     }
   }
 

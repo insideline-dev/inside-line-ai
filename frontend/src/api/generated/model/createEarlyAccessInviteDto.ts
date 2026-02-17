@@ -5,6 +5,7 @@
  * Inside Line API Documentation
  * OpenAPI spec version: 2.0
  */
+import type { CreateEarlyAccessInviteDtoRole } from './createEarlyAccessInviteDtoRole';
 
 export interface CreateEarlyAccessInviteDto {
   /** @pattern ^(?!\.)(?!.*\.\.)([A-Za-z0-9_'+\-\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\-]*\.)+[A-Za-z]{2,}$ */
@@ -14,4 +15,5 @@ export interface CreateEarlyAccessInviteDto {
    * @maximum 90
    */
   expiresInDays?: number;
+  role?: CreateEarlyAccessInviteDtoRole;
 }

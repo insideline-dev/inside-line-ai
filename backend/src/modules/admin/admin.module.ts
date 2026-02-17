@@ -12,11 +12,13 @@ import { CacheService } from './cache.service';
 import { IntegrationHealthService } from './integration-health.service';
 import { SystemConfigService } from './system-config.service';
 import { BulkDataService } from './bulk-data.service';
+import { AdminMatchingService } from './admin-matching.service';
 import { StartupModule } from '../startup';
 import { UnipileModule } from '../integrations/unipile/unipile.module';
 import { DatabaseModule } from '../../database';
 import { QueueModule } from '../../queue';
 import { EarlyAccessModule } from '../early-access';
+import { NotificationModule } from '../../notification/notification.module';
 
 @Module({
   imports: [
@@ -25,6 +27,7 @@ import { EarlyAccessModule } from '../early-access';
     StartupModule,
     UnipileModule,
     EarlyAccessModule,
+    NotificationModule,
     MulterModule.register({
       limits: {
         fileSize: 10 * 1024 * 1024, // 10MB limit
@@ -51,6 +54,7 @@ import { EarlyAccessModule } from '../early-access';
     IntegrationHealthService,
     SystemConfigService,
     BulkDataService,
+    AdminMatchingService,
   ],
   exports: [AnalyticsService, UserManagementService, ScoringConfigService],
 })

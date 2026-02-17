@@ -9,6 +9,7 @@ import { PortfolioService } from '../portfolio.service';
 import { DealPipelineService } from '../deal-pipeline.service';
 import { MessagingService } from '../messaging.service';
 import { ScoringPreferencesService } from '../scoring-preferences.service';
+import { ScoringConfigService } from '../../admin/scoring-config.service';
 import { UserRole } from '../../../auth/entities/auth.schema';
 
 describe('InvestorController', () => {
@@ -152,6 +153,14 @@ describe('InvestorController', () => {
             upsert: jest.fn(),
             reset: jest.fn(),
             resetAll: jest.fn(),
+          },
+        },
+        {
+          provide: ScoringConfigService,
+          useValue: {
+            getAll: jest.fn(),
+            getByStage: jest.fn(),
+            upsert: jest.fn(),
           },
         },
       ],

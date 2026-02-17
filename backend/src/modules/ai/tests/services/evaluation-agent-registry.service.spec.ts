@@ -96,6 +96,7 @@ describe("EvaluationAgentRegistryService", () => {
 
   beforeEach(() => {
     pipelineState = {
+      get: jest.fn().mockResolvedValue({ pipelineRunId: "run-1" }),
       recordAgentTelemetry: jest.fn().mockResolvedValue(undefined),
     } as unknown as jest.Mocked<PipelineStateService>;
 

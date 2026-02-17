@@ -130,115 +130,59 @@ export class ResearchService {
     }
 
     // ── Phase 1: team, market, product, news (parallel) ──
-    const phase1Settled = await Promise.allSettled(
-      PHASE_1_KEYS.map((key) =>
-        this.runSingleAgentSafe(
-          startupId,
-          pipelineRunId,
+    await Promise.all(
+      PHASE_1_KEYS.map(async (key) => {
+        const settledResult = await this.settleAgentRun(
           key,
-          RESEARCH_AGENTS[key],
-          pipelineInput,
-          options?.onAgentStart,
-        ),
-      ),
-    );
-
-    for (let index = 0; index < phase1Settled.length; index += 1) {
-      const settledResult = phase1Settled[index];
-      const key = PHASE_1_KEYS[index];
-      const agentResult = this.unwrapSettled(key, settledResult);
-      options?.onAgentComplete?.({
-        agent: key,
-        output: agentResult.output,
-        usedFallback: agentResult.usedFallback,
-        error: agentResult.error,
-        rejected: agentResult.rejected,
-      });
-      this.mergeAgentResult(result, key, agentResult, dedupeSources);
-
-      if (agentResult.rejected) {
-        await this.aiDebugLog?.logAgentFailure({
-          startupId,
-          phase: PipelinePhase.RESEARCH,
-          agentKey: key,
-          error: agentResult.error ?? "Unknown error",
-        });
-      } else {
-        await this.aiDebugLog?.logAgentResult({
-          startupId,
-          phase: PipelinePhase.RESEARCH,
-          agentKey: key,
-          usedFallback: agentResult.usedFallback,
-          error: agentResult.error,
-          model: researchModel,
-          output: agentResult.output,
-        });
-
-        if (!agentResult.usedFallback) {
-          await this.pipelineFeedback.markConsumedByScope({
+          this.runSingleAgentSafe(
             startupId,
-            phase: PipelinePhase.RESEARCH,
-            agentKey: key,
-          });
-        }
-      }
-    }
+            pipelineRunId,
+            key,
+            RESEARCH_AGENTS[key],
+            pipelineInput,
+            options?.onAgentStart,
+          ),
+        );
+        const agentResult = this.unwrapSettled(key, settledResult);
+        await this.handleAgentResult({
+          startupId,
+          key,
+          agentResult,
+          result,
+          dedupeSources,
+          onAgentComplete: options?.onAgentComplete,
+          model: researchModel,
+        });
+      }),
+    );
 
     // ── Phase 2: competitor (sequential, receives phase 1 context) ──
     const competitorInput = this.buildCompetitorInput(pipelineInput, result);
-    const phase2Settled = await Promise.allSettled(
-      PHASE_2_KEYS.map((key) =>
-        this.runSingleAgentSafe(
-          startupId,
-          pipelineRunId,
+    await Promise.all(
+      PHASE_2_KEYS.map(async (key) => {
+        const settledResult = await this.settleAgentRun(
           key,
-          PHASE_2_RESEARCH_AGENTS[key],
-          competitorInput,
-          options?.onAgentStart,
-        ),
-      ),
-    );
-
-    for (let index = 0; index < phase2Settled.length; index += 1) {
-      const settledResult = phase2Settled[index];
-      const key = PHASE_2_KEYS[index];
-      const agentResult = this.unwrapSettled(key, settledResult);
-      options?.onAgentComplete?.({
-        agent: key,
-        output: agentResult.output,
-        usedFallback: agentResult.usedFallback,
-        error: agentResult.error,
-        rejected: agentResult.rejected,
-      });
-      this.mergeAgentResult(result, key, agentResult, dedupeSources);
-
-      if (agentResult.rejected) {
-        await this.aiDebugLog?.logAgentFailure({
-          startupId,
-          phase: PipelinePhase.RESEARCH,
-          agentKey: key,
-          error: agentResult.error ?? "Unknown error",
-        });
-      } else {
-        await this.aiDebugLog?.logAgentResult({
-          startupId,
-          phase: PipelinePhase.RESEARCH,
-          agentKey: key,
-          usedFallback: agentResult.usedFallback,
-          error: agentResult.error,
-          model: researchModel,
-          output: agentResult.output,
-        });
-
-        if (!agentResult.usedFallback) {
-          await this.pipelineFeedback.markConsumedByScope({
+          this.runSingleAgentSafe(
             startupId,
-            phase: PipelinePhase.RESEARCH,
-            agentKey: key,
-          });
-        }
-      }
-    }
+            pipelineRunId,
+            key,
+            PHASE_2_RESEARCH_AGENTS[key],
+            competitorInput,
+            options?.onAgentStart,
+          ),
+        );
+        const agentResult = this.unwrapSettled(key, settledResult);
+        await this.handleAgentResult({
+          startupId,
+          key,
+          agentResult,
+          result,
+          dedupeSources,
+          onAgentComplete: options?.onAgentComplete,
+          model: researchModel,
+        });
+      }),
+    );
 
     result.sources = Array.from(dedupeSources.values());
 
@@ -426,6 +370,81 @@ export class ResearchService {
     }
 
     return { ...settledResult.value, rejected: false };
+  }
+
+  private async settleAgentRun(
+    _key: ResearchAgentKey,
+    runPromise: Promise<AgentRunResult>,
+  ): Promise<PromiseSettledResult<AgentRunResult>> {
+    try {
+      const value = await runPromise;
+      return { status: "fulfilled", value };
+    } catch (reason) {
+      return { status: "rejected", reason };
+    }
+  }
+
+  private async handleAgentResult(input: {
+    startupId: string;
+    key: ResearchAgentKey;
+    agentResult: AgentRunResult;
+    result: ResearchResult;
+    dedupeSources: Map<string, SourceEntry>;
+    onAgentComplete?: (payload: {
+      agent: ResearchAgentKey;
+      output?: ResearchAgentOutput;
+      usedFallback: boolean;
+      error?: string;
+      rejected: boolean;
+    }) => void;
+    model: string;
+  }): Promise<void> {
+    const {
+      startupId,
+      key,
+      agentResult,
+      result,
+      dedupeSources,
+      onAgentComplete,
+      model,
+    } = input;
+
+    onAgentComplete?.({
+      agent: key,
+      output: agentResult.output,
+      usedFallback: agentResult.usedFallback,
+      error: agentResult.error,
+      rejected: agentResult.rejected,
+    });
+    this.mergeAgentResult(result, key, agentResult, dedupeSources);
+
+    if (agentResult.rejected) {
+      await this.aiDebugLog?.logAgentFailure({
+        startupId,
+        phase: PipelinePhase.RESEARCH,
+        agentKey: key,
+        error: agentResult.error ?? "Unknown error",
+      });
+      return;
+    }
+
+    await this.aiDebugLog?.logAgentResult({
+      startupId,
+      phase: PipelinePhase.RESEARCH,
+      agentKey: key,
+      usedFallback: agentResult.usedFallback,
+      error: agentResult.error,
+      model,
+      output: agentResult.output,
+    });
+
+    if (!agentResult.usedFallback) {
+      await this.pipelineFeedback.markConsumedByScope({
+        startupId,
+        phase: PipelinePhase.RESEARCH,
+        agentKey: key,
+      });
+    }
   }
 
   private mergeAgentResult(

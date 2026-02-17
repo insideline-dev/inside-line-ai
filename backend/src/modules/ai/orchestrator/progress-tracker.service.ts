@@ -180,7 +180,13 @@ export class ProgressTrackerService {
     );
 
     await this.persistProgress(params.startupId, payload);
-    this.emitPhaseEvent(params.userId, params.startupId, params.phase, phase);
+    this.emitPhaseEvent(
+      params.userId,
+      params.startupId,
+      params.pipelineRunId,
+      params.phase,
+      phase,
+    );
     return payload;
   }
 
@@ -319,9 +325,15 @@ export class ProgressTrackerService {
       completedAt: next.completedAt,
       progress: next.progress,
       error: next.error,
+      attempts: next.attempts,
+      retryCount: next.retryCount,
+      usedFallback: next.usedFallback,
+      lastEvent: next.lastEvent,
+      lastEventAt: next.lastEventAt,
     };
     this.notifications.sendPipelineEvent(params.userId, event, {
       startupId: params.startupId,
+      pipelineRunId: params.pipelineRunId,
       phase: params.phase,
       agent: publicAgentPayload,
     });
@@ -452,6 +464,19 @@ export class ProgressTrackerService {
     next: AgentLifecycleEvent,
   ): AgentLifecycleEvent[] {
     const MAX_EVENTS = 300;
+    const duplicate = existing.some(
+      (event) =>
+        event.phase === next.phase &&
+        event.agentKey === next.agentKey &&
+        event.event === next.event &&
+        (event.attempt ?? 0) === (next.attempt ?? 0) &&
+        (event.retryCount ?? 0) === (next.retryCount ?? 0) &&
+        (event.error ?? "") === (next.error ?? ""),
+    );
+    if (duplicate) {
+      return existing;
+    }
+
     const merged = [...existing, next];
     if (merged.length <= MAX_EVENTS) {
       return merged;
@@ -534,6 +559,7 @@ export class ProgressTrackerService {
   private emitPhaseEvent(
     userId: string,
     startupId: string,
+    pipelineRunId: string,
     phase: PipelinePhase,
     phaseProgress: PhaseProgress,
   ): void {
@@ -552,6 +578,7 @@ export class ProgressTrackerService {
 
     this.notifications.sendPipelineEvent(userId, event, {
       startupId,
+      pipelineRunId,
       phase,
       status: phaseProgress.status,
       error: phaseProgress.error,

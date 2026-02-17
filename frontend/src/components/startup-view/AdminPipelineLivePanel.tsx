@@ -30,6 +30,7 @@ import {
 interface AdminPipelineLivePanelProps {
   startupId: string;
   startupStatus: string;
+  onRetryAgent?: (phase: "research" | "evaluation", agentKey: string) => Promise<void>;
 }
 
 type FlattenedAgent = {
@@ -208,6 +209,21 @@ function previewText(value: string | null | undefined, limit = 160): string {
   return `${compact.slice(0, limit)}...`;
 }
 
+function normalizeAgentError(value: string | undefined): string | undefined {
+  if (!value) {
+    return value;
+  }
+  const normalized = value.toLowerCase();
+  if (
+    normalized.includes("no output generated") ||
+    normalized.includes("no object generated") ||
+    normalized.includes("empty response")
+  ) {
+    return "Model returned empty structured output; fallback result generated.";
+  }
+  return value;
+}
+
 function toPrettyOutput(trace: PipelineAgentTrace | null): string {
   if (!trace) {
     return "";
@@ -247,8 +263,10 @@ function isTerminalPhaseStatus(status: string | undefined): boolean {
 export function AdminPipelineLivePanel({
   startupId,
   startupStatus,
+  onRetryAgent,
 }: AdminPipelineLivePanelProps) {
   const [selectedTrace, setSelectedTrace] = useState<PipelineAgentTrace | null>(null);
+  const [retryingAgentKey, setRetryingAgentKey] = useState<string | null>(null);
   const { progress, isLoading, isFetching } = useStartupRealtimeProgress(startupId, {
     enabled: true,
     pollMs: 1500,
@@ -324,7 +342,27 @@ export function AdminPipelineLivePanel({
     events.sort(
       (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
     );
-    return events.slice(0, 80);
+    const seen = new Set<string>();
+    const deduped: PipelineAgentEvent[] = [];
+    for (const event of events) {
+      const signature = [
+        event.phase,
+        event.agentKey,
+        event.event,
+        event.attempt ?? 0,
+        event.retryCount ?? 0,
+        event.error ?? "",
+      ].join("|");
+      if (seen.has(signature)) {
+        continue;
+      }
+      seen.add(signature);
+      deduped.push(event);
+      if (deduped.length >= 80) {
+        break;
+      }
+    }
+    return deduped;
   }, [progress?.agentEvents]);
 
   const agentTraceTimeline = useMemo<PipelineAgentTrace[]>(() => {
@@ -598,6 +636,40 @@ export function AdminPipelineLivePanel({
                         <span>Retries: {agent.data.retryCount ?? 0}</span>
                         <span>Fallback: {agent.data.usedFallback ? "yes" : "no"}</span>
                       </div>
+                      {onRetryAgent &&
+                        (agent.phase === "research" || agent.phase === "evaluation") &&
+                        (agent.data.status === "failed" || agent.data.usedFallback === true) && (
+                          <div className="mt-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-7 gap-1.5 text-xs"
+                              disabled={retryingAgentKey === `${agent.phase}:${agent.key}`}
+                              onClick={async () => {
+                                const actionKey = `${agent.phase}:${agent.key}`;
+                                setRetryingAgentKey(actionKey);
+                                try {
+                                  await onRetryAgent(
+                                    agent.phase as "research" | "evaluation",
+                                    agent.key,
+                                  );
+                                } finally {
+                                  setRetryingAgentKey((current) =>
+                                    current === actionKey ? null : current,
+                                  );
+                                }
+                              }}
+                            >
+                              {retryingAgentKey === `${agent.phase}:${agent.key}` ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <RotateCcw className="h-3.5 w-3.5" />
+                              )}
+                              Retry agent
+                            </Button>
+                          </div>
+                        )}
                       {(agent.data.usedFallback ||
                         (agent.data.retryCount ?? 0) > 0 ||
                         agent.data.lastEvent) && (
@@ -629,7 +701,9 @@ export function AdminPipelineLivePanel({
                         </div>
                       )}
                       {agent.data.error && (
-                        <p className="mt-1 text-xs text-destructive">{agent.data.error}</p>
+                        <p className="mt-1 text-xs text-destructive">
+                          {normalizeAgentError(agent.data.error)}
+                        </p>
                       )}
                     </div>
                   ))
@@ -714,7 +788,9 @@ export function AdminPipelineLivePanel({
                       <span>Started: {formatTime(trace.startedAt)}</span>
                     </div>
                     {trace.error && (
-                      <p className="mt-1 text-xs text-destructive">{trace.error}</p>
+                      <p className="mt-1 text-xs text-destructive">
+                        {normalizeAgentError(trace.error)}
+                      </p>
                     )}
                     <div className="mt-2 grid gap-2 md:grid-cols-2">
                       <Button

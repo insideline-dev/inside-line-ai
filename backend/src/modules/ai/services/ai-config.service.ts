@@ -51,6 +51,13 @@ export class AiConfigService {
     return this.config.get<number>("AI_EVALUATION_MAX_OUTPUT_TOKENS", 8000);
   }
 
+  getEvaluationTimeoutMs(): number {
+    return this.config.get<number>(
+      "AI_EVALUATION_TIMEOUT_MS",
+      this.getPipelineTimeoutMs(),
+    );
+  }
+
   getSynthesisMaxOutputTokens(): number {
     return this.config.get<number>("AI_SYNTHESIS_MAX_OUTPUT_TOKENS", 16000);
   }
@@ -105,6 +112,7 @@ export class AiConfigService {
       [QUEUE_NAMES.AI_RESEARCH]: 6,
       [QUEUE_NAMES.AI_EVALUATION]: 8,
       [QUEUE_NAMES.AI_SYNTHESIS]: 2,
+      [QUEUE_NAMES.AI_MATCHING]: 3,
     };
 
     const envMap: Record<QueueName, string> = {
@@ -114,6 +122,7 @@ export class AiConfigService {
       [QUEUE_NAMES.AI_RESEARCH]: "AI_QUEUE_CONCURRENCY_RESEARCH",
       [QUEUE_NAMES.AI_EVALUATION]: "AI_QUEUE_CONCURRENCY_EVALUATION",
       [QUEUE_NAMES.AI_SYNTHESIS]: "AI_QUEUE_CONCURRENCY_SYNTHESIS",
+      [QUEUE_NAMES.AI_MATCHING]: "AI_QUEUE_CONCURRENCY_MATCHING",
     };
     const legacyEnvMap: Partial<Record<QueueName, string>> = {
       [QUEUE_NAMES.AI_EXTRACTION]: "AI_EXTRACTION_CONCURRENCY",

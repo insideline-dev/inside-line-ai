@@ -80,108 +80,100 @@ export class EvaluationAgentRegistryService {
     const outputs = new Map<EvaluationAgentKey, unknown>();
     const failedKeys: EvaluationAgentKey[] = [];
     const errors: Array<{ agent: string; error: string }> = [];
-    const startedAtByAgent = new Map<EvaluationAgentKey, Date>();
-
-    const settled = await Promise.allSettled(
+    await Promise.all(
       this.agents.map(async (agent) => {
         const startedAt = new Date();
-        startedAtByAgent.set(agent.key, startedAt);
         this.emitAgentStart(onAgentStart, agent.key);
-        const feedbackNotes = await this.loadFeedbackNotes(startupId, agent.key);
-        const result = await agent.run(pipelineData, {
-          feedbackNotes,
-          onLifecycle: (event) =>
-            this.emitAgentLifecycle(onAgentLifecycle, event),
-          onTrace: (event) =>
-            this.persistAgentTrace(startupId, pipelineRunId, event),
-        });
-        const completedAt = new Date();
 
-        await this.recordTelemetrySafely(startupId, {
-          agentKey: result.key,
-          phase: PipelinePhase.EVALUATION,
-          startedAt: startedAt.toISOString(),
-          completedAt: completedAt.toISOString(),
-          durationMs: completedAt.getTime() - startedAt.getTime(),
-          retryCount: 0,
-        });
+        try {
+          const feedbackNotes = await this.loadFeedbackNotes(startupId, agent.key);
+          const result = await agent.run(pipelineData, {
+            feedbackNotes,
+            onLifecycle: (event) =>
+              this.emitAgentLifecycle(onAgentLifecycle, event),
+            onTrace: (event) =>
+              this.persistAgentTrace(startupId, pipelineRunId, event),
+          });
+          const completedAt = new Date();
 
-        if (!result.usedFallback) {
-          await this.consumeAgentFeedback(startupId, agent.key);
+          await this.recordTelemetrySafely(startupId, {
+            agentKey: result.key,
+            phase: PipelinePhase.EVALUATION,
+            startedAt: startedAt.toISOString(),
+            completedAt: completedAt.toISOString(),
+            durationMs: completedAt.getTime() - startedAt.getTime(),
+            retryCount: 0,
+          });
+
+          if (!result.usedFallback) {
+            await this.consumeAgentFeedback(startupId, agent.key);
+          }
+
+          outputs.set(result.key, result.output);
+          this.emitAgentCompletion(onAgentComplete, {
+            agent: result.key,
+            output: result.output,
+            usedFallback: result.usedFallback,
+            error: result.error,
+          });
+
+          if (result.usedFallback) {
+            failedKeys.push(result.key);
+            errors.push({
+              agent: result.key,
+              error: result.error ?? "Agent fallback used",
+            });
+          }
+        } catch (error) {
+          const completedAt = new Date();
+          const errorMessage =
+            error instanceof Error ? error.message : String(error);
+
+          this.emitAgentLifecycle(onAgentLifecycle, {
+            agent: agent.key,
+            event: "failed",
+            attempt: 1,
+            retryCount: 0,
+            error: errorMessage,
+          });
+
+          await this.recordTelemetrySafely(startupId, {
+            agentKey: agent.key,
+            phase: PipelinePhase.EVALUATION,
+            startedAt: startedAt.toISOString(),
+            completedAt: completedAt.toISOString(),
+            durationMs: completedAt.getTime() - startedAt.getTime(),
+            retryCount: 0,
+          });
+
+          const fallbackOutput = agent.fallback(pipelineData);
+          this.persistAgentTrace(startupId, pipelineRunId, {
+            agent: agent.key,
+            status: "failed",
+            inputPrompt: "",
+            outputText: this.safeStringify(fallbackOutput),
+            outputJson: fallbackOutput,
+            attempt: 1,
+            retryCount: 0,
+            usedFallback: true,
+            error: errorMessage,
+          });
+
+          failedKeys.push(agent.key);
+          errors.push({
+            agent: agent.key,
+            error: errorMessage,
+          });
+          outputs.set(agent.key, fallbackOutput);
+          this.emitAgentCompletion(onAgentComplete, {
+            agent: agent.key,
+            output: fallbackOutput,
+            usedFallback: true,
+            error: errorMessage,
+          });
         }
-
-        return result;
       }),
     );
-
-    settled.forEach((entry, index) => {
-      const agent = this.agents[index];
-
-      if (entry.status === "rejected") {
-        const startedAt = startedAtByAgent.get(agent.key) ?? new Date();
-        const completedAt = new Date();
-        const errorMessage =
-          entry.reason instanceof Error ? entry.reason.message : String(entry.reason);
-
-        this.emitAgentLifecycle(onAgentLifecycle, {
-          agent: agent.key,
-          event: "failed",
-          attempt: 1,
-          retryCount: 0,
-          error: errorMessage,
-        });
-
-        void this.recordTelemetrySafely(startupId, {
-          agentKey: agent.key,
-          phase: PipelinePhase.EVALUATION,
-          startedAt: startedAt.toISOString(),
-          completedAt: completedAt.toISOString(),
-          durationMs: completedAt.getTime() - startedAt.getTime(),
-          retryCount: 0,
-        });
-
-        const fallbackOutput = agent.fallback(pipelineData);
-        this.persistAgentTrace(startupId, pipelineRunId, {
-          agent: agent.key,
-          status: "failed",
-          inputPrompt: "",
-          outputText: this.safeStringify(fallbackOutput),
-          outputJson: fallbackOutput,
-          attempt: 1,
-          retryCount: 0,
-          usedFallback: true,
-          error: errorMessage,
-        });
-        failedKeys.push(agent.key);
-        errors.push({
-          agent: agent.key,
-          error: errorMessage,
-        });
-        outputs.set(agent.key, fallbackOutput);
-        this.emitAgentCompletion(onAgentComplete, {
-          agent: agent.key,
-          output: fallbackOutput,
-          usedFallback: true,
-          error: errorMessage,
-        });
-        return;
-      }
-
-      outputs.set(entry.value.key, entry.value.output);
-      this.emitAgentCompletion(onAgentComplete, {
-        agent: entry.value.key,
-        output: entry.value.output,
-        usedFallback: entry.value.usedFallback,
-        error: entry.value.error,
-      });
-      if (entry.value.usedFallback) {
-        failedKeys.push(entry.value.key);
-        errors.push({
-          agent: entry.value.key,
-          error: entry.value.error ?? "Agent fallback used",
-        });
-      }
-    });
 
     const completedAgents = this.agents.length - failedKeys.length;
     const minimumRequired = this.phaseTransition.getConfig().minimumEvaluationAgents;

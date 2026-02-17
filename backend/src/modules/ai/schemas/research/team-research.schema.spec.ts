@@ -33,4 +33,22 @@ describe("TeamResearchSchema", () => {
       }),
     ).toThrow();
   });
+
+  it("accepts null optional online presence fields", () => {
+    const parsed = TeamResearchSchema.parse({
+      linkedinProfiles: [],
+      previousCompanies: [],
+      education: [],
+      achievements: [],
+      onlinePresence: {
+        github: null,
+        twitter: null,
+        personalSites: [],
+      },
+      sources: [],
+    });
+
+    expect(parsed.onlinePresence.github).toBeUndefined();
+    expect(parsed.onlinePresence.twitter).toBeUndefined();
+  });
 });

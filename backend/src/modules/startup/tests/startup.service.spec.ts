@@ -635,6 +635,72 @@ describe("StartupService", () => {
         progress: null,
       });
     });
+
+    it("should hide detailed agent telemetry for non-admin progress responses", async () => {
+      mockDb.limit.mockResolvedValueOnce([mockStartup]);
+      pipelineService.getTrackedProgress.mockResolvedValueOnce({
+        pipelineRunId: "run-telemetry",
+        startupId: mockStartupId,
+        status: PipelineStatus.RUNNING,
+        currentPhase: PipelinePhase.EVALUATION,
+        overallProgress: 60,
+        phasesCompleted: [PipelinePhase.EXTRACTION, PipelinePhase.SCRAPING],
+        phases: {
+          [PipelinePhase.EXTRACTION]: {
+            status: "completed",
+            agents: {},
+          },
+          [PipelinePhase.SCRAPING]: {
+            status: "completed",
+            agents: {},
+          },
+          [PipelinePhase.RESEARCH]: {
+            status: "completed",
+            agents: {},
+          },
+          [PipelinePhase.EVALUATION]: {
+            status: "running",
+            retryCount: 1,
+            agents: {
+              traction: {
+                key: "traction",
+                status: "running",
+                progress: 0,
+                attempts: 2,
+                retryCount: 1,
+                usedFallback: false,
+                lastEvent: "retrying",
+                lastEventAt: new Date().toISOString(),
+              },
+            },
+          },
+          [PipelinePhase.SYNTHESIS]: {
+            status: "pending",
+            agents: {},
+          },
+        },
+        agentEvents: [
+          {
+            id: "evt-1",
+            phase: PipelinePhase.EVALUATION,
+            agentKey: "traction",
+            event: "retrying",
+            timestamp: new Date().toISOString(),
+            attempt: 2,
+            retryCount: 1,
+            error: "No output generated",
+          },
+        ],
+        updatedAt: new Date().toISOString(),
+      } as any);
+
+      const result = await service.getProgress(mockStartupId, mockUserId);
+      const traction = result.progress?.phases?.[PipelinePhase.EVALUATION]?.agents?.traction;
+
+      expect(traction?.retryCount).toBeUndefined();
+      expect(traction?.lastEvent).toBeUndefined();
+      expect(result.progress?.agentEvents).toBeUndefined();
+    });
   });
 
   describe("adminGetProgress", () => {
@@ -658,6 +724,88 @@ describe("StartupService", () => {
 
       await expect(service.adminGetProgress(mockStartupId)).rejects.toThrow(
         NotFoundException,
+      );
+    });
+
+    it("should include detailed agent telemetry for admin progress responses", async () => {
+      const analyzingStartup = {
+        ...mockStartup,
+        status: StartupStatus.ANALYZING,
+      };
+      mockDb.limit.mockResolvedValueOnce([analyzingStartup]);
+      pipelineService.getTrackedProgress.mockResolvedValueOnce({
+        pipelineRunId: "run-telemetry",
+        startupId: mockStartupId,
+        status: PipelineStatus.RUNNING,
+        currentPhase: PipelinePhase.EVALUATION,
+        overallProgress: 65,
+        phasesCompleted: [PipelinePhase.EXTRACTION, PipelinePhase.SCRAPING],
+        phases: {
+          [PipelinePhase.EXTRACTION]: {
+            status: "completed",
+            agents: {},
+          },
+          [PipelinePhase.SCRAPING]: {
+            status: "completed",
+            agents: {},
+          },
+          [PipelinePhase.RESEARCH]: {
+            status: "completed",
+            agents: {},
+          },
+          [PipelinePhase.EVALUATION]: {
+            status: "running",
+            retryCount: 2,
+            agents: {
+              traction: {
+                key: "traction",
+                status: "running",
+                progress: 0,
+                attempts: 3,
+                retryCount: 2,
+                usedFallback: false,
+                lastEvent: "retrying",
+                lastEventAt: new Date().toISOString(),
+              },
+            },
+          },
+          [PipelinePhase.SYNTHESIS]: {
+            status: "pending",
+            agents: {},
+          },
+        },
+        agentEvents: [
+          {
+            id: "evt-1",
+            phase: PipelinePhase.EVALUATION,
+            agentKey: "traction",
+            event: "retrying",
+            timestamp: new Date().toISOString(),
+            attempt: 3,
+            retryCount: 2,
+            error: "No output generated",
+          },
+        ],
+        updatedAt: new Date().toISOString(),
+      } as any);
+
+      const result = await service.adminGetProgress(mockStartupId);
+      const traction = result.progress?.phases?.[PipelinePhase.EVALUATION]?.agents?.traction;
+
+      expect(result.progress?.agentEvents?.[0]).toEqual(
+        expect.objectContaining({
+          agentKey: "traction",
+          event: "retrying",
+          retryCount: 2,
+        }),
+      );
+      expect(result.progress?.phases?.[PipelinePhase.EVALUATION]?.retryCount).toBe(2);
+      expect(traction).toEqual(
+        expect.objectContaining({
+          retryCount: 2,
+          attempts: 3,
+          lastEvent: "retrying",
+        }),
       );
     });
   });

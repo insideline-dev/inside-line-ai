@@ -24,7 +24,7 @@ import { MemoTabContent } from "@/components/startup-view/MemoTabContent";
 import { CompetitorsTabContent } from "@/components/startup-view/CompetitorsTabContent";
 import { SourcesTabContent } from "@/components/startup-view/SourcesTabContent";
 import { AdminEditTab } from "@/components/startup-view/AdminEditTab";
-import { AnalysisProgress } from "@/components/AnalysisProgress";
+import { AdminPipelineLivePanel } from "@/components/startup-view/AdminPipelineLivePanel";
 import {
   RefreshCw,
 } from "lucide-react";
@@ -233,6 +233,8 @@ function AdminReviewPage() {
   const canApproveReject = ["pending_review", "analyzing", "analyzed"].includes(
     startup.status
   );
+  const defaultTabValue =
+    startup.status === "analyzing" || !evaluation ? "pipeline-live" : "summary";
 
   const handleSectionReanalyze = async (
     sectionKey: string,
@@ -271,114 +273,116 @@ function AdminReviewPage() {
         }
       />
 
-      {startup.status === "analyzing" && (
-        <Card className="mb-6">
-          <CardContent className="p-6">
-            <AnalysisProgress
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <Tabs defaultValue={defaultTabValue} className="w-full min-w-0">
+          <TabsList className="flex h-auto w-full flex-wrap rounded-xl bg-muted/60 p-2">
+            <TabsTrigger value="pipeline-live" className="w-full sm:w-auto">
+              Pipeline Live
+            </TabsTrigger>
+            {evaluation && (
+              <>
+                <TabsTrigger value="summary" className="w-full sm:w-auto">Summary</TabsTrigger>
+                <TabsTrigger value="memo" className="w-full sm:w-auto">Memo</TabsTrigger>
+                <TabsTrigger value="product" className="w-full sm:w-auto">Product</TabsTrigger>
+                <TabsTrigger value="team" className="w-full sm:w-auto">Team</TabsTrigger>
+                <TabsTrigger value="competitors" className="w-full sm:w-auto">Competitors</TabsTrigger>
+                <TabsTrigger value="sources" className="w-full sm:w-auto">Sources</TabsTrigger>
+                <TabsTrigger value="edit" className="w-full sm:w-auto">Edit</TabsTrigger>
+                <TabsTrigger value="raw" className="w-full sm:w-auto">Raw</TabsTrigger>
+              </>
+            )}
+          </TabsList>
+
+          <TabsContent value="pipeline-live" className="mt-6">
+            <AdminPipelineLivePanel
               startupId={startup.id}
-              isAnalyzing={true}
-              weights={stageWeights ?? undefined}
-              progress={evaluation?.analysisProgress as any}
-              showAgentDetails
+              startupStatus={startup.status}
             />
-          </CardContent>
-        </Card>
-      )}
+          </TabsContent>
 
-      {evaluation && (
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
-          <Tabs defaultValue="summary" className="w-full min-w-0">
-            <TabsList className="grid h-auto w-full grid-cols-8 rounded-xl bg-muted/60 p-2">
-              <TabsTrigger value="summary" className="w-full">Summary</TabsTrigger>
-              <TabsTrigger value="memo" className="w-full">Memo</TabsTrigger>
-              <TabsTrigger value="product" className="w-full">Product</TabsTrigger>
-              <TabsTrigger value="team" className="w-full">Team</TabsTrigger>
-              <TabsTrigger value="competitors" className="w-full">Competitors</TabsTrigger>
-              <TabsTrigger value="sources" className="w-full">Sources</TabsTrigger>
-              <TabsTrigger value="edit" className="w-full">Edit</TabsTrigger>
-              <TabsTrigger value="raw" className="w-full">Raw</TabsTrigger>
-            </TabsList>
+          {evaluation && (
+            <>
+              <TabsContent value="summary" className="mt-6">
+                <AdminSummaryTab
+                  startup={startup}
+                  evaluation={evaluation}
+                  weights={stageWeights}
+                />
+              </TabsContent>
 
-            <TabsContent value="summary" className="mt-6">
-              <AdminSummaryTab
-                startup={startup}
-                evaluation={evaluation}
-                weights={stageWeights}
-              />
-            </TabsContent>
+              <TabsContent value="team" className="mt-6">
+                <TeamTabContent
+                  evaluation={evaluation}
+                  teamMembers={startup.teamMembers || []}
+                  teamWeight={stageWeights?.team}
+                  companyName={startup.name}
+                />
+              </TabsContent>
 
-            <TabsContent value="team" className="mt-6">
-              <TeamTabContent
-                evaluation={evaluation}
-                teamMembers={startup.teamMembers || []}
-                teamWeight={stageWeights?.team}
-                companyName={startup.name}
-              />
-            </TabsContent>
+              <TabsContent value="product" className="mt-6">
+                <ProductTabContent
+                  startup={startup}
+                  evaluation={evaluation}
+                  productWeight={stageWeights?.product}
+                />
+              </TabsContent>
 
-            <TabsContent value="product" className="mt-6">
-              <ProductTabContent
-                startup={startup}
-                evaluation={evaluation}
-                productWeight={stageWeights?.product}
-              />
-            </TabsContent>
+              <TabsContent value="memo" className="mt-6">
+                <MemoTabContent
+                  startup={startup}
+                  evaluation={evaluation}
+                  weights={stageWeights}
+                  adminFeedback={{
+                    onReanalyze: handleSectionReanalyze,
+                    reanalyzingSection,
+                  }}
+                />
+              </TabsContent>
 
-            <TabsContent value="memo" className="mt-6">
-              <MemoTabContent
-                startup={startup}
-                evaluation={evaluation}
-                weights={stageWeights}
-                adminFeedback={{
-                  onReanalyze: handleSectionReanalyze,
-                  reanalyzingSection,
-                }}
-              />
-            </TabsContent>
+              <TabsContent value="competitors" className="mt-6">
+                <CompetitorsTabContent
+                  evaluation={evaluation}
+                  companyName={startup.name}
+                />
+              </TabsContent>
 
-            <TabsContent value="competitors" className="mt-6">
-              <CompetitorsTabContent
-                evaluation={evaluation}
-                companyName={startup.name}
-              />
-            </TabsContent>
+              <TabsContent value="sources" className="mt-6">
+                <SourcesTabContent startup={startup} evaluation={evaluation} />
+              </TabsContent>
 
-            <TabsContent value="sources" className="mt-6">
-              <SourcesTabContent startup={startup} evaluation={evaluation} />
-            </TabsContent>
+              <TabsContent value="edit" className="mt-6">
+                <AdminEditTab startup={startup} />
+              </TabsContent>
 
-            <TabsContent value="edit" className="mt-6">
-              <AdminEditTab startup={startup} />
-            </TabsContent>
+              <TabsContent value="raw" className="mt-6">
+                <Card>
+                  <CardContent className="p-0">
+                    <pre className="max-h-[620px] overflow-auto rounded-lg bg-muted/30 p-4 text-xs leading-relaxed">
+                      {JSON.stringify({ startup, evaluation }, null, 2)}
+                    </pre>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </>
+          )}
+        </Tabs>
 
-            <TabsContent value="raw" className="mt-6">
-              <Card>
-                <CardContent className="p-0">
-                  <pre className="max-h-[620px] overflow-auto rounded-lg bg-muted/30 p-4 text-xs leading-relaxed">
-                    {JSON.stringify({ startup, evaluation }, null, 2)}
-                  </pre>
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
-
-          <AdminReviewSidebar
-            startup={startup}
-            evaluation={evaluation}
-            adminNotes={adminNotes}
-            onAdminNotesChange={setAdminNotes}
-            onApprove={() => setShowApproveDialog(true)}
-            onReject={() => setShowRejectDialog(true)}
-            onDeleteSubmission={() => setShowDeleteDialog(true)}
-            onMatchInvestors={() => setShowMatchDialog(true)}
-            approveDisabled={approveMutation.isPending || rejectMutation.isPending}
-            rejectDisabled={approveMutation.isPending || rejectMutation.isPending}
-            deleteDisabled={deleteMutation.isPending}
-            matchDisabled={matchMutation.isPending}
-            canApproveReject={canApproveReject}
-          />
-        </div>
-      )}
+        <AdminReviewSidebar
+          startup={startup}
+          evaluation={evaluation}
+          adminNotes={adminNotes}
+          onAdminNotesChange={setAdminNotes}
+          onApprove={() => setShowApproveDialog(true)}
+          onReject={() => setShowRejectDialog(true)}
+          onDeleteSubmission={() => setShowDeleteDialog(true)}
+          onMatchInvestors={() => setShowMatchDialog(true)}
+          approveDisabled={approveMutation.isPending || rejectMutation.isPending}
+          rejectDisabled={approveMutation.isPending || rejectMutation.isPending}
+          deleteDisabled={deleteMutation.isPending}
+          matchDisabled={matchMutation.isPending}
+          canApproveReject={canApproveReject}
+        />
+      </div>
 
       <AlertDialog open={showApproveDialog} onOpenChange={setShowApproveDialog}>
         <AlertDialogContent>

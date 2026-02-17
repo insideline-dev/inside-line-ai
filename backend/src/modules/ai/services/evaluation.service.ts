@@ -4,6 +4,7 @@ import { PipelineStateService } from "./pipeline-state.service";
 import { ModelPurpose, PipelinePhase } from "../interfaces/pipeline.interface";
 import type {
   EvaluationAgentCompletion,
+  EvaluationAgentLifecycleEvent,
   EvaluationAgentKey,
   EvaluationPipelineInput,
 } from "../interfaces/agent.interface";
@@ -16,6 +17,7 @@ import { DEFAULT_MODEL_BY_PURPOSE } from "../ai.config";
 export interface EvaluationRunOptions {
   onAgentStart?: (agent: EvaluationAgentKey) => void;
   onAgentComplete?: (payload: EvaluationAgentCompletion) => void;
+  onAgentLifecycle?: (payload: EvaluationAgentLifecycleEvent) => void;
   agentKey?: EvaluationAgentKey;
 }
 
@@ -53,6 +55,10 @@ export class EvaluationService {
       options?.onAgentComplete?.(payload);
     };
 
+    const handleAgentLifecycle = (payload: EvaluationAgentLifecycleEvent) => {
+      options?.onAgentLifecycle?.(payload);
+    };
+
     const pipelineInput = await this.loadPipelineInput(startupId);
     if (options?.agentKey) {
       const current = await this.pipelineState.getPhaseResult(
@@ -66,6 +72,7 @@ export class EvaluationService {
           pipelineInput,
           handleAgentStart,
           handleAgentComplete,
+          handleAgentLifecycle,
         );
       }
 
@@ -74,6 +81,7 @@ export class EvaluationService {
         options.agentKey,
         pipelineInput,
         handleAgentStart,
+        handleAgentLifecycle,
       );
       handleAgentComplete(rerun);
 
@@ -85,6 +93,7 @@ export class EvaluationService {
       pipelineInput,
       handleAgentStart,
       handleAgentComplete,
+      handleAgentLifecycle,
     );
   }
 

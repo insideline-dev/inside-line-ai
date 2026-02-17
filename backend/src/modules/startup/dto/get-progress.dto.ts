@@ -8,6 +8,13 @@ export const ProgressAgentSchema = z.object({
   startedAt: z.string().optional(),
   completedAt: z.string().optional(),
   error: z.string().optional(),
+  attempts: z.number().int().min(0).optional(),
+  retryCount: z.number().int().min(0).optional(),
+  usedFallback: z.boolean().optional(),
+  lastEvent: z
+    .enum(["started", "retrying", "completed", "failed", "fallback"])
+    .optional(),
+  lastEventAt: z.string().optional(),
 });
 
 export const ProgressPhaseSchema = z.object({
@@ -16,7 +23,19 @@ export const ProgressPhaseSchema = z.object({
   startedAt: z.string().optional(),
   completedAt: z.string().optional(),
   error: z.string().optional(),
+  retryCount: z.number().int().min(0).optional(),
   agents: z.record(z.string(), ProgressAgentSchema).optional(),
+});
+
+export const ProgressAgentEventSchema = z.object({
+  id: z.string(),
+  phase: z.string(),
+  agentKey: z.string(),
+  event: z.enum(["started", "retrying", "completed", "failed", "fallback"]),
+  timestamp: z.string(),
+  attempt: z.number().int().min(1).optional(),
+  retryCount: z.number().int().min(0).optional(),
+  error: z.string().optional(),
 });
 
 export const ProgressSchema = z.object({
@@ -29,6 +48,7 @@ export const ProgressSchema = z.object({
   error: z.string().optional(),
   updatedAt: z.string().optional(),
   phases: z.record(z.string(), ProgressPhaseSchema),
+  agentEvents: z.array(ProgressAgentEventSchema).optional(),
 });
 
 export const GetProgressResponseSchema = z.object({

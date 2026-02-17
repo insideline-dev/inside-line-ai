@@ -415,6 +415,10 @@ export class PipelineService {
     status: "pending" | "running" | "completed" | "failed";
     progress?: number;
     error?: string;
+    attempt?: number;
+    retryCount?: number;
+    usedFallback?: boolean;
+    lifecycleEvent?: "started" | "retrying" | "completed" | "failed" | "fallback";
   }): Promise<void> {
     await this.progressTracker.updateAgentProgress(params);
   }
@@ -435,6 +439,7 @@ export class PipelineService {
       phase,
       status: PhaseStatus.WAITING,
       error: waitingError,
+      retryCount,
     });
 
     await this.queue.addJob(

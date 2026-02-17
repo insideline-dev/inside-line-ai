@@ -237,7 +237,7 @@ describe("EvaluationProcessor", () => {
     expect(result.type).toBe("ai_evaluation");
   });
 
-  it("marks fallback agent completions as completed in progress tracking", async () => {
+  it("marks fallback agent completions as failed in progress tracking", async () => {
     evaluationService.run.mockImplementationOnce(
       async (
         _startupId: string,
@@ -283,9 +283,11 @@ describe("EvaluationProcessor", () => {
     expect(pipelineService.onAgentProgress).toHaveBeenCalledWith(
       expect.objectContaining({
         key: "traction",
-        status: "completed",
-        progress: 100,
-        error: undefined,
+        status: "failed",
+        progress: 0,
+        error: "No output generated.",
+        usedFallback: true,
+        lifecycleEvent: "fallback",
       }),
     );
   });

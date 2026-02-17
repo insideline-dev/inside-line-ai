@@ -54,8 +54,24 @@ export interface EvaluationFeedbackNote {
   createdAt: Date;
 }
 
+export type EvaluationAgentLifecycleEventType =
+  | "started"
+  | "retrying"
+  | "completed"
+  | "fallback"
+  | "failed";
+
+export interface EvaluationAgentLifecycleEvent {
+  agent: EvaluationAgentKey;
+  event: EvaluationAgentLifecycleEventType;
+  attempt: number;
+  retryCount: number;
+  error?: string;
+}
+
 export interface EvaluationAgentRunOptions {
   feedbackNotes?: EvaluationFeedbackNote[];
+  onLifecycle?: (event: EvaluationAgentLifecycleEvent) => void;
 }
 
 export interface EvaluationAgentCompletion {

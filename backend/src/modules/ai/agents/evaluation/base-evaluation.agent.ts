@@ -67,6 +67,12 @@ export abstract class BaseEvaluationAgent<TOutput>
       attempt <= NO_OUTPUT_RETRY_ATTEMPTS;
       attempt += 1
     ) {
+      this.emitLifecycleEvent(options, {
+        agent: this.key,
+        event: "started",
+        attempt,
+        retryCount: Math.max(0, attempt - 1),
+      });
       try {
         const { output } = await generateText({
           model: this.providers.resolveModelForPurpose(ModelPurpose.EVALUATION),
@@ -115,6 +121,12 @@ export abstract class BaseEvaluationAgent<TOutput>
           maxOutputTokens: this.aiConfig.getEvaluationMaxOutputTokens(),
         });
 
+        this.emitLifecycleEvent(options, {
+          agent: this.key,
+          event: "completed",
+          attempt,
+          retryCount: Math.max(0, attempt - 1),
+        });
         return {
           key: this.key,
           output: this.normalizeNarrativeFields(this.schema.parse(output)),
@@ -127,12 +139,26 @@ export abstract class BaseEvaluationAgent<TOutput>
           this.isNoOutputError(message);
 
         if (shouldRetry) {
+          this.emitLifecycleEvent(options, {
+            agent: this.key,
+            event: "retrying",
+            attempt,
+            retryCount: attempt,
+            error: message,
+          });
           this.logger.warn(
             `${this.key} evaluation returned no output, retrying (${attempt}/${NO_OUTPUT_RETRY_ATTEMPTS})`,
           );
           continue;
         }
 
+        this.emitLifecycleEvent(options, {
+          agent: this.key,
+          event: "fallback",
+          attempt,
+          retryCount: Math.max(0, attempt - 1),
+          error: message,
+        });
         this.logger.warn(`${this.key} evaluation fallback used: ${message}`);
         const fallbackOutput = this.normalizeNarrativeFields(
           this.fallback(pipelineData),
@@ -146,6 +172,13 @@ export abstract class BaseEvaluationAgent<TOutput>
       }
     }
 
+    this.emitLifecycleEvent(options, {
+      agent: this.key,
+      event: "fallback",
+      attempt: NO_OUTPUT_RETRY_ATTEMPTS,
+      retryCount: Math.max(0, NO_OUTPUT_RETRY_ATTEMPTS - 1),
+      error: "Evaluation failed after retries",
+    });
     const fallbackOutput = this.normalizeNarrativeFields(
       this.fallback(pipelineData),
     );
@@ -155,6 +188,24 @@ export abstract class BaseEvaluationAgent<TOutput>
       usedFallback: true,
       error: "Evaluation failed after retries",
     };
+  }
+
+  private emitLifecycleEvent(
+    options: EvaluationAgentRunOptions | undefined,
+    event: Parameters<NonNullable<EvaluationAgentRunOptions["onLifecycle"]>>[0],
+  ): void {
+    if (!options?.onLifecycle) {
+      return;
+    }
+
+    try {
+      options.onLifecycle(event);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `${this.key} evaluation lifecycle callback failed: ${message}`,
+      );
+    }
   }
 
   private normalizeNarrativeFields(output: TOutput): TOutput {

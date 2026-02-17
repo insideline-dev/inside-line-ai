@@ -23,6 +23,15 @@ const NON_RETRYABLE_PATTERNS = [
 const HEALTH_CHECK_INTERVAL_MS = 15_000;
 const STALLED_CONSUMPTION_THRESHOLD_MS = 45_000;
 const RECOVERY_DELAY_MS = 5_000;
+const TRANSIENT_REDIS_WARN_WINDOW_MS = 30_000;
+const TRANSIENT_REDIS_ERROR_PATTERNS = [
+  "connection is closed",
+  "connection closed",
+  "econnreset",
+  "econnrefused",
+  "etimedout",
+  "socket hang up",
+];
 
 /**
  * Parse REDIS_URL into ConnectionOptions
@@ -51,6 +60,7 @@ export abstract class BaseProcessor<
     quit: () => Promise<unknown>;
     disconnect: () => void;
   };
+  private transientWarnTimestamps = new Map<string, number>();
   private lastJobActivityAt = Date.now();
 
   constructor(
@@ -245,15 +255,7 @@ export abstract class BaseProcessor<
   }
 
   private shouldRecoverFromError(message: string): boolean {
-    const normalized = message.toLowerCase();
-    return (
-      normalized.includes('connection is closed') ||
-      normalized.includes('connection closed') ||
-      normalized.includes('econnreset') ||
-      normalized.includes('econnrefused') ||
-      normalized.includes('etimedout') ||
-      normalized.includes('socket hang up')
-    );
+    return this.isTransientRedisError(message);
   }
 
   private scheduleRecovery(reason: string): void {
@@ -261,9 +263,16 @@ export abstract class BaseProcessor<
       return;
     }
 
-    this.logger.warn(
-      `Scheduling worker recovery for ${this.queueName}: ${reason}`,
-    );
+    const message = `Scheduling worker recovery for ${this.queueName}: ${reason}`;
+    if (this.isTransientRedisError(reason)) {
+      this.warnThrottled(
+        `schedule:${this.queueName}`,
+        message,
+        TRANSIENT_REDIS_WARN_WINDOW_MS,
+      );
+    } else {
+      this.logger.warn(message);
+    }
     this.restartTimer = setTimeout(() => {
       this.restartTimer = undefined;
       void this.recoverWorker(reason);
@@ -277,7 +286,16 @@ export abstract class BaseProcessor<
 
     this.recovering = true;
     let recovered = false;
-    this.logger.warn(`Recovering worker for ${this.queueName}: ${reason}`);
+    const message = `Recovering worker for ${this.queueName}: ${reason}`;
+    if (this.isTransientRedisError(reason)) {
+      this.warnThrottled(
+        `recover:${this.queueName}`,
+        message,
+        TRANSIENT_REDIS_WARN_WINDOW_MS,
+      );
+    } else {
+      this.logger.warn(message);
+    }
 
     try {
       if (this.worker) {
@@ -378,11 +396,36 @@ export abstract class BaseProcessor<
       ...(this.queuePrefix ? { prefix: this.queuePrefix } : {}),
     });
     this.probeQueue.on("error", (error) => {
-      this.logger.warn(
-        `Queue probe error for ${this.queueName}: ${String(error)}`,
-      );
+      const message = String(error);
+      const logMessage = `Queue probe error for ${this.queueName}: ${message}`;
+      if (this.isTransientRedisError(message)) {
+        this.warnThrottled(
+          `probe:${this.queueName}`,
+          logMessage,
+          TRANSIENT_REDIS_WARN_WINDOW_MS,
+        );
+        return;
+      }
+      this.logger.warn(logMessage);
     });
     return this.probeQueue;
+  }
+
+  private isTransientRedisError(message: string): boolean {
+    const normalized = message.toLowerCase();
+    return TRANSIENT_REDIS_ERROR_PATTERNS.some((pattern) =>
+      normalized.includes(pattern),
+    );
+  }
+
+  private warnThrottled(key: string, message: string, windowMs: number): void {
+    const now = Date.now();
+    const lastLoggedAt = this.transientWarnTimestamps.get(key);
+    if (typeof lastLoggedAt === "number" && now - lastLoggedAt < windowMs) {
+      return;
+    }
+    this.transientWarnTimestamps.set(key, now);
+    this.logger.warn(message);
   }
 
   private acquireProbeQueueConnection(): ConnectionOptions {

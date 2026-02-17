@@ -24,7 +24,7 @@ export class TwilioApiClientService {
     const authToken = this.config.get<string>('TWILIO_AUTH_TOKEN');
 
     if (!accountSid || !authToken) {
-      this.logger.warn('Twilio credentials not configured');
+      this.logger.log('Twilio integration disabled: credentials not configured');
       return;
     }
 
@@ -61,7 +61,7 @@ export class TwilioApiClientService {
 
   validateWebhook(signature: string, url: string, params: Record<string, string>): boolean {
     if (!this.authToken) {
-      this.logger.warn('Auth token not available for webhook validation');
+      this.logger.debug('Skipping Twilio webhook validation: auth token not configured');
       return false;
     }
 

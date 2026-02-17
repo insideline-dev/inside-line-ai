@@ -12,6 +12,16 @@ import {
 import type { JobData, JobResult } from "./interfaces";
 import { buildBullRedisConnection } from "./redis-connection.util";
 
+const TRANSIENT_REDIS_WARN_WINDOW_MS = 30_000;
+const TRANSIENT_REDIS_ERROR_PATTERNS = [
+  "connection is closed",
+  "connection closed",
+  "econnreset",
+  "econnrefused",
+  "etimedout",
+  "socket hang up",
+];
+
 export interface QueueDepthInfo {
   waiting: number;
   active: number;
@@ -29,6 +39,7 @@ export class QueueService implements OnModuleDestroy {
   private readonly redisConnectionOptions: ConnectionOptions;
   private readonly queueConnection: Redis;
   private readonly queuePrefix?: string;
+  private readonly transientWarnTimestamps = new Map<string, number>();
 
   constructor(private config: ConfigService) {
     this.queueDepthLimits = resolveQueueDepthLimits((key, defaultValue) =>
@@ -57,7 +68,17 @@ export class QueueService implements OnModuleDestroy {
   private createQueueConnection(): Redis {
     const client = new Redis(this.redisConnectionOptions as RedisOptions);
     client.on("error", (error) => {
-      this.logger.warn(`Queue Redis connection error: ${String(error)}`);
+      const message = String(error);
+      const logMessage = `Queue Redis connection error: ${message}`;
+      if (this.isTransientRedisError(message)) {
+        this.warnThrottled(
+          "queue-connection",
+          logMessage,
+          TRANSIENT_REDIS_WARN_WINDOW_MS,
+        );
+        return;
+      }
+      this.logger.warn(logMessage);
     });
     return client;
   }
@@ -75,6 +96,24 @@ export class QueueService implements OnModuleDestroy {
         ...(this.queuePrefix ? { prefix: this.queuePrefix } : {}),
         defaultJobOptions: DEFAULT_JOB_OPTIONS,
       });
+      const queueWithEvents = queue as unknown as {
+        on?: (event: string, handler: (error: unknown) => void) => void;
+      };
+      if (typeof queueWithEvents.on === "function") {
+        queueWithEvents.on("error", (error) => {
+          const message = String(error);
+          const logMessage = `Queue ${name} error: ${message}`;
+          if (this.isTransientRedisError(message)) {
+            this.warnThrottled(
+              `queue:${name}`,
+              logMessage,
+              TRANSIENT_REDIS_WARN_WINDOW_MS,
+            );
+            return;
+          }
+          this.logger.warn(logMessage);
+        });
+      }
       this.queues.set(name, queue);
 
       this.logger.log(`Initialized queue: ${name}`);
@@ -340,12 +379,37 @@ export class QueueService implements OnModuleDestroy {
       ...(this.queuePrefix ? { prefix: this.queuePrefix } : {}),
     });
     events.on("error", (error) => {
-      this.logger.warn(
-        `Queue events error for ${queueName}: ${String(error)}`,
-      );
+      const message = String(error);
+      const logMessage = `Queue events error for ${queueName}: ${message}`;
+      if (this.isTransientRedisError(message)) {
+        this.warnThrottled(
+          `queue-events:${queueName}`,
+          logMessage,
+          TRANSIENT_REDIS_WARN_WINDOW_MS,
+        );
+        return;
+      }
+      this.logger.warn(logMessage);
     });
     await events.waitUntilReady();
     this.queueEvents.set(queueName, events);
     return events;
+  }
+
+  private isTransientRedisError(message: string): boolean {
+    const normalized = message.toLowerCase();
+    return TRANSIENT_REDIS_ERROR_PATTERNS.some((pattern) =>
+      normalized.includes(pattern),
+    );
+  }
+
+  private warnThrottled(key: string, message: string, windowMs: number): void {
+    const now = Date.now();
+    const lastLoggedAt = this.transientWarnTimestamps.get(key);
+    if (typeof lastLoggedAt === "number" && now - lastLoggedAt < windowMs) {
+      return;
+    }
+    this.transientWarnTimestamps.set(key, now);
+    this.logger.warn(message);
   }
 }

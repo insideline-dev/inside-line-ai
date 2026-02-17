@@ -1,6 +1,15 @@
 import { Logger } from "@nestjs/common";
 import Redis from "ioredis";
 
+const TRANSIENT_REDIS_ERROR_PATTERNS = [
+  "connection is closed",
+  "connection closed",
+  "econnreset",
+  "econnrefused",
+  "etimedout",
+  "socket hang up",
+];
+
 interface MemoryEntry {
   value: string;
   expiresAt: number;
@@ -66,7 +75,12 @@ export class RedisFallbackClient {
       try {
         await this.redis.del(key);
       } catch (error) {
-        this.logger.warn(`Redis del failed for ${key}: ${String(error)}`);
+        const message = String(error);
+        if (this.isTransientRedisError(message)) {
+          this.logger.debug(`Redis del failed for ${key}: ${message}`);
+        } else {
+          this.logger.warn(`Redis del failed for ${key}: ${message}`);
+        }
       }
     }
   }
@@ -142,7 +156,12 @@ export class RedisFallbackClient {
       this.logger.log("Redis recovered");
       await this.syncMemoryToRedis();
     } catch (error) {
-      this.logger.warn(`Redis recovery failed: ${String(error)}`);
+      const message = String(error);
+      if (this.isTransientRedisError(message)) {
+        this.logger.debug(`Redis recovery failed: ${message}`);
+      } else {
+        this.logger.warn(`Redis recovery failed: ${message}`);
+      }
       this.useMemory = true;
     } finally {
       this.reconnectInFlight = false;
@@ -174,6 +193,13 @@ export class RedisFallbackClient {
     return (
       message.includes("connection is closed") ||
       message.includes("connection closed")
+    );
+  }
+
+  private isTransientRedisError(message: string): boolean {
+    const normalized = message.toLowerCase();
+    return TRANSIENT_REDIS_ERROR_PATTERNS.some((pattern) =>
+      normalized.includes(pattern),
     );
   }
 

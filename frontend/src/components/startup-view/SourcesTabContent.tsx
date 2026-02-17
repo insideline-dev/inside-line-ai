@@ -123,13 +123,13 @@ function SourceRow({
               href={url}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-sm font-medium text-violet-600 hover:underline break-all"
+              className="inline-flex items-center gap-1 break-all text-sm font-medium text-violet-600 hover:underline"
             >
               {title}
               <ExternalLink className="h-3 w-3 shrink-0" />
             </a>
           ) : (
-            <p className="text-sm font-medium break-all">{title}</p>
+            <p className="break-all text-sm font-medium">{title}</p>
           )}
           {subtitle && <p className="mt-0.5 text-xs text-muted-foreground">{subtitle}</p>}
           <p className="mt-1 text-xs text-muted-foreground">{formatDate(timestamp)}</p>
@@ -144,9 +144,7 @@ function SourceRow({
 
 export function SourcesTabContent({ startup, evaluation }: SourcesTabContentProps) {
   const allSources = (evaluation?.sources as unknown as SourceLike[]) || [];
-  const rawSources = allSources.filter(
-    (item) => Boolean(item?.url),
-  );
+  const rawSources = allSources.filter((item) => Boolean(item?.url));
 
   const modelByAgent = allSources.reduce(
     (acc, source) => {

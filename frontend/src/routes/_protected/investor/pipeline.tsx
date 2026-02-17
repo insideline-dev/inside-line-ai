@@ -2,7 +2,23 @@ import { useState, type DragEvent } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { List, LayoutGrid, Search, Clock, GripVertical, Lock, Loader2, ArrowRight, MapPin } from "lucide-react";
+import {
+  List,
+  LayoutGrid,
+  Search,
+  Clock,
+  GripVertical,
+  Lock,
+  Loader2,
+  ArrowRight,
+  MapPin,
+  Plus,
+  Sparkles,
+  Eye,
+  Star,
+  CheckCircle2,
+  CircleX,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -98,35 +114,46 @@ const STATUSES: Status[] = ["new", "reviewing", "engaged", "closed", "passed"];
 
 const STATUS_CONFIG: Record<
   Status,
-  { label: string; color: string; badgeClass: string; borderClass: string }
+  {
+    label: string;
+    icon: typeof Sparkles;
+    iconClass: string;
+    badgeClass: string;
+    borderClass: string;
+  }
 > = {
   new: {
     label: "New",
-    color: "bg-blue-500/10 text-blue-700 dark:text-blue-400",
+    icon: Sparkles,
+    iconClass: "text-blue-500",
     badgeClass: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
     borderClass: "border-blue-500",
   },
   reviewing: {
     label: "Reviewing",
-    color: "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400",
+    icon: Eye,
+    iconClass: "text-amber-500",
     badgeClass: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300",
     borderClass: "border-yellow-500",
   },
   engaged: {
     label: "Engaged",
-    color: "bg-green-500/10 text-green-700 dark:text-green-400",
+    icon: Star,
+    iconClass: "text-violet-500",
     badgeClass: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300",
     borderClass: "border-green-500",
   },
   closed: {
     label: "Closed",
-    color: "bg-purple-500/10 text-purple-700 dark:text-purple-400",
+    icon: CheckCircle2,
+    iconClass: "text-green-500",
     badgeClass: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300",
     borderClass: "border-purple-500",
   },
   passed: {
     label: "Passed",
-    color: "bg-red-500/10 text-red-700 dark:text-red-400",
+    icon: CircleX,
+    iconClass: "text-muted-foreground",
     badgeClass: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
     borderClass: "border-red-500",
   },
@@ -324,22 +351,28 @@ function PipelinePage() {
           </div>
           <div className="flex rounded-md border">
             <Button
-              variant={viewMode === "board" ? "secondary" : "ghost"}
-              size="sm"
-              onClick={() => setViewMode("board")}
-              className="rounded-r-none"
-            >
-              <LayoutGrid className="h-4 w-4" />
-            </Button>
-            <Button
               variant={viewMode === "list" ? "secondary" : "ghost"}
               size="sm"
               onClick={() => setViewMode("list")}
-              className="rounded-l-none"
+              className="rounded-r-none"
             >
               <List className="h-4 w-4" />
             </Button>
+            <Button
+              variant={viewMode === "board" ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setViewMode("board")}
+              className="rounded-l-none"
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </Button>
           </div>
+          <Button asChild>
+            <Link to="/investor/submit">
+              <Plus className="h-4 w-4 mr-2" />
+              Analyze Startup
+            </Link>
+          </Button>
         </div>
       </div>
 
@@ -531,6 +564,7 @@ function KanbanColumn({
 }) {
   const [dragOver, setDragOver] = useState(false);
   const config = STATUS_CONFIG[status];
+  const StatusIcon = config.icon;
 
   function handleDragOver(e: DragEvent) {
     e.preventDefault();
@@ -553,24 +587,25 @@ function KanbanColumn({
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className={`rounded-lg border-2 bg-muted/30 p-3 min-h-[300px] transition-colors ${
-        dragOver ? config.borderClass : "border-transparent"
+      className={`flex h-[230px] flex-col overflow-hidden rounded-xl border bg-card transition-colors ${
+        dragOver ? `${config.borderClass} border-2` : "border-border"
       }`}
     >
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-semibold">{config.label}</h3>
-        <Badge variant="secondary" className="text-xs tabular-nums">
+      <div className="flex items-center justify-between border-b px-4 py-2.5">
+        <div className="flex items-center gap-2">
+          <StatusIcon className={`h-4.5 w-4.5 ${config.iconClass}`} />
+          <h3 className="text-sm font-semibold">{config.label}</h3>
+        </div>
+        <Badge variant="secondary" className="rounded-lg px-3 text-xs tabular-nums">
           {matches.length}
         </Badge>
       </div>
-      <div className="space-y-2 overflow-y-auto max-h-[calc(100vh-280px)]">
+      <div className="flex-1 space-y-2 overflow-y-auto p-2.5">
         {matches.map((match) => (
           <KanbanCard key={match.id} match={match} />
         ))}
         {matches.length === 0 && (
-          <p className="text-xs text-muted-foreground text-center py-8">
-            No deals
-          </p>
+          <p className="py-10 text-center text-sm text-muted-foreground">No startups</p>
         )}
       </div>
     </div>

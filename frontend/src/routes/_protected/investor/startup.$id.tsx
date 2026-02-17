@@ -1,20 +1,14 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQueryClient } from "@tanstack/react-query";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScoreRing } from "@/components/analysis/ScoreRing";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import {
-  getStartupControllerFindAllQueryKey,
-  useStartupControllerApprove,
   useStartupControllerFindOne,
   useStartupControllerFindApprovedById,
   useStartupControllerGetEvaluation,
-  useStartupControllerReject,
 } from "@/api/generated/startup/startup";
 import { useInvestorControllerGetEffectiveWeights } from "@/api/generated/investor/investor";
-import { useCurrentUser } from "@/lib/auth/hooks";
-import { toast } from "sonner";
 import {
   StartupHeader,
   SummaryCard,
@@ -44,8 +38,6 @@ function unwrapApiResponse<T>(payload: unknown): T {
 
 function InvestorStartupDetailPage() {
   const { id } = Route.useParams();
-  const queryClient = useQueryClient();
-  const { data: user } = useCurrentUser();
 
   const {
     data: ownStartupRes,
@@ -85,42 +77,6 @@ function InvestorStartupDetailPage() {
   const isLoading = ownStartupLoading || approvedStartupLoading || evalLoading;
   const error = approvedStartupError || evalError;
 
-  const isInvestorOwnedPrivatePendingReview =
-    startup &&
-    startup.status === "pending_review" &&
-    startup.isPrivate === true &&
-    startup.submittedByRole === "investor" &&
-    user &&
-    startup.userId === user.id;
-
-  const approveMutation = useStartupControllerApprove({
-    mutation: {
-      onSuccess: async () => {
-        await queryClient.invalidateQueries({
-          queryKey: getStartupControllerFindAllQueryKey(),
-        });
-        toast.success("Startup accepted");
-      },
-      onError: () => {
-        toast.error("Failed to accept startup");
-      },
-    },
-  });
-
-  const rejectMutation = useStartupControllerReject({
-    mutation: {
-      onSuccess: async () => {
-        await queryClient.invalidateQueries({
-          queryKey: getStartupControllerFindAllQueryKey(),
-        });
-        toast.success("Startup denied");
-      },
-      onError: () => {
-        toast.error("Failed to deny startup");
-      },
-    },
-  });
-
   if (isLoading) {
     return <div className="flex items-center justify-center py-12"><Loader2 className="h-8 w-8 animate-spin" /></div>;
   }
@@ -143,28 +99,6 @@ function InvestorStartupDetailPage() {
         backLink="/investor"
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            {isInvestorOwnedPrivatePendingReview && (
-              <>
-                <Button
-                  onClick={() => approveMutation.mutate({ id, data: {} })}
-                  disabled={approveMutation.isPending || rejectMutation.isPending}
-                >
-                  Accept
-                </Button>
-                <Button
-                  variant="destructive"
-                  onClick={() =>
-                    rejectMutation.mutate({
-                      id,
-                      data: { rejectionReason: "Rejected by investor after review." },
-                    })
-                  }
-                  disabled={approveMutation.isPending || rejectMutation.isPending}
-                >
-                  Deny
-                </Button>
-              </>
-            )}
             {evaluation?.overallScore ? (
               <ScoreRing score={evaluation.overallScore as number} size="lg" label="Overall Score" showLabel />
             ) : null}

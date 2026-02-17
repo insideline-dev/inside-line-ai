@@ -8,6 +8,10 @@ import { ModelPurpose } from "../interfaces/pipeline.interface";
 export class AiConfigService {
   constructor(private config: ConfigService) {}
 
+  isPromptRuntimeConfigEnabled(): boolean {
+    return this.config.get<boolean>("AI_PROMPT_RUNTIME_CONFIG_ENABLED", false);
+  }
+
   isPipelineEnabled(): boolean {
     return this.config.get<boolean>("AI_PIPELINE_ENABLED", true);
   }
@@ -29,10 +33,6 @@ export class AiConfigService {
 
   getMaxRetries(): number {
     return this.config.get<number>("AI_MAX_RETRIES", 3);
-  }
-
-  isPromptRuntimeConfigEnabled(): boolean {
-    return this.config.get<boolean>("AI_PROMPT_RUNTIME_CONFIG_ENABLED", true);
   }
 
   getResearchTemperature(): number {

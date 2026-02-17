@@ -45,6 +45,13 @@ export async function customFetch<T>(
 
   let response = await fetch(`${API_BASE_URL}${url}`, config);
 
+  // Handle 429 - retry once after backoff (don't treat as auth failure)
+  if (response.status === 429) {
+    const retryAfter = Number(response.headers.get("Retry-After")) || 2;
+    await new Promise((r) => setTimeout(r, retryAfter * 1000));
+    response = await fetch(`${API_BASE_URL}${url}`, config);
+  }
+
   // Handle 401 - attempt token refresh (skip for the refresh endpoint itself)
   if (response.status === 401 && url !== "/auth/refresh") {
     // Deduplicate: reuse in-flight refresh, or start a new one

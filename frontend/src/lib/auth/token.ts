@@ -36,7 +36,8 @@ async function proactiveRefresh(): Promise<void> {
     if (res.ok) {
       const data = await res.json();
       if (data.accessToken) setAccessToken(data.accessToken);
-    } else {
+    } else if (res.status !== 429) {
+      // Only clear token on real failures — 429 just means "try again later"
       accessToken = null;
     }
   } catch {

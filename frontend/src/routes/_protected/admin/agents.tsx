@@ -6,22 +6,27 @@ import {
   getAdminControllerGetAiPromptRevisionsQueryKey,
   getAdminControllerGetAiPromptsQueryKey,
   useAdminControllerCreateAiPromptRevision,
+  useAdminControllerGetAiPromptContextSchema,
   useAdminControllerGetAiPromptFlow,
   useAdminControllerGetAiPromptRevisions,
   useAdminControllerGetAiPrompts,
   useAdminControllerPublishAiPromptRevision,
+  useAdminControllerPreviewAiPrompt,
   useAdminControllerSeedAiPrompts,
   useAdminControllerUpdateAiPromptRevision,
 } from "@/api/generated/admin/admin";
 import type {
+  AiPromptContextSchemaResponseDto,
   AiPromptDefinitionsResponseDto,
   AiPromptDefinitionsResponseDtoItem,
   AiPromptFlowResponseDto,
   AiPromptFlowResponseDtoFlowsItem,
   AiPromptFlowResponseDtoFlowsItemNodesItem,
+  AiPromptPreviewResponseDto,
   AiPromptFlowResponseDtoFlowsItemNodesItemPromptKeysItem,
   AiPromptRevisionsResponseDto,
   AiPromptSeedResultDto,
+  PreviewAiPromptRequestDto,
 } from "@/api/generated/model";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -122,6 +127,18 @@ function humanizePromptKey(key: string): string {
     .join(" ");
 }
 
+function formatPreviewValue(value: unknown): string {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
 function pickNodeIcon(nodeId: string) {
   if (nodeId.includes("extract")) return FileSearch;
   if (nodeId.includes("scrape")) return Globe;
@@ -207,6 +224,9 @@ function AdminAgentsPage() {
   const [systemPrompt, setSystemPrompt] = useState("");
   const [userPrompt, setUserPrompt] = useState("");
   const [notes, setNotes] = useState("");
+  const [previewStartupId, setPreviewStartupId] = useState("");
+  const [previewStage, setPreviewStage] = useState<"auto" | StageOption>("auto");
+  const [previewResult, setPreviewResult] = useState<AiPromptPreviewResponseDto | null>(null);
 
   const definitionsQuery = useAdminControllerGetAiPrompts();
   const flowQuery = useAdminControllerGetAiPromptFlow();
@@ -315,11 +335,20 @@ function AdminAgentsPage() {
       enabled: Boolean(currentPromptKey),
     },
   });
+  const contextSchemaQuery = useAdminControllerGetAiPromptContextSchema(currentPromptKey ?? "", {
+    query: {
+      enabled: Boolean(currentPromptKey),
+    },
+  });
 
   const revisionsPayload = useMemo(() => {
     const data = extractResponseData<AiPromptRevisionsResponseDto>(revisionsQuery.data);
     return data;
   }, [revisionsQuery.data]);
+  const contextSchema = useMemo(() => {
+    const data = extractResponseData<AiPromptContextSchemaResponseDto>(contextSchemaQuery.data);
+    return data;
+  }, [contextSchemaQuery.data]);
 
   const revisions = revisionsPayload?.revisions ?? [];
   const selectedDefinition = currentPromptKey
@@ -376,6 +405,10 @@ function AdminAgentsPage() {
     setUserPrompt("");
     setNotes("");
   }, [currentPromptKey, activeDraft, activePublished]);
+
+  useEffect(() => {
+    setPreviewResult(null);
+  }, [currentPromptKey]);
 
   const seedMutation = useAdminControllerSeedAiPrompts({
     mutation: {
@@ -448,6 +481,16 @@ function AdminAgentsPage() {
       onError: (error) => toast.error((error as Error).message || "Failed to publish revision"),
     },
   });
+  const previewMutation = useAdminControllerPreviewAiPrompt({
+    mutation: {
+      onSuccess: (result) => {
+        const payload = extractResponseData<AiPromptPreviewResponseDto>(result);
+        setPreviewResult(payload);
+        toast.success("Runtime preview generated");
+      },
+      onError: (error) => toast.error((error as Error).message || "Failed to generate preview"),
+    },
+  });
 
   const isSaving =
     createDraftMutation.isPending || updateDraftMutation.isPending || publishMutation.isPending;
@@ -487,12 +530,37 @@ function AdminAgentsPage() {
     publishMutation.mutate({ key: currentPromptKey, revisionId });
   };
 
-  const allowedVariables = revisionsPayload?.allowedVariables ?? selectedDefinition?.allowedVariables ?? [];
-  const requiredVariables = revisionsPayload?.requiredVariables ?? selectedDefinition?.requiredVariables ?? [];
-  const variableDefinitions =
+  const allowedVariables = contextSchema?.allowedVariables ?? revisionsPayload?.allowedVariables ?? selectedDefinition?.allowedVariables ?? [];
+  const requiredVariables = contextSchema?.requiredVariables ?? revisionsPayload?.requiredVariables ?? selectedDefinition?.requiredVariables ?? [];
+  const variableDefinitions = (contextSchema?.variableDefinitions as Record<string, VariableDefinition>) ??
     (revisionsPayload?.variableDefinitions as Record<string, VariableDefinition>) ??
     (selectedDefinition?.variableDefinitions as Record<string, VariableDefinition>) ??
     {};
+  const runtimeFields = contextSchema?.contextFields ?? [];
+  const requiredPhases = contextSchema?.requiredPhases ?? [];
+  const contextNotes = contextSchema?.notes ?? [];
+
+  const handlePreview = () => {
+    if (!currentPromptKey) return;
+
+    if (selectedDefinition?.surface === "pipeline" && !previewStartupId.trim()) {
+      toast.error("Startup ID is required for pipeline prompt preview");
+      return;
+    }
+
+    const payload: PreviewAiPromptRequestDto = {};
+    if (previewStartupId.trim()) {
+      payload.startupId = previewStartupId.trim();
+    }
+    if (previewStage !== "auto") {
+      payload.stage = previewStage;
+    }
+
+    previewMutation.mutate({
+      key: currentPromptKey,
+      data: payload,
+    });
+  };
 
   const incomingNodeLabels = useMemo(() => {
     if (!activeFlow || !selectedNode) return [];
@@ -527,6 +595,7 @@ function AdminAgentsPage() {
               definitionsQuery.refetch();
               if (currentPromptKey) {
                 revisionsQuery.refetch();
+                contextSchemaQuery.refetch();
               }
             }}
           >
@@ -624,7 +693,7 @@ function AdminAgentsPage() {
       </Tabs>
 
       <Sheet open={Boolean(selectedNode) && isSheetOpen} onOpenChange={setIsSheetOpen}>
-        <SheetContent side="right" className="w-full overflow-hidden sm:max-w-[780px]">
+        <SheetContent side="right" className="flex h-full w-full flex-col overflow-hidden sm:max-w-[780px]">
           {!selectedNode ? null : (
             <>
               <SheetHeader>
@@ -637,55 +706,57 @@ function AdminAgentsPage() {
                 <SheetDescription>{selectedNode.description}</SheetDescription>
               </SheetHeader>
 
-              {selectedNode.promptKeys.length === 0 ? (
-                <div className="mt-4 space-y-4">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-base">Flow Context</CardTitle>
-                      <CardDescription>This node is runtime logic, not prompt-configured.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div>
-                        <p className="mb-2 text-sm font-medium">Inputs</p>
-                        <div className="flex flex-wrap gap-2">
-                          {selectedNode.inputs.map((input) => (
-                            <Badge key={input} variant="outline">
-                              {input}
-                            </Badge>
-                          ))}
+              <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-1">
+                {selectedNode.promptKeys.length === 0 ? (
+                  <div className="space-y-4">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-base">Graph Context (Static)</CardTitle>
+                        <CardDescription>This node is runtime logic, not prompt-configured.</CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div>
+                          <p className="mb-2 text-sm font-medium">Inputs</p>
+                          <div className="flex flex-wrap gap-2">
+                            {selectedNode.inputs.map((input) => (
+                              <Badge key={input} variant="outline">
+                                {input}
+                              </Badge>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                      <div>
-                        <p className="mb-2 text-sm font-medium">Outputs</p>
-                        <div className="flex flex-wrap gap-2">
-                          {selectedNode.outputs.map((output) => (
-                            <Badge key={output}>{output}</Badge>
-                          ))}
+                        <div>
+                          <p className="mb-2 text-sm font-medium">Outputs</p>
+                          <div className="flex flex-wrap gap-2">
+                            {selectedNode.outputs.map((output) => (
+                              <Badge key={output}>{output}</Badge>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                      <div>
-                        <p className="mb-2 text-sm font-medium">Incoming Nodes</p>
-                        <p className="text-sm text-muted-foreground">
-                          {incomingNodeLabels.length > 0 ? incomingNodeLabels.join(", ") : "None"}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="mb-2 text-sm font-medium">Outgoing Nodes</p>
-                        <p className="text-sm text-muted-foreground">
-                          {outgoingNodeLabels.length > 0 ? outgoingNodeLabels.join(", ") : "None"}
-                        </p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              ) : (
-                <div className="mt-4 space-y-4 overflow-y-auto pb-24">
-                  <Tabs defaultValue="prompts" className="space-y-4">
+                        <div>
+                          <p className="mb-2 text-sm font-medium">Incoming Nodes</p>
+                          <p className="text-sm text-muted-foreground">
+                            {incomingNodeLabels.length > 0 ? incomingNodeLabels.join(", ") : "None"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="mb-2 text-sm font-medium">Outgoing Nodes</p>
+                          <p className="text-sm text-muted-foreground">
+                            {outgoingNodeLabels.length > 0 ? outgoingNodeLabels.join(", ") : "None"}
+                          </p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                ) : (
+                  <div className="space-y-4 pb-6">
+                    <Tabs defaultValue="prompts" className="space-y-4">
                     <TabsList>
                       <TabsTrigger value="prompts">Prompts</TabsTrigger>
                       <TabsTrigger value="variables">Variables</TabsTrigger>
                       <TabsTrigger value="revisions">Revisions</TabsTrigger>
-                      <TabsTrigger value="context">Flow Context</TabsTrigger>
+                      <TabsTrigger value="runtime-preview">Runtime Preview</TabsTrigger>
+                      <TabsTrigger value="context">Graph Context (Static)</TabsTrigger>
                     </TabsList>
 
                     <TabsContent value="prompts" className="space-y-4">
@@ -826,6 +897,58 @@ function AdminAgentsPage() {
                             </div>
                           </div>
 
+                          <div>
+                            <p className="mb-2 text-sm font-medium">Required Pipeline Phases</p>
+                            <div className="flex flex-wrap gap-2">
+                              {requiredPhases.length === 0 ? (
+                                <span className="text-sm text-muted-foreground">None</span>
+                              ) : (
+                                requiredPhases.map((phase) => (
+                                  <Badge key={phase} variant="secondary">
+                                    {phase}
+                                  </Badge>
+                                ))
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <p className="text-sm font-medium">Runtime Context Fields</p>
+                            {runtimeFields.length === 0 ? (
+                              <p className="text-sm text-muted-foreground">No runtime field metadata found for this prompt key.</p>
+                            ) : (
+                              <div className="space-y-2">
+                                {runtimeFields.map((field) => (
+                                  <div key={field.path} className="rounded-md border p-3">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <Badge variant="outline">{field.path}</Badge>
+                                      <Badge variant="secondary">{field.type}</Badge>
+                                      {field.sourceVariable ? (
+                                        <Badge>{`{{${field.sourceVariable}}}`}</Badge>
+                                      ) : null}
+                                    </div>
+                                    {field.description ? (
+                                      <p className="mt-2 text-sm">{field.description}</p>
+                                    ) : null}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          {contextNotes.length > 0 ? (
+                            <div className="space-y-2">
+                              <p className="text-sm font-medium">Runtime Notes</p>
+                              <div className="space-y-2">
+                                {contextNotes.map((note) => (
+                                  <p key={note} className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
+                                    {note}
+                                  </p>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
+
                           <div className="space-y-2">
                             <p className="text-sm font-medium">Variable Details</p>
                             {allowedVariables.length === 0 ? (
@@ -910,10 +1033,118 @@ function AdminAgentsPage() {
                       </Card>
                     </TabsContent>
 
+                    <TabsContent value="runtime-preview">
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-base">Runtime Preview</CardTitle>
+                          <CardDescription>
+                            Resolve real runtime variables, render final prompts, and inspect effective model routing.
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                          <div className="grid gap-3 md:grid-cols-[1fr_220px_auto]">
+                            <div className="space-y-2">
+                              <Label>Startup ID {selectedDefinition?.surface === "pipeline" ? "(required)" : "(optional)"}</Label>
+                              <Input
+                                value={previewStartupId}
+                                onChange={(event) => setPreviewStartupId(event.target.value)}
+                                placeholder="UUID of startup to preview against"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Stage Override</Label>
+                              <Select
+                                value={previewStage}
+                                onValueChange={(value) => setPreviewStage(value as "auto" | StageOption)}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Auto" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="auto">Auto</SelectItem>
+                                  {STAGES.map((stage) => (
+                                    <SelectItem key={stage} value={stage}>
+                                      {formatStage(stage)}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="flex items-end">
+                              <Button
+                                onClick={handlePreview}
+                                disabled={!currentPromptKey || previewMutation.isPending}
+                              >
+                                {previewMutation.isPending ? "Generating..." : "Generate Preview"}
+                              </Button>
+                            </div>
+                          </div>
+
+                          {!previewResult ? (
+                            <p className="text-sm text-muted-foreground">Run preview to inspect rendered prompts and resolved runtime variables.</p>
+                          ) : (
+                            <div className="space-y-4">
+                              <div className="rounded-md border p-3">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <Badge>{previewResult.source.promptSource}</Badge>
+                                  {previewResult.source.effectiveStage ? (
+                                    <Badge variant="secondary">{formatStage(previewResult.source.effectiveStage)}</Badge>
+                                  ) : (
+                                    <Badge variant="secondary">Global</Badge>
+                                  )}
+                                  <Badge variant="outline">{previewResult.model.modelName}</Badge>
+                                  <Badge variant="outline">{previewResult.model.provider}</Badge>
+                                  <Badge variant="outline">{previewResult.model.searchMode}</Badge>
+                                </div>
+                                <p className="mt-2 text-xs text-muted-foreground">
+                                  Prompt revision: {previewResult.source.promptRevisionId ?? "code default"} · Startup: {previewResult.source.startupId ?? "none"}
+                                </p>
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  Hashes: user={previewResult.hashes.renderedUserPrompt.slice(0, 16)}... · system={previewResult.hashes.renderedSystemPrompt.slice(0, 16)}... · vars={previewResult.hashes.variables.slice(0, 16)}...
+                                </p>
+                              </div>
+
+                              <div className="space-y-2">
+                                <Label>Rendered System Prompt</Label>
+                                <Textarea
+                                  readOnly
+                                  value={previewResult.prompt.renderedSystemPrompt}
+                                  className="min-h-[180px] font-mono text-xs"
+                                />
+                              </div>
+
+                              <div className="space-y-2">
+                                <Label>Rendered User Prompt</Label>
+                                <Textarea
+                                  readOnly
+                                  value={previewResult.prompt.renderedUserPrompt}
+                                  className="min-h-[260px] font-mono text-xs"
+                                />
+                              </div>
+
+                              <div className="space-y-2">
+                                <Label>Resolved Runtime Variables</Label>
+                                <div className="space-y-2">
+                                  {Object.entries(previewResult.resolvedVariables).map(([name, value]) => (
+                                    <div key={name} className="rounded-md border p-3">
+                                      <p className="text-xs font-semibold">{`{{${name}}}`}</p>
+                                      <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded bg-muted/40 p-2 text-xs">
+                                        {formatPreviewValue(value)}
+                                      </pre>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    </TabsContent>
+
                     <TabsContent value="context">
                       <Card>
                         <CardHeader>
-                          <CardTitle className="text-base">Flow Context</CardTitle>
+                          <CardTitle className="text-base">Graph Context (Static)</CardTitle>
                           <CardDescription>
                             Inputs, outputs, and graph neighbors for this agent node.
                           </CardDescription>
@@ -952,9 +1183,10 @@ function AdminAgentsPage() {
                         </CardContent>
                       </Card>
                     </TabsContent>
-                  </Tabs>
-                </div>
-              )}
+                    </Tabs>
+                  </div>
+                )}
+              </div>
 
               <SheetFooter className="mt-4 border-t pt-4">
                 <p className="text-xs text-muted-foreground">

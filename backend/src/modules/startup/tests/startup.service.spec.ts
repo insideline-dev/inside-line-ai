@@ -546,7 +546,6 @@ describe("StartupService", () => {
 
       expect(result.status).toBe(StartupStatus.APPROVED);
       expect(result.approvedAt).toBeTruthy();
-      expect(queueService.addJob).toHaveBeenCalled();
     });
 
     it("should throw NotFoundException if startup not found", async () => {

@@ -28,6 +28,14 @@ type ResearchAgentOutput =
 
 export interface ResearchRunOptions {
   agentKey?: ResearchAgentKey;
+  onAgentStart?: (agent: ResearchAgentKey) => void;
+  onAgentComplete?: (payload: {
+    agent: ResearchAgentKey;
+    output?: ResearchAgentOutput;
+    usedFallback: boolean;
+    error?: string;
+    rejected: boolean;
+  }) => void;
 }
 
 const PHASE_1_KEYS = Object.keys(RESEARCH_AGENTS) as Array<keyof typeof RESEARCH_AGENTS>;
@@ -81,7 +89,20 @@ export class ResearchService {
     if (options?.agentKey) {
       const key = options.agentKey;
       const agent = ALL_RESEARCH_AGENTS[key];
-      const agentResult = await this.runSingleAgentSafe(startupId, key, agent, pipelineInput);
+      const agentResult = await this.runSingleAgentSafe(
+        startupId,
+        key,
+        agent,
+        pipelineInput,
+        options?.onAgentStart,
+      );
+      options?.onAgentComplete?.({
+        agent: key,
+        output: agentResult.output,
+        usedFallback: agentResult.usedFallback,
+        error: agentResult.error,
+        rejected: agentResult.rejected,
+      });
       this.mergeAgentResult(result, key, agentResult, dedupeSources);
 
       if (!agentResult.usedFallback) {
@@ -107,7 +128,13 @@ export class ResearchService {
     // ── Phase 1: team, market, product, news (parallel) ──
     const phase1Settled = await Promise.allSettled(
       PHASE_1_KEYS.map((key) =>
-        this.runSingleAgent(startupId, key, RESEARCH_AGENTS[key], pipelineInput),
+        this.runSingleAgent(
+          startupId,
+          key,
+          RESEARCH_AGENTS[key],
+          pipelineInput,
+          options?.onAgentStart,
+        ),
       ),
     );
 
@@ -115,6 +142,13 @@ export class ResearchService {
       const settledResult = phase1Settled[index];
       const key = PHASE_1_KEYS[index];
       const agentResult = this.unwrapSettled(key, settledResult);
+      options?.onAgentComplete?.({
+        agent: key,
+        output: agentResult.output,
+        usedFallback: agentResult.usedFallback,
+        error: agentResult.error,
+        rejected: agentResult.rejected,
+      });
       this.mergeAgentResult(result, key, agentResult, dedupeSources);
 
       if (agentResult.rejected) {
@@ -149,7 +183,13 @@ export class ResearchService {
     const competitorInput = this.buildCompetitorInput(pipelineInput, result);
     const phase2Settled = await Promise.allSettled(
       PHASE_2_KEYS.map((key) =>
-        this.runSingleAgent(startupId, key, PHASE_2_RESEARCH_AGENTS[key], competitorInput),
+        this.runSingleAgent(
+          startupId,
+          key,
+          PHASE_2_RESEARCH_AGENTS[key],
+          competitorInput,
+          options?.onAgentStart,
+        ),
       ),
     );
 
@@ -157,6 +197,13 @@ export class ResearchService {
       const settledResult = phase2Settled[index];
       const key = PHASE_2_KEYS[index];
       const agentResult = this.unwrapSettled(key, settledResult);
+      options?.onAgentComplete?.({
+        agent: key,
+        output: agentResult.output,
+        usedFallback: agentResult.usedFallback,
+        error: agentResult.error,
+        rejected: agentResult.rejected,
+      });
       this.mergeAgentResult(result, key, agentResult, dedupeSources);
 
       if (agentResult.rejected) {
@@ -221,9 +268,16 @@ export class ResearchService {
     key: ResearchAgentKey,
     agent: ResearchAgentConfig<ResearchAgentOutput>,
     pipelineInput: ResearchPipelineInput,
+    onAgentStart?: (agent: ResearchAgentKey) => void,
   ): Promise<AgentRunResult> {
     try {
-      const agentResult = await this.runSingleAgent(startupId, key, agent, pipelineInput);
+      const agentResult = await this.runSingleAgent(
+        startupId,
+        key,
+        agent,
+        pipelineInput,
+        onAgentStart,
+      );
       return agentResult;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -242,6 +296,7 @@ export class ResearchService {
     key: ResearchAgentKey,
     agent: ResearchAgentConfig<ResearchAgentOutput>,
     pipelineInput: ResearchPipelineInput,
+    onAgentStart?: (agent: ResearchAgentKey) => void,
   ): Promise<{
     output: ResearchAgentOutput;
     sources: SourceEntry[];
@@ -249,6 +304,8 @@ export class ResearchService {
     error?: string;
     rejected: boolean;
   }> {
+    onAgentStart?.(key);
+
     const promptConfig = await this.promptService.resolve({
       key: RESEARCH_PROMPT_KEY_BY_AGENT[key],
       stage: pipelineInput.extraction.stage,

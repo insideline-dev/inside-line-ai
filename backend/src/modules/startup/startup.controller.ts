@@ -69,12 +69,12 @@ export class StartupController {
     private meetingService: MeetingService,
   ) {}
 
-  // ============ FOUNDER ENDPOINTS ============
+  // ============ OWNER ENDPOINTS (FOUNDER/INVESTOR) ============
 
   @Post()
-  @Roles(UserRole.FOUNDER, UserRole.ADMIN)
+  @Roles(UserRole.FOUNDER, UserRole.INVESTOR, UserRole.ADMIN)
   async create(@CurrentUser() user: User, @Body() dto: CreateStartupDto) {
-    return this.startupService.create(user.id, dto);
+    return this.startupService.create(user.id, dto, user.role);
   }
 
   @Get()
@@ -94,7 +94,7 @@ export class StartupController {
   }
 
   @Patch(':id')
-  @Roles(UserRole.FOUNDER, UserRole.ADMIN)
+  @Roles(UserRole.FOUNDER, UserRole.INVESTOR, UserRole.ADMIN)
   async update(
     @CurrentUser() user: User,
     @Param('id') id: string,
@@ -104,14 +104,14 @@ export class StartupController {
   }
 
   @Delete(':id')
-  @Roles(UserRole.FOUNDER, UserRole.ADMIN)
+  @Roles(UserRole.FOUNDER, UserRole.INVESTOR, UserRole.ADMIN)
   async delete(@CurrentUser() user: User, @Param('id') id: string) {
     await this.startupService.delete(id, user.id);
     return { success: true, message: 'Startup deleted' };
   }
 
   @Post(':id/submit')
-  @Roles(UserRole.FOUNDER, UserRole.ADMIN)
+  @Roles(UserRole.FOUNDER, UserRole.INVESTOR, UserRole.ADMIN)
   async submit(
     @CurrentUser() user: User,
     @Param('id') id: string,
@@ -121,7 +121,7 @@ export class StartupController {
   }
 
   @Post(':id/resubmit')
-  @Roles(UserRole.FOUNDER, UserRole.ADMIN)
+  @Roles(UserRole.FOUNDER, UserRole.INVESTOR, UserRole.ADMIN)
   async resubmit(
     @CurrentUser() user: User,
     @Param('id') id: string,
@@ -131,13 +131,13 @@ export class StartupController {
   }
 
   @Get(':id/jobs')
-  @Roles(UserRole.FOUNDER, UserRole.ADMIN)
+  @Roles(UserRole.FOUNDER, UserRole.INVESTOR, UserRole.ADMIN)
   async getJobs(@CurrentUser() user: User, @Param('id') id: string) {
     return this.startupService.getJobs(id, user.id);
   }
 
   @Post(':id/upload-url')
-  @Roles(UserRole.FOUNDER, UserRole.ADMIN)
+  @Roles(UserRole.FOUNDER, UserRole.INVESTOR, UserRole.ADMIN)
   async getUploadUrl(
     @CurrentUser() user: User,
     @Param('id') id: string,
@@ -147,7 +147,7 @@ export class StartupController {
   }
 
   @Post(':id/draft')
-  @Roles(UserRole.FOUNDER, UserRole.ADMIN)
+  @Roles(UserRole.FOUNDER, UserRole.INVESTOR, UserRole.ADMIN)
   async saveDraft(
     @CurrentUser() user: User,
     @Param('id') id: string,
@@ -157,13 +157,13 @@ export class StartupController {
   }
 
   @Get(':id/draft')
-  @Roles(UserRole.FOUNDER, UserRole.ADMIN)
+  @Roles(UserRole.FOUNDER, UserRole.INVESTOR, UserRole.ADMIN)
   async getDraft(@CurrentUser() user: User, @Param('id') id: string) {
     return this.draftService.get(id, user.id);
   }
 
   @Get(':id/progress')
-  @Roles(UserRole.FOUNDER, UserRole.ADMIN)
+  @Roles(UserRole.FOUNDER, UserRole.INVESTOR, UserRole.ADMIN)
   @ApiOperation({ summary: 'Get startup analysis progress' })
   @ApiResponse({ status: 200, type: GetProgressResponseDto })
   async getProgress(@CurrentUser() user: User, @Param('id') id: string) {
@@ -326,23 +326,23 @@ export class StartupController {
   }
 
   @Post('admin/:id/approve')
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.INVESTOR)
   async approve(
     @CurrentUser() user: User,
     @Param('id') id: string,
     @Body() _dto: ApproveStartupDto,
   ) {
-    return this.startupService.approve(id, user.id);
+    return this.startupService.approve(id, user.id, user.role);
   }
 
   @Post('admin/:id/reject')
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.INVESTOR)
   async reject(
     @CurrentUser() user: User,
     @Param('id') id: string,
     @Body() dto: RejectStartupDto,
   ) {
-    return this.startupService.reject(id, user.id, dto.rejectionReason);
+    return this.startupService.reject(id, user.id, dto.rejectionReason, user.role);
   }
 
   @Post('admin/:id/reanalyze')

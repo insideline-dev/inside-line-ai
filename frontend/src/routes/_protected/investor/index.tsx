@@ -6,9 +6,14 @@ import { Badge } from "@/components/ui/badge";
 import { ScoreRing } from "@/components/analysis/ScoreRing";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SearchAndFilters, useFilteredStartups, defaultFilters, type FilterState } from "@/components/SearchAndFilters";
+import {
+  useInvestorControllerGetMatches,
+  useInvestorControllerGetThesis,
+} from "@/api/generated/investor/investor";
 import { AnalysisProgressBar } from "@/components/AnalysisProgressBar";
-import { useInvestorControllerGetMatches } from "@/api/generated/investor/investor";
-import { useStartupControllerFindAll } from "@/api/generated/startup/startup";
+import {
+  useStartupControllerFindAll,
+} from "@/api/generated/startup/startup";
 import {
   Target,
   MapPin,
@@ -147,10 +152,10 @@ function PrivateStartupCard({
           </div>
         )}
 
-        {effectiveStatus === "approved" && (
+        {(effectiveStatus === "approved" || effectiveStatus === "pending_review") && (
           <Button className="w-full mt-4" size="sm" asChild>
             <Link to="/investor/startup/$id" params={{ id: String(startup.id) }}>
-              View Analysis
+              {effectiveStatus === "pending_review" ? "Review Analysis" : "View Analysis"}
               <ArrowRight className="w-4 h-4 ml-2" />
             </Link>
           </Button>
@@ -163,7 +168,19 @@ function PrivateStartupCard({
 function InvestorDashboard() {
   const [filters, setFilters] = useState<FilterState>(defaultFilters);
 
-  const { data: matchesData, isLoading } = useInvestorControllerGetMatches();
+  const { data: thesisData } = useInvestorControllerGetThesis();
+  const thesis = Array.isArray(thesisData) ? null : thesisData;
+  const thesisParams =
+    thesis && typeof thesis === "object" && "minThesisFitScore" in thesis
+      ? (thesis as { minThesisFitScore?: number | null; minStartupScore?: number | null })
+      : null;
+
+  const matchParams = {
+    minScore: thesisParams?.minStartupScore ?? undefined,
+    minThesisFitScore: thesisParams?.minThesisFitScore ?? undefined,
+  };
+
+  const { data: matchesData, isLoading } = useInvestorControllerGetMatches(matchParams);
   const matches = extractList<MatchedStartup>(matchesData);
 
   const { data: myStartupsData, isLoading: isLoadingMyStartups } = useStartupControllerFindAll(undefined, {
@@ -213,7 +230,7 @@ function InvestorDashboard() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Deal Flow</h1>
+          <h1 className="text-2xl font-bold">Pipeline</h1>
           <p className="text-muted-foreground">
             Startups matched to your investment thesis
           </p>

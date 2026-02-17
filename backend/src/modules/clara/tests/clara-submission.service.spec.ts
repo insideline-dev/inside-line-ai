@@ -159,7 +159,7 @@ describe("ClaraSubmissionService", () => {
     });
 
     expect(mockDb.insert).toHaveBeenCalled();
-    expect(mockDb.update).toHaveBeenCalled();
+    expect(mockDb.update).not.toHaveBeenCalled();
     expect(pipeline.startPipeline).toHaveBeenCalledWith("startup-1", "admin-1");
     expect(notifications.create).toHaveBeenCalledWith(
       "admin-1",
@@ -167,6 +167,31 @@ describe("ClaraSubmissionService", () => {
       "Acme Corp was submitted via email by founder@startup.com",
       "info",
       "/admin/startups/startup-1",
+    );
+  });
+
+  it("creates investor-owned private startup when investor user is linked", async () => {
+    const ctx = createMessageContext({
+      investorUserId: "investor-1",
+      attachments: [createAttachment()],
+    });
+
+    await service.handleSubmission(ctx, "admin-1", "Acme Corp");
+
+    expect(mockDb.values).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: "investor-1",
+        submittedByRole: "investor",
+        isPrivate: true,
+      }),
+    );
+    expect(pipeline.startPipeline).toHaveBeenCalledWith("startup-1", "investor-1");
+    expect(notifications.create).toHaveBeenCalledWith(
+      "investor-1",
+      "Clara: New startup submitted",
+      "Acme Corp was submitted via email by founder@startup.com",
+      "info",
+      "/investor/startup/startup-1",
     );
   });
 

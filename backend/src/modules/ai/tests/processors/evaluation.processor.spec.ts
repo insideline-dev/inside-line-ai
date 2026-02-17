@@ -60,6 +60,7 @@ describe("EvaluationProcessor", () => {
           async (
             _startupId: string,
             options?: {
+              onAgentStart?: (agent: string) => void;
               onAgentComplete?: (payload: {
                 agent: string;
                 output: unknown;
@@ -68,6 +69,7 @@ describe("EvaluationProcessor", () => {
               }) => void;
             },
           ) => {
+            options?.onAgentStart?.("team");
             options?.onAgentComplete?.({
               agent: "team",
               output: { score: 80 },
@@ -180,6 +182,7 @@ describe("EvaluationProcessor", () => {
     expect(evaluationService.run).toHaveBeenCalledWith(
       "startup-1",
       expect.objectContaining({
+        onAgentStart: expect.any(Function),
         onAgentComplete: expect.any(Function),
       }),
     );
@@ -199,6 +202,14 @@ describe("EvaluationProcessor", () => {
           agent: "team",
           usedFallback: false,
         }),
+      }),
+    );
+    expect(pipelineService.onAgentProgress).toHaveBeenCalledWith(
+      expect.objectContaining({
+        startupId: "startup-1",
+        phase: PipelinePhase.EVALUATION,
+        key: "team",
+        status: "running",
       }),
     );
     expect(pipelineService.onAgentProgress).toHaveBeenCalledWith(

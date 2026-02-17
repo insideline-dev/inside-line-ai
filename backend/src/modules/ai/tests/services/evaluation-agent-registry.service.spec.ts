@@ -176,7 +176,8 @@ describe("EvaluationAgentRegistryService", () => {
 
   it("emits per-agent completion payload via callback", async () => {
     const agents = ALL_KEYS.map((key) => createAgent(key));
-    const callback = jest.fn();
+    const onAgentStart = jest.fn();
+    const onAgentComplete = jest.fn();
 
     const service = createRegistry(
       agents,
@@ -185,10 +186,11 @@ describe("EvaluationAgentRegistryService", () => {
       pipelineFeedback as unknown as PipelineFeedbackService,
     );
 
-    await service.runAll("startup-4", pipelineData, callback);
+    await service.runAll("startup-4", pipelineData, onAgentStart, onAgentComplete);
 
-    expect(callback).toHaveBeenCalledTimes(11);
-    expect(callback).toHaveBeenCalledWith(
+    expect(onAgentStart).toHaveBeenCalledTimes(11);
+    expect(onAgentComplete).toHaveBeenCalledTimes(11);
+    expect(onAgentComplete).toHaveBeenCalledWith(
       expect.objectContaining({
         agent: "team",
         usedFallback: false,

@@ -442,4 +442,21 @@ describe("ResearchService", () => {
 
     expect(pipelineFeedback.markConsumedByScope).not.toHaveBeenCalled();
   });
+
+  it("emits per-agent start and completion callbacks", async () => {
+    const onAgentStart = jest.fn();
+    const onAgentComplete = jest.fn();
+
+    await service.run("startup-1", { onAgentStart, onAgentComplete });
+
+    expect(onAgentStart).toHaveBeenCalledTimes(5);
+    expect(onAgentComplete).toHaveBeenCalledTimes(5);
+    expect(onAgentStart).toHaveBeenCalledWith("team");
+    expect(onAgentComplete).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agent: "market",
+        usedFallback: true,
+      }),
+    );
+  });
 });

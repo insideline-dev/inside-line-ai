@@ -8,10 +8,12 @@ import {
   useStartupControllerCreate,
   useStartupControllerSubmit,
 } from "@/api/generated/startup/startup";
+import { usePortalControllerSubmitToPortal } from "@/api/generated/portal/portal";
 import { useStorageControllerGetUploadUrl } from "@/api/generated/storage/storage";
 import type {
   CreateStartupDto,
   GetUploadUrlDtoContentType,
+  SubmitToPortalDto,
 } from "@/api/generated/model";
 
 // Simple debounce hook
@@ -158,6 +160,7 @@ interface StartupSubmitFormProps {
   portalRequiredFields?: string[];
   enableDraftSaving?: boolean;
   draftId?: string | null;
+  showPrimaryContactSection?: boolean;
 }
 
 interface StoredDraft {
@@ -247,12 +250,16 @@ export function StartupSubmitForm({
   portalRequiredFields = [],
   enableDraftSaving = false,
   draftId: draftIdProp,
+  showPrimaryContactSection,
 }: StartupSubmitFormProps) {
   void apiEndpoint;
   void draftIdProp;
   const isPortalSubmission = !!portalSlug;
   const isWebsiteRequired = isPortalSubmission ? portalRequiredFields.includes("website") : true;
   const isPitchDeckRequired = isPortalSubmission ? portalRequiredFields.includes("pitchDeck") : false;
+  const primaryContactRequired = userRole === "founder" || userRole === "portal";
+  const shouldShowPrimaryContactSection =
+    showPrimaryContactSection ?? primaryContactRequired;
   const draftStorageKey = "startup-submit-draft-v1";
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -273,6 +280,7 @@ export function StartupSubmitForm({
   const submitSchema = createSubmitSchema(userRole, isWebsiteRequired);
   const createStartupMutation = useStartupControllerCreate();
   const submitStartupMutation = useStartupControllerSubmit();
+  const portalSubmitMutation = usePortalControllerSubmitToPortal();
   const uploadUrlMutation = useStorageControllerGetUploadUrl();
 
   const form = useForm<SubmitFormData>({
@@ -441,10 +449,6 @@ export function StartupSubmitForm({
 
   const submitMutation = useMutation({
     mutationFn: async (data: SubmitFormData) => {
-      if (isPortalSubmission) {
-        throw new Error("Portal submission is handled in the dedicated portal form");
-      }
-
       const fundingTarget = parsePositiveNumberInput(data.fundingTarget);
       if (fundingTarget === undefined) {
         throw new Error("Round size must be a positive number");
@@ -493,6 +497,43 @@ export function StartupSubmitForm({
 
       if (!website) {
         throw new Error("Website is required");
+      }
+
+      if (isPortalSubmission) {
+        if (!portalSlug) {
+          throw new Error("Portal slug is missing");
+        }
+
+        const founderEmail = normalizeOptionalText(data.contactEmail);
+        if (!founderEmail) {
+          throw new Error("Contact email is required");
+        }
+
+        const submitPayload: SubmitToPortalDto = {
+          name: data.name.trim(),
+          tagline: data.tagline.trim(),
+          description: data.description.trim(),
+          website,
+          location: data.location.trim(),
+          industry:
+            data.sectorIndustry?.trim() ||
+            data.sectorIndustryGroup?.trim() ||
+            "general",
+          stage: data.stage as SubmitToPortalDto["stage"],
+          fundingTarget: Math.round(fundingTarget),
+          teamSize: Math.max(validTeamMembers.length, 1),
+          pitchDeckUrl: pitchDeckFile?.publicUrl,
+          demoUrl: demoVideoUrl,
+          founderEmail,
+          founderName: normalizeOptionalText(data.contactName),
+        };
+
+        await portalSubmitMutation.mutateAsync({
+          slug: portalSlug,
+          data: submitPayload,
+        });
+
+        return { id: "portal-submission" };
       }
 
       if (isPitchDeckRequired && !pitchDeckFile) {
@@ -1386,7 +1427,7 @@ export function StartupSubmitForm({
           </CardContent>
         </Card>
 
-        {(userRole === "founder" || userRole === "portal") && (
+        {shouldShowPrimaryContactSection && (
           <Card>
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
@@ -1394,7 +1435,7 @@ export function StartupSubmitForm({
                 Primary Contact
               </CardTitle>
               <CardDescription>
-                Your contact information for investor outreach (required)
+                Your contact information for investor outreach ({primaryContactRequired ? "required" : "optional"})
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -1403,7 +1444,7 @@ export function StartupSubmitForm({
                 name="contactName"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Full Name *</FormLabel>
+                    <FormLabel>Full Name {primaryContactRequired ? "*" : ""}</FormLabel>
                     <FormControl>
                       <div className="relative">
                         <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -1425,7 +1466,7 @@ export function StartupSubmitForm({
                 name="contactEmail"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Email Address *</FormLabel>
+                    <FormLabel>Email Address {primaryContactRequired ? "*" : ""}</FormLabel>
                     <FormControl>
                       <div className="relative">
                         <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />

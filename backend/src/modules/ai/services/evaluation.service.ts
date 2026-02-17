@@ -14,6 +14,7 @@ import { AiDebugLogService } from "./ai-debug-log.service";
 import { DEFAULT_MODEL_BY_PURPOSE } from "../ai.config";
 
 export interface EvaluationRunOptions {
+  onAgentStart?: (agent: EvaluationAgentKey) => void;
   onAgentComplete?: (payload: EvaluationAgentCompletion) => void;
   agentKey?: EvaluationAgentKey;
 }
@@ -33,6 +34,11 @@ export class EvaluationService {
     const evaluationModel =
       process.env.AI_MODEL_EVALUATION ??
       DEFAULT_MODEL_BY_PURPOSE[ModelPurpose.EVALUATION];
+
+    const handleAgentStart = (agent: EvaluationAgentKey) => {
+      options?.onAgentStart?.(agent);
+    };
+
     const handleAgentComplete = (payload: EvaluationAgentCompletion) => {
       void this.aiDebugLog?.logAgentResult({
         startupId,
@@ -58,6 +64,7 @@ export class EvaluationService {
         return this.registry.runAll(
           startupId,
           pipelineInput,
+          handleAgentStart,
           handleAgentComplete,
         );
       }
@@ -66,13 +73,19 @@ export class EvaluationService {
         startupId,
         options.agentKey,
         pipelineInput,
+        handleAgentStart,
       );
       handleAgentComplete(rerun);
 
       return this.mergeAgentResult(current, rerun);
     }
 
-    return this.registry.runAll(startupId, pipelineInput, handleAgentComplete);
+    return this.registry.runAll(
+      startupId,
+      pipelineInput,
+      handleAgentStart,
+      handleAgentComplete,
+    );
   }
 
   private async loadPipelineInput(startupId: string): Promise<EvaluationPipelineInput> {

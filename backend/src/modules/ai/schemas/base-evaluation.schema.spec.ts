@@ -79,4 +79,32 @@ describe("BaseEvaluationSchema", () => {
     expect(parsed.dataGaps).toEqual([]);
     expect(parsed.sources).toEqual([]);
   });
+
+  it("accepts optional narrative fields", () => {
+    const parsed = BaseEvaluationSchema.parse({
+      score: 78,
+      confidence: 0.6,
+      feedback: "Concise evaluator summary.",
+      narrativeSummary:
+        "Paragraph one.\n\nParagraph two.\n\nParagraph three.",
+      memoNarrative:
+        "Paragraph one.\n\nParagraph two.\n\nParagraph three.",
+    });
+
+    expect(parsed.narrativeSummary).toContain("Paragraph one.");
+    expect(parsed.memoNarrative).toContain("Paragraph one.");
+  });
+
+  it("treats null narrative fields as undefined", () => {
+    const parsed = BaseEvaluationSchema.parse({
+      score: 66,
+      confidence: 0.5,
+      feedback: "Summary",
+      narrativeSummary: null,
+      memoNarrative: null,
+    });
+
+    expect(parsed.narrativeSummary).toBeUndefined();
+    expect(parsed.memoNarrative).toBeUndefined();
+  });
 });

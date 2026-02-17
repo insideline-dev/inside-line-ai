@@ -57,6 +57,7 @@ export class AiDebugLogService {
     agentKey: string;
     usedFallback: boolean;
     error?: string;
+    model?: string;
     output: unknown;
   }): Promise<void> {
     await this.write({

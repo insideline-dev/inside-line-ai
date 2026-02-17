@@ -90,6 +90,44 @@ describe("WebsiteScraperService", () => {
     expect(result.metadata.pageCount).toBe(1);
   });
 
+  it("excludes script/style/noscript/template text from extracted content", async () => {
+    globalThis.fetch = jest.fn().mockImplementation(async (url: string) => {
+      const parsed = new URL(url);
+      parsed.hostname = "inside-line.test";
+      if (parsed.toString() !== "https://inside-line.test/") {
+        return { ok: false, status: 404, text: async () => "" } as Response;
+      }
+
+      return {
+        ok: true,
+        status: 200,
+        text: async () => `
+          <html>
+            <head>
+              <title>Inside Line</title>
+              <style>.hidden { display: none; }</style>
+            </head>
+            <body>
+              <h1>Visible headline</h1>
+              <p>Visible paragraph.</p>
+              <script>window.__NEXT_DATA__ = {"huge":"payload"};</script>
+              <noscript>Should not appear</noscript>
+              <template>Template text should not appear</template>
+            </body>
+          </html>
+        `,
+      } as Response;
+    }) as any;
+
+    const result = await service.deepScrape("https://inside-line.test");
+
+    expect(result.fullText).toContain("Visible headline");
+    expect(result.fullText).toContain("Visible paragraph.");
+    expect(result.fullText).not.toContain("__NEXT_DATA__");
+    expect(result.fullText).not.toContain("Should not appear");
+    expect(result.fullText).not.toContain("Template text should not appear");
+  });
+
   describe("SSRF Protection - Hostname Blocking", () => {
     beforeEach(() => {
       service = new WebsiteScraperService();

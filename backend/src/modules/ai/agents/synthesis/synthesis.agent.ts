@@ -68,7 +68,10 @@ export class SynthesisAgent {
         `[Synthesis] Raw AI output | Keys: ${Object.keys(output).join(", ")} | ${JSON.stringify(output).substring(0, 200)}...`,
       );
 
-      const parsed = SynthesisSchema.parse(output);
+      const parsed = this.normalizeExecutiveSummary(
+        SynthesisSchema.parse(output),
+        input,
+      );
       this.logger.log(
         `[Synthesis] ✅ Synthesis completed | Strengths: ${parsed.strengths.length} | Concerns: ${parsed.concerns.length} | Score: ${parsed.overallScore}`,
       );
@@ -98,6 +101,199 @@ export class SynthesisAgent {
       founderReport: "We were unable to generate an automated report. Our team will follow up.",
       dataConfidenceNotes: "Synthesis failed — all scores require manual verification.",
     };
+  }
+
+  private normalizeExecutiveSummary(
+    output: SynthesisAgentOutput,
+    input: SynthesisAgentInput,
+  ): SynthesisAgentOutput {
+    if (this.hasDetailedExecutiveSummary(output.executiveSummary)) {
+      return output;
+    }
+
+    this.logger.warn(
+      "[Synthesis] Executive summary too short; expanding to structured multi-paragraph narrative",
+    );
+    return {
+      ...output,
+      executiveSummary: this.buildExecutiveSummaryFromSignals(output, input),
+    };
+  }
+
+  private hasDetailedExecutiveSummary(value: string | null | undefined): value is string {
+    if (typeof value !== "string") {
+      return false;
+    }
+    const trimmed = value.trim();
+    if (trimmed.length < 500) {
+      return false;
+    }
+    const paragraphs = trimmed
+      .split(/\n\s*\n+/)
+      .map((paragraph) => paragraph.trim())
+      .filter((paragraph) => paragraph.length > 0);
+    return paragraphs.length >= 4;
+  }
+
+  private buildExecutiveSummaryFromSignals(
+    output: SynthesisAgentOutput,
+    input: SynthesisAgentInput,
+  ): string {
+    const existingSummary = this.normalizeWhitespace(output.executiveSummary);
+    const strengths = this.cleanStringArray(output.strengths).slice(0, 4);
+    const concerns = this.cleanStringArray(output.concerns).slice(0, 4);
+    const nextSteps = this.cleanStringArray(output.nextSteps).slice(0, 4);
+    const confidenceNotes = this.normalizeWhitespace(output.dataConfidenceNotes);
+
+    const scoredDimensions = Object.entries(input.evaluation)
+      .filter(([key]) => key !== "summary")
+      .map(([key, value]) => {
+        const dimension = value as { score?: number; confidence?: number };
+        return {
+          key,
+          score: typeof dimension.score === "number" ? Math.round(dimension.score) : 0,
+          confidence:
+            typeof dimension.confidence === "number"
+              ? Math.round(dimension.confidence * 100)
+              : 0,
+        };
+      });
+
+    const topDimensions = [...scoredDimensions]
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3)
+      .map(
+        (dimension) =>
+          `${this.formatDimensionLabel(dimension.key)} (${dimension.score}/100, ${dimension.confidence}% confidence)`,
+      );
+    const weakDimensions = [...scoredDimensions]
+      .sort((a, b) => a.score - b.score)
+      .slice(0, 3)
+      .map(
+        (dimension) =>
+          `${this.formatDimensionLabel(dimension.key)} (${dimension.score}/100, ${dimension.confidence}% confidence)`,
+      );
+
+    const degraded = input.evaluation.summary?.degraded === true;
+    const failedKeys = (input.evaluation.summary?.failedKeys ?? []).map((key) =>
+      this.formatDimensionLabel(key),
+    );
+
+    const paragraphOne = [
+      `${input.extraction.companyName} is currently rated ${Math.round(output.overallScore)}/100 with a ${output.recommendation} recommendation and ${output.confidenceLevel.toLowerCase()} confidence.`,
+      existingSummary.length > 0
+        ? this.asSentence(existingSummary)
+        : this.asSentence(output.investmentThesis),
+    ]
+      .join(" ")
+      .trim();
+
+    const paragraphTwo = [
+      strengths.length > 0
+        ? `The strongest validated signals in this run are ${this.joinList(strengths)}.`
+        : "Strength signals are present but not yet fully validated across independent sources.",
+      topDimensions.length > 0
+        ? `Highest-scoring dimensions are ${this.joinList(topDimensions)}, which indicates where current conviction is strongest.`
+        : "Dimension-level scoring was incomplete, so ranking confidence by area remains limited.",
+    ]
+      .join(" ")
+      .trim();
+
+    const paragraphThree = [
+      concerns.length > 0
+        ? `Primary concerns include ${this.joinList(concerns)}.`
+        : "No material concerns were explicitly surfaced, but residual execution risk remains.",
+      weakDimensions.length > 0
+        ? `Lowest-scoring dimensions are ${this.joinList(weakDimensions)}, which currently constrain upside confidence.`
+        : "Weak-dimension scoring could not be established from the available result set.",
+      degraded
+        ? failedKeys.length > 0
+          ? `This run completed in degraded mode with fallback outputs for ${this.joinList(failedKeys)}, so those sections require direct analyst verification.`
+          : "This run completed in degraded mode, so some conclusions should be treated as provisional until manually verified."
+        : "All evaluation dimensions returned structured outputs, improving end-to-end consistency for this recommendation.",
+    ]
+      .join(" ")
+      .trim();
+
+    const paragraphFour = [
+      nextSteps.length > 0
+        ? `Priority diligence actions are ${this.joinList(nextSteps)}.`
+        : "Priority diligence should focus on validation of demand durability, unit economics, and execution milestones.",
+      confidenceNotes.length > 0
+        ? `Data confidence notes: ${this.asSentence(confidenceNotes)}`
+        : "Data confidence is moderate and should be tightened with independent source checks before IC finalization.",
+    ]
+      .join(" ")
+      .trim();
+
+    const paragraphFive = [
+      `Investment thesis: ${this.asSentence(output.investmentThesis)}`,
+      output.recommendation === "Pass"
+        ? "At current evidence quality, the opportunity supports immediate partner-level diligence with emphasis on execution scaling and downside protection."
+        : output.recommendation === "Consider"
+          ? "At current evidence quality, conviction can improve if the team closes identified data gaps and demonstrates durable progress against the next operating milestones."
+          : "At current evidence quality, deployment is not justified until the key risks are mitigated and the unresolved diligence gaps are closed.",
+    ]
+      .join(" ")
+      .trim();
+
+    return [paragraphOne, paragraphTwo, paragraphThree, paragraphFour, paragraphFive].join(
+      "\n\n",
+    );
+  }
+
+  private cleanStringArray(input: unknown): string[] {
+    if (!Array.isArray(input)) {
+      return [];
+    }
+    return input
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => this.normalizeWhitespace(item))
+      .filter((item) => item.length > 0);
+  }
+
+  private normalizeWhitespace(input: string): string {
+    return input.replace(/\s+/g, " ").trim();
+  }
+
+  private asSentence(input: string): string {
+    const normalized = this.normalizeWhitespace(input);
+    if (normalized.length === 0) {
+      return "";
+    }
+    return /[.!?]$/.test(normalized) ? normalized : `${normalized}.`;
+  }
+
+  private joinList(items: string[]): string {
+    if (items.length === 0) {
+      return "";
+    }
+    if (items.length === 1) {
+      return items[0] ?? "";
+    }
+    if (items.length === 2) {
+      return `${items[0]} and ${items[1]}`;
+    }
+    return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
+  }
+
+  private formatDimensionLabel(key: string): string {
+    if (key === "gtm") {
+      return "Go-to-Market";
+    }
+    if (key === "businessModel") {
+      return "Business Model";
+    }
+    if (key === "competitiveAdvantage") {
+      return "Competitive Advantage";
+    }
+    if (key === "dealTerms") {
+      return "Deal Terms";
+    }
+    if (key === "exitPotential") {
+      return "Exit Potential";
+    }
+    return key.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^\w/, (char) => char.toUpperCase());
   }
 
   private buildSynthesisBrief(input: SynthesisAgentInput): string {
@@ -233,6 +429,8 @@ export class SynthesisAgent {
           score: number;
           confidence: number;
           feedback?: string;
+          narrativeSummary?: string;
+          memoNarrative?: string;
           keyFindings?: string[];
           risks?: string[];
         };
@@ -251,8 +449,12 @@ export class SynthesisAgent {
           ? ` | Risks: ${ev.risks.join("; ")}`
           : "";
         const scoreLine = `- ${key}${weightLabel}: Score ${ev.score}/100 (confidence ${ev.confidence})${findings}${risks}`;
-        const feedbackBlock = ev.feedback
-          ? `\n  ### ${key} — Section Narrative\n  ${ev.feedback}`
+        const sectionNarrative =
+          ev.narrativeSummary?.trim() ||
+          ev.memoNarrative?.trim() ||
+          ev.feedback?.trim();
+        const feedbackBlock = sectionNarrative
+          ? `\n  ### ${key} — Section Narrative\n  ${sectionNarrative}`
           : "";
         return `${scoreLine}${feedbackBlock}`;
       });

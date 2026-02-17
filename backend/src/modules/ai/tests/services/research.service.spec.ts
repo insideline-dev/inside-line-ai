@@ -378,6 +378,29 @@ describe("ResearchService", () => {
     });
   });
 
+  it("preserves sources declared in agent output even when source entries are empty", async () => {
+    geminiResearch.research.mockImplementationOnce(() =>
+      Promise.resolve({
+        output: {
+          linkedinProfiles: [],
+          previousCompanies: [],
+          education: [],
+          achievements: ["Team profile data is limited"],
+          onlinePresence: { personalSites: [] },
+          sources: ["https://team-output-source.example.com"],
+        },
+        sources: [],
+        usedFallback: false,
+      }),
+    );
+
+    const result = await service.run("startup-1", { agentKey: "team" });
+
+    expect(result.sources.some((sourceEntry) =>
+      sourceEntry.url === "https://team-output-source.example.com"
+    )).toBe(true);
+  });
+
   it("does not consume feedback when targeted rerun falls back", async () => {
     geminiResearch.research.mockResolvedValueOnce({
       output: {

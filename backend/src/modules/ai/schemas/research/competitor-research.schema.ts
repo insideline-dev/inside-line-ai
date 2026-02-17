@@ -1,27 +1,50 @@
 import { z } from "zod";
 
+const nullToUndefined = (value: unknown): unknown =>
+  value === null ? undefined : value;
+
+const optionalUrl = z.preprocess(
+  nullToUndefined,
+  z.string().url().optional(),
+);
+
+const optionalNonNegativeNumber = z.preprocess(
+  nullToUndefined,
+  z.number().nonnegative().optional(),
+);
+
+const optionalString = z.preprocess(
+  nullToUndefined,
+  z.string().optional(),
+);
+
+const optionalThreatLevel = z.preprocess(
+  nullToUndefined,
+  z.enum(["high", "medium", "low"]).optional(),
+);
+
 export const CompetitorDetailSchema = z.object({
   name: z.string().min(1),
   description: z.string().min(1),
-  website: z.string().url().optional(),
-  fundingRaised: z.number().nonnegative().optional(),
-  fundingStage: z.string().optional(),
-  employeeCount: z.number().nonnegative().optional(),
+  website: optionalUrl,
+  fundingRaised: optionalNonNegativeNumber,
+  fundingStage: optionalString,
+  employeeCount: optionalNonNegativeNumber,
   productOverview: z.string(),
   keyFeatures: z.array(z.string()).default([]),
-  pricing: z.string().optional(),
-  targetMarket: z.string().optional(),
+  pricing: optionalString,
+  targetMarket: optionalString,
   differentiators: z.array(z.string()).default([]),
   weaknesses: z.array(z.string()).default([]),
-  threatLevel: z.enum(["high", "medium", "low"]).optional(),
+  threatLevel: optionalThreatLevel,
 });
 
 export const IndirectCompetitorDetailSchema = z.object({
   name: z.string().min(1),
   description: z.string().min(1),
   whyIndirect: z.string().min(1),
-  threatLevel: z.enum(["high", "medium", "low"]).optional(),
-  website: z.string().url().optional(),
+  threatLevel: optionalThreatLevel,
+  website: optionalUrl,
 });
 
 export const CompetitorResearchSchema = z.object({

@@ -21,6 +21,17 @@ type TestOutput = {
   verdict: string;
 };
 
+type NarrativeOutput = {
+  score: number;
+  confidence: number;
+  feedback: string;
+  keyFindings: string[];
+  risks: string[];
+  dataGaps: string[];
+  narrativeSummary?: string;
+  memoNarrative?: string;
+};
+
 class TestEvaluationAgent extends BaseEvaluationAgent<TestOutput> {
   readonly key = "team" as const;
   protected readonly schema = z.object({
@@ -36,6 +47,34 @@ class TestEvaluationAgent extends BaseEvaluationAgent<TestOutput> {
   readonly fallback = jest.fn((_pipelineData: EvaluationPipelineInput) => ({
     score: 50,
     verdict: "Fallback verdict",
+  }));
+}
+
+class NarrativeEvaluationAgent extends BaseEvaluationAgent<NarrativeOutput> {
+  readonly key = "team" as const;
+  protected readonly schema = z.object({
+    score: z.number().int().min(0).max(100),
+    confidence: z.number().min(0).max(1),
+    feedback: z.string().min(1),
+    keyFindings: z.array(z.string()).default([]),
+    risks: z.array(z.string()).default([]),
+    dataGaps: z.array(z.string()).default([]),
+    narrativeSummary: z.string().optional(),
+    memoNarrative: z.string().optional(),
+  });
+  protected readonly systemPrompt = "Narrative evaluator";
+
+  readonly buildContext = jest.fn((_pipelineData: EvaluationPipelineInput) => ({
+    company: "Clipaf",
+  }));
+
+  readonly fallback = jest.fn((_pipelineData: EvaluationPipelineInput) => ({
+    score: 45,
+    confidence: 0.2,
+    feedback: "Fallback summary.",
+    keyFindings: ["Insufficient evidence"],
+    risks: ["Low confidence"],
+    dataGaps: ["Missing primary data"],
   }));
 }
 
@@ -285,5 +324,104 @@ describe("BaseEvaluationAgent", () => {
     expect(call?.system).toContain("## Confidence Score (0.0 - 1.0)");
     expect(call?.system).toContain("0.8-1.0: All key data points available with third-party validation");
     expect(call?.system).toContain("0.0-0.2: Critical data missing, evaluation is speculative");
+  });
+
+  it("normalizes short feedback into detailed narrativeSummary and memoNarrative", async () => {
+    const narrativeAgent = new NarrativeEvaluationAgent(
+      providers as unknown as AiProviderService,
+      aiConfig as unknown as AiConfigService,
+      promptService as unknown as AiPromptService,
+    );
+
+    generateTextMock.mockResolvedValueOnce({
+      output: {
+        score: 81,
+        confidence: 0.7,
+        feedback: "Strong signal with remaining diligence needs.",
+        keyFindings: ["Founder has category experience", "Evidence of commercial demand"],
+        risks: ["Execution concentration risk"],
+        dataGaps: ["No verified retention cohorts"],
+      },
+    });
+
+    const result = await narrativeAgent.run(pipelineData);
+    const output = result.output;
+
+    expect(result.usedFallback).toBe(false);
+    expect(output.narrativeSummary).toBeTruthy();
+    expect(output.memoNarrative).toBe(output.narrativeSummary);
+    const paragraphs = (output.narrativeSummary ?? "")
+      .split(/\n\s*\n+/)
+      .map((value) => value.trim())
+      .filter((value) => value.length > 0);
+    expect(paragraphs.length).toBeGreaterThanOrEqual(4);
+    expect((output.narrativeSummary ?? "").length).toBeGreaterThan(420);
+  });
+
+  it("preserves existing long narrativeSummary and mirrors it to memoNarrative", async () => {
+    const narrativeAgent = new NarrativeEvaluationAgent(
+      providers as unknown as AiProviderService,
+      aiConfig as unknown as AiConfigService,
+      promptService as unknown as AiPromptService,
+    );
+
+    const longNarrative = [
+      "Paragraph one contains detailed analysis anchored in provided evidence, including signal quality, confidence constraints, and explicit framing of what can and cannot be concluded from the current data.",
+      "Paragraph two evaluates strengths and caveats with explicit assumptions, connecting observed operating behavior to stage-appropriate expectations and clarifying where early positive indicators still require durability checks.",
+      "Paragraph three outlines key risks, mitigations, and diligence priorities, with a clear distinction between structural risks, execution risks, and information risks that can materially alter conviction if unresolved.",
+      "Paragraph four summarizes investment implications for IC discussion, including conditional upside cases, downside sensitivities, and the minimum verification milestones required before escalating commitment level.",
+    ].join("\n\n");
+
+    generateTextMock.mockResolvedValueOnce({
+      output: {
+        score: 79,
+        confidence: 0.65,
+        feedback: "Concise summary.",
+        narrativeSummary: longNarrative,
+        keyFindings: ["Signal one"],
+        risks: ["Risk one"],
+        dataGaps: ["Gap one"],
+      },
+    });
+
+    const result = await narrativeAgent.run(pipelineData);
+    expect(result.output.narrativeSummary).toBe(longNarrative);
+    expect(result.output.memoNarrative).toBe(longNarrative);
+  });
+
+  it("upgrades long single-paragraph feedback into multi-paragraph narrative fields", async () => {
+    const narrativeAgent = new NarrativeEvaluationAgent(
+      providers as unknown as AiProviderService,
+      aiConfig as unknown as AiConfigService,
+      promptService as unknown as AiPromptService,
+    );
+
+    const longSingleParagraph = [
+      "The team demonstrates strong operator-market fit with repeat execution against ambitious milestones and has built early GTM repeatability across multiple customer cohorts, but the current plan still depends on concentrated decision-making at founder level and has not yet shown clear delegation resilience under rapid scale stress.",
+      "Commercial traction is credible but still uneven by segment, and available evidence suggests onboarding throughput can become constrained without additional senior functional leadership.",
+    ].join(" ");
+
+    generateTextMock.mockResolvedValueOnce({
+      output: {
+        score: 78,
+        confidence: 0.62,
+        feedback: longSingleParagraph,
+        keyFindings: ["Founder has deep category exposure", "Early paid demand validated"],
+        risks: ["Execution concentration risk"],
+        dataGaps: ["No segmented retention cohorts"],
+      },
+    });
+
+    const result = await narrativeAgent.run(pipelineData);
+    const output = result.output;
+
+    expect(output.narrativeSummary).toBeTruthy();
+    expect(output.memoNarrative).toBe(output.narrativeSummary);
+    expect(output.feedback).toBe(output.narrativeSummary);
+    const paragraphs = (output.narrativeSummary ?? "")
+      .split(/\n\s*\n+/)
+      .map((value) => value.trim())
+      .filter((value) => value.length > 0);
+    expect(paragraphs.length).toBeGreaterThanOrEqual(4);
   });
 });

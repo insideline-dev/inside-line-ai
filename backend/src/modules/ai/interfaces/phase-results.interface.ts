@@ -123,6 +123,8 @@ export interface EnrichedTeamMember {
   name: string;
   role?: string;
   linkedinUrl?: string;
+  matchConfidence?: number;
+  confidenceReason?: string;
   linkedinProfile?: {
     headline: string;
     summary: string;

@@ -66,8 +66,16 @@ describe("LinkedinEnrichmentService", () => {
         profileUrl: "https://linkedin.com/in/sam-builder",
         profileImageUrl: null,
         summary: null,
-        currentCompany: null,
-        experience: [],
+        currentCompany: { name: "Inside Line", title: "CTO" },
+        experience: [
+          {
+            company: "Inside Line",
+            title: "CTO",
+            startDate: "2023",
+            endDate: null,
+            current: true,
+          },
+        ],
         education: [],
       },
     ]);
@@ -80,8 +88,16 @@ describe("LinkedinEnrichmentService", () => {
       profileUrl: "https://linkedin.com/in/sam-builder",
       profileImageUrl: null,
       summary: null,
-      currentCompany: null,
-      experience: [],
+      currentCompany: { name: "Inside Line", title: "CTO" },
+      experience: [
+        {
+          company: "Inside Line",
+          title: "CTO",
+          startDate: "2023",
+          endDate: null,
+          current: true,
+        },
+      ],
       education: [],
     });
 
@@ -92,6 +108,48 @@ describe("LinkedinEnrichmentService", () => {
     expect(unipile.searchProfiles).toHaveBeenCalledWith("Sam Builder", "Inside Line");
     expect(result[0]?.enrichmentStatus).toBe("success");
     expect(result[0]?.linkedinUrl).toBe("https://linkedin.com/in/sam-builder");
+    expect(result[0]?.matchConfidence).toBeGreaterThanOrEqual(80);
+    expect(result[0]?.confidenceReason).toContain("currently employed");
+  });
+
+  it("rejects profiles without a current target-company signal", async () => {
+    unipile.searchProfiles.mockResolvedValueOnce([
+      {
+        id: "search-2",
+        firstName: "Sam",
+        lastName: "Builder",
+        headline: "CTO",
+        location: "SF",
+        profileUrl: "https://linkedin.com/in/sam-builder-2",
+        profileImageUrl: null,
+        summary: null,
+        currentCompany: null,
+        experience: [],
+        education: [],
+      },
+    ]);
+    unipile.getProfile.mockResolvedValueOnce({
+      id: "search-2",
+      firstName: "Sam",
+      lastName: "Builder",
+      headline: "CTO",
+      location: "SF",
+      profileUrl: "https://linkedin.com/in/sam-builder-2",
+      profileImageUrl: null,
+      summary: null,
+      currentCompany: null,
+      experience: [],
+      education: [],
+    });
+
+    const result = await service.enrichTeamMembers(
+      "user-1",
+      [{ name: "Sam Builder", role: "CTO" }],
+      { companyName: "Inside Line" },
+    );
+
+    expect(result[0]?.enrichmentStatus).toBe("not_found");
+    expect(result[0]?.confidenceReason).toContain("Current company does not match target company");
   });
 
   it("continues when one member enrichment fails", async () => {
@@ -186,6 +244,85 @@ describe("LinkedinEnrichmentService", () => {
     expect(result[0]?.linkedinUrl).toBe(
       "https://www.linkedin.com/in/nathan-blecharczyk-real",
     );
+  });
+
+  it("rejects mismatched profiles and falls back to a better-matching candidate", async () => {
+    unipile.getProfile
+      .mockResolvedValueOnce({
+        id: "wrong-john",
+        firstName: "John",
+        lastName: "Doe",
+        headline: "Talent Leader",
+        location: "NC",
+        profileUrl: "https://linkedin.com/in/johncollison",
+        profileImageUrl: null,
+        summary: null,
+        currentCompany: { name: "RDU Airport", title: "Talent Lead" },
+        experience: [
+          {
+            company: "RDU Airport",
+            title: "Talent Lead",
+            startDate: "2021",
+            endDate: null,
+            current: true,
+          },
+        ],
+        education: [],
+      })
+      .mockResolvedValueOnce({
+        id: "john-collison",
+        firstName: "John",
+        lastName: "Collison",
+        headline: "President at Stripe",
+        location: "San Francisco, CA",
+        profileUrl: "https://linkedin.com/in/john-collison-stripe",
+        profileImageUrl: null,
+        summary: null,
+        currentCompany: { name: "Stripe", title: "President" },
+        experience: [
+          {
+            company: "Stripe",
+            title: "President",
+            startDate: "2011",
+            endDate: null,
+            current: true,
+          },
+        ],
+        education: [],
+      });
+
+    unipile.searchProfiles.mockResolvedValueOnce([
+      {
+        id: "john-collison",
+        firstName: "John",
+        lastName: "Collison",
+        headline: "President at Stripe",
+        location: "San Francisco, CA",
+        profileUrl: "https://linkedin.com/in/john-collison-stripe",
+        profileImageUrl: null,
+        summary: null,
+        currentCompany: { name: "Stripe", title: "President" },
+        experience: [],
+        education: [],
+      },
+    ]);
+
+    const result = await service.enrichTeamMembers(
+      "user-1",
+      [
+        {
+          name: "John Collison",
+          role: "President",
+          linkedinUrl: "https://linkedin.com/in/johncollison",
+        },
+      ],
+      { companyName: "Stripe" },
+    );
+
+    expect(unipile.searchProfiles).toHaveBeenCalledWith("John Collison", "Stripe");
+    expect(result[0]?.enrichmentStatus).toBe("success");
+    expect(result[0]?.linkedinUrl).toBe("https://linkedin.com/in/john-collison-stripe");
+    expect(result[0]?.linkedinProfile?.headline).toBe("President at Stripe");
   });
 
   it("filters out ex-employees and self-employed profiles in company leadership discovery", async () => {

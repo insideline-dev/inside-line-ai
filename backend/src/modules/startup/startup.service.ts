@@ -123,6 +123,19 @@ export class StartupService {
       scoreField: "exitPotentialScore",
     },
   ] as const;
+  private static readonly EVALUATION_SECTION_DATA_FIELDS = [
+    "teamData",
+    "marketData",
+    "productData",
+    "tractionData",
+    "businessModelData",
+    "gtmData",
+    "financialsData",
+    "competitiveAdvantageData",
+    "legalData",
+    "dealTermsData",
+    "exitPotentialData",
+  ] as const;
   private static readonly RESEARCH_AGENTS = new Set<
     ResearchAgentKey
   >(["team", "market", "product", "news"]);
@@ -946,7 +959,10 @@ export class StartupService {
   }
 
   private withModelSources(evaluation: StartupEvaluation): StartupEvaluation {
-    const rawSources = Array.isArray(evaluation.sources) ? evaluation.sources : [];
+    const evaluationWithNarratives = this.withMemoNarratives(evaluation);
+    const rawSources = Array.isArray(evaluationWithNarratives.sources)
+      ? evaluationWithNarratives.sources
+      : [];
     const baseSources = rawSources.map((source) =>
       source && typeof source === "object"
         ? { ...(source as Record<string, unknown>) }
@@ -1045,13 +1061,170 @@ export class StartupService {
     }
 
     if (missingModelSources.length === 0) {
-      return evaluation;
+      return evaluationWithNarratives;
     }
 
     return {
-      ...evaluation,
+      ...evaluationWithNarratives,
       sources: [...baseSources, ...missingModelSources],
     };
+  }
+
+  private withMemoNarratives(evaluation: StartupEvaluation): StartupEvaluation {
+    const updated: Record<string, unknown> = { ...evaluation };
+
+    for (const field of StartupService.EVALUATION_SECTION_DATA_FIELDS) {
+      updated[field] = this.ensureMemoNarrative(updated[field]);
+    }
+
+    return updated as StartupEvaluation;
+  }
+
+  private ensureMemoNarrative(section: unknown): unknown {
+    if (!section || typeof section !== "object" || Array.isArray(section)) {
+      return section;
+    }
+
+    const record = { ...(section as Record<string, unknown>) };
+    const existingNarrative = this.pickNarrative(record);
+    const normalizedExisting = existingNarrative?.trim() ?? "";
+    if (this.isDetailedNarrative(normalizedExisting)) {
+      record.narrativeSummary = normalizedExisting;
+      record.memoNarrative = normalizedExisting;
+      return record;
+    }
+
+    const feedback = this.readString(record.feedback);
+    const score = this.readNumber(record.score);
+    const confidence = this.readNumber(record.confidence);
+    const keyFindings = this.readStringArray(record.keyFindings).slice(0, 4);
+    const risks = this.readStringArray(record.risks).slice(0, 3);
+    const dataGaps = this.readStringArray(record.dataGaps).slice(0, 3);
+
+    const confidencePercent =
+      confidence !== null ? Math.round(confidence * 100) : null;
+    const paragraphOneParts = [
+      score !== null
+        ? `This section is currently scored at ${Math.round(score)}/100${confidencePercent !== null ? ` with ${confidencePercent}% confidence` : ""}.`
+        : "This section currently has directional signal but limited confidence due to sparse evidence.",
+      feedback ||
+        "The current assessment should be treated as provisional pending additional primary-source diligence.",
+    ].filter((part) => part.length > 0);
+    const paragraphOne = paragraphOneParts.join(" ").trim();
+
+    const paragraphTwo = keyFindings.length
+      ? `Primary evidence signals include ${this.joinList(keyFindings)}. These indicators support a constructive directional view for this dimension, but should still be validated against independent sources where possible.`
+      : "Evidence depth remains limited in this run, so the current narrative should be interpreted as an early diligence snapshot rather than a final IC view.";
+
+    const paragraphThree = keyFindings.length
+      ? "Execution implications are cautiously positive if the observed signals can be sustained and converted into repeatable outcomes. At current evidence depth, this should be viewed as a promising but not fully de-risked section."
+      : "Execution implications remain uncertain due to limited repeatable evidence. Additional operating and performance transparency is required before this section can support high conviction.";
+
+    const paragraphFourParts: string[] = [];
+    if (risks.length > 0) {
+      paragraphFourParts.push(
+        `Key risks include ${this.joinList(risks)}, which could materially change conviction if unaddressed.`,
+      );
+    }
+    if (dataGaps.length > 0) {
+      paragraphFourParts.push(
+        `Critical data gaps include ${this.joinList(dataGaps)} and should be resolved before final investment recommendation.`,
+      );
+    }
+    const paragraphFour =
+      paragraphFourParts.join(" ") ||
+      "No critical unresolved blockers were explicitly identified in this section, but continued monitoring is recommended as new evidence arrives.";
+
+    const paragraphFive =
+      "Recommended next diligence should focus on third-party validation of key claims, trend consistency checks over multiple periods, and explicit downside stress-testing before final IC commitment.";
+
+    const narrative = [
+      paragraphOne,
+      paragraphTwo,
+      paragraphThree,
+      paragraphFour,
+      paragraphFive,
+    ]
+      .map((value) => value.trim())
+      .filter((value) => value.length > 0)
+      .join("\n\n");
+
+    if (narrative.length > 0) {
+      record.narrativeSummary = narrative;
+      record.memoNarrative = narrative;
+      if (!this.isDetailedNarrative(feedback ?? "")) {
+        record.feedback = narrative;
+      }
+    }
+
+    return record;
+  }
+
+  private pickNarrative(record: Record<string, unknown>): string | null {
+    const candidateKeys = [
+      "narrativeSummary",
+      "memoNarrative",
+      "feedback",
+      "summary",
+      "assessment",
+      "analysis",
+    ];
+    for (const key of candidateKeys) {
+      const value = this.readString(record[key]);
+      if (value) {
+        return value;
+      }
+    }
+    return null;
+  }
+
+  private readString(value: unknown): string | null {
+    if (typeof value !== "string") {
+      return null;
+    }
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+
+  private readNumber(value: unknown): number | null {
+    return typeof value === "number" && Number.isFinite(value) ? value : null;
+  }
+
+  private readStringArray(value: unknown): string[] {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    return value
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0);
+  }
+
+  private joinList(items: string[]): string {
+    if (items.length === 0) {
+      return "";
+    }
+    if (items.length === 1) {
+      return items[0] ?? "";
+    }
+    if (items.length === 2) {
+      return `${items[0]} and ${items[1]}`;
+    }
+    return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
+  }
+
+  private isDetailedNarrative(value: string): boolean {
+    const trimmed = value.trim();
+    if (trimmed.length < 420) {
+      return false;
+    }
+
+    const paragraphs = trimmed
+      .split(/\n\s*\n+/)
+      .map((paragraph) => paragraph.trim())
+      .filter((paragraph) => paragraph.length > 0);
+
+    return paragraphs.length >= 4;
   }
 
   private normalizeAgentKey(agent: unknown): string | null {

@@ -153,6 +153,26 @@ export function MemoTabContent({
   weights,
   animateOnMount = false,
 }: MemoTabContentProps) {
+  const dueDiligenceAreas = (() => {
+    const fromInvestorMemo = toStringArray(investorMemo?.keyDueDiligenceAreas);
+    if (fromInvestorMemo.length > 0) {
+      return fromInvestorMemo;
+    }
+
+    const evalAny = evaluation as unknown as Record<string, unknown>;
+    const fromRecommendations = toStringArray(evalAny.recommendations);
+    if (fromRecommendations.length > 0) {
+      return fromRecommendations;
+    }
+
+    const fromNextSteps = toStringArray(evalAny.nextSteps);
+    if (fromNextSteps.length > 0) {
+      return fromNextSteps;
+    }
+
+    return [];
+  })();
+
   const getAdminFeedbackProps = (sectionKey: string) => {
     if (!adminFeedback) return undefined;
     const evalAny = evaluation as unknown as Record<string, unknown>;
@@ -401,54 +421,27 @@ export function MemoTabContent({
           adminFeedback={getAdminFeedbackProps("exitPotential")}
         />
 
-        <MemoSection
-          title="Executive Summary"
-          icon={FileText}
-          animateOnMount={animateOnMount}
-          summary={executiveSummaryText}
-          details={
-            <div className="space-y-4">
-              {((evaluation.keyStrengths as string[]) || []).length > 0 && (
-                <div>
-                  <h4 className="font-medium mb-2">Top Strengths</h4>
-                  <ul className="space-y-1">
-                    {((evaluation.keyStrengths as string[]) || []).slice(0, 3).map((item, idx) => (
-                      <li key={idx} className="text-sm">• {item}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {((evaluation.keyRisks as string[]) || []).length > 0 && (
-                <div>
-                  <h4 className="font-medium mb-2">Key Risks</h4>
-                  <ul className="space-y-1">
-                    {((evaluation.keyRisks as string[]) || []).slice(0, 3).map((item, idx) => (
-                      <li key={idx} className="text-sm">• {item}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          }
-        />
-
         {/* Key Due Diligence Areas */}
-        {investorMemo?.keyDueDiligenceAreas && investorMemo.keyDueDiligenceAreas.length > 0 && (
-          <div className="mt-6 pt-6 border-t" data-testid="section-due-diligence">
-            <div className="flex items-center gap-2 mb-4">
-              <Search className="w-5 h-5 text-muted-foreground" />
-              <h3 className="font-semibold text-base">Key Due Diligence Areas</h3>
-            </div>
+        <div className="mt-6 pt-6 border-t" data-testid="section-due-diligence">
+          <div className="flex items-center gap-2 mb-4">
+            <Search className="w-5 h-5 text-muted-foreground" />
+            <h3 className="font-semibold text-base">Key Due Diligence Areas</h3>
+          </div>
+          {dueDiligenceAreas.length > 0 ? (
             <ul className="space-y-2">
-              {investorMemo.keyDueDiligenceAreas.map((area, i) => (
+              {dueDiligenceAreas.map((area, i) => (
                 <li key={i} className="flex items-start gap-3 text-sm text-muted-foreground">
                   <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground shrink-0 mt-2" />
                   <span>{area}</span>
                 </li>
               ))}
             </ul>
-          </div>
-        )}
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Due diligence areas were not generated for this run.
+            </p>
+          )}
+        </div>
 
       </CardContent>
     </Card>

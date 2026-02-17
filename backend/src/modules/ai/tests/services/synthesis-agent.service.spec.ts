@@ -102,6 +102,41 @@ describe("SynthesisAgent", () => {
     expect(output.investorMemo).toContain("Investor memo");
   });
 
+  it("expands short executive summary into a detailed multi-paragraph narrative", async () => {
+    generateTextMock.mockResolvedValueOnce({
+      output: {
+        overallScore: 78,
+        recommendation: "Consider",
+        executiveSummary: "Promising company with clear upside and manageable risk.",
+        strengths: ["Strong team quality", "Large and growing market"],
+        concerns: ["GTM repeatability still unproven", "Need stronger unit economics evidence"],
+        investmentThesis: "Invest if milestones are hit with disciplined execution.",
+        nextSteps: ["Validate conversion by channel", "Audit retention cohorts"],
+        confidenceLevel: "Medium",
+        investorMemo: "Investor memo body",
+        founderReport: "Founder report body",
+        dataConfidenceNotes: "Some sections rely on directional signals.",
+      },
+    });
+
+    const pipeline = createEvaluationPipelineInput();
+    const output = await service.run({
+      extraction: pipeline.extraction,
+      scraping: pipeline.scraping,
+      research: pipeline.research,
+      evaluation: createMockEvaluationResult(),
+      stageWeights: { team: 0.25, traction: 0.2, market: 0.2, product: 0.15, dealTerms: 0.1, exitPotential: 0.1 },
+    });
+
+    const paragraphs = output.executiveSummary
+      .split(/\n\s*\n+/)
+      .map((paragraph) => paragraph.trim())
+      .filter((paragraph) => paragraph.length > 0);
+
+    expect(paragraphs.length).toBeGreaterThanOrEqual(4);
+    expect(output.executiveSummary).toContain("Clipaf");
+  });
+
   it("routes to gemini provider when synthesis model is non-gpt", async () => {
     generateTextMock.mockResolvedValueOnce({
       output: {

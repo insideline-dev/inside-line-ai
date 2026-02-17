@@ -15,6 +15,18 @@ import { AiPromptService } from "../../services/ai-prompt.service";
 import { EVALUATION_PROMPT_KEY_BY_AGENT } from "../../services/ai-prompt-catalog";
 
 const NO_OUTPUT_RETRY_ATTEMPTS = 2;
+const NARRATIVE_MIN_LENGTH = 420;
+
+interface BaseEvaluationLike {
+  score: number;
+  confidence: number;
+  feedback: string;
+  keyFindings?: string[];
+  risks?: string[];
+  dataGaps?: string[];
+  narrativeSummary?: string;
+  memoNarrative?: string;
+}
 
 @Injectable()
 export abstract class BaseEvaluationAgent<TOutput>
@@ -85,6 +97,12 @@ export abstract class BaseEvaluationAgent<TOutput>
             "- Evaluate using ONLY the provided context. Do not invent facts.",
             "- When key evidence is missing, lower confidence and avoid extreme scores.",
             "- Keep rationales concise and tied to observable evidence.",
+            "",
+            "## Narrative Output Contract (critical for memo tab)",
+            "- Provide `feedback` as a detailed memo narrative (4-5 paragraphs, 450-650 words).",
+            "- Provide `narrativeSummary` as a detailed memo narrative (4-5 paragraphs, 450-650 words).",
+            "- Set `memoNarrative` equal to `narrativeSummary`.",
+            "- If evidence is limited, write a detailed but cautious narrative and call out data gaps explicitly.",
           ].join("\n"),
           prompt: this.promptService.renderTemplate(
             promptConfig.userPrompt,
@@ -99,7 +117,7 @@ export abstract class BaseEvaluationAgent<TOutput>
 
         return {
           key: this.key,
-          output: this.schema.parse(output),
+          output: this.normalizeNarrativeFields(this.schema.parse(output)),
           usedFallback: false,
         };
       } catch (error) {
@@ -116,21 +134,176 @@ export abstract class BaseEvaluationAgent<TOutput>
         }
 
         this.logger.warn(`${this.key} evaluation fallback used: ${message}`);
+        const fallbackOutput = this.normalizeNarrativeFields(
+          this.fallback(pipelineData),
+        );
         return {
           key: this.key,
-          output: this.fallback(pipelineData),
+          output: fallbackOutput,
           usedFallback: true,
           error: message,
         };
       }
     }
 
+    const fallbackOutput = this.normalizeNarrativeFields(
+      this.fallback(pipelineData),
+    );
     return {
       key: this.key,
-      output: this.fallback(pipelineData),
+      output: fallbackOutput,
       usedFallback: true,
       error: "Evaluation failed after retries",
     };
+  }
+
+  private normalizeNarrativeFields(output: TOutput): TOutput {
+    if (!this.isBaseEvaluationLike(output)) {
+      return output;
+    }
+
+    const narrativeCandidate = this.pickExistingNarrative(output);
+    const narrative = this.hasDetailedNarrative(narrativeCandidate)
+      ? narrativeCandidate
+      : this.buildNarrativeFromStructuredSignals(output);
+    const feedback = this.hasDetailedNarrative(output.feedback)
+      ? output.feedback
+      : narrative;
+
+    return {
+      ...output,
+      feedback,
+      narrativeSummary: narrative,
+      memoNarrative: narrative,
+    };
+  }
+
+  private hasDetailedNarrative(value: string | null | undefined): value is string {
+    if (typeof value !== "string") {
+      return false;
+    }
+
+    const trimmed = value.trim();
+    if (trimmed.length < NARRATIVE_MIN_LENGTH) {
+      return false;
+    }
+
+    const paragraphs = trimmed
+      .split(/\n\s*\n+/)
+      .map((paragraph) => paragraph.trim())
+      .filter((paragraph) => paragraph.length > 0);
+
+    return paragraphs.length >= 4;
+  }
+
+  private isBaseEvaluationLike(value: unknown): value is TOutput & BaseEvaluationLike {
+    if (!value || typeof value !== "object") {
+      return false;
+    }
+
+    const record = value as Record<string, unknown>;
+    return (
+      typeof record.score === "number" &&
+      typeof record.confidence === "number" &&
+      typeof record.feedback === "string"
+    );
+  }
+
+  private pickExistingNarrative(value: BaseEvaluationLike): string | null {
+    const candidates = [value.narrativeSummary, value.memoNarrative, value.feedback];
+    for (const candidate of candidates) {
+      if (typeof candidate === "string" && candidate.trim().length > 0) {
+        return candidate.trim();
+      }
+    }
+    return null;
+  }
+
+  private buildNarrativeFromStructuredSignals(value: BaseEvaluationLike): string {
+    const findings = this.cleanStringArray(value.keyFindings).slice(0, 4);
+    const risks = this.cleanStringArray(value.risks).slice(0, 3);
+    const dataGaps = this.cleanStringArray(value.dataGaps).slice(0, 3);
+    const confidencePercent = Math.round(value.confidence * 100);
+    const intro = this.normalizeWhitespace(value.feedback);
+
+    const paragraphOne = [
+      `This section is currently scored at ${Math.round(value.score)}/100 with ${confidencePercent}% confidence.`,
+      intro.length > 0
+        ? intro
+        : "The current assessment is directionally useful but should be interpreted with caution.",
+    ]
+      .join(" ")
+      .trim();
+
+    const paragraphTwo = findings.length
+      ? `Evidence quality is anchored by the following validated signals: ${findings
+          .map((item) => this.asSentence(item))
+          .join(" ")} Together, these datapoints suggest a credible directional case for this dimension, but they should be interpreted in context of stage-appropriate variance.`
+      : "Available evidence is limited in depth, so conclusions remain provisional pending additional verification and primary-source diligence. The current signal supports only a directional view, not final conviction.";
+
+    const paragraphThree =
+      findings.length > 0
+        ? "From an execution perspective, the observed signals indicate there is a viable path to improvement if the team sustains delivery cadence and converts early proof points into repeatable operating outcomes. This section should therefore be treated as conditionally constructive rather than fully de-risked."
+        : "Execution implications remain uncertain because evidence does not yet show repeatability across key operating motions. The current assessment therefore emphasizes caution until stronger and more persistent proof points are available.";
+
+    const paragraphFourParts: string[] = [];
+    if (risks.length > 0) {
+      paragraphFourParts.push(
+        `Key risks include ${this.joinList(risks)}, each of which could materially affect conviction if not mitigated.`,
+      );
+    }
+    if (dataGaps.length > 0) {
+      paragraphFourParts.push(
+        `Critical unresolved data gaps include ${this.joinList(dataGaps)}; these should be closed before final IC commitment.`,
+      );
+    }
+
+    const paragraphFour =
+      paragraphFourParts.join(" ") ||
+      "No critical unresolved blockers were explicitly identified in this run, but ongoing diligence is still required as new data becomes available.";
+
+    const paragraphFive =
+      "Recommended next-step diligence should prioritize independent source validation, metric consistency checks over time, and explicit confirmation of downside sensitivity. Final IC confidence should increase only after this section demonstrates both evidence depth and durability under scrutiny.";
+
+    return [
+      paragraphOne,
+      paragraphTwo,
+      paragraphThree,
+      paragraphFour,
+      paragraphFive,
+    ].join("\n\n");
+  }
+
+  private cleanStringArray(input: unknown): string[] {
+    if (!Array.isArray(input)) {
+      return [];
+    }
+    return input
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => this.normalizeWhitespace(item))
+      .filter((item) => item.length > 0);
+  }
+
+  private normalizeWhitespace(input: string): string {
+    return input.replace(/\s+/g, " ").trim();
+  }
+
+  private asSentence(input: string): string {
+    const normalized = this.normalizeWhitespace(input);
+    if (normalized.length === 0) {
+      return "";
+    }
+    return /[.!?]$/.test(normalized) ? normalized : `${normalized}.`;
+  }
+
+  private joinList(items: string[]): string {
+    if (items.length === 1) {
+      return items[0] ?? "";
+    }
+    if (items.length === 2) {
+      return `${items[0]} and ${items[1]}`;
+    }
+    return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
   }
 
   private isNoOutputError(message: string): boolean {

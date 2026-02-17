@@ -289,7 +289,9 @@ export class WebsiteScraperService {
         .filter((entry): entry is { url: string; text: string } => Boolean(entry))
         .slice(0, this.maxLinksPerPage);
 
-      const content = $("body").text().replace(/\s+/g, " ").trim();
+      const bodyTextRoot = $("body").clone();
+      bodyTextRoot.find("script, style, noscript, template").remove();
+      const content = bodyTextRoot.text().replace(/\s+/g, " ").trim();
 
       const page: ScrapedPage = {
         url: this.normalizeUrl(pageUrl, pageUrl.endsWith("/")),

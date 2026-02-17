@@ -73,18 +73,26 @@ export class ScrapingService {
     const discoveredWebsiteLeaders = this.extractLeadershipCandidates(
       website?.teamBios ?? [],
     );
+    const discoveredWebsiteLinkedinMembers = this.extractLinkedinCandidatesFromWebsiteLinks(
+      website?.links ?? [],
+    );
     const discoveredLinkedinLeaders = await this.discoverCompanyLinkedinLeadership(
       record.name,
-      [...submittedTeamMembers, ...discoveredWebsiteLeaders],
+      [
+        ...submittedTeamMembers,
+        ...discoveredWebsiteLeaders,
+        ...discoveredWebsiteLinkedinMembers,
+      ],
       record.website ?? undefined,
     );
     const teamMembers = this.mergeTeamMembers(
       submittedTeamMembers,
       discoveredWebsiteLeaders,
+      discoveredWebsiteLinkedinMembers,
       discoveredLinkedinLeaders,
     );
     this.logger.log(
-      `[Scraping] Team member seed built | submitted=${submittedTeamMembers.length} | discoveredWebsiteLeaders=${discoveredWebsiteLeaders.length} | discoveredLinkedinLeaders=${discoveredLinkedinLeaders.length} | final=${teamMembers.length}`,
+      `[Scraping] Team member seed built | submitted=${submittedTeamMembers.length} | discoveredWebsiteLeaders=${discoveredWebsiteLeaders.length} | discoveredWebsiteLinkedin=${discoveredWebsiteLinkedinMembers.length} | discoveredLinkedinLeaders=${discoveredLinkedinLeaders.length} | final=${teamMembers.length}`,
     );
 
     const enrichedTeam = await this.enrichTeamMembers(
@@ -94,17 +102,34 @@ export class ScrapingService {
       record.website,
       scrapeErrors,
     );
+    const submittedNames = new Set(
+      submittedTeamMembers.map((member) => member.name.trim().toLowerCase()),
+    );
+    const droppedUnverifiedTeamMembers = enrichedTeam.filter((member) => {
+      const isSubmittedMember = submittedNames.has(member.name.trim().toLowerCase());
+      if (isSubmittedMember) {
+        return false;
+      }
+      return member.enrichmentStatus !== "success";
+    });
+    const verifiedTeamMembers = enrichedTeam.filter((member) => {
+      const isSubmittedMember = submittedNames.has(member.name.trim().toLowerCase());
+      if (isSubmittedMember) {
+        return true;
+      }
+      return member.enrichmentStatus === "success";
+    });
 
     const result: ScrapingResult = {
       website,
       websiteUrl: website?.url ?? record.website ?? null,
       websiteSummary: website?.description || undefined,
-      teamMembers: enrichedTeam,
+      teamMembers: verifiedTeamMembers,
       notableClaims: this.buildNotableClaims(record.industry, record.stage, record.fundingTarget),
       scrapeErrors,
     };
 
-    const statusCounts = enrichedTeam.reduce<Record<string, number>>((acc, member) => {
+    const statusCounts = result.teamMembers.reduce<Record<string, number>>((acc, member) => {
       const key = member.enrichmentStatus ?? "unknown";
       acc[key] = (acc[key] ?? 0) + 1;
       return acc;
@@ -112,7 +137,7 @@ export class ScrapingService {
     const errorSummary = scrapeErrors.map((error) => `${error.type}:${error.target}`);
 
     this.logger.log(
-      `[Scraping] Completed scraping phase for startup ${startupId} | websiteScraped=${Boolean(website)} | teamMembers=${enrichedTeam.length} | errors=${scrapeErrors.length}`,
+      `[Scraping] Completed scraping phase for startup ${startupId} | websiteScraped=${Boolean(website)} | teamMembers=${result.teamMembers.length} | droppedUnverified=${droppedUnverifiedTeamMembers.length} | errors=${scrapeErrors.length}`,
     );
     this.logger.debug(
       `[Scraping] Status summary ${JSON.stringify(statusCounts)} | Error targets ${JSON.stringify(errorSummary)}`,
@@ -136,8 +161,23 @@ export class ScrapingService {
       startupWebsite: record.website ?? null,
       submittedTeamMembers,
       discoveredWebsiteLeadershipTeamMembers: discoveredWebsiteLeaders,
+      discoveredWebsiteLinkedinTeamMembers: discoveredWebsiteLinkedinMembers,
       discoveredLinkedinLeadershipTeamMembers: discoveredLinkedinLeaders,
       requestedTeamMembers: teamMembers,
+      memberConfidenceLog: result.teamMembers.map((member) => ({
+        name: member.name,
+        linkedinUrl: member.linkedinUrl ?? null,
+        enrichmentStatus: member.enrichmentStatus,
+        matchConfidence: member.matchConfidence ?? null,
+        confidenceReason: member.confidenceReason ?? null,
+      })),
+      droppedUnverifiedTeamMembers: droppedUnverifiedTeamMembers.map((member) => ({
+        name: member.name,
+        linkedinUrl: member.linkedinUrl ?? null,
+        enrichmentStatus: member.enrichmentStatus,
+        matchConfidence: member.matchConfidence ?? null,
+        confidenceReason: member.confidenceReason ?? null,
+      })),
       scrapingResult: {
         websiteUrl: result.websiteUrl ?? null,
         websiteSummary: result.websiteSummary ?? null,
@@ -148,6 +188,7 @@ export class ScrapingService {
       counts: {
         requestedTeamMembers: teamMembers.length,
         enrichedTeamMembers: result.teamMembers.length,
+        droppedUnverifiedTeamMembers: droppedUnverifiedTeamMembers.length,
         scrapeErrors: result.scrapeErrors.length,
       },
     });
@@ -192,6 +233,7 @@ export class ScrapingService {
   private mergeTeamMembers(
     submitted: TeamMemberInput[],
     discoveredFromWebsite: TeamMemberInput[],
+    discoveredFromWebsiteLinkedin: TeamMemberInput[],
     discoveredFromLinkedin: TeamMemberInput[],
   ): TeamMemberInput[] {
     const byName = new Map<string, TeamMemberInput>();
@@ -214,9 +256,147 @@ export class ScrapingService {
 
     submitted.forEach(upsert);
     discoveredFromWebsite.forEach(upsert);
+    discoveredFromWebsiteLinkedin.forEach(upsert);
     discoveredFromLinkedin.forEach(upsert);
 
     return Array.from(byName.values());
+  }
+
+  private extractLinkedinCandidatesFromWebsiteLinks(
+    links: Array<{ url: string; text: string }>,
+  ): TeamMemberInput[] {
+    const discovered: TeamMemberInput[] = [];
+    const seen = new Set<string>();
+
+    for (const link of links) {
+      const linkedinUrl = this.normalizeLinkedinProfileUrl(link.url);
+      if (!linkedinUrl) {
+        continue;
+      }
+
+      const name = this.extractTeamMemberNameFromLink(link.text, linkedinUrl);
+      if (!name) {
+        continue;
+      }
+
+      const key = name.toLowerCase();
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+
+      discovered.push({
+        name,
+        role: this.extractRoleHintFromLink(link.text),
+        linkedinUrl,
+      });
+    }
+
+    return discovered.slice(0, 12);
+  }
+
+  private normalizeLinkedinProfileUrl(url: string): string | undefined {
+    try {
+      const parsed = new URL(url);
+      const host = parsed.hostname.toLowerCase().replace(/^www\./, "");
+      if (host !== "linkedin.com") {
+        return undefined;
+      }
+
+      const segments = parsed.pathname
+        .split("/")
+        .map((segment) => segment.trim())
+        .filter(Boolean);
+      if (segments[0] !== "in" || !segments[1]) {
+        return undefined;
+      }
+
+      return `https://www.linkedin.com/in/${segments[1]}`;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private extractTeamMemberNameFromLink(
+    linkText: string,
+    linkedinUrl: string,
+  ): string | null {
+    const normalizedText = linkText.replace(/\s+/g, " ").trim();
+    if (normalizedText.length > 0) {
+      const sanitized = normalizedText
+        .replace(
+          /\b(founder|co[\s-]?founder|chief|ceo|cto|coo|cfo|cmo|cpo|president|vice president|vp|head|director|managing director|general manager|partner)\b.*$/i,
+          "",
+        )
+        .replace(/[|@•,:;]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      const tokens = sanitized
+        .split(" ")
+        .map((token) => this.normalizeNameToken(token))
+        .filter((token) => token.length > 1);
+
+      if (
+        tokens.length >= 2 &&
+        !tokens.some((token) => ["linkedin", "profile", "view"].includes(token))
+      ) {
+        return tokens.map((token) => `${token[0]?.toUpperCase() ?? ""}${token.slice(1)}`).join(" ");
+      }
+    }
+
+    try {
+      const parsed = new URL(linkedinUrl);
+      const slug = parsed.pathname.split("/").filter(Boolean)[1];
+      if (!slug) {
+        return null;
+      }
+
+      const tokens = slug
+        .split("-")
+        .map((token) => this.normalizeNameToken(token))
+        .filter((token) => token.length > 1 && !/^\d+$/.test(token));
+
+      if (tokens.length < 2) {
+        return null;
+      }
+
+      return tokens.map((token) => `${token[0]?.toUpperCase() ?? ""}${token.slice(1)}`).join(" ");
+    } catch {
+      return null;
+    }
+  }
+
+  private extractRoleHintFromLink(linkText: string): string | undefined {
+    const match = linkText
+      .replace(/\s+/g, " ")
+      .match(
+        /\b(founder|co[\s-]?founder|chief [a-z ]+ officer|ceo|cto|coo|cfo|cmo|cpo|president|vice president|vp|head|director|managing director|general manager|partner)\b/i,
+      );
+    if (!match?.[0]) {
+      return undefined;
+    }
+
+    const role = match[0].trim();
+    if (role.length === 0) {
+      return undefined;
+    }
+
+    if (role.toUpperCase() === role) {
+      return role;
+    }
+
+    return role
+      .split(" ")
+      .map((part) => `${part[0]?.toUpperCase() ?? ""}${part.slice(1).toLowerCase()}`)
+      .join(" ");
+  }
+
+  private normalizeNameToken(value: string): string {
+    return value
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "")
+      .trim();
   }
 
   private async discoverCompanyLinkedinLeadership(
@@ -370,6 +550,8 @@ export class ScrapingService {
           role: member.role,
           linkedinUrl: member.linkedinUrl,
           enrichmentStatus: "error",
+          matchConfidence: 0,
+          confidenceReason: `LinkedIn enrichment request failed: ${message}`,
         }));
       }
     }
@@ -417,6 +599,8 @@ export class ScrapingService {
         role: original.role,
         linkedinUrl: enriched?.linkedinUrl ?? original.linkedinUrl,
         enrichmentStatus: enriched?.enrichmentStatus ?? "error",
+        matchConfidence: enriched?.matchConfidence,
+        confidenceReason: enriched?.confidenceReason,
         linkedinProfile: enriched?.linkedinProfile,
         enrichedAt: enriched?.enrichedAt,
       });

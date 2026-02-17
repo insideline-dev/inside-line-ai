@@ -15,12 +15,35 @@ interface StartupContextInput {
   website?: string;
 }
 
+interface ProfileMatchAssessment {
+  accepted: boolean;
+  confidence: number;
+  reason: string;
+}
+
+interface RejectedCandidateDecision {
+  linkedinUrl: string;
+  confidence: number;
+  reason: string;
+}
+
 @Injectable()
 export class LinkedinEnrichmentService {
   private readonly logger = new Logger(LinkedinEnrichmentService.name);
   private readonly batchSize: number;
   private readonly maxCompanyLeadershipCandidates: number;
   private readonly maxProfileCandidates = 3;
+  private readonly nameStopWords = new Set([
+    'mr',
+    'mrs',
+    'ms',
+    'dr',
+    'jr',
+    'sr',
+    'ii',
+    'iii',
+    'iv',
+  ]);
   private readonly companyLeadershipQueries = [
     'founder',
     'co-founder',
@@ -125,6 +148,8 @@ export class LinkedinEnrichmentService {
         role: member.role,
         linkedinUrl: member.linkedinUrl,
         enrichmentStatus: 'not_configured',
+        matchConfidence: 0,
+        confidenceReason: 'LinkedIn integration is not configured',
       }));
     }
 
@@ -149,6 +174,8 @@ export class LinkedinEnrichmentService {
           role: member.role,
           linkedinUrl: member.linkedinUrl,
           enrichmentStatus: 'error',
+          matchConfidence: 0,
+          confidenceReason: 'LinkedIn enrichment failed with an unexpected error',
         });
       }
     }
@@ -162,6 +189,7 @@ export class LinkedinEnrichmentService {
     startupContext?: StartupContextInput,
   ): Promise<EnrichedTeamMember> {
     const attemptedUrls: string[] = [];
+    const rejectedCandidates: RejectedCandidateDecision[] = [];
     let candidateUrls: string[] = member.linkedinUrl
       ? [member.linkedinUrl]
       : await this.getSearchCandidateUrls(member, startupContext);
@@ -174,6 +202,8 @@ export class LinkedinEnrichmentService {
         name: member.name,
         role: member.role,
         enrichmentStatus: 'not_found',
+        matchConfidence: 0,
+        confidenceReason: 'No LinkedIn candidate URLs were found',
       };
     }
 
@@ -184,15 +214,35 @@ export class LinkedinEnrichmentService {
 
       try {
         const profile = await this.unipileService.getProfile(userId, linkedinUrl);
-        if (profile) {
-          return {
-            name: member.name,
-            role: member.role,
+        if (!profile) {
+          rejectedCandidates.push({
             linkedinUrl,
-            linkedinProfile: this.mapProfile(profile),
-            enrichmentStatus: 'success',
-            enrichedAt: new Date().toISOString(),
-          };
+            confidence: 0,
+            reason: 'Profile lookup returned no profile data',
+          });
+        } else {
+          const assessment = this.assessRequestedProfile(profile, member, startupContext);
+          if (!assessment.accepted) {
+            rejectedCandidates.push({
+              linkedinUrl,
+              confidence: assessment.confidence,
+              reason: assessment.reason,
+            });
+            this.logger.debug(
+              `[LinkedInEnrichment] profile mismatch for ${member.name}; candidate ${linkedinUrl} rejected (${assessment.reason}, confidence=${assessment.confidence})`,
+            );
+          } else {
+            return {
+              name: member.name,
+              role: member.role,
+              linkedinUrl,
+              linkedinProfile: this.mapProfile(profile),
+              enrichmentStatus: 'success',
+              matchConfidence: assessment.confidence,
+              confidenceReason: assessment.reason,
+              enrichedAt: new Date().toISOString(),
+            };
+          }
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -206,10 +256,17 @@ export class LinkedinEnrichmentService {
             role: member.role,
             linkedinUrl,
             enrichmentStatus: 'error',
+            matchConfidence: 0,
+            confidenceReason: `LinkedIn profile fetch failed: ${message}`,
           };
         }
 
         sawRecoverableFetchError = true;
+        rejectedCandidates.push({
+          linkedinUrl,
+          confidence: 0,
+          reason: `Recoverable LinkedIn fetch error: ${message}`,
+        });
       }
 
       const consumedAllCandidates = index === candidateUrls.length - 1;
@@ -229,12 +286,18 @@ export class LinkedinEnrichmentService {
       }
     }
 
+    const bestRejectedCandidate = this.pickBestRejectedCandidate(rejectedCandidates);
+
     if (sawRecoverableFetchError) {
       return {
         name: member.name,
         role: member.role,
         linkedinUrl: lastAttemptedUrl ?? member.linkedinUrl,
         enrichmentStatus: 'error',
+        matchConfidence: bestRejectedCandidate?.confidence ?? 0,
+        confidenceReason:
+          bestRejectedCandidate?.reason ??
+          'All candidate profile lookups failed with recoverable errors',
       };
     }
 
@@ -243,6 +306,10 @@ export class LinkedinEnrichmentService {
       role: member.role,
       linkedinUrl: lastAttemptedUrl ?? member.linkedinUrl,
       enrichmentStatus: 'not_found',
+      matchConfidence: bestRejectedCandidate?.confidence ?? 0,
+      confidenceReason:
+        bestRejectedCandidate?.reason ??
+        'No candidate profile matched name/company constraints',
     };
   }
 
@@ -260,6 +327,10 @@ export class LinkedinEnrichmentService {
     const candidates: string[] = [];
 
     for (const match of matches) {
+      if (this.hasProfileName(match) && !this.namesLikelyMatch(member.name, match)) {
+        continue;
+      }
+
       const profileUrl = match.profileUrl?.trim();
       if (!profileUrl) {
         continue;
@@ -514,5 +585,192 @@ export class LinkedinEnrichmentService {
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, " ")
       .trim();
+  }
+
+  private hasProfileName(profile: LinkedInProfile): boolean {
+    const fullName = `${profile.firstName || ''} ${profile.lastName || ''}`.trim();
+    return fullName.length > 0;
+  }
+
+  private assessRequestedProfile(
+    profile: LinkedInProfile,
+    requestedMember: TeamMemberInput,
+    startupContext?: StartupContextInput,
+  ): ProfileMatchAssessment {
+    const nameConfidence = this.computeNameMatchConfidence(requestedMember.name, profile);
+    if (nameConfidence === 0) {
+      return {
+        accepted: false,
+        confidence: 0,
+        reason: "Profile name does not match requested member name",
+      };
+    }
+
+    const companyName = startupContext?.companyName?.trim();
+    if (!companyName) {
+      return {
+        accepted: true,
+        confidence: Math.max(70, nameConfidence),
+        reason: "Name matched; company context was not provided",
+      };
+    }
+
+    // Strict accuracy gate: only accept profiles that are currently at target company.
+    // This avoids ex-employees and self-employed matches that happen to share name tokens.
+    if (!this.isCurrentAtTargetCompany(profile, companyName)) {
+      return {
+        accepted: false,
+        confidence: Math.max(10, Math.round(nameConfidence * 0.6)),
+        reason: `Current company does not match target company "${companyName}"`,
+      };
+    }
+
+    return {
+      accepted: true,
+      confidence: Math.min(100, nameConfidence + 8),
+      reason: `Name matched and currently employed at "${companyName}"`,
+    };
+  }
+
+  private pickBestRejectedCandidate(
+    candidates: RejectedCandidateDecision[],
+  ): RejectedCandidateDecision | null {
+    if (candidates.length === 0) {
+      return null;
+    }
+
+    const sorted = [...candidates].sort((left, right) => right.confidence - left.confidence);
+    return sorted[0] ?? null;
+  }
+
+  private computeNameMatchConfidence(
+    requestedName: string,
+    profile: LinkedInProfile,
+  ): number {
+    if (!this.namesLikelyMatch(requestedName, profile)) {
+      return 0;
+    }
+
+    const requestedTokens = this.tokenizeName(requestedName);
+    const profileFirst = this.normalizeNameToken(profile.firstName);
+    const profileLast = this.normalizeNameToken(profile.lastName);
+    const profileTokens = this.tokenizeName(
+      `${profile.firstName || ""} ${profile.lastName || ""}`,
+    );
+
+    if (requestedTokens.length === 0) {
+      return 0;
+    }
+
+    if (requestedTokens.length === 1) {
+      const requestedSingle = requestedTokens[0];
+      if (
+        this.tokensEquivalent(requestedSingle, profileFirst) ||
+        this.tokensEquivalent(requestedSingle, profileLast)
+      ) {
+        return 80;
+      }
+      return profileTokens.includes(requestedSingle) ? 72 : 0;
+    }
+
+    const requestedFirst = requestedTokens[0];
+    const requestedLast = requestedTokens[requestedTokens.length - 1];
+    const firstMatches =
+      this.tokensEquivalent(requestedFirst, profileFirst) ||
+      profileTokens.includes(requestedFirst);
+    const lastMatches =
+      this.tokensEquivalent(requestedLast, profileLast) ||
+      profileTokens.includes(requestedLast);
+
+    if (firstMatches && lastMatches) {
+      return 92;
+    }
+
+    const overlap = requestedTokens.filter((token) => profileTokens.includes(token));
+    if (overlap.length >= 2) {
+      return 82;
+    }
+    if (overlap.length === 1) {
+      return 65;
+    }
+    return 0;
+  }
+
+  private namesLikelyMatch(requestedName: string, profile: LinkedInProfile): boolean {
+    const requestedTokens = this.tokenizeName(requestedName);
+    if (requestedTokens.length === 0) {
+      return false;
+    }
+
+    const requestedFirst = requestedTokens[0];
+    const requestedLast = requestedTokens[requestedTokens.length - 1];
+
+    const profileFirst = this.normalizeNameToken(profile.firstName);
+    const profileLast = this.normalizeNameToken(profile.lastName);
+    const profileTokens = this.tokenizeName(
+      `${profile.firstName || ''} ${profile.lastName || ''}`,
+    );
+
+    if (requestedTokens.length === 1) {
+      return (
+        profileTokens.includes(requestedFirst) ||
+        this.tokensEquivalent(requestedFirst, profileFirst) ||
+        this.tokensEquivalent(requestedFirst, profileLast)
+      );
+    }
+
+    const firstMatches =
+      this.tokensEquivalent(requestedFirst, profileFirst) ||
+      profileTokens.includes(requestedFirst);
+    const lastMatches =
+      this.tokensEquivalent(requestedLast, profileLast) ||
+      profileTokens.includes(requestedLast);
+
+    if (firstMatches && lastMatches) {
+      return true;
+    }
+
+    const overlap = requestedTokens.filter((token) => profileTokens.includes(token));
+    return overlap.length >= 2;
+  }
+
+  private tokenizeName(value: string): string[] {
+    return value
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, ' ')
+      .split(/[\s-]+/)
+      .map((token) => token.trim())
+      .filter(
+        (token) => token.length > 0 && !this.nameStopWords.has(token),
+      );
+  }
+
+  private normalizeNameToken(value: string | null | undefined): string {
+    if (!value) {
+      return '';
+    }
+
+    const [token] = this.tokenizeName(value);
+    return token ?? '';
+  }
+
+  private tokensEquivalent(
+    left: string | null | undefined,
+    right: string | null | undefined,
+  ): boolean {
+    if (!left || !right) {
+      return false;
+    }
+
+    if (left === right) {
+      return true;
+    }
+
+    // Allow mild variation like "nathaniel" vs "nathan" while preventing unrelated names.
+    if (left.length >= 4 && right.length >= 4) {
+      return left.startsWith(right) || right.startsWith(left);
+    }
+
+    return false;
   }
 }

@@ -1,7 +1,7 @@
 import { Injectable, Optional } from "@nestjs/common";
 import { EvaluationAgentRegistryService } from "./evaluation-agent-registry.service";
 import { PipelineStateService } from "./pipeline-state.service";
-import { PipelinePhase } from "../interfaces/pipeline.interface";
+import { ModelPurpose, PipelinePhase } from "../interfaces/pipeline.interface";
 import type {
   EvaluationAgentCompletion,
   EvaluationAgentKey,
@@ -11,6 +11,7 @@ import type { EvaluationResult } from "../interfaces/phase-results.interface";
 import { EVALUATION_SCHEMAS } from "../schemas";
 import { EVALUATION_AGENT_KEYS } from "../constants/agent-keys";
 import { AiDebugLogService } from "./ai-debug-log.service";
+import { DEFAULT_MODEL_BY_PURPOSE } from "../ai.config";
 
 export interface EvaluationRunOptions {
   onAgentComplete?: (payload: EvaluationAgentCompletion) => void;
@@ -29,6 +30,9 @@ export class EvaluationService {
     startupId: string,
     options?: EvaluationRunOptions,
   ): Promise<EvaluationResult> {
+    const evaluationModel =
+      process.env.AI_MODEL_EVALUATION ??
+      DEFAULT_MODEL_BY_PURPOSE[ModelPurpose.EVALUATION];
     const handleAgentComplete = (payload: EvaluationAgentCompletion) => {
       void this.aiDebugLog?.logAgentResult({
         startupId,
@@ -36,6 +40,7 @@ export class EvaluationService {
         agentKey: payload.agent,
         usedFallback: payload.usedFallback,
         error: payload.error,
+        model: evaluationModel,
         output: payload.output,
       });
 

@@ -1,12 +1,25 @@
 import { z } from "zod";
 import { BaseEvaluationSchema } from "../base-evaluation.schema";
 
+const nullToUndefined = (value: unknown): unknown =>
+  value === null ? undefined : value;
+
+const optionalNonNegativeNumber = z.preprocess(
+  nullToUndefined,
+  z.number().nonnegative().optional(),
+);
+
+const optionalNumber = z.preprocess(
+  nullToUndefined,
+  z.number().optional(),
+);
+
 export const TractionEvaluationSchema = BaseEvaluationSchema.extend({
   metrics: z
     .object({
-      users: z.number().nonnegative().optional(),
-      revenue: z.number().nonnegative().optional(),
-      growthRatePct: z.number().optional(),
+      users: optionalNonNegativeNumber,
+      revenue: optionalNonNegativeNumber,
+      growthRatePct: optionalNumber,
     })
     .default({}),
   customerValidation: z.string().min(1),

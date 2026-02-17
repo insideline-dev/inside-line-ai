@@ -101,6 +101,18 @@ describe("MarketCompetitorSchema", () => {
     expect(parsed.url).toBe("https://competitor-y.example.com");
   });
 
+  it("treats null competitor optional fields as undefined", () => {
+    const parsed = MarketCompetitorSchema.parse({
+      name: "Competitor Null",
+      description: "Competitor with sparse info",
+      fundingRaised: null,
+      url: null,
+    });
+
+    expect(parsed.fundingRaised).toBeUndefined();
+    expect(parsed.url).toBeUndefined();
+  });
+
   it("rejects invalid url format", () => {
     expect(() =>
       MarketCompetitorSchema.parse({
@@ -109,5 +121,25 @@ describe("MarketCompetitorSchema", () => {
         url: "not-a-valid-url",
       }),
     ).toThrow();
+  });
+});
+
+describe("MarketResearchSchema null tolerance", () => {
+  it("treats null marketSize values as undefined", () => {
+    const parsed = MarketResearchSchema.parse({
+      marketReports: ["Report"],
+      competitors: [],
+      marketTrends: [],
+      marketSize: {
+        tam: null,
+        sam: null,
+        som: null,
+      },
+      sources: [],
+    });
+
+    expect(parsed.marketSize.tam).toBeUndefined();
+    expect(parsed.marketSize.sam).toBeUndefined();
+    expect(parsed.marketSize.som).toBeUndefined();
   });
 });

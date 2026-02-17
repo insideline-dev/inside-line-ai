@@ -9,7 +9,7 @@ import type {
   ResearchResult,
   SourceEntry,
 } from "../interfaces/phase-results.interface";
-import { PipelinePhase } from "../interfaces/pipeline.interface";
+import { ModelPurpose, PipelinePhase } from "../interfaces/pipeline.interface";
 import type { PipelineFeedback } from "../entities/pipeline-feedback.schema";
 import { PipelineStateService } from "./pipeline-state.service";
 import { GeminiResearchService } from "./gemini-research.service";
@@ -17,6 +17,7 @@ import { PipelineFeedbackService } from "./pipeline-feedback.service";
 import { AiPromptService } from "./ai-prompt.service";
 import { RESEARCH_PROMPT_KEY_BY_AGENT } from "./ai-prompt-catalog";
 import { AiDebugLogService } from "./ai-debug-log.service";
+import { DEFAULT_MODEL_BY_PURPOSE } from "../ai.config";
 
 type ResearchAgentOutput =
   | NonNullable<ResearchResult["team"]>
@@ -66,6 +67,9 @@ export class ResearchService {
     let phaseFeedbackConsumed = false;
 
     const dedupeSources = new Map<string, SourceEntry>();
+    const researchModel =
+      process.env.AI_MODEL_RESEARCH ??
+      DEFAULT_MODEL_BY_PURPOSE[ModelPurpose.RESEARCH];
     for (const source of result.sources) {
       const sourceKey = this.getSourceKey(source);
       if (!dedupeSources.has(sourceKey)) {
@@ -127,6 +131,7 @@ export class ResearchService {
           agentKey: key,
           usedFallback: agentResult.usedFallback,
           error: agentResult.error,
+          model: researchModel,
           output: agentResult.output,
         });
 
@@ -168,6 +173,7 @@ export class ResearchService {
           agentKey: key,
           usedFallback: agentResult.usedFallback,
           error: agentResult.error,
+          model: researchModel,
           output: agentResult.output,
         });
 
@@ -341,7 +347,8 @@ export class ResearchService {
       result.competitor = agentResult.output as ResearchResult["competitor"];
     }
 
-    for (const source of agentResult.sources) {
+    const outputSources = this.extractOutputSources(key, agentResult.output);
+    for (const source of [...agentResult.sources, ...outputSources]) {
       const sourceKey = this.getSourceKey(source);
       if (!dedupeSources.has(sourceKey)) {
         dedupeSources.set(sourceKey, source);
@@ -386,6 +393,49 @@ export class ResearchService {
 
   private getSourceKey(source: SourceEntry): string {
     return `${source.agent}::${source.url ?? source.name}`;
+  }
+
+  private extractOutputSources(
+    key: ResearchAgentKey,
+    output: ResearchAgentOutput,
+  ): SourceEntry[] {
+    const candidate = output as { sources?: unknown };
+    if (!Array.isArray(candidate.sources)) {
+      return [];
+    }
+
+    const dedupe = new Set<string>();
+    const entries: SourceEntry[] = [];
+    for (const value of candidate.sources) {
+      if (typeof value !== "string") {
+        continue;
+      }
+
+      const url = value.trim();
+      if (!url || dedupe.has(url)) {
+        continue;
+      }
+
+      dedupe.add(url);
+      entries.push({
+        name: this.buildSourceName(url),
+        url,
+        type: "search",
+        agent: key,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    return entries;
+  }
+
+  private buildSourceName(url: string): string {
+    try {
+      const host = new URL(url).hostname.replace(/^www\./, "");
+      return host || "Research source";
+    } catch {
+      return "Research source";
+    }
   }
 
   private async loadFeedbackContext(

@@ -257,6 +257,49 @@ describe("StartupService", () => {
       ).toBe(true);
     });
 
+    it("should synthesize memo narratives when a section only has single-paragraph feedback", async () => {
+      const approvedStartup = {
+        ...mockStartup,
+        status: StartupStatus.APPROVED,
+      };
+      const evaluationWithSingleParagraphFeedback = {
+        ...mockEvaluation,
+        teamData: {
+          score: 82,
+          confidence: 0.68,
+          feedback:
+            "The founding team has strong category familiarity and early commercial traction, but execution still appears concentrated around core founders with limited evidence of broader management bandwidth and no verified retention segmentation across customer cohorts despite promising initial demand in core channels.",
+          keyFindings: ["Founder-market fit is credible", "Early demand signal is present"],
+          risks: ["Execution concentration risk"],
+          dataGaps: ["No cohort-level retention data"],
+        },
+      };
+
+      mockDb.limit
+        .mockResolvedValueOnce([approvedStartup])
+        .mockResolvedValueOnce([evaluationWithSingleParagraphFeedback]);
+
+      const result = await service.findOne(mockStartupId, mockUserId);
+      const teamData = (
+        (result as { evaluation?: { teamData?: Record<string, unknown> } }).evaluation
+          ?.teamData ?? {}
+      ) as Record<string, unknown>;
+
+      const narrativeSummary = teamData.narrativeSummary as string | undefined;
+      const memoNarrative = teamData.memoNarrative as string | undefined;
+      const feedback = teamData.feedback as string | undefined;
+
+      expect(narrativeSummary).toBeTruthy();
+      expect(memoNarrative).toBe(narrativeSummary);
+      expect(feedback).toBe(narrativeSummary);
+      const paragraphs = (narrativeSummary ?? "")
+        .split(/\n\s*\n+/)
+        .map((value) => value.trim())
+        .filter((value) => value.length > 0);
+      expect(paragraphs.length).toBeGreaterThanOrEqual(4);
+      expect((narrativeSummary ?? "").length).toBeGreaterThan(420);
+    });
+
     it("should not include evaluation data before approval for founders", async () => {
       const reviewingStartup = {
         ...mockStartup,

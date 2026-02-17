@@ -92,6 +92,29 @@ describe("CompetitorResearchSchema", () => {
     expect(parsed.targetMarket).toBeUndefined();
     expect(parsed.threatLevel).toBeUndefined();
   });
+
+  it("treats null optional values as undefined", () => {
+    const parsed = CompetitorDetailSchema.parse({
+      name: "NullCo",
+      description: "Null-friendly payload",
+      website: null,
+      fundingRaised: null,
+      fundingStage: null,
+      employeeCount: null,
+      pricing: null,
+      targetMarket: null,
+      threatLevel: null,
+      productOverview: "Core product",
+    });
+
+    expect(parsed.website).toBeUndefined();
+    expect(parsed.fundingRaised).toBeUndefined();
+    expect(parsed.fundingStage).toBeUndefined();
+    expect(parsed.employeeCount).toBeUndefined();
+    expect(parsed.pricing).toBeUndefined();
+    expect(parsed.targetMarket).toBeUndefined();
+    expect(parsed.threatLevel).toBeUndefined();
+  });
 });
 
 describe("IndirectCompetitorDetailSchema", () => {

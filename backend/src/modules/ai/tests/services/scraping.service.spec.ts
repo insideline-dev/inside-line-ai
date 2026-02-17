@@ -58,6 +58,7 @@ describe("ScrapingService", () => {
     } as unknown as jest.Mocked<WebsiteScraperService>;
 
     linkedin = {
+      discoverCompanyLeadershipMembers: jest.fn().mockResolvedValue([]),
       enrichTeamMembers: jest.fn().mockResolvedValue([
         {
           name: "Alex Founder",
@@ -134,5 +135,143 @@ describe("ScrapingService", () => {
     mockDb.limit.mockResolvedValueOnce([]);
 
     await expect(service.run("missing")).rejects.toThrow("Startup missing not found");
+  });
+
+  it("discovers team members from website linkedin profile links when startup has no submitted members", async () => {
+    mockDb.limit.mockResolvedValueOnce([
+      {
+        id: "startup-2",
+        userId: "user-123",
+        website: "https://chari.com",
+        name: "Chari",
+        industry: "b2b_ecommerce",
+        stage: "series_a",
+        description: "B2B commerce",
+        teamMembers: [],
+      },
+    ]);
+
+    websiteScraper.deepScrape.mockResolvedValueOnce({
+      url: "https://chari.com/",
+      title: "Chari",
+      description: "",
+      fullText: "L'equipe Chari",
+      headings: [],
+      subpages: [],
+      links: [
+        {
+          url: "https://www.linkedin.com/in/belkhayat",
+          text: "Ismael BELKHAYAT CEO",
+        },
+        {
+          url: "https://www.linkedin.com/in/sophia-alj-40333960",
+          text: "Sophia ALJ",
+        },
+        {
+          url: "https://www.linkedin.com/company/chari",
+          text: "Chari Company",
+        },
+      ],
+      teamBios: [],
+      customerLogos: [],
+      testimonials: [],
+      metadata: {
+        scrapedAt: new Date().toISOString(),
+        pageCount: 1,
+        hasAboutPage: false,
+        hasTeamPage: false,
+        hasPricingPage: false,
+      },
+    } as any);
+
+    linkedin.enrichTeamMembers.mockImplementationOnce(async (_, members) =>
+      members.map((member) => ({
+        name: member.name,
+        role: member.role,
+        linkedinUrl: member.linkedinUrl,
+        enrichmentStatus: "success" as const,
+      })),
+    );
+
+    await service.run("startup-2");
+
+    const enrichmentCall = linkedin.enrichTeamMembers.mock.calls.at(-1);
+    expect(enrichmentCall).toBeDefined();
+    const enrichedSeed = enrichmentCall?.[1] ?? [];
+    expect(enrichedSeed).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "Ismael Belkhayat",
+          linkedinUrl: "https://www.linkedin.com/in/belkhayat",
+        }),
+        expect.objectContaining({
+          name: "Sophia Alj",
+          linkedinUrl: "https://www.linkedin.com/in/sophia-alj-40333960",
+        }),
+      ]),
+    );
+  });
+
+  it("drops non-success auto-discovered members from final team output", async () => {
+    mockDb.limit.mockResolvedValueOnce([
+      {
+        id: "startup-3",
+        userId: "user-123",
+        website: "https://chari.com",
+        name: "Chari",
+        industry: "b2b_ecommerce",
+        stage: "series_a",
+        description: "B2B commerce",
+        teamMembers: [],
+      },
+    ]);
+
+    websiteScraper.deepScrape.mockResolvedValueOnce({
+      url: "https://chari.com/",
+      title: "Chari",
+      description: "",
+      fullText: "L'equipe Chari",
+      headings: [],
+      subpages: [],
+      links: [
+        {
+          url: "https://www.linkedin.com/in/belkhayat",
+          text: "Ismael BELKHAYAT CEO",
+        },
+        {
+          url: "https://www.linkedin.com/in/cyrille-jacques-a7035457",
+          text: "Cyrille JACQUES",
+        },
+      ],
+      teamBios: [],
+      customerLogos: [],
+      testimonials: [],
+      metadata: {
+        scrapedAt: new Date().toISOString(),
+        pageCount: 1,
+        hasAboutPage: false,
+        hasTeamPage: false,
+        hasPricingPage: false,
+      },
+    } as any);
+
+    linkedin.enrichTeamMembers.mockResolvedValueOnce([
+      {
+        name: "Ismael Belkhayat",
+        role: "CEO",
+        linkedinUrl: "https://www.linkedin.com/in/belkhayat",
+        enrichmentStatus: "success",
+      },
+      {
+        name: "Cyrille Jacques",
+        linkedinUrl: "https://www.linkedin.com/in/cyrille-jacques-a7035457",
+        enrichmentStatus: "not_found",
+      },
+    ] as any);
+
+    const result = await service.run("startup-3");
+
+    expect(result.teamMembers).toHaveLength(1);
+    expect(result.teamMembers[0]?.name).toBe("Ismael Belkhayat");
   });
 });

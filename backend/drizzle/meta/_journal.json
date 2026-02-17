@@ -78,6 +78,20 @@
       "when": 1771091006750,
       "tag": "0010_military_frightful_four",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1771329545348,
+      "tag": "0011_thin_cassandra_nova",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1771330030980,
+      "tag": "0012_furry_praxagora",
+      "breakpoints": true
     }
   ]
 }

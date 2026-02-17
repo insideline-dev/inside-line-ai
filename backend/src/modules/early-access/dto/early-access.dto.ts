@@ -1,9 +1,17 @@
 import { createZodDto } from "nestjs-zod";
 import { z } from "zod";
+import { UserRole } from "../../../auth/entities/auth.schema";
+
+const inviteRoleSchema = z.enum([
+  UserRole.FOUNDER,
+  UserRole.INVESTOR,
+  UserRole.SCOUT,
+]);
 
 export const CreateEarlyAccessInviteSchema = z.object({
   email: z.email(),
   expiresInDays: z.coerce.number().int().min(1).max(90).optional().default(7),
+  role: inviteRoleSchema.optional().default(UserRole.FOUNDER),
 });
 export type CreateEarlyAccessInvite = z.infer<typeof CreateEarlyAccessInviteSchema>;
 export class CreateEarlyAccessInviteDto extends createZodDto(
@@ -33,6 +41,7 @@ export class JoinWaitlistDto extends createZodDto(JoinWaitlistSchema) {}
 export const EarlyAccessInviteResponseSchema = z.object({
   id: z.uuid(),
   email: z.email(),
+  role: inviteRoleSchema,
   status: z.enum(["pending", "redeemed", "revoked", "expired"]),
   expiresAt: z.iso.datetime(),
   redeemedAt: z.iso.datetime().nullable(),

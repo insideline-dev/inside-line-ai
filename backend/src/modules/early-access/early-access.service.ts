@@ -104,6 +104,7 @@ export class EarlyAccessService {
       .values({
         email: normalizedEmail,
         tokenHash,
+        role: dto.role ?? UserRole.FOUNDER,
         status: "pending",
         expiresAt,
         createdByUserId: adminUserId,
@@ -263,7 +264,7 @@ export class EarlyAccessService {
     const normalizedEmail = this.normalizeEmail(email);
 
     const [invite] = await this.drizzle.db
-      .select({ id: earlyAccessInvite.id })
+      .select({ id: earlyAccessInvite.id, role: earlyAccessInvite.role })
       .from(earlyAccessInvite)
       .where(
         and(
@@ -279,10 +280,26 @@ export class EarlyAccessService {
       return;
     }
 
-    await this.drizzle.db
-      .update(earlyAccessInvite)
-      .set({ redeemedByUserId: userId })
-      .where(eq(earlyAccessInvite.id, invite.id));
+    await this.drizzle.db.transaction(async (tx) => {
+      await tx
+        .update(earlyAccessInvite)
+        .set({ redeemedByUserId: userId })
+        .where(eq(earlyAccessInvite.id, invite.id));
+
+      if (
+        invite.role === UserRole.FOUNDER ||
+        invite.role === UserRole.INVESTOR ||
+        invite.role === UserRole.SCOUT
+      ) {
+        await tx
+          .update(user)
+          .set({
+            role: invite.role,
+            onboardingCompleted: true,
+          })
+          .where(and(eq(user.id, userId), eq(user.onboardingCompleted, false)));
+      }
+    });
   }
 
   private mapInvite(
@@ -290,10 +307,17 @@ export class EarlyAccessService {
     rawToken?: string,
   ): EarlyAccessInviteResponse {
     const frontendUrl = this.config.get<string>("FRONTEND_URL") || "http://localhost:3030";
+    const inviteRole =
+      invite.role === UserRole.INVESTOR
+        ? UserRole.INVESTOR
+        : invite.role === UserRole.SCOUT
+          ? UserRole.SCOUT
+          : UserRole.FOUNDER;
 
     return {
       id: invite.id,
       email: invite.email,
+      role: inviteRole,
       status: invite.status,
       expiresAt: invite.expiresAt.toISOString(),
       redeemedAt: invite.redeemedAt ? invite.redeemedAt.toISOString() : null,

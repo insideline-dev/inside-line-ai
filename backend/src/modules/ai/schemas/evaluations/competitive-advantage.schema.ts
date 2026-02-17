@@ -24,16 +24,22 @@ const optionalThreatLevel = z.preprocess(
   z.enum(["high", "medium", "low"]).optional(),
 );
 
+const requiredStringFromNull = (fallback: string) =>
+  z.preprocess(
+    (value) => (value === null ? fallback : value),
+    z.string().min(1),
+  );
+
 const CompetitiveDirectCompetitorSchema = z.object({
-  name: z.string().min(1),
-  description: z.string().min(1),
+  name: requiredStringFromNull("Unknown competitor"),
+  description: requiredStringFromNull("Description unavailable"),
   url: optionalUrl,
   fundingRaised: optionalNonNegativeNumber,
 });
 
 const CompetitiveIndirectCompetitorSchema = z.object({
-  name: z.string().min(1),
-  description: z.string().min(1),
+  name: requiredStringFromNull("Unknown competitor"),
+  description: requiredStringFromNull("Description unavailable"),
   whyIndirect: optionalString,
   url: optionalUrl,
   threatLevel: optionalThreatLevel,
@@ -42,7 +48,7 @@ const CompetitiveIndirectCompetitorSchema = z.object({
 export const CompetitiveAdvantageEvaluationSchema = BaseEvaluationSchema.extend(
   {
     moats: z.array(z.string()).default([]),
-    competitivePosition: z.string().min(1),
+    competitivePosition: requiredStringFromNull("Competitive position requires manual review"),
     barriers: z.array(z.string()).default([]),
     directCompetitors: z.array(z.string()).default([]),
     indirectCompetitors: z.array(z.string()).default([]),

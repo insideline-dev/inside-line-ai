@@ -18,21 +18,27 @@ const optionalString = z.preprocess(
   z.string().min(1).optional(),
 );
 
+const requiredStringFromNull = (fallback: string) =>
+  z.preprocess(
+    (value) => (value === null ? fallback : value),
+    z.string().min(1),
+  );
+
 const optionalThreatLevel = z.preprocess(
   nullToUndefined,
   z.enum(["high", "medium", "low"]).optional(),
 );
 
 export const MarketCompetitorSchema = z.object({
-  name: z.string().min(1),
-  description: z.string().min(1),
+  name: requiredStringFromNull("Unknown competitor"),
+  description: requiredStringFromNull("Description unavailable"),
   fundingRaised: optionalNonNegativeNumber,
   url: optionalUrl,
 });
 
 export const MarketIndirectCompetitorSchema = z.object({
-  name: z.string().min(1),
-  description: z.string().min(1),
+  name: requiredStringFromNull("Unknown competitor"),
+  description: requiredStringFromNull("Description unavailable"),
   whyIndirect: optionalString,
   threatLevel: optionalThreatLevel,
   url: optionalUrl,

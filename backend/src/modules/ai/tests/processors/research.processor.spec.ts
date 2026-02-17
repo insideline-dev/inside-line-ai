@@ -210,4 +210,58 @@ describe("ResearchProcessor", () => {
       }),
     );
   });
+
+  it("marks fallback agent completions as completed with fallback lifecycle", async () => {
+    researchService.run.mockImplementationOnce(
+      async (_startupId, options?: unknown) => {
+        const callbacks = options as {
+          onAgentComplete?: (payload: {
+            agent: "team" | "market" | "product" | "news" | "competitor";
+            output?: unknown;
+            usedFallback: boolean;
+            error?: string;
+            rejected: boolean;
+          }) => void;
+        };
+        callbacks.onAgentComplete?.({
+          agent: "team",
+          output: { linkedinProfiles: [] },
+          usedFallback: true,
+          error: "Schema validation failed",
+          rejected: false,
+        });
+        return {
+          team: null,
+          market: null,
+          product: null,
+          news: null,
+          competitor: null,
+          sources: [],
+          errors: [],
+        };
+      },
+    );
+
+    const job = {
+      id: "job-1",
+      data: {
+        type: "ai_research",
+        startupId: "startup-1",
+        pipelineRunId: "run-1",
+        userId: "user-1",
+      } satisfies AiResearchJobData,
+    } as unknown as Job<AiResearchJobData>;
+
+    await (processor as any).process(job);
+
+    expect(pipelineService.onAgentProgress).toHaveBeenCalledWith(
+      expect.objectContaining({
+        key: "team",
+        phase: PipelinePhase.RESEARCH,
+        status: "completed",
+        usedFallback: true,
+        lifecycleEvent: "fallback",
+      }),
+    );
+  });
 });

@@ -14,6 +14,12 @@ const optionalNumber = z.preprocess(
   z.number().optional(),
 );
 
+const requiredStringFromNull = (fallback: string) =>
+  z.preprocess(
+    (value) => (value === null ? fallback : value),
+    z.string().min(1),
+  );
+
 export const TractionEvaluationSchema = BaseEvaluationSchema.extend({
   metrics: z
     .object({
@@ -22,9 +28,9 @@ export const TractionEvaluationSchema = BaseEvaluationSchema.extend({
       growthRatePct: optionalNumber,
     })
     .default({}),
-  customerValidation: z.string().min(1),
-  growthTrajectory: z.string().min(1),
-  revenueModel: z.string().min(1),
+  customerValidation: requiredStringFromNull("Customer validation requires manual review"),
+  growthTrajectory: requiredStringFromNull("Growth trajectory requires manual review"),
+  revenueModel: requiredStringFromNull("Revenue model requires manual review"),
 });
 
 export type TractionEvaluation = z.infer<typeof TractionEvaluationSchema>;

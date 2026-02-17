@@ -106,7 +106,9 @@ export class ResearchProcessor
                 });
             },
             onAgentComplete: ({ agent, output, usedFallback, error, rejected }) => {
-              const isFailed = rejected || usedFallback || Boolean(error);
+              const isFailed =
+                (rejected && !usedFallback) ||
+                (Boolean(error) && !usedFallback);
               const lifecycleEvent = usedFallback
                 ? "fallback"
                 : isFailed

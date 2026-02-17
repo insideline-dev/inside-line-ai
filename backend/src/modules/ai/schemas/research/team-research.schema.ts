@@ -8,6 +8,12 @@ const optionalUrl = z.preprocess(
   z.string().url().optional(),
 );
 
+const requiredStringFromNull = (fallback: string) =>
+  z.preprocess(
+    (value) => (value === null ? fallback : value),
+    z.string().min(1),
+  );
+
 const stringArray = z.preprocess(
   (value) =>
     Array.isArray(value)
@@ -25,9 +31,9 @@ const urlArray = z.preprocess(
 ).default([]);
 
 export const TeamLinkedinProfileSchema = z.object({
-  name: z.preprocess(nullToUndefined, z.string().min(1)),
-  title: z.preprocess(nullToUndefined, z.string().min(1)),
-  company: z.preprocess(nullToUndefined, z.string().min(1)),
+  name: requiredStringFromNull("Unknown person"),
+  title: requiredStringFromNull("Unknown title"),
+  company: requiredStringFromNull("Unknown company"),
   experience: stringArray,
   url: optionalUrl,
 });

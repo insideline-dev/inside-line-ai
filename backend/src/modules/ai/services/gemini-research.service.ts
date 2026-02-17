@@ -71,6 +71,17 @@ export class GeminiResearchService {
 
         const parsed = this.parseTextToObject(response.text, request.schema);
         if (!parsed.success) {
+          lastError = parsed.error;
+          const shouldRetry =
+            attempt < maxAttempts && this.isRetryableParseError(parsed.error);
+          if (shouldRetry) {
+            const delayMs = this.getRetryDelayMs(attempt);
+            this.logger.warn(
+              `Research agent ${request.agent} attempt ${attempt}/${maxAttempts} returned schema-invalid output, retrying in ${delayMs}ms: ${parsed.error}`,
+            );
+            await this.sleep(delayMs);
+            continue;
+          }
           const fallbackSources = Array.isArray(fallback.sources) ? fallback.sources : [];
           return {
             output: {
@@ -167,6 +178,14 @@ export class GeminiResearchService {
     return retryablePatterns.some((pattern) => normalized.includes(pattern));
   }
 
+  private isRetryableParseError(message: string): boolean {
+    const normalized = message.toLowerCase();
+    return (
+      normalized.includes("schema validation failed") ||
+      normalized.includes("parseable json payload")
+    );
+  }
+
   private async sleep(ms: number): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, ms));
   }
@@ -185,9 +204,12 @@ export class GeminiResearchService {
 
     const parsed = schema.safeParse(candidate);
     if (!parsed.success) {
+      const issues = this.formatSchemaIssues(parsed.error);
       return {
         success: false,
-        error: parsed.error.issues[0]?.message ?? "Schema validation failed",
+        error: issues.length > 0
+          ? `Schema validation failed: ${issues}`
+          : "Schema validation failed",
       };
     }
 
@@ -227,6 +249,28 @@ export class GeminiResearchService {
     extracted: string[],
   ): string[] {
     return [...new Set([...existing, ...extracted])];
+  }
+
+  private formatSchemaIssues(error: z.ZodError): string {
+    const preview = error.issues.slice(0, 6).map((issue) => {
+      const path = issue.path.length > 0
+        ? issue.path
+            .map((segment) =>
+              typeof segment === "number" ? `[${segment}]` : String(segment),
+            )
+            .join(".")
+            .replace(".[", "[")
+        : "(root)";
+      return `${path}: ${issue.message}`;
+    });
+
+    if (preview.length === 0) {
+      return "";
+    }
+    if (error.issues.length <= preview.length) {
+      return preview.join(" | ");
+    }
+    return `${preview.join(" | ")} | +${error.issues.length - preview.length} more issue(s)`;
   }
 
   private extractSources(

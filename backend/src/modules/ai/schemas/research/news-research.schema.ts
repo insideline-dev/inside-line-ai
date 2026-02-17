@@ -3,6 +3,17 @@ import { z } from "zod";
 const nullToUndefined = (value: unknown): unknown =>
   value === null ? undefined : value;
 
+const requiredStringFromNull = (fallback: string) =>
+  z.preprocess(
+    (value) => (value === null ? fallback : value),
+    z.string().min(1),
+  );
+
+const optionalUrl = z.preprocess(
+  nullToUndefined,
+  z.string().url().optional(),
+);
+
 const stringArray = z.preprocess(
   (value) =>
     Array.isArray(value)
@@ -20,11 +31,11 @@ const urlArray = z.preprocess(
 ).default([]);
 
 export const NewsArticleSchema = z.object({
-  title: z.preprocess(nullToUndefined, z.string().min(1)),
-  source: z.preprocess(nullToUndefined, z.string().min(1)),
-  date: z.preprocess(nullToUndefined, z.string().min(1)),
-  summary: z.preprocess(nullToUndefined, z.string().min(1)),
-  url: z.preprocess(nullToUndefined, z.string().url()),
+  title: requiredStringFromNull("Untitled article"),
+  source: requiredStringFromNull("Unknown source"),
+  date: requiredStringFromNull("Unknown date"),
+  summary: requiredStringFromNull("Summary unavailable"),
+  url: optionalUrl,
 });
 
 export const NewsResearchSchema = z.object({

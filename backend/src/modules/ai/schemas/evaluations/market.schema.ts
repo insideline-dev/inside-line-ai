@@ -24,26 +24,32 @@ const optionalThreatLevel = z.preprocess(
   z.enum(["high", "medium", "low"]).optional(),
 );
 
+const requiredStringFromNull = (fallback: string) =>
+  z.preprocess(
+    (value) => (value === null ? fallback : value),
+    z.string().min(1),
+  );
+
 const MarketCompetitorDetailSchema = z.object({
-  name: z.string().min(1),
-  description: z.string().min(1),
+  name: requiredStringFromNull("Unknown competitor"),
+  description: requiredStringFromNull("Description unavailable"),
   url: optionalUrl,
   fundingRaised: optionalNonNegativeNumber,
 });
 
 const MarketIndirectCompetitorDetailSchema = z.object({
-  name: z.string().min(1),
-  description: z.string().min(1),
+  name: requiredStringFromNull("Unknown competitor"),
+  description: requiredStringFromNull("Description unavailable"),
   whyIndirect: optionalString,
   url: optionalUrl,
   threatLevel: optionalThreatLevel,
 });
 
 export const MarketEvaluationSchema = BaseEvaluationSchema.extend({
-  marketSize: z.string().min(1),
-  marketGrowth: z.string().min(1),
+  marketSize: requiredStringFromNull("Market size requires manual review"),
+  marketGrowth: requiredStringFromNull("Market growth requires manual review"),
   tamEstimate: optionalNonNegativeNumber,
-  marketTiming: z.string().min(1),
+  marketTiming: requiredStringFromNull("Market timing requires manual review"),
   credibilityScore: z.number().int().min(0).max(100),
   directCompetitors: z.array(z.string()).default([]),
   indirectCompetitors: z.array(z.string()).default([]),

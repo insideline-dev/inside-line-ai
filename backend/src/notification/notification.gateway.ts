@@ -39,6 +39,13 @@ interface PipelineEventPayloads {
       attempts?: number;
       retryCount?: number;
       usedFallback?: boolean;
+      fallbackReason?:
+        | "EMPTY_STRUCTURED_OUTPUT"
+        | "TIMEOUT"
+        | "SCHEMA_OUTPUT_INVALID"
+        | "MODEL_OR_PROVIDER_ERROR"
+        | "UNHANDLED_AGENT_EXCEPTION";
+      rawProviderError?: string;
       lastEvent?: string;
       lastEventAt?: string;
     };
@@ -57,6 +64,13 @@ interface PipelineEventPayloads {
       attempts?: number;
       retryCount?: number;
       usedFallback?: boolean;
+      fallbackReason?:
+        | "EMPTY_STRUCTURED_OUTPUT"
+        | "TIMEOUT"
+        | "SCHEMA_OUTPUT_INVALID"
+        | "MODEL_OR_PROVIDER_ERROR"
+        | "UNHANDLED_AGENT_EXCEPTION";
+      rawProviderError?: string;
       lastEvent?: string;
       lastEventAt?: string;
     };

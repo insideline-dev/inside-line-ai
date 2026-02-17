@@ -9,6 +9,7 @@ import { startup, StartupStatus } from "../../startup/entities";
 import { pipelineRun } from "../entities";
 import type {
   EvaluationAgentKey,
+  EvaluationFallbackReason,
   ResearchAgentKey,
 } from "../interfaces/agent.interface";
 import { EVALUATION_AGENT_KEYS, RESEARCH_AGENT_KEYS } from "../constants/agent-keys";
@@ -425,6 +426,8 @@ export class PipelineService {
     attempt?: number;
     retryCount?: number;
     usedFallback?: boolean;
+    fallbackReason?: EvaluationFallbackReason;
+    rawProviderError?: string;
     lifecycleEvent?: "started" | "retrying" | "completed" | "failed" | "fallback";
   }): Promise<void> {
     await this.progressTracker.updateAgentProgress(params);

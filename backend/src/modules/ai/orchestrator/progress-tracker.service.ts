@@ -4,12 +4,21 @@ import { z } from "zod";
 import { DrizzleService } from "../../../database";
 import { NotificationGateway } from "../../../notification/notification.gateway";
 import { startupEvaluation } from "../../analysis/entities";
+import type { EvaluationFallbackReason } from "../interfaces/agent.interface";
 import {
   PhaseStatus,
   PipelinePhase,
   PipelineStatus,
 } from "../interfaces/pipeline.interface";
 import { isPhaseTerminal } from "./pipeline.config";
+
+const FallbackReasonSchema = z.enum([
+  "EMPTY_STRUCTURED_OUTPUT",
+  "TIMEOUT",
+  "SCHEMA_OUTPUT_INVALID",
+  "MODEL_OR_PROVIDER_ERROR",
+  "UNHANDLED_AGENT_EXCEPTION",
+]);
 
 const AgentLifecycleEventSchema = z.object({
   id: z.string(),
@@ -20,6 +29,8 @@ const AgentLifecycleEventSchema = z.object({
   attempt: z.number().int().min(1).optional(),
   retryCount: z.number().int().min(0).optional(),
   error: z.string().optional(),
+  fallbackReason: FallbackReasonSchema.optional(),
+  rawProviderError: z.string().optional(),
 });
 
 const AgentProgressSchema = z.object({
@@ -32,6 +43,8 @@ const AgentProgressSchema = z.object({
   attempts: z.number().int().min(0).optional(),
   retryCount: z.number().int().min(0).optional(),
   usedFallback: z.boolean().optional(),
+  fallbackReason: FallbackReasonSchema.optional(),
+  rawProviderError: z.string().optional(),
   lastEvent: z.enum(["started", "retrying", "completed", "failed", "fallback"]).optional(),
   lastEventAt: z.string().optional(),
 });
@@ -70,6 +83,7 @@ type PipelineStatusEventName = "pipeline:completed" | "pipeline:failed" | "pipel
 @Injectable()
 export class ProgressTrackerService {
   private readonly logger = new Logger(ProgressTrackerService.name);
+  private readonly mutationQueues = new Map<string, Promise<void>>();
 
   constructor(
     private drizzle: DrizzleService,
@@ -82,28 +96,30 @@ export class ProgressTrackerService {
     pipelineRunId: string;
     phases: PipelinePhase[];
   }): Promise<PipelineProgressPayload> {
-    const now = new Date().toISOString();
-    const phaseSet = new Set(params.phases);
-    const phases = this.createInitialPhases(phaseSet);
+    return this.withMutationLock(params.startupId, async () => {
+      const now = new Date().toISOString();
+      const phaseSet = new Set(params.phases);
+      const phases = this.createInitialPhases(phaseSet);
 
-    const payload: PipelineProgressPayload = {
-      pipelineRunId: params.pipelineRunId,
-      startupId: params.startupId,
-      status: PipelineStatus.RUNNING,
-      currentPhase: params.phases[0] ?? PipelinePhase.EXTRACTION,
-      overallProgress: 0,
-      phasesCompleted: [],
-      phases,
-      agentEvents: [],
-      updatedAt: now,
-    };
+      const payload: PipelineProgressPayload = {
+        pipelineRunId: params.pipelineRunId,
+        startupId: params.startupId,
+        status: PipelineStatus.RUNNING,
+        currentPhase: params.phases[0] ?? PipelinePhase.EXTRACTION,
+        overallProgress: 0,
+        phasesCompleted: [],
+        phases,
+        agentEvents: [],
+        updatedAt: now,
+      };
 
-    await this.persistProgress(params.startupId, payload);
-    this.notifications.sendPipelineEvent(params.userId, "pipeline:started", {
-      startupId: params.startupId,
-      pipelineRunId: params.pipelineRunId,
+      await this.persistProgress(params.startupId, payload);
+      this.notifications.sendPipelineEvent(params.userId, "pipeline:started", {
+        startupId: params.startupId,
+        pipelineRunId: params.pipelineRunId,
+      });
+      return payload;
     });
-    return payload;
   }
 
   async updatePhaseProgress(params: {
@@ -115,79 +131,81 @@ export class ProgressTrackerService {
     error?: string;
     retryCount?: number;
   }): Promise<PipelineProgressPayload> {
-    const payload = await this.ensureProgress(
-      params.startupId,
-      params.pipelineRunId,
-    );
-    const now = new Date().toISOString();
-
-    const phase = payload.phases[params.phase] ?? {
-      status: PhaseStatus.PENDING,
-      agents: {},
-    };
-
-    phase.status = params.status;
-    if (typeof params.retryCount === "number") {
-      phase.retryCount = Math.max(0, Math.floor(params.retryCount));
-    } else if (typeof phase.retryCount !== "number") {
-      phase.retryCount = 0;
-    }
-    if (params.status === PhaseStatus.RUNNING && !phase.startedAt) {
-      phase.startedAt = now;
-      payload.currentPhase = params.phase;
-      this.logger.log(
-        `[Pipeline] 🚀 STARTING ${params.phase} phase | Startup: ${params.startupId}`,
+    return this.withMutationLock(params.startupId, async () => {
+      const payload = await this.ensureProgress(
+        params.startupId,
+        params.pipelineRunId,
       );
-    }
-    if (isPhaseTerminal(params.status)) {
-      phase.completedAt = now;
-      const duration =
-        (new Date(now).getTime() -
-          new Date(phase.startedAt || now).getTime()) /
-        1000;
-      if (params.status === PhaseStatus.COMPLETED) {
+      const now = new Date().toISOString();
+
+      const phase = payload.phases[params.phase] ?? {
+        status: PhaseStatus.PENDING,
+        agents: {},
+      };
+
+      phase.status = params.status;
+      if (typeof params.retryCount === "number") {
+        phase.retryCount = Math.max(0, Math.floor(params.retryCount));
+      } else if (typeof phase.retryCount !== "number") {
+        phase.retryCount = 0;
+      }
+      if (params.status === PhaseStatus.RUNNING && !phase.startedAt) {
+        phase.startedAt = now;
+        payload.currentPhase = params.phase;
         this.logger.log(
-          `[Pipeline] ✅ COMPLETED ${params.phase} phase in ${duration}s | Startup: ${params.startupId}`,
-        );
-      } else if (params.status === PhaseStatus.FAILED) {
-        this.logger.error(
-          `[Pipeline] ❌ FAILED ${params.phase} phase after ${duration}s | Error: ${params.error} | Startup: ${params.startupId}`,
+          `[Pipeline] 🚀 STARTING ${params.phase} phase | Startup: ${params.startupId}`,
         );
       }
-    }
-    if (params.error) {
-      phase.error = params.error;
-    } else if (params.status !== PhaseStatus.FAILED) {
-      delete phase.error;
-    }
+      if (isPhaseTerminal(params.status)) {
+        phase.completedAt = now;
+        const duration =
+          (new Date(now).getTime() -
+            new Date(phase.startedAt || now).getTime()) /
+          1000;
+        if (params.status === PhaseStatus.COMPLETED) {
+          this.logger.log(
+            `[Pipeline] ✅ COMPLETED ${params.phase} phase in ${duration}s | Startup: ${params.startupId}`,
+          );
+        } else if (params.status === PhaseStatus.FAILED) {
+          this.logger.error(
+            `[Pipeline] ❌ FAILED ${params.phase} phase after ${duration}s | Error: ${params.error} | Startup: ${params.startupId}`,
+          );
+        }
+      }
+      if (params.error) {
+        phase.error = params.error;
+      } else if (params.status !== PhaseStatus.FAILED) {
+        delete phase.error;
+      }
 
-    payload.phases[params.phase] = phase;
-    payload.phasesCompleted = (Object.entries(payload.phases) as Array<
-      [PipelinePhase, PhaseProgress]
-    >)
-      .filter(([, value]) => value.status === PhaseStatus.COMPLETED)
-      .map(([phaseName]) => phaseName);
-    payload.overallProgress = Math.round(
-      (payload.phasesCompleted.length / Object.keys(payload.phases).length) *
-        100,
-    );
-    payload.currentPhase = this.resolveCurrentPhase(payload, params.phase);
-    payload.estimatedTimeRemaining = this.estimateTimeRemaining(payload);
-    payload.updatedAt = now;
+      payload.phases[params.phase] = phase;
+      payload.phasesCompleted = (Object.entries(payload.phases) as Array<
+        [PipelinePhase, PhaseProgress]
+      >)
+        .filter(([, value]) => value.status === PhaseStatus.COMPLETED)
+        .map(([phaseName]) => phaseName);
+      payload.overallProgress = Math.round(
+        (payload.phasesCompleted.length / Object.keys(payload.phases).length) *
+          100,
+      );
+      payload.currentPhase = this.resolveCurrentPhase(payload, params.phase);
+      payload.estimatedTimeRemaining = this.estimateTimeRemaining(payload);
+      payload.updatedAt = now;
 
-    this.logger.debug(
-      `[Pipeline] Progress: ${payload.overallProgress}% | Completed: ${payload.phasesCompleted.join(", ") || "none"} | Next: ${payload.currentPhase}`,
-    );
+      this.logger.debug(
+        `[Pipeline] Progress: ${payload.overallProgress}% | Completed: ${payload.phasesCompleted.join(", ") || "none"} | Next: ${payload.currentPhase}`,
+      );
 
-    await this.persistProgress(params.startupId, payload);
-    this.emitPhaseEvent(
-      params.userId,
-      params.startupId,
-      params.pipelineRunId,
-      params.phase,
-      phase,
-    );
-    return payload;
+      await this.persistProgress(params.startupId, payload);
+      this.emitPhaseEvent(
+        params.userId,
+        params.startupId,
+        params.pipelineRunId,
+        params.phase,
+        phase,
+      );
+      return payload;
+    });
   }
 
   async updateAgentProgress(params: {
@@ -202,140 +220,161 @@ export class ProgressTrackerService {
     attempt?: number;
     retryCount?: number;
     usedFallback?: boolean;
+    fallbackReason?: EvaluationFallbackReason;
+    rawProviderError?: string;
     lifecycleEvent?: "started" | "retrying" | "completed" | "failed" | "fallback";
   }): Promise<void> {
-    const payload = await this.ensureProgress(
-      params.startupId,
-      params.pipelineRunId,
-    );
-    const now = new Date().toISOString();
-    const phase = payload.phases[params.phase] ?? {
-      status: PhaseStatus.PENDING,
-      agents: {},
-    };
-
-    const existing = phase.agents[params.key] ?? {
-      key: params.key,
-      status: "pending" as const,
-    };
-    const next: AgentProgress = {
-      ...existing,
-      key: params.key,
-      status: params.status,
-    };
-    const lifecycleEvent =
-      params.lifecycleEvent ??
-      (params.status === "running"
-        ? "started"
-        : params.status === "completed"
-          ? "completed"
-          : "failed");
-
-    if (
-      this.isAgentTerminalStatus(existing.status) &&
-      !this.isAgentTerminalStatus(params.status)
-    ) {
-      this.logger.debug(
-        `[Pipeline] Ignoring stale non-terminal update for agent ${params.key} in ${params.phase} (existing=${existing.status}, incoming=${params.status}, lifecycle=${lifecycleEvent})`,
+    await this.withMutationLock(params.startupId, async () => {
+      const payload = await this.ensureProgress(
+        params.startupId,
+        params.pipelineRunId,
       );
-      return;
-    }
+      const now = new Date().toISOString();
+      const phase = payload.phases[params.phase] ?? {
+        status: PhaseStatus.PENDING,
+        agents: {},
+      };
 
-    if (params.status === "running" && !next.startedAt) {
-      next.startedAt = now;
-      this.logger.log(
-        `[Pipeline] 🤖 Agent running: ${params.key} | Phase: ${params.phase}`,
-      );
-    }
-    if (params.status === "completed" || params.status === "failed") {
-      next.completedAt = now;
-      const duration =
-        (new Date(now).getTime() -
-          new Date(next.startedAt || now).getTime()) /
-        1000;
-      if (params.status === "completed") {
-        this.logger.log(
-          `[Pipeline] ✅ Agent completed: ${params.key} in ${duration}s | Phase: ${params.phase}`,
+      const existing = phase.agents[params.key] ?? {
+        key: params.key,
+        status: "pending" as const,
+      };
+      const next: AgentProgress = {
+        ...existing,
+        key: params.key,
+        status: params.status,
+      };
+      const lifecycleEvent =
+        params.lifecycleEvent ??
+        (params.status === "running"
+          ? "started"
+          : params.status === "completed"
+            ? "completed"
+            : "failed");
+
+      if (
+        this.isAgentTerminalStatus(existing.status) &&
+        !this.isAgentTerminalStatus(params.status)
+      ) {
+        this.logger.debug(
+          `[Pipeline] Ignoring stale non-terminal update for agent ${params.key} in ${params.phase} (existing=${existing.status}, incoming=${params.status}, lifecycle=${lifecycleEvent})`,
         );
-      } else {
-        this.logger.error(
-          `[Pipeline] ❌ Agent failed: ${params.key} | Error: ${params.error} | Phase: ${params.phase}`,
+        return;
+      }
+
+      if (params.status === "running" && !next.startedAt) {
+        next.startedAt = now;
+        this.logger.log(
+          `[Pipeline] 🤖 Agent running: ${params.key} | Phase: ${params.phase}`,
         );
       }
-    }
-    if (typeof params.progress === "number") {
-      next.progress = params.progress;
-      this.logger.debug(
-        `[Pipeline] Agent ${params.key} progress: ${params.progress}%`,
-      );
-    }
-    if (params.error) {
-      next.error = params.error;
-    } else if (params.status === "completed" && !params.usedFallback) {
-      delete next.error;
-    }
-    if (typeof params.attempt === "number") {
-      next.attempts = Math.max(
-        next.attempts ?? 0,
-        Math.max(1, Math.floor(params.attempt)),
-      );
-    } else if (params.status === "running" && typeof next.attempts !== "number") {
-      next.attempts = 1;
-    }
-    if (typeof params.retryCount === "number") {
-      next.retryCount = Math.max(0, Math.floor(params.retryCount));
-    } else if (lifecycleEvent === "retrying") {
-      next.retryCount = Math.max(0, (next.retryCount ?? 0) + 1);
-    } else if (typeof next.retryCount !== "number") {
-      next.retryCount = 0;
-    }
-    if (params.usedFallback === true) {
-      next.usedFallback = true;
-    } else if (params.usedFallback === false && lifecycleEvent !== "fallback") {
-      next.usedFallback = false;
-    }
-    next.lastEvent = lifecycleEvent;
-    next.lastEventAt = now;
+      if (params.status === "completed" || params.status === "failed") {
+        next.completedAt = now;
+        const duration =
+          (new Date(now).getTime() -
+            new Date(next.startedAt || now).getTime()) /
+          1000;
+        if (params.status === "completed") {
+          this.logger.log(
+            `[Pipeline] ✅ Agent completed: ${params.key} in ${duration}s | Phase: ${params.phase}`,
+          );
+        } else {
+          this.logger.error(
+            `[Pipeline] ❌ Agent failed: ${params.key} | Error: ${params.error} | Phase: ${params.phase}`,
+          );
+        }
+      }
+      if (typeof params.progress === "number") {
+        next.progress = params.progress;
+        this.logger.debug(
+          `[Pipeline] Agent ${params.key} progress: ${params.progress}%`,
+        );
+      }
+      if (params.error) {
+        next.error = params.error;
+      } else if (params.status === "completed" && !params.usedFallback) {
+        delete next.error;
+      }
+      if (typeof params.attempt === "number") {
+        next.attempts = Math.max(
+          next.attempts ?? 0,
+          Math.max(1, Math.floor(params.attempt)),
+        );
+      } else if (
+        params.status === "running" &&
+        typeof next.attempts !== "number"
+      ) {
+        next.attempts = 1;
+      }
+      if (typeof params.retryCount === "number") {
+        next.retryCount = Math.max(0, Math.floor(params.retryCount));
+      } else if (lifecycleEvent === "retrying") {
+        next.retryCount = Math.max(0, (next.retryCount ?? 0) + 1);
+      } else if (typeof next.retryCount !== "number") {
+        next.retryCount = 0;
+      }
+      if (params.usedFallback === true) {
+        next.usedFallback = true;
+      } else if (params.usedFallback === false && lifecycleEvent !== "fallback") {
+        next.usedFallback = false;
+      }
+      if (params.fallbackReason) {
+        next.fallbackReason = params.fallbackReason;
+      } else if (!next.usedFallback) {
+        delete next.fallbackReason;
+      }
+      if (params.rawProviderError) {
+        next.rawProviderError = params.rawProviderError;
+      } else if (!next.usedFallback) {
+        delete next.rawProviderError;
+      }
+      next.lastEvent = lifecycleEvent;
+      next.lastEventAt = now;
 
-    phase.agents[params.key] = next;
-    payload.phases[params.phase] = phase;
-    payload.agentEvents = this.appendAgentEvent(payload.agentEvents ?? [], {
-      id: `${now}:${params.phase}:${params.key}:${lifecycleEvent}`,
-      phase: params.phase,
-      agentKey: params.key,
-      event: lifecycleEvent,
-      timestamp: now,
-      attempt:
-        typeof params.attempt === "number"
-          ? Math.max(1, Math.floor(params.attempt))
-          : next.attempts,
-      retryCount: next.retryCount,
-      error: params.error,
-    });
-    payload.updatedAt = now;
+      phase.agents[params.key] = next;
+      payload.phases[params.phase] = phase;
+      payload.agentEvents = this.appendAgentEvent(payload.agentEvents ?? [], {
+        id: `${now}:${params.phase}:${params.key}:${lifecycleEvent}`,
+        phase: params.phase,
+        agentKey: params.key,
+        event: lifecycleEvent,
+        timestamp: now,
+        attempt:
+          typeof params.attempt === "number"
+            ? Math.max(1, Math.floor(params.attempt))
+            : next.attempts,
+        retryCount: next.retryCount,
+        error: params.error,
+        fallbackReason: params.fallbackReason ?? next.fallbackReason,
+        rawProviderError: params.rawProviderError ?? next.rawProviderError,
+      });
+      payload.updatedAt = now;
 
-    await this.persistProgress(params.startupId, payload);
+      await this.persistProgress(params.startupId, payload);
 
-    const event: "agent:completed" | "agent:progress" =
-      next.status === "completed" ? "agent:completed" : "agent:progress";
-    const publicAgentPayload = {
-      key: next.key,
-      status: next.status,
-      startedAt: next.startedAt,
-      completedAt: next.completedAt,
-      progress: next.progress,
-      error: next.error,
-      attempts: next.attempts,
-      retryCount: next.retryCount,
-      usedFallback: next.usedFallback,
-      lastEvent: next.lastEvent,
-      lastEventAt: next.lastEventAt,
-    };
-    this.notifications.sendPipelineEvent(params.userId, event, {
-      startupId: params.startupId,
-      pipelineRunId: params.pipelineRunId,
-      phase: params.phase,
-      agent: publicAgentPayload,
+      const event: "agent:completed" | "agent:progress" =
+        next.status === "completed" ? "agent:completed" : "agent:progress";
+      const publicAgentPayload = {
+        key: next.key,
+        status: next.status,
+        startedAt: next.startedAt,
+        completedAt: next.completedAt,
+        progress: next.progress,
+        error: next.error,
+        attempts: next.attempts,
+        retryCount: next.retryCount,
+        usedFallback: next.usedFallback,
+        fallbackReason: next.fallbackReason,
+        rawProviderError: next.rawProviderError,
+        lastEvent: next.lastEvent,
+        lastEventAt: next.lastEventAt,
+      };
+      this.notifications.sendPipelineEvent(params.userId, event, {
+        startupId: params.startupId,
+        pipelineRunId: params.pipelineRunId,
+        phase: params.phase,
+        agent: publicAgentPayload,
+      });
     });
   }
 
@@ -348,51 +387,76 @@ export class ProgressTrackerService {
     error?: string;
     overallScore?: number;
   }): Promise<PipelineProgressPayload> {
-    const payload = await this.ensureProgress(
-      params.startupId,
-      params.pipelineRunId,
-    );
-    payload.status = params.status;
-    payload.currentPhase = params.currentPhase ?? payload.currentPhase;
-    if (params.status === PipelineStatus.COMPLETED) {
-      payload.overallProgress = 100;
-      const totalTime = Object.values(payload.phases).reduce(
-        (sum, phase) => {
-          if (phase.startedAt && phase.completedAt) {
-            return (
-              sum +
-              (new Date(phase.completedAt).getTime() -
-                new Date(phase.startedAt).getTime())
-            );
-          }
-          return sum;
-        },
-        0,
-      ) / 1000;
-      this.logger.log(
-        `[Pipeline] 🎉 PIPELINE COMPLETED | Total time: ${totalTime}s | Overall score: ${params.overallScore ?? "N/A"} | Startup: ${params.startupId}`,
+    return this.withMutationLock(params.startupId, async () => {
+      const payload = await this.ensureProgress(
+        params.startupId,
+        params.pipelineRunId,
       );
-    }
-    if (params.error) {
-      payload.error = params.error;
-      this.logger.error(
-        `[Pipeline] ❌ PIPELINE FAILED | Error: ${params.error} | Startup: ${params.startupId}`,
-      );
-    } else if (params.status === PipelineStatus.COMPLETED) {
-      delete payload.error;
-    }
-    payload.updatedAt = new Date().toISOString();
+      payload.status = params.status;
+      payload.currentPhase = params.currentPhase ?? payload.currentPhase;
+      if (params.status === PipelineStatus.COMPLETED) {
+        payload.overallProgress = 100;
+        const totalTime = Object.values(payload.phases).reduce(
+          (sum, phase) => {
+            if (phase.startedAt && phase.completedAt) {
+              return (
+                sum +
+                (new Date(phase.completedAt).getTime() -
+                  new Date(phase.startedAt).getTime())
+              );
+            }
+            return sum;
+          },
+          0,
+        ) / 1000;
+        this.logger.log(
+          `[Pipeline] 🎉 PIPELINE COMPLETED | Total time: ${totalTime}s | Overall score: ${params.overallScore ?? "N/A"} | Startup: ${params.startupId}`,
+        );
+      }
+      if (params.error) {
+        payload.error = params.error;
+        this.logger.error(
+          `[Pipeline] ❌ PIPELINE FAILED | Error: ${params.error} | Startup: ${params.startupId}`,
+        );
+      } else if (params.status === PipelineStatus.COMPLETED) {
+        delete payload.error;
+      }
+      payload.updatedAt = new Date().toISOString();
 
-    await this.persistProgress(params.startupId, payload);
-    const event = this.pipelineStatusEvent(params.status);
-    this.notifications.sendPipelineEvent(params.userId, event, {
-      startupId: params.startupId,
-      pipelineRunId: params.pipelineRunId,
-      status: params.status,
-      overallScore: params.overallScore,
-      error: params.error,
+      await this.persistProgress(params.startupId, payload);
+      const event = this.pipelineStatusEvent(params.status);
+      this.notifications.sendPipelineEvent(params.userId, event, {
+        startupId: params.startupId,
+        pipelineRunId: params.pipelineRunId,
+        status: params.status,
+        overallScore: params.overallScore,
+        error: params.error,
+      });
+      return payload;
     });
-    return payload;
+  }
+
+  private async withMutationLock<T>(
+    startupId: string,
+    task: () => Promise<T>,
+  ): Promise<T> {
+    const previous = this.mutationQueues.get(startupId) ?? Promise.resolve();
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const queued = previous.finally(() => gate);
+    this.mutationQueues.set(startupId, queued);
+
+    await previous;
+    try {
+      return await task();
+    } finally {
+      release?.();
+      if (this.mutationQueues.get(startupId) === queued) {
+        this.mutationQueues.delete(startupId);
+      }
+    }
   }
 
   async getProgress(startupId: string): Promise<PipelineProgressPayload | null> {
@@ -471,7 +535,9 @@ export class ProgressTrackerService {
         event.event === next.event &&
         (event.attempt ?? 0) === (next.attempt ?? 0) &&
         (event.retryCount ?? 0) === (next.retryCount ?? 0) &&
-        (event.error ?? "") === (next.error ?? ""),
+        (event.error ?? "") === (next.error ?? "") &&
+        (event.fallbackReason ?? "") === (next.fallbackReason ?? "") &&
+        (event.rawProviderError ?? "") === (next.rawProviderError ?? ""),
     );
     if (duplicate) {
       return existing;
@@ -857,6 +923,18 @@ export class ProgressTrackerService {
         usedFallback:
           typeof record.usedFallback === "boolean"
             ? record.usedFallback
+            : undefined,
+        fallbackReason:
+          record.fallbackReason === "EMPTY_STRUCTURED_OUTPUT" ||
+          record.fallbackReason === "TIMEOUT" ||
+          record.fallbackReason === "SCHEMA_OUTPUT_INVALID" ||
+          record.fallbackReason === "MODEL_OR_PROVIDER_ERROR" ||
+          record.fallbackReason === "UNHANDLED_AGENT_EXCEPTION"
+            ? record.fallbackReason
+            : undefined,
+        rawProviderError:
+          typeof record.rawProviderError === "string"
+            ? record.rawProviderError
             : undefined,
         lastEvent:
           record.lastEvent === "started" ||

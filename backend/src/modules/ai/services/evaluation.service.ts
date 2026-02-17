@@ -4,6 +4,7 @@ import { PipelineStateService } from "./pipeline-state.service";
 import { ModelPurpose, PipelinePhase } from "../interfaces/pipeline.interface";
 import type {
   EvaluationAgentCompletion,
+  EvaluationFallbackReason,
   EvaluationAgentLifecycleEvent,
   EvaluationAgentKey,
   EvaluationPipelineInput,
@@ -130,10 +131,24 @@ export class EvaluationService {
         ...current.summary,
         failedKeys: [...current.summary.failedKeys],
         errors: [...current.summary.errors],
+        fallbackKeys: [...(current.summary.fallbackKeys ?? [])],
+        warnings: [...(current.summary.warnings ?? [])],
+        fallbackReasonCounts: { ...(current.summary.fallbackReasonCounts ?? {}) },
       },
     };
 
+    const previousWarning = (next.summary.warnings ?? []).find(
+      (entry) => entry.agent === rerun.agent,
+    );
+    this.updateFallbackReasonCount(
+      next.summary.fallbackReasonCounts,
+      previousWarning?.reason,
+      -1,
+    );
     next.summary.errors = next.summary.errors.filter(
+      (entry) => entry.agent !== rerun.agent,
+    );
+    next.summary.warnings = (next.summary.warnings ?? []).filter(
       (entry) => entry.agent !== rerun.agent,
     );
 
@@ -144,25 +159,68 @@ export class EvaluationService {
       : rerun.output;
 
     const failed = new Set(next.summary.failedKeys);
+    const fallback = new Set(next.summary.fallbackKeys ?? []);
+    const rerunFallbackReason = rerun.usedFallback
+      ? (rerun.fallbackReason ?? "UNHANDLED_AGENT_EXCEPTION")
+      : rerun.fallbackReason;
     if (rerun.usedFallback) {
-      failed.add(rerun.agent);
-      next.summary.errors.push({
+      failed.delete(rerun.agent);
+      fallback.add(rerun.agent);
+      next.summary.warnings?.push({
         agent: rerun.agent,
-        error: rerun.error ?? "Agent fallback used",
+        message:
+          rerun.error ??
+          "Agent returned deterministic fallback output; manual review recommended.",
+        ...(rerunFallbackReason ? { reason: rerunFallbackReason } : {}),
       });
+      this.updateFallbackReasonCount(
+        next.summary.fallbackReasonCounts,
+        rerunFallbackReason,
+        1,
+      );
     } else {
       failed.delete(rerun.agent);
+      fallback.delete(rerun.agent);
+      if (rerun.error) {
+        failed.add(rerun.agent);
+        next.summary.errors.push({
+          agent: rerun.agent,
+          error: rerun.error,
+        });
+      }
     }
 
     next.summary.failedKeys = EVALUATION_AGENT_KEYS.filter((key) =>
       failed.has(key),
     );
+    next.summary.fallbackKeys = EVALUATION_AGENT_KEYS.filter((key) =>
+      fallback.has(key),
+    );
     next.summary.failedAgents = next.summary.failedKeys.length;
+    next.summary.fallbackAgents = next.summary.fallbackKeys.length;
     next.summary.completedAgents =
       EVALUATION_AGENT_KEYS.length - next.summary.failedAgents;
     next.summary.degraded =
-      next.summary.completedAgents < next.summary.minimumRequired;
+      next.summary.completedAgents < next.summary.minimumRequired ||
+      (next.summary.fallbackAgents ?? 0) > 0;
 
     return next;
+  }
+
+  private updateFallbackReasonCount(
+    counts: Record<string, number> | undefined,
+    reason: EvaluationFallbackReason | undefined,
+    delta: number,
+  ): void {
+    if (!counts || !reason || delta === 0) {
+      return;
+    }
+    const current = counts[reason] ?? 0;
+    const next = current + delta;
+    if (next <= 0) {
+      delete counts[reason];
+      return;
+    }
+    counts[reason] = next;
   }
 }

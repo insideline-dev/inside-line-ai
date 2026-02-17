@@ -114,12 +114,18 @@ function normalizeTerminalAgentStates(progress: PipelineProgressData): void {
         continue;
       }
 
+      const hasFallbackSignal =
+        agent.usedFallback === true || agent.lastEvent === "fallback";
       const hasFailureSignal =
-        Boolean(agent.error) ||
-        agent.usedFallback === true ||
+        (Boolean(agent.error) && !hasFallbackSignal) ||
         agent.lastEvent === "failed" ||
-        agent.lastEvent === "fallback" ||
         phase.status === "failed";
+
+      if (hasFallbackSignal) {
+        agent.status = "completed";
+        agent.completedAt = agent.completedAt ?? now;
+        continue;
+      }
 
       if (hasFailureSignal) {
         agent.status = "failed";
@@ -492,6 +498,10 @@ export function useStartupRealtimeProgress(
             attempts: data.agent.attempts ?? existing.attempts,
             retryCount: data.agent.retryCount ?? existing.retryCount,
             usedFallback: data.agent.usedFallback ?? existing.usedFallback,
+            fallbackReason:
+              data.agent.fallbackReason ?? existing.fallbackReason,
+            rawProviderError:
+              data.agent.rawProviderError ?? existing.rawProviderError,
             lastEvent: data.agent.lastEvent ?? existing.lastEvent,
             lastEventAt: data.agent.lastEventAt ?? existing.lastEventAt,
           };
@@ -504,9 +514,28 @@ export function useStartupRealtimeProgress(
           if (phase.status === "pending" || phase.status === "waiting") {
             phase.status = "running";
           }
-          if (agent.error) {
-            phase.error = agent.error;
+
+          const phaseAgents = Object.values(phase.agents ?? {});
+          let latestHardFailure:
+            | (typeof phaseAgents)[number]
+            | undefined;
+          for (let index = phaseAgents.length - 1; index >= 0; index -= 1) {
+            const candidate = phaseAgents[index];
+            if (
+              candidate?.status === "failed" &&
+              candidate.usedFallback !== true &&
+              candidate.lastEvent !== "fallback"
+            ) {
+              latestHardFailure = candidate;
+              break;
+            }
           }
+          if (latestHardFailure?.error) {
+            phase.error = latestHardFailure.error;
+          } else if (phase.status !== "failed") {
+            delete phase.error;
+          }
+
           phase.progress = calculatePhaseProgress(phase);
           next.currentPhase = data.phase;
 

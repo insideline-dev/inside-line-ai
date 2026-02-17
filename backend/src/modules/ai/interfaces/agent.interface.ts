@@ -46,6 +46,8 @@ export interface EvaluationAgentResult<TOutput> {
   output: TOutput;
   usedFallback: boolean;
   error?: string;
+  fallbackReason?: EvaluationFallbackReason;
+  rawProviderError?: string;
 }
 
 export interface EvaluationFeedbackNote {
@@ -61,12 +63,21 @@ export type EvaluationAgentLifecycleEventType =
   | "fallback"
   | "failed";
 
+export type EvaluationFallbackReason =
+  | "EMPTY_STRUCTURED_OUTPUT"
+  | "TIMEOUT"
+  | "SCHEMA_OUTPUT_INVALID"
+  | "MODEL_OR_PROVIDER_ERROR"
+  | "UNHANDLED_AGENT_EXCEPTION";
+
 export interface EvaluationAgentLifecycleEvent {
   agent: EvaluationAgentKey;
   event: EvaluationAgentLifecycleEventType;
   attempt: number;
   retryCount: number;
   error?: string;
+  fallbackReason?: EvaluationFallbackReason;
+  rawProviderError?: string;
 }
 
 export interface EvaluationAgentTraceEvent {
@@ -79,6 +90,8 @@ export interface EvaluationAgentTraceEvent {
   retryCount: number;
   usedFallback: boolean;
   error?: string;
+  fallbackReason?: EvaluationFallbackReason;
+  rawProviderError?: string;
 }
 
 export interface EvaluationAgentRunOptions {
@@ -92,6 +105,8 @@ export interface EvaluationAgentCompletion {
   output: unknown;
   usedFallback: boolean;
   error?: string;
+  fallbackReason?: EvaluationFallbackReason;
+  rawProviderError?: string;
 }
 
 export interface EvaluationAgent<TOutput> {

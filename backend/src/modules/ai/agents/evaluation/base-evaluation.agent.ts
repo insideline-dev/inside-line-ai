@@ -4,6 +4,7 @@ import { z } from "zod";
 import type {
   EvaluationAgent,
   EvaluationAgentKey,
+  EvaluationFallbackReason,
   EvaluationAgentResult,
   EvaluationPipelineInput,
   EvaluationAgentRunOptions,
@@ -14,8 +15,9 @@ import { AiProviderService } from "../../providers/ai-provider.service";
 import { AiConfigService } from "../../services/ai-config.service";
 import { AiPromptService } from "../../services/ai-prompt.service";
 import { EVALUATION_PROMPT_KEY_BY_AGENT } from "../../services/ai-prompt-catalog";
+import { buildEvaluationCommonBaseline } from "../../services/evaluation-prompt-baseline";
 
-const NO_OUTPUT_RETRY_ATTEMPTS = 2;
+const MAX_EVALUATION_ATTEMPTS = 3;
 const NARRATIVE_MIN_LENGTH = 420;
 
 interface BaseEvaluationLike {
@@ -51,11 +53,19 @@ export abstract class BaseEvaluationAgent<TOutput>
     pipelineData: EvaluationPipelineInput,
     options?: EvaluationAgentRunOptions,
   ): Promise<EvaluationAgentResult<TOutput>> {
+    let lastFallbackReason: EvaluationFallbackReason | undefined;
+    let lastFallbackMessage: string | undefined;
+    let lastRawProviderError: string | undefined;
     const context = this.buildContext(pipelineData);
+    const feedbackNotes = options?.feedbackNotes ?? [];
     const promptContext = {
+      startupSnapshot: buildEvaluationCommonBaseline({
+        extraction: pipelineData.extraction,
+        adminFeedback: feedbackNotes,
+      }),
       ...context,
       startupFormContext: pipelineData.extraction.startupContext ?? {},
-      adminFeedback: options?.feedbackNotes ?? [],
+      adminFeedback: feedbackNotes,
     };
     const promptConfig = await this.promptService.resolve({
       key: EVALUATION_PROMPT_KEY_BY_AGENT[this.key],
@@ -72,7 +82,7 @@ export abstract class BaseEvaluationAgent<TOutput>
 
     for (
       let attempt = 1;
-      attempt <= NO_OUTPUT_RETRY_ATTEMPTS;
+      attempt <= MAX_EVALUATION_ATTEMPTS;
       attempt += 1
     ) {
       this.emitLifecycleEvent(options, {
@@ -155,14 +165,18 @@ export abstract class BaseEvaluationAgent<TOutput>
         };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        const normalizedMessage = this.normalizeFallbackError(message);
-        const traceError =
-          normalizedMessage === message
-            ? message
-            : `${normalizedMessage} (provider: ${message})`;
+        const fallbackReason = this.classifyFallbackReason(error, message);
+        const normalizedMessage = this.normalizeFallbackError(
+          fallbackReason,
+          message,
+        );
+        const rawProviderError = this.sanitizeRawProviderError(message);
+        lastFallbackReason = fallbackReason;
+        lastFallbackMessage = normalizedMessage;
+        lastRawProviderError = rawProviderError;
         const shouldRetry =
-          attempt < NO_OUTPUT_RETRY_ATTEMPTS &&
-          this.isNoOutputError(message);
+          attempt < MAX_EVALUATION_ATTEMPTS &&
+          this.shouldRetryFallbackReason(fallbackReason);
 
         if (shouldRetry) {
           this.emitLifecycleEvent(options, {
@@ -171,9 +185,11 @@ export abstract class BaseEvaluationAgent<TOutput>
             attempt,
             retryCount: attempt,
             error: normalizedMessage,
+            fallbackReason,
+            rawProviderError,
           });
           this.logger.warn(
-            `${this.key} evaluation returned no output, retrying (${attempt}/${NO_OUTPUT_RETRY_ATTEMPTS})`,
+            `${this.key} evaluation retrying due to ${fallbackReason} (${attempt}/${MAX_EVALUATION_ATTEMPTS})`,
           );
           continue;
         }
@@ -184,6 +200,8 @@ export abstract class BaseEvaluationAgent<TOutput>
           attempt,
           retryCount: Math.max(0, attempt - 1),
           error: normalizedMessage,
+          fallbackReason,
+          rawProviderError,
         });
         this.logger.warn(
           `${this.key} evaluation fallback used: ${normalizedMessage}`,
@@ -200,23 +218,34 @@ export abstract class BaseEvaluationAgent<TOutput>
           attempt,
           retryCount: Math.max(0, attempt - 1),
           usedFallback: true,
-          error: traceError,
+          error: normalizedMessage,
+          fallbackReason,
+          rawProviderError,
         });
         return {
           key: this.key,
           output: fallbackOutput,
           usedFallback: true,
           error: normalizedMessage,
+          fallbackReason,
+          rawProviderError,
         };
       }
     }
 
+    const finalFallbackReason =
+      lastFallbackReason ?? "EMPTY_STRUCTURED_OUTPUT";
+    const finalFallbackMessage =
+      lastFallbackMessage ??
+      "Model returned empty structured output; fallback result generated.";
     this.emitLifecycleEvent(options, {
       agent: this.key,
       event: "fallback",
-      attempt: NO_OUTPUT_RETRY_ATTEMPTS,
-      retryCount: Math.max(0, NO_OUTPUT_RETRY_ATTEMPTS - 1),
-      error: "Evaluation failed after retries",
+      attempt: MAX_EVALUATION_ATTEMPTS,
+      retryCount: Math.max(0, MAX_EVALUATION_ATTEMPTS - 1),
+      error: finalFallbackMessage,
+      fallbackReason: finalFallbackReason,
+      rawProviderError: lastRawProviderError,
     });
     const fallbackOutput = this.normalizeNarrativeFields(
       this.fallback(pipelineData),
@@ -227,16 +256,20 @@ export abstract class BaseEvaluationAgent<TOutput>
       inputPrompt: renderedPrompt,
       outputText: this.safeStringify(fallbackOutput),
       outputJson: fallbackOutput,
-      attempt: NO_OUTPUT_RETRY_ATTEMPTS,
-      retryCount: Math.max(0, NO_OUTPUT_RETRY_ATTEMPTS - 1),
+      attempt: MAX_EVALUATION_ATTEMPTS,
+      retryCount: Math.max(0, MAX_EVALUATION_ATTEMPTS - 1),
       usedFallback: true,
-      error: "Evaluation failed after retries",
+      error: finalFallbackMessage,
+      fallbackReason: finalFallbackReason,
+      rawProviderError: lastRawProviderError,
     });
     return {
       key: this.key,
       output: fallbackOutput,
       usedFallback: true,
-      error: "Evaluation failed after retries",
+      error: finalFallbackMessage,
+      fallbackReason: finalFallbackReason,
+      rawProviderError: lastRawProviderError,
     };
   }
 
@@ -440,11 +473,70 @@ export abstract class BaseEvaluationAgent<TOutput>
     );
   }
 
-  private normalizeFallbackError(message: string): string {
+  private classifyFallbackReason(
+    error: unknown,
+    message: string,
+  ): EvaluationFallbackReason {
+    if (error instanceof z.ZodError) {
+      return "SCHEMA_OUTPUT_INVALID";
+    }
     if (this.isNoOutputError(message)) {
+      return "EMPTY_STRUCTURED_OUTPUT";
+    }
+    const normalized = message.toLowerCase();
+    if (
+      normalized.includes("timed out") ||
+      normalized.includes("timeout")
+    ) {
+      return "TIMEOUT";
+    }
+    if (error instanceof Error) {
+      return "MODEL_OR_PROVIDER_ERROR";
+    }
+    return "UNHANDLED_AGENT_EXCEPTION";
+  }
+
+  private shouldRetryFallbackReason(reason: EvaluationFallbackReason): boolean {
+    return (
+      reason === "EMPTY_STRUCTURED_OUTPUT" ||
+      reason === "SCHEMA_OUTPUT_INVALID" ||
+      reason === "TIMEOUT" ||
+      reason === "MODEL_OR_PROVIDER_ERROR"
+    );
+  }
+
+  private normalizeFallbackError(
+    reason: EvaluationFallbackReason,
+    message: string,
+  ): string {
+    if (reason === "EMPTY_STRUCTURED_OUTPUT") {
       return "Model returned empty structured output; fallback result generated.";
     }
+    if (reason === "TIMEOUT") {
+      return "Model request timed out; fallback result generated.";
+    }
+    if (reason === "SCHEMA_OUTPUT_INVALID") {
+      return "Model returned schema-invalid structured output; fallback result generated.";
+    }
+    if (
+      reason === "MODEL_OR_PROVIDER_ERROR" &&
+      typeof message === "string" &&
+      message.trim().length > 0
+    ) {
+      return message.trim();
+    }
+    if (reason === "UNHANDLED_AGENT_EXCEPTION") {
+      return "Unhandled evaluation exception; fallback result generated.";
+    }
     return message;
+  }
+
+  private sanitizeRawProviderError(message: string): string {
+    const compact = this.normalizeWhitespace(message);
+    if (compact.length <= 2000) {
+      return compact;
+    }
+    return `${compact.slice(0, 2000)}...`;
   }
 
   private async withTimeout<T>(

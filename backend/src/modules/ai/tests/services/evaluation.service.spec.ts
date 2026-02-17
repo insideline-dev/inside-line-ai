@@ -31,6 +31,9 @@ describe("EvaluationService", () => {
       minimumRequired: 8,
       failedKeys: [],
       errors: [],
+      fallbackAgents: 0,
+      fallbackKeys: [],
+      warnings: [],
       degraded: false,
     },
   } as unknown as EvaluationResult;
@@ -95,6 +98,7 @@ describe("EvaluationService", () => {
       },
       expect.any(Function),
       expect.any(Function),
+      expect.any(Function),
     );
     expect(result).toBe(evaluationResult);
   });
@@ -111,6 +115,7 @@ describe("EvaluationService", () => {
         scraping: pipelineInput.scraping,
         research: pipelineInput.research,
       },
+      expect.any(Function),
       expect.any(Function),
       expect.any(Function),
     );
@@ -167,6 +172,7 @@ describe("EvaluationService", () => {
         extraction: pipelineInput.extraction,
       }),
       expect.any(Function),
+      expect.any(Function),
     );
     expect(result.market).toEqual({ score: 91 });
     expect(result.summary.failedAgents).toBe(0);
@@ -194,11 +200,22 @@ describe("EvaluationService", () => {
       const result = await service.run("startup-1", { agentKey: "team" });
 
       expect(result.team).toEqual({ invalidSchema: "bad data" });
-      expect(result.summary.failedAgents).toBe(1);
-      expect(result.summary.failedKeys).toContain("team");
+      expect(result.summary.failedAgents).toBe(0);
+      expect(result.summary.fallbackAgents).toBe(1);
+      expect(result.summary.fallbackKeys).toContain("team");
+      expect(result.summary.warnings).toEqual([
+        {
+          agent: "team",
+          message: "Agent generation failed, fallback used",
+          reason: "UNHANDLED_AGENT_EXCEPTION",
+        },
+      ]);
+      expect(result.summary.fallbackReasonCounts).toEqual({
+        UNHANDLED_AGENT_EXCEPTION: 1,
+      });
     });
 
-    it("rerun updates failedKeys when usedFallback is true", async () => {
+    it("rerun updates fallback keys when usedFallback is true", async () => {
       const currentResult = {
         ...evaluationResult,
         summary: {
@@ -206,6 +223,9 @@ describe("EvaluationService", () => {
           failedAgents: 0,
           failedKeys: [],
           errors: [],
+          fallbackAgents: 0,
+          fallbackKeys: [],
+          warnings: [],
         },
       };
 
@@ -228,14 +248,20 @@ describe("EvaluationService", () => {
 
       const result = await service.run("startup-1", { agentKey: "market" });
 
-      expect(result.summary.failedKeys).toContain("market");
-      expect(result.summary.failedAgents).toBe(1);
-      expect(result.summary.errors).toEqual([
+      expect(result.summary.failedKeys).not.toContain("market");
+      expect(result.summary.failedAgents).toBe(0);
+      expect(result.summary.fallbackKeys).toContain("market");
+      expect(result.summary.fallbackAgents).toBe(1);
+      expect(result.summary.warnings).toEqual([
         {
           agent: "market",
-          error: "Timeout during agent execution",
+          message: "Timeout during agent execution",
+          reason: "UNHANDLED_AGENT_EXCEPTION",
         },
       ]);
+      expect(result.summary.fallbackReasonCounts).toEqual({
+        UNHANDLED_AGENT_EXCEPTION: 1,
+      });
     });
 
     it("rerun clears previous errors for that agent", async () => {
@@ -248,6 +274,9 @@ describe("EvaluationService", () => {
           errors: [
             { agent: "market", error: "Previous error" },
           ],
+          fallbackAgents: 0,
+          fallbackKeys: [],
+          warnings: [],
         },
       };
 
@@ -272,6 +301,7 @@ describe("EvaluationService", () => {
       expect(result.summary.errors).toEqual([]);
       expect(result.summary.failedKeys).not.toContain("market");
       expect(result.summary.failedAgents).toBe(0);
+      expect(result.summary.fallbackAgents).toBe(0);
     });
 
     it("missing upstream results throws error", async () => {

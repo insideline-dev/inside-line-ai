@@ -126,11 +126,13 @@ describe("EvaluationAgentRegistryService", () => {
 
     expect(result.summary.completedAgents).toBe(11);
     expect(result.summary.failedAgents).toBe(0);
+    expect(result.summary.fallbackAgents).toBe(0);
+    expect(result.summary.fallbackKeys).toEqual([]);
     expect(result.summary.degraded).toBe(false);
     expect(pipelineState.recordAgentTelemetry).toHaveBeenCalledTimes(11);
   });
 
-  it("marks run as degraded when fewer than 8 agents succeed", async () => {
+  it("marks run as degraded when agents use fallback outputs", async () => {
     const fallbackKeys = new Set<EvaluationAgentKey>([
       "team",
       "market",
@@ -151,10 +153,16 @@ describe("EvaluationAgentRegistryService", () => {
 
     const result = await service.runAll("startup-2", pipelineData);
 
-    expect(result.summary.completedAgents).toBe(7);
-    expect(result.summary.failedAgents).toBe(4);
+    expect(result.summary.completedAgents).toBe(11);
+    expect(result.summary.failedAgents).toBe(0);
+    expect(result.summary.fallbackAgents).toBe(4);
     expect(result.summary.degraded).toBe(true);
-    expect(result.summary.failedKeys.sort()).toEqual(Array.from(fallbackKeys).sort());
+    expect(result.summary.fallbackKeys?.sort()).toEqual(
+      Array.from(fallbackKeys).sort(),
+    );
+    expect(result.summary.fallbackReasonCounts).toEqual({
+      UNHANDLED_AGENT_EXCEPTION: 4,
+    });
   });
 
   it("uses agent fallback output when an agent throws", async () => {
@@ -171,7 +179,11 @@ describe("EvaluationAgentRegistryService", () => {
 
     const result = await service.runAll("startup-3", pipelineData);
 
-    expect(result.summary.failedKeys).toContain("market");
+    expect(result.summary.failedKeys).not.toContain("market");
+    expect(result.summary.fallbackKeys).toContain("market");
+    expect(result.summary.fallbackReasonCounts).toEqual({
+      UNHANDLED_AGENT_EXCEPTION: 1,
+    });
     expect(agents[1].fallback).toHaveBeenCalledTimes(1);
   });
 

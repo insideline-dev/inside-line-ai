@@ -67,6 +67,7 @@ export const envSchema = z.object({
   DEV_EXPOSE_TOKENS: z.coerce.boolean().default(false),
   LOG_TO_FILE: z.coerce.boolean().default(true),
   LOG_FILE_PATH: z.string().default("logs/backend.jsonl"),
+  LOG_MAX_FILE_SIZE: z.coerce.number().default(52428800), // 50 MB
 
   // Storage Configuration (R2/S3)
   STORAGE_PROVIDER: z.enum(["r2", "s3", "backblaze"]).default("r2"),

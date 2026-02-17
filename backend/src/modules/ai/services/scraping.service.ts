@@ -3,6 +3,7 @@ import { ConfigService } from "@nestjs/config";
 import { eq } from "drizzle-orm";
 import { appendFile, mkdir } from "fs/promises";
 import { dirname, resolve } from "path";
+import { rotateIfNeeded } from "../../../common/logging/rotate-log";
 import { DrizzleService } from "../../../database";
 import { startup } from "../../startup/entities";
 import type {
@@ -662,6 +663,7 @@ export class ScrapingService {
       const resolvedPath = this.resolveLogPath(this.debugLogPath);
       await mkdir(dirname(resolvedPath), { recursive: true });
 
+      await rotateIfNeeded(resolvedPath);
       await appendFile(
         resolvedPath,
         `${JSON.stringify({

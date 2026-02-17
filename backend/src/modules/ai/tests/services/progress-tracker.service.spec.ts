@@ -162,6 +162,51 @@ describe("ProgressTrackerService", () => {
     );
   });
 
+  it("ignores stale running updates after an agent reaches a terminal state", async () => {
+    await service.initProgress({
+      startupId: "startup-1",
+      userId: "user-1",
+      pipelineRunId: "run-1",
+      phases: Object.values(PipelinePhase),
+    });
+
+    await service.updateAgentProgress({
+      startupId: "startup-1",
+      userId: "user-1",
+      pipelineRunId: "run-1",
+      phase: PipelinePhase.EVALUATION,
+      key: "traction",
+      status: "failed",
+      error: "No output generated.",
+      attempt: 2,
+      retryCount: 1,
+      usedFallback: true,
+      lifecycleEvent: "fallback",
+    });
+
+    await service.updateAgentProgress({
+      startupId: "startup-1",
+      userId: "user-1",
+      pipelineRunId: "run-1",
+      phase: PipelinePhase.EVALUATION,
+      key: "traction",
+      status: "running",
+      progress: 0,
+      error: "No output generated.",
+      attempt: 1,
+      retryCount: 1,
+      lifecycleEvent: "retrying",
+    });
+
+    const progress = await service.getProgress("startup-1");
+    const traction = progress?.phases.evaluation.agents.traction;
+
+    expect(traction?.status).toBe("failed");
+    expect(traction?.lastEvent).toBe("fallback");
+    expect(traction?.attempts).toBe(2);
+    expect(traction?.retryCount).toBe(1);
+  });
+
   it("stores phase failure error and emits phase:failed", async () => {
     await service.initProgress({
       startupId: "startup-1",

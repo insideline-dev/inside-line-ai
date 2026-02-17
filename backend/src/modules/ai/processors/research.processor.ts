@@ -107,6 +107,11 @@ export class ResearchProcessor
             },
             onAgentComplete: ({ agent, output, usedFallback, error, rejected }) => {
               const isFailed = rejected || usedFallback || Boolean(error);
+              const lifecycleEvent = usedFallback
+                ? "fallback"
+                : isFailed
+                  ? "failed"
+                  : "completed";
               this.pipelineService
                 .onAgentProgress({
                   startupId,
@@ -117,6 +122,8 @@ export class ResearchProcessor
                   status: isFailed ? "failed" : "completed",
                   progress: isFailed ? 0 : 100,
                   error,
+                  usedFallback,
+                  lifecycleEvent,
                 })
                 .catch((progressError) => {
                   this.logger.warn(

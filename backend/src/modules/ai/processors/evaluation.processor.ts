@@ -104,7 +104,7 @@ export class EvaluationProcessor
               });
           },
           onAgentComplete: ({ agent, output, usedFallback, error }) => {
-            const isHardFailure = Boolean(error) && !usedFallback;
+            const isFailed = usedFallback || Boolean(error);
             this.pipelineService
               .onAgentProgress({
                 startupId,
@@ -112,9 +112,11 @@ export class EvaluationProcessor
                 pipelineRunId,
                 phase: PipelinePhase.EVALUATION,
                 key: agent,
-                status: isHardFailure ? "failed" : "completed",
-                progress: isHardFailure ? 0 : 100,
-                error: isHardFailure ? error : undefined,
+                status: isFailed ? "failed" : "completed",
+                progress: isFailed ? 0 : 100,
+                error: error,
+                usedFallback,
+                lifecycleEvent: usedFallback ? "fallback" : "completed",
               })
               .catch((progressError) => {
                 this.logger.warn(
@@ -136,8 +138,37 @@ export class EvaluationProcessor
                 output,
                 usedFallback,
                 error,
-              },
-            });
+                },
+              });
+          },
+          onAgentLifecycle: ({ agent, event, attempt, retryCount, error }) => {
+            if (event !== "retrying") {
+              return;
+            }
+
+            this.pipelineService
+              .onAgentProgress({
+                startupId,
+                userId,
+                pipelineRunId,
+                phase: PipelinePhase.EVALUATION,
+                key: agent,
+                status: "running",
+                progress: 0,
+                error,
+                lifecycleEvent: event,
+                attempt,
+                retryCount,
+              })
+              .catch((progressError) => {
+                this.logger.warn(
+                  `Failed to update evaluation retry telemetry for ${agent}: ${
+                    progressError instanceof Error
+                      ? progressError.message
+                      : String(progressError)
+                  }`,
+                );
+              });
           },
         }),
     });

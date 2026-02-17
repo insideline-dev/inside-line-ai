@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { Zap } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -41,6 +41,7 @@ type FormValues = z.infer<typeof formSchema>;
 export function QuickAddStartupDialog() {
   const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const form = useForm<FormValues>({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -104,6 +105,12 @@ export function QuickAddStartupDialog() {
           queryClient.invalidateQueries({ queryKey: ["/admin/stats"] });
           setOpen(false);
           form.reset();
+          if (data?.startupId) {
+            navigate({
+              to: "/admin/startup/$id",
+              params: { id: data.startupId },
+            });
+          }
         },
         onError: () => {
           toast.error("Failed to create startup");

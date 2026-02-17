@@ -68,7 +68,66 @@ function calculatePhaseProgress(phase: PipelinePhaseProgress): number {
   return normalizePercent(total / agents.length);
 }
 
+function isTerminalPhaseStatus(status: string | undefined): boolean {
+  return status === "completed" || status === "failed" || status === "skipped";
+}
+
+function normalizeTerminalAgentStates(progress: PipelineProgressData): void {
+  const pipelineTerminal = Boolean(
+    progress.pipelineStatus &&
+      TERMINAL_PIPELINE_STATUSES.has(progress.pipelineStatus),
+  );
+  const now = new Date().toISOString();
+
+  for (const phase of Object.values(progress.phases)) {
+    const phaseTerminal = isTerminalPhaseStatus(phase.status);
+    if (!pipelineTerminal && !phaseTerminal) {
+      continue;
+    }
+
+    const agents = Object.values(phase.agents ?? {});
+    if (!agents.length) {
+      continue;
+    }
+
+    for (const agent of agents) {
+      if (agent.status !== "running" && agent.status !== "pending") {
+        continue;
+      }
+
+      const hasFailureSignal =
+        Boolean(agent.error) ||
+        agent.usedFallback === true ||
+        agent.lastEvent === "failed" ||
+        agent.lastEvent === "fallback" ||
+        phase.status === "failed";
+
+      if (hasFailureSignal) {
+        agent.status = "failed";
+        agent.completedAt = agent.completedAt ?? now;
+        continue;
+      }
+
+      const hasSuccessSignal =
+        phase.status === "completed" ||
+        phase.status === "skipped" ||
+        Boolean(agent.completedAt) ||
+        agent.lastEvent === "completed";
+
+      if (hasSuccessSignal) {
+        agent.status = "completed";
+        agent.completedAt = agent.completedAt ?? now;
+        delete agent.error;
+      }
+    }
+
+    phase.progress = calculatePhaseProgress(phase);
+  }
+}
+
 function recomputeProgress(progress: PipelineProgressData): PipelineProgressData {
+  normalizeTerminalAgentStates(progress);
+
   const phaseEntries = Object.entries(progress.phases);
   const phaseCount = Math.max(phaseEntries.length, 1);
   const overall = phaseEntries.reduce((sum, [, phase]) => {
@@ -169,6 +228,32 @@ function patchProgressPayload(
   };
 }
 
+function cloneProgress(progress: PipelineProgressData): PipelineProgressData {
+  return {
+    ...progress,
+    phasesCompleted: [...(progress.phasesCompleted ?? [])],
+    phases: Object.fromEntries(
+      Object.entries(progress.phases ?? {}).map(([phaseKey, phaseValue]) => [
+        phaseKey,
+        {
+          ...phaseValue,
+          agents: phaseValue.agents
+            ? Object.fromEntries(
+                Object.entries(phaseValue.agents).map(([agentKey, agentValue]) => [
+                  agentKey,
+                  { ...agentValue },
+                ]),
+              )
+            : undefined,
+        },
+      ]),
+    ),
+    agentEvents: Array.isArray(progress.agentEvents)
+      ? [...progress.agentEvents]
+      : progress.agentEvents,
+  };
+}
+
 export function useStartupRealtimeProgress(
   startupId: string | number | null | undefined,
   options?: {
@@ -198,10 +283,17 @@ export function useStartupRealtimeProgress(
     },
   });
 
-  const progressResponse = useMemo(
-    () => toProgressResponse(query.data),
-    [query.data],
-  );
+  const progressResponse = useMemo(() => {
+    const parsed = toProgressResponse(query.data);
+    if (!parsed?.progress) {
+      return parsed;
+    }
+
+    return {
+      ...parsed,
+      progress: recomputeProgress(cloneProgress(parsed.progress)),
+    };
+  }, [query.data]);
   const progress = progressResponse?.progress ?? null;
 
   usePipelineStatus(enabled && socketEnabled ? id : null, {

@@ -97,6 +97,11 @@ export interface AgentProgressEvent {
     startedAt?: string;
     completedAt?: string;
     error?: string;
+    attempts?: number;
+    retryCount?: number;
+    usedFallback?: boolean;
+    lastEvent?: "started" | "retrying" | "completed" | "failed" | "fallback";
+    lastEventAt?: string;
   };
 }
 

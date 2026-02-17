@@ -909,7 +909,9 @@ export class StartupService {
         throw new NotFoundException(`Startup with ID ${id} not found`);
       }
 
-      return this.buildProgressResponse(db, id, found.status);
+      return this.buildProgressResponse(db, id, found.status, {
+        includeAdminDetails: false,
+      });
     });
   }
 
@@ -924,7 +926,9 @@ export class StartupService {
       throw new NotFoundException(`Startup with ID ${id} not found`);
     }
 
-    return this.buildProgressResponse(this.drizzle.db, id, found.status);
+    return this.buildProgressResponse(this.drizzle.db, id, found.status, {
+      includeAdminDetails: true,
+    });
   }
 
   private async triggerAnalysis(
@@ -1293,7 +1297,11 @@ export class StartupService {
     db: DrizzleService["db"],
     startupId: string,
     status: StartupStatus,
+    options?: {
+      includeAdminDetails?: boolean;
+    },
   ): Promise<GetProgressResponse> {
+    const includeAdminDetails = options?.includeAdminDetails === true;
     const response: GetProgressResponse = {
       status,
       progress: null,
@@ -1334,9 +1342,8 @@ export class StartupService {
               value.status === "waiting";
 
             const agents = Object.fromEntries(
-              Object.entries(value.agents ?? {}).map(([agentKey, agent]) => [
-                agentKey,
-                {
+              Object.entries(value.agents ?? {}).map(([agentKey, agent]) => {
+                const baseAgent = {
                   key: agent.key,
                   status: agent.status,
                   progress:
@@ -1346,13 +1353,23 @@ export class StartupService {
                   startedAt: agent.startedAt,
                   completedAt: agent.completedAt,
                   error: agent.error,
-                },
-              ]),
+                };
+                const adminAgentFields = includeAdminDetails
+                  ? {
+                      attempts: agent.attempts,
+                      retryCount: agent.retryCount,
+                      usedFallback: agent.usedFallback,
+                      lastEvent: agent.lastEvent,
+                      lastEventAt: agent.lastEventAt,
+                    }
+                  : {};
+                return [agentKey, { ...baseAgent, ...adminAgentFields }];
+              }),
             );
 
             return [
               phase,
-              {
+              ({
                 status: value.status,
                 progress: this.resolvePhaseProgress(value.status, agents),
                 startedAt: value.startedAt,
@@ -1360,11 +1377,26 @@ export class StartupService {
                 error: shouldExposeIssue
                   ? (value.error ?? phaseIssue)
                   : undefined,
+                ...(includeAdminDetails ? { retryCount: value.retryCount } : {}),
                 agents: Object.keys(agents).length > 0 ? agents : undefined,
-              },
+              }),
             ];
           }),
         ),
+        ...(includeAdminDetails
+          ? {
+              agentEvents: (trackedProgress.agentEvents ?? []).map((event) => ({
+                id: event.id,
+                phase: event.phase,
+                agentKey: event.agentKey,
+                event: event.event,
+                timestamp: event.timestamp,
+                attempt: event.attempt,
+                retryCount: event.retryCount,
+                error: event.error,
+              })),
+            }
+          : {}),
       };
       return response;
     }
@@ -1420,6 +1452,12 @@ export class StartupService {
                 startedAt: value.startedAt,
                 completedAt: value.completedAt,
                 error: shouldExposeIssue ? (value.error ?? phaseIssue) : undefined,
+                ...(includeAdminDetails
+                  ? {
+                      retryCount:
+                        pipelineState.retryCounts[phase as PipelinePhase] ?? 0,
+                    }
+                  : {}),
               };
             })(),
           ]),

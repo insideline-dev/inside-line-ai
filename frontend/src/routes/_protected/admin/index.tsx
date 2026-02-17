@@ -132,10 +132,14 @@ function AdminStartupRow({ startup }: { startup: StartupItem }) {
             )}
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" asChild>
+            <Button variant={effectiveStatus === "analyzing" ? "default" : "outline"} asChild>
               <Link to="/admin/startup/$id" params={{ id: startup.id }}>
-                <Eye className="w-4 h-4 mr-2" />
-                Review
+                {effectiveStatus === "analyzing" ? (
+                  <Sparkles className="w-4 h-4 mr-2" />
+                ) : (
+                  <Eye className="w-4 h-4 mr-2" />
+                )}
+                {effectiveStatus === "analyzing" ? "Live" : "Review"}
               </Link>
             </Button>
           </div>

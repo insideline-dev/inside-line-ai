@@ -8,6 +8,13 @@ export const PIPELINE_PHASE_ORDER = [
 
 export type PipelinePhaseKey = (typeof PIPELINE_PHASE_ORDER)[number] | string;
 
+export type PipelineAgentEventType =
+  | "started"
+  | "retrying"
+  | "completed"
+  | "failed"
+  | "fallback";
+
 export interface PipelineAgentProgress {
   key: string;
   status: "pending" | "running" | "completed" | "failed" | string;
@@ -15,6 +22,11 @@ export interface PipelineAgentProgress {
   startedAt?: string;
   completedAt?: string;
   error?: string;
+  attempts?: number;
+  retryCount?: number;
+  usedFallback?: boolean;
+  lastEvent?: PipelineAgentEventType;
+  lastEventAt?: string;
 }
 
 export interface PipelinePhaseProgress {
@@ -23,7 +35,19 @@ export interface PipelinePhaseProgress {
   startedAt?: string;
   completedAt?: string;
   error?: string;
+  retryCount?: number;
   agents?: Record<string, PipelineAgentProgress>;
+}
+
+export interface PipelineAgentEvent {
+  id: string;
+  phase: PipelinePhaseKey;
+  agentKey: string;
+  event: PipelineAgentEventType;
+  timestamp: string;
+  attempt?: number;
+  retryCount?: number;
+  error?: string;
 }
 
 export interface PipelineProgressData {
@@ -36,6 +60,7 @@ export interface PipelineProgressData {
   error?: string;
   phasesCompleted: string[];
   phases: Record<string, PipelinePhaseProgress>;
+  agentEvents?: PipelineAgentEvent[];
 }
 
 export interface StartupProgressResponse {

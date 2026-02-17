@@ -2,6 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import type {
   EvaluationAgent,
   EvaluationAgentCompletion,
+  EvaluationAgentLifecycleEvent,
   EvaluationFeedbackNote,
   EvaluationAgentKey,
   EvaluationPipelineInput,
@@ -70,6 +71,7 @@ export class EvaluationAgentRegistryService {
     pipelineData: EvaluationPipelineInput,
     onAgentStart?: (agent: EvaluationAgentKey) => void,
     onAgentComplete?: (payload: EvaluationAgentCompletion) => void,
+    onAgentLifecycle?: (payload: EvaluationAgentLifecycleEvent) => void,
   ): Promise<EvaluationResult> {
     const outputs = new Map<EvaluationAgentKey, unknown>();
     const failedKeys: EvaluationAgentKey[] = [];
@@ -82,7 +84,11 @@ export class EvaluationAgentRegistryService {
         startedAtByAgent.set(agent.key, startedAt);
         this.emitAgentStart(onAgentStart, agent.key);
         const feedbackNotes = await this.loadFeedbackNotes(startupId, agent.key);
-        const result = await agent.run(pipelineData, { feedbackNotes });
+        const result = await agent.run(pipelineData, {
+          feedbackNotes,
+          onLifecycle: (event) =>
+            this.emitAgentLifecycle(onAgentLifecycle, event),
+        });
         const completedAt = new Date();
 
         await this.recordTelemetrySafely(startupId, {
@@ -110,6 +116,14 @@ export class EvaluationAgentRegistryService {
         const completedAt = new Date();
         const errorMessage =
           entry.reason instanceof Error ? entry.reason.message : String(entry.reason);
+
+        this.emitAgentLifecycle(onAgentLifecycle, {
+          agent: agent.key,
+          event: "failed",
+          attempt: 1,
+          retryCount: 0,
+          error: errorMessage,
+        });
 
         void this.recordTelemetrySafely(startupId, {
           agentKey: agent.key,
@@ -190,6 +204,7 @@ export class EvaluationAgentRegistryService {
     key: EvaluationAgentKey,
     pipelineData: EvaluationPipelineInput,
     onAgentStart?: (agent: EvaluationAgentKey) => void,
+    onAgentLifecycle?: (payload: EvaluationAgentLifecycleEvent) => void,
   ): Promise<EvaluationAgentCompletion> {
     const agent = this.agents.find((candidate) => candidate.key === key);
     if (!agent) {
@@ -200,7 +215,11 @@ export class EvaluationAgentRegistryService {
     this.emitAgentStart(onAgentStart, key);
     try {
       const feedbackNotes = await this.loadFeedbackNotes(startupId, key);
-      const result = await agent.run(pipelineData, { feedbackNotes });
+      const result = await agent.run(pipelineData, {
+        feedbackNotes,
+        onLifecycle: (event) =>
+          this.emitAgentLifecycle(onAgentLifecycle, event),
+      });
       const completedAt = new Date();
 
       await this.recordTelemetrySafely(startupId, {
@@ -226,6 +245,13 @@ export class EvaluationAgentRegistryService {
     } catch (error) {
       const completedAt = new Date();
       const message = error instanceof Error ? error.message : String(error);
+      this.emitAgentLifecycle(onAgentLifecycle, {
+        agent: key,
+        event: "failed",
+        attempt: 1,
+        retryCount: 0,
+        error: message,
+      });
       await this.recordTelemetrySafely(startupId, {
         agentKey: key,
         phase: PipelinePhase.EVALUATION,
@@ -289,6 +315,26 @@ export class EvaluationAgentRegistryService {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.warn(
         `Evaluation agent completion callback failed for ${payload.agent}: ${message}`,
+      );
+    }
+  }
+
+  private emitAgentLifecycle(
+    onAgentLifecycle:
+      | ((payload: EvaluationAgentLifecycleEvent) => void)
+      | undefined,
+    payload: EvaluationAgentLifecycleEvent,
+  ): void {
+    if (!onAgentLifecycle) {
+      return;
+    }
+
+    try {
+      onAgentLifecycle(payload);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `Evaluation agent lifecycle callback failed for ${payload.agent}: ${message}`,
       );
     }
   }

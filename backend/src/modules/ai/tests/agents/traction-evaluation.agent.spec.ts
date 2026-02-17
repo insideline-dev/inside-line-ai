@@ -31,6 +31,7 @@ describe("TractionEvaluationAgent metric sanitization", () => {
     aiConfig = {
       getEvaluationTemperature: jest.fn().mockReturnValue(0.2),
       getEvaluationMaxOutputTokens: jest.fn().mockReturnValue(4000),
+      getEvaluationTimeoutMs: jest.fn().mockReturnValue(120000),
     } as unknown as jest.Mocked<AiConfigService>;
 
     promptService = {

@@ -19,14 +19,48 @@ interface PipelineEventPayloads {
   'pipeline:failed': { startupId: string; pipelineRunId: string; status: PipelineStatus; overallScore?: number; error?: string };
   'pipeline:cancelled': { startupId: string; pipelineRunId: string; status: PipelineStatus; overallScore?: number; error?: string };
   'pipeline:updated': { startupId: string; pipelineRunId: string; status: PipelineStatus; overallScore?: number; error?: string };
-  'phase:started': { startupId: string; phase: PipelinePhase; status: PhaseStatus; error?: string };
-  'phase:completed': { startupId: string; phase: PipelinePhase; status: PhaseStatus; error?: string };
-  'phase:failed': { startupId: string; phase: PipelinePhase; status: PhaseStatus; error?: string };
-  'phase:waiting': { startupId: string; phase: PipelinePhase; status: PhaseStatus; error?: string };
-  'phase:skipped': { startupId: string; phase: PipelinePhase; status: PhaseStatus; error?: string };
-  'phase:updated': { startupId: string; phase: PipelinePhase; status: PhaseStatus; error?: string };
-  'agent:progress': { startupId: string; phase: PipelinePhase; agent: { key: string; status: string; startedAt?: string; completedAt?: string; progress?: number; error?: string } };
-  'agent:completed': { startupId: string; phase: PipelinePhase; agent: { key: string; status: string; startedAt?: string; completedAt?: string; progress?: number; error?: string } };
+  'phase:started': { startupId: string; pipelineRunId: string; phase: PipelinePhase; status: PhaseStatus; error?: string };
+  'phase:completed': { startupId: string; pipelineRunId: string; phase: PipelinePhase; status: PhaseStatus; error?: string };
+  'phase:failed': { startupId: string; pipelineRunId: string; phase: PipelinePhase; status: PhaseStatus; error?: string };
+  'phase:waiting': { startupId: string; pipelineRunId: string; phase: PipelinePhase; status: PhaseStatus; error?: string };
+  'phase:skipped': { startupId: string; pipelineRunId: string; phase: PipelinePhase; status: PhaseStatus; error?: string };
+  'phase:updated': { startupId: string; pipelineRunId: string; phase: PipelinePhase; status: PhaseStatus; error?: string };
+  'agent:progress': {
+    startupId: string;
+    pipelineRunId: string;
+    phase: PipelinePhase;
+    agent: {
+      key: string;
+      status: string;
+      startedAt?: string;
+      completedAt?: string;
+      progress?: number;
+      error?: string;
+      attempts?: number;
+      retryCount?: number;
+      usedFallback?: boolean;
+      lastEvent?: string;
+      lastEventAt?: string;
+    };
+  };
+  'agent:completed': {
+    startupId: string;
+    pipelineRunId: string;
+    phase: PipelinePhase;
+    agent: {
+      key: string;
+      status: string;
+      startedAt?: string;
+      completedAt?: string;
+      progress?: number;
+      error?: string;
+      attempts?: number;
+      retryCount?: number;
+      usedFallback?: boolean;
+      lastEvent?: string;
+      lastEventAt?: string;
+    };
+  };
 }
 
 function parseCookies(raw: string): Record<string, string> {

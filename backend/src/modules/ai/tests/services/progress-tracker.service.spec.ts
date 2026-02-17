@@ -236,6 +236,44 @@ describe("ProgressTrackerService", () => {
     );
   });
 
+  it("deduplicates repeated lifecycle events for the same agent attempt", async () => {
+    await service.initProgress({
+      startupId: "startup-1",
+      userId: "user-1",
+      pipelineRunId: "run-1",
+      phases: Object.values(PipelinePhase),
+    });
+
+    await service.updateAgentProgress({
+      startupId: "startup-1",
+      userId: "user-1",
+      pipelineRunId: "run-1",
+      phase: PipelinePhase.RESEARCH,
+      key: "team",
+      status: "running",
+      progress: 0,
+      attempt: 1,
+      retryCount: 0,
+      lifecycleEvent: "started",
+    });
+
+    await service.updateAgentProgress({
+      startupId: "startup-1",
+      userId: "user-1",
+      pipelineRunId: "run-1",
+      phase: PipelinePhase.RESEARCH,
+      key: "team",
+      status: "running",
+      progress: 0,
+      attempt: 1,
+      retryCount: 0,
+      lifecycleEvent: "started",
+    });
+
+    const progress = await service.getProgress("startup-1");
+    expect(progress?.agentEvents).toHaveLength(1);
+  });
+
   it("marks progress as complete and emits pipeline:completed", async () => {
     await service.initProgress({
       startupId: "startup-1",

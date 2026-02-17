@@ -252,6 +252,19 @@ function AdminReviewPage() {
     });
   };
 
+  const handleLiveAgentRetry = async (
+    phase: "research" | "evaluation",
+    agentKey: string,
+  ) => {
+    await retryAgentMutation.mutateAsync({
+      id,
+      data: {
+        phase,
+        agent: agentKey,
+      },
+    });
+  };
+
   return (
     <div className="space-y-6">
       <StartupHeader
@@ -297,6 +310,7 @@ function AdminReviewPage() {
             <AdminPipelineLivePanel
               startupId={startup.id}
               startupStatus={startup.status}
+              onRetryAgent={handleLiveAgentRetry}
             />
           </TabsContent>
 

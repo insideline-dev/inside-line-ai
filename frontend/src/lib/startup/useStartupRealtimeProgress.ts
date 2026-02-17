@@ -72,6 +72,25 @@ function isTerminalPhaseStatus(status: string | undefined): boolean {
   return status === "completed" || status === "failed" || status === "skipped";
 }
 
+function isTerminalAgentStatus(status: string | undefined): boolean {
+  return status === "completed" || status === "failed";
+}
+
+function isOlderTimestamp(
+  incoming: string | undefined,
+  existing: string | undefined,
+): boolean {
+  if (!incoming || !existing) {
+    return false;
+  }
+  const incomingMs = new Date(incoming).getTime();
+  const existingMs = new Date(existing).getTime();
+  if (!Number.isFinite(incomingMs) || !Number.isFinite(existingMs)) {
+    return false;
+  }
+  return incomingMs < existingMs;
+}
+
 function normalizeTerminalAgentStates(progress: PipelineProgressData): void {
   const pipelineTerminal = Boolean(
     progress.pipelineStatus &&
@@ -317,6 +336,13 @@ export function useStartupRealtimeProgress(
       queryClient.setQueryData(queryKey, (current) =>
         patchProgressPayload(current, (base) => {
           const next = { ...base };
+          if (
+            next.pipelineRunId &&
+            data.pipelineRunId &&
+            next.pipelineRunId !== data.pipelineRunId
+          ) {
+            return next;
+          }
           next.pipelineRunId = data.pipelineRunId;
           next.pipelineStatus = data.status;
           next.overallProgress = 100;
@@ -332,6 +358,13 @@ export function useStartupRealtimeProgress(
       queryClient.setQueryData(queryKey, (current) =>
         patchProgressPayload(current, (base) => {
           const next = { ...base };
+          if (
+            next.pipelineRunId &&
+            data.pipelineRunId &&
+            next.pipelineRunId !== data.pipelineRunId
+          ) {
+            return next;
+          }
           next.pipelineRunId = data.pipelineRunId;
           next.pipelineStatus = data.status;
           next.error = data.error;
@@ -344,6 +377,13 @@ export function useStartupRealtimeProgress(
       queryClient.setQueryData(queryKey, (current) =>
         patchProgressPayload(current, (base) => {
           const next = { ...base };
+          if (
+            next.pipelineRunId &&
+            data.pipelineRunId &&
+            next.pipelineRunId !== data.pipelineRunId
+          ) {
+            return next;
+          }
           next.pipelineRunId = data.pipelineRunId;
           next.pipelineStatus = data.status;
           next.error = data.error;
@@ -356,6 +396,16 @@ export function useStartupRealtimeProgress(
       queryClient.setQueryData(queryKey, (current) =>
         patchProgressPayload(current, (base) => {
           const next = { ...base };
+          if (data.pipelineRunId) {
+            if (
+              next.pipelineRunId &&
+              next.pipelineRunId !== data.pipelineRunId
+            ) {
+              return next;
+            }
+            next.pipelineRunId = data.pipelineRunId;
+          }
+
           const phase = ensurePhase(next, data.phase);
           const now = new Date().toISOString();
 
@@ -399,12 +449,30 @@ export function useStartupRealtimeProgress(
       queryClient.setQueryData(queryKey, (current) =>
         patchProgressPayload(current, (base) => {
           const next = { ...base };
+          if (data.pipelineRunId) {
+            if (
+              next.pipelineRunId &&
+              next.pipelineRunId !== data.pipelineRunId
+            ) {
+              return next;
+            }
+            next.pipelineRunId = data.pipelineRunId;
+          }
+
           const phase = ensurePhase(next, data.phase);
           const now = new Date().toISOString();
           const existing = (phase.agents ?? {})[data.agent.key] ?? {
             key: data.agent.key,
             status: "pending",
           };
+
+          if (
+            isOlderTimestamp(data.agent.lastEventAt, existing.lastEventAt) ||
+            (isTerminalAgentStatus(existing.status) &&
+              !isTerminalAgentStatus(data.agent.status))
+          ) {
+            return recomputeProgress(next);
+          }
 
           const agent: PipelineAgentProgress = {
             ...existing,
@@ -421,6 +489,11 @@ export function useStartupRealtimeProgress(
               (data.agent.status === "completed" || data.agent.status === "failed"
                 ? existing.completedAt ?? now
                 : existing.completedAt),
+            attempts: data.agent.attempts ?? existing.attempts,
+            retryCount: data.agent.retryCount ?? existing.retryCount,
+            usedFallback: data.agent.usedFallback ?? existing.usedFallback,
+            lastEvent: data.agent.lastEvent ?? existing.lastEvent,
+            lastEventAt: data.agent.lastEventAt ?? existing.lastEventAt,
           };
 
           phase.agents = {

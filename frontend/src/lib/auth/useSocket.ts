@@ -74,6 +74,7 @@ export interface JobStatusEvent {
 
 export interface PhaseEvent {
   startupId: string;
+  pipelineRunId?: string;
   phase: string;
   status: string;
   error?: string;
@@ -89,6 +90,7 @@ export interface PipelineStatusEvent {
 
 export interface AgentProgressEvent {
   startupId: string;
+  pipelineRunId?: string;
   phase: string;
   agent: {
     key: string;

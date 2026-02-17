@@ -31,6 +31,10 @@ export class AiConfigService {
     return this.config.get<number>("AI_MAX_RETRIES", 3);
   }
 
+  isPromptRuntimeConfigEnabled(): boolean {
+    return this.config.get<boolean>("AI_PROMPT_RUNTIME_CONFIG_ENABLED", true);
+  }
+
   getResearchTemperature(): number {
     return this.config.get<number>("AI_RESEARCH_TEMPERATURE", 0.4);
   }

@@ -126,7 +126,7 @@ describe("GeminiResearchService", () => {
   });
 
   it("returns fallback with merged sources when grounded text cannot be parsed as schema JSON", async () => {
-    generateTextMock.mockResolvedValueOnce({
+    generateTextMock.mockResolvedValue({
       text: "This response did not return strict JSON.",
       sources: [{ title: "Source", url: "https://search-b.example.com" }],
       providerMetadata: {},
@@ -192,7 +192,7 @@ describe("GeminiResearchService", () => {
   });
 
   it("error logs include agent key when provider throws", async () => {
-    generateTextMock.mockRejectedValueOnce(new Error("API rate limit exceeded"));
+    generateTextMock.mockRejectedValue(new Error("API rate limit exceeded"));
 
     await service.research({
       agent: "market",
@@ -235,7 +235,7 @@ describe("GeminiResearchService", () => {
   });
 
   it("fallback sources default to empty array when undefined", async () => {
-    generateTextMock.mockRejectedValueOnce(new Error("Network error"));
+    generateTextMock.mockRejectedValue(new Error("Network error"));
 
     const result = await service.research({
       agent: "market",
@@ -256,7 +256,7 @@ describe("GeminiResearchService", () => {
   });
 
   it("merges fallback sources with extracted sources on parse failure", async () => {
-    generateTextMock.mockResolvedValueOnce({
+    generateTextMock.mockResolvedValue({
       text: "Not valid JSON",
       sources: [{ title: "Search", url: "https://search.example.com" }],
       providerMetadata: {},
@@ -386,7 +386,7 @@ describe("GeminiResearchService JSON extraction", () => {
   });
 
   it("rejects arrays and returns fallback", async () => {
-    generateTextMock.mockResolvedValueOnce({
+    generateTextMock.mockResolvedValue({
       text: JSON.stringify(["item1", "item2"]),
       sources: [],
       providerMetadata: {},
@@ -411,7 +411,7 @@ describe("GeminiResearchService JSON extraction", () => {
   });
 
   it("rejects null and returns fallback", async () => {
-    generateTextMock.mockResolvedValueOnce({
+    generateTextMock.mockResolvedValue({
       text: "null",
       sources: [],
       providerMetadata: {},
@@ -504,7 +504,7 @@ describe("GeminiResearchService JSON extraction", () => {
   });
 
   it("rejects array in fenced block", async () => {
-    generateTextMock.mockResolvedValueOnce({
+    generateTextMock.mockResolvedValue({
       text: ["```json", JSON.stringify(["array", "item"]), "```"].join("\n"),
       sources: [],
       providerMetadata: {},
@@ -529,7 +529,7 @@ describe("GeminiResearchService JSON extraction", () => {
   });
 
   it("rejects null in fenced block", async () => {
-    generateTextMock.mockResolvedValueOnce({
+    generateTextMock.mockResolvedValue({
       text: ["```json", "null", "```"].join("\n"),
       sources: [],
       providerMetadata: {},

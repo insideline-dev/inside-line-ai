@@ -14,8 +14,14 @@ const optionalNonNegativeNumber = z.preprocess(
   z.number().nonnegative().optional(),
 );
 
+const requiredStringFromNull = (fallback: string) =>
+  z.preprocess(
+    (value) => (value === null ? fallback : value),
+    z.string().min(1),
+  );
+
 export const FundingHistoryEntrySchema = z.object({
-  round: z.string().min(1),
+  round: requiredStringFromNull("Unknown round"),
   amount: z.number().nonnegative(),
   date: optionalString,
 });
@@ -24,7 +30,7 @@ export const FinancialsEvaluationSchema = BaseEvaluationSchema.extend({
   burnRate: optionalNonNegativeNumber,
   runway: optionalNonNegativeNumber,
   fundingHistory: z.array(FundingHistoryEntrySchema).default([]),
-  financialHealth: z.string().min(1),
+  financialHealth: requiredStringFromNull("Financial health requires manual review"),
 });
 
 export type FinancialsEvaluation = z.infer<typeof FinancialsEvaluationSchema>;

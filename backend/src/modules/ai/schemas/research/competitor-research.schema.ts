@@ -23,14 +23,20 @@ const optionalThreatLevel = z.preprocess(
   z.enum(["high", "medium", "low"]).optional(),
 );
 
+const requiredStringFromNull = (fallback: string) =>
+  z.preprocess(
+    (value) => (value === null ? fallback : value),
+    z.string().min(1),
+  );
+
 export const CompetitorDetailSchema = z.object({
-  name: z.string().min(1),
-  description: z.string().min(1),
+  name: requiredStringFromNull("Unknown competitor"),
+  description: requiredStringFromNull("Description unavailable"),
   website: optionalUrl,
   fundingRaised: optionalNonNegativeNumber,
   fundingStage: optionalString,
   employeeCount: optionalNonNegativeNumber,
-  productOverview: z.string(),
+  productOverview: requiredStringFromNull("Product overview unavailable"),
   keyFeatures: z.array(z.string()).default([]),
   pricing: optionalString,
   targetMarket: optionalString,
@@ -40,9 +46,9 @@ export const CompetitorDetailSchema = z.object({
 });
 
 export const IndirectCompetitorDetailSchema = z.object({
-  name: z.string().min(1),
-  description: z.string().min(1),
-  whyIndirect: z.string().min(1),
+  name: requiredStringFromNull("Unknown competitor"),
+  description: requiredStringFromNull("Description unavailable"),
+  whyIndirect: requiredStringFromNull("Indirect relationship not specified"),
   threatLevel: optionalThreatLevel,
   website: optionalUrl,
 });

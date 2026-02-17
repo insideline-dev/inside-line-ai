@@ -205,7 +205,7 @@ export class MatchingProcessor
       title: 'New High-Score Match',
       message: `A new startup matches your investment thesis with a score of ${n.overallScore}%`,
       type: NotificationType.MATCH,
-      link: `/investor/matches/${startupId}`,
+      link: `/investor/startup/${startupId}`,
     }));
 
     await this.notificationService.createBulk(notificationPayloads);

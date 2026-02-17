@@ -73,7 +73,7 @@ export class AdminMatchingService {
           type: NotificationType.MATCH,
           title: "New Startup Match",
           message: `A startup matched your thesis with ${match.thesisFitScore}% alignment.`,
-          link: `/investor/matches/${startupId}`,
+          link: `/investor/startup/${startupId}`,
         })),
       );
     }

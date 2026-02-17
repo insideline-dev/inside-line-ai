@@ -82,12 +82,30 @@ export function NotificationCenter() {
     }
   };
 
+  const resolveNotificationLink = (link?: string): string | null => {
+    if (!link) return null;
+
+    const trimmedLink = link.trim();
+    const legacyAdminStartupMatch = trimmedLink.match(/^\/admin\/startups\/([^/?#]+)/);
+    if (legacyAdminStartupMatch) {
+      return `/admin/startup/${legacyAdminStartupMatch[1]}`;
+    }
+
+    const investorMatchRoute = trimmedLink.match(/^\/investor\/matches\/([^/?#]+)/);
+    if (investorMatchRoute) {
+      return `/investor/startup/${investorMatchRoute[1]}`;
+    }
+
+    return trimmedLink;
+  };
+
   const handleNotificationClick = (notification: Notification) => {
     if (!notification.read) {
       markRead({ id: notification.id });
     }
-    if (notification.link) {
-      navigate({ to: notification.link });
+    const target = resolveNotificationLink(notification.link);
+    if (target) {
+      navigate({ to: target as any });
     }
     setOpen(false);
   };

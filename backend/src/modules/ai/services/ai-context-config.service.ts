@@ -231,7 +231,9 @@ export class AiContextConfigService {
         source: "revision_override",
         revisionId: revision.id,
         stage: normalizedStage,
-        config: this.toEffectiveConfig(revision.configJson),
+        config: this.toEffectiveConfig(
+          this.parseContextConfig(revision.configJson, params.key),
+        ),
       };
     }
 
@@ -305,7 +307,9 @@ export class AiContextConfigService {
       source: "published",
       revisionId: selected.id,
       stage: normalizedStage,
-      config: this.toEffectiveConfig(selected.configJson),
+      config: this.toEffectiveConfig(
+        this.parseContextConfig(selected.configJson, params.key),
+      ),
     };
   }
 

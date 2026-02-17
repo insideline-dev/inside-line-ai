@@ -22,6 +22,8 @@ import {
   Eye,
   Clock,
   Plus,
+  List,
+  LayoutGrid,
   FileSearch,
   Lock,
   Loader2,
@@ -236,6 +238,28 @@ function InvestorDashboard() {
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
+          <div className="flex rounded-md border overflow-hidden">
+            <Button
+              variant="secondary"
+              size="icon"
+              className="rounded-none border-r"
+              asChild
+            >
+              <Link to="/investor">
+                <List className="w-4 h-4" />
+              </Link>
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-none"
+              asChild
+            >
+              <Link to="/investor/pipeline">
+                <LayoutGrid className="w-4 h-4" />
+              </Link>
+            </Button>
+          </div>
           <Button asChild data-testid="button-submit-startup">
             <Link to="/investor/submit">
               <Plus className="w-4 h-4 mr-2" />

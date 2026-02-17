@@ -13,6 +13,7 @@ import { StartupStatus, StartupStage } from "../entities/startup.schema";
 import { AiConfigService } from "../../ai/services/ai-config.service";
 import { PipelineService } from "../../ai/services/pipeline.service";
 import { PipelineFeedbackService } from "../../ai/services/pipeline-feedback.service";
+import { StartupMatchingPipelineService } from "../../ai/services/startup-matching-pipeline.service";
 import {
   PipelineStatus,
   ModelPurpose,
@@ -29,6 +30,7 @@ describe("StartupService", () => {
   let aiConfigService: jest.Mocked<AiConfigService>;
   let pipelineService: jest.Mocked<PipelineService>;
   let pipelineFeedbackService: jest.Mocked<PipelineFeedbackService>;
+  let startupMatchingService: jest.Mocked<StartupMatchingPipelineService>;
 
   const createMockDb = () => ({
     select: jest.fn().mockReturnThis(),
@@ -125,6 +127,16 @@ describe("StartupService", () => {
       record: jest.fn().mockResolvedValue({ id: "feedback-1" }),
     } as unknown as jest.Mocked<PipelineFeedbackService>;
 
+    startupMatchingService = {
+      queueStartupMatching: jest.fn().mockResolvedValue({
+        startupId: mockStartupId,
+        analysisJobId: "matching-job-1",
+        queueJobId: "queue-job-1",
+        status: "queued",
+        triggerSource: "approval",
+      }),
+    } as unknown as jest.Mocked<StartupMatchingPipelineService>;
+
     service = new StartupService(
       drizzleService,
       queueService,
@@ -133,6 +145,7 @@ describe("StartupService", () => {
       aiConfigService,
       pipelineService,
       pipelineFeedbackService,
+      startupMatchingService,
     );
   });
 
@@ -546,6 +559,11 @@ describe("StartupService", () => {
 
       expect(result.status).toBe(StartupStatus.APPROVED);
       expect(result.approvedAt).toBeTruthy();
+      expect(startupMatchingService.queueStartupMatching).toHaveBeenCalledWith({
+        startupId: mockStartupId,
+        requestedBy: mockUserId,
+        triggerSource: "approval",
+      });
     });
 
     it("should throw NotFoundException if startup not found", async () => {
@@ -562,6 +580,29 @@ describe("StartupService", () => {
       await expect(service.approve(mockStartupId, mockUserId)).rejects.toThrow(
         BadRequestException,
       );
+    });
+
+    it("does not fail approval when matching queueing fails", async () => {
+      const submittedStartup = {
+        ...mockStartup,
+        status: StartupStatus.SUBMITTED,
+      };
+      const approvedStartup = {
+        ...submittedStartup,
+        status: StartupStatus.APPROVED,
+        approvedAt: new Date(),
+      };
+
+      mockDb.limit.mockResolvedValueOnce([submittedStartup]);
+      mockDb.returning.mockResolvedValueOnce([approvedStartup]);
+      startupMatchingService.queueStartupMatching.mockRejectedValueOnce(
+        new Error("queue offline"),
+      );
+
+      const result = await service.approve(mockStartupId, mockUserId);
+
+      expect(result.status).toBe(StartupStatus.APPROVED);
+      expect(startupMatchingService.queueStartupMatching).toHaveBeenCalledTimes(1);
     });
   });
 

@@ -39,6 +39,9 @@ describe("EvaluationProcessor", () => {
       minimumRequired: 8,
       failedKeys: [],
       errors: [],
+      fallbackAgents: 0,
+      fallbackKeys: [],
+      warnings: [],
       degraded: false,
     },
   };
@@ -237,7 +240,7 @@ describe("EvaluationProcessor", () => {
     expect(result.type).toBe("ai_evaluation");
   });
 
-  it("marks fallback agent completions as failed in progress tracking", async () => {
+  it("marks fallback agent completions as completed with fallback lifecycle", async () => {
     evaluationService.run.mockImplementationOnce(
       async (
         _startupId: string,
@@ -260,9 +263,13 @@ describe("EvaluationProcessor", () => {
           ...evaluationResult,
           summary: {
             ...evaluationResult.summary,
-            failedAgents: 1,
-            failedKeys: ["traction"],
-            errors: [{ agent: "traction", error: "No output generated." }],
+            failedAgents: 0,
+            failedKeys: [],
+            errors: [],
+            fallbackAgents: 1,
+            fallbackKeys: ["traction"],
+            warnings: [{ agent: "traction", message: "No output generated." }],
+            degraded: true,
           },
         };
       },
@@ -283,8 +290,8 @@ describe("EvaluationProcessor", () => {
     expect(pipelineService.onAgentProgress).toHaveBeenCalledWith(
       expect.objectContaining({
         key: "traction",
-        status: "failed",
-        progress: 0,
+        status: "completed",
+        progress: 100,
         error: "No output generated.",
         usedFallback: true,
         lifecycleEvent: "fallback",

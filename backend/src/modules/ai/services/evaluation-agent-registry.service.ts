@@ -2,6 +2,7 @@ import { Injectable, Logger, Optional } from "@nestjs/common";
 import type {
   EvaluationAgent,
   EvaluationAgentCompletion,
+  EvaluationFallbackReason,
   EvaluationAgentLifecycleEvent,
   EvaluationFeedbackNote,
   EvaluationAgentKey,
@@ -80,6 +81,9 @@ export class EvaluationAgentRegistryService {
     const outputs = new Map<EvaluationAgentKey, unknown>();
     const failedKeys: EvaluationAgentKey[] = [];
     const errors: Array<{ agent: string; error: string }> = [];
+    const fallbackKeys: EvaluationAgentKey[] = [];
+    const warnings: Array<{ agent: string; message: string }> = [];
+    const fallbackReasonCounts: Partial<Record<EvaluationFallbackReason, number>> = {};
     await Promise.all(
       this.agents.map(async (agent) => {
         const startedAt = new Date();
@@ -110,31 +114,49 @@ export class EvaluationAgentRegistryService {
           }
 
           outputs.set(result.key, result.output);
+          const normalizedFallbackReason = result.usedFallback
+            ? (result.fallbackReason ?? "UNHANDLED_AGENT_EXCEPTION")
+            : result.fallbackReason;
           this.emitAgentCompletion(onAgentComplete, {
             agent: result.key,
             output: result.output,
             usedFallback: result.usedFallback,
             error: result.error,
+            fallbackReason: normalizedFallbackReason,
+            rawProviderError: result.rawProviderError,
           });
 
           if (result.usedFallback) {
-            failedKeys.push(result.key);
-            errors.push({
+            fallbackKeys.push(result.key);
+            warnings.push({
               agent: result.key,
-              error: result.error ?? "Agent fallback used",
+              message:
+                result.error ??
+                "Agent returned deterministic fallback output; manual review recommended.",
+              ...(normalizedFallbackReason
+                ? { reason: normalizedFallbackReason }
+                : {}),
             });
+            this.bumpFallbackReasonCount(
+              fallbackReasonCounts,
+              normalizedFallbackReason,
+            );
           }
         } catch (error) {
           const completedAt = new Date();
           const errorMessage =
             error instanceof Error ? error.message : String(error);
+          const fallbackReason: EvaluationFallbackReason =
+            "UNHANDLED_AGENT_EXCEPTION";
 
           this.emitAgentLifecycle(onAgentLifecycle, {
             agent: agent.key,
-            event: "failed",
+            event: "fallback",
             attempt: 1,
             retryCount: 0,
             error: errorMessage,
+            fallbackReason,
+            rawProviderError: errorMessage,
           });
 
           await this.recordTelemetrySafely(startupId, {
@@ -149,7 +171,7 @@ export class EvaluationAgentRegistryService {
           const fallbackOutput = agent.fallback(pipelineData);
           this.persistAgentTrace(startupId, pipelineRunId, {
             agent: agent.key,
-            status: "failed",
+            status: "fallback",
             inputPrompt: "",
             outputText: this.safeStringify(fallbackOutput),
             outputJson: fallbackOutput,
@@ -157,19 +179,28 @@ export class EvaluationAgentRegistryService {
             retryCount: 0,
             usedFallback: true,
             error: errorMessage,
+            fallbackReason,
+            rawProviderError: errorMessage,
           });
 
-          failedKeys.push(agent.key);
-          errors.push({
+          fallbackKeys.push(agent.key);
+          warnings.push({
             agent: agent.key,
-            error: errorMessage,
+            message: errorMessage,
+            ...(fallbackReason ? { reason: fallbackReason } : {}),
           });
+          this.bumpFallbackReasonCount(
+            fallbackReasonCounts,
+            fallbackReason,
+          );
           outputs.set(agent.key, fallbackOutput);
           this.emitAgentCompletion(onAgentComplete, {
             agent: agent.key,
             output: fallbackOutput,
             usedFallback: true,
             error: errorMessage,
+            fallbackReason,
+            rawProviderError: errorMessage,
           });
         }
       }),
@@ -177,18 +208,23 @@ export class EvaluationAgentRegistryService {
 
     const completedAgents = this.agents.length - failedKeys.length;
     const minimumRequired = this.phaseTransition.getConfig().minimumEvaluationAgents;
+    const fallbackAgents = fallbackKeys.length;
     const summary: EvaluationSummary = {
       completedAgents,
       failedAgents: failedKeys.length,
       minimumRequired,
       failedKeys,
       errors,
-      degraded: completedAgents < minimumRequired,
+      fallbackAgents,
+      fallbackKeys,
+      warnings,
+      fallbackReasonCounts,
+      degraded: completedAgents < minimumRequired || fallbackAgents > 0,
     };
 
     if (summary.degraded) {
       this.logger.warn(
-        `Evaluation completed in degraded mode for startup ${startupId}: ${completedAgents}/${this.agents.length} agents successful`,
+        `Evaluation completed in degraded mode for startup ${startupId}: ${completedAgents}/${this.agents.length} completed, ${fallbackAgents} fallback`,
       );
     }
 
@@ -253,16 +289,24 @@ export class EvaluationAgentRegistryService {
         output: result.output,
         usedFallback: result.usedFallback,
         error: result.error,
+        fallbackReason: result.usedFallback
+          ? (result.fallbackReason ?? "UNHANDLED_AGENT_EXCEPTION")
+          : result.fallbackReason,
+        rawProviderError: result.rawProviderError,
       };
     } catch (error) {
       const completedAt = new Date();
       const message = error instanceof Error ? error.message : String(error);
+      const fallbackReason: EvaluationFallbackReason =
+        "UNHANDLED_AGENT_EXCEPTION";
       this.emitAgentLifecycle(onAgentLifecycle, {
         agent: key,
-        event: "failed",
+        event: "fallback",
         attempt: 1,
         retryCount: 0,
         error: message,
+        fallbackReason,
+        rawProviderError: message,
       });
       await this.recordTelemetrySafely(startupId, {
         agentKey: key,
@@ -272,11 +316,27 @@ export class EvaluationAgentRegistryService {
         durationMs: completedAt.getTime() - startedAt.getTime(),
         retryCount: 0,
       });
-      return {
+      const fallbackOutput = agent.fallback(pipelineData);
+      this.persistAgentTrace(startupId, pipelineRunId, {
         agent: key,
-        output: agent.fallback(pipelineData),
+        status: "fallback",
+        inputPrompt: "",
+        outputText: this.safeStringify(fallbackOutput),
+        outputJson: fallbackOutput,
+        attempt: 1,
+        retryCount: 0,
         usedFallback: true,
         error: message,
+        fallbackReason,
+        rawProviderError: message,
+      });
+      return {
+        agent: key,
+        output: fallbackOutput,
+        usedFallback: true,
+        error: message,
+        fallbackReason,
+        rawProviderError: message,
       };
     }
   }
@@ -307,6 +367,8 @@ export class EvaluationAgentRegistryService {
         outputText: event.outputText,
         outputJson: event.outputJson,
         error: event.error,
+        fallbackReason: event.fallbackReason,
+        rawProviderError: event.rawProviderError,
       })
       .catch((error) => {
         const message = error instanceof Error ? error.message : String(error);
@@ -322,6 +384,16 @@ export class EvaluationAgentRegistryService {
     } catch {
       return String(value);
     }
+  }
+
+  private bumpFallbackReasonCount(
+    counts: Partial<Record<EvaluationFallbackReason, number>>,
+    reason: EvaluationFallbackReason | undefined,
+  ): void {
+    if (!reason) {
+      return;
+    }
+    counts[reason] = (counts[reason] ?? 0) + 1;
   }
 
   private async recordTelemetrySafely(

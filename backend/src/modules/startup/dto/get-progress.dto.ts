@@ -11,6 +11,16 @@ export const ProgressAgentSchema = z.object({
   attempts: z.number().int().min(0).optional(),
   retryCount: z.number().int().min(0).optional(),
   usedFallback: z.boolean().optional(),
+  fallbackReason: z
+    .enum([
+      "EMPTY_STRUCTURED_OUTPUT",
+      "TIMEOUT",
+      "SCHEMA_OUTPUT_INVALID",
+      "MODEL_OR_PROVIDER_ERROR",
+      "UNHANDLED_AGENT_EXCEPTION",
+    ])
+    .optional(),
+  rawProviderError: z.string().optional(),
   lastEvent: z
     .enum(["started", "retrying", "completed", "failed", "fallback"])
     .optional(),
@@ -36,6 +46,16 @@ export const ProgressAgentEventSchema = z.object({
   attempt: z.number().int().min(1).optional(),
   retryCount: z.number().int().min(0).optional(),
   error: z.string().optional(),
+  fallbackReason: z
+    .enum([
+      "EMPTY_STRUCTURED_OUTPUT",
+      "TIMEOUT",
+      "SCHEMA_OUTPUT_INVALID",
+      "MODEL_OR_PROVIDER_ERROR",
+      "UNHANDLED_AGENT_EXCEPTION",
+    ])
+    .optional(),
+  rawProviderError: z.string().optional(),
 });
 
 export const ProgressAgentTraceSchema = z.object({
@@ -51,6 +71,16 @@ export const ProgressAgentTraceSchema = z.object({
   outputText: z.string().nullable().optional(),
   outputJson: z.unknown().optional(),
   error: z.string().nullable().optional(),
+  fallbackReason: z
+    .enum([
+      "EMPTY_STRUCTURED_OUTPUT",
+      "TIMEOUT",
+      "SCHEMA_OUTPUT_INVALID",
+      "MODEL_OR_PROVIDER_ERROR",
+      "UNHANDLED_AGENT_EXCEPTION",
+    ])
+    .optional(),
+  rawProviderError: z.string().optional(),
   startedAt: z.string().optional(),
   completedAt: z.string().nullable().optional(),
 });

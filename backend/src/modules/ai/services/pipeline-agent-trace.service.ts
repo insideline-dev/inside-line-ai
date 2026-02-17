@@ -2,6 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { and, eq, lt } from "drizzle-orm";
 import { DrizzleService } from "../../../database";
+import type { EvaluationFallbackReason } from "../interfaces/agent.interface";
 import { PipelinePhase } from "../interfaces/pipeline.interface";
 import { pipelineAgentRun } from "../entities";
 
@@ -20,6 +21,8 @@ export interface RecordPipelineAgentRunInput {
   outputText?: string;
   outputJson?: unknown;
   error?: string;
+  fallbackReason?: EvaluationFallbackReason;
+  rawProviderError?: string;
   startedAt?: Date;
   completedAt?: Date;
 }
@@ -58,7 +61,11 @@ export class PipelineAgentTraceService {
     );
     const inputPrompt = this.truncateText(input.inputPrompt, this.promptCharLimit);
     const outputText = this.truncateText(input.outputText, this.outputCharLimit);
-    const outputJson = this.normalizeOutputJson(input.outputJson);
+    const outputJson = this.attachTraceMeta(
+      this.normalizeOutputJson(input.outputJson),
+      input.fallbackReason,
+      input.rawProviderError,
+    );
 
     await this.drizzle.db.insert(pipelineAgentRun).values({
       startupId: input.startupId,
@@ -141,6 +148,26 @@ export class PipelineAgentTraceService {
     }
   }
 
+  private attachTraceMeta(
+    outputJson: Record<string, unknown> | unknown[] | null,
+    fallbackReason: EvaluationFallbackReason | undefined,
+    rawProviderError: string | undefined,
+  ): Record<string, unknown> | unknown[] | null {
+    if (!outputJson || Array.isArray(outputJson)) {
+      return outputJson;
+    }
+    if (!fallbackReason && !rawProviderError) {
+      return outputJson;
+    }
+    return {
+      ...outputJson,
+      __traceMeta: {
+        ...(fallbackReason ? { fallbackReason } : {}),
+        ...(rawProviderError ? { rawProviderError } : {}),
+      },
+    };
+  }
+
   private normalizeNonNegativeInt(value: number | undefined, fallback: number): number {
     if (typeof value !== "number" || !Number.isFinite(value)) {
       return fallback;
@@ -148,4 +175,3 @@ export class PipelineAgentTraceService {
     return Math.max(0, Math.floor(value));
   }
 }
-

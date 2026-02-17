@@ -102,6 +102,13 @@ export interface AgentProgressEvent {
     attempts?: number;
     retryCount?: number;
     usedFallback?: boolean;
+    fallbackReason?:
+      | "EMPTY_STRUCTURED_OUTPUT"
+      | "TIMEOUT"
+      | "SCHEMA_OUTPUT_INVALID"
+      | "MODEL_OR_PROVIDER_ERROR"
+      | "UNHANDLED_AGENT_EXCEPTION";
+    rawProviderError?: string;
     lastEvent?: "started" | "retrying" | "completed" | "failed" | "fallback";
     lastEventAt?: string;
   };

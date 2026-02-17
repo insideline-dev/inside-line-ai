@@ -144,9 +144,20 @@ function toneForEvent(event: PipelineAgentEventType): SignalTone {
   return "neutral";
 }
 
+function isFallbackAgent(agent: PipelineAgentProgress): boolean {
+  return agent.usedFallback === true || agent.lastEvent === "fallback";
+}
+
+function isHardFailedAgent(agent: PipelineAgentProgress): boolean {
+  return (
+    agent.status === "failed" ||
+    (agent.lastEvent === "failed" && !isFallbackAgent(agent))
+  );
+}
+
 function toneForAgent(agent: PipelineAgentProgress): SignalTone {
-  if (agent.status === "failed" || Boolean(agent.error)) return "danger";
-  if (agent.usedFallback || (agent.retryCount ?? 0) > 0) return "warning";
+  if (isHardFailedAgent(agent)) return "danger";
+  if (isFallbackAgent(agent) || (agent.retryCount ?? 0) > 0) return "warning";
   if (agent.status === "running") return "info";
   if (agent.status === "completed") return "success";
   return "neutral";
@@ -156,15 +167,14 @@ function toneForPhase(phase: PipelinePhaseProgress): SignalTone {
   const agentValues = Object.values(phase.agents ?? {});
   if (
     phase.status === "failed" ||
-    Boolean(phase.error) ||
-    agentValues.some((agent) => agent.status === "failed" || Boolean(agent.error))
+    agentValues.some((agent) => isHardFailedAgent(agent))
   ) {
     return "danger";
   }
   if (
     (phase.retryCount ?? 0) > 0 ||
     agentValues.some(
-      (agent) => agent.usedFallback || (agent.retryCount ?? 0) > 0,
+      (agent) => isFallbackAgent(agent) || (agent.retryCount ?? 0) > 0,
     )
   ) {
     return "warning";
@@ -222,6 +232,19 @@ function normalizeAgentError(value: string | undefined): string | undefined {
     return "Model returned empty structured output; fallback result generated.";
   }
   return value;
+}
+
+function formatFallbackReason(
+  reason: string | undefined,
+): string | undefined {
+  if (!reason || reason.trim().length === 0) {
+    return undefined;
+  }
+  return reason
+    .toLowerCase()
+    .split("_")
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(" ");
 }
 
 function toPrettyOutput(trace: PipelineAgentTrace | null): string {
@@ -297,10 +320,10 @@ export function AdminPipelineLivePanel({
           (agent) => (agent.retryCount ?? 0) > 0,
         ).length;
         const fallbackAgentCount = agents.filter(
-          (agent) => agent.usedFallback === true,
+          (agent) => isFallbackAgent(agent),
         ).length;
         const failedAgentCount = agents.filter(
-          (agent) => agent.status === "failed" || Boolean(agent.error),
+          (agent) => isHardFailedAgent(agent),
         ).length;
         return {
           phase,
@@ -352,6 +375,8 @@ export function AdminPipelineLivePanel({
         event.attempt ?? 0,
         event.retryCount ?? 0,
         event.error ?? "",
+        event.fallbackReason ?? "",
+        event.rawProviderError ?? "",
       ].join("|");
       if (seen.has(signature)) {
         continue;
@@ -380,7 +405,7 @@ export function AdminPipelineLivePanel({
   ).length;
   const isLive = startupStatus === "analyzing" && progress?.pipelineStatus === "running";
   const fallbackCount = flattenedAgents.filter(
-    (agent) => agent.data.usedFallback === true,
+    (agent) => isFallbackAgent(agent.data),
   ).length;
   const retriedAgentsCount = flattenedAgents.filter(
     (agent) => (agent.data.retryCount ?? 0) > 0,
@@ -394,7 +419,7 @@ export function AdminPipelineLivePanel({
   const activeFailedAgentsCount = flattenedAgents.filter((agent) => {
     const phaseStatus = phaseStatusByKey[agent.phase];
     return (
-      (agent.data.status === "failed" || Boolean(agent.data.error)) &&
+      isHardFailedAgent(agent.data) &&
       !isTerminalPhaseStatus(phaseStatus)
     );
   }).length;
@@ -403,9 +428,8 @@ export function AdminPipelineLivePanel({
   ).length;
   const problematicAgentsCount = flattenedAgents.filter(
     (agent) =>
-      agent.data.usedFallback === true ||
-      agent.data.status === "failed" ||
-      Boolean(agent.data.error),
+      isFallbackAgent(agent.data) ||
+      isHardFailedAgent(agent.data),
   ).length;
   const totalIssueSignals =
     problematicAgentsCount + activePhaseErrorCount + (isLive ? activeRetriesCount : 0);
@@ -601,7 +625,15 @@ export function AdminPipelineLivePanel({
                   </div>
                 )}
                 {entry.data.error && (
-                  <p className="mt-2 text-xs text-destructive">{entry.data.error}</p>
+                  <p
+                    className={`mt-2 text-xs ${
+                      entry.data.status === "failed"
+                        ? "text-destructive"
+                        : "text-amber-700 dark:text-amber-300"
+                    }`}
+                  >
+                    {entry.data.error}
+                  </p>
                 )}
               </div>
             ))}
@@ -634,11 +666,16 @@ export function AdminPipelineLivePanel({
                         <span>Phase: {formatLabel(agent.phase)}</span>
                         <span>Attempt: {agent.data.attempts ?? 1}</span>
                         <span>Retries: {agent.data.retryCount ?? 0}</span>
-                        <span>Fallback: {agent.data.usedFallback ? "yes" : "no"}</span>
+                        <span>Fallback: {isFallbackAgent(agent.data) ? "yes" : "no"}</span>
                       </div>
+                      {isFallbackAgent(agent.data) && (
+                        <div className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                          Reason: {formatFallbackReason(agent.data.fallbackReason) ?? "Unknown"}
+                        </div>
+                      )}
                       {onRetryAgent &&
                         (agent.phase === "research" || agent.phase === "evaluation") &&
-                        (agent.data.status === "failed" || agent.data.usedFallback === true) && (
+                        (agent.data.status === "failed" || isFallbackAgent(agent.data)) && (
                           <div className="mt-2">
                             <Button
                               type="button"
@@ -670,7 +707,7 @@ export function AdminPipelineLivePanel({
                             </Button>
                           </div>
                         )}
-                      {(agent.data.usedFallback ||
+                      {(isFallbackAgent(agent.data) ||
                         (agent.data.retryCount ?? 0) > 0 ||
                         agent.data.lastEvent) && (
                         <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -682,7 +719,7 @@ export function AdminPipelineLivePanel({
                               retried {agent.data.retryCount}
                             </Badge>
                           )}
-                          {agent.data.usedFallback && (
+                          {isFallbackAgent(agent.data) && (
                             <Badge
                               variant="outline"
                               className="bg-amber-500/10 text-amber-700 border-amber-500/30 dark:text-amber-300"
@@ -701,8 +738,19 @@ export function AdminPipelineLivePanel({
                         </div>
                       )}
                       {agent.data.error && (
-                        <p className="mt-1 text-xs text-destructive">
+                        <p
+                          className={`mt-1 text-xs ${
+                            isFallbackAgent(agent.data)
+                              ? "text-amber-700 dark:text-amber-300"
+                              : "text-destructive"
+                          }`}
+                        >
                           {normalizeAgentError(agent.data.error)}
+                        </p>
+                      )}
+                      {agent.data.rawProviderError && isFallbackAgent(agent.data) && (
+                        <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                          Provider: {previewText(agent.data.rawProviderError, 220)}
                         </p>
                       )}
                     </div>
@@ -740,9 +788,27 @@ export function AdminPipelineLivePanel({
                         {typeof event.retryCount === "number" && (
                           <span>Retries: {event.retryCount}</span>
                         )}
+                        {event.fallbackReason && (
+                          <span>
+                            Reason: {formatFallbackReason(event.fallbackReason)}
+                          </span>
+                        )}
                       </div>
                       {event.error && (
-                        <p className="mt-1 text-xs text-destructive">{event.error}</p>
+                        <p
+                          className={`mt-1 text-xs ${
+                            event.event === "fallback"
+                              ? "text-amber-700 dark:text-amber-300"
+                              : "text-destructive"
+                          }`}
+                        >
+                          {normalizeAgentError(event.error)}
+                        </p>
+                      )}
+                      {event.rawProviderError && event.event === "fallback" && (
+                        <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                          Provider: {previewText(event.rawProviderError, 220)}
+                        </p>
                       )}
                     </div>
                   ))
@@ -788,8 +854,19 @@ export function AdminPipelineLivePanel({
                       <span>Started: {formatTime(trace.startedAt)}</span>
                     </div>
                     {trace.error && (
-                      <p className="mt-1 text-xs text-destructive">
+                      <p
+                        className={`mt-1 text-xs ${
+                          trace.status === "fallback"
+                            ? "text-amber-700 dark:text-amber-300"
+                            : "text-destructive"
+                        }`}
+                      >
                         {normalizeAgentError(trace.error)}
+                      </p>
+                    )}
+                    {trace.rawProviderError && trace.status === "fallback" && (
+                      <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                        Provider: {previewText(trace.rawProviderError, 220)}
                       </p>
                     )}
                     <div className="mt-2 grid gap-2 md:grid-cols-2">
@@ -856,6 +933,18 @@ export function AdminPipelineLivePanel({
                   : "Agent Trace"}
               </DialogTitle>
             </DialogHeader>
+            {selectedTrace?.status === "fallback" && (
+              <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+                Fallback reason:{" "}
+                {formatFallbackReason(selectedTrace.fallbackReason) ?? "Unknown"}
+                {selectedTrace.rawProviderError ? (
+                  <>
+                    {" "}
+                    | Raw provider error: {selectedTrace.rawProviderError}
+                  </>
+                ) : null}
+              </div>
+            )}
             <div className="grid gap-3 md:grid-cols-2">
               <div className="space-y-1">
                 <p className="text-xs font-medium text-muted-foreground">Input Prompt</p>

@@ -163,14 +163,44 @@ describe("BaseEvaluationAgent", () => {
     });
   });
 
+  it("prepends Startup Snapshot baseline before agent-specific sections", async () => {
+    generateTextMock.mockResolvedValueOnce({
+      output: {
+        score: 79,
+        verdict: "Baseline present",
+      },
+    });
+
+    agent.buildContext.mockReturnValueOnce({
+      companyDescription: "Agent-specific section content",
+    });
+
+    await agent.run(pipelineData);
+
+    const call = generateTextMock.mock.calls[0]?.[0];
+    const prompt = String(call?.prompt ?? "");
+    const startupSnapshotIndex = prompt.indexOf("## Startup Snapshot");
+    const agentSectionIndex = prompt.indexOf("## Company Description");
+
+    expect(startupSnapshotIndex).toBeGreaterThan(-1);
+    expect(prompt).toContain('"companyName": "Clipaf"');
+    expect(prompt).toContain('"industry": "Industrial SaaS"');
+    expect(prompt).toContain('"website": "https://clipaf.com"');
+    expect(agentSectionIndex).toBeGreaterThan(-1);
+    expect(startupSnapshotIndex).toBeLessThan(agentSectionIndex);
+  });
+
   it("uses fallback when provider call fails", async () => {
-    generateTextMock.mockRejectedValueOnce(new Error("provider timeout"));
+    generateTextMock.mockRejectedValue(new Error("provider timeout"));
 
     const result = await agent.run(pipelineData);
 
+    expect(generateTextMock).toHaveBeenCalledTimes(3);
     expect(agent.fallback).toHaveBeenCalledWith(pipelineData);
     expect(result.usedFallback).toBe(true);
-    expect(result.error).toBe("provider timeout");
+    expect(result.error).toBe("Model request timed out; fallback result generated.");
+    expect(result.fallbackReason).toBe("TIMEOUT");
+    expect(result.rawProviderError).toBe("provider timeout");
     expect(result.output).toEqual({
       score: 50,
       verdict: "Fallback verdict",
@@ -199,7 +229,7 @@ describe("BaseEvaluationAgent", () => {
   });
 
   it("uses fallback when model output fails schema validation", async () => {
-    generateTextMock.mockResolvedValueOnce({
+    generateTextMock.mockResolvedValue({
       output: {
         score: 999,
         verdict: "Invalid",
@@ -208,9 +238,14 @@ describe("BaseEvaluationAgent", () => {
 
     const result = await agent.run(pipelineData);
 
+    expect(generateTextMock).toHaveBeenCalledTimes(3);
     expect(agent.fallback).toHaveBeenCalledWith(pipelineData);
     expect(result.usedFallback).toBe(true);
-    expect(result.error).toBeTruthy();
+    expect(result.error).toBe(
+      "Model returned schema-invalid structured output; fallback result generated.",
+    );
+    expect(result.fallbackReason).toBe("SCHEMA_OUTPUT_INVALID");
+    expect(result.rawProviderError).toContain("Too big");
   });
 
   it("formatContext wraps string values in user_provided_data tags", async () => {

@@ -18,6 +18,7 @@ import type {
 import { PipelineService } from "../ai/services/pipeline.service";
 import { ModelPurpose, PipelinePhase } from "../ai/interfaces/pipeline.interface";
 import { PipelineFeedbackService } from "../ai/services/pipeline-feedback.service";
+import { StartupMatchingPipelineService } from "../ai/services/startup-matching-pipeline.service";
 import { pipelineAgentRun } from "../ai/entities";
 import { startup, StartupStatus } from "./entities/startup.schema";
 import { agentConversation } from "../agent/entities/agent.schema";
@@ -165,6 +166,7 @@ export class StartupService {
     private aiConfig: AiConfigService,
     private aiPipeline: PipelineService,
     private pipelineFeedback: PipelineFeedbackService,
+    private startupMatching: StartupMatchingPipelineService,
   ) {}
 
   private generateSlug(name: string): string {
@@ -443,6 +445,22 @@ export class StartupService {
       })
       .where(eq(startup.id, id))
       .returning();
+
+    try {
+      const queued = await this.startupMatching.queueStartupMatching({
+        startupId: id,
+        requestedBy: actorId,
+        triggerSource: "approval",
+      });
+      this.logger.log(
+        `Queued startup matching for ${id} (analysisJobId=${queued.analysisJobId}, queueJobId=${queued.queueJobId})`,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `Approval succeeded but matching queue failed for startup ${id}: ${message}`,
+      );
+    }
 
     this.logger.log(`Approved startup ${id} by ${actorRole} ${actorId}`);
     return updated;
@@ -892,10 +910,39 @@ export class StartupService {
   async getJobs(startupId: string, userId: string) {
     await this.findOne(startupId, userId);
 
+    const jobs = await this.drizzle.withRLS(userId, (db) =>
+      db
+        .select()
+        .from(analysisJob)
+        .where(eq(analysisJob.startupId, startupId))
+        .orderBy(desc(analysisJob.createdAt))
+        .limit(100),
+    );
+
     return {
-      jobs: [],
-      message: "Job tracking not implemented yet",
+      jobs,
     };
+  }
+
+  async adminGetJobs(startupId: string) {
+    const [found] = await this.drizzle.db
+      .select({ id: startup.id })
+      .from(startup)
+      .where(eq(startup.id, startupId))
+      .limit(1);
+
+    if (!found) {
+      throw new NotFoundException(`Startup with ID ${startupId} not found`);
+    }
+
+    const jobs = await this.drizzle.db
+      .select()
+      .from(analysisJob)
+      .where(eq(analysisJob.startupId, startupId))
+      .orderBy(desc(analysisJob.createdAt))
+      .limit(100);
+
+    return { jobs };
   }
 
   async getProgress(id: string, userId: string): Promise<GetProgressResponse> {
@@ -1294,6 +1341,50 @@ export class StartupService {
     return new Date().toISOString();
   }
 
+  private parseTraceMeta(value: unknown): {
+    fallbackReason?:
+      | "EMPTY_STRUCTURED_OUTPUT"
+      | "TIMEOUT"
+      | "SCHEMA_OUTPUT_INVALID"
+      | "MODEL_OR_PROVIDER_ERROR"
+      | "UNHANDLED_AGENT_EXCEPTION";
+    rawProviderError?: string;
+    outputJson: unknown;
+  } {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return { outputJson: value };
+    }
+
+    const record = value as Record<string, unknown>;
+    const meta = record.__traceMeta;
+    const outputJson = { ...record };
+    delete outputJson.__traceMeta;
+
+    if (!meta || typeof meta !== "object" || Array.isArray(meta)) {
+      return { outputJson };
+    }
+
+    const metaRecord = meta as Record<string, unknown>;
+    const fallbackReason =
+      metaRecord.fallbackReason === "EMPTY_STRUCTURED_OUTPUT" ||
+      metaRecord.fallbackReason === "TIMEOUT" ||
+      metaRecord.fallbackReason === "SCHEMA_OUTPUT_INVALID" ||
+      metaRecord.fallbackReason === "MODEL_OR_PROVIDER_ERROR" ||
+      metaRecord.fallbackReason === "UNHANDLED_AGENT_EXCEPTION"
+        ? metaRecord.fallbackReason
+        : undefined;
+    const rawProviderError =
+      typeof metaRecord.rawProviderError === "string"
+        ? metaRecord.rawProviderError
+        : undefined;
+
+    return {
+      fallbackReason,
+      rawProviderError,
+      outputJson,
+    };
+  }
+
   private async buildProgressResponse(
     db: DrizzleService["db"],
     startupId: string,
@@ -1363,6 +1454,8 @@ export class StartupService {
                       attempts: agent.attempts,
                       retryCount: agent.retryCount,
                       usedFallback: agent.usedFallback,
+                      fallbackReason: agent.fallbackReason,
+                      rawProviderError: agent.rawProviderError,
                       lastEvent: agent.lastEvent,
                       lastEventAt: agent.lastEventAt,
                     }
@@ -1398,6 +1491,8 @@ export class StartupService {
                 attempt: event.attempt,
                 retryCount: event.retryCount,
                 error: event.error,
+                fallbackReason: event.fallbackReason,
+                rawProviderError: event.rawProviderError,
               })),
               agentTraces,
             }
@@ -1518,6 +1613,13 @@ export class StartupService {
       outputText?: string | null;
       outputJson?: unknown;
       error?: string | null;
+      fallbackReason?:
+        | "EMPTY_STRUCTURED_OUTPUT"
+        | "TIMEOUT"
+        | "SCHEMA_OUTPUT_INVALID"
+        | "MODEL_OR_PROVIDER_ERROR"
+        | "UNHANDLED_AGENT_EXCEPTION";
+      rawProviderError?: string;
       startedAt?: string;
       completedAt?: string | null;
     }>
@@ -1545,6 +1647,7 @@ export class StartupService {
     }
 
     return rows.map((row) => ({
+      ...this.parseTraceMeta(row.outputJson),
       id: row.id,
       pipelineRunId: row.pipelineRunId,
       phase: row.phase,
@@ -1555,7 +1658,6 @@ export class StartupService {
       usedFallback: row.usedFallback,
       inputPrompt: row.inputPrompt ?? null,
       outputText: row.outputText ?? null,
-      outputJson: row.outputJson,
       error: row.error ?? null,
       startedAt: row.startedAt ? row.startedAt.toISOString() : undefined,
       completedAt: row.completedAt ? row.completedAt.toISOString() : null,

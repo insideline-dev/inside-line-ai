@@ -8,6 +8,13 @@ export const PIPELINE_PHASE_ORDER = [
 
 export type PipelinePhaseKey = (typeof PIPELINE_PHASE_ORDER)[number] | string;
 
+export type PipelineFallbackReason =
+  | "EMPTY_STRUCTURED_OUTPUT"
+  | "TIMEOUT"
+  | "SCHEMA_OUTPUT_INVALID"
+  | "MODEL_OR_PROVIDER_ERROR"
+  | "UNHANDLED_AGENT_EXCEPTION";
+
 export type PipelineAgentEventType =
   | "started"
   | "retrying"
@@ -25,6 +32,8 @@ export interface PipelineAgentProgress {
   attempts?: number;
   retryCount?: number;
   usedFallback?: boolean;
+  fallbackReason?: PipelineFallbackReason;
+  rawProviderError?: string;
   lastEvent?: PipelineAgentEventType;
   lastEventAt?: string;
 }
@@ -48,6 +57,8 @@ export interface PipelineAgentEvent {
   attempt?: number;
   retryCount?: number;
   error?: string;
+  fallbackReason?: PipelineFallbackReason;
+  rawProviderError?: string;
 }
 
 export interface PipelineAgentTrace {
@@ -63,6 +74,8 @@ export interface PipelineAgentTrace {
   outputText?: string | null;
   outputJson?: unknown;
   error?: string | null;
+  fallbackReason?: PipelineFallbackReason;
+  rawProviderError?: string;
   startedAt?: string;
   completedAt?: string | null;
 }

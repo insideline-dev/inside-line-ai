@@ -103,8 +103,15 @@ export class EvaluationProcessor
                 );
               });
           },
-          onAgentComplete: ({ agent, output, usedFallback, error }) => {
-            const isFailed = usedFallback || Boolean(error);
+          onAgentComplete: ({
+            agent,
+            output,
+            usedFallback,
+            error,
+            fallbackReason,
+            rawProviderError,
+          }) => {
+            const isFailed = Boolean(error) && usedFallback !== true;
             this.pipelineService
               .onAgentProgress({
                 startupId,
@@ -116,7 +123,13 @@ export class EvaluationProcessor
                 progress: isFailed ? 0 : 100,
                 error: error,
                 usedFallback,
-                lifecycleEvent: usedFallback ? "fallback" : "completed",
+                fallbackReason,
+                rawProviderError,
+                lifecycleEvent: usedFallback
+                  ? "fallback"
+                  : isFailed
+                    ? "failed"
+                    : "completed",
               })
               .catch((progressError) => {
                 this.logger.warn(
@@ -138,10 +151,20 @@ export class EvaluationProcessor
                 output,
                 usedFallback,
                 error,
+                fallbackReason,
+                rawProviderError,
               },
             });
           },
-          onAgentLifecycle: ({ agent, event, attempt, retryCount, error }) => {
+          onAgentLifecycle: ({
+            agent,
+            event,
+            attempt,
+            retryCount,
+            error,
+            fallbackReason,
+            rawProviderError,
+          }) => {
             if (event !== "retrying") {
               return;
             }
@@ -156,6 +179,8 @@ export class EvaluationProcessor
                 status: "running",
                 progress: 0,
                 error,
+                fallbackReason,
+                rawProviderError,
                 lifecycleEvent: event,
                 attempt,
                 retryCount,

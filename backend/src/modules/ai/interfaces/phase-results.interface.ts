@@ -192,22 +192,38 @@ export interface EvaluationSummary {
   completedAgents: number;
   failedAgents: number;
   minimumRequired: number;
-  failedKeys: Array<
-    | "team"
-    | "market"
-    | "product"
-    | "traction"
-    | "businessModel"
-    | "gtm"
-    | "financials"
-    | "competitiveAdvantage"
-    | "legal"
-    | "dealTerms"
-    | "exitPotential"
-  >;
+  failedKeys: EvaluationSummaryAgentKey[];
   errors: Array<{ agent: string; error: string }>;
+  fallbackAgents?: number;
+  fallbackKeys?: EvaluationSummaryAgentKey[];
+  warnings?: Array<{
+    agent: string;
+    message: string;
+    reason?: EvaluationFallbackReasonCode;
+  }>;
+  fallbackReasonCounts?: Partial<Record<EvaluationFallbackReasonCode, number>>;
   degraded: boolean;
 }
+
+export type EvaluationFallbackReasonCode =
+  | "EMPTY_STRUCTURED_OUTPUT"
+  | "TIMEOUT"
+  | "SCHEMA_OUTPUT_INVALID"
+  | "MODEL_OR_PROVIDER_ERROR"
+  | "UNHANDLED_AGENT_EXCEPTION";
+
+export type EvaluationSummaryAgentKey =
+  | "team"
+  | "market"
+  | "product"
+  | "traction"
+  | "businessModel"
+  | "gtm"
+  | "financials"
+  | "competitiveAdvantage"
+  | "legal"
+  | "dealTerms"
+  | "exitPotential";
 
 export interface EvaluationResult {
   team: TeamEvaluation;

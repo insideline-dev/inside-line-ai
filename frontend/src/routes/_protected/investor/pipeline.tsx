@@ -1,8 +1,8 @@
 import { useState, type DragEvent } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { List, LayoutGrid, Search, Clock, GripVertical } from "lucide-react";
+import { List, LayoutGrid, Search, Clock, GripVertical, Lock, Loader2, ArrowRight, MapPin } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -10,6 +10,9 @@ import {
   useInvestorControllerUpdateMatchStatus,
   getInvestorControllerGetPipelineQueryKey,
 } from "@/api/generated/investor/investor";
+import {
+  useStartupControllerFindAll,
+} from "@/api/generated/startup/startup";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -33,6 +36,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScoreRing } from "@/components/analysis/ScoreRing";
+import { AnalysisProgressBar } from "@/components/AnalysisProgressBar";
 
 export const Route = createFileRoute("/_protected/investor/pipeline")({
   component: PipelinePage,
@@ -69,6 +73,24 @@ type PipelineData = {
 
 type Status = PipelineMatch["status"];
 type ViewMode = "list" | "board";
+type StartupStatus =
+  | "draft"
+  | "submitted"
+  | "analyzing"
+  | "pending_review"
+  | "approved"
+  | "rejected";
+
+type PrivateStartup = {
+  id: string;
+  name: string;
+  description: string;
+  stage: string;
+  location: string;
+  overallScore: number | null;
+  status: StartupStatus;
+  createdAt: string;
+};
 
 // --- Constants ---
 
@@ -132,6 +154,51 @@ function getAllMatches(pipeline: PipelineData): PipelineMatch[] {
   return STATUSES.flatMap((s) => pipeline[s]);
 }
 
+function extractList<T>(payload: unknown): T[] {
+  if (Array.isArray(payload)) return payload as T[];
+  if (
+    payload &&
+    typeof payload === "object" &&
+    "data" in payload &&
+    Array.isArray((payload as { data?: unknown }).data)
+  ) {
+    return (payload as { data: T[] }).data;
+  }
+  return [];
+}
+
+function getStartupStatusBadge(status: StartupStatus) {
+  switch (status) {
+    case "submitted":
+      return (
+        <Badge variant="outline" className="gap-1">
+          <Clock className="h-3 w-3" />
+          Queued
+        </Badge>
+      );
+    case "analyzing":
+      return (
+        <Badge variant="outline" className="gap-1">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          Analyzing
+        </Badge>
+      );
+    case "approved":
+      return <Badge className="bg-chart-2/10 text-chart-2 border-chart-2/20">Ready</Badge>;
+    case "pending_review":
+      return <Badge variant="secondary">Pending Review</Badge>;
+    case "rejected":
+      return <Badge variant="destructive">Rejected</Badge>;
+    default:
+      return <Badge variant="secondary">Draft</Badge>;
+  }
+}
+
+function formatStageLabel(stage: string | null | undefined): string {
+  if (!stage) return "Unknown stage";
+  return stage.replace(/_/g, " ");
+}
+
 function extractResponseData<T>(payload: unknown): T | null {
   if (payload === null || payload === undefined) {
     return null;
@@ -163,6 +230,18 @@ function PipelinePage() {
   const queryClient = useQueryClient();
   const pipelineResponse = useInvestorControllerGetPipeline();
   const pipeline = extractResponseData<PipelineData>(pipelineResponse.data);
+  const myStartupsResponse = useStartupControllerFindAll(undefined, {
+    query: {
+      refetchInterval: (query) => {
+        const rows = extractList<PrivateStartup>(query.state.data);
+        const hasInFlight = rows.some(
+          (row) => row.status === "submitted" || row.status === "analyzing",
+        );
+        return hasInFlight ? 5000 : false;
+      },
+    },
+  });
+  const myStartups = extractList<PrivateStartup>(myStartupsResponse.data);
 
   const updateStatus = useInvestorControllerUpdateMatchStatus({
     mutation: {
@@ -263,6 +342,81 @@ function PipelinePage() {
           </div>
         </div>
       </div>
+
+      {/* My Private Analysis */}
+      {myStartupsResponse.isLoading ? (
+        <div className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Lock className="h-4 w-4 text-muted-foreground" />
+            <h2 className="text-lg font-semibold">My Private Analysis</h2>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            {[1, 2].map((i) => (
+              <Skeleton key={i} className="h-36 w-full" />
+            ))}
+          </div>
+        </div>
+      ) : myStartups.length > 0 ? (
+        <div className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Lock className="h-4 w-4 text-muted-foreground" />
+            <h2 className="text-lg font-semibold">My Private Analysis</h2>
+            <Badge variant="secondary">{myStartups.length}</Badge>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            {myStartups.map((startup) => (
+              <Card key={startup.id}>
+                <CardContent className="p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-semibold truncate">{startup.name}</p>
+                      <p className="text-sm text-muted-foreground line-clamp-1">
+                        {startup.description || "No description"}
+                      </p>
+                    </div>
+                    <ScoreRing
+                      score={startup.status === "approved" ? startup.overallScore ?? 0 : 0}
+                      size="sm"
+                      showLabel={false}
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {getStartupStatusBadge(startup.status)}
+                    <Badge variant="outline" className="capitalize">
+                      {formatStageLabel(startup.stage)}
+                    </Badge>
+                  </div>
+
+                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                    <span className="inline-flex items-center gap-1">
+                      <MapPin className="h-3 w-3" />
+                      {startup.location || "Unknown"}
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                      <Clock className="h-3 w-3" />
+                      {formatDate(startup.createdAt)}
+                    </span>
+                  </div>
+
+                  {(startup.status === "submitted" || startup.status === "analyzing") && (
+                    <AnalysisProgressBar startupId={startup.id} />
+                  )}
+
+                  {(startup.status === "approved" || startup.status === "pending_review") && (
+                    <Button asChild size="sm" className="w-full">
+                      <Link to="/investor/startup/$id" params={{ id: String(startup.id) }}>
+                        {startup.status === "pending_review" ? "Review Analysis" : "View Analysis"}
+                        <ArrowRight className="ml-2 h-4 w-4" />
+                      </Link>
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       {/* Views */}
       {viewMode === "board" ? (

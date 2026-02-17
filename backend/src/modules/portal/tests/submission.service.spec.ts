@@ -9,6 +9,9 @@ import { NotificationService } from '../../../notification';
 import { UserAuthService } from '../../../auth/user-auth.service';
 import { PortalSubmissionStatus } from '../entities';
 import { StartupStage, StartupStatus } from '../../startup/entities/startup.schema';
+import { QueueService } from '../../../queue';
+import { PipelineService } from '../../ai/services/pipeline.service';
+import { AiConfigService } from '../../ai/services/ai-config.service';
 
 describe('SubmissionService', () => {
   let service: SubmissionService;
@@ -124,6 +127,25 @@ describe('SubmissionService', () => {
           useValue: {
             findUserByEmail: jest.fn(),
             createUser: jest.fn(),
+          },
+        },
+        {
+          provide: QueueService,
+          useValue: {
+            addJob: jest.fn(),
+          },
+        },
+        {
+          provide: PipelineService,
+          useValue: {
+            startPipeline: jest.fn(),
+          },
+        },
+        {
+          provide: AiConfigService,
+          useValue: {
+            getModelForPurpose: jest.fn().mockReturnValue('gpt-4'),
+            isPipelineEnabled: jest.fn().mockReturnValue(false),
           },
         },
       ],

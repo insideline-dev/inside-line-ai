@@ -7,6 +7,15 @@ const PromptKeySchema = z.enum(AI_PROMPT_KEYS);
 const PromptSurfaceSchema = z.enum(["pipeline", "clara"]);
 const PromptStatusSchema = z.enum(["draft", "published", "archived"]);
 const FlowNodeKindSchema = z.enum(["prompt", "system"]);
+const PromptSearchModeSchema = z.enum(["off", "provider_grounded_search"]);
+const ContextFieldTypeSchema = z.enum([
+  "string",
+  "number",
+  "boolean",
+  "array",
+  "object",
+  "unknown",
+]);
 
 export const CreateAiPromptRevisionSchema = z.object({
   stage: z.nativeEnum(StartupStage).nullable().optional(),
@@ -132,6 +141,79 @@ export const AiPromptFlowResponseSchema = z.object({
   flows: z.array(AiFlowSchema),
 });
 
+const AiPromptContextFieldSchema = z.object({
+  path: z.string(),
+  label: z.string(),
+  type: ContextFieldTypeSchema,
+  sourceVariable: z.string().nullable().optional(),
+  description: z.string().optional(),
+});
+
+export const AiPromptContextSchemaResponseSchema = z.object({
+  key: PromptKeySchema,
+  displayName: z.string(),
+  description: z.string().nullable(),
+  allowedVariables: z.array(z.string()),
+  requiredVariables: z.array(z.string()),
+  variableDefinitions: z.record(z.string(), AiPromptVariableDefinitionSchema),
+  requiredPhases: z.array(z.string()),
+  contextFields: z.array(AiPromptContextFieldSchema),
+  notes: z.array(z.string()),
+});
+
+export const PreviewAiPromptRequestSchema = z.object({
+  startupId: z.string().uuid().optional(),
+  stage: z.nativeEnum(StartupStage).nullable().optional(),
+  investorThesis: z.string().trim().min(1).optional(),
+  fromEmail: z.string().email().optional(),
+  subject: z.string().optional(),
+  body: z.string().optional(),
+  attachments: z.array(z.string()).optional(),
+  hasLinkedStartup: z.boolean().optional(),
+  historyBlock: z.string().optional(),
+  investorName: z.string().optional(),
+  intent: z.string().optional(),
+  startupBlock: z.string().optional(),
+  intentInstructions: z.string().optional(),
+});
+
+const AiPromptPreviewSourceSchema = z.object({
+  promptSource: z.enum(["db", "code"]),
+  promptRevisionId: z.string().uuid().nullable(),
+  effectiveStage: z.nativeEnum(StartupStage).nullable(),
+  startupId: z.string().uuid().nullable(),
+});
+
+const AiPromptPreviewPromptSchema = z.object({
+  systemPromptTemplate: z.string(),
+  userPromptTemplate: z.string(),
+  renderedSystemPrompt: z.string(),
+  renderedUserPrompt: z.string(),
+});
+
+const AiPromptPreviewModelSchema = z.object({
+  purpose: z.string(),
+  modelName: z.string(),
+  provider: z.string(),
+  searchMode: PromptSearchModeSchema,
+  supportedSearchModes: z.array(PromptSearchModeSchema),
+});
+
+const AiPromptPreviewHashesSchema = z.object({
+  renderedSystemPrompt: z.string(),
+  renderedUserPrompt: z.string(),
+  variables: z.string(),
+});
+
+export const AiPromptPreviewResponseSchema = z.object({
+  key: PromptKeySchema,
+  source: AiPromptPreviewSourceSchema,
+  prompt: AiPromptPreviewPromptSchema,
+  model: AiPromptPreviewModelSchema,
+  resolvedVariables: z.record(z.string(), z.any()),
+  hashes: AiPromptPreviewHashesSchema,
+});
+
 export type CreateAiPromptRevision = z.infer<typeof CreateAiPromptRevisionSchema>;
 export type UpdateAiPromptRevision = z.infer<typeof UpdateAiPromptRevisionSchema>;
 
@@ -142,3 +224,6 @@ export class AiPromptRevisionsResponseDto extends createZodDto(AiPromptRevisions
 export class AiPromptRevisionResponseDto extends createZodDto(AiPromptRevisionSchema) {}
 export class AiPromptSeedResultDto extends createZodDto(AiPromptSeedResultSchema) {}
 export class AiPromptFlowResponseDto extends createZodDto(AiPromptFlowResponseSchema) {}
+export class AiPromptContextSchemaResponseDto extends createZodDto(AiPromptContextSchemaResponseSchema) {}
+export class PreviewAiPromptRequestDto extends createZodDto(PreviewAiPromptRequestSchema) {}
+export class AiPromptPreviewResponseDto extends createZodDto(AiPromptPreviewResponseSchema) {}

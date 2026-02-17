@@ -11,7 +11,9 @@ import { StartupIntakeService } from '../../startup/startup-intake.service';
 import { IntegrationHealthService } from '../integration-health.service';
 import { SystemConfigService } from '../system-config.service';
 import { BulkDataService } from '../bulk-data.service';
+import { AdminMatchingService } from '../admin-matching.service';
 import { AiPromptService } from '../../ai/services/ai-prompt.service';
+import { AiPromptRuntimeService } from '../../ai/services/ai-prompt-runtime.service';
 import { EarlyAccessService } from '../../early-access';
 import { UserRole } from '../../../auth/entities/auth.schema';
 import { StartupStatus } from '../../startup/entities/startup.schema';
@@ -27,6 +29,7 @@ describe('AdminController', () => {
   let startupService: jest.Mocked<StartupService>;
   let startupIntakeService: jest.Mocked<StartupIntakeService>;
   let aiPromptService: jest.Mocked<AiPromptService>;
+  let aiPromptRuntimeService: jest.Mocked<AiPromptRuntimeService>;
   let earlyAccessService: jest.Mocked<EarlyAccessService>;
 
   const mockAdmin = {
@@ -124,6 +127,12 @@ describe('AdminController', () => {
           },
         },
         {
+          provide: AdminMatchingService,
+          useValue: {
+            triggerMatchForStartup: jest.fn(),
+          },
+        },
+        {
           provide: AiPromptService,
           useValue: {
             listPromptDefinitions: jest.fn(),
@@ -133,6 +142,13 @@ describe('AdminController', () => {
             updateDraft: jest.fn(),
             publishRevision: jest.fn(),
             seedFromCode: jest.fn(),
+          },
+        },
+        {
+          provide: AiPromptRuntimeService,
+          useValue: {
+            getContextSchema: jest.fn(),
+            previewPrompt: jest.fn(),
           },
         },
         {
@@ -156,6 +172,7 @@ describe('AdminController', () => {
     startupService = module.get(StartupService);
     startupIntakeService = module.get(StartupIntakeService);
     aiPromptService = module.get(AiPromptService);
+    aiPromptRuntimeService = module.get(AiPromptRuntimeService);
     earlyAccessService = module.get(EarlyAccessService);
   });
 
@@ -652,6 +669,39 @@ describe('AdminController', () => {
 
       expect(result).toEqual(payload);
       expect(aiPromptService.seedFromCode).toHaveBeenCalledWith(mockAdmin.id);
+    });
+
+    it('should return prompt runtime context schema', async () => {
+      const payload = {
+        key: 'research.team',
+        allowedVariables: ['contextJson'],
+        requiredVariables: ['contextJson'],
+        requiredPhases: ['extraction', 'scraping'],
+        contextFields: [],
+      };
+
+      aiPromptRuntimeService.getContextSchema.mockReturnValueOnce(payload as any);
+
+      const result = await controller.getAiPromptContextSchema('research.team');
+
+      expect(result).toEqual(payload);
+      expect(aiPromptRuntimeService.getContextSchema).toHaveBeenCalledWith('research.team');
+    });
+
+    it('should return prompt preview payload', async () => {
+      const payload = {
+        key: 'research.team',
+        source: { promptSource: 'db', promptRevisionId: 'r1', effectiveStage: 'seed' },
+        resolvedVariables: { contextJson: '{}' },
+      };
+      const body = { startupId: 'ed8f8dcb-4145-4af3-92ce-c8d879ec43db', stage: 'seed' };
+
+      aiPromptRuntimeService.previewPrompt.mockResolvedValueOnce(payload as any);
+
+      const result = await controller.previewAiPrompt('research.team', body as any);
+
+      expect(result).toEqual(payload);
+      expect(aiPromptRuntimeService.previewPrompt).toHaveBeenCalledWith('research.team', body);
     });
   });
 });

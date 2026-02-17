@@ -1,5 +1,6 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { Progress } from "@/components/ui/progress";
+import { Badge } from "@/components/ui/badge";
 import { Loader2, Check, X, FileSearch, Globe, Search, BarChart3, Sparkles, AlertTriangle, Clock3 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
@@ -8,6 +9,7 @@ import { useStartupRealtimeProgress } from "@/lib/startup/useStartupRealtimeProg
 interface AnalysisProgressBarProps {
   startupId: number | string;
   onTerminalStatus?: (status: "pending_review" | "submitted") => void;
+  showAgentDetails?: boolean;
 }
 
 const PHASE_ORDER = ["extraction", "scraping", "research", "evaluation", "synthesis"] as const;
@@ -19,6 +21,29 @@ const PHASE_META: Record<string, { label: string; icon: typeof FileSearch }> = {
   evaluation: { label: "Evaluating", icon: BarChart3 },
   synthesis: { label: "Synthesizing", icon: Sparkles },
 };
+
+const AGENT_PHASE_META = {
+  research: {
+    label: "Research Agents",
+    order: ["team", "market", "product", "news", "competitor"],
+  },
+  evaluation: {
+    label: "Evaluation Agents",
+    order: [
+      "team",
+      "market",
+      "product",
+      "traction",
+      "businessModel",
+      "gtm",
+      "financials",
+      "competitiveAdvantage",
+      "legal",
+      "dealTerms",
+      "exitPotential",
+    ],
+  },
+} as const;
 
 function PhaseIcon({
   status,
@@ -39,6 +64,7 @@ function PhaseIcon({
 export function AnalysisProgressBar({
   startupId,
   onTerminalStatus,
+  showAgentDetails = true,
 }: AnalysisProgressBarProps) {
   const queryClient = useQueryClient();
   const terminalNotified = useRef(false);
@@ -62,6 +88,54 @@ export function AnalysisProgressBar({
   const currentPhase = progress?.currentPhase ?? "extraction";
   const currentMeta = PHASE_META[currentPhase];
   const currentPhaseStatus = progress?.phases?.[currentPhase]?.status;
+  const agentPhaseSections = useMemo(() => {
+    const phases = progress?.phases;
+    if (!phases) {
+      return [];
+    }
+
+    const sections: Array<{
+      phaseKey: string;
+      label: string;
+      phaseStatus: string;
+      agents: Array<
+        [string, {
+          key?: string;
+          status: string;
+          progress?: number;
+          error?: string;
+        }]
+      >;
+    }> = [];
+
+    for (const [phaseKey, meta] of Object.entries(AGENT_PHASE_META)) {
+      const agents = phases[phaseKey]?.agents;
+      if (!agents || Object.keys(agents).length === 0) {
+        continue;
+      }
+
+      const order = new Map<string, number>(
+        meta.order.map((key, index) => [String(key), index]),
+      );
+      const sortedAgents = Object.entries(agents).sort(([a], [b]) => {
+        const ai = order.get(a);
+        const bi = order.get(b);
+        if (ai !== undefined && bi !== undefined) return ai - bi;
+        if (ai !== undefined) return -1;
+        if (bi !== undefined) return 1;
+        return a.localeCompare(b);
+      });
+
+      sections.push({
+        phaseKey,
+        label: meta.label,
+        phaseStatus: phases[phaseKey]?.status ?? "pending",
+        agents: sortedAgents,
+      });
+    }
+
+    return sections;
+  }, [progress?.phases]);
 
   useEffect(() => {
     if (terminalNotified.current) {
@@ -174,6 +248,68 @@ export function AnalysisProgressBar({
           className={cn("h-1.5", isFailed && "[&>div]:bg-destructive")}
         />
       </div>
+
+      {showAgentDetails && agentPhaseSections.length > 0 && (
+        <div className="space-y-2 pt-1">
+          {agentPhaseSections.map((section) => (
+            <div key={section.phaseKey} className="rounded-md border border-border/60 p-2 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] font-medium text-foreground/90">{section.label}</p>
+                <Badge variant="outline" className="text-[10px] capitalize h-5 px-1.5">
+                  {section.phaseStatus}
+                </Badge>
+              </div>
+              <div className="space-y-1">
+                {section.agents.map(([agentKey, agent]) => {
+                  const status = agent.status ?? "pending";
+                  const agentProgress = typeof agent.progress === "number" ? Math.round(agent.progress) : undefined;
+                  const label = agent.key || agentKey;
+                  const statusClass =
+                    status === "completed"
+                      ? "text-emerald-600"
+                      : status === "failed"
+                        ? "text-destructive"
+                        : status === "running"
+                          ? "text-primary"
+                          : "text-muted-foreground";
+
+                  return (
+                    <div key={`${section.phaseKey}-${agentKey}`} className="flex items-center justify-between text-[11px]">
+                      <span className="truncate pr-2 text-foreground/85">{label}</span>
+                      <span className={cn("inline-flex items-center gap-1", statusClass)}>
+                        {status === "completed" ? (
+                          <Check className="w-3 h-3" />
+                        ) : status === "failed" ? (
+                          <X className="w-3 h-3" />
+                        ) : status === "running" ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <Clock3 className="w-3 h-3" />
+                        )}
+                        <span className="capitalize">{status}</span>
+                        {agentProgress !== undefined && (
+                          <span className="text-muted-foreground">{agentProgress}%</span>
+                        )}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              {section.agents.some(([, agent]) => Boolean(agent.error)) && (
+                <div className="space-y-0.5">
+                  {section.agents.map(([agentKey, agent]) =>
+                    agent.error ? (
+                      <p key={`${section.phaseKey}-${agentKey}-error`} className="text-[10px] text-destructive line-clamp-2">
+                        {agent.key || agentKey}: {agent.error}
+                      </p>
+                    ) : null,
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

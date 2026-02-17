@@ -42,6 +42,31 @@ export class ClaraConversationService {
   ): Promise<ClaraConversationRecord> {
     const existing = await this.findByThreadId(threadId);
     if (existing) {
+      const shouldRefreshIdentity =
+        existing.investorEmail !== investorEmail ||
+        (existing.investorName == null && investorName != null) ||
+        (existing.investorUserId == null && investorUserId != null);
+
+      if (shouldRefreshIdentity) {
+        const [updated] = await this.drizzle.db
+          .update(claraConversation)
+          .set({
+            investorEmail,
+            investorName: investorName ?? existing.investorName,
+            investorUserId: investorUserId ?? existing.investorUserId,
+            updatedAt: new Date(),
+          })
+          .where(eq(claraConversation.id, existing.id))
+          .returning();
+
+        return updated ?? {
+          ...existing,
+          investorEmail,
+          investorName: investorName ?? existing.investorName,
+          investorUserId: investorUserId ?? existing.investorUserId,
+        };
+      }
+
       return existing;
     }
 

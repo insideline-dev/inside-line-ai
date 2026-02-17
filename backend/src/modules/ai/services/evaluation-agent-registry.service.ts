@@ -68,6 +68,7 @@ export class EvaluationAgentRegistryService {
   async runAll(
     startupId: string,
     pipelineData: EvaluationPipelineInput,
+    onAgentStart?: (agent: EvaluationAgentKey) => void,
     onAgentComplete?: (payload: EvaluationAgentCompletion) => void,
   ): Promise<EvaluationResult> {
     const outputs = new Map<EvaluationAgentKey, unknown>();
@@ -79,6 +80,7 @@ export class EvaluationAgentRegistryService {
       this.agents.map(async (agent) => {
         const startedAt = new Date();
         startedAtByAgent.set(agent.key, startedAt);
+        this.emitAgentStart(onAgentStart, agent.key);
         const feedbackNotes = await this.loadFeedbackNotes(startupId, agent.key);
         const result = await agent.run(pipelineData, { feedbackNotes });
         const completedAt = new Date();
@@ -187,6 +189,7 @@ export class EvaluationAgentRegistryService {
     startupId: string,
     key: EvaluationAgentKey,
     pipelineData: EvaluationPipelineInput,
+    onAgentStart?: (agent: EvaluationAgentKey) => void,
   ): Promise<EvaluationAgentCompletion> {
     const agent = this.agents.find((candidate) => candidate.key === key);
     if (!agent) {
@@ -194,6 +197,7 @@ export class EvaluationAgentRegistryService {
     }
 
     const startedAt = new Date();
+    this.emitAgentStart(onAgentStart, key);
     try {
       const feedbackNotes = await this.loadFeedbackNotes(startupId, key);
       const result = await agent.run(pipelineData, { feedbackNotes });
@@ -249,6 +253,24 @@ export class EvaluationAgentRegistryService {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.warn(
         `Failed to record evaluation telemetry for ${payload.agentKey}: ${message}`,
+      );
+    }
+  }
+
+  private emitAgentStart(
+    onAgentStart: ((agent: EvaluationAgentKey) => void) | undefined,
+    agent: EvaluationAgentKey,
+  ): void {
+    if (!onAgentStart) {
+      return;
+    }
+
+    try {
+      onAgentStart(agent);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `Evaluation agent start callback failed for ${agent}: ${message}`,
       );
     }
   }

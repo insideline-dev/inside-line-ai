@@ -3372,6 +3372,30 @@
         ]
       }
     },
+    "/admin/startups/{id}/match": {
+      "post": {
+        "operationId": "AdminController_matchStartupInvestors",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Trigger investor thesis matching for an approved startup",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
     "/admin/startups/{id}/reanalyze": {
       "post": {
         "operationId": "AdminController_reanalyzeStartup",
@@ -3652,6 +3676,78 @@
           }
         },
         "summary": "Create prompt draft revision",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/ai-prompts/{key}/context-schema": {
+      "get": {
+        "operationId": "AdminController_getAiPromptContextSchema",
+        "parameters": [
+          {
+            "name": "key",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiPromptContextSchemaResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get runtime context schema and variable provenance for a prompt key",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/ai-prompts/{key}/preview": {
+      "post": {
+        "operationId": "AdminController_previewAiPrompt",
+        "parameters": [
+          {
+            "name": "key",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreviewAiPromptRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiPromptPreviewResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Preview rendered prompt, resolved variables, and effective model config",
         "tags": [
           "Admin"
         ]
@@ -4416,6 +4512,20 @@
     "/investor/messaging/conversations": {
       "get": {
         "operationId": "InvestorController_getConversations",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Investor"
+        ]
+      }
+    },
+    "/investor/scoring/defaults": {
+      "get": {
+        "operationId": "InvestorController_getScoringDefaults",
         "parameters": [],
         "responses": {
           "200": {
@@ -7349,6 +7459,7 @@
             "minimum": 0
           },
           "teamMembers": {
+            "maxItems": 50,
             "type": "array",
             "items": {
               "type": "object",
@@ -8272,6 +8383,367 @@
           "variableDefinitions"
         ]
       },
+      "AiPromptContextSchemaResponseDto": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "enum": [
+              "extraction.fields",
+              "research.team",
+              "research.market",
+              "research.product",
+              "research.news",
+              "research.competitor",
+              "evaluation.team",
+              "evaluation.market",
+              "evaluation.product",
+              "evaluation.traction",
+              "evaluation.businessModel",
+              "evaluation.gtm",
+              "evaluation.financials",
+              "evaluation.competitiveAdvantage",
+              "evaluation.legal",
+              "evaluation.dealTerms",
+              "evaluation.exitPotential",
+              "synthesis.final",
+              "matching.thesis",
+              "clara.intent",
+              "clara.response"
+            ]
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "allowedVariables": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "requiredVariables": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "variableDefinitions": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "description": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string"
+                },
+                "example": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "description",
+                "source"
+              ]
+            }
+          },
+          "requiredPhases": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "contextFields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "string",
+                    "number",
+                    "boolean",
+                    "array",
+                    "object",
+                    "unknown"
+                  ]
+                },
+                "sourceVariable": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "description": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path",
+                "label",
+                "type"
+              ]
+            }
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "key",
+          "displayName",
+          "description",
+          "allowedVariables",
+          "requiredVariables",
+          "variableDefinitions",
+          "requiredPhases",
+          "contextFields",
+          "notes"
+        ]
+      },
+      "PreviewAiPromptRequestDto": {
+        "type": "object",
+        "properties": {
+          "startupId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "stage": {
+            "type": "string",
+            "enum": [
+              "pre_seed",
+              "seed",
+              "series_a",
+              "series_b",
+              "series_c",
+              "series_d",
+              "series_e",
+              "series_f_plus"
+            ],
+            "nullable": true
+          },
+          "investorThesis": {
+            "type": "string",
+            "minLength": 1
+          },
+          "fromEmail": {
+            "type": "string",
+            "format": "email",
+            "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "hasLinkedStartup": {
+            "type": "boolean"
+          },
+          "historyBlock": {
+            "type": "string"
+          },
+          "investorName": {
+            "type": "string"
+          },
+          "intent": {
+            "type": "string"
+          },
+          "startupBlock": {
+            "type": "string"
+          },
+          "intentInstructions": {
+            "type": "string"
+          }
+        }
+      },
+      "AiPromptPreviewResponseDto": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "enum": [
+              "extraction.fields",
+              "research.team",
+              "research.market",
+              "research.product",
+              "research.news",
+              "research.competitor",
+              "evaluation.team",
+              "evaluation.market",
+              "evaluation.product",
+              "evaluation.traction",
+              "evaluation.businessModel",
+              "evaluation.gtm",
+              "evaluation.financials",
+              "evaluation.competitiveAdvantage",
+              "evaluation.legal",
+              "evaluation.dealTerms",
+              "evaluation.exitPotential",
+              "synthesis.final",
+              "matching.thesis",
+              "clara.intent",
+              "clara.response"
+            ]
+          },
+          "source": {
+            "type": "object",
+            "properties": {
+              "promptSource": {
+                "type": "string",
+                "enum": [
+                  "db",
+                  "code"
+                ]
+              },
+              "promptRevisionId": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "nullable": true
+              },
+              "effectiveStage": {
+                "type": "string",
+                "enum": [
+                  "pre_seed",
+                  "seed",
+                  "series_a",
+                  "series_b",
+                  "series_c",
+                  "series_d",
+                  "series_e",
+                  "series_f_plus"
+                ],
+                "nullable": true
+              },
+              "startupId": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "nullable": true
+              }
+            },
+            "required": [
+              "promptSource",
+              "promptRevisionId",
+              "effectiveStage",
+              "startupId"
+            ]
+          },
+          "prompt": {
+            "type": "object",
+            "properties": {
+              "systemPromptTemplate": {
+                "type": "string"
+              },
+              "userPromptTemplate": {
+                "type": "string"
+              },
+              "renderedSystemPrompt": {
+                "type": "string"
+              },
+              "renderedUserPrompt": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "systemPromptTemplate",
+              "userPromptTemplate",
+              "renderedSystemPrompt",
+              "renderedUserPrompt"
+            ]
+          },
+          "model": {
+            "type": "object",
+            "properties": {
+              "purpose": {
+                "type": "string"
+              },
+              "modelName": {
+                "type": "string"
+              },
+              "provider": {
+                "type": "string"
+              },
+              "searchMode": {
+                "type": "string",
+                "enum": [
+                  "off",
+                  "provider_grounded_search"
+                ]
+              },
+              "supportedSearchModes": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "off",
+                    "provider_grounded_search"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "purpose",
+              "modelName",
+              "provider",
+              "searchMode",
+              "supportedSearchModes"
+            ]
+          },
+          "resolvedVariables": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "hashes": {
+            "type": "object",
+            "properties": {
+              "renderedSystemPrompt": {
+                "type": "string"
+              },
+              "renderedUserPrompt": {
+                "type": "string"
+              },
+              "variables": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "renderedSystemPrompt",
+              "renderedUserPrompt",
+              "variables"
+            ]
+          }
+        },
+        "required": [
+          "key",
+          "source",
+          "prompt",
+          "model",
+          "resolvedVariables",
+          "hashes"
+        ]
+      },
       "CreateAiPromptRevisionDto": {
         "type": "object",
         "properties": {
@@ -8492,6 +8964,12 @@
             "maximum": 9007199254740991,
             "minimum": 0
           },
+          "minRevenue": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "nullable": true
+          },
           "geographicFocus": {
             "type": "array",
             "items": {
@@ -8505,6 +8983,12 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 100
+            }
+          },
+          "businessModels": {
+            "type": "array",
+            "items": {
+              "type": "string"
             }
           },
           "mustHaveFeatures": {
@@ -8526,6 +9010,31 @@
           "thesisNarrative": {
             "type": "string",
             "maxLength": 10000
+          },
+          "antiPortfolio": {
+            "type": "string",
+            "maxLength": 5000
+          },
+          "website": {
+            "type": "string",
+            "format": "uri"
+          },
+          "fundSize": {
+            "type": "number",
+            "minimum": 0,
+            "nullable": true
+          },
+          "minThesisFitScore": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100,
+            "nullable": true
+          },
+          "minStartupScore": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100,
+            "nullable": true
           }
         }
       },
@@ -8714,6 +9223,69 @@
                 "type": "integer",
                 "minimum": 0,
                 "maximum": 100
+              }
+            },
+            "required": [
+              "team",
+              "market",
+              "product",
+              "traction",
+              "businessModel",
+              "gtm",
+              "financials",
+              "competitiveAdvantage",
+              "legal",
+              "dealTerms",
+              "exitPotential"
+            ],
+            "nullable": true
+          },
+          "customRationale": {
+            "type": "object",
+            "properties": {
+              "team": {
+                "type": "string",
+                "maxLength": 2000
+              },
+              "market": {
+                "type": "string",
+                "maxLength": 2000
+              },
+              "product": {
+                "type": "string",
+                "maxLength": 2000
+              },
+              "traction": {
+                "type": "string",
+                "maxLength": 2000
+              },
+              "businessModel": {
+                "type": "string",
+                "maxLength": 2000
+              },
+              "gtm": {
+                "type": "string",
+                "maxLength": 2000
+              },
+              "financials": {
+                "type": "string",
+                "maxLength": 2000
+              },
+              "competitiveAdvantage": {
+                "type": "string",
+                "maxLength": 2000
+              },
+              "legal": {
+                "type": "string",
+                "maxLength": 2000
+              },
+              "dealTerms": {
+                "type": "string",
+                "maxLength": 2000
+              },
+              "exitPotential": {
+                "type": "string",
+                "maxLength": 2000
               }
             },
             "required": [

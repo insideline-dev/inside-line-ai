@@ -245,6 +245,7 @@ describe('ScoringPreferencesService', () => {
         stage: mockStage,
         useCustomWeights: true,
         customWeights: mockCustomWeights,
+        customRationale: null,
       });
       expect(mockDb.returning).toHaveBeenCalled();
     });
@@ -274,6 +275,7 @@ describe('ScoringPreferencesService', () => {
       expect(mockDb.set).toHaveBeenCalledWith({
         useCustomWeights: updateDto.useCustomWeights,
         customWeights: updateDto.customWeights,
+        customRationale: null,
         updatedAt: expect.any(Date),
       });
       expect(mockDb.returning).toHaveBeenCalled();
@@ -315,6 +317,7 @@ describe('ScoringPreferencesService', () => {
       expect(mockDb.set).toHaveBeenCalledWith({
         useCustomWeights: false,
         customWeights: null,
+        customRationale: null,
         updatedAt: expect.any(Date),
       });
     });

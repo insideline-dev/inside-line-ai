@@ -74,6 +74,8 @@ const PipelineStateSchema = z.object({
 export class PipelineStateService implements OnModuleDestroy {
   private readonly logger = new Logger(PipelineStateService.name);
   private readonly redisClient: RedisFallbackClient;
+  // Mutations are serialized to avoid lost updates when phases run in parallel.
+  private stateMutationQueue: Promise<void> = Promise.resolve();
 
   constructor(
     private config: ConfigService,
@@ -98,63 +100,65 @@ export class PipelineStateService implements OnModuleDestroy {
     userId: string,
     pipelineRunId = nanoid(),
   ): Promise<PipelineState> {
-    const now = new Date().toISOString();
-    const state: PipelineState = {
-      pipelineRunId,
-      startupId,
-      userId,
-      status: PipelineStatus.RUNNING,
-      quality: "standard",
-      currentPhase: PipelinePhase.EXTRACTION,
-      phases: this.createInitialPhases(),
-      results: {},
-      retryCounts: {},
-      telemetry: {
-        startedAt: now,
-        totalTokens: {
-          input: 0,
-          output: 0,
+    return this.withStateMutationLock(async () => {
+      const now = new Date().toISOString();
+      const state: PipelineState = {
+        pipelineRunId,
+        startupId,
+        userId,
+        status: PipelineStatus.RUNNING,
+        quality: "standard",
+        currentPhase: PipelinePhase.EXTRACTION,
+        phases: this.createInitialPhases(),
+        results: {},
+        retryCounts: {},
+        telemetry: {
+          startedAt: now,
+          totalTokens: {
+            input: 0,
+            output: 0,
+          },
+          phases: {
+            [PipelinePhase.EXTRACTION]: {
+              phase: PipelinePhase.EXTRACTION,
+              agentCount: 0,
+              successCount: 0,
+              failedCount: 0,
+            },
+            [PipelinePhase.SCRAPING]: {
+              phase: PipelinePhase.SCRAPING,
+              agentCount: 0,
+              successCount: 0,
+              failedCount: 0,
+            },
+            [PipelinePhase.RESEARCH]: {
+              phase: PipelinePhase.RESEARCH,
+              agentCount: 0,
+              successCount: 0,
+              failedCount: 0,
+            },
+            [PipelinePhase.EVALUATION]: {
+              phase: PipelinePhase.EVALUATION,
+              agentCount: 0,
+              successCount: 0,
+              failedCount: 0,
+            },
+            [PipelinePhase.SYNTHESIS]: {
+              phase: PipelinePhase.SYNTHESIS,
+              agentCount: 0,
+              successCount: 0,
+              failedCount: 0,
+            },
+          },
+          agents: {},
         },
-        phases: {
-          [PipelinePhase.EXTRACTION]: {
-            phase: PipelinePhase.EXTRACTION,
-            agentCount: 0,
-            successCount: 0,
-            failedCount: 0,
-          },
-          [PipelinePhase.SCRAPING]: {
-            phase: PipelinePhase.SCRAPING,
-            agentCount: 0,
-            successCount: 0,
-            failedCount: 0,
-          },
-          [PipelinePhase.RESEARCH]: {
-            phase: PipelinePhase.RESEARCH,
-            agentCount: 0,
-            successCount: 0,
-            failedCount: 0,
-          },
-          [PipelinePhase.EVALUATION]: {
-            phase: PipelinePhase.EVALUATION,
-            agentCount: 0,
-            successCount: 0,
-            failedCount: 0,
-          },
-          [PipelinePhase.SYNTHESIS]: {
-            phase: PipelinePhase.SYNTHESIS,
-            agentCount: 0,
-            successCount: 0,
-            failedCount: 0,
-          },
-        },
-        agents: {},
-      },
-      createdAt: now,
-      updatedAt: now,
-    };
+        createdAt: now,
+        updatedAt: now,
+      };
 
-    await this.persist(state);
-    return state;
+      await this.persist(state);
+      return state;
+    });
   }
 
   async get(startupId: string): Promise<PipelineState | null> {
@@ -167,50 +171,52 @@ export class PipelineStateService implements OnModuleDestroy {
     status: PhaseStatus,
     error?: string,
   ): Promise<void> {
-    const current = await this.requireState(startupId);
-    const now = new Date().toISOString();
+    const pipelineRunId = await this.withStateMutationLock(async () => {
+      const current = await this.requireState(startupId);
+      const now = new Date().toISOString();
 
-    const updatedPhase: PhaseResult = {
-      ...current.phases[phase],
-      status,
-      error: error || undefined,
-    };
+      const updatedPhase: PhaseResult = {
+        ...current.phases[phase],
+        status,
+        error: error || undefined,
+      };
 
-    if (status === PhaseStatus.WAITING && !updatedPhase.startedAt) {
-      current.currentPhase = phase;
-    }
-
-    if (status === PhaseStatus.RUNNING && !updatedPhase.startedAt) {
-      updatedPhase.startedAt = now;
-      current.currentPhase = phase;
-      current.telemetry.phases[phase].startedAt = now;
-    }
-
-    if (
-      status === PhaseStatus.COMPLETED ||
-      status === PhaseStatus.FAILED ||
-      status === PhaseStatus.SKIPPED
-    ) {
-      updatedPhase.completedAt = now;
-      current.telemetry.phases[phase].completedAt = now;
-      if (current.telemetry.phases[phase].startedAt) {
-        current.telemetry.phases[phase].durationMs =
-          new Date(now).getTime() -
-          new Date(
-            current.telemetry.phases[phase].startedAt as string,
-          ).getTime();
+      if (status === PhaseStatus.WAITING && !updatedPhase.startedAt) {
+        current.currentPhase = phase;
       }
-    }
 
-    current.phases[phase] = updatedPhase;
+      if (status === PhaseStatus.RUNNING && !updatedPhase.startedAt) {
+        updatedPhase.startedAt = now;
+        current.currentPhase = phase;
+        current.telemetry.phases[phase].startedAt = now;
+      }
 
-    current.updatedAt = now;
-    await this.persist(current);
+      if (
+        status === PhaseStatus.COMPLETED ||
+        status === PhaseStatus.FAILED ||
+        status === PhaseStatus.SKIPPED
+      ) {
+        updatedPhase.completedAt = now;
+        current.telemetry.phases[phase].completedAt = now;
+        if (current.telemetry.phases[phase].startedAt) {
+          current.telemetry.phases[phase].durationMs =
+            new Date(now).getTime() -
+            new Date(
+              current.telemetry.phases[phase].startedAt as string,
+            ).getTime();
+        }
+      }
+
+      current.phases[phase] = updatedPhase;
+      current.updatedAt = now;
+      await this.persist(current);
+      return current.pipelineRunId;
+    });
 
     if (status === PhaseStatus.FAILED) {
       await this.aiDebugLog?.logPhaseFailure({
         startupId,
-        pipelineRunId: current.pipelineRunId,
+        pipelineRunId,
         phase,
         error,
       });
@@ -218,85 +224,99 @@ export class PipelineStateService implements OnModuleDestroy {
   }
 
   async setStatus(startupId: string, status: PipelineStatus): Promise<void> {
-    const current = await this.requireState(startupId);
-    const now = new Date().toISOString();
-    current.status = status;
+    await this.withStateMutationLock(async () => {
+      const current = await this.requireState(startupId);
+      const now = new Date().toISOString();
+      current.status = status;
 
-    if (
-      status === PipelineStatus.COMPLETED ||
-      status === PipelineStatus.FAILED ||
-      status === PipelineStatus.CANCELLED
-    ) {
-      current.telemetry.completedAt = now;
-      current.telemetry.totalDurationMs =
-        new Date(now).getTime() -
-        new Date(current.telemetry.startedAt).getTime();
-    }
+      if (
+        status === PipelineStatus.COMPLETED ||
+        status === PipelineStatus.FAILED ||
+        status === PipelineStatus.CANCELLED
+      ) {
+        current.telemetry.completedAt = now;
+        current.telemetry.totalDurationMs =
+          new Date(now).getTime() -
+          new Date(current.telemetry.startedAt).getTime();
+      }
 
-    current.updatedAt = now;
-    await this.persist(current);
+      current.updatedAt = now;
+      await this.persist(current);
+    });
   }
 
   async setQuality(
     startupId: string,
     quality: "standard" | "degraded",
   ): Promise<void> {
-    const current = await this.requireState(startupId);
-    current.quality = quality;
-    current.updatedAt = new Date().toISOString();
-    await this.persist(current);
+    await this.withStateMutationLock(async () => {
+      const current = await this.requireState(startupId);
+      current.quality = quality;
+      current.updatedAt = new Date().toISOString();
+      await this.persist(current);
+    });
   }
 
   async setPipelineRunId(startupId: string, pipelineRunId: string): Promise<void> {
-    const current = await this.requireState(startupId);
-    const now = new Date().toISOString();
-    current.pipelineRunId = pipelineRunId;
-    current.status = PipelineStatus.RUNNING;
-    current.quality = "standard";
-    current.telemetry.startedAt = now;
-    current.telemetry.completedAt = undefined;
-    current.telemetry.totalDurationMs = undefined;
-    current.updatedAt = now;
-    await this.persist(current);
+    await this.withStateMutationLock(async () => {
+      const current = await this.requireState(startupId);
+      const now = new Date().toISOString();
+      current.pipelineRunId = pipelineRunId;
+      current.status = PipelineStatus.RUNNING;
+      current.quality = "standard";
+      current.telemetry.startedAt = now;
+      current.telemetry.completedAt = undefined;
+      current.telemetry.totalDurationMs = undefined;
+      current.updatedAt = now;
+      await this.persist(current);
+    });
   }
 
   async clearPhaseResult(startupId: string, phase: PipelinePhase): Promise<void> {
-    const current = await this.requireState(startupId);
-    delete current.results[phase];
-    current.updatedAt = new Date().toISOString();
-    await this.persist(current);
+    await this.withStateMutationLock(async () => {
+      const current = await this.requireState(startupId);
+      delete current.results[phase];
+      current.updatedAt = new Date().toISOString();
+      await this.persist(current);
+    });
   }
 
   async incrementRetryCount(
     startupId: string,
     phase: PipelinePhase,
   ): Promise<number> {
-    const current = await this.requireState(startupId);
-    const next = (current.retryCounts[phase] ?? 0) + 1;
-    current.retryCounts[phase] = next;
-    current.updatedAt = new Date().toISOString();
-    await this.persist(current);
-    return next;
+    return this.withStateMutationLock(async () => {
+      const current = await this.requireState(startupId);
+      const next = (current.retryCounts[phase] ?? 0) + 1;
+      current.retryCounts[phase] = next;
+      current.updatedAt = new Date().toISOString();
+      await this.persist(current);
+      return next;
+    });
   }
 
   async resetRetryCount(startupId: string, phase: PipelinePhase): Promise<void> {
-    const current = await this.requireState(startupId);
-    current.retryCounts[phase] = 0;
-    current.updatedAt = new Date().toISOString();
-    await this.persist(current);
+    await this.withStateMutationLock(async () => {
+      const current = await this.requireState(startupId);
+      current.retryCounts[phase] = 0;
+      current.updatedAt = new Date().toISOString();
+      await this.persist(current);
+    });
   }
 
   async resetPhase(startupId: string, phase: PipelinePhase): Promise<void> {
-    const current = await this.requireState(startupId);
-    current.phases[phase] = { status: PhaseStatus.PENDING };
-    current.telemetry.phases[phase] = {
-      phase,
-      agentCount: 0,
-      successCount: 0,
-      failedCount: 0,
-    };
-    current.updatedAt = new Date().toISOString();
-    await this.persist(current);
+    await this.withStateMutationLock(async () => {
+      const current = await this.requireState(startupId);
+      current.phases[phase] = { status: PhaseStatus.PENDING };
+      current.telemetry.phases[phase] = {
+        phase,
+        agentCount: 0,
+        successCount: 0,
+        failedCount: 0,
+      };
+      current.updatedAt = new Date().toISOString();
+      await this.persist(current);
+    });
   }
 
   async resetPhaseStatus(
@@ -304,10 +324,12 @@ export class PipelineStateService implements OnModuleDestroy {
     phase: PipelinePhase,
     status: PhaseStatus = PhaseStatus.PENDING,
   ): Promise<void> {
-    const current = await this.requireState(startupId);
-    current.phases[phase] = { status };
-    current.updatedAt = new Date().toISOString();
-    await this.persist(current);
+    await this.withStateMutationLock(async () => {
+      const current = await this.requireState(startupId);
+      current.phases[phase] = { status };
+      current.updatedAt = new Date().toISOString();
+      await this.persist(current);
+    });
   }
 
   async setPhaseResult<P extends PipelinePhase>(
@@ -315,13 +337,17 @@ export class PipelineStateService implements OnModuleDestroy {
     phase: P,
     result: PhaseResultMap[P],
   ): Promise<void> {
-    const current = await this.requireState(startupId);
-    (current.results as Record<PipelinePhase, unknown>)[phase] = result;
-    current.updatedAt = new Date().toISOString();
-    await this.persist(current);
+    const pipelineRunId = await this.withStateMutationLock(async () => {
+      const current = await this.requireState(startupId);
+      (current.results as Record<PipelinePhase, unknown>)[phase] = result;
+      current.updatedAt = new Date().toISOString();
+      await this.persist(current);
+      return current.pipelineRunId;
+    });
+
     await this.aiDebugLog?.logPhaseResult({
       startupId,
-      pipelineRunId: current.pipelineRunId,
+      pipelineRunId,
       phase,
       result,
     });
@@ -339,26 +365,30 @@ export class PipelineStateService implements OnModuleDestroy {
     startupId: string,
     telemetry: AgentTelemetry,
   ): Promise<void> {
-    const current = await this.requireState(startupId);
-    current.telemetry.agents[telemetry.agentKey] = telemetry;
+    await this.withStateMutationLock(async () => {
+      const current = await this.requireState(startupId);
+      current.telemetry.agents[telemetry.agentKey] = telemetry;
 
-    const phaseMetrics = current.telemetry.phases[telemetry.phase];
-    phaseMetrics.agentCount += 1;
-    if (telemetry.completedAt) {
-      phaseMetrics.successCount += 1;
-    }
+      const phaseMetrics = current.telemetry.phases[telemetry.phase];
+      phaseMetrics.agentCount += 1;
+      if (telemetry.completedAt) {
+        phaseMetrics.successCount += 1;
+      }
 
-    if (telemetry.tokenUsage) {
-      current.telemetry.totalTokens.input += telemetry.tokenUsage.input;
-      current.telemetry.totalTokens.output += telemetry.tokenUsage.output;
-    }
+      if (telemetry.tokenUsage) {
+        current.telemetry.totalTokens.input += telemetry.tokenUsage.input;
+        current.telemetry.totalTokens.output += telemetry.tokenUsage.output;
+      }
 
-    current.updatedAt = new Date().toISOString();
-    await this.persist(current);
+      current.updatedAt = new Date().toISOString();
+      await this.persist(current);
+    });
   }
 
   async clear(startupId: string): Promise<void> {
-    await this.redisClient.del(this.getKey(startupId));
+    await this.withStateMutationLock(async () => {
+      await this.redisClient.del(this.getKey(startupId));
+    });
   }
 
   async onModuleDestroy() {
@@ -408,5 +438,24 @@ export class PipelineStateService implements OnModuleDestroy {
   private async persist(state: PipelineState): Promise<void> {
     const key = this.getKey(state.startupId);
     await this.redisClient.set(key, JSON.stringify(state), this.getTtlSeconds());
+  }
+
+  private async withStateMutationLock<T>(
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    const previous = this.stateMutationQueue;
+    let releaseQueue!: () => void;
+
+    this.stateMutationQueue = new Promise<void>((resolve) => {
+      releaseQueue = () => resolve();
+    });
+
+    await previous.catch(() => undefined);
+
+    try {
+      return await operation();
+    } finally {
+      releaseQueue();
+    }
   }
 }

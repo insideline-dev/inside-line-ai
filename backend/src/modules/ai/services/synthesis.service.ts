@@ -6,7 +6,7 @@ import { startupEvaluation } from "../../analysis/entities";
 import { NotificationType } from "../../../notification/entities";
 import { NotificationService } from "../../../notification/notification.service";
 import { PipelineStateService } from "./pipeline-state.service";
-import { PipelinePhase } from "../interfaces/pipeline.interface";
+import { ModelPurpose, PipelinePhase } from "../interfaces/pipeline.interface";
 import { EVALUATION_AGENT_KEYS } from "../constants/agent-keys";
 import type {
   EvaluationResult,
@@ -23,6 +23,7 @@ import { SynthesisAgent } from "../agents/synthesis";
 import type { SynthesisAgentInput, SynthesisAgentOutput } from "../agents/synthesis";
 import { InvestorMatchingService } from "./investor-matching.service";
 import { MemoGeneratorService } from "./memo-generator.service";
+import { AiConfigService } from "./ai-config.service";
 
 @Injectable()
 export class SynthesisService {
@@ -33,6 +34,7 @@ export class SynthesisService {
     private pipelineState: PipelineStateService,
     private synthesisAgent: SynthesisAgent,
     private scoreComputation: ScoreComputationService,
+    private aiConfig: AiConfigService,
     private investorMatching: InvestorMatchingService,
     private memoGenerator: MemoGeneratorService,
     private notificationService: NotificationService,
@@ -144,6 +146,11 @@ export class SynthesisService {
     const { overallScore, sectionScores } = synthesis;
     const percentileRank =
       await this.scoreComputation.computePercentileRank(overallScore);
+    const persistedSources = this.buildPersistedSources(
+      research.sources,
+      evaluation,
+      synthesis,
+    );
 
     const evaluationValues = {
       teamData: evaluation.team,
@@ -181,7 +188,7 @@ export class SynthesisService {
       executiveSummary: synthesis.executiveSummary,
       investorMemo: synthesis.investorMemo,
       founderReport: synthesis.founderReport,
-      sources: research.sources,
+      sources: persistedSources,
       dataConfidenceNotes: synthesis.dataConfidenceNotes,
     };
 
@@ -217,6 +224,7 @@ export class SynthesisService {
       linkedinProfile?: {
         headline: string;
         summary: string;
+        profilePictureUrl?: string;
         currentCompany?: {
           name: string;
           title: string;
@@ -262,6 +270,7 @@ export class SynthesisService {
           ? {
               headline: linkedinProfile.headline,
               summary: linkedinProfile.summary,
+              profilePictureUrl: linkedinProfile.profilePictureUrl,
               currentCompany: linkedinProfile.currentCompany,
               experience: linkedinProfile.experience,
               education: linkedinProfile.education,
@@ -289,6 +298,7 @@ export class SynthesisService {
           ? {
               headline: scraped.linkedinProfile.headline,
               summary: scraped.linkedinProfile.summary,
+              profilePictureUrl: scraped.linkedinProfile.profilePictureUrl,
               currentCompany: scraped.linkedinProfile.currentCompany,
               experience: scraped.linkedinProfile.experience,
               education: scraped.linkedinProfile.education,
@@ -298,6 +308,100 @@ export class SynthesisService {
     }
 
     return merged;
+  }
+
+  private buildPersistedSources(
+    researchSources: ResearchResult["sources"],
+    evaluation: EvaluationResult,
+    synthesis: SynthesisResult,
+  ): Array<Record<string, unknown>> {
+    const evaluationModel = this.aiConfig.getModelForPurpose(
+      ModelPurpose.EVALUATION,
+    );
+    const synthesisModel = this.aiConfig.getModelForPurpose(
+      ModelPurpose.SYNTHESIS,
+    );
+    const now = new Date().toISOString();
+
+    const evaluationAgentSources: Array<Record<string, unknown>> = [
+      {
+        agent: "TeamAgent",
+        description: "Team composition and founder-market fit analysis",
+        score: Math.round(evaluation.team.score),
+      },
+      {
+        agent: "MarketAgent",
+        description: "Market opportunity and TAM/SAM/SOM analysis",
+        score: Math.round(evaluation.market.score),
+      },
+      {
+        agent: "ProductAgent",
+        description: "Product quality and defensibility analysis",
+        score: Math.round(evaluation.product.score),
+      },
+      {
+        agent: "TractionAgent",
+        description: "Growth trajectory and validation analysis",
+        score: Math.round(evaluation.traction.score),
+      },
+      {
+        agent: "BusinessModelAgent",
+        description: "Business model and unit economics analysis",
+        score: Math.round(evaluation.businessModel.score),
+      },
+      {
+        agent: "GTMAgent",
+        description: "Go-to-market strategy analysis",
+        score: Math.round(evaluation.gtm.score),
+      },
+      {
+        agent: "FinancialsAgent",
+        description: "Financial health and runway analysis",
+        score: Math.round(evaluation.financials.score),
+      },
+      {
+        agent: "CompetitiveAdvantageAgent",
+        description: "Competitive moat and positioning analysis",
+        score: Math.round(evaluation.competitiveAdvantage.score),
+      },
+      {
+        agent: "LegalRegulatoryAgent",
+        description: "Legal, regulatory and IP analysis",
+        score: Math.round(evaluation.legal.score),
+      },
+      {
+        agent: "DealTermsAgent",
+        description: "Deal terms and valuation analysis",
+        score: Math.round(evaluation.dealTerms.score),
+      },
+      {
+        agent: "ExitPotentialAgent",
+        description: "Exit potential and M&A analysis",
+        score: Math.round(evaluation.exitPotential.score),
+      },
+      {
+        agent: "SynthesisAgent",
+        description: "Final synthesis and investor memo generation",
+        score: Math.round(synthesis.overallScore),
+        model: synthesisModel,
+      },
+    ].map((entry) => ({
+      ...entry,
+      name: String(entry.model ?? evaluationModel),
+      model: String(entry.model ?? evaluationModel),
+      category: "api",
+      type: "api",
+      relevance:
+        typeof entry.score === "number"
+          ? `Score: ${entry.score}`
+          : undefined,
+      timestamp: now,
+    }));
+
+    return [
+      ...researchSources.map((source) => ({ ...source })),
+      ...evaluationAgentSources,
+    ];
   }
 
   private async performPostSynthesisOps(

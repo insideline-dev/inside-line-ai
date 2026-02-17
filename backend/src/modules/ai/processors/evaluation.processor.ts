@@ -104,6 +104,7 @@ export class EvaluationProcessor
               });
           },
           onAgentComplete: ({ agent, output, usedFallback, error }) => {
+            const isHardFailure = Boolean(error) && !usedFallback;
             this.pipelineService
               .onAgentProgress({
                 startupId,
@@ -111,9 +112,9 @@ export class EvaluationProcessor
                 pipelineRunId,
                 phase: PipelinePhase.EVALUATION,
                 key: agent,
-                status: error ? "failed" : "completed",
-                progress: error ? 0 : 100,
-                error,
+                status: isHardFailure ? "failed" : "completed",
+                progress: isHardFailure ? 0 : 100,
+                error: isHardFailure ? error : undefined,
               })
               .catch((progressError) => {
                 this.logger.warn(

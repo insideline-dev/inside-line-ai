@@ -16,9 +16,11 @@ import type {
   ResearchAgentKey,
 } from "../ai/interfaces/agent.interface";
 import { PipelineService } from "../ai/services/pipeline.service";
-import { PipelinePhase } from "../ai/interfaces/pipeline.interface";
+import { ModelPurpose, PipelinePhase } from "../ai/interfaces/pipeline.interface";
 import { PipelineFeedbackService } from "../ai/services/pipeline-feedback.service";
 import { startup, StartupStatus } from "./entities/startup.schema";
+import { agentConversation } from "../agent/entities/agent.schema";
+import { investorInboxSubmission } from "../integrations/agentmail/entities/investor-inbox-submission.schema";
 import {
   CreateStartup,
   UpdateStartup,
@@ -54,6 +56,74 @@ export interface AdminRetryAgentRequest {
 @Injectable()
 export class StartupService {
   private readonly logger = new Logger(StartupService.name);
+  private static readonly EVALUATION_AGENT_SOURCES = [
+    {
+      key: "teamagent",
+      agent: "TeamAgent",
+      description: "Team composition and founder-market fit analysis",
+      scoreField: "teamScore",
+    },
+    {
+      key: "marketagent",
+      agent: "MarketAgent",
+      description: "Market opportunity and TAM/SAM/SOM analysis",
+      scoreField: "marketScore",
+    },
+    {
+      key: "productagent",
+      agent: "ProductAgent",
+      description: "Product quality and defensibility analysis",
+      scoreField: "productScore",
+    },
+    {
+      key: "tractionagent",
+      agent: "TractionAgent",
+      description: "Growth trajectory and validation analysis",
+      scoreField: "tractionScore",
+    },
+    {
+      key: "businessmodelagent",
+      agent: "BusinessModelAgent",
+      description: "Business model and unit economics analysis",
+      scoreField: "businessModelScore",
+    },
+    {
+      key: "gtmagent",
+      agent: "GTMAgent",
+      description: "Go-to-market strategy analysis",
+      scoreField: "gtmScore",
+    },
+    {
+      key: "financialsagent",
+      agent: "FinancialsAgent",
+      description: "Financial health and runway analysis",
+      scoreField: "financialsScore",
+    },
+    {
+      key: "competitiveadvantageagent",
+      agent: "CompetitiveAdvantageAgent",
+      description: "Competitive moat and positioning analysis",
+      scoreField: "competitiveAdvantageScore",
+    },
+    {
+      key: "legalregulatoryagent",
+      agent: "LegalRegulatoryAgent",
+      description: "Legal, regulatory and IP analysis",
+      scoreField: "legalScore",
+    },
+    {
+      key: "dealtermsagent",
+      agent: "DealTermsAgent",
+      description: "Deal terms and valuation analysis",
+      scoreField: "dealTermsScore",
+    },
+    {
+      key: "exitpotentialagent",
+      agent: "ExitPotentialAgent",
+      description: "Exit potential and M&A analysis",
+      scoreField: "exitPotentialScore",
+    },
+  ] as const;
   private static readonly RESEARCH_AGENTS = new Set<
     ResearchAgentKey
   >(["team", "market", "product", "news"]);
@@ -622,7 +692,19 @@ export class StartupService {
       throw new NotFoundException(`Startup with ID ${id} not found`);
     }
 
-    await this.drizzle.db.delete(startup).where(eq(startup.id, id));
+    await this.drizzle.db.transaction(async (tx) => {
+      // Non-cascading references: clear these before deleting startup.
+      await tx
+        .update(agentConversation)
+        .set({ currentStartupId: null, updatedAt: new Date() })
+        .where(eq(agentConversation.currentStartupId, id));
+
+      await tx
+        .delete(investorInboxSubmission)
+        .where(eq(investorInboxSubmission.startupId, id));
+
+      await tx.delete(startup).where(eq(startup.id, id));
+    });
 
     this.logger.log(`Admin deleted startup ${id}`);
   }
@@ -877,7 +959,7 @@ export class StartupService {
       throw new NotFoundException("Evaluation not found");
     }
 
-    return evaluation;
+    return this.withModelSources(evaluation);
   }
 
   private async withEvaluation<
@@ -910,8 +992,140 @@ export class StartupService {
 
     return {
       ...startupRecord,
-      evaluation,
+      evaluation: this.withModelSources(evaluation),
     };
+  }
+
+  private withModelSources(evaluation: StartupEvaluation): StartupEvaluation {
+    const rawSources = Array.isArray(evaluation.sources) ? evaluation.sources : [];
+    const baseSources = rawSources.map((source) =>
+      source && typeof source === "object"
+        ? { ...(source as Record<string, unknown>) }
+        : source,
+    );
+
+    const evaluationModel = this.aiConfig.getModelForPurpose(
+      ModelPurpose.EVALUATION,
+    );
+    const synthesisModel = this.aiConfig.getModelForPurpose(
+      ModelPurpose.SYNTHESIS,
+    );
+    const knownEvaluationAgents = new Set<string>(
+      StartupService.EVALUATION_AGENT_SOURCES.map((entry) => entry.key),
+    );
+    const knownSynthesisAgent = "synthesisagent";
+    const existingModelAgents = new Set<string>();
+
+    for (const source of baseSources) {
+      if (!source || typeof source !== "object") {
+        continue;
+      }
+
+      const sourceRecord = source as Record<string, unknown>;
+      const sourceType =
+        typeof sourceRecord.type === "string" ? sourceRecord.type.toLowerCase() : "";
+      const sourceCategory =
+        typeof sourceRecord.category === "string"
+          ? sourceRecord.category.toLowerCase()
+          : "";
+      const hasModel =
+        typeof sourceRecord.model === "string" &&
+        sourceRecord.model.trim().length > 0;
+      const isApiLike = sourceType === "api" || sourceCategory === "api" || hasModel;
+
+      if (!isApiLike) {
+        continue;
+      }
+
+      const normalizedAgent = this.normalizeAgentKey(sourceRecord.agent);
+      if (!normalizedAgent) {
+        continue;
+      }
+
+      const isKnownEvaluationAgent = knownEvaluationAgents.has(normalizedAgent);
+      const isKnownSynthesisAgent = normalizedAgent === knownSynthesisAgent;
+      if (!isKnownEvaluationAgent && !isKnownSynthesisAgent) {
+        continue;
+      }
+
+      const model = isKnownSynthesisAgent ? synthesisModel : evaluationModel;
+      sourceRecord.category = "api";
+      sourceRecord.type = "api";
+      sourceRecord.model = model;
+      sourceRecord.name = model;
+      existingModelAgents.add(normalizedAgent);
+    }
+
+    const timestamp = this.toIsoTimestamp(evaluation.updatedAt);
+
+    const missingModelSources = StartupService.EVALUATION_AGENT_SOURCES
+      .filter((entry) => !existingModelAgents.has(entry.key))
+      .map((entry) => {
+        const scoreValue = (evaluation as Record<string, unknown>)[entry.scoreField];
+        return {
+          category: "api",
+          type: "api",
+          name: evaluationModel,
+          model: evaluationModel,
+          agent: entry.agent,
+          description: entry.description,
+          relevance:
+            typeof scoreValue === "number"
+              ? `Score: ${Math.round(scoreValue)}`
+              : undefined,
+          timestamp,
+        } as Record<string, unknown>;
+      });
+
+    const synthesisAgentKey = "synthesisagent";
+    if (!existingModelAgents.has(synthesisAgentKey)) {
+      const overallScore = evaluation.overallScore;
+      missingModelSources.push({
+        category: "api",
+        type: "api",
+        name: synthesisModel,
+        model: synthesisModel,
+        agent: "SynthesisAgent",
+        description: "Final synthesis and investor memo generation",
+        relevance:
+          typeof overallScore === "number"
+            ? `Score: ${Math.round(overallScore)}`
+            : undefined,
+        timestamp,
+      });
+    }
+
+    if (missingModelSources.length === 0) {
+      return evaluation;
+    }
+
+    return {
+      ...evaluation,
+      sources: [...baseSources, ...missingModelSources],
+    };
+  }
+
+  private normalizeAgentKey(agent: unknown): string | null {
+    if (typeof agent !== "string" || agent.trim().length === 0) {
+      return null;
+    }
+
+    return agent.toLowerCase().replace(/[^a-z]/g, "");
+  }
+
+  private toIsoTimestamp(value: unknown): string {
+    if (value instanceof Date) {
+      return value.toISOString();
+    }
+
+    if (typeof value === "string" && value.trim().length > 0) {
+      const parsed = new Date(value);
+      if (!Number.isNaN(parsed.getTime())) {
+        return parsed.toISOString();
+      }
+    }
+
+    return new Date().toISOString();
   }
 
   private async buildProgressResponse(

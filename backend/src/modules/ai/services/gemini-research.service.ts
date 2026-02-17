@@ -22,6 +22,9 @@ interface ResearchResponse<TOutput extends { sources: string[] }> {
   sources: SourceEntry[];
   usedFallback: boolean;
   error?: string;
+  outputText?: string;
+  attempt: number;
+  retryCount: number;
 }
 
 @Injectable()
@@ -37,71 +40,135 @@ export class GeminiResearchService {
     request: ResearchRequest<TOutput>,
   ): Promise<ResearchResponse<TOutput>> {
     const fallback = request.fallback();
+    const modelName = this.aiConfig.getModelForPurpose(ModelPurpose.RESEARCH);
+    const model = this.providers.resolveModelForPurpose(ModelPurpose.RESEARCH);
+    const canUseGoogleSearchTool = this.isGeminiModel(modelName);
+    const maxAttempts = this.getResearchMaxAttempts();
+    let lastError = "Unknown research error";
 
-    try {
-      const modelName = this.aiConfig.getModelForPurpose(ModelPurpose.RESEARCH);
-      const model = this.providers.resolveModelForPurpose(ModelPurpose.RESEARCH);
-      const canUseGoogleSearchTool = this.isGeminiModel(modelName);
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        const response = await this.withTimeout(
+          generateText({
+            model,
+            system: request.systemPrompt,
+            prompt: request.prompt,
+            tools: canUseGoogleSearchTool
+              ? {
+                  google_search: google.tools.googleSearch({}),
+                }
+              : undefined,
+            temperature: this.aiConfig.getResearchTemperature(),
+          }),
+          this.getResearchTimeoutMs(),
+          `Research agent ${request.agent} timed out`,
+        );
 
-      const response = await this.withTimeout(
-        generateText({
-          model,
-          system: request.systemPrompt,
-          prompt: request.prompt,
-          tools: canUseGoogleSearchTool
-            ? {
-                google_search: google.tools.googleSearch({}),
-              }
-            : undefined,
-          temperature: this.aiConfig.getResearchTemperature(),
-        }),
-        this.getResearchTimeoutMs(),
-        `Research agent ${request.agent} timed out`,
-      );
+        const extractedSources = this.extractSources(response, request.agent);
+        const sourceUrls = extractedSources
+          .map((entry) => entry.url)
+          .filter((url): url is string => Boolean(url));
 
-      const extractedSources = this.extractSources(response, request.agent);
-      const sourceUrls = extractedSources
-        .map((entry) => entry.url)
-        .filter((url): url is string => Boolean(url));
+        const parsed = this.parseTextToObject(response.text, request.schema);
+        if (!parsed.success) {
+          const fallbackSources = Array.isArray(fallback.sources) ? fallback.sources : [];
+          return {
+            output: {
+              ...fallback,
+              sources: this.mergeSourceUrls(fallbackSources, sourceUrls),
+            },
+            sources: extractedSources,
+            usedFallback: true,
+            error: parsed.error,
+            outputText: response.text,
+            attempt,
+            retryCount: Math.max(0, attempt - 1),
+          };
+        }
 
-      const parsed = this.parseTextToObject(response.text, request.schema);
-      if (!parsed.success) {
-        const fallbackSources = Array.isArray(fallback.sources) ? fallback.sources : [];
         return {
           output: {
-            ...fallback,
-            sources: this.mergeSourceUrls(fallbackSources, sourceUrls),
+            ...parsed.data,
+            sources: this.mergeSourceUrls(parsed.data.sources, sourceUrls),
           },
           sources: extractedSources,
+          usedFallback: false,
+          outputText: response.text,
+          attempt,
+          retryCount: Math.max(0, attempt - 1),
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        lastError = message;
+        const shouldRetry =
+          attempt < maxAttempts && this.isRetryableError(message);
+        if (shouldRetry) {
+          const delayMs = this.getRetryDelayMs(attempt);
+          this.logger.warn(
+            `Research agent ${request.agent} attempt ${attempt}/${maxAttempts} failed, retrying in ${delayMs}ms: ${message}`,
+          );
+          await this.sleep(delayMs);
+          continue;
+        }
+
+        const promptSize = request.prompt.length + request.systemPrompt.length;
+        this.logger.warn(
+          `Research agent ${request.agent} failed (model: ${modelName}, prompt size: ${promptSize}), using fallback: ${message}`,
+        );
+        return {
+          output: fallback,
+          sources: this.toInternalSource(request.agent),
           usedFallback: true,
-          error: parsed.error,
+          error: message,
+          attempt,
+          retryCount: Math.max(0, attempt - 1),
         };
       }
-
-      return {
-        output: {
-          ...parsed.data,
-          sources: this.mergeSourceUrls(parsed.data.sources, sourceUrls),
-        },
-        sources: extractedSources,
-        usedFallback: false,
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      const modelName = this.aiConfig.getModelForPurpose(ModelPurpose.RESEARCH);
-      const promptSize = request.prompt.length + request.systemPrompt.length;
-
-      this.logger.warn(
-        `Research agent ${request.agent} failed (model: ${modelName}, prompt size: ${promptSize}), using fallback: ${message}`,
-      );
-
-      return {
-        output: fallback,
-        sources: this.toInternalSource(request.agent),
-        usedFallback: true,
-        error: message,
-      };
     }
+
+    return {
+      output: fallback,
+      sources: this.toInternalSource(request.agent),
+      usedFallback: true,
+      error: lastError,
+      attempt: maxAttempts,
+      retryCount: Math.max(0, maxAttempts - 1),
+    };
+  }
+
+  private getResearchMaxAttempts(): number {
+    const raw = Number(process.env.AI_RESEARCH_MAX_ATTEMPTS ?? 3);
+    if (!Number.isFinite(raw)) {
+      return 3;
+    }
+    return Math.max(1, Math.floor(raw));
+  }
+
+  private getRetryDelayMs(attempt: number): number {
+    const baseMs = 750 * 2 ** Math.max(0, attempt - 1);
+    const jitter = Math.floor(Math.random() * 250);
+    return baseMs + jitter;
+  }
+
+  private isRetryableError(message: string): boolean {
+    const normalized = message.toLowerCase();
+    const retryablePatterns = [
+      "timed out",
+      "timeout",
+      "rate limit",
+      "429",
+      "503",
+      "502",
+      "network",
+      "connection",
+      "socket",
+      "temporarily unavailable",
+    ];
+    return retryablePatterns.some((pattern) => normalized.includes(pattern));
+  }
+
+  private async sleep(ms: number): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   private parseTextToObject<TOutput>(
@@ -258,7 +325,7 @@ export class GeminiResearchService {
 
     return await new Promise<T>((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error(message)), timeoutMs);
-      promise
+      Promise.resolve(promise)
         .then((result) => {
           clearTimeout(timer);
           resolve(result);

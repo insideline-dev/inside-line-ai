@@ -17,6 +17,7 @@ import { PipelineFeedbackService } from "./pipeline-feedback.service";
 import { AiPromptService } from "./ai-prompt.service";
 import { RESEARCH_PROMPT_KEY_BY_AGENT } from "./ai-prompt-catalog";
 import { AiDebugLogService } from "./ai-debug-log.service";
+import { PipelineAgentTraceService } from "./pipeline-agent-trace.service";
 import { DEFAULT_MODEL_BY_PURPOSE } from "../ai.config";
 
 type ResearchAgentOutput =
@@ -49,6 +50,7 @@ export class ResearchService {
     private pipelineFeedback: PipelineFeedbackService,
     private promptService: AiPromptService,
     @Optional() private aiDebugLog?: AiDebugLogService,
+    @Optional() private pipelineAgentTrace?: PipelineAgentTraceService,
   ) {}
 
   async run(startupId: string, options?: ResearchRunOptions): Promise<ResearchResult> {
@@ -66,6 +68,7 @@ export class ResearchService {
     }
 
     const pipelineInput: ResearchPipelineInput = { extraction, scraping };
+    const pipelineRunId = await this.resolvePipelineRunId(startupId);
     const currentResult = options?.agentKey
       ? await this.pipelineState.getPhaseResult(startupId, PipelinePhase.RESEARCH)
       : null;
@@ -91,6 +94,7 @@ export class ResearchService {
       const agent = ALL_RESEARCH_AGENTS[key];
       const agentResult = await this.runSingleAgentSafe(
         startupId,
+        pipelineRunId,
         key,
         agent,
         pipelineInput,
@@ -128,8 +132,9 @@ export class ResearchService {
     // ── Phase 1: team, market, product, news (parallel) ──
     const phase1Settled = await Promise.allSettled(
       PHASE_1_KEYS.map((key) =>
-        this.runSingleAgent(
+        this.runSingleAgentSafe(
           startupId,
+          pipelineRunId,
           key,
           RESEARCH_AGENTS[key],
           pipelineInput,
@@ -183,8 +188,9 @@ export class ResearchService {
     const competitorInput = this.buildCompetitorInput(pipelineInput, result);
     const phase2Settled = await Promise.allSettled(
       PHASE_2_KEYS.map((key) =>
-        this.runSingleAgent(
+        this.runSingleAgentSafe(
           startupId,
+          pipelineRunId,
           key,
           PHASE_2_RESEARCH_AGENTS[key],
           competitorInput,
@@ -265,6 +271,7 @@ export class ResearchService {
 
   private async runSingleAgentSafe(
     startupId: string,
+    pipelineRunId: string | undefined,
     key: ResearchAgentKey,
     agent: ResearchAgentConfig<ResearchAgentOutput>,
     pipelineInput: ResearchPipelineInput,
@@ -273,6 +280,7 @@ export class ResearchService {
     try {
       const agentResult = await this.runSingleAgent(
         startupId,
+        pipelineRunId,
         key,
         agent,
         pipelineInput,
@@ -281,29 +289,38 @@ export class ResearchService {
       return agentResult;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
+      const fallbackOutput = agent.fallback(pipelineInput);
+      await this.recordAgentTraceSafely({
+        startupId,
+        pipelineRunId,
+        phase: PipelinePhase.RESEARCH,
+        agentKey: key,
+        status: "failed",
+        usedFallback: true,
+        error: errorMessage,
+        outputJson: fallbackOutput,
+        outputText: this.toOutputText(fallbackOutput),
+      });
       return {
-        output: agent.fallback(pipelineInput),
+        output: fallbackOutput,
         sources: [],
         usedFallback: true,
         error: errorMessage,
         rejected: true,
+        attempt: 1,
+        retryCount: 0,
       };
     }
   }
 
   private async runSingleAgent(
     startupId: string,
+    pipelineRunId: string | undefined,
     key: ResearchAgentKey,
     agent: ResearchAgentConfig<ResearchAgentOutput>,
     pipelineInput: ResearchPipelineInput,
     onAgentStart?: (agent: ResearchAgentKey) => void,
-  ): Promise<{
-    output: ResearchAgentOutput;
-    sources: SourceEntry[];
-    usedFallback: boolean;
-    error?: string;
-    rejected: boolean;
-  }> {
+  ): Promise<AgentRunResult> {
     onAgentStart?.(key);
 
     const promptConfig = await this.promptService.resolve({
@@ -340,27 +357,57 @@ export class ResearchService {
         schema: agent.schema,
         fallback: () => agent.fallback(pipelineInput),
       });
-      return { ...result, rejected: false };
+      const outputText = result.outputText ?? this.toOutputText(result.output);
+      await this.recordAgentTraceSafely({
+        startupId,
+        pipelineRunId,
+        phase: PipelinePhase.RESEARCH,
+        agentKey: key,
+        status: result.usedFallback ? "fallback" : "completed",
+        usedFallback: result.usedFallback,
+        inputPrompt: prompt,
+        outputJson: result.output,
+        outputText,
+        error: result.error,
+        attempt: result.attempt,
+        retryCount: result.retryCount,
+      });
+
+      return { ...result, rejected: false, inputPrompt: prompt, outputText };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      const fallbackOutput = agent.fallback(pipelineInput);
+      await this.recordAgentTraceSafely({
+        startupId,
+        pipelineRunId,
+        phase: PipelinePhase.RESEARCH,
+        agentKey: key,
+        status: "fallback",
+        usedFallback: true,
+        inputPrompt: prompt,
+        outputJson: fallbackOutput,
+        outputText: this.toOutputText(fallbackOutput),
+        error: message,
+        attempt: 1,
+        retryCount: 0,
+      });
       return {
-        output: agent.fallback(pipelineInput),
+        output: fallbackOutput,
         sources: [],
         usedFallback: true,
         error: message,
         rejected: false,
+        attempt: 1,
+        retryCount: 0,
+        inputPrompt: prompt,
+        outputText: this.toOutputText(fallbackOutput),
       };
     }
   }
 
   private unwrapSettled(
     key: ResearchAgentKey,
-    settledResult: PromiseSettledResult<{
-      output: ResearchAgentOutput;
-      sources: SourceEntry[];
-      usedFallback: boolean;
-      error?: string;
-    }>,
+    settledResult: PromiseSettledResult<AgentRunResult>,
   ): AgentRunResult {
     if (settledResult.status === "rejected") {
       const errorMessage =
@@ -373,6 +420,8 @@ export class ResearchService {
         usedFallback: true,
         error: errorMessage,
         rejected: true,
+        attempt: 1,
+        retryCount: 0,
       };
     }
 
@@ -528,6 +577,73 @@ export class ResearchService {
       (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
     );
   }
+
+  private async recordAgentTraceSafely(input: {
+    startupId: string;
+    pipelineRunId: string | undefined;
+    phase: PipelinePhase;
+    agentKey: string;
+    status: "completed" | "failed" | "fallback";
+    usedFallback: boolean;
+    inputPrompt?: string;
+    outputText?: string;
+    outputJson?: unknown;
+    error?: string;
+    attempt?: number;
+    retryCount?: number;
+  }): Promise<void> {
+    if (!input.pipelineRunId) {
+      return;
+    }
+    if (!this.pipelineAgentTrace) {
+      return;
+    }
+
+    try {
+      await this.pipelineAgentTrace.recordRun({
+        startupId: input.startupId,
+        pipelineRunId: input.pipelineRunId,
+        phase: input.phase,
+        agentKey: input.agentKey,
+        status: input.status,
+        usedFallback: input.usedFallback,
+        inputPrompt: input.inputPrompt,
+        outputText: input.outputText,
+        outputJson: input.outputJson,
+        error: input.error,
+        attempt: input.attempt,
+        retryCount: input.retryCount,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.aiDebugLog?.logAgentFailure({
+        startupId: input.startupId,
+        phase: input.phase,
+        agentKey: input.agentKey,
+        error: `Trace persistence failed: ${message}`,
+      }).catch(() => undefined);
+    }
+  }
+
+  private async resolvePipelineRunId(startupId: string): Promise<string | undefined> {
+    const stateReader = this.pipelineState as PipelineStateService & {
+      get?: (id: string) => Promise<{ pipelineRunId?: string } | null>;
+    };
+    if (typeof stateReader.get !== "function") {
+      return undefined;
+    }
+
+    const state = await stateReader.get(startupId);
+    return state?.pipelineRunId ?? undefined;
+  }
+
+  private toOutputText(value: unknown): string {
+    try {
+      return JSON.stringify(value, null, 2);
+    } catch {
+      return String(value);
+    }
+  }
 }
 
 interface AgentRunResult {
@@ -536,4 +652,8 @@ interface AgentRunResult {
   usedFallback: boolean;
   error?: string;
   rejected: boolean;
+  attempt?: number;
+  retryCount?: number;
+  inputPrompt?: string;
+  outputText?: string;
 }

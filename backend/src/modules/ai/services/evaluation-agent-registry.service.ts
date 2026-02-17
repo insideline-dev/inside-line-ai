@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, Optional } from "@nestjs/common";
 import type {
   EvaluationAgent,
   EvaluationAgentCompletion,
@@ -6,6 +6,7 @@ import type {
   EvaluationFeedbackNote,
   EvaluationAgentKey,
   EvaluationPipelineInput,
+  EvaluationAgentTraceEvent,
 } from "../interfaces/agent.interface";
 import type {
   EvaluationResult,
@@ -15,6 +16,7 @@ import { PipelinePhase } from "../interfaces/pipeline.interface";
 import { PipelineStateService } from "./pipeline-state.service";
 import { PhaseTransitionService } from "../orchestrator/phase-transition.service";
 import { PipelineFeedbackService } from "./pipeline-feedback.service";
+import { PipelineAgentTraceService } from "./pipeline-agent-trace.service";
 import {
   BusinessModelEvaluationAgent,
   CompetitiveAdvantageEvaluationAgent,
@@ -50,6 +52,7 @@ export class EvaluationAgentRegistryService {
     private pipelineState: PipelineStateService,
     private phaseTransition: PhaseTransitionService,
     private pipelineFeedback: PipelineFeedbackService,
+    @Optional() private pipelineAgentTrace?: PipelineAgentTraceService,
   ) {
     this.agents = [
       this.team,
@@ -73,6 +76,7 @@ export class EvaluationAgentRegistryService {
     onAgentComplete?: (payload: EvaluationAgentCompletion) => void,
     onAgentLifecycle?: (payload: EvaluationAgentLifecycleEvent) => void,
   ): Promise<EvaluationResult> {
+    const pipelineRunId = (await this.pipelineState.get(startupId))?.pipelineRunId;
     const outputs = new Map<EvaluationAgentKey, unknown>();
     const failedKeys: EvaluationAgentKey[] = [];
     const errors: Array<{ agent: string; error: string }> = [];
@@ -88,6 +92,8 @@ export class EvaluationAgentRegistryService {
           feedbackNotes,
           onLifecycle: (event) =>
             this.emitAgentLifecycle(onAgentLifecycle, event),
+          onTrace: (event) =>
+            this.persistAgentTrace(startupId, pipelineRunId, event),
         });
         const completedAt = new Date();
 
@@ -135,6 +141,17 @@ export class EvaluationAgentRegistryService {
         });
 
         const fallbackOutput = agent.fallback(pipelineData);
+        this.persistAgentTrace(startupId, pipelineRunId, {
+          agent: agent.key,
+          status: "failed",
+          inputPrompt: "",
+          outputText: this.safeStringify(fallbackOutput),
+          outputJson: fallbackOutput,
+          attempt: 1,
+          retryCount: 0,
+          usedFallback: true,
+          error: errorMessage,
+        });
         failedKeys.push(agent.key);
         errors.push({
           agent: agent.key,
@@ -206,6 +223,7 @@ export class EvaluationAgentRegistryService {
     onAgentStart?: (agent: EvaluationAgentKey) => void,
     onAgentLifecycle?: (payload: EvaluationAgentLifecycleEvent) => void,
   ): Promise<EvaluationAgentCompletion> {
+    const pipelineRunId = (await this.pipelineState.get(startupId))?.pipelineRunId;
     const agent = this.agents.find((candidate) => candidate.key === key);
     if (!agent) {
       throw new Error(`Unsupported evaluation agent "${key}"`);
@@ -219,6 +237,8 @@ export class EvaluationAgentRegistryService {
         feedbackNotes,
         onLifecycle: (event) =>
           this.emitAgentLifecycle(onAgentLifecycle, event),
+        onTrace: (event) =>
+          this.persistAgentTrace(startupId, pipelineRunId, event),
       });
       const completedAt = new Date();
 
@@ -266,6 +286,49 @@ export class EvaluationAgentRegistryService {
         usedFallback: true,
         error: message,
       };
+    }
+  }
+
+  private persistAgentTrace(
+    startupId: string,
+    pipelineRunId: string | undefined,
+    event: EvaluationAgentTraceEvent,
+  ): void {
+    if (!pipelineRunId) {
+      return;
+    }
+    if (!this.pipelineAgentTrace) {
+      return;
+    }
+
+    void this.pipelineAgentTrace
+      .recordRun({
+        startupId,
+        pipelineRunId,
+        phase: PipelinePhase.EVALUATION,
+        agentKey: event.agent,
+        status: event.status,
+        attempt: event.attempt,
+        retryCount: event.retryCount,
+        usedFallback: event.usedFallback,
+        inputPrompt: event.inputPrompt,
+        outputText: event.outputText,
+        outputJson: event.outputJson,
+        error: event.error,
+      })
+      .catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.warn(
+          `Failed to persist evaluation trace for ${event.agent}: ${message}`,
+        );
+      });
+  }
+
+  private safeStringify(value: unknown): string {
+    try {
+      return JSON.stringify(value, null, 2);
+    } catch {
+      return String(value);
     }
   }
 

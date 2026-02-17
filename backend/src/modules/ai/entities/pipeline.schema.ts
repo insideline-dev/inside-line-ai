@@ -1,5 +1,15 @@
 import { relations } from "drizzle-orm";
-import { index, integer, jsonb, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  index,
+  integer,
+  jsonb,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+} from "drizzle-orm/pg-core";
 import { user } from "../../../auth/entities";
 import { startup } from "../../startup/entities";
 import { PipelinePhase, PipelineStatus } from "../interfaces/pipeline.interface";
@@ -73,6 +83,53 @@ export const pipelineFailure = pgTable(
   ],
 );
 
+export const pipelineAgentRunStatusEnum = pgEnum("pipeline_agent_run_status", [
+  "running",
+  "completed",
+  "failed",
+  "fallback",
+]);
+
+export const pipelineAgentRun = pgTable(
+  "pipeline_agent_runs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    pipelineRunId: text("pipeline_run_id")
+      .notNull()
+      .references(() => pipelineRun.pipelineRunId, { onDelete: "cascade" }),
+    startupId: uuid("startup_id")
+      .notNull()
+      .references(() => startup.id, { onDelete: "cascade" }),
+    phase: pipelinePhaseEnum("phase").notNull(),
+    agentKey: text("agent_key").notNull(),
+    status: pipelineAgentRunStatusEnum("status").notNull(),
+    attempt: integer("attempt").notNull().default(1),
+    retryCount: integer("retry_count").notNull().default(0),
+    usedFallback: boolean("used_fallback").notNull().default(false),
+    inputPrompt: text("input_prompt"),
+    outputText: text("output_text"),
+    outputJson: jsonb("output_json").$type<Record<string, unknown> | unknown[]>(),
+    error: text("error"),
+    startedAt: timestamp("started_at").defaultNow().notNull(),
+    completedAt: timestamp("completed_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("pipeline_agent_runs_startup_idx").on(table.startupId),
+    index("pipeline_agent_runs_pipeline_idx").on(table.pipelineRunId),
+    index("pipeline_agent_runs_startup_phase_agent_idx").on(
+      table.startupId,
+      table.phase,
+      table.agentKey,
+    ),
+    index("pipeline_agent_runs_created_idx").on(table.createdAt),
+  ],
+);
+
 export const pipelineRunRelations = relations(pipelineRun, ({ one, many }) => ({
   startup: one(startup, {
     fields: [pipelineRun.startupId],
@@ -83,6 +140,7 @@ export const pipelineRunRelations = relations(pipelineRun, ({ one, many }) => ({
     references: [user.id],
   }),
   failures: many(pipelineFailure),
+  agentRuns: many(pipelineAgentRun),
 }));
 
 export const pipelineFailureRelations = relations(pipelineFailure, ({ one }) => ({
@@ -96,7 +154,20 @@ export const pipelineFailureRelations = relations(pipelineFailure, ({ one }) => 
   }),
 }));
 
+export const pipelineAgentRunRelations = relations(pipelineAgentRun, ({ one }) => ({
+  pipelineRun: one(pipelineRun, {
+    fields: [pipelineAgentRun.pipelineRunId],
+    references: [pipelineRun.pipelineRunId],
+  }),
+  startup: one(startup, {
+    fields: [pipelineAgentRun.startupId],
+    references: [startup.id],
+  }),
+}));
+
 export type PipelineRun = typeof pipelineRun.$inferSelect;
 export type NewPipelineRun = typeof pipelineRun.$inferInsert;
 export type PipelineFailure = typeof pipelineFailure.$inferSelect;
 export type NewPipelineFailure = typeof pipelineFailure.$inferInsert;
+export type PipelineAgentRun = typeof pipelineAgentRun.$inferSelect;
+export type NewPipelineAgentRun = typeof pipelineAgentRun.$inferInsert;

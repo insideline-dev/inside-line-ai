@@ -50,6 +50,23 @@ export interface PipelineAgentEvent {
   error?: string;
 }
 
+export interface PipelineAgentTrace {
+  id: string;
+  pipelineRunId: string;
+  phase: PipelinePhaseKey;
+  agentKey: string;
+  status: "running" | "completed" | "failed" | "fallback";
+  attempt?: number;
+  retryCount?: number;
+  usedFallback?: boolean;
+  inputPrompt?: string | null;
+  outputText?: string | null;
+  outputJson?: unknown;
+  error?: string | null;
+  startedAt?: string;
+  completedAt?: string | null;
+}
+
 export interface PipelineProgressData {
   overallProgress: number;
   currentPhase: PipelinePhaseKey;
@@ -61,6 +78,7 @@ export interface PipelineProgressData {
   phasesCompleted: string[];
   phases: Record<string, PipelinePhaseProgress>;
   agentEvents?: PipelineAgentEvent[];
+  agentTraces?: PipelineAgentTrace[];
 }
 
 export interface StartupProgressResponse {

@@ -16,7 +16,9 @@ interface SourceLike {
   title?: string;
   url?: string;
   type?: string;
+  category?: string;
   agent?: string;
+  model?: string;
   timestamp?: string;
   relevance?: string;
 }
@@ -48,6 +50,35 @@ const AI_AGENT_ROWS = [
   { key: "synthesis", label: "SynthesisAgent", description: "Final synthesis and investor memo generation", scoreKey: "overallScore" },
 ] as const;
 
+type AiAgentRowKey = (typeof AI_AGENT_ROWS)[number]["key"];
+
+const SOURCE_AGENT_TO_ROW_KEY: Record<string, AiAgentRowKey> = {
+  team: "team",
+  teamagent: "team",
+  market: "market",
+  marketagent: "market",
+  product: "product",
+  productagent: "product",
+  traction: "traction",
+  tractionagent: "traction",
+  businessmodel: "businessModel",
+  businessmodelagent: "businessModel",
+  gtm: "gtm",
+  gtmagent: "gtm",
+  financials: "financials",
+  financialsagent: "financials",
+  competitiveadvantage: "competitiveAdvantage",
+  competitiveadvantageagent: "competitiveAdvantage",
+  legal: "legal",
+  legalregulatoryagent: "legal",
+  dealterms: "dealTerms",
+  dealtermsagent: "dealTerms",
+  exitpotential: "exitPotential",
+  exitpotentialagent: "exitPotential",
+  synthesis: "synthesis",
+  synthesisagent: "synthesis",
+};
+
 function formatDate(value?: string): string {
   if (!value) return "N/A";
   const parsed = new Date(value);
@@ -58,6 +89,12 @@ function formatDate(value?: string): string {
 function getSourceAgentLabel(agent?: string): string {
   if (!agent) return "Orchestrator";
   return AGENT_LABEL[agent] || "Orchestrator";
+}
+
+function toAiAgentRowKey(agent?: string): AiAgentRowKey | null {
+  if (!agent) return null;
+  const normalized = agent.toLowerCase().replace(/[^a-z]/g, "");
+  return SOURCE_AGENT_TO_ROW_KEY[normalized] ?? null;
 }
 
 function sectionTitleClass() {
@@ -86,13 +123,13 @@ function SourceRow({
               href={url}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-sm font-medium text-violet-600 hover:underline break-all"
+              className="inline-flex items-center gap-1 break-all text-sm font-medium text-violet-600 hover:underline"
             >
               {title}
               <ExternalLink className="h-3 w-3 shrink-0" />
             </a>
           ) : (
-            <p className="text-sm font-medium break-all">{title}</p>
+            <p className="break-all text-sm font-medium">{title}</p>
           )}
           {subtitle && <p className="mt-0.5 text-xs text-muted-foreground">{subtitle}</p>}
           <p className="mt-1 text-xs text-muted-foreground">{formatDate(timestamp)}</p>
@@ -106,9 +143,36 @@ function SourceRow({
 }
 
 export function SourcesTabContent({ startup, evaluation }: SourcesTabContentProps) {
-  const rawSources = ((evaluation?.sources as unknown as SourceLike[]) || []).filter(
-    (item) => Boolean(item?.url),
+  const allSources = (evaluation?.sources as unknown as SourceLike[]) || [];
+  const rawSources = allSources.filter((item) => Boolean(item?.url));
+
+  const modelByAgent = allSources.reduce(
+    (acc, source) => {
+      const sourceType = (source.type || "").toLowerCase();
+      const sourceCategory = (source.category || "").toLowerCase();
+      const isApiSource =
+        sourceType === "api" ||
+        sourceCategory === "api" ||
+        typeof source.model === "string";
+
+      if (!isApiSource) return acc;
+
+      const agentKey = toAiAgentRowKey(source.agent);
+      if (!agentKey) return acc;
+
+      const model =
+        (typeof source.model === "string" && source.model.trim()) ||
+        (typeof source.name === "string" && source.name.trim()) ||
+        "";
+
+      if (!model) return acc;
+
+      acc[agentKey] = model;
+      return acc;
+    },
+    {} as Partial<Record<AiAgentRowKey, string>>,
   );
+
   const websiteSources = [
     ...(startup.website
       ? [
@@ -152,6 +216,7 @@ export function SourcesTabContent({ startup, evaluation }: SourcesTabContentProp
     return {
       ...row,
       score: typeof score === "number" ? Math.round(score) : null,
+      model: modelByAgent[row.key] || "Model unavailable",
     };
   }).filter((row) => row.score !== null);
 
@@ -241,7 +306,7 @@ export function SourcesTabContent({ startup, evaluation }: SourcesTabContentProp
                   </p>
                 </div>
                 <Badge variant="secondary" className="shrink-0 text-[11px]">
-                  OpenAI GPT-5.2
+                  {row.model}
                 </Badge>
               </div>
             </div>

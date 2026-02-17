@@ -3372,6 +3372,30 @@
         ]
       }
     },
+    "/admin/startups/{id}/match": {
+      "post": {
+        "operationId": "AdminController_matchStartupInvestors",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Trigger investor thesis matching for an approved startup",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
     "/admin/startups/{id}/reanalyze": {
       "post": {
         "operationId": "AdminController_reanalyzeStartup",
@@ -8943,6 +8967,7 @@
           "minRevenue": {
             "type": "integer",
             "minimum": 0,
+            "maximum": 9007199254740991,
             "nullable": true
           },
           "geographicFocus": {
@@ -9218,19 +9243,64 @@
           "customRationale": {
             "type": "object",
             "properties": {
-              "team": { "type": "string", "maxLength": 2000 },
-              "market": { "type": "string", "maxLength": 2000 },
-              "product": { "type": "string", "maxLength": 2000 },
-              "traction": { "type": "string", "maxLength": 2000 },
-              "businessModel": { "type": "string", "maxLength": 2000 },
-              "gtm": { "type": "string", "maxLength": 2000 },
-              "financials": { "type": "string", "maxLength": 2000 },
-              "competitiveAdvantage": { "type": "string", "maxLength": 2000 },
-              "legal": { "type": "string", "maxLength": 2000 },
-              "dealTerms": { "type": "string", "maxLength": 2000 },
-              "exitPotential": { "type": "string", "maxLength": 2000 }
+              "team": {
+                "type": "string",
+                "maxLength": 2000
+              },
+              "market": {
+                "type": "string",
+                "maxLength": 2000
+              },
+              "product": {
+                "type": "string",
+                "maxLength": 2000
+              },
+              "traction": {
+                "type": "string",
+                "maxLength": 2000
+              },
+              "businessModel": {
+                "type": "string",
+                "maxLength": 2000
+              },
+              "gtm": {
+                "type": "string",
+                "maxLength": 2000
+              },
+              "financials": {
+                "type": "string",
+                "maxLength": 2000
+              },
+              "competitiveAdvantage": {
+                "type": "string",
+                "maxLength": 2000
+              },
+              "legal": {
+                "type": "string",
+                "maxLength": 2000
+              },
+              "dealTerms": {
+                "type": "string",
+                "maxLength": 2000
+              },
+              "exitPotential": {
+                "type": "string",
+                "maxLength": 2000
+              }
             },
-            "required": ["team", "market", "product", "traction", "businessModel", "gtm", "financials", "competitiveAdvantage", "legal", "dealTerms", "exitPotential"],
+            "required": [
+              "team",
+              "market",
+              "product",
+              "traction",
+              "businessModel",
+              "gtm",
+              "financials",
+              "competitiveAdvantage",
+              "legal",
+              "dealTerms",
+              "exitPotential"
+            ],
             "nullable": true
           }
         },

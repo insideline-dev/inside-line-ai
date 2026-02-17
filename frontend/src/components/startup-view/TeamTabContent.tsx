@@ -360,6 +360,9 @@ function buildTeamMembers(
         "",
       profilePictureUrl:
         linkedinData.profilePictureUrl ||
+        linkedinData.profileImageUrl ||
+        linkedinData.avatarUrl ||
+        linkedinData.picture ||
         member.imageUrl ||
         memberEval?.imageUrl ||
         founderData?.profilePictureUrl ||

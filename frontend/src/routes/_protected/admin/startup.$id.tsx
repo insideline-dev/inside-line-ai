@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -29,11 +29,17 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useStartupControllerFindOne, getStartupControllerFindOneQueryKey } from "@/api/generated/startup/startup";
+import {
+  useStartupControllerFindOne,
+  useStartupControllerAdminDelete,
+  getStartupControllerFindOneQueryKey,
+} from "@/api/generated/startup/startup";
 import {
   useAdminControllerApproveStartup,
   useAdminControllerReanalyzeStartup,
+  useAdminControllerRetryStartupAgent,
   useAdminControllerGetAllScoringWeights,
+  useAdminControllerMatchStartupInvestors,
   getAdminControllerRejectStartupUrl,
   getAdminControllerGetStatsQueryKey,
   getAdminControllerGetAllStartupsQueryKey,
@@ -72,10 +78,14 @@ function unwrapApiResponse<T>(payload: unknown): T {
 
 function AdminReviewPage() {
   const { id } = Route.useParams();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [adminNotes, setAdminNotes] = useState("");
   const [showApproveDialog, setShowApproveDialog] = useState(false);
   const [showRejectDialog, setShowRejectDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showMatchDialog, setShowMatchDialog] = useState(false);
+  const [reanalyzingSection, setReanalyzingSection] = useState<string | null>(null);
 
   const { data: startupResponse, isLoading } = useStartupControllerFindOne(id);
   const startup = startupResponse
@@ -151,6 +161,54 @@ function AdminReviewPage() {
     },
   });
 
+  const retryAgentMutation = useAdminControllerRetryStartupAgent({
+    mutation: {
+      onSuccess: (_result, variables) => {
+        queryClient.invalidateQueries({ queryKey: getStartupControllerFindOneQueryKey(id) });
+        queryClient.invalidateQueries({ queryKey: getAdminControllerGetAllStartupsQueryKey() });
+        toast.success("Section re-analysis triggered", {
+          description: `${variables.data.agent} has been queued for re-analysis.`,
+        });
+      },
+      onError: (error: Error) => {
+        toast.error("Failed to re-analyze section", { description: error.message });
+      },
+      onSettled: () => {
+        setReanalyzingSection(null);
+      },
+    },
+  });
+
+  const deleteMutation = useStartupControllerAdminDelete({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getAdminControllerGetAllStartupsQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getAdminControllerGetStatsQueryKey() });
+        toast.success("Startup submission deleted");
+        setShowDeleteDialog(false);
+        navigate({ to: "/admin" });
+      },
+      onError: (error: Error) => {
+        toast.error("Failed to delete submission", { description: error.message });
+      },
+    },
+  });
+
+  const matchMutation = useAdminControllerMatchStartupInvestors({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getStartupControllerFindOneQueryKey(id) });
+        toast.success("Investor matching complete", {
+          description: "Matching results have been sent to investors.",
+        });
+        setShowMatchDialog(false);
+      },
+      onError: (error: Error) => {
+        toast.error("Failed to match investors", { description: error.message });
+      },
+    },
+  });
+
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -175,6 +233,22 @@ function AdminReviewPage() {
   const canApproveReject = ["pending_review", "analyzing", "analyzed"].includes(
     startup.status
   );
+
+  const handleSectionReanalyze = async (
+    sectionKey: string,
+    _evaluationId: string,
+    comment: string,
+  ) => {
+    setReanalyzingSection(sectionKey);
+    await retryAgentMutation.mutateAsync({
+      id,
+      data: {
+        phase: "evaluation",
+        agent: sectionKey,
+        feedback: comment,
+      },
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -255,6 +329,10 @@ function AdminReviewPage() {
                 startup={startup}
                 evaluation={evaluation}
                 weights={stageWeights}
+                adminFeedback={{
+                  onReanalyze: handleSectionReanalyze,
+                  reanalyzingSection,
+                }}
               />
             </TabsContent>
 
@@ -291,8 +369,12 @@ function AdminReviewPage() {
             onAdminNotesChange={setAdminNotes}
             onApprove={() => setShowApproveDialog(true)}
             onReject={() => setShowRejectDialog(true)}
+            onDeleteSubmission={() => setShowDeleteDialog(true)}
+            onMatchInvestors={() => setShowMatchDialog(true)}
             approveDisabled={approveMutation.isPending || rejectMutation.isPending}
             rejectDisabled={approveMutation.isPending || rejectMutation.isPending}
+            deleteDisabled={deleteMutation.isPending}
+            matchDisabled={matchMutation.isPending}
             canApproveReject={canApproveReject}
           />
         </div>
@@ -349,6 +431,49 @@ function AdminReviewPage() {
               className="bg-destructive text-destructive-foreground"
             >
               {rejectMutation.isPending ? "Rejecting..." : "Reject"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={showMatchDialog} onOpenChange={setShowMatchDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Match investors for this startup?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will run thesis alignment against all investor profiles and notify
+              matched investors.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => matchMutation.mutate({ id })}
+              disabled={matchMutation.isPending}
+            >
+              {matchMutation.isPending ? "Matching..." : "Match Investors"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this startup submission?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently deletes the startup and all linked analysis data.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteMutation.mutate({ id })}
+              disabled={deleteMutation.isPending}
+              className="bg-destructive text-destructive-foreground"
+            >
+              {deleteMutation.isPending ? "Deleting..." : "Delete Submission"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

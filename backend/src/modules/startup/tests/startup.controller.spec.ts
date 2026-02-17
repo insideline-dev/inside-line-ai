@@ -146,7 +146,7 @@ describe('StartupController', () => {
       const result = await controller.create(mockUser, dto);
 
       expect(result).toEqual(mockStartup);
-      expect(startupService.create).toHaveBeenCalledWith(mockUser.id, dto);
+      expect(startupService.create).toHaveBeenCalledWith(mockUser.id, dto, mockUser.role);
     });
   });
 
@@ -513,7 +513,7 @@ describe('StartupController', () => {
         const result = await controller.approve(adminUser, mockStartup.id, {});
 
         expect(result).toEqual(approved);
-        expect(startupService.approve).toHaveBeenCalledWith(mockStartup.id, adminUser.id);
+        expect(startupService.approve).toHaveBeenCalledWith(mockStartup.id, adminUser.id, adminUser.role);
       });
     });
 
@@ -536,6 +536,7 @@ describe('StartupController', () => {
           mockStartup.id,
           adminUser.id,
           dto.rejectionReason,
+          adminUser.role,
         );
       });
     });

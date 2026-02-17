@@ -245,7 +245,11 @@ export class AuthController {
       foundUser.id,
       foundUser.email,
     );
-    return this.setTokensAndRespond(res, foundUser);
+    const refreshedUser = await this.userAuthService.findUserById(foundUser.id);
+    if (!refreshedUser) {
+      throw new UnauthorizedException("User not found");
+    }
+    return this.setTokensAndRespond(res, refreshedUser);
   }
 
   // ============ GOOGLE OAUTH ============
@@ -295,7 +299,11 @@ export class AuthController {
       foundUser.id,
       foundUser.email,
     );
-    const tokens = await this.authService.generateTokens(foundUser);
+    const refreshedUser = await this.userAuthService.findUserById(foundUser.id);
+    if (!refreshedUser) {
+      throw new UnauthorizedException("User not found");
+    }
+    const tokens = await this.authService.generateTokens(refreshedUser);
     this.setTokenCookies(res, tokens.accessToken, tokens.refreshToken);
 
     const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3030";

@@ -1,54 +1,84 @@
 services:
+  # ============================================
+  # Redis (BullMQ queues)
+  # ============================================
   redis:
     image: redis:7-alpine
+    container_name: inside-line-redis
     restart: unless-stopped
-    ports:
-      - "6379:6379"
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy noeviction
     volumes:
       - redis_data:/data
+    networks:
+      - inside-line
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
-      timeout: 3s
-      retries: 3
+      timeout: 5s
+      retries: 5
+      start_period: 5s
 
+  # ============================================
+  # Backend API (NestJS + Bun)
+  # ============================================
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    container_name: inside-line-api
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "${API_PORT:-8080}:8080"
+    env_file:
+      - path: ./backend/.env
+        required: false
     environment:
+      # These override whatever comes from env_file or Coolify
       NODE_ENV: production
       PORT: 8080
       REDIS_URL: redis://redis:6379
-      DATABASE_URL: ${DATABASE_URL}
-      JWT_SECRET: ${JWT_SECRET}
-      FRONTEND_URL: ${FRONTEND_URL:-http://localhost}
-      ENABLE_SWAGGER: ${ENABLE_SWAGGER:-false}
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
-      AWS_REGION: ${AWS_REGION}
-      AWS_S3_BUCKET: ${AWS_S3_BUCKET}
-      RESEND_API_KEY: ${RESEND_API_KEY}
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
-      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
     depends_on:
       redis:
         condition: service_healthy
+    networks:
+      - inside-line
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
+  # ============================================
+  # Frontend (Nginx — serves SPA + proxies API)
+  # ============================================
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-      args:
-        VITE_API_URL: ${VITE_API_URL:-http://localhost:8080}
+    container_name: inside-line-frontend
     restart: unless-stopped
     ports:
-      - "80:80"
+      - "${PORT:-80}:80"
     depends_on:
       - backend
+    networks:
+      - inside-line
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
 
 volumes:
   redis_data:
+    driver: local
+
+networks:
+  inside-line:
+    driver: bridge

@@ -442,7 +442,6 @@ export class UnipileService {
     if (!bestSegment) return null;
     return `${root}${bestSegment}`;
   }
-
   private async resolveBestCompanyId(
     companyName: string,
     companyWebsite?: string,

@@ -338,7 +338,7 @@ export class AuthController {
 
   @Public()
   @Post("refresh")
-  @Throttle({ default: { limit: 3, ttl: 60000 } }) // 3 refreshes per minute
+  @Throttle({ default: { limit: 10, ttl: 60000 } }) // 10 refreshes per minute
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "Refresh access token" })
   @ApiResponse({ status: 200, type: AuthResponseDto })

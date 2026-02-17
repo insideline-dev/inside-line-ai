@@ -120,7 +120,7 @@ export class ClaraSubmissionService {
       NotificationType.INFO,
       isInvestorSubmission
         ? `/investor/startup/${created.id}`
-        : `/admin/startups/${created.id}`,
+        : `/admin/startup/${created.id}`,
     );
 
     return {

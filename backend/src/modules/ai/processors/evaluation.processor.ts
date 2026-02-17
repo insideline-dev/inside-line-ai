@@ -138,8 +138,8 @@ export class EvaluationProcessor
                 output,
                 usedFallback,
                 error,
-                },
-              });
+              },
+            });
           },
           onAgentLifecycle: ({ agent, event, attempt, retryCount, error }) => {
             if (event !== "retrying") {

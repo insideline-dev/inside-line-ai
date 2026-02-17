@@ -103,7 +103,7 @@ export class StartupIntakeService {
       `New startup submitted via ${source}`,
       `${companyName} was submitted by ${fromEmail}`,
       NotificationType.INFO,
-      `/admin/startups/${created.id}`,
+      `/admin/startup/${created.id}`,
     );
 
     return {
@@ -168,7 +168,7 @@ export class StartupIntakeService {
       'Startup quick-created',
       `${params.name} was quick-created and pipeline started`,
       NotificationType.INFO,
-      `/admin/startups/${created.id}`,
+      `/admin/startup/${created.id}`,
     );
 
     return {

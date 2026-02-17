@@ -3,9 +3,11 @@ import {
   createWriteStream,
   existsSync,
   mkdirSync,
+  statSync,
   type WriteStream,
 } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
+import { rotateIfNeeded } from "./rotate-log";
 
 type LogEntry = {
   timestamp: string;
@@ -20,12 +22,16 @@ type LogEntry = {
 export class AppFileLogger extends ConsoleLogger {
   private readonly fileLoggingEnabled: boolean;
   private readonly filePath: string;
+  private readonly maxFileBytes: number;
   private stream: WriteStream | null = null;
+  private bytesWritten = 0;
+  private rotationPending = false;
 
   constructor(context = "AppLogger") {
     super(context, { timestamp: true });
     this.fileLoggingEnabled = this.readFileLoggingEnabled();
     this.filePath = this.resolveLogFilePath();
+    this.maxFileBytes = this.readMaxFileBytes();
 
     if (!this.fileLoggingEnabled) {
       return;
@@ -36,6 +42,13 @@ export class AppFileLogger extends ConsoleLogger {
     this.stream.on("error", (error) => {
       super.error(`Failed writing to log file ${this.filePath}: ${String(error)}`);
     });
+
+    // Seed bytesWritten from existing file size
+    try {
+      this.bytesWritten = statSync(this.filePath).size;
+    } catch {
+      this.bytesWritten = 0;
+    }
 
     super.log(`File logging enabled: ${this.filePath}`);
     this.writeToFile("log", "File logging initialized", [this.filePath]);
@@ -87,6 +100,15 @@ export class AppFileLogger extends ConsoleLogger {
     return resolve(cwd, configured);
   }
 
+  private readMaxFileBytes(): number {
+    const raw = process.env.LOG_MAX_FILE_SIZE?.trim();
+    if (!raw) {
+      return 50 * 1024 * 1024; // 50 MB default
+    }
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 50 * 1024 * 1024;
+  }
+
   private readFileLoggingEnabled(): boolean {
     const value = process.env.LOG_TO_FILE?.trim().toLowerCase();
     if (!value) {
@@ -116,10 +138,41 @@ export class AppFileLogger extends ConsoleLogger {
     };
 
     try {
-      this.stream.write(`${JSON.stringify(entry)}\n`);
+      const line = `${JSON.stringify(entry)}\n`;
+      this.stream.write(line);
+      this.bytesWritten += Buffer.byteLength(line, "utf8");
+      this.scheduleRotationCheck();
     } catch (error) {
       super.error(`Failed to append log entry: ${String(error)}`);
     }
+  }
+
+  private scheduleRotationCheck(): void {
+    if (this.rotationPending || this.bytesWritten < this.maxFileBytes) {
+      return;
+    }
+    this.rotationPending = true;
+
+    // Run rotation async — don't block the log call
+    rotateIfNeeded(this.filePath, this.maxFileBytes)
+      .then((rotated) => {
+        if (rotated) {
+          this.reopenStream();
+          this.bytesWritten = 0;
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        this.rotationPending = false;
+      });
+  }
+
+  private reopenStream(): void {
+    this.stream?.end();
+    this.stream = createWriteStream(this.filePath, { flags: "a" });
+    this.stream.on("error", (error) => {
+      super.error(`Failed writing to log file ${this.filePath}: ${String(error)}`);
+    });
   }
 
   private normalizeMessage(message: unknown): string {

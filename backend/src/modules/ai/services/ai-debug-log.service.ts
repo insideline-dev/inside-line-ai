@@ -2,6 +2,7 @@ import { Injectable, Logger, Optional } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { appendFile, mkdir } from "fs/promises";
 import { dirname, resolve } from "path";
+import { rotateIfNeeded } from "../../../common/logging/rotate-log";
 import { PipelinePhase } from "../interfaces/pipeline.interface";
 
 type DebugLogKind =
@@ -87,6 +88,7 @@ export class AiDebugLogService {
     try {
       const path = this.resolvePath(this.logPath);
       await mkdir(dirname(path), { recursive: true });
+      await rotateIfNeeded(path);
       await appendFile(
         path,
         `${JSON.stringify(

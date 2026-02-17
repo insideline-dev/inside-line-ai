@@ -31,8 +31,8 @@ services:
       dockerfile: Dockerfile
     container_name: inside-line-api
     restart: unless-stopped
-    ports:
-      - "${API_PORT:-8080}:8080"
+    # ports:
+    #   - "${API_PORT:-8080}:8080"
     env_file:
       - path: ./backend/.env
         required: false
@@ -47,7 +47,15 @@ services:
     networks:
       - inside-line
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:8080/health",
+        ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -62,14 +70,15 @@ services:
       dockerfile: Dockerfile
     container_name: inside-line-frontend
     restart: unless-stopped
-    ports:
-      - "${PORT:-80}:80"
+    # ports:
+    #   - "${PORT:-80}:80"
     depends_on:
       - backend
     networks:
       - inside-line
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      test:
+        ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
       interval: 30s
       timeout: 3s
       retries: 3

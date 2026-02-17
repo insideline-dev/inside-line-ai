@@ -7,7 +7,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
-import { user } from "../../../auth/entities/auth.schema";
+import { user, userRoleEnum, UserRole } from "../../../auth/entities/auth.schema";
 
 export const earlyAccessInviteStatusEnum = pgEnum("early_access_invite_status", [
   "pending",
@@ -22,6 +22,7 @@ export const earlyAccessInvite = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     email: text("email").notNull(),
     tokenHash: text("token_hash").notNull().unique(),
+    role: userRoleEnum("role").notNull().default(UserRole.FOUNDER),
     status: earlyAccessInviteStatusEnum("status").notNull().default("pending"),
     expiresAt: timestamp("expires_at").notNull(),
     redeemedAt: timestamp("redeemed_at"),

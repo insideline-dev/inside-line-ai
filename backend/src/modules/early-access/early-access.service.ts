@@ -9,6 +9,7 @@ import { ConfigService } from "@nestjs/config";
 import { and, desc, eq, gt, isNull } from "drizzle-orm";
 import { createHash, randomBytes } from "node:crypto";
 import { DrizzleService } from "../../database";
+import { EmailService } from "../../email/email.service";
 import { user, UserRole } from "../../auth/entities/auth.schema";
 import {
   earlyAccessInvite,
@@ -30,6 +31,7 @@ export class EarlyAccessService {
   constructor(
     private drizzle: DrizzleService,
     private config: ConfigService,
+    private emailService: EmailService,
   ) {}
 
   async assertEmailAllowed(email: string): Promise<void> {
@@ -111,7 +113,13 @@ export class EarlyAccessService {
       })
       .returning();
 
-    return this.mapInvite(created, rawToken);
+    const mapped = this.mapInvite(created, rawToken);
+
+    if (mapped.inviteUrl) {
+      await this.sendInviteEmail(normalizedEmail, mapped.inviteUrl, expiryDays);
+    }
+
+    return mapped;
   }
 
   async listInvites(): Promise<EarlyAccessInviteResponse[]> {
@@ -240,6 +248,41 @@ export class EarlyAccessService {
       .onConflictDoNothing({ target: waitlistEntry.email });
   }
 
+  async approveWaitlistEntry(
+    id: string,
+    adminUserId: string,
+  ): Promise<EarlyAccessInviteResponse> {
+    const [entry] = await this.drizzle.db
+      .select()
+      .from(waitlistEntry)
+      .where(eq(waitlistEntry.id, id))
+      .limit(1);
+
+    if (!entry) {
+      throw new NotFoundException("Waitlist entry not found");
+    }
+
+    const roleMap: Record<string, UserRole.FOUNDER | UserRole.INVESTOR | UserRole.SCOUT> = {
+      founder: UserRole.FOUNDER,
+      investor: UserRole.INVESTOR,
+      scout: UserRole.SCOUT,
+    };
+    const mappedRole =
+      roleMap[entry.role.toLowerCase()] ?? UserRole.FOUNDER;
+
+    const invite = await this.createInvite(adminUserId, {
+      email: entry.email,
+      role: mappedRole,
+      expiresInDays: DEFAULT_INVITE_EXPIRY_DAYS,
+    });
+
+    await this.drizzle.db
+      .delete(waitlistEntry)
+      .where(eq(waitlistEntry.id, id));
+
+    return invite;
+  }
+
   async listWaitlist(): Promise<WaitlistEntryResponse[]> {
     const entries = await this.drizzle.db
       .select()
@@ -326,6 +369,70 @@ export class EarlyAccessService {
         ? `${frontendUrl}/login?invite=${encodeURIComponent(rawToken)}`
         : undefined,
     };
+  }
+
+  private async sendInviteEmail(
+    to: string,
+    inviteUrl: string,
+    expiryDays: number,
+  ): Promise<void> {
+    const appName =
+      this.config.get<string>("APP_NAME") || "Inside Line";
+
+    await this.emailService.send({
+      to,
+      subject: `You've been invited to ${appName}`,
+      html: this.getInviteTemplate(inviteUrl, expiryDays, appName),
+      text: `You've been invited to join ${appName}! Click the link to get started: ${inviteUrl} — This link expires in ${expiryDays} day${expiryDays === 1 ? "" : "s"}.`,
+    });
+  }
+
+  private getInviteTemplate(
+    inviteUrl: string,
+    expiryDays: number,
+    appName: string,
+  ): string {
+    return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>You're Invited</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f4f4f5;">
+  <table role="presentation" style="width: 100%; border-collapse: collapse;">
+    <tr>
+      <td align="center" style="padding: 40px 0;">
+        <table role="presentation" style="width: 100%; max-width: 600px; border-collapse: collapse; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+          <tr>
+            <td style="padding: 40px 40px 20px;">
+              <h1 style="margin: 0 0 20px; font-size: 24px; font-weight: 700; color: #18181b;">You're invited to ${appName}</h1>
+              <p style="margin: 0 0 24px; font-size: 16px; line-height: 24px; color: #52525b;">
+                You've been granted early access. Click below to create your account and get started.
+              </p>
+              <a href="${inviteUrl}" style="display: inline-block; padding: 14px 32px; font-size: 16px; font-weight: 600; color: #ffffff; background-color: #18181b; text-decoration: none; border-radius: 8px;">
+                Accept Invitation
+              </a>
+              <p style="margin: 24px 0 0; font-size: 14px; line-height: 20px; color: #71717a;">
+                This invitation expires in ${expiryDays} day${expiryDays === 1 ? "" : "s"}. If you weren't expecting this, you can safely ignore this email.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 20px 40px 40px; border-top: 1px solid #e4e4e7;">
+              <p style="margin: 0; font-size: 12px; color: #a1a1aa;">
+                If the button doesn't work, copy and paste this link:<br>
+                <a href="${inviteUrl}" style="color: #3b82f6; word-break: break-all;">${inviteUrl}</a>
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
   }
 
   private normalizeEmail(email: string): string {

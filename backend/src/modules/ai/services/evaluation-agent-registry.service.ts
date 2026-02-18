@@ -78,6 +78,7 @@ export class EvaluationAgentRegistryService {
     onAgentLifecycle?: (payload: EvaluationAgentLifecycleEvent) => void,
   ): Promise<EvaluationResult> {
     const pipelineRunId = (await this.pipelineState.get(startupId))?.pipelineRunId;
+    const traceWrites: Promise<void>[] = [];
     const outputs = new Map<EvaluationAgentKey, unknown>();
     const failedKeys: EvaluationAgentKey[] = [];
     const errors: Array<{ agent: string; error: string }> = [];
@@ -95,8 +96,11 @@ export class EvaluationAgentRegistryService {
             feedbackNotes,
             onLifecycle: (event) =>
               this.emitAgentLifecycle(onAgentLifecycle, event),
-            onTrace: (event) =>
-              this.persistAgentTrace(startupId, pipelineRunId, event),
+            onTrace: (event) => {
+              traceWrites.push(
+                this.persistAgentTrace(startupId, pipelineRunId, event),
+              );
+            },
           });
           const completedAt = new Date();
 
@@ -106,7 +110,7 @@ export class EvaluationAgentRegistryService {
             startedAt: startedAt.toISOString(),
             completedAt: completedAt.toISOString(),
             durationMs: completedAt.getTime() - startedAt.getTime(),
-            retryCount: 0,
+            retryCount: result.retryCount ?? 0,
           });
 
           if (!result.usedFallback) {
@@ -121,6 +125,12 @@ export class EvaluationAgentRegistryService {
             agent: result.key,
             output: result.output,
             usedFallback: result.usedFallback,
+            ...(typeof result.attempt === "number"
+              ? { attempt: result.attempt }
+              : {}),
+            ...(typeof result.retryCount === "number"
+              ? { retryCount: result.retryCount }
+              : {}),
             error: result.error,
             fallbackReason: normalizedFallbackReason,
             rawProviderError: result.rawProviderError,
@@ -169,19 +179,21 @@ export class EvaluationAgentRegistryService {
           });
 
           const fallbackOutput = agent.fallback(pipelineData);
-          this.persistAgentTrace(startupId, pipelineRunId, {
-            agent: agent.key,
-            status: "fallback",
-            inputPrompt: "",
-            outputText: this.safeStringify(fallbackOutput),
-            outputJson: fallbackOutput,
-            attempt: 1,
-            retryCount: 0,
-            usedFallback: true,
-            error: errorMessage,
-            fallbackReason,
-            rawProviderError: errorMessage,
-          });
+          traceWrites.push(
+            this.persistAgentTrace(startupId, pipelineRunId, {
+              agent: agent.key,
+              status: "fallback",
+              inputPrompt: "",
+              outputText: this.safeStringify(fallbackOutput),
+              outputJson: fallbackOutput,
+              attempt: 1,
+              retryCount: 0,
+              usedFallback: true,
+              error: errorMessage,
+              fallbackReason,
+              rawProviderError: errorMessage,
+            }),
+          );
 
           fallbackKeys.push(agent.key);
           warnings.push({
@@ -198,6 +210,8 @@ export class EvaluationAgentRegistryService {
             agent: agent.key,
             output: fallbackOutput,
             usedFallback: true,
+            attempt: 1,
+            retryCount: 0,
             error: errorMessage,
             fallbackReason,
             rawProviderError: errorMessage,
@@ -205,6 +219,7 @@ export class EvaluationAgentRegistryService {
         }
       }),
     );
+    await Promise.allSettled(traceWrites);
 
     const completedAgents = this.agents.length - failedKeys.length;
     const minimumRequired = this.phaseTransition.getConfig().minimumEvaluationAgents;
@@ -252,6 +267,7 @@ export class EvaluationAgentRegistryService {
     onAgentLifecycle?: (payload: EvaluationAgentLifecycleEvent) => void,
   ): Promise<EvaluationAgentCompletion> {
     const pipelineRunId = (await this.pipelineState.get(startupId))?.pipelineRunId;
+    const traceWrites: Promise<void>[] = [];
     const agent = this.agents.find((candidate) => candidate.key === key);
     if (!agent) {
       throw new Error(`Unsupported evaluation agent "${key}"`);
@@ -265,8 +281,11 @@ export class EvaluationAgentRegistryService {
         feedbackNotes,
         onLifecycle: (event) =>
           this.emitAgentLifecycle(onAgentLifecycle, event),
-        onTrace: (event) =>
-          this.persistAgentTrace(startupId, pipelineRunId, event),
+        onTrace: (event) => {
+          traceWrites.push(
+            this.persistAgentTrace(startupId, pipelineRunId, event),
+          );
+        },
       });
       const completedAt = new Date();
 
@@ -276,18 +295,25 @@ export class EvaluationAgentRegistryService {
         startedAt: startedAt.toISOString(),
         completedAt: completedAt.toISOString(),
         durationMs: completedAt.getTime() - startedAt.getTime(),
-        retryCount: 0,
+        retryCount: result.retryCount ?? 0,
       });
 
       if (!result.usedFallback) {
         await this.consumeAgentFeedback(startupId, key);
         await this.consumePhaseFeedback(startupId);
       }
+      await Promise.allSettled(traceWrites);
 
       return {
         agent: result.key,
         output: result.output,
         usedFallback: result.usedFallback,
+        ...(typeof result.attempt === "number"
+          ? { attempt: result.attempt }
+          : {}),
+        ...(typeof result.retryCount === "number"
+          ? { retryCount: result.retryCount }
+          : {}),
         error: result.error,
         fallbackReason: result.usedFallback
           ? (result.fallbackReason ?? "UNHANDLED_AGENT_EXCEPTION")
@@ -317,23 +343,28 @@ export class EvaluationAgentRegistryService {
         retryCount: 0,
       });
       const fallbackOutput = agent.fallback(pipelineData);
-      this.persistAgentTrace(startupId, pipelineRunId, {
-        agent: key,
-        status: "fallback",
-        inputPrompt: "",
-        outputText: this.safeStringify(fallbackOutput),
-        outputJson: fallbackOutput,
-        attempt: 1,
-        retryCount: 0,
-        usedFallback: true,
-        error: message,
-        fallbackReason,
-        rawProviderError: message,
-      });
+      traceWrites.push(
+        this.persistAgentTrace(startupId, pipelineRunId, {
+          agent: key,
+          status: "fallback",
+          inputPrompt: "",
+          outputText: this.safeStringify(fallbackOutput),
+          outputJson: fallbackOutput,
+          attempt: 1,
+          retryCount: 0,
+          usedFallback: true,
+          error: message,
+          fallbackReason,
+          rawProviderError: message,
+        }),
+      );
+      await Promise.allSettled(traceWrites);
       return {
         agent: key,
         output: fallbackOutput,
         usedFallback: true,
+        attempt: 1,
+        retryCount: 0,
         error: message,
         fallbackReason,
         rawProviderError: message,
@@ -345,15 +376,15 @@ export class EvaluationAgentRegistryService {
     startupId: string,
     pipelineRunId: string | undefined,
     event: EvaluationAgentTraceEvent,
-  ): void {
+  ): Promise<void> {
     if (!pipelineRunId) {
-      return;
+      return Promise.resolve();
     }
     if (!this.pipelineAgentTrace) {
-      return;
+      return Promise.resolve();
     }
 
-    void this.pipelineAgentTrace
+    return this.pipelineAgentTrace
       .recordRun({
         startupId,
         pipelineRunId,

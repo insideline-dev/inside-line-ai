@@ -42,6 +42,7 @@ export const AI_PROMPT_KEYS = [
   "matching.thesis",
   "clara.intent",
   "clara.response",
+  "clara.agent",
 ] as const;
 
 export type AiPromptKey = (typeof AI_PROMPT_KEYS)[number];
@@ -76,6 +77,66 @@ export const AI_PROMPT_VARIABLE_DEFINITIONS: Record<string, PromptVariableDefini
   contextJson: {
     description: "Structured JSON context for an agent run.",
     source: "ResearchService/BaseEvaluationAgent/Synthesis service prompt builders",
+  },
+  companyName: {
+    description: "Startup company name resolved from extraction output.",
+    source: "Research prompt variable builder",
+  },
+  sector: {
+    description: "Sector/industry label normalized from startup intake and extraction data.",
+    source: "Research prompt variable builder",
+  },
+  website: {
+    description: "Primary startup website URL.",
+    source: "Research prompt variable builder",
+  },
+  founderNames: {
+    description: "Bullet-formatted founder names extracted from deck/intake data.",
+    source: "Research prompt variable builder",
+  },
+  teamMembers: {
+    description: "Bullet-formatted team roster with roles/profile links when available.",
+    source: "Research prompt variable builder",
+  },
+  deckClaims: {
+    description: "Pitch-deck claims and extracted deck text excerpt for validation.",
+    source: "Research prompt variable builder",
+  },
+  adminGuidance: {
+    description: "Consolidated admin feedback notes for this phase/agent scope.",
+    source: "Research prompt variable builder",
+  },
+  location: {
+    description: "Primary geographic location associated with the startup.",
+    source: "Research prompt variable builder",
+  },
+  claimedTam: {
+    description: "Extracted TAM/SAM/SOM or market-size claim line from source materials.",
+    source: "Research prompt variable builder",
+  },
+  claimedGrowthRate: {
+    description: "Extracted growth-rate/CAGR claim line from source materials.",
+    source: "Research prompt variable builder",
+  },
+  targetMarket: {
+    description: "Target customer/segment summary used for market research prompts.",
+    source: "Research prompt variable builder",
+  },
+  productDescription: {
+    description: "Product description from startup context and extracted materials.",
+    source: "Research prompt variable builder",
+  },
+  claimedTechStack: {
+    description: "Tech stack and technical-readiness signals inferred from materials.",
+    source: "Research prompt variable builder",
+  },
+  knownCompetitors: {
+    description: "Known competitor list/signals gathered from context and notable claims.",
+    source: "Research prompt variable builder",
+  },
+  claimedDifferentiation: {
+    description: "Startup's stated differentiation/tagline signal.",
+    source: "Research prompt variable builder",
   },
   contextSections: {
     description: "Human-readable formatted context blocks injected into evaluation prompts.",
@@ -215,8 +276,17 @@ export const AI_PROMPT_CATALOG: Record<AiPromptKey, PromptCatalogEntry> = {
     surface: "pipeline",
     defaultSystemPrompt: TEAM_RESEARCH_SYSTEM_PROMPT,
     defaultUserPrompt: TEAM_RESEARCH_HUMAN_PROMPT,
-    allowedVariables: ["contextJson", "agentName", "agentKey"],
-    requiredVariables: ["contextJson"],
+    allowedVariables: [
+      "companyName",
+      "sector",
+      "teamMembers",
+      "deckClaims",
+      "adminGuidance",
+      "contextJson",
+      "agentName",
+      "agentKey",
+    ],
+    requiredVariables: ["companyName", "teamMembers"],
   },
   "research.market": {
     key: "research.market",
@@ -225,8 +295,20 @@ export const AI_PROMPT_CATALOG: Record<AiPromptKey, PromptCatalogEntry> = {
     surface: "pipeline",
     defaultSystemPrompt: MARKET_RESEARCH_SYSTEM_PROMPT,
     defaultUserPrompt: MARKET_RESEARCH_HUMAN_PROMPT,
-    allowedVariables: ["contextJson", "agentName", "agentKey"],
-    requiredVariables: ["contextJson"],
+    allowedVariables: [
+      "companyName",
+      "sector",
+      "location",
+      "claimedTam",
+      "claimedGrowthRate",
+      "targetMarket",
+      "productDescription",
+      "adminGuidance",
+      "contextJson",
+      "agentName",
+      "agentKey",
+    ],
+    requiredVariables: ["companyName", "sector"],
   },
   "research.product": {
     key: "research.product",
@@ -235,8 +317,18 @@ export const AI_PROMPT_CATALOG: Record<AiPromptKey, PromptCatalogEntry> = {
     surface: "pipeline",
     defaultSystemPrompt: PRODUCT_RESEARCH_SYSTEM_PROMPT,
     defaultUserPrompt: PRODUCT_RESEARCH_HUMAN_PROMPT,
-    allowedVariables: ["contextJson", "agentName", "agentKey"],
-    requiredVariables: ["contextJson"],
+    allowedVariables: [
+      "companyName",
+      "sector",
+      "website",
+      "productDescription",
+      "claimedTechStack",
+      "adminGuidance",
+      "contextJson",
+      "agentName",
+      "agentKey",
+    ],
+    requiredVariables: ["companyName", "productDescription"],
   },
   "research.news": {
     key: "research.news",
@@ -245,8 +337,16 @@ export const AI_PROMPT_CATALOG: Record<AiPromptKey, PromptCatalogEntry> = {
     surface: "pipeline",
     defaultSystemPrompt: NEWS_RESEARCH_SYSTEM_PROMPT,
     defaultUserPrompt: NEWS_RESEARCH_HUMAN_PROMPT,
-    allowedVariables: ["contextJson", "agentName", "agentKey"],
-    requiredVariables: ["contextJson"],
+    allowedVariables: [
+      "companyName",
+      "website",
+      "founderNames",
+      "adminGuidance",
+      "contextJson",
+      "agentName",
+      "agentKey",
+    ],
+    requiredVariables: ["companyName"],
   },
   "research.competitor": {
     key: "research.competitor",
@@ -255,8 +355,19 @@ export const AI_PROMPT_CATALOG: Record<AiPromptKey, PromptCatalogEntry> = {
     surface: "pipeline",
     defaultSystemPrompt: COMPETITOR_RESEARCH_SYSTEM_PROMPT,
     defaultUserPrompt: COMPETITOR_RESEARCH_HUMAN_PROMPT,
-    allowedVariables: ["contextJson", "agentName", "agentKey"],
-    requiredVariables: ["contextJson"],
+    allowedVariables: [
+      "companyName",
+      "sector",
+      "website",
+      "productDescription",
+      "knownCompetitors",
+      "claimedDifferentiation",
+      "adminGuidance",
+      "contextJson",
+      "agentName",
+      "agentKey",
+    ],
+    requiredVariables: ["companyName", "productDescription"],
   },
   "evaluation.team": {
     key: "evaluation.team",
@@ -911,6 +1022,31 @@ export const AI_PROMPT_CATALOG: Record<AiPromptKey, PromptCatalogEntry> = {
       "intentInstructions",
       "historyBlock",
     ],
+  },
+  "clara.agent": {
+    key: "clara.agent",
+    displayName: "Clara Agent Loop",
+    description: "Agentic tool-calling loop for answering investor questions",
+    surface: "clara",
+    defaultSystemPrompt: [
+      "You are Clara, a smart and friendly AI assistant for Inside Line, an investor deal-flow platform.",
+      "",
+      "You can look up information for investors using tools: matched startups, deal pipeline, startup details,",
+      "investment thesis, notes, portfolio, and startup search.",
+      "",
+      "Be concise and professional but warm. Use tools to gather data before answering. Never fabricate data.",
+      "Format responses for email (plain text, no markdown). Sign off as Clara.",
+    ].join("\n"),
+    defaultUserPrompt: [
+      "From: {{fromEmail}}",
+      "Subject: {{subject}}",
+      "",
+      "{{body}}",
+      "",
+      "{{historyBlock}}",
+    ].join("\n"),
+    allowedVariables: ["fromEmail", "subject", "body", "historyBlock"],
+    requiredVariables: ["fromEmail", "subject", "body"],
   },
 };
 

@@ -133,6 +133,10 @@ export class StartupController {
   @Get(':id/jobs')
   @Roles(UserRole.FOUNDER, UserRole.INVESTOR, UserRole.ADMIN)
   async getJobs(@CurrentUser() user: User, @Param('id') id: string) {
+    if (user.role === UserRole.ADMIN) {
+      return this.startupService.adminGetJobs(id);
+    }
+
     return this.startupService.getJobs(id, user.id);
   }
 

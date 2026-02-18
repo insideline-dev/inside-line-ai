@@ -7,9 +7,17 @@ const requiredStringFromNull = (fallback: string) =>
     z.string().min(1),
   );
 
+const stringArray = z.preprocess(
+  (value) =>
+    Array.isArray(value)
+      ? value.filter((item): item is string => typeof item === "string")
+      : [],
+  z.array(z.string()),
+).default([]);
+
 export const GtmEvaluationSchema = BaseEvaluationSchema.extend({
-  customerSegments: z.array(z.string()).default([]),
-  acquisitionChannels: z.array(z.string()).default([]),
+  customerSegments: stringArray,
+  acquisitionChannels: stringArray,
   salesStrategy: requiredStringFromNull("Sales strategy requires manual review"),
   pricingStrategy: requiredStringFromNull("Pricing strategy requires manual review"),
 });

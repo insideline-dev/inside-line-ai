@@ -177,6 +177,11 @@ export const PreviewAiPromptRequestSchema = z.object({
   intentInstructions: z.string().optional(),
 });
 
+export const PreviewAiPipelineContextRequestSchema = z.object({
+  startupId: z.string().uuid(),
+  stage: z.nativeEnum(StartupStage).nullable().optional(),
+});
+
 const AiPromptPreviewSourceSchema = z.object({
   promptSource: z.enum(["db", "code"]),
   promptRevisionId: z.string().uuid().nullable(),
@@ -205,13 +210,43 @@ const AiPromptPreviewHashesSchema = z.object({
   variables: z.string(),
 });
 
+const AiContextSectionSchema = z.object({
+  title: z.string(),
+  data: z.unknown(),
+});
+
 export const AiPromptPreviewResponseSchema = z.object({
   key: PromptKeySchema,
   source: AiPromptPreviewSourceSchema,
   prompt: AiPromptPreviewPromptSchema,
   model: AiPromptPreviewModelSchema,
   resolvedVariables: z.record(z.string(), z.any()),
+  parsedContextJson: z.unknown().nullable().optional(),
+  parsedContextSections: z.array(AiContextSectionSchema).nullable().optional(),
+  sectionTitles: z.array(z.string()).optional(),
   hashes: AiPromptPreviewHashesSchema,
+});
+
+const AiPipelineContextAgentPreviewSchema = z.object({
+  phase: z.string(),
+  agentKey: z.string(),
+  promptKey: PromptKeySchema,
+  promptSource: z.enum(["db", "code"]),
+  promptRevisionId: z.string().uuid().nullable(),
+  effectiveStage: z.nativeEnum(StartupStage).nullable(),
+  resolvedVariables: z.record(z.string(), z.any()),
+  renderedSystemPrompt: z.string(),
+  renderedUserPrompt: z.string(),
+  parsedContextJson: z.unknown().nullable(),
+  parsedContextSections: z.array(AiContextSectionSchema).nullable(),
+  hashes: AiPromptPreviewHashesSchema,
+});
+
+export const AiPipelineContextPreviewResponseSchema = z.object({
+  startupId: z.string().uuid(),
+  effectiveStage: z.nativeEnum(StartupStage).nullable(),
+  generatedAt: z.iso.datetime(),
+  agents: z.array(AiPipelineContextAgentPreviewSchema),
 });
 
 export type CreateAiPromptRevision = z.infer<typeof CreateAiPromptRevisionSchema>;
@@ -227,3 +262,9 @@ export class AiPromptFlowResponseDto extends createZodDto(AiPromptFlowResponseSc
 export class AiPromptContextSchemaResponseDto extends createZodDto(AiPromptContextSchemaResponseSchema) {}
 export class PreviewAiPromptRequestDto extends createZodDto(PreviewAiPromptRequestSchema) {}
 export class AiPromptPreviewResponseDto extends createZodDto(AiPromptPreviewResponseSchema) {}
+export class PreviewAiPipelineContextRequestDto extends createZodDto(
+  PreviewAiPipelineContextRequestSchema,
+) {}
+export class AiPipelineContextPreviewResponseDto extends createZodDto(
+  AiPipelineContextPreviewResponseSchema,
+) {}

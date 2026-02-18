@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  EnrichmentResult,
   ExtractionResult,
   ResearchResult,
   ScrapingResult,
@@ -23,12 +24,14 @@ export type EvaluationAgentKey =
 export interface ResearchPipelineInput {
   extraction: ExtractionResult;
   scraping: ScrapingResult;
+  enrichment?: EnrichmentResult;
 }
 
 export interface EvaluationPipelineInput {
   extraction: ExtractionResult;
   scraping: ScrapingResult;
   research: ResearchResult;
+  enrichment?: EnrichmentResult;
 }
 
 export interface ResearchAgentConfig<TOutput> {
@@ -45,6 +48,8 @@ export interface EvaluationAgentResult<TOutput> {
   key: EvaluationAgentKey;
   output: TOutput;
   usedFallback: boolean;
+  attempt?: number;
+  retryCount?: number;
   error?: string;
   fallbackReason?: EvaluationFallbackReason;
   rawProviderError?: string;
@@ -83,6 +88,7 @@ export interface EvaluationAgentLifecycleEvent {
 export interface EvaluationAgentTraceEvent {
   agent: EvaluationAgentKey;
   status: "completed" | "fallback" | "failed";
+  captureStatus?: "captured" | "missing" | "provider_error_only";
   inputPrompt: string;
   outputText?: string;
   outputJson?: unknown;
@@ -104,6 +110,8 @@ export interface EvaluationAgentCompletion {
   agent: EvaluationAgentKey;
   output: unknown;
   usedFallback: boolean;
+  attempt?: number;
+  retryCount?: number;
   error?: string;
   fallbackReason?: EvaluationFallbackReason;
   rawProviderError?: string;

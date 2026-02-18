@@ -174,7 +174,7 @@ export interface SourceEntry {
   name: string;
   url?: string;
   type: "document" | "website" | "linkedin" | "api" | "search";
-  agent: "team" | "market" | "product" | "news" | "competitor";
+  agent: "team" | "market" | "product" | "news" | "competitor" | "enrichment";
   timestamp: string;
 }
 
@@ -238,6 +238,89 @@ export interface EvaluationResult {
   dealTerms: DealTermsEvaluation;
   exitPotential: ExitPotentialEvaluation;
   summary: EvaluationSummary;
+}
+
+export interface EnrichmentConfidenceField<T> {
+  value: T;
+  confidence: number;
+  source: string;
+}
+
+export interface EnrichmentDiscoveredFounder {
+  name: string;
+  role?: string;
+  linkedinUrl?: string;
+  email?: string;
+  twitterUrl?: string;
+  confidence: number;
+}
+
+export interface EnrichmentFundingEntry {
+  round: string;
+  amount?: number;
+  currency?: string;
+  date?: string;
+  investors?: string[];
+  source: string;
+}
+
+export interface EnrichmentPitchDeckUrl {
+  url: string;
+  source: string;
+  confidence: number;
+}
+
+export interface EnrichmentSocialProfiles {
+  crunchbaseUrl?: string;
+  angelListUrl?: string;
+  twitterUrl?: string;
+  linkedinCompanyUrl?: string;
+  githubUrl?: string;
+}
+
+export interface EnrichmentProductSignals {
+  pricing?: string;
+  customers?: string[];
+  techStack?: string[];
+  integrations?: string[];
+}
+
+export interface EnrichmentTractionSignals {
+  employeeCount?: number;
+  webTrafficEstimate?: string;
+  appStoreRating?: string;
+  socialFollowers?: Record<string, number>;
+}
+
+export interface EnrichmentCorrectionDetail {
+  field: string;
+  oldValue: string;
+  newValue: string;
+  confidence: number;
+  reason: string;
+}
+
+export interface EnrichmentResult {
+  companyName?: EnrichmentConfidenceField<string>;
+  companyDescription?: EnrichmentConfidenceField<string>;
+  tagline?: EnrichmentConfidenceField<string>;
+  industry?: EnrichmentConfidenceField<string>;
+  stage?: EnrichmentConfidenceField<string>;
+  website?: EnrichmentConfidenceField<string>;
+  foundingDate?: EnrichmentConfidenceField<string>;
+  headquarters?: EnrichmentConfidenceField<string>;
+  discoveredFounders: EnrichmentDiscoveredFounder[];
+  fundingHistory: EnrichmentFundingEntry[];
+  pitchDeckUrls: EnrichmentPitchDeckUrl[];
+  socialProfiles: EnrichmentSocialProfiles;
+  productSignals: EnrichmentProductSignals;
+  tractionSignals: EnrichmentTractionSignals;
+  fieldsEnriched: string[];
+  fieldsStillMissing: string[];
+  fieldsCorrected: string[];
+  correctionDetails: EnrichmentCorrectionDetail[];
+  sources: Array<{ url: string; title: string; type: string }>;
+  dbFieldsUpdated: string[];
 }
 
 export interface SynthesisResult {

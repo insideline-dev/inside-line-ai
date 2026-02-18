@@ -1,0 +1,1 @@
+ALTER TYPE "public"."pipeline_phase" ADD VALUE 'enrichment' BEFORE 'scraping';

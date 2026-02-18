@@ -2,7 +2,7 @@ import { Outlet, createFileRoute, useLocation, useNavigate } from "@tanstack/rea
 import { useEffect } from "react";
 import { RoleSidebar } from "@/components/layouts/RoleSidebar";
 import { useScoutControllerGetMyApplications } from "@/api/generated/scout/scout";
-import type { ScoutApplication } from "@/types/user";
+import type { ScoutApplicationsResponseDtoDataItem } from "@/api/generated/model";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Clock, XCircle, Loader2 } from "lucide-react";
@@ -21,7 +21,7 @@ function ScoutLayout() {
     { query: { enabled: !isApplyPage } },
   );
 
-  const applications = (response?.data as ScoutApplication[] | undefined) ?? [];
+  const applications = (response?.data.data ?? []) as ScoutApplicationsResponseDtoDataItem[];
   const hasApproved = applications.some((a) => a.status === "approved");
   const hasPending = applications.some((a) => a.status === "pending");
   const noApplications = !isLoading && applications.length === 0;
@@ -32,7 +32,6 @@ function ScoutLayout() {
     }
   }, [isApplyPage, noApplications, navigate]);
 
-  // Always allow the apply page
   if (isApplyPage) {
     return (
       <RoleSidebar role="scout">
@@ -73,7 +72,6 @@ function ScoutLayout() {
     );
   }
 
-  // All rejected
   if (applications.length > 0) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-6">

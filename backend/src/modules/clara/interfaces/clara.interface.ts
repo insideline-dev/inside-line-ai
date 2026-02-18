@@ -58,3 +58,11 @@ export interface ConversationMessage {
   intent: string | null;
   createdAt: Date;
 }
+
+export interface SubmissionResult {
+  startupId: string;
+  startupName: string;
+  isDuplicate: boolean;
+  isEnriched?: boolean;
+  status: string;
+}

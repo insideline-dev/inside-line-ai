@@ -12,9 +12,17 @@ interface AnalysisProgressBarProps {
   showAgentDetails?: boolean;
 }
 
-const PHASE_ORDER = ["extraction", "scraping", "research", "evaluation", "synthesis"] as const;
+const PHASE_ORDER = [
+  "enrichment",
+  "extraction",
+  "scraping",
+  "research",
+  "evaluation",
+  "synthesis",
+] as const;
 
 const PHASE_META: Record<string, { label: string; icon: typeof FileSearch }> = {
+  enrichment: { label: "Gap Filling", icon: Search },
   extraction: { label: "Extracting", icon: FileSearch },
   scraping: { label: "Scraping", icon: Globe },
   research: { label: "Researching", icon: Search },
@@ -85,7 +93,7 @@ export function AnalysisProgressBar({
   );
   const hasWarnings = Boolean(warningPhase);
 
-  const currentPhase = progress?.currentPhase ?? "extraction";
+  const currentPhase = progress?.currentPhase ?? "enrichment";
   const currentMeta = PHASE_META[currentPhase];
   const currentPhaseStatus = progress?.phases?.[currentPhase]?.status;
   const agentPhaseSections = useMemo(() => {

@@ -12,7 +12,7 @@ import {
   useScoutControllerRejectApplication,
   getScoutControllerGetScoutApplicationsQueryKey,
 } from "@/api/generated/scout/scout";
-import type { ScoutApplication } from "@/types/user";
+import type { ScoutApplicationsResponseDtoDataItem } from "@/api/generated/model";
 
 export const Route = createFileRoute("/_protected/admin/scouts")({
   component: ScoutApplications,
@@ -36,7 +36,7 @@ function ScoutApplications() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { data: response, isLoading, error } = useScoutControllerGetScoutApplications();
-  const applications = (response?.data as ScoutApplication[] | undefined) ?? [];
+  const applications = (response?.data.data ?? []) as ScoutApplicationsResponseDtoDataItem[];
 
   const { mutate: approveApplication, isPending: isApproving } = useScoutControllerApproveApplication({
     mutation: {

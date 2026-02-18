@@ -2446,6 +2446,33 @@
         ]
       }
     },
+    "/scout/investors": {
+      "get": {
+        "operationId": "ScoutController_getInvestors",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScoutInvestorsResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "List investors available for scout applications",
+        "tags": [
+          "Scout"
+        ]
+      }
+    },
     "/scout/apply": {
       "post": {
         "operationId": "ScoutController_apply",
@@ -2462,9 +2489,22 @@
         },
         "responses": {
           "201": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScoutApplicationsResponseDto"
+                }
+              }
+            }
           }
         },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Apply to become a scout for a specific investor",
         "tags": [
           "Scout"
         ]
@@ -2514,9 +2554,22 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScoutApplicationsResponseDto"
+                }
+              }
+            }
           }
         },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Get scout applications created by current user",
         "tags": [
           "Scout"
         ]
@@ -2538,9 +2591,22 @@
         },
         "responses": {
           "201": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScoutSubmitResponseDto"
+                }
+              }
+            }
           }
         },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Submit startup referral as approved scout",
         "tags": [
           "Scout"
         ]
@@ -2587,9 +2653,106 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScoutSubmissionsResponseDto"
+                }
+              }
+            }
           }
         },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Get startup referrals submitted by current scout user",
+        "tags": [
+          "Scout"
+        ]
+      }
+    },
+    "/scout/startups/{startupId}": {
+      "get": {
+        "operationId": "ScoutController_getMySubmissionStartup",
+        "parameters": [
+          {
+            "name": "startupId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScoutStartupDetailResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Get details for a startup submitted by the scout",
+        "tags": [
+          "Scout"
+        ]
+      }
+    },
+    "/scout/startups/{startupId}/matches": {
+      "get": {
+        "operationId": "ScoutController_getMySubmissionMatches",
+        "parameters": [
+          {
+            "name": "startupId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maximum": 20,
+              "exclusiveMinimum": true,
+              "default": 3,
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScoutStartupMatchesResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Get top investor matches for a scout-submitted startup",
         "tags": [
           "Scout"
         ]
@@ -2639,9 +2802,22 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScoutApplicationsResponseDto"
+                }
+              }
+            }
           }
         },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Get scout applications submitted to the current investor",
         "tags": [
           "Scout"
         ]
@@ -2662,9 +2838,22 @@
         ],
         "responses": {
           "201": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScoutApplicationsResponseDto"
+                }
+              }
+            }
           }
         },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Approve a scout application",
         "tags": [
           "Scout"
         ]
@@ -2695,9 +2884,22 @@
         },
         "responses": {
           "201": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScoutApplicationsResponseDto"
+                }
+              }
+            }
           }
         },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Reject a scout application",
         "tags": [
           "Scout"
         ]
@@ -2744,9 +2946,22 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScoutSubmissionsResponseDto"
+                }
+              }
+            }
           }
         },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Get startup referrals submitted to current investor",
         "tags": [
           "Scout"
         ]
@@ -2758,9 +2973,22 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScoutCommissionsResponseDto"
+                }
+              }
+            }
           }
         },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Get scout commission records",
         "tags": [
           "Scout"
         ]
@@ -2772,9 +3000,22 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScoutTotalEarningsResponseDto"
+                }
+              }
+            }
           }
         },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Get scout commission totals",
         "tags": [
           "Scout"
         ]
@@ -2786,9 +3027,22 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScoutMetricsResponseDto"
+                }
+              }
+            }
           }
         },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Get scout activity metrics",
         "tags": [
           "Scout"
         ]
@@ -2800,9 +3054,22 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScoutLeaderboardResponseDto"
+                }
+              }
+            }
           }
         },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Get scout leaderboard",
         "tags": [
           "Scout"
         ]
@@ -3123,6 +3390,30 @@
         ]
       }
     },
+    "/admin/early-access/waitlist/{id}/approve": {
+      "post": {
+        "operationId": "AdminController_approveWaitlistEntry",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Approve a waitlist entry by generating an invite",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
     "/admin/startups": {
       "get": {
         "operationId": "AdminController_getAllStartups",
@@ -3391,6 +3682,30 @@
           }
         },
         "summary": "Trigger investor thesis matching for an approved startup",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/startups/{id}/matching/status": {
+      "get": {
+        "operationId": "AdminController_getStartupMatchingStatus",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get latest investor matching status for startup",
         "tags": [
           "Admin"
         ]
@@ -3753,6 +4068,38 @@
         ]
       }
     },
+    "/admin/ai-prompts/pipeline-context-preview": {
+      "post": {
+        "operationId": "AdminController_previewAiPipelineContext",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreviewAiPipelineContextRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiPipelineContextPreviewResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Preview runtime context passed to all research and evaluation agents for a startup",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
     "/admin/ai-prompts/{key}/revisions/{revisionId}": {
       "put": {
         "operationId": "AdminController_updateAiPromptRevision",
@@ -4064,6 +4411,31 @@
             "description": ""
           }
         },
+        "summary": "List Clara AI conversations",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/conversations/{id}/messages": {
+      "get": {
+        "operationId": "AdminController_getConversationMessages",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get messages for a Clara conversation",
         "tags": [
           "Admin"
         ]
@@ -6764,6 +7136,19 @@
                           "usedFallback": {
                             "type": "boolean"
                           },
+                          "fallbackReason": {
+                            "type": "string",
+                            "enum": [
+                              "EMPTY_STRUCTURED_OUTPUT",
+                              "TIMEOUT",
+                              "SCHEMA_OUTPUT_INVALID",
+                              "MODEL_OR_PROVIDER_ERROR",
+                              "UNHANDLED_AGENT_EXCEPTION"
+                            ]
+                          },
+                          "rawProviderError": {
+                            "type": "string"
+                          },
                           "lastEvent": {
                             "type": "string",
                             "enum": [
@@ -6799,6 +7184,9 @@
                     "id": {
                       "type": "string"
                     },
+                    "pipelineRunId": {
+                      "type": "string"
+                    },
                     "phase": {
                       "type": "string"
                     },
@@ -6829,6 +7217,19 @@
                       "maximum": 9007199254740991
                     },
                     "error": {
+                      "type": "string"
+                    },
+                    "fallbackReason": {
+                      "type": "string",
+                      "enum": [
+                        "EMPTY_STRUCTURED_OUTPUT",
+                        "TIMEOUT",
+                        "SCHEMA_OUTPUT_INVALID",
+                        "MODEL_OR_PROVIDER_ERROR",
+                        "UNHANDLED_AGENT_EXCEPTION"
+                      ]
+                    },
+                    "rawProviderError": {
                       "type": "string"
                     }
                   },
@@ -6892,6 +7293,19 @@
                     "error": {
                       "type": "string",
                       "nullable": true
+                    },
+                    "fallbackReason": {
+                      "type": "string",
+                      "enum": [
+                        "EMPTY_STRUCTURED_OUTPUT",
+                        "TIMEOUT",
+                        "SCHEMA_OUTPUT_INVALID",
+                        "MODEL_OR_PROVIDER_ERROR",
+                        "UNHANDLED_AGENT_EXCEPTION"
+                      ]
+                    },
+                    "rawProviderError": {
+                      "type": "string"
                     },
                     "startedAt": {
                       "type": "string"
@@ -7177,6 +7591,58 @@
           "teamSize"
         ]
       },
+      "ScoutInvestorsResponseDto": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "email": {
+                  "type": "string",
+                  "format": "email",
+                  "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                },
+                "image": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "hasApplied": {
+                  "type": "boolean"
+                },
+                "applicationStatus": {
+                  "type": "string",
+                  "enum": [
+                    "pending",
+                    "approved",
+                    "rejected"
+                  ],
+                  "nullable": true
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "email",
+                "hasApplied",
+                "applicationStatus"
+              ]
+            }
+          }
+        },
+        "required": [
+          "data"
+        ]
+      },
       "ApplyScoutDto": {
         "type": "object",
         "properties": {
@@ -7230,6 +7696,134 @@
           "experience",
           "motivation",
           "dealflowSources"
+        ]
+      },
+      "ScoutApplicationsResponseDto": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "userId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "investorId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "name": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "email": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "linkedinUrl": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "experience": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "motivation": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "dealflowSources": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "portfolio": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "nullable": true
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "pending",
+                    "approved",
+                    "rejected"
+                  ]
+                },
+                "reviewedAt": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "reviewedBy": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                  "nullable": true
+                },
+                "rejectionReason": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "createdAt": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "userId",
+                "investorId",
+                "status",
+                "createdAt"
+              ]
+            }
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "page": {
+                "type": "integer",
+                "exclusiveMinimum": true,
+                "maximum": 9007199254740991,
+                "minimum": 0
+              },
+              "limit": {
+                "type": "integer",
+                "exclusiveMinimum": true,
+                "maximum": 9007199254740991,
+                "minimum": 0
+              },
+              "total": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "totalPages": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "page",
+              "limit",
+              "total",
+              "totalPages"
+            ]
+          }
+        },
+        "required": [
+          "data",
+          "meta"
         ]
       },
       "ScoutSubmitStartupDto": {
@@ -7496,6 +8090,268 @@
           "startupData"
         ]
       },
+      "ScoutSubmitResponseDto": {
+        "type": "object",
+        "properties": {
+          "startup": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "submission": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "scoutId": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "startupId": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "investorId": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "commissionRate": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991,
+                "nullable": true
+              },
+              "notes": {
+                "type": "string",
+                "nullable": true
+              },
+              "createdAt": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "scoutId",
+              "startupId",
+              "investorId",
+              "createdAt"
+            ]
+          }
+        },
+        "required": [
+          "startup",
+          "submission"
+        ]
+      },
+      "ScoutSubmissionsResponseDto": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "submissionId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "investorId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "investorName": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "investorEmail": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "commissionRate": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991,
+                  "nullable": true
+                },
+                "notes": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "name": {
+                  "type": "string"
+                },
+                "tagline": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "website": {
+                  "type": "string"
+                },
+                "location": {
+                  "type": "string"
+                },
+                "industry": {
+                  "type": "string"
+                },
+                "stage": {
+                  "type": "string"
+                },
+                "fundingTarget": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "teamSize": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "status": {
+                  "type": "string"
+                },
+                "overallScore": {
+                  "type": "number",
+                  "nullable": true
+                },
+                "roundCurrency": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "createdAt": {
+                  "type": "string"
+                },
+                "submittedAt": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "updatedAt": {
+                  "type": "string",
+                  "nullable": true
+                }
+              },
+              "required": [
+                "id",
+                "submissionId",
+                "investorId",
+                "name",
+                "tagline",
+                "description",
+                "website",
+                "location",
+                "industry",
+                "stage",
+                "fundingTarget",
+                "teamSize",
+                "status",
+                "createdAt"
+              ]
+            }
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "page": {
+                "type": "integer",
+                "exclusiveMinimum": true,
+                "maximum": 9007199254740991,
+                "minimum": 0
+              },
+              "limit": {
+                "type": "integer",
+                "exclusiveMinimum": true,
+                "maximum": 9007199254740991,
+                "minimum": 0
+              },
+              "total": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "totalPages": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "page",
+              "limit",
+              "total",
+              "totalPages"
+            ]
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ]
+      },
+      "ScoutStartupDetailResponseDto": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "ScoutStartupMatchesResponseDto": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "investorId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "investorName": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "overallScore": {
+                  "type": "number",
+                  "nullable": true
+                },
+                "thesisFitScore": {
+                  "type": "number",
+                  "nullable": true
+                },
+                "fitRationale": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "status": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "createdAt": {
+                  "type": "string",
+                  "nullable": true
+                }
+              },
+              "required": [
+                "investorId"
+              ]
+            }
+          }
+        },
+        "required": [
+          "data"
+        ]
+      },
       "RejectScoutDto": {
         "type": "object",
         "properties": {
@@ -7508,6 +8364,140 @@
         "required": [
           "rejectionReason"
         ]
+      },
+      "ScoutCommissionsResponseDto": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "scoutId": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "submissionId": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "dealSize": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "commissionRate": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "commissionAmount": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "status": {
+              "type": "string"
+            },
+            "paidAt": {
+              "type": "string",
+              "nullable": true
+            },
+            "createdAt": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "scoutId",
+            "submissionId",
+            "dealSize",
+            "commissionRate",
+            "commissionAmount",
+            "status",
+            "createdAt"
+          ]
+        }
+      },
+      "ScoutTotalEarningsResponseDto": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "pending": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "paid": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "total",
+          "pending",
+          "paid"
+        ]
+      },
+      "ScoutMetricsResponseDto": {
+        "type": "object",
+        "properties": {
+          "totalSubmissions": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "totalSubmissions"
+        ]
+      },
+      "ScoutLeaderboardResponseDto": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "name": {
+              "type": "string"
+            },
+            "submissions": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "conversions": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "earnings": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "submissions",
+            "conversions",
+            "earnings"
+          ]
+        }
       },
       "UpdateUserDto": {
         "type": "object",
@@ -7668,6 +8658,7 @@
             "type": "string",
             "enum": [
               "extraction",
+              "enrichment",
               "scraping",
               "research",
               "evaluation",
@@ -7882,7 +8873,8 @@
                 "synthesis.final",
                 "matching.thesis",
                 "clara.intent",
-                "clara.response"
+                "clara.response",
+                "clara.agent"
               ]
             },
             "displayName": {
@@ -8141,7 +9133,8 @@
                             "synthesis.final",
                             "matching.thesis",
                             "clara.intent",
-                            "clara.response"
+                            "clara.response",
+                            "clara.agent"
                           ]
                         }
                       },
@@ -8240,7 +9233,8 @@
                   "synthesis.final",
                   "matching.thesis",
                   "clara.intent",
-                  "clara.response"
+                  "clara.response",
+                  "clara.agent"
                 ]
               },
               "displayName": {
@@ -8568,7 +9562,8 @@
               "synthesis.final",
               "matching.thesis",
               "clara.intent",
-              "clara.response"
+              "clara.response",
+              "clara.agent"
             ]
           },
           "displayName": {
@@ -8762,7 +9757,8 @@
               "synthesis.final",
               "matching.thesis",
               "clara.intent",
-              "clara.response"
+              "clara.response",
+              "clara.agent"
             ]
           },
           "source": {
@@ -8874,6 +9870,32 @@
             "type": "object",
             "additionalProperties": true
           },
+          "parsedContextJson": {
+            "nullable": true
+          },
+          "parsedContextSections": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "title": {
+                  "type": "string"
+                },
+                "data": {}
+              },
+              "required": [
+                "title",
+                "data"
+              ]
+            },
+            "nullable": true
+          },
+          "sectionTitles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "hashes": {
             "type": "object",
             "properties": {
@@ -8901,6 +9923,199 @@
           "model",
           "resolvedVariables",
           "hashes"
+        ]
+      },
+      "PreviewAiPipelineContextRequestDto": {
+        "type": "object",
+        "properties": {
+          "startupId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "stage": {
+            "type": "string",
+            "enum": [
+              "pre_seed",
+              "seed",
+              "series_a",
+              "series_b",
+              "series_c",
+              "series_d",
+              "series_e",
+              "series_f_plus"
+            ],
+            "nullable": true
+          }
+        },
+        "required": [
+          "startupId"
+        ]
+      },
+      "AiPipelineContextPreviewResponseDto": {
+        "type": "object",
+        "properties": {
+          "startupId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "effectiveStage": {
+            "type": "string",
+            "enum": [
+              "pre_seed",
+              "seed",
+              "series_a",
+              "series_b",
+              "series_c",
+              "series_d",
+              "series_e",
+              "series_f_plus"
+            ],
+            "nullable": true
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+          },
+          "agents": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "phase": {
+                  "type": "string"
+                },
+                "agentKey": {
+                  "type": "string"
+                },
+                "promptKey": {
+                  "type": "string",
+                  "enum": [
+                    "extraction.fields",
+                    "research.team",
+                    "research.market",
+                    "research.product",
+                    "research.news",
+                    "research.competitor",
+                    "evaluation.team",
+                    "evaluation.market",
+                    "evaluation.product",
+                    "evaluation.traction",
+                    "evaluation.businessModel",
+                    "evaluation.gtm",
+                    "evaluation.financials",
+                    "evaluation.competitiveAdvantage",
+                    "evaluation.legal",
+                    "evaluation.dealTerms",
+                    "evaluation.exitPotential",
+                    "synthesis.final",
+                    "matching.thesis",
+                    "clara.intent",
+                    "clara.response",
+                    "clara.agent"
+                  ]
+                },
+                "promptSource": {
+                  "type": "string",
+                  "enum": [
+                    "db",
+                    "code"
+                  ]
+                },
+                "promptRevisionId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                  "nullable": true
+                },
+                "effectiveStage": {
+                  "type": "string",
+                  "enum": [
+                    "pre_seed",
+                    "seed",
+                    "series_a",
+                    "series_b",
+                    "series_c",
+                    "series_d",
+                    "series_e",
+                    "series_f_plus"
+                  ],
+                  "nullable": true
+                },
+                "resolvedVariables": {
+                  "type": "object",
+                  "additionalProperties": true
+                },
+                "renderedSystemPrompt": {
+                  "type": "string"
+                },
+                "renderedUserPrompt": {
+                  "type": "string"
+                },
+                "parsedContextJson": {
+                  "nullable": true
+                },
+                "parsedContextSections": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "title": {
+                        "type": "string"
+                      },
+                      "data": {}
+                    },
+                    "required": [
+                      "title",
+                      "data"
+                    ]
+                  },
+                  "nullable": true
+                },
+                "hashes": {
+                  "type": "object",
+                  "properties": {
+                    "renderedSystemPrompt": {
+                      "type": "string"
+                    },
+                    "renderedUserPrompt": {
+                      "type": "string"
+                    },
+                    "variables": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "renderedSystemPrompt",
+                    "renderedUserPrompt",
+                    "variables"
+                  ]
+                }
+              },
+              "required": [
+                "phase",
+                "agentKey",
+                "promptKey",
+                "promptSource",
+                "promptRevisionId",
+                "effectiveStage",
+                "resolvedVariables",
+                "renderedSystemPrompt",
+                "renderedUserPrompt",
+                "parsedContextJson",
+                "parsedContextSections",
+                "hashes"
+              ]
+            }
+          }
+        },
+        "required": [
+          "startupId",
+          "effectiveStage",
+          "generatedAt",
+          "agents"
         ]
       },
       "CreateAiPromptRevisionDto": {

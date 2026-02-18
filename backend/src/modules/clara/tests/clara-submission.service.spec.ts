@@ -54,6 +54,7 @@ describe("ClaraSubmissionService", () => {
     update: jest.fn().mockReturnThis(),
     set: jest.fn().mockReturnThis(),
     where: jest.fn().mockReturnThis(),
+    orderBy: jest.fn().mockReturnThis(),
     select: jest.fn().mockReturnThis(),
     from: jest.fn().mockReturnThis(),
     limit: jest.fn().mockResolvedValue([]),
@@ -75,6 +76,7 @@ describe("ClaraSubmissionService", () => {
     mockDbChain.update.mockReturnThis();
     mockDbChain.set.mockReturnThis();
     mockDbChain.where.mockReturnThis();
+    mockDbChain.orderBy.mockReturnThis();
     mockDbChain.select.mockReturnThis();
     mockDbChain.from.mockReturnThis();
 
@@ -166,7 +168,7 @@ describe("ClaraSubmissionService", () => {
       "Clara: New startup submitted",
       "Acme Corp was submitted via email by founder@startup.com",
       "info",
-      "/admin/startups/startup-1",
+      "/admin/startup/startup-1",
     );
   });
 
@@ -214,11 +216,13 @@ describe("ClaraSubmissionService", () => {
       startupId: "existing-startup",
       startupName: "Acme Corp",
       isDuplicate: true,
+      isEnriched: true,
       status: StartupStatus.SUBMITTED,
     });
 
     expect(mockDb.insert).not.toHaveBeenCalled();
-    expect(pipeline.startPipeline).not.toHaveBeenCalled();
+    // startPipeline is called because the attachment was enriched (isEnriched: true)
+    expect(pipeline.startPipeline).toHaveBeenCalledWith("existing-startup", "admin-1");
   });
 
 

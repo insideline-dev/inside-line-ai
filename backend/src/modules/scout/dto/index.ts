@@ -3,3 +3,5 @@ export * from './reject-scout.dto';
 export * from './submit-startup.dto';
 export * from './get-applications-query.dto';
 export * from './get-submissions-query.dto';
+export * from './get-startup-matches-query.dto';
+export * from './scout-response.dto';

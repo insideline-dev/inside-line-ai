@@ -8,6 +8,15 @@ import { ModelPurpose } from "../interfaces/pipeline.interface";
 export class AiConfigService {
   constructor(private config: ConfigService) {}
 
+  private toPositiveInt(value: number | undefined, fallback: number): number {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      return fallback;
+    }
+
+    const normalized = Math.floor(value);
+    return normalized > 0 ? normalized : fallback;
+  }
+
   isPromptRuntimeConfigEnabled(): boolean {
     return this.config.get<boolean>("AI_PROMPT_RUNTIME_CONFIG_ENABLED", false);
   }
@@ -25,10 +34,34 @@ export class AiConfigService {
   }
 
   getResearchTimeoutMs(): number {
-    return this.config.get<number>(
-      "AI_RESEARCH_TIMEOUT_MS",
-      this.getPipelineTimeoutMs(),
-    );
+    return this.getResearchAttemptTimeoutMs();
+  }
+
+  getResearchAttemptTimeoutMs(): number {
+    const explicit = this.config.get<number>("AI_RESEARCH_ATTEMPT_TIMEOUT_MS");
+    if (typeof explicit === "number" && Number.isFinite(explicit)) {
+      return this.toPositiveInt(explicit, 90_000);
+    }
+
+    const legacy = this.config.get<number>("AI_RESEARCH_TIMEOUT_MS", 90_000);
+    return this.toPositiveInt(legacy, 90_000);
+  }
+
+  getResearchMaxAttempts(): number {
+    const explicit = this.config.get<number>("AI_RESEARCH_MAX_ATTEMPTS", 2);
+    return this.toPositiveInt(explicit, 2);
+  }
+
+  getResearchAgentHardTimeoutMs(): number {
+    const explicit = this.config.get<number>("AI_RESEARCH_AGENT_HARD_TIMEOUT_MS");
+    if (typeof explicit === "number" && Number.isFinite(explicit)) {
+      return this.toPositiveInt(explicit, 210_000);
+    }
+
+    const computed =
+      this.getResearchAttemptTimeoutMs() * this.getResearchMaxAttempts() +
+      30_000;
+    return this.toPositiveInt(computed, 210_000);
   }
 
   getMaxRetries(): number {
@@ -52,10 +85,36 @@ export class AiConfigService {
   }
 
   getEvaluationTimeoutMs(): number {
-    return this.config.get<number>(
-      "AI_EVALUATION_TIMEOUT_MS",
-      this.getPipelineTimeoutMs(),
+    return this.getEvaluationAttemptTimeoutMs();
+  }
+
+  getEvaluationAttemptTimeoutMs(): number {
+    const explicit = this.config.get<number>("AI_EVALUATION_ATTEMPT_TIMEOUT_MS");
+    if (typeof explicit === "number" && Number.isFinite(explicit)) {
+      return this.toPositiveInt(explicit, 90_000);
+    }
+
+    const legacy = this.config.get<number>("AI_EVALUATION_TIMEOUT_MS", 90_000);
+    return this.toPositiveInt(legacy, 90_000);
+  }
+
+  getEvaluationMaxAttempts(): number {
+    const explicit = this.config.get<number>("AI_EVALUATION_MAX_ATTEMPTS", 2);
+    return this.toPositiveInt(explicit, 2);
+  }
+
+  getEvaluationAgentHardTimeoutMs(): number {
+    const explicit = this.config.get<number>(
+      "AI_EVALUATION_AGENT_HARD_TIMEOUT_MS",
     );
+    if (typeof explicit === "number" && Number.isFinite(explicit)) {
+      return this.toPositiveInt(explicit, 210_000);
+    }
+
+    const computed =
+      this.getEvaluationAttemptTimeoutMs() * this.getEvaluationMaxAttempts() +
+      30_000;
+    return this.toPositiveInt(computed, 210_000);
   }
 
   getSynthesisMaxOutputTokens(): number {
@@ -68,6 +127,11 @@ export class AiConfigService {
         return this.config.get<string>(
           "AI_MODEL_EXTRACTION",
           DEFAULT_MODEL_BY_PURPOSE[ModelPurpose.EXTRACTION],
+        );
+      case ModelPurpose.ENRICHMENT:
+        return this.config.get<string>(
+          "AI_MODEL_ENRICHMENT",
+          DEFAULT_MODEL_BY_PURPOSE[ModelPurpose.ENRICHMENT],
         );
       case ModelPurpose.RESEARCH:
         return this.config.get<string>(
@@ -108,6 +172,7 @@ export class AiConfigService {
     const fallback: Record<QueueName, number> = {
       [QUEUE_NAMES.TASK]: 10,
       [QUEUE_NAMES.AI_EXTRACTION]: 4,
+      [QUEUE_NAMES.AI_ENRICHMENT]: 4,
       [QUEUE_NAMES.AI_SCRAPING]: 4,
       [QUEUE_NAMES.AI_RESEARCH]: 6,
       [QUEUE_NAMES.AI_EVALUATION]: 8,
@@ -118,6 +183,7 @@ export class AiConfigService {
     const envMap: Record<QueueName, string> = {
       [QUEUE_NAMES.TASK]: "QUEUE_CONCURRENCY_TASK",
       [QUEUE_NAMES.AI_EXTRACTION]: "AI_QUEUE_CONCURRENCY_EXTRACTION",
+      [QUEUE_NAMES.AI_ENRICHMENT]: "AI_QUEUE_CONCURRENCY_ENRICHMENT",
       [QUEUE_NAMES.AI_SCRAPING]: "AI_QUEUE_CONCURRENCY_SCRAPING",
       [QUEUE_NAMES.AI_RESEARCH]: "AI_QUEUE_CONCURRENCY_RESEARCH",
       [QUEUE_NAMES.AI_EVALUATION]: "AI_QUEUE_CONCURRENCY_EVALUATION",
@@ -168,5 +234,23 @@ export class AiConfigService {
 
   getMatchingFallbackScore(): number {
     return Number(this.config.get("AI_MATCHING_FALLBACK_SCORE", "30"));
+  }
+
+  getEnrichmentTemperature(): number {
+    return Number(this.config.get("AI_ENRICHMENT_TEMPERATURE", "0.1"));
+  }
+
+  getEnrichmentTimeoutMs(): number {
+    return this.config.get<number>(
+      "AI_ENRICHMENT_TIMEOUT_MS",
+      this.getPipelineTimeoutMs(),
+    );
+  }
+
+  getEnrichmentCorrectionThreshold(): number {
+    return this.config.get<number>(
+      "ENRICHMENT_CORRECTION_CONFIDENCE_THRESHOLD",
+      0.85,
+    );
   }
 }

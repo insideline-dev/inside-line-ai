@@ -10,6 +10,8 @@ export const ProgressAgentSchema = z.object({
   error: z.string().optional(),
   attempts: z.number().int().min(0).optional(),
   retryCount: z.number().int().min(0).optional(),
+  phaseRetryCount: z.number().int().min(0).optional(),
+  agentAttemptId: z.string().optional(),
   usedFallback: z.boolean().optional(),
   fallbackReason: z
     .enum([
@@ -39,12 +41,15 @@ export const ProgressPhaseSchema = z.object({
 
 export const ProgressAgentEventSchema = z.object({
   id: z.string(),
+  pipelineRunId: z.string().optional(),
   phase: z.string(),
   agentKey: z.string(),
   event: z.enum(["started", "retrying", "completed", "failed", "fallback"]),
   timestamp: z.string(),
   attempt: z.number().int().min(1).optional(),
   retryCount: z.number().int().min(0).optional(),
+  phaseRetryCount: z.number().int().min(0).optional(),
+  agentAttemptId: z.string().optional(),
   error: z.string().optional(),
   fallbackReason: z
     .enum([
@@ -81,6 +86,7 @@ export const ProgressAgentTraceSchema = z.object({
     ])
     .optional(),
   rawProviderError: z.string().optional(),
+  captureStatus: z.enum(["captured", "missing", "provider_error_only"]).optional(),
   startedAt: z.string().optional(),
   completedAt: z.string().nullable().optional(),
 });

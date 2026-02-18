@@ -16,8 +16,11 @@ function createState(
     userId: "user-1",
     status: PipelineStatus.RUNNING,
     quality: "standard",
-    currentPhase: PipelinePhase.EXTRACTION,
+    currentPhase: PipelinePhase.ENRICHMENT,
     phases: {
+      [PipelinePhase.ENRICHMENT]: {
+        status: phases[PipelinePhase.ENRICHMENT] ?? PhaseStatus.COMPLETED,
+      },
       [PipelinePhase.EXTRACTION]: {
         status: phases[PipelinePhase.EXTRACTION] ?? PhaseStatus.PENDING,
       },
@@ -43,6 +46,12 @@ function createState(
         output: 0,
       },
       phases: {
+        [PipelinePhase.ENRICHMENT]: {
+          phase: PipelinePhase.ENRICHMENT,
+          agentCount: 0,
+          successCount: 0,
+          failedCount: 0,
+        },
         [PipelinePhase.EXTRACTION]: {
           phase: PipelinePhase.EXTRACTION,
           agentCount: 0,

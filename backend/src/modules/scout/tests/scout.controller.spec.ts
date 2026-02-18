@@ -70,6 +70,7 @@ describe('ScoutController', () => {
         {
           provide: ScoutService,
           useValue: {
+            listInvestors: jest.fn(),
             apply: jest.fn(),
             findApplications: jest.fn(),
             findApplicationsForInvestor: jest.fn(),
@@ -83,6 +84,8 @@ describe('ScoutController', () => {
             submit: jest.fn(),
             findAll: jest.fn(),
             findAllForInvestor: jest.fn(),
+            getStartupDetail: jest.fn(),
+            getStartupMatches: jest.fn(),
           },
         },
         {
@@ -143,7 +146,8 @@ describe('ScoutController', () => {
 
       const result = await controller.apply(mockUser, validDto);
 
-      expect(result).toEqual(mockApplication);
+      expect(result.data[0]).toEqual(mockApplication);
+      expect(result.meta.total).toBe(1);
       expect(scoutService.apply).toHaveBeenCalledWith(mockUser.id, validDto);
     });
 
@@ -489,7 +493,7 @@ describe('ScoutController', () => {
         mockApplication.id,
       );
 
-      expect(result.status).toBe(ScoutApplicationStatus.APPROVED);
+      expect(result.data[0].status).toBe(ScoutApplicationStatus.APPROVED);
       expect(scoutService.approve).toHaveBeenCalledWith(
         mockApplication.id,
         mockInvestor.id,
@@ -516,8 +520,8 @@ describe('ScoutController', () => {
         dto,
       );
 
-      expect(result.status).toBe(ScoutApplicationStatus.REJECTED);
-      expect(result.rejectionReason).toBe(dto.rejectionReason);
+      expect(result.data[0].status).toBe(ScoutApplicationStatus.REJECTED);
+      expect(result.data[0].rejectionReason).toBe(dto.rejectionReason);
       expect(scoutService.reject).toHaveBeenCalledWith(
         mockApplication.id,
         mockInvestor.id,

@@ -53,6 +53,7 @@ import { Route as ProtectedAdminConfigRouteImport } from './routes/_protected/ad
 import { Route as ProtectedAdminBulkDataRouteImport } from './routes/_protected/admin/bulk-data'
 import { Route as ProtectedAdminAnalyticsRouteImport } from './routes/_protected/admin/analytics'
 import { Route as ProtectedAdminAgentsRouteImport } from './routes/_protected/admin/agents'
+import { Route as ProtectedScoutStartupIdRouteImport } from './routes/_protected/scout/startup.$id'
 import { Route as ProtectedInvestorStartupIdRouteImport } from './routes/_protected/investor/startup.$id'
 import { Route as ProtectedFounderStartupIdRouteImport } from './routes/_protected/founder/startup.$id'
 import { Route as ProtectedAdminStartupIdRouteImport } from './routes/_protected/admin/startup.$id'
@@ -287,6 +288,11 @@ const ProtectedAdminAgentsRoute = ProtectedAdminAgentsRouteImport.update({
   path: '/agents',
   getParentRoute: () => ProtectedAdminRoute,
 } as any)
+const ProtectedScoutStartupIdRoute = ProtectedScoutStartupIdRouteImport.update({
+  id: '/startup/$id',
+  path: '/startup/$id',
+  getParentRoute: () => ProtectedScoutRoute,
+} as any)
 const ProtectedInvestorStartupIdRoute =
   ProtectedInvestorStartupIdRouteImport.update({
     id: '/startup/$id',
@@ -352,6 +358,7 @@ export interface FileRoutesByFullPath {
   '/admin/startup/$id': typeof ProtectedAdminStartupIdRoute
   '/founder/startup/$id': typeof ProtectedFounderStartupIdRoute
   '/investor/startup/$id': typeof ProtectedInvestorStartupIdRoute
+  '/scout/startup/$id': typeof ProtectedScoutStartupIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -396,6 +403,7 @@ export interface FileRoutesByTo {
   '/admin/startup/$id': typeof ProtectedAdminStartupIdRoute
   '/founder/startup/$id': typeof ProtectedFounderStartupIdRoute
   '/investor/startup/$id': typeof ProtectedInvestorStartupIdRoute
+  '/scout/startup/$id': typeof ProtectedScoutStartupIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -446,6 +454,7 @@ export interface FileRoutesById {
   '/_protected/admin/startup/$id': typeof ProtectedAdminStartupIdRoute
   '/_protected/founder/startup/$id': typeof ProtectedFounderStartupIdRoute
   '/_protected/investor/startup/$id': typeof ProtectedInvestorStartupIdRoute
+  '/_protected/scout/startup/$id': typeof ProtectedScoutStartupIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -496,6 +505,7 @@ export interface FileRouteTypes {
     | '/admin/startup/$id'
     | '/founder/startup/$id'
     | '/investor/startup/$id'
+    | '/scout/startup/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -540,6 +550,7 @@ export interface FileRouteTypes {
     | '/admin/startup/$id'
     | '/founder/startup/$id'
     | '/investor/startup/$id'
+    | '/scout/startup/$id'
   id:
     | '__root__'
     | '/'
@@ -589,6 +600,7 @@ export interface FileRouteTypes {
     | '/_protected/admin/startup/$id'
     | '/_protected/founder/startup/$id'
     | '/_protected/investor/startup/$id'
+    | '/_protected/scout/startup/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -911,6 +923,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProtectedAdminAgentsRouteImport
       parentRoute: typeof ProtectedAdminRoute
     }
+    '/_protected/scout/startup/$id': {
+      id: '/_protected/scout/startup/$id'
+      path: '/startup/$id'
+      fullPath: '/scout/startup/$id'
+      preLoaderRoute: typeof ProtectedScoutStartupIdRouteImport
+      parentRoute: typeof ProtectedScoutRoute
+    }
     '/_protected/investor/startup/$id': {
       id: '/_protected/investor/startup/$id'
       path: '/startup/$id'
@@ -1026,6 +1045,7 @@ interface ProtectedScoutRouteChildren {
   ProtectedScoutMetricsRoute: typeof ProtectedScoutMetricsRoute
   ProtectedScoutSubmitRoute: typeof ProtectedScoutSubmitRoute
   ProtectedScoutIndexRoute: typeof ProtectedScoutIndexRoute
+  ProtectedScoutStartupIdRoute: typeof ProtectedScoutStartupIdRoute
 }
 
 const ProtectedScoutRouteChildren: ProtectedScoutRouteChildren = {
@@ -1035,6 +1055,7 @@ const ProtectedScoutRouteChildren: ProtectedScoutRouteChildren = {
   ProtectedScoutMetricsRoute: ProtectedScoutMetricsRoute,
   ProtectedScoutSubmitRoute: ProtectedScoutSubmitRoute,
   ProtectedScoutIndexRoute: ProtectedScoutIndexRoute,
+  ProtectedScoutStartupIdRoute: ProtectedScoutStartupIdRoute,
 }
 
 const ProtectedScoutRouteWithChildren = ProtectedScoutRoute._addFileChildren(

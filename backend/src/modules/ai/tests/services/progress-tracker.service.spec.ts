@@ -107,7 +107,10 @@ describe("ProgressTrackerService", () => {
     });
 
     expect(completed.phasesCompleted).toEqual([PipelinePhase.EXTRACTION]);
-    expect(completed.overallProgress).toBe(20);
+    const expectedProgress = Math.round(
+      (1 / Object.values(PipelinePhase).length) * 100,
+    );
+    expect(completed.overallProgress).toBe(expectedProgress);
     expect(notifications.sendPipelineEvent).toHaveBeenCalledWith(
       "user-1",
       "phase:completed",

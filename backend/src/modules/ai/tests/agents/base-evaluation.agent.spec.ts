@@ -2,12 +2,41 @@ import { beforeEach, describe, expect, it, jest, mock } from "bun:test";
 import { z } from "zod";
 
 const generateTextMock = jest.fn();
+class MockNoObjectGeneratedError extends Error {
+  readonly text?: string;
+
+  constructor({
+    message = "No object generated.",
+    text,
+    cause,
+  }: {
+    message?: string;
+    text?: string;
+    cause?: unknown;
+  } = {}) {
+    super(message);
+    this.name = "AI_NoObjectGeneratedError";
+    this.text = text;
+    if (cause !== undefined) {
+      (this as Error & { cause?: unknown }).cause = cause;
+    }
+  }
+
+  static isInstance(error: unknown): error is MockNoObjectGeneratedError {
+    return (
+      error instanceof MockNoObjectGeneratedError ||
+      (error instanceof Error && error.name === "AI_NoObjectGeneratedError")
+    );
+  }
+}
 
 mock.module("ai", () => ({
   generateText: generateTextMock,
   Output: { object: ({ schema }: { schema: unknown }) => schema },
+  NoObjectGeneratedError: MockNoObjectGeneratedError,
 }));
 
+import { NoObjectGeneratedError } from "ai";
 import { BaseEvaluationAgent } from "../../agents/evaluation/base-evaluation.agent";
 import type { EvaluationPipelineInput } from "../../interfaces/agent.interface";
 import { ModelPurpose } from "../../interfaces/pipeline.interface";
@@ -246,6 +275,129 @@ describe("BaseEvaluationAgent", () => {
     );
     expect(result.fallbackReason).toBe("SCHEMA_OUTPUT_INVALID");
     expect(result.rawProviderError).toContain("Too big");
+  });
+
+  it("emits failed trace events for retry attempts and fallback on terminal failure", async () => {
+    generateTextMock.mockRejectedValue(new Error("provider timeout"));
+    const onTrace = jest.fn();
+
+    await agent.run(pipelineData, { onTrace });
+
+    expect(onTrace).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "failed",
+        attempt: 1,
+        retryCount: 1,
+        usedFallback: false,
+      }),
+    );
+    expect(onTrace).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "failed",
+        attempt: 2,
+        retryCount: 2,
+        usedFallback: false,
+      }),
+    );
+    expect(onTrace).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "fallback",
+        attempt: 3,
+        retryCount: 2,
+        usedFallback: true,
+      }),
+    );
+  });
+
+  it("captures raw output text on retry traces when object generation fails", async () => {
+    generateTextMock
+      .mockRejectedValueOnce(
+        new NoObjectGeneratedError({
+          message: "No object generated.",
+          text: '{"score": 71, "verdict": "raw candidate"}',
+        }),
+      )
+      .mockRejectedValueOnce(new Error("text recovery failed"))
+      .mockResolvedValueOnce({
+        output: {
+          score: 78,
+          verdict: "Recovered on retry",
+        },
+      });
+
+    const onTrace = jest.fn();
+    const result = await agent.run(pipelineData, { onTrace });
+
+    expect(result.usedFallback).toBe(false);
+    expect(generateTextMock).toHaveBeenCalledTimes(3);
+    expect(onTrace).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "failed",
+        attempt: 1,
+        retryCount: 1,
+        outputText: '{"score": 71, "verdict": "raw candidate"}',
+        outputJson: {
+          score: 71,
+          verdict: "raw candidate",
+        },
+      }),
+    );
+  });
+
+  it("captures raw recovery text when schema parse fails during retry path", async () => {
+    generateTextMock
+      .mockRejectedValueOnce(new Error("No output generated."))
+      .mockResolvedValueOnce({
+        text: '{"score":"bad","verdict":"candidate from text"}',
+      })
+      .mockResolvedValueOnce({
+        output: {
+          score: 77,
+          verdict: "Recovered on second attempt",
+        },
+      });
+
+    const onTrace = jest.fn();
+    const result = await agent.run(pipelineData, { onTrace });
+
+    expect(result.usedFallback).toBe(false);
+    expect(onTrace).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "failed",
+        attempt: 1,
+        retryCount: 1,
+        outputText: '{"score":"bad","verdict":"candidate from text"}',
+        outputJson: {
+          score: "bad",
+          verdict: "candidate from text",
+        },
+      }),
+    );
+  });
+
+  it("retains last captured raw output in terminal fallback traces", async () => {
+    generateTextMock.mockRejectedValue(
+      new NoObjectGeneratedError({
+        message: "No object generated.",
+        text: "raw malformed payload from provider",
+      }),
+    );
+
+    const onTrace = jest.fn();
+    const result = await agent.run(pipelineData, { onTrace });
+
+    expect(result.usedFallback).toBe(true);
+    expect(onTrace).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "fallback",
+        usedFallback: true,
+        outputText: "raw malformed payload from provider",
+        outputJson: {
+          score: 50,
+          verdict: "Fallback verdict",
+        },
+      }),
+    );
   });
 
   it("formatContext wraps string values in user_provided_data tags", async () => {

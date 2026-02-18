@@ -67,6 +67,8 @@ export class ResearchProcessor
   ): Promise<Omit<AiResearchJobResult, "jobId" | "duration" | "success">> {
     const { startupId, pipelineRunId, userId } = job.data;
     const agentKey = this.readAgentRetryKey(job.data.metadata);
+    const phaseRetryCount = this.readPhaseRetryCount(job.data.metadata);
+    const agentAttemptIds = new Map<ResearchAgentKey, string>();
 
     if (job.data.type !== "ai_research") {
       throw new Error("Invalid job type for research processor");
@@ -85,6 +87,14 @@ export class ResearchProcessor
           {
             ...(agentKey ? { agentKey } : {}),
             onAgentStart: (agent) => {
+              const attemptId = this.buildAgentAttemptId(
+                pipelineRunId,
+                PipelinePhase.RESEARCH,
+                agent,
+                phaseRetryCount,
+                1,
+              );
+              agentAttemptIds.set(agent, attemptId);
               this.pipelineService
                 .onAgentProgress({
                   startupId,
@@ -94,6 +104,10 @@ export class ResearchProcessor
                   key: agent,
                   status: "running",
                   progress: 0,
+                  phaseRetryCount,
+                  agentAttemptId: attemptId,
+                  attempt: 1,
+                  retryCount: 0,
                 })
                 .catch((progressError) => {
                   this.logger.warn(
@@ -105,7 +119,29 @@ export class ResearchProcessor
                   );
                 });
             },
-            onAgentComplete: ({ agent, output, usedFallback, error, rejected }) => {
+            onAgentComplete: ({
+              agent,
+              output,
+              usedFallback,
+              error,
+              rejected,
+              attempt,
+              retryCount,
+            }) => {
+              const resolvedAttempt = Math.max(1, attempt ?? 1);
+              const resolvedRetryCount = Math.max(
+                0,
+                retryCount ?? resolvedAttempt - 1,
+              );
+              const attemptId =
+                agentAttemptIds.get(agent) ??
+                this.buildAgentAttemptId(
+                  pipelineRunId,
+                  PipelinePhase.RESEARCH,
+                  agent,
+                  phaseRetryCount,
+                  resolvedAttempt,
+                );
               const isFailed =
                 (rejected && !usedFallback) ||
                 (Boolean(error) && !usedFallback);
@@ -124,6 +160,10 @@ export class ResearchProcessor
                   status: isFailed ? "failed" : "completed",
                   progress: isFailed ? 0 : 100,
                   error,
+                  attempt: resolvedAttempt,
+                  retryCount: resolvedRetryCount,
+                  phaseRetryCount,
+                  agentAttemptId: attemptId,
                   usedFallback,
                   lifecycleEvent,
                 })
@@ -149,6 +189,8 @@ export class ResearchProcessor
                   usedFallback,
                   error,
                   rejected,
+                  attempt: resolvedAttempt,
+                  retryCount: resolvedRetryCount,
                 },
               });
             },
@@ -183,5 +225,29 @@ export class ResearchProcessor
     }
 
     return undefined;
+  }
+
+  private readPhaseRetryCount(
+    metadata: Record<string, unknown> | undefined,
+  ): number {
+    const retryCount = metadata?.retryCount;
+    if (
+      typeof retryCount === "number" &&
+      Number.isFinite(retryCount) &&
+      retryCount >= 0
+    ) {
+      return Math.floor(retryCount);
+    }
+    return 0;
+  }
+
+  private buildAgentAttemptId(
+    pipelineRunId: string,
+    phase: PipelinePhase,
+    agent: string,
+    phaseRetryCount: number,
+    attempt: number,
+  ): string {
+    return `${pipelineRunId}:${phase}:${agent}:phase-${phaseRetryCount}:attempt-${attempt}`;
   }
 }

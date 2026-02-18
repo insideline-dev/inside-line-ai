@@ -7,9 +7,17 @@ const requiredStringFromNull = (fallback: string) =>
     z.string().min(1),
   );
 
+const stringArray = z.preprocess(
+  (value) =>
+    Array.isArray(value)
+      ? value.filter((item): item is string => typeof item === "string")
+      : [],
+  z.array(z.string()),
+).default([]);
+
 export const LegalEvaluationSchema = BaseEvaluationSchema.extend({
   ipStatus: requiredStringFromNull("IP status requires manual review"),
-  regulatoryRisks: z.array(z.string()).default([]),
+  regulatoryRisks: stringArray,
   legalStructure: requiredStringFromNull("Legal structure requires manual review"),
 });
 

@@ -59,12 +59,15 @@ export type GetProgressResponseDtoProgress = {
    */
   retryCount?: number;
   usedFallback?: boolean;
+  fallbackReason?: 'EMPTY_STRUCTURED_OUTPUT' | 'TIMEOUT' | 'SCHEMA_OUTPUT_INVALID' | 'MODEL_OR_PROVIDER_ERROR' | 'UNHANDLED_AGENT_EXCEPTION';
+  rawProviderError?: string;
   lastEvent?: 'started' | 'retrying' | 'completed' | 'failed' | 'fallback';
   lastEventAt?: string;
 }};
 }};
   agentEvents?: ({
   id: string;
+  pipelineRunId?: string;
   phase: string;
   agentKey: string;
   event: 'started' | 'retrying' | 'completed' | 'failed' | 'fallback';
@@ -80,6 +83,8 @@ export type GetProgressResponseDtoProgress = {
    */
   retryCount?: number;
   error?: string;
+  fallbackReason?: 'EMPTY_STRUCTURED_OUTPUT' | 'TIMEOUT' | 'SCHEMA_OUTPUT_INVALID' | 'MODEL_OR_PROVIDER_ERROR' | 'UNHANDLED_AGENT_EXCEPTION';
+  rawProviderError?: string;
 })[];
   agentTraces?: ({
   id: string;
@@ -105,6 +110,8 @@ export type GetProgressResponseDtoProgress = {
   outputJson?: unknown;
   /** @nullable */
   error?: string | null;
+  fallbackReason?: 'EMPTY_STRUCTURED_OUTPUT' | 'TIMEOUT' | 'SCHEMA_OUTPUT_INVALID' | 'MODEL_OR_PROVIDER_ERROR' | 'UNHANDLED_AGENT_EXCEPTION';
+  rawProviderError?: string;
   startedAt?: string;
   /** @nullable */
   completedAt?: string | null;

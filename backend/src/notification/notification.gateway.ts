@@ -38,6 +38,8 @@ interface PipelineEventPayloads {
       error?: string;
       attempts?: number;
       retryCount?: number;
+      phaseRetryCount?: number;
+      agentAttemptId?: string;
       usedFallback?: boolean;
       fallbackReason?:
         | "EMPTY_STRUCTURED_OUTPUT"
@@ -63,6 +65,8 @@ interface PipelineEventPayloads {
       error?: string;
       attempts?: number;
       retryCount?: number;
+      phaseRetryCount?: number;
+      agentAttemptId?: string;
       usedFallback?: boolean;
       fallbackReason?:
         | "EMPTY_STRUCTURED_OUTPUT"

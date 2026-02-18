@@ -246,6 +246,68 @@ describe("LinkedinEnrichmentService", () => {
     );
   });
 
+  it("retries via search when provided linkedin URL returns no profile", async () => {
+    unipile.getProfile
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        id: "nathan-1",
+        firstName: "Nathan",
+        lastName: "Blecharczyk",
+        headline: "CTO at Airbnb",
+        location: "San Francisco",
+        profileUrl: "https://www.linkedin.com/in/nathan-blecharczyk-real",
+        profileImageUrl: "https://media.licdn.com/photo.jpg",
+        summary: null,
+        currentCompany: { name: "Airbnb", title: "CTO" },
+        experience: [],
+        education: [],
+      });
+
+    unipile.searchProfiles.mockResolvedValueOnce([
+      {
+        id: "fallback-url",
+        firstName: "Nathan",
+        lastName: "Blecharczyk",
+        headline: "CTO at Airbnb",
+        location: "San Francisco",
+        profileUrl: "https://www.linkedin.com/in/nathan-blecharczyk-real",
+        profileImageUrl: null,
+        summary: null,
+        currentCompany: null,
+        experience: [],
+        education: [],
+      },
+    ]);
+
+    const result = await service.enrichTeamMembers(
+      "user-1",
+      [
+        {
+          name: "Nathan Blecharczyk",
+          role: "CTO",
+          linkedinUrl: "https://linkedin.com/in/nblecharczyk",
+        },
+      ],
+      { companyName: "Airbnb" },
+    );
+
+    expect(unipile.searchProfiles).toHaveBeenCalledWith(
+      "Nathan Blecharczyk",
+      "Airbnb",
+    );
+    expect(unipile.getProfile).toHaveBeenNthCalledWith(
+      1,
+      "user-1",
+      "https://linkedin.com/in/nblecharczyk",
+    );
+    expect(unipile.getProfile).toHaveBeenNthCalledWith(
+      2,
+      "user-1",
+      "https://www.linkedin.com/in/nathan-blecharczyk-real",
+    );
+    expect(result[0]?.enrichmentStatus).toBe("success");
+  });
+
   it("rejects mismatched profiles and falls back to a better-matching candidate", async () => {
     unipile.getProfile
       .mockResolvedValueOnce({

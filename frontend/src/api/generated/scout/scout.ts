@@ -27,11 +27,22 @@ import type {
 import type {
   ApplyScoutDto,
   RejectScoutDto,
+  ScoutApplicationsResponseDto,
+  ScoutCommissionsResponseDto,
   ScoutControllerGetMyApplicationsParams,
+  ScoutControllerGetMySubmissionMatchesParams,
   ScoutControllerGetMySubmissionsParams,
   ScoutControllerGetScoutApplicationsParams,
   ScoutControllerGetScoutSubmissionsParams,
-  ScoutSubmitStartupDto
+  ScoutInvestorsResponseDto,
+  ScoutLeaderboardResponseDto,
+  ScoutMetricsResponseDto,
+  ScoutStartupDetailResponseDto,
+  ScoutStartupMatchesResponseDto,
+  ScoutSubmissionsResponseDto,
+  ScoutSubmitResponseDto,
+  ScoutSubmitStartupDto,
+  ScoutTotalEarningsResponseDto
 } from '.././model';
 
 import { customFetch } from '../../client';
@@ -42,8 +53,121 @@ type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
 
 
 
+/**
+ * @summary List investors available for scout applications
+ */
+export type scoutControllerGetInvestorsResponse200 = {
+  data: ScoutInvestorsResponseDto
+  status: 200
+}
+    
+export type scoutControllerGetInvestorsResponseSuccess = (scoutControllerGetInvestorsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type scoutControllerGetInvestorsResponse = (scoutControllerGetInvestorsResponseSuccess)
+
+export const getScoutControllerGetInvestorsUrl = () => {
+
+
+  
+
+  return `/scout/investors`
+}
+
+export const scoutControllerGetInvestors = async ( options?: RequestInit): Promise<scoutControllerGetInvestorsResponse> => {
+  
+  return customFetch<scoutControllerGetInvestorsResponse>(getScoutControllerGetInvestorsUrl(),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getScoutControllerGetInvestorsQueryKey = () => {
+    return [
+    `/scout/investors`
+    ] as const;
+    }
+
+    
+export const getScoutControllerGetInvestorsQueryOptions = <TData = Awaited<ReturnType<typeof scoutControllerGetInvestors>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof scoutControllerGetInvestors>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getScoutControllerGetInvestorsQueryKey();
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof scoutControllerGetInvestors>>> = ({ signal }) => scoutControllerGetInvestors({ signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof scoutControllerGetInvestors>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ScoutControllerGetInvestorsQueryResult = NonNullable<Awaited<ReturnType<typeof scoutControllerGetInvestors>>>
+export type ScoutControllerGetInvestorsQueryError = ErrorType<unknown>
+
+
+export function useScoutControllerGetInvestors<TData = Awaited<ReturnType<typeof scoutControllerGetInvestors>>, TError = ErrorType<unknown>>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof scoutControllerGetInvestors>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof scoutControllerGetInvestors>>,
+          TError,
+          Awaited<ReturnType<typeof scoutControllerGetInvestors>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useScoutControllerGetInvestors<TData = Awaited<ReturnType<typeof scoutControllerGetInvestors>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof scoutControllerGetInvestors>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof scoutControllerGetInvestors>>,
+          TError,
+          Awaited<ReturnType<typeof scoutControllerGetInvestors>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useScoutControllerGetInvestors<TData = Awaited<ReturnType<typeof scoutControllerGetInvestors>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof scoutControllerGetInvestors>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List investors available for scout applications
+ */
+
+export function useScoutControllerGetInvestors<TData = Awaited<ReturnType<typeof scoutControllerGetInvestors>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof scoutControllerGetInvestors>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getScoutControllerGetInvestorsQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+/**
+ * @summary Apply to become a scout for a specific investor
+ */
 export type scoutControllerApplyResponse201 = {
-  data: void
+  data: ScoutApplicationsResponseDto
   status: 201
 }
     
@@ -108,7 +232,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type ScoutControllerApplyMutationBody = BodyType<ApplyScoutDto>
     export type ScoutControllerApplyMutationError = ErrorType<unknown>
 
-    export const useScoutControllerApply = <TError = ErrorType<unknown>,
+    /**
+ * @summary Apply to become a scout for a specific investor
+ */
+export const useScoutControllerApply = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof scoutControllerApply>>, TError,{data: BodyType<ApplyScoutDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof scoutControllerApply>>,
@@ -118,8 +245,11 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getScoutControllerApplyMutationOptions(options), queryClient);
     }
-    export type scoutControllerGetMyApplicationsResponse200 = {
-  data: void
+    /**
+ * @summary Get scout applications created by current user
+ */
+export type scoutControllerGetMyApplicationsResponse200 = {
+  data: ScoutApplicationsResponseDto
   status: 200
 }
     
@@ -213,6 +343,9 @@ export function useScoutControllerGetMyApplications<TData = Awaited<ReturnType<t
  params?: ScoutControllerGetMyApplicationsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof scoutControllerGetMyApplications>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get scout applications created by current user
+ */
 
 export function useScoutControllerGetMyApplications<TData = Awaited<ReturnType<typeof scoutControllerGetMyApplications>>, TError = ErrorType<unknown>>(
  params?: ScoutControllerGetMyApplicationsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof scoutControllerGetMyApplications>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
@@ -229,8 +362,11 @@ export function useScoutControllerGetMyApplications<TData = Awaited<ReturnType<t
 
 
 
+/**
+ * @summary Submit startup referral as approved scout
+ */
 export type scoutControllerSubmitResponse201 = {
-  data: void
+  data: ScoutSubmitResponseDto
   status: 201
 }
     
@@ -295,7 +431,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type ScoutControllerSubmitMutationBody = BodyType<ScoutSubmitStartupDto>
     export type ScoutControllerSubmitMutationError = ErrorType<unknown>
 
-    export const useScoutControllerSubmit = <TError = ErrorType<unknown>,
+    /**
+ * @summary Submit startup referral as approved scout
+ */
+export const useScoutControllerSubmit = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof scoutControllerSubmit>>, TError,{data: BodyType<ScoutSubmitStartupDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof scoutControllerSubmit>>,
@@ -305,8 +444,11 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getScoutControllerSubmitMutationOptions(options), queryClient);
     }
-    export type scoutControllerGetMySubmissionsResponse200 = {
-  data: void
+    /**
+ * @summary Get startup referrals submitted by current scout user
+ */
+export type scoutControllerGetMySubmissionsResponse200 = {
+  data: ScoutSubmissionsResponseDto
   status: 200
 }
     
@@ -400,6 +542,9 @@ export function useScoutControllerGetMySubmissions<TData = Awaited<ReturnType<ty
  params?: ScoutControllerGetMySubmissionsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof scoutControllerGetMySubmissions>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get startup referrals submitted by current scout user
+ */
 
 export function useScoutControllerGetMySubmissions<TData = Awaited<ReturnType<typeof scoutControllerGetMySubmissions>>, TError = ErrorType<unknown>>(
  params?: ScoutControllerGetMySubmissionsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof scoutControllerGetMySubmissions>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
@@ -416,8 +561,246 @@ export function useScoutControllerGetMySubmissions<TData = Awaited<ReturnType<ty
 
 
 
+/**
+ * @summary Get details for a startup submitted by the scout
+ */
+export type scoutControllerGetMySubmissionStartupResponse200 = {
+  data: ScoutStartupDetailResponseDto
+  status: 200
+}
+    
+export type scoutControllerGetMySubmissionStartupResponseSuccess = (scoutControllerGetMySubmissionStartupResponse200) & {
+  headers: Headers;
+};
+;
+
+export type scoutControllerGetMySubmissionStartupResponse = (scoutControllerGetMySubmissionStartupResponseSuccess)
+
+export const getScoutControllerGetMySubmissionStartupUrl = (startupId: string,) => {
+
+
+  
+
+  return `/scout/startups/${startupId}`
+}
+
+export const scoutControllerGetMySubmissionStartup = async (startupId: string, options?: RequestInit): Promise<scoutControllerGetMySubmissionStartupResponse> => {
+  
+  return customFetch<scoutControllerGetMySubmissionStartupResponse>(getScoutControllerGetMySubmissionStartupUrl(startupId),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getScoutControllerGetMySubmissionStartupQueryKey = (startupId: string,) => {
+    return [
+    `/scout/startups/${startupId}`
+    ] as const;
+    }
+
+    
+export const getScoutControllerGetMySubmissionStartupQueryOptions = <TData = Awaited<ReturnType<typeof scoutControllerGetMySubmissionStartup>>, TError = ErrorType<unknown>>(startupId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof scoutControllerGetMySubmissionStartup>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getScoutControllerGetMySubmissionStartupQueryKey(startupId);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof scoutControllerGetMySubmissionStartup>>> = ({ signal }) => scoutControllerGetMySubmissionStartup(startupId, { signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(startupId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof scoutControllerGetMySubmissionStartup>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ScoutControllerGetMySubmissionStartupQueryResult = NonNullable<Awaited<ReturnType<typeof scoutControllerGetMySubmissionStartup>>>
+export type ScoutControllerGetMySubmissionStartupQueryError = ErrorType<unknown>
+
+
+export function useScoutControllerGetMySubmissionStartup<TData = Awaited<ReturnType<typeof scoutControllerGetMySubmissionStartup>>, TError = ErrorType<unknown>>(
+ startupId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof scoutControllerGetMySubmissionStartup>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof scoutControllerGetMySubmissionStartup>>,
+          TError,
+          Awaited<ReturnType<typeof scoutControllerGetMySubmissionStartup>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useScoutControllerGetMySubmissionStartup<TData = Awaited<ReturnType<typeof scoutControllerGetMySubmissionStartup>>, TError = ErrorType<unknown>>(
+ startupId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof scoutControllerGetMySubmissionStartup>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof scoutControllerGetMySubmissionStartup>>,
+          TError,
+          Awaited<ReturnType<typeof scoutControllerGetMySubmissionStartup>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useScoutControllerGetMySubmissionStartup<TData = Awaited<ReturnType<typeof scoutControllerGetMySubmissionStartup>>, TError = ErrorType<unknown>>(
+ startupId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof scoutControllerGetMySubmissionStartup>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get details for a startup submitted by the scout
+ */
+
+export function useScoutControllerGetMySubmissionStartup<TData = Awaited<ReturnType<typeof scoutControllerGetMySubmissionStartup>>, TError = ErrorType<unknown>>(
+ startupId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof scoutControllerGetMySubmissionStartup>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getScoutControllerGetMySubmissionStartupQueryOptions(startupId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+/**
+ * @summary Get top investor matches for a scout-submitted startup
+ */
+export type scoutControllerGetMySubmissionMatchesResponse200 = {
+  data: ScoutStartupMatchesResponseDto
+  status: 200
+}
+    
+export type scoutControllerGetMySubmissionMatchesResponseSuccess = (scoutControllerGetMySubmissionMatchesResponse200) & {
+  headers: Headers;
+};
+;
+
+export type scoutControllerGetMySubmissionMatchesResponse = (scoutControllerGetMySubmissionMatchesResponseSuccess)
+
+export const getScoutControllerGetMySubmissionMatchesUrl = (startupId: string,
+    params?: ScoutControllerGetMySubmissionMatchesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/scout/startups/${startupId}/matches?${stringifiedParams}` : `/scout/startups/${startupId}/matches`
+}
+
+export const scoutControllerGetMySubmissionMatches = async (startupId: string,
+    params?: ScoutControllerGetMySubmissionMatchesParams, options?: RequestInit): Promise<scoutControllerGetMySubmissionMatchesResponse> => {
+  
+  return customFetch<scoutControllerGetMySubmissionMatchesResponse>(getScoutControllerGetMySubmissionMatchesUrl(startupId,params),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getScoutControllerGetMySubmissionMatchesQueryKey = (startupId: string,
+    params?: ScoutControllerGetMySubmissionMatchesParams,) => {
+    return [
+    `/scout/startups/${startupId}/matches`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+    
+export const getScoutControllerGetMySubmissionMatchesQueryOptions = <TData = Awaited<ReturnType<typeof scoutControllerGetMySubmissionMatches>>, TError = ErrorType<unknown>>(startupId: string,
+    params?: ScoutControllerGetMySubmissionMatchesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof scoutControllerGetMySubmissionMatches>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getScoutControllerGetMySubmissionMatchesQueryKey(startupId,params);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof scoutControllerGetMySubmissionMatches>>> = ({ signal }) => scoutControllerGetMySubmissionMatches(startupId,params, { signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(startupId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof scoutControllerGetMySubmissionMatches>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ScoutControllerGetMySubmissionMatchesQueryResult = NonNullable<Awaited<ReturnType<typeof scoutControllerGetMySubmissionMatches>>>
+export type ScoutControllerGetMySubmissionMatchesQueryError = ErrorType<unknown>
+
+
+export function useScoutControllerGetMySubmissionMatches<TData = Awaited<ReturnType<typeof scoutControllerGetMySubmissionMatches>>, TError = ErrorType<unknown>>(
+ startupId: string,
+    params: undefined |  ScoutControllerGetMySubmissionMatchesParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof scoutControllerGetMySubmissionMatches>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof scoutControllerGetMySubmissionMatches>>,
+          TError,
+          Awaited<ReturnType<typeof scoutControllerGetMySubmissionMatches>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useScoutControllerGetMySubmissionMatches<TData = Awaited<ReturnType<typeof scoutControllerGetMySubmissionMatches>>, TError = ErrorType<unknown>>(
+ startupId: string,
+    params?: ScoutControllerGetMySubmissionMatchesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof scoutControllerGetMySubmissionMatches>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof scoutControllerGetMySubmissionMatches>>,
+          TError,
+          Awaited<ReturnType<typeof scoutControllerGetMySubmissionMatches>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useScoutControllerGetMySubmissionMatches<TData = Awaited<ReturnType<typeof scoutControllerGetMySubmissionMatches>>, TError = ErrorType<unknown>>(
+ startupId: string,
+    params?: ScoutControllerGetMySubmissionMatchesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof scoutControllerGetMySubmissionMatches>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get top investor matches for a scout-submitted startup
+ */
+
+export function useScoutControllerGetMySubmissionMatches<TData = Awaited<ReturnType<typeof scoutControllerGetMySubmissionMatches>>, TError = ErrorType<unknown>>(
+ startupId: string,
+    params?: ScoutControllerGetMySubmissionMatchesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof scoutControllerGetMySubmissionMatches>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getScoutControllerGetMySubmissionMatchesQueryOptions(startupId,params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+/**
+ * @summary Get scout applications submitted to the current investor
+ */
 export type scoutControllerGetScoutApplicationsResponse200 = {
-  data: void
+  data: ScoutApplicationsResponseDto
   status: 200
 }
     
@@ -511,6 +894,9 @@ export function useScoutControllerGetScoutApplications<TData = Awaited<ReturnTyp
  params?: ScoutControllerGetScoutApplicationsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof scoutControllerGetScoutApplications>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get scout applications submitted to the current investor
+ */
 
 export function useScoutControllerGetScoutApplications<TData = Awaited<ReturnType<typeof scoutControllerGetScoutApplications>>, TError = ErrorType<unknown>>(
  params?: ScoutControllerGetScoutApplicationsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof scoutControllerGetScoutApplications>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
@@ -527,8 +913,11 @@ export function useScoutControllerGetScoutApplications<TData = Awaited<ReturnTyp
 
 
 
+/**
+ * @summary Approve a scout application
+ */
 export type scoutControllerApproveApplicationResponse201 = {
-  data: void
+  data: ScoutApplicationsResponseDto
   status: 201
 }
     
@@ -592,7 +981,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     
     export type ScoutControllerApproveApplicationMutationError = ErrorType<unknown>
 
-    export const useScoutControllerApproveApplication = <TError = ErrorType<unknown>,
+    /**
+ * @summary Approve a scout application
+ */
+export const useScoutControllerApproveApplication = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof scoutControllerApproveApplication>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof scoutControllerApproveApplication>>,
@@ -602,8 +994,11 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getScoutControllerApproveApplicationMutationOptions(options), queryClient);
     }
-    export type scoutControllerRejectApplicationResponse201 = {
-  data: void
+    /**
+ * @summary Reject a scout application
+ */
+export type scoutControllerRejectApplicationResponse201 = {
+  data: ScoutApplicationsResponseDto
   status: 201
 }
     
@@ -669,7 +1064,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type ScoutControllerRejectApplicationMutationBody = BodyType<RejectScoutDto>
     export type ScoutControllerRejectApplicationMutationError = ErrorType<unknown>
 
-    export const useScoutControllerRejectApplication = <TError = ErrorType<unknown>,
+    /**
+ * @summary Reject a scout application
+ */
+export const useScoutControllerRejectApplication = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof scoutControllerRejectApplication>>, TError,{id: string;data: BodyType<RejectScoutDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof scoutControllerRejectApplication>>,
@@ -679,8 +1077,11 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getScoutControllerRejectApplicationMutationOptions(options), queryClient);
     }
-    export type scoutControllerGetScoutSubmissionsResponse200 = {
-  data: void
+    /**
+ * @summary Get startup referrals submitted to current investor
+ */
+export type scoutControllerGetScoutSubmissionsResponse200 = {
+  data: ScoutSubmissionsResponseDto
   status: 200
 }
     
@@ -774,6 +1175,9 @@ export function useScoutControllerGetScoutSubmissions<TData = Awaited<ReturnType
  params?: ScoutControllerGetScoutSubmissionsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof scoutControllerGetScoutSubmissions>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get startup referrals submitted to current investor
+ */
 
 export function useScoutControllerGetScoutSubmissions<TData = Awaited<ReturnType<typeof scoutControllerGetScoutSubmissions>>, TError = ErrorType<unknown>>(
  params?: ScoutControllerGetScoutSubmissionsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof scoutControllerGetScoutSubmissions>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
@@ -790,8 +1194,11 @@ export function useScoutControllerGetScoutSubmissions<TData = Awaited<ReturnType
 
 
 
+/**
+ * @summary Get scout commission records
+ */
 export type scoutControllerGetCommissionsResponse200 = {
-  data: void
+  data: ScoutCommissionsResponseDto
   status: 200
 }
     
@@ -878,6 +1285,9 @@ export function useScoutControllerGetCommissions<TData = Awaited<ReturnType<type
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof scoutControllerGetCommissions>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get scout commission records
+ */
 
 export function useScoutControllerGetCommissions<TData = Awaited<ReturnType<typeof scoutControllerGetCommissions>>, TError = ErrorType<unknown>>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof scoutControllerGetCommissions>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
@@ -894,8 +1304,11 @@ export function useScoutControllerGetCommissions<TData = Awaited<ReturnType<type
 
 
 
+/**
+ * @summary Get scout commission totals
+ */
 export type scoutControllerGetTotalEarningsResponse200 = {
-  data: void
+  data: ScoutTotalEarningsResponseDto
   status: 200
 }
     
@@ -982,6 +1395,9 @@ export function useScoutControllerGetTotalEarnings<TData = Awaited<ReturnType<ty
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof scoutControllerGetTotalEarnings>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get scout commission totals
+ */
 
 export function useScoutControllerGetTotalEarnings<TData = Awaited<ReturnType<typeof scoutControllerGetTotalEarnings>>, TError = ErrorType<unknown>>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof scoutControllerGetTotalEarnings>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
@@ -998,8 +1414,11 @@ export function useScoutControllerGetTotalEarnings<TData = Awaited<ReturnType<ty
 
 
 
+/**
+ * @summary Get scout activity metrics
+ */
 export type scoutControllerGetMetricsResponse200 = {
-  data: void
+  data: ScoutMetricsResponseDto
   status: 200
 }
     
@@ -1086,6 +1505,9 @@ export function useScoutControllerGetMetrics<TData = Awaited<ReturnType<typeof s
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof scoutControllerGetMetrics>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get scout activity metrics
+ */
 
 export function useScoutControllerGetMetrics<TData = Awaited<ReturnType<typeof scoutControllerGetMetrics>>, TError = ErrorType<unknown>>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof scoutControllerGetMetrics>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
@@ -1102,8 +1524,11 @@ export function useScoutControllerGetMetrics<TData = Awaited<ReturnType<typeof s
 
 
 
+/**
+ * @summary Get scout leaderboard
+ */
 export type scoutControllerGetLeaderboardResponse200 = {
-  data: void
+  data: ScoutLeaderboardResponseDto
   status: 200
 }
     
@@ -1190,6 +1615,9 @@ export function useScoutControllerGetLeaderboard<TData = Awaited<ReturnType<type
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof scoutControllerGetLeaderboard>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get scout leaderboard
+ */
 
 export function useScoutControllerGetLeaderboard<TData = Awaited<ReturnType<typeof scoutControllerGetLeaderboard>>, TError = ErrorType<unknown>>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof scoutControllerGetLeaderboard>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}

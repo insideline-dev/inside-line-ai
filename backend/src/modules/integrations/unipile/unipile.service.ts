@@ -25,6 +25,14 @@ interface UnipileSearchResponse {
   items?: unknown[];
 }
 
+interface ParsedUnipileError {
+  status?: number;
+  type?: string;
+  title?: string;
+  detail?: string;
+  raw: string;
+}
+
 @Injectable()
 export class UnipileService {
   private readonly logger = new Logger(UnipileService.name);
@@ -181,8 +189,17 @@ export class UnipileService {
       if (response.status === 404) {
         return null;
       }
-      const error = await response.text();
-      throw new BadRequestException(`Unipile API error: ${error}`);
+      const rawError = await response.text();
+      const parsedError = this.parseUnipileError(rawError);
+      if (this.isRecipientUnreachableError(response.status, parsedError)) {
+        this.logger.debug(
+          `LinkedIn profile unavailable for ${profileUrl}: ${
+            parsedError.detail || parsedError.title || parsedError.raw
+          }`,
+        );
+        return null;
+      }
+      throw new BadRequestException(`Unipile API error: ${rawError}`);
     }
 
     const data = await response.json();
@@ -549,5 +566,46 @@ export class UnipileService {
 
   private asMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
+  }
+
+  private parseUnipileError(raw: string): ParsedUnipileError {
+    const base: ParsedUnipileError = { raw };
+    if (!raw || raw.trim().length === 0) {
+      return base;
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      return {
+        raw,
+        status:
+          typeof parsed.status === 'number' && Number.isFinite(parsed.status)
+            ? parsed.status
+            : undefined,
+        type: typeof parsed.type === 'string' ? parsed.type : undefined,
+        title: typeof parsed.title === 'string' ? parsed.title : undefined,
+        detail: typeof parsed.detail === 'string' ? parsed.detail : undefined,
+      };
+    } catch {
+      return base;
+    }
+  }
+
+  private isRecipientUnreachableError(
+    statusCode: number,
+    error: ParsedUnipileError,
+  ): boolean {
+    const status = typeof error.status === 'number' ? error.status : statusCode;
+    if (status !== 422) {
+      return false;
+    }
+
+    const normalized = `${error.type ?? ''} ${error.title ?? ''} ${error.detail ?? ''} ${error.raw}`.toLowerCase();
+    return (
+      normalized.includes('invalid_recipient') ||
+      normalized.includes('recipient cannot be reached') ||
+      normalized.includes('profile is not locked') ||
+      normalized.includes('locked')
+    );
   }
 }

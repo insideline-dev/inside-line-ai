@@ -161,6 +161,8 @@ interface StartupSubmitFormProps {
   enableDraftSaving?: boolean;
   draftId?: string | null;
   showPrimaryContactSection?: boolean;
+  onSubmitStartup?: (payload: CreateStartupDto) => Promise<void | { id?: string }>;
+  successMessage?: string;
 }
 
 interface StoredDraft {
@@ -251,6 +253,8 @@ export function StartupSubmitForm({
   enableDraftSaving = false,
   draftId: draftIdProp,
   showPrimaryContactSection,
+  onSubmitStartup,
+  successMessage,
 }: StartupSubmitFormProps) {
   void apiEndpoint;
   void draftIdProp;
@@ -597,6 +601,11 @@ export function StartupSubmitForm({
         demoUrl: demoVideoUrl,
       } as CreateStartupDto;
 
+      if (onSubmitStartup) {
+        await onSubmitStartup(createPayload);
+        return { id: "external-submission" };
+      }
+
       const createResult = await createStartupMutation.mutateAsync({
         data: createPayload,
       });
@@ -615,17 +624,19 @@ export function StartupSubmitForm({
       return created;
     },
     onSuccess: () => {
-      const successMessage = isInvestorOrAdmin
+      const resolvedSuccessMessage = successMessage ?? (isInvestorOrAdmin
         ? "Startup submitted for analysis."
-        : "Your startup has been submitted and the AI pipeline has started.";
+        : "Your startup has been submitted and the AI pipeline has started.");
 
-      toast.success(successMessage);
+      toast.success(resolvedSuccessMessage);
 
       if (shouldSaveDraft) {
         localStorage.removeItem(draftStorageKey);
       }
 
-      queryClient.invalidateQueries({ queryKey: ["/startups"] });
+      if (!onSubmitStartup) {
+        queryClient.invalidateQueries({ queryKey: ["/startups"] });
+      }
 
       if (onSuccess) {
         onSuccess();

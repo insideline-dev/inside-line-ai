@@ -108,7 +108,7 @@ export class PipelineStateService implements OnModuleDestroy {
         userId,
         status: PipelineStatus.RUNNING,
         quality: "standard",
-        currentPhase: PipelinePhase.EXTRACTION,
+        currentPhase: PipelinePhase.ENRICHMENT,
         phases: this.createInitialPhases(),
         results: {},
         retryCounts: {},
@@ -121,6 +121,12 @@ export class PipelineStateService implements OnModuleDestroy {
           phases: {
             [PipelinePhase.EXTRACTION]: {
               phase: PipelinePhase.EXTRACTION,
+              agentCount: 0,
+              successCount: 0,
+              failedCount: 0,
+            },
+            [PipelinePhase.ENRICHMENT]: {
+              phase: PipelinePhase.ENRICHMENT,
               agentCount: 0,
               successCount: 0,
               failedCount: 0,
@@ -398,6 +404,7 @@ export class PipelineStateService implements OnModuleDestroy {
   private createInitialPhases(): Record<PipelinePhase, PhaseResult> {
     return {
       [PipelinePhase.EXTRACTION]: { status: PhaseStatus.PENDING },
+      [PipelinePhase.ENRICHMENT]: { status: PhaseStatus.PENDING },
       [PipelinePhase.SCRAPING]: { status: PhaseStatus.PENDING },
       [PipelinePhase.RESEARCH]: { status: PhaseStatus.PENDING },
       [PipelinePhase.EVALUATION]: { status: PhaseStatus.PENDING },
@@ -418,7 +425,19 @@ export class PipelineStateService implements OnModuleDestroy {
     const json = await this.redisClient.get(key);
     if (!json) return null;
 
-    const parsed = PipelineStateSchema.safeParse(JSON.parse(json));
+    const raw = JSON.parse(json);
+
+    // Backfill phases added after state was cached (e.g. ENRICHMENT)
+    for (const phase of Object.values(PipelinePhase)) {
+      if (raw.phases && !raw.phases[phase]) {
+        raw.phases[phase] = { status: PhaseStatus.PENDING };
+      }
+      if (raw.telemetry?.phases && !raw.telemetry.phases[phase]) {
+        raw.telemetry.phases[phase] = { phase, agentCount: 0, successCount: 0, failedCount: 0 };
+      }
+    }
+
+    const parsed = PipelineStateSchema.safeParse(raw);
     if (!parsed.success) {
       this.logger.warn(`Corrupt pipeline state for ${key}: ${parsed.error.message}`);
       return null;

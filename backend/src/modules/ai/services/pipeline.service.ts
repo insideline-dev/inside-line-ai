@@ -70,12 +70,14 @@ export class PipelineService {
   private readonly typeByPhase: Record<
     PipelinePhase,
     | "ai_extraction"
+    | "ai_enrichment"
     | "ai_scraping"
     | "ai_research"
     | "ai_evaluation"
     | "ai_synthesis"
   > = {
     [PipelinePhase.EXTRACTION]: "ai_extraction",
+    [PipelinePhase.ENRICHMENT]: "ai_enrichment",
     [PipelinePhase.SCRAPING]: "ai_scraping",
     [PipelinePhase.RESEARCH]: "ai_research",
     [PipelinePhase.EVALUATION]: "ai_evaluation",
@@ -425,6 +427,8 @@ export class PipelineService {
     error?: string;
     attempt?: number;
     retryCount?: number;
+    agentAttemptId?: string;
+    phaseRetryCount?: number;
     usedFallback?: boolean;
     fallbackReason?: EvaluationFallbackReason;
     rawProviderError?: string;

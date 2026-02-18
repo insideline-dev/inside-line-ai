@@ -54,6 +54,7 @@ export type JobType =
   | "matching"
   | "market_analysis"
   | "ai_extraction"
+  | "ai_enrichment"
   | "ai_scraping"
   | "ai_research"
   | "ai_evaluation"
@@ -101,6 +102,8 @@ export interface AgentProgressEvent {
     error?: string;
     attempts?: number;
     retryCount?: number;
+    phaseRetryCount?: number;
+    agentAttemptId?: string;
     usedFallback?: boolean;
     fallbackReason?:
       | "EMPTY_STRUCTURED_OUTPUT"

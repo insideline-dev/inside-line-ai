@@ -11,7 +11,7 @@ import type { DrizzleService } from "../../../../database";
 import type { AiProviderService } from "../../providers/ai-provider.service";
 import type { AiPromptService } from "../../services/ai-prompt.service";
 import type { AiConfigService } from "../../services/ai-config.service";
-import { ModelPurpose } from "../../interfaces/pipeline.interface";
+import type { ScoreComputationService } from "../../services/score-computation.service";
 import { InvestorMatchingService } from "../../services/investor-matching.service";
 import { createMockInvestorCandidates } from "../fixtures/mock-investor.fixture";
 import { createMockSynthesisResult } from "../fixtures/mock-synthesis.fixture";
@@ -22,6 +22,7 @@ describe("InvestorMatchingService", () => {
   let providers: jest.Mocked<AiProviderService>;
   let promptService: jest.Mocked<AiPromptService>;
   let aiConfig: jest.Mocked<AiConfigService>;
+  let scoreComputation: jest.Mocked<ScoreComputationService>;
   const resolvedModel = { provider: "openai-model" };
 
   beforeEach(() => {
@@ -62,7 +63,7 @@ describe("InvestorMatchingService", () => {
     } as unknown as jest.Mocked<DrizzleService>;
 
     providers = {
-      resolveModelForPurpose: jest.fn().mockReturnValue(resolvedModel),
+      resolveModel: jest.fn().mockReturnValue(resolvedModel),
     } as unknown as jest.Mocked<AiProviderService>;
 
     promptService = {
@@ -91,11 +92,16 @@ describe("InvestorMatchingService", () => {
       getMatchingFallbackScore: jest.fn().mockReturnValue(30),
     } as unknown as jest.Mocked<AiConfigService>;
 
+    scoreComputation = {
+      computeWithInvestorPreferences: jest.fn().mockResolvedValue(82),
+    } as unknown as jest.Mocked<ScoreComputationService>;
+
     service = new InvestorMatchingService(
       drizzle as unknown as DrizzleService,
       providers as unknown as AiProviderService,
       promptService as unknown as AiPromptService,
       aiConfig as unknown as AiConfigService,
+      scoreComputation as unknown as ScoreComputationService,
     );
   });
 
@@ -118,12 +124,12 @@ describe("InvestorMatchingService", () => {
       synthesis: createMockSynthesisResult(),
     });
 
-    expect(providers.resolveModelForPurpose).toHaveBeenCalledWith(
-      ModelPurpose.THESIS_ALIGNMENT,
-    );
+    expect(providers.resolveModel).toHaveBeenCalledWith("gemini-3-flash-preview");
     expect(result.candidatesEvaluated).toBe(2);
     expect(generateTextMock).toHaveBeenCalledTimes(2);
+    expect(scoreComputation.computeWithInvestorPreferences).toHaveBeenCalledTimes(2);
     expect(result.matches.length).toBe(2);
+    expect(result.failedCandidates).toBe(0);
   });
 
   it("does not include candidates below thesis fit threshold", async () => {

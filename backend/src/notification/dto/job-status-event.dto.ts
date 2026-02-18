@@ -4,6 +4,7 @@ export type JobType =
   | "matching"
   | "market_analysis"
   | "ai_extraction"
+  | "ai_enrichment"
   | "ai_scraping"
   | "ai_research"
   | "ai_evaluation"

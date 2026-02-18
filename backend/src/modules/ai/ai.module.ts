@@ -24,8 +24,10 @@ import { AiDebugLogService } from "./services/ai-debug-log.service";
 import { AiPromptService } from "./services/ai-prompt.service";
 import { AiPromptRuntimeService } from "./services/ai-prompt-runtime.service";
 import {
+  EnrichmentProcessor,
   EvaluationProcessor,
   ExtractionProcessor,
+  MatchingProcessor,
   ResearchProcessor,
   ScrapingProcessor,
   SynthesisProcessor,
@@ -51,7 +53,10 @@ import { ScrapingCacheService } from "./services/scraping-cache.service";
 import { ScrapingService } from "./services/scraping.service";
 import { SynthesisAgent } from "./agents/synthesis";
 import { SynthesisService } from "./services/synthesis.service";
+import { StartupMatchingPipelineService } from "./services/startup-matching-pipeline.service";
 import { WebsiteScraperService } from "./services/website-scraper.service";
+import { BraveSearchService } from "./services/brave-search.service";
+import { EnrichmentService } from "./services/enrichment.service";
 
 @Global()
 @Module({
@@ -81,12 +86,15 @@ import { WebsiteScraperService } from "./services/website-scraper.service";
     ScrapingService,
     WebsiteScraperService,
     LinkedinEnrichmentService,
+    BraveSearchService,
+    EnrichmentService,
     ScrapingCacheService,
     ResearchService,
     SynthesisAgent,
     ScoreComputationService,
     LocationNormalizerService,
     InvestorMatchingService,
+    StartupMatchingPipelineService,
     MemoGeneratorService,
     TeamEvaluationAgent,
     MarketEvaluationAgent,
@@ -103,10 +111,12 @@ import { WebsiteScraperService } from "./services/website-scraper.service";
     EvaluationService,
     SynthesisService,
     ExtractionProcessor,
+    EnrichmentProcessor,
     ScrapingProcessor,
     ResearchProcessor,
     EvaluationProcessor,
     SynthesisProcessor,
+    MatchingProcessor,
   ],
   exports: [
     AiProviderService,
@@ -117,6 +127,7 @@ import { WebsiteScraperService } from "./services/website-scraper.service";
     PipelineFeedbackService,
     PipelineService,
     InvestorMatchingService,
+    StartupMatchingPipelineService,
   ],
 })
 export class AiModule {}

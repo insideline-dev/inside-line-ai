@@ -22,7 +22,10 @@ describe("AiConfigService", () => {
     );
 
     expect(service.getModelForPurpose(ModelPurpose.EXTRACTION)).toBe(
-      "gemini-3.0-flash-preview",
+      "gemini-3-flash-preview",
+    );
+    expect(service.getModelForPurpose(ModelPurpose.ENRICHMENT)).toBe(
+      "gemini-3-flash-preview",
     );
     expect(service.getModelForPurpose(ModelPurpose.SYNTHESIS)).toBe(
       "gemini-3-flash-preview",
@@ -40,6 +43,7 @@ describe("AiConfigService", () => {
 
     expect(service.getQueueConcurrency(QUEUE_NAMES.AI_EVALUATION)).toBe(12);
     expect(service.getQueueConcurrency(QUEUE_NAMES.AI_SYNTHESIS)).toBe(2);
+    expect(service.getQueueConcurrency(QUEUE_NAMES.AI_MATCHING)).toBe(3);
   });
 
   it("supports legacy phase concurrency env keys", () => {

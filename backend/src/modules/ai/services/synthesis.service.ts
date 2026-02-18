@@ -3,8 +3,6 @@ import { eq } from "drizzle-orm";
 import { DrizzleService } from "../../../database";
 import { startup } from "../../startup/entities";
 import { startupEvaluation } from "../../analysis/entities";
-import { NotificationType } from "../../../notification/entities";
-import { NotificationService } from "../../../notification/notification.service";
 import { PipelineStateService } from "./pipeline-state.service";
 import { ModelPurpose, PipelinePhase } from "../interfaces/pipeline.interface";
 import { EVALUATION_AGENT_KEYS } from "../constants/agent-keys";
@@ -20,10 +18,33 @@ import {
   type SectionScores,
 } from "./score-computation.service";
 import { SynthesisAgent } from "../agents/synthesis";
-import type { SynthesisAgentInput, SynthesisAgentOutput } from "../agents/synthesis";
-import { InvestorMatchingService } from "./investor-matching.service";
+import type {
+  SynthesisAgentOutput,
+} from "../agents/synthesis";
+import type { EvaluationFallbackReason } from "../interfaces/agent.interface";
 import { MemoGeneratorService } from "./memo-generator.service";
 import { AiConfigService } from "./ai-config.service";
+
+export const SYNTHESIS_AGENT_KEY = "synthesisagent";
+
+export interface SynthesisRunTraceDetails {
+  agentKey: typeof SYNTHESIS_AGENT_KEY;
+  status: "completed" | "fallback";
+  attempt: number;
+  retryCount: number;
+  usedFallback: boolean;
+  inputPrompt?: string;
+  outputText?: string;
+  outputJson?: unknown;
+  error?: string;
+  fallbackReason?: EvaluationFallbackReason;
+  rawProviderError?: string;
+}
+
+export interface SynthesisRunDetails {
+  synthesis: SynthesisResult;
+  trace: SynthesisRunTraceDetails;
+}
 
 @Injectable()
 export class SynthesisService {
@@ -35,12 +56,15 @@ export class SynthesisService {
     private synthesisAgent: SynthesisAgent,
     private scoreComputation: ScoreComputationService,
     private aiConfig: AiConfigService,
-    private investorMatching: InvestorMatchingService,
     private memoGenerator: MemoGeneratorService,
-    private notificationService: NotificationService,
   ) {}
 
   async run(startupId: string): Promise<SynthesisResult> {
+    const details = await this.runDetailed(startupId);
+    return details.synthesis;
+  }
+
+  async runDetailed(startupId: string): Promise<SynthesisRunDetails> {
     this.logger.log(`[Synthesis] Starting synthesis run | Startup: ${startupId}`);
 
     const { extraction, research, evaluation, scraping } =
@@ -53,7 +77,7 @@ export class SynthesisService {
       `[Synthesis] Loaded phase results | Company: ${extraction.companyName} | Research sources: ${research.sources?.length ?? 0}`,
     );
 
-    const generated = await this.synthesisAgent.run({
+    const generated = await this.synthesisAgent.runDetailed({
       extraction,
       scraping,
       research,
@@ -64,11 +88,11 @@ export class SynthesisService {
     const overallScore = this.scoreComputation.computeWeightedScore(sectionScores, normalizedWeights);
 
     this.logger.log(
-      `[Synthesis] Agent output | Strengths: ${generated.strengths.length} | Concerns: ${generated.concerns.length}`,
+      `[Synthesis] Agent output | Strengths: ${generated.output.strengths.length} | Concerns: ${generated.output.concerns.length}`,
     );
 
     const synthesis = this.buildSynthesisResult(
-      generated,
+      generated.output,
       sectionScores,
       overallScore,
       evaluation,
@@ -82,7 +106,22 @@ export class SynthesisService {
 
     await this.performPostSynthesisOps(startupId, synthesis, extraction);
 
-    return { ...synthesis };
+    return {
+      synthesis: { ...synthesis },
+      trace: {
+        agentKey: SYNTHESIS_AGENT_KEY,
+        status: generated.usedFallback ? "fallback" : "completed",
+        attempt: generated.attempt,
+        retryCount: generated.retryCount,
+        usedFallback: generated.usedFallback,
+        inputPrompt: generated.inputPrompt,
+        outputText: generated.outputText,
+        outputJson: generated.outputJson,
+        error: generated.error,
+        fallbackReason: generated.fallbackReason,
+        rawProviderError: generated.rawProviderError,
+      },
+    };
   }
 
   private async loadPhaseResults(startupId: string) {
@@ -131,7 +170,7 @@ export class SynthesisService {
       dataConfidenceNotes:
         generated.dataConfidenceNotes ||
         (evaluation.summary.degraded
-          ? `Degraded pipeline run: ${evaluation.summary.completedAgents}/${EVALUATION_AGENT_KEYS.length} evaluation agents completed without fallback`
+          ? `Degraded pipeline run: ${evaluation.summary.completedAgents}/${EVALUATION_AGENT_KEYS.length} evaluation agents completed; fallback used in ${evaluation.summary.fallbackAgents ?? 0} agent(s)`
           : "Full evaluation coverage completed without fallback"),
     };
   }
@@ -407,57 +446,8 @@ export class SynthesisService {
   private async performPostSynthesisOps(
     startupId: string,
     synthesis: SynthesisResult,
-    extraction: ExtractionResult,
+    _extraction: ExtractionResult,
   ): Promise<void> {
-    try {
-      let startupRecord:
-        | { location: string; geoPath: string[] | null }
-        | undefined;
-
-      try {
-        const [found] = await this.drizzle.db
-          .select({
-            location: startup.location,
-            geoPath: startup.geoPath,
-          })
-          .from(startup)
-          .where(eq(startup.id, startupId))
-          .limit(1);
-        startupRecord = found;
-      } catch {
-        startupRecord = undefined;
-      }
-
-      const matching = await this.investorMatching.matchStartup({
-        startupId,
-        startup: {
-          industry: extraction.industry,
-          stage: extraction.stage,
-          fundingTarget: extraction.fundingAsk,
-          location: extraction.location || startupRecord?.location || "",
-          geoPath: startupRecord?.geoPath ?? null,
-        },
-        synthesis,
-      });
-
-      if (matching.matches.length > 0) {
-        await this.notificationService.createBulk(
-          matching.matches.map((match) => ({
-            userId: match.investorId,
-            title: "New Startup Match",
-            message: `A startup matched your thesis with ${match.thesisFitScore}% alignment.`,
-            type: NotificationType.MATCH,
-            link: `/investor/startup/${startupId}`,
-          })),
-        );
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.logger.error(
-        `Investor matching/notification failed for startup ${startupId}: ${message}`,
-      );
-    }
-
     try {
       const memo = await this.memoGenerator.generateAndUpload(
         startupId,

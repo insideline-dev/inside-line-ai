@@ -30,6 +30,9 @@ function createState(
     quality: "standard",
     currentPhase: PipelinePhase.EXTRACTION,
     phases: {
+      [PipelinePhase.ENRICHMENT]: {
+        status: phaseOverrides[PipelinePhase.ENRICHMENT] ?? PhaseStatus.PENDING,
+      },
       [PipelinePhase.EXTRACTION]: {
         status: phaseOverrides[PipelinePhase.EXTRACTION] ?? PhaseStatus.PENDING,
       },
@@ -52,6 +55,12 @@ function createState(
       startedAt: new Date().toISOString(),
       totalTokens: { input: 0, output: 0 },
       phases: {
+        [PipelinePhase.ENRICHMENT]: {
+          phase: PipelinePhase.ENRICHMENT,
+          agentCount: 0,
+          successCount: 0,
+          failedCount: 0,
+        },
         [PipelinePhase.EXTRACTION]: {
           phase: PipelinePhase.EXTRACTION,
           agentCount: 0,
@@ -604,7 +613,12 @@ describe("PipelineService", () => {
   it("queues targeted research agent retry and resets downstream phases", async () => {
     stateService.get.mockResolvedValueOnce(
       createState({}, {
+        [PipelinePhase.ENRICHMENT]: PhaseStatus.COMPLETED,
+        [PipelinePhase.EXTRACTION]: PhaseStatus.COMPLETED,
+        [PipelinePhase.SCRAPING]: PhaseStatus.COMPLETED,
         [PipelinePhase.RESEARCH]: PhaseStatus.COMPLETED,
+        [PipelinePhase.EVALUATION]: PhaseStatus.COMPLETED,
+        [PipelinePhase.SYNTHESIS]: PhaseStatus.COMPLETED,
       }),
     );
 
@@ -646,6 +660,21 @@ describe("PipelineService", () => {
     expect(stateService.setPipelineRunId).toHaveBeenCalledWith(
       "startup-1",
       expect.any(String),
+    );
+    expect(progressTracker.initProgress).toHaveBeenCalledWith(
+      expect.objectContaining({
+        startupId: "startup-1",
+        userId: "user-1",
+        currentPhase: PipelinePhase.RESEARCH,
+        initialPhaseStatuses: expect.objectContaining({
+          [PipelinePhase.ENRICHMENT]: PhaseStatus.COMPLETED,
+          [PipelinePhase.EXTRACTION]: PhaseStatus.COMPLETED,
+          [PipelinePhase.SCRAPING]: PhaseStatus.COMPLETED,
+          [PipelinePhase.RESEARCH]: PhaseStatus.COMPLETED,
+          [PipelinePhase.EVALUATION]: PhaseStatus.COMPLETED,
+          [PipelinePhase.SYNTHESIS]: PhaseStatus.COMPLETED,
+        }),
+      }),
     );
   });
 

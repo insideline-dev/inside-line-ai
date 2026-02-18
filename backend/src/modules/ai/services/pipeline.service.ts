@@ -1,9 +1,10 @@
-import { BadRequestException, Injectable, Logger } from "@nestjs/common";
-import { Optional } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger, Optional } from "@nestjs/common";
 import { ModuleRef } from "@nestjs/core";
 import { randomUUID } from "crypto";
 import { eq } from "drizzle-orm";
 import { DrizzleService } from "../../../database";
+import { NotificationType } from "../../../notification/entities";
+import { NotificationService } from "../../../notification/notification.service";
 import { QueueService } from "../../../queue";
 import { startup, StartupStatus } from "../../startup/entities";
 import { pipelineRun } from "../entities";
@@ -87,6 +88,7 @@ export class PipelineService {
   constructor(
     private drizzle: DrizzleService,
     private queue: QueueService,
+    private notifications: NotificationService,
     private pipelineState: PipelineStateService,
     private aiConfig: AiConfigService,
     private pipelineFeedback: PipelineFeedbackService,
@@ -138,6 +140,14 @@ export class PipelineService {
     for (const phase of this.phaseTransition.getInitialPhases()) {
       await this.queuePhase({ startupId, pipelineRunId: state.pipelineRunId, userId, phase });
     }
+
+    await this.notifyPipelineLifecycle({
+      userId,
+      startupId,
+      type: NotificationType.INFO,
+      title: "Analysis started",
+      message: "AI pipeline analysis has started.",
+    });
 
     this.logger.log(
       `Started AI pipeline ${state.pipelineRunId} for startup ${startupId}`,
@@ -298,6 +308,7 @@ export class PipelineService {
     if (!state) {
       throw new Error(`Pipeline state for startup ${startupId} not found`);
     }
+    const alreadyCancelled = state.status === PipelineStatus.CANCELLED;
 
     const removedJobs = await this.queue.removePipelineJobs(startupId);
     this.errorRecovery.clearAllTimeoutsForStartup(startupId);
@@ -311,6 +322,15 @@ export class PipelineService {
       currentPhase: state.currentPhase,
     });
     await this.updateStartupStatus(startupId, StartupStatus.SUBMITTED);
+    if (!alreadyCancelled) {
+      await this.notifyPipelineLifecycle({
+        userId: state.userId,
+        startupId,
+        type: NotificationType.WARNING,
+        title: "Analysis cancelled",
+        message: "AI pipeline analysis was cancelled.",
+      });
+    }
 
     return { removedJobs };
   }
@@ -549,6 +569,10 @@ export class PipelineService {
     if (!refreshed) {
       return;
     }
+    const shouldNotifyTerminal =
+      refreshed.status !== PipelineStatus.COMPLETED &&
+      refreshed.status !== PipelineStatus.CANCELLED &&
+      refreshed.status !== PipelineStatus.FAILED;
 
     const decision = this.phaseTransition.decideNextPhases(refreshed);
 
@@ -600,6 +624,15 @@ export class PipelineService {
         error: degradedReason,
       });
       await this.updateStartupStatus(startupId, StartupStatus.PENDING_REVIEW);
+      if (shouldNotifyTerminal) {
+        await this.notifyPipelineLifecycle({
+          userId: refreshed.userId,
+          startupId,
+          type: NotificationType.WARNING,
+          title: "Analysis completed with warnings",
+          message: degradedReason,
+        });
+      }
       return;
     }
 
@@ -618,9 +651,62 @@ export class PipelineService {
       overallScore: synthesisResult?.overallScore,
     });
     await this.updateStartupStatus(startupId, StartupStatus.PENDING_REVIEW);
+    if (shouldNotifyTerminal) {
+      await this.notifyPipelineLifecycle({
+        userId: refreshed.userId,
+        startupId,
+        type: NotificationType.SUCCESS,
+        title: "Analysis completed",
+        message: "AI pipeline analysis completed successfully.",
+      });
+    }
 
     // Notify Clara conversation if exists
     this.notifyClaraSafely(startupId, synthesisResult?.overallScore);
+  }
+
+  private async notifyPipelineLifecycle(params: {
+    userId: string;
+    startupId: string;
+    type: NotificationType;
+    title: string;
+    message: string;
+  }): Promise<void> {
+    const startupLabel = await this.getStartupLabel(params.startupId);
+    try {
+      await this.notifications.createAndBroadcast(
+        params.userId,
+        `${params.title}: ${startupLabel}`,
+        params.message,
+        params.type,
+        `/admin/startup/${params.startupId}`,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `Failed to send lifecycle notification for startup ${params.startupId}: ${message}`,
+      );
+    }
+  }
+
+  private async getStartupLabel(startupId: string): Promise<string> {
+    try {
+      const [record] = await this.drizzle.db
+        .select({ name: startup.name })
+        .from(startup)
+        .where(eq(startup.id, startupId))
+        .limit(1);
+      if (record?.name) {
+        return record.name;
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.debug(
+        `Unable to fetch startup name for notification on ${startupId}: ${message}`,
+      );
+    }
+
+    return `Startup ${startupId}`;
   }
 
   private notifyClaraSafely(

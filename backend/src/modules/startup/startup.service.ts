@@ -141,7 +141,7 @@ export class StartupService {
   ] as const;
   private static readonly RESEARCH_AGENTS = new Set<
     ResearchAgentKey
-  >(["team", "market", "product", "news"]);
+  >(["team", "market", "product", "news", "competitor"]);
   private static readonly EVALUATION_AGENTS = new Set<
     EvaluationAgentKey
   >([
@@ -649,10 +649,20 @@ export class StartupService {
       });
     }
 
-    await this.aiPipeline.retryAgent(id, {
-      phase: request.phase,
-      agentKey: request.agent as ResearchAgentKey | EvaluationAgentKey,
-    });
+    let mode: "agent_retry" | "full_reanalysis_fallback" = "agent_retry";
+    const existingState = await this.aiPipeline.getPipelineStatus(id);
+    if (!existingState) {
+      mode = "full_reanalysis_fallback";
+      await this.aiPipeline.startPipeline(id, found.userId);
+      this.logger.warn(
+        `Pipeline state missing for startup ${id}; falling back to full reanalysis for admin retry request`,
+      );
+    } else {
+      await this.aiPipeline.retryAgent(id, {
+        phase: request.phase,
+        agentKey: request.agent as ResearchAgentKey | EvaluationAgentKey,
+      });
+    }
 
     this.logger.log(
       `Admin ${adminId} requested agent retry for startup ${id}, phase ${request.phase}, agent ${request.agent}`,
@@ -664,7 +674,7 @@ export class StartupService {
       agent: request.agent,
       accepted: true,
       feedbackAccepted: Boolean(feedback),
-      mode: "agent_retry",
+      mode,
     };
   }
 

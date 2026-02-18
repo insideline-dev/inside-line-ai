@@ -31,6 +31,12 @@ interface AdminPipelineLivePanelProps {
   startupId: string;
   startupStatus: string;
   onRetryAgent?: (phase: "research" | "evaluation", agentKey: string) => Promise<void>;
+  trackedRetry?: {
+    phase: "research" | "evaluation";
+    agentKey: string;
+    requestedAt: string;
+  } | null;
+  onClearTrackedRetry?: () => void;
 }
 
 type FlattenedAgent = {
@@ -133,6 +139,14 @@ function formatTime(value?: string): string {
     minute: "2-digit",
     second: "2-digit",
   });
+}
+
+function toTimestampMs(value: string | undefined): number | null {
+  if (!value) {
+    return null;
+  }
+  const parsed = new Date(value).getTime();
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function eventVerb(event: PipelineAgentEventType): string {
@@ -480,6 +494,8 @@ export function AdminPipelineLivePanel({
   startupId,
   startupStatus,
   onRetryAgent,
+  trackedRetry,
+  onClearTrackedRetry,
 }: AdminPipelineLivePanelProps) {
   const [selectedTrace, setSelectedTrace] = useState<PipelineAgentTrace | null>(null);
   const [retryingAgentKey, setRetryingAgentKey] = useState<string | null>(null);
@@ -651,6 +667,58 @@ export function AdminPipelineLivePanel({
       ? event.event === "failed" || event.event === "fallback" || event.event === "retrying"
       : event.event === "failed" || event.event === "fallback",
   );
+  const trackedRetryAgent = trackedRetry
+    ? flattenedAgents.find(
+        (agent) =>
+          agent.phase === trackedRetry.phase && agent.key === trackedRetry.agentKey,
+      )
+    : null;
+  const trackedRetryEvent = trackedRetry
+    ? eventTimeline.find(
+        (event) =>
+          String(event.phase) === trackedRetry.phase &&
+          event.agentKey === trackedRetry.agentKey,
+      )
+    : undefined;
+  const trackedRetryRequestMs = toTimestampMs(trackedRetry?.requestedAt);
+  const progressUpdatedMs = toTimestampMs(progress?.updatedAt);
+  const hasTelemetrySinceTrackedRetry =
+    trackedRetryRequestMs !== null &&
+    progressUpdatedMs !== null &&
+    progressUpdatedMs >= trackedRetryRequestMs;
+  const trackedRetryAgentEventMs = toTimestampMs(trackedRetryAgent?.data.lastEventAt);
+  const hasTrackedAgentSignal =
+    hasTelemetrySinceTrackedRetry &&
+    trackedRetryAgentEventMs !== null &&
+    trackedRetryRequestMs !== null &&
+    trackedRetryAgentEventMs >= trackedRetryRequestMs;
+  const trackedRetryStatus: "queued" | "running" | "completed" | "failed" =
+    !trackedRetry || !hasTrackedAgentSignal
+      ? "queued"
+      : trackedRetryAgent?.data.status === "running"
+        ? "running"
+        : trackedRetryAgent?.data.status === "failed"
+          ? "failed"
+          : trackedRetryAgent?.data.status === "completed"
+            ? "completed"
+            : "queued";
+  const trackedRetryTone: SignalTone =
+    trackedRetryStatus === "failed"
+      ? "danger"
+      : trackedRetryStatus === "completed"
+        ? "success"
+        : trackedRetryStatus === "running"
+          ? "info"
+          : "warning";
+  const trackedRetryStatusMessage = trackedRetry
+    ? trackedRetryStatus === "queued"
+      ? "Queued. Waiting for live telemetry from the new pipeline run."
+      : trackedRetryStatus === "running"
+        ? `Running now${trackedRetryEvent ? ` • ${eventVerb(trackedRetryEvent.event)} at ${formatTime(trackedRetryEvent.timestamp)}` : ""}.`
+        : trackedRetryStatus === "completed"
+          ? `Completed${trackedRetryEvent ? ` • ${eventVerb(trackedRetryEvent.event)} at ${formatTime(trackedRetryEvent.timestamp)}` : ""}. Synthesis will refresh downstream outputs.`
+          : `Failed${trackedRetryEvent ? ` • ${eventVerb(trackedRetryEvent.event)} at ${formatTime(trackedRetryEvent.timestamp)}` : ""}. Check timeline details.`
+    : "";
 
   if (!progress && !isLoading) {
     return (
@@ -686,6 +754,40 @@ export function AdminPipelineLivePanel({
       </CardHeader>
 
       <CardContent className="space-y-5">
+        {trackedRetry && (
+          <div className={`rounded-lg border px-3 py-2 ${SURFACE_TONE_CLASS[trackedRetryTone]}`}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                {trackedRetryStatus === "running" ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-sky-500" />
+                ) : trackedRetryStatus === "completed" ? (
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                ) : trackedRetryStatus === "failed" ? (
+                  <XCircle className="h-4 w-4 text-destructive" />
+                ) : (
+                  <Clock3 className="h-4 w-4 text-amber-500" />
+                )}
+                Tracking targeted retry: {formatLabel(trackedRetry.agentKey)} (
+                {formatLabel(trackedRetry.phase)})
+              </div>
+              {onClearTrackedRetry && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 px-2 text-xs"
+                  onClick={onClearTrackedRetry}
+                >
+                  Dismiss
+                </Button>
+              )}
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {trackedRetryStatusMessage}
+            </p>
+          </div>
+        )}
+
         {(progress?.error || totalIssueSignals > 0 || latestAttentionEvent) && (
           <div className={`rounded-lg border px-3 py-2 ${SURFACE_TONE_CLASS[runTone]}`}>
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -845,11 +947,17 @@ export function AdminPipelineLivePanel({
                 {flattenedAgents.length === 0 ? (
                   <p className="text-sm text-muted-foreground">No agent activity yet.</p>
                 ) : (
-                  flattenedAgents.map((agent) => (
-                    <div
-                      key={`${agent.phase}:${agent.key}`}
-                      className={`rounded-md border p-2.5 ${SURFACE_TONE_CLASS[toneForAgent(agent.data)]}`}
-                    >
+                  flattenedAgents.map((agent) => {
+                    const isTrackedAgent =
+                      trackedRetry?.phase === agent.phase &&
+                      trackedRetry.agentKey === agent.key;
+                    return (
+                      <div
+                        key={`${agent.phase}:${agent.key}`}
+                        className={`rounded-md border p-2.5 ${SURFACE_TONE_CLASS[toneForAgent(agent.data)]} ${
+                          isTrackedAgent ? "ring-1 ring-primary/50" : ""
+                        }`}
+                      >
                       <div className="flex items-center justify-between gap-2">
                         <p className="flex items-center gap-2 text-sm font-medium">
                           {statusIcon(agent.data.status)}
@@ -932,6 +1040,14 @@ export function AdminPipelineLivePanel({
                               {eventVerb(agent.data.lastEvent)}
                             </Badge>
                           )}
+                          {isTrackedAgent && (
+                            <Badge
+                              variant="outline"
+                              className="bg-sky-500/10 text-sky-700 border-sky-500/30 dark:text-sky-300"
+                            >
+                              targeted retry
+                            </Badge>
+                          )}
                         </div>
                       )}
                       {agent.data.error && (
@@ -950,8 +1066,9 @@ export function AdminPipelineLivePanel({
                           Provider: {previewText(agent.data.rawProviderError, 220)}
                         </p>
                       )}
-                    </div>
-                  ))
+                      </div>
+                    );
+                  })
                 )}
               </div>
             </ScrollArea>

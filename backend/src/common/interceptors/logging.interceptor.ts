@@ -5,8 +5,8 @@ import {
   CallHandler,
   Logger,
 } from '@nestjs/common';
-import { Observable } from 'rxjs';
-import { tap } from 'rxjs/operators';
+import { Observable, throwError } from 'rxjs';
+import { catchError, tap } from 'rxjs/operators';
 
 @Injectable()
 export class LoggingInterceptor implements NestInterceptor {
@@ -24,6 +24,25 @@ export class LoggingInterceptor implements NestInterceptor {
         const duration = Date.now() - now;
 
         this.logger.log(`${method} ${url} ${statusCode} - ${duration}ms`);
+      }),
+      catchError((error: unknown) => {
+        const response = context.switchToHttp().getResponse();
+        const statusCode =
+          response?.statusCode && response.statusCode >= 400
+            ? response.statusCode
+            : (error as { status?: number })?.status ?? 500;
+        const duration = Date.now() - now;
+        const message =
+          error instanceof Error
+            ? error.message
+            : typeof error === 'string'
+              ? error
+              : 'Request failed';
+
+        this.logger.error(
+          `${method} ${url} ${statusCode} - ${duration}ms - ${message}`,
+        );
+        return throwError(() => error);
       }),
     );
   }

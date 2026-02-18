@@ -46,11 +46,8 @@ import { Route as ProtectedFounderDataRoomRouteImport } from './routes/_protecte
 import { Route as ProtectedAdminUsersRouteImport } from './routes/_protected/admin/users'
 import { Route as ProtectedAdminScoutsRouteImport } from './routes/_protected/admin/scouts'
 import { Route as ProtectedAdminScoringRouteImport } from './routes/_protected/admin/scoring'
-import { Route as ProtectedAdminQueueRouteImport } from './routes/_protected/admin/queue'
 import { Route as ProtectedAdminIntegrationsRouteImport } from './routes/_protected/admin/integrations'
 import { Route as ProtectedAdminConversationsRouteImport } from './routes/_protected/admin/conversations'
-import { Route as ProtectedAdminConfigRouteImport } from './routes/_protected/admin/config'
-import { Route as ProtectedAdminBulkDataRouteImport } from './routes/_protected/admin/bulk-data'
 import { Route as ProtectedAdminAnalyticsRouteImport } from './routes/_protected/admin/analytics'
 import { Route as ProtectedAdminAgentsRouteImport } from './routes/_protected/admin/agents'
 import { Route as ProtectedScoutStartupIdRouteImport } from './routes/_protected/scout/startup.$id'
@@ -251,11 +248,6 @@ const ProtectedAdminScoringRoute = ProtectedAdminScoringRouteImport.update({
   path: '/scoring',
   getParentRoute: () => ProtectedAdminRoute,
 } as any)
-const ProtectedAdminQueueRoute = ProtectedAdminQueueRouteImport.update({
-  id: '/queue',
-  path: '/queue',
-  getParentRoute: () => ProtectedAdminRoute,
-} as any)
 const ProtectedAdminIntegrationsRoute =
   ProtectedAdminIntegrationsRouteImport.update({
     id: '/integrations',
@@ -268,16 +260,6 @@ const ProtectedAdminConversationsRoute =
     path: '/conversations',
     getParentRoute: () => ProtectedAdminRoute,
   } as any)
-const ProtectedAdminConfigRoute = ProtectedAdminConfigRouteImport.update({
-  id: '/config',
-  path: '/config',
-  getParentRoute: () => ProtectedAdminRoute,
-} as any)
-const ProtectedAdminBulkDataRoute = ProtectedAdminBulkDataRouteImport.update({
-  id: '/bulk-data',
-  path: '/bulk-data',
-  getParentRoute: () => ProtectedAdminRoute,
-} as any)
 const ProtectedAdminAnalyticsRoute = ProtectedAdminAnalyticsRouteImport.update({
   id: '/analytics',
   path: '/analytics',
@@ -326,11 +308,8 @@ export interface FileRoutesByFullPath {
   '/auth/magic-link': typeof AuthMagicLinkRoute
   '/admin/agents': typeof ProtectedAdminAgentsRoute
   '/admin/analytics': typeof ProtectedAdminAnalyticsRoute
-  '/admin/bulk-data': typeof ProtectedAdminBulkDataRoute
-  '/admin/config': typeof ProtectedAdminConfigRoute
   '/admin/conversations': typeof ProtectedAdminConversationsRoute
   '/admin/integrations': typeof ProtectedAdminIntegrationsRoute
-  '/admin/queue': typeof ProtectedAdminQueueRoute
   '/admin/scoring': typeof ProtectedAdminScoringRoute
   '/admin/scouts': typeof ProtectedAdminScoutsRoute
   '/admin/users': typeof ProtectedAdminUsersRoute
@@ -371,11 +350,8 @@ export interface FileRoutesByTo {
   '/auth/magic-link': typeof AuthMagicLinkRoute
   '/admin/agents': typeof ProtectedAdminAgentsRoute
   '/admin/analytics': typeof ProtectedAdminAnalyticsRoute
-  '/admin/bulk-data': typeof ProtectedAdminBulkDataRoute
-  '/admin/config': typeof ProtectedAdminConfigRoute
   '/admin/conversations': typeof ProtectedAdminConversationsRoute
   '/admin/integrations': typeof ProtectedAdminIntegrationsRoute
-  '/admin/queue': typeof ProtectedAdminQueueRoute
   '/admin/scoring': typeof ProtectedAdminScoringRoute
   '/admin/scouts': typeof ProtectedAdminScoutsRoute
   '/admin/users': typeof ProtectedAdminUsersRoute
@@ -422,11 +398,8 @@ export interface FileRoutesById {
   '/auth/magic-link': typeof AuthMagicLinkRoute
   '/_protected/admin/agents': typeof ProtectedAdminAgentsRoute
   '/_protected/admin/analytics': typeof ProtectedAdminAnalyticsRoute
-  '/_protected/admin/bulk-data': typeof ProtectedAdminBulkDataRoute
-  '/_protected/admin/config': typeof ProtectedAdminConfigRoute
   '/_protected/admin/conversations': typeof ProtectedAdminConversationsRoute
   '/_protected/admin/integrations': typeof ProtectedAdminIntegrationsRoute
-  '/_protected/admin/queue': typeof ProtectedAdminQueueRoute
   '/_protected/admin/scoring': typeof ProtectedAdminScoringRoute
   '/_protected/admin/scouts': typeof ProtectedAdminScoutsRoute
   '/_protected/admin/users': typeof ProtectedAdminUsersRoute
@@ -473,11 +446,8 @@ export interface FileRouteTypes {
     | '/auth/magic-link'
     | '/admin/agents'
     | '/admin/analytics'
-    | '/admin/bulk-data'
-    | '/admin/config'
     | '/admin/conversations'
     | '/admin/integrations'
-    | '/admin/queue'
     | '/admin/scoring'
     | '/admin/scouts'
     | '/admin/users'
@@ -518,11 +488,8 @@ export interface FileRouteTypes {
     | '/auth/magic-link'
     | '/admin/agents'
     | '/admin/analytics'
-    | '/admin/bulk-data'
-    | '/admin/config'
     | '/admin/conversations'
     | '/admin/integrations'
-    | '/admin/queue'
     | '/admin/scoring'
     | '/admin/scouts'
     | '/admin/users'
@@ -568,11 +535,8 @@ export interface FileRouteTypes {
     | '/auth/magic-link'
     | '/_protected/admin/agents'
     | '/_protected/admin/analytics'
-    | '/_protected/admin/bulk-data'
-    | '/_protected/admin/config'
     | '/_protected/admin/conversations'
     | '/_protected/admin/integrations'
-    | '/_protected/admin/queue'
     | '/_protected/admin/scoring'
     | '/_protected/admin/scouts'
     | '/_protected/admin/users'
@@ -874,13 +838,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProtectedAdminScoringRouteImport
       parentRoute: typeof ProtectedAdminRoute
     }
-    '/_protected/admin/queue': {
-      id: '/_protected/admin/queue'
-      path: '/queue'
-      fullPath: '/admin/queue'
-      preLoaderRoute: typeof ProtectedAdminQueueRouteImport
-      parentRoute: typeof ProtectedAdminRoute
-    }
     '/_protected/admin/integrations': {
       id: '/_protected/admin/integrations'
       path: '/integrations'
@@ -893,20 +850,6 @@ declare module '@tanstack/react-router' {
       path: '/conversations'
       fullPath: '/admin/conversations'
       preLoaderRoute: typeof ProtectedAdminConversationsRouteImport
-      parentRoute: typeof ProtectedAdminRoute
-    }
-    '/_protected/admin/config': {
-      id: '/_protected/admin/config'
-      path: '/config'
-      fullPath: '/admin/config'
-      preLoaderRoute: typeof ProtectedAdminConfigRouteImport
-      parentRoute: typeof ProtectedAdminRoute
-    }
-    '/_protected/admin/bulk-data': {
-      id: '/_protected/admin/bulk-data'
-      path: '/bulk-data'
-      fullPath: '/admin/bulk-data'
-      preLoaderRoute: typeof ProtectedAdminBulkDataRouteImport
       parentRoute: typeof ProtectedAdminRoute
     }
     '/_protected/admin/analytics': {
@@ -957,11 +900,8 @@ declare module '@tanstack/react-router' {
 interface ProtectedAdminRouteChildren {
   ProtectedAdminAgentsRoute: typeof ProtectedAdminAgentsRoute
   ProtectedAdminAnalyticsRoute: typeof ProtectedAdminAnalyticsRoute
-  ProtectedAdminBulkDataRoute: typeof ProtectedAdminBulkDataRoute
-  ProtectedAdminConfigRoute: typeof ProtectedAdminConfigRoute
   ProtectedAdminConversationsRoute: typeof ProtectedAdminConversationsRoute
   ProtectedAdminIntegrationsRoute: typeof ProtectedAdminIntegrationsRoute
-  ProtectedAdminQueueRoute: typeof ProtectedAdminQueueRoute
   ProtectedAdminScoringRoute: typeof ProtectedAdminScoringRoute
   ProtectedAdminScoutsRoute: typeof ProtectedAdminScoutsRoute
   ProtectedAdminUsersRoute: typeof ProtectedAdminUsersRoute
@@ -972,11 +912,8 @@ interface ProtectedAdminRouteChildren {
 const ProtectedAdminRouteChildren: ProtectedAdminRouteChildren = {
   ProtectedAdminAgentsRoute: ProtectedAdminAgentsRoute,
   ProtectedAdminAnalyticsRoute: ProtectedAdminAnalyticsRoute,
-  ProtectedAdminBulkDataRoute: ProtectedAdminBulkDataRoute,
-  ProtectedAdminConfigRoute: ProtectedAdminConfigRoute,
   ProtectedAdminConversationsRoute: ProtectedAdminConversationsRoute,
   ProtectedAdminIntegrationsRoute: ProtectedAdminIntegrationsRoute,
-  ProtectedAdminQueueRoute: ProtectedAdminQueueRoute,
   ProtectedAdminScoringRoute: ProtectedAdminScoringRoute,
   ProtectedAdminScoutsRoute: ProtectedAdminScoutsRoute,
   ProtectedAdminUsersRoute: ProtectedAdminUsersRoute,

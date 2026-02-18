@@ -242,7 +242,6 @@ export class EnrichmentService {
     if (!record.tagline) missing.push("tagline");
     if (!record.industry) missing.push("industry");
     if (!record.location) missing.push("location");
-    if (!record.teamMembers?.length) missing.push("teamMembers");
     return missing;
   }
 
@@ -282,7 +281,7 @@ export class EnrichmentService {
     const companyName = record.name;
     const queries = [
       { query: `${companyName} startup company profile`, options: { count: 5 } },
-      { query: `${companyName} founder CEO LinkedIn site:linkedin.com OR site:crunchbase.com`, options: { count: 5 } },
+      { query: `${companyName} founders leadership team company profile`, options: { count: 5 } },
       { query: `${companyName} funding round raised site:crunchbase.com OR site:techcrunch.com`, options: { count: 5 } },
       { query: `${companyName} pitch deck site:docsend.com OR site:slideshare.net`, options: { count: 3 } },
       { query: `${companyName} product pricing customers reviews`, options: { count: 5 } },
@@ -493,25 +492,6 @@ export class EnrichmentService {
         updatedFields.push(
           `${fieldDef.label} (corrected: "${correction.oldValue}" → "${correction.newValue}", confidence=${correction.confidence.toFixed(2)})`,
         );
-      }
-    }
-
-    // Merge discovered founders into teamMembers
-    if (enrichment.discoveredFounders.length > 0 && record.teamMembers) {
-      const existingNames = new Set(
-        record.teamMembers.map((m) => m.name.trim().toLowerCase()),
-      );
-      const newMembers = enrichment.discoveredFounders
-        .filter((f) => f.confidence >= 0.5 && !existingNames.has(f.name.trim().toLowerCase()))
-        .map((f) => ({
-          name: f.name,
-          role: f.role ?? "Founder",
-          linkedinUrl: f.linkedinUrl ?? "",
-        }));
-
-      if (newMembers.length > 0) {
-        updates.teamMembers = [...record.teamMembers, ...newMembers];
-        updatedFields.push(`teamMembers (+${newMembers.length} discovered)`);
       }
     }
 

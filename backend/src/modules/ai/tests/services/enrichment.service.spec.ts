@@ -230,7 +230,7 @@ describe("EnrichmentService", () => {
 
   describe("identifyMissingFields — gap detection", () => {
     it("detects all missing fields when record is empty", async () => {
-      const aiJson = makeEnrichmentJson({ fieldsStillMissing: ["website", "description", "tagline", "industry", "location", "teamMembers"] });
+      const aiJson = makeEnrichmentJson({ fieldsStillMissing: ["website", "description", "tagline", "industry", "location"] });
       generateTextMock.mockResolvedValue({ text: aiJson });
 
       const { service } = buildService({ record: makeStartupRecord() });
@@ -238,7 +238,7 @@ describe("EnrichmentService", () => {
 
       // The prompt is built with the missing fields — we verify indirectly that
       // the result carries fieldsStillMissing passed back from AI
-      expect(result.fieldsStillMissing).toContain("teamMembers");
+      expect(result.fieldsStillMissing).toContain("website");
     });
 
     it("does NOT list fields that are already populated", async () => {
@@ -387,50 +387,11 @@ describe("EnrichmentService", () => {
     });
   });
 
-  describe("applyDbWrites — discovered founders merge", () => {
-    it("merges new founders into teamMembers when confidence >= 0.5", async () => {
+  describe("applyDbWrites — discovered founders", () => {
+    it("does not write discovered founders into teamMembers (handled by linkedin_enrichment)", async () => {
       const aiJson = makeEnrichmentJson({
         discoveredFounders: [
           { name: "Bob Builder", role: "CTO", confidence: 0.8 },
-        ],
-      });
-      generateTextMock.mockResolvedValue({ text: aiJson });
-
-      const { service, drizzle } = buildService({
-        record: makeStartupRecord({
-          teamMembers: [{ name: "Alice", role: "CEO" }],
-        }),
-      });
-      const result = await service.run(STARTUP_ID);
-
-      expect(drizzle.db.update).toHaveBeenCalled();
-      expect(result.dbFieldsUpdated.some((f) => f.includes("teamMembers"))).toBe(true);
-      expect(result.dbFieldsUpdated.some((f) => f.includes("+1"))).toBe(true);
-    });
-
-    it("does NOT merge founders with confidence < 0.5", async () => {
-      const aiJson = makeEnrichmentJson({
-        discoveredFounders: [
-          { name: "Ghost Person", role: "Unknown", confidence: 0.3 },
-        ],
-      });
-      generateTextMock.mockResolvedValue({ text: aiJson });
-
-      const { service, drizzle } = buildService({
-        record: makeStartupRecord({
-          teamMembers: [{ name: "Alice", role: "CEO" }],
-        }),
-      });
-      const result = await service.run(STARTUP_ID);
-
-      expect(drizzle.db.update).not.toHaveBeenCalled();
-      expect(result.dbFieldsUpdated).toHaveLength(0);
-    });
-
-    it("does NOT add duplicate founders that already exist in teamMembers", async () => {
-      const aiJson = makeEnrichmentJson({
-        discoveredFounders: [
-          { name: "Alice", role: "CEO", confidence: 0.9 },
         ],
       });
       generateTextMock.mockResolvedValue({ text: aiJson });
@@ -466,6 +427,22 @@ describe("EnrichmentService", () => {
       await service.run(STARTUP_ID);
 
       expect(braveSearch.search).toHaveBeenCalled();
+    });
+
+    it("does not run LinkedIn-specific founder search queries in gap-fill stage", async () => {
+      const aiJson = makeEnrichmentJson();
+      generateTextMock.mockResolvedValue({ text: aiJson });
+
+      const { service, braveSearch } = buildService({ braveConfigured: true });
+      await service.run(STARTUP_ID);
+
+      const queries = braveSearch.search.mock.calls.map(
+        (call) => String(call[0]).toLowerCase(),
+      );
+      expect(queries.some((query) => query.includes("site:linkedin.com"))).toBe(
+        false,
+      );
+      expect(queries.some((query) => query.includes(" linkedin "))).toBe(false);
     });
   });
 

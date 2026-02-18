@@ -1,9 +1,15 @@
 import { beforeEach, describe, expect, it, jest } from "bun:test";
 import { DrizzleService } from "../../../../database";
-import { ScrapingService } from "../../services/scraping.service";
+import {
+  SCRAPING_AGENT_LINKEDIN_KEY,
+  SCRAPING_AGENT_WEBSITE_KEY,
+  ScrapingService,
+} from "../../services/scraping.service";
 import { WebsiteScraperService } from "../../services/website-scraper.service";
 import { LinkedinEnrichmentService } from "../../services/linkedin-enrichment.service";
 import { ScrapingCacheService } from "../../services/scraping-cache.service";
+import { PipelineStateService } from "../../services/pipeline-state.service";
+import { PipelinePhase } from "../../interfaces/pipeline.interface";
 
 describe("ScrapingService", () => {
   let service: ScrapingService;
@@ -92,6 +98,46 @@ describe("ScrapingService", () => {
     expect(result.websiteUrl).toBe("https://inside-line.test/");
     expect(result.teamMembers[0]?.enrichmentStatus).toBe("success");
     expect(result.scrapeErrors).toHaveLength(0);
+  });
+
+  it("emits website and linkedin enrichment sub-agent callbacks", async () => {
+    const started: string[] = [];
+    const completed: Array<{
+      agentKey: string;
+      status: string;
+      outputJson: unknown;
+    }> = [];
+
+    await service.run("startup-1", {
+      onAgentStart: (agentKey) => {
+        started.push(agentKey);
+      },
+      onAgentComplete: (payload) => {
+        completed.push({
+          agentKey: payload.agentKey,
+          status: payload.status,
+          outputJson: payload.outputJson,
+        });
+      },
+    });
+
+    expect(started).toEqual([
+      SCRAPING_AGENT_WEBSITE_KEY,
+      SCRAPING_AGENT_LINKEDIN_KEY,
+    ]);
+    expect(completed.map((entry) => entry.agentKey)).toEqual([
+      SCRAPING_AGENT_WEBSITE_KEY,
+      SCRAPING_AGENT_LINKEDIN_KEY,
+    ]);
+    expect(completed.map((entry) => entry.status)).toEqual([
+      "completed",
+      "completed",
+    ]);
+    expect(completed[1]?.outputJson).toEqual(
+      expect.objectContaining({
+        verifiedTeamMembers: 1,
+      }),
+    );
   });
 
   it("uses cached website data when available", async () => {
@@ -273,5 +319,182 @@ describe("ScrapingService", () => {
 
     expect(result.teamMembers).toHaveLength(1);
     expect(result.teamMembers[0]?.name).toBe("Ismael Belkhayat");
+  });
+
+  it("uses extraction founder names as linkedin enrichment seeds when startup team is empty", async () => {
+    mockDb.limit.mockResolvedValueOnce([
+      {
+        id: "startup-4",
+        userId: "user-123",
+        website: "https://inside-line.test",
+        name: "Inside Line",
+        industry: "SaaS",
+        stage: "seed",
+        description: "AI startup screening",
+        teamMembers: [],
+      },
+    ]);
+
+    websiteScraper.deepScrape.mockResolvedValueOnce({
+      url: "https://inside-line.test/",
+      title: "Inside Line",
+      description: "AI startup screening",
+      fullText: "scraped content",
+      headings: [],
+      subpages: [],
+      links: [],
+      teamBios: [],
+      customerLogos: [],
+      testimonials: [],
+      metadata: {
+        scrapedAt: new Date().toISOString(),
+        pageCount: 1,
+        hasAboutPage: false,
+        hasTeamPage: false,
+        hasPricingPage: false,
+      },
+    } as any);
+
+    const pipelineState = {
+      getPhaseResult: jest.fn().mockImplementation(
+        async (_startupId: string, phase: PipelinePhase) => {
+          if (phase === PipelinePhase.EXTRACTION) {
+            return {
+              founderNames: ["Jane Founder"],
+            };
+          }
+          return null;
+        },
+      ),
+    } as unknown as jest.Mocked<PipelineStateService>;
+
+    linkedin.enrichTeamMembers.mockImplementationOnce(async (_, members) =>
+      members.map((member) => ({
+        name: member.name,
+        role: member.role,
+        linkedinUrl:
+          member.linkedinUrl ?? "https://www.linkedin.com/in/jane-founder",
+        enrichmentStatus: "success" as const,
+      })),
+    );
+
+    const serviceWithPipelineState = new ScrapingService(
+      drizzle,
+      websiteScraper,
+      linkedin,
+      cache,
+      undefined,
+      pipelineState as unknown as PipelineStateService,
+    );
+
+    const result = await serviceWithPipelineState.run("startup-4");
+
+    expect(linkedin.enrichTeamMembers).toHaveBeenCalled();
+    expect(linkedin.enrichTeamMembers).toHaveBeenCalledWith(
+      "user-123",
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "Jane Founder",
+          role: "Founder",
+        }),
+      ]),
+      expect.any(Object),
+    );
+    expect(result.teamMembers.some((member) => member.name === "Jane Founder")).toBe(
+      true,
+    );
+  });
+
+  it("uses enrichment discovered founders as linkedin enrichment seeds when extraction founders are absent", async () => {
+    mockDb.limit.mockResolvedValueOnce([
+      {
+        id: "startup-5",
+        userId: "user-123",
+        website: "https://inside-line.test",
+        name: "Inside Line",
+        industry: "SaaS",
+        stage: "seed",
+        description: "AI startup screening",
+        teamMembers: [],
+      },
+    ]);
+
+    websiteScraper.deepScrape.mockResolvedValueOnce({
+      url: "https://inside-line.test/",
+      title: "Inside Line",
+      description: "AI startup screening",
+      fullText: "scraped content",
+      headings: [],
+      subpages: [],
+      links: [],
+      teamBios: [],
+      customerLogos: [],
+      testimonials: [],
+      metadata: {
+        scrapedAt: new Date().toISOString(),
+        pageCount: 1,
+        hasAboutPage: false,
+        hasTeamPage: false,
+        hasPricingPage: false,
+      },
+    } as any);
+
+    const pipelineState = {
+      getPhaseResult: jest.fn().mockImplementation(
+        async (_startupId: string, phase: PipelinePhase) => {
+          if (phase === PipelinePhase.EXTRACTION) {
+            return null;
+          }
+          if (phase === PipelinePhase.ENRICHMENT) {
+            return {
+              discoveredFounders: [
+                {
+                  name: "Lina Builder",
+                  role: "Co-Founder",
+                  linkedinUrl: "https://www.linkedin.com/in/lina-builder",
+                  confidence: 0.9,
+                },
+              ],
+            };
+          }
+          return null;
+        },
+      ),
+    } as unknown as jest.Mocked<PipelineStateService>;
+
+    linkedin.enrichTeamMembers.mockImplementationOnce(async (_, members) =>
+      members.map((member) => ({
+        name: member.name,
+        role: member.role,
+        linkedinUrl: member.linkedinUrl,
+        enrichmentStatus: "success" as const,
+      })),
+    );
+
+    const serviceWithPipelineState = new ScrapingService(
+      drizzle,
+      websiteScraper,
+      linkedin,
+      cache,
+      undefined,
+      pipelineState as unknown as PipelineStateService,
+    );
+
+    const result = await serviceWithPipelineState.run("startup-5");
+
+    expect(linkedin.enrichTeamMembers).toHaveBeenCalledWith(
+      "user-123",
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "Lina Builder",
+          role: "Co-Founder",
+          linkedinUrl: "https://www.linkedin.com/in/lina-builder",
+        }),
+      ]),
+      expect.any(Object),
+    );
+    expect(result.teamMembers.some((member) => member.name === "Lina Builder")).toBe(
+      true,
+    );
   });
 });

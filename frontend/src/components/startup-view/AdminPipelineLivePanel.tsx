@@ -5,7 +5,6 @@ import {
   CheckCircle2,
   Clock3,
   Eye,
-  FileText,
   Loader2,
   RefreshCw,
   RotateCcw,
@@ -56,6 +55,12 @@ const PHASE_LABELS: Record<string, string> = {
   synthesis: "Synthesis",
 };
 
+const AGENT_LABELS: Record<string, string> = {
+  extract_fields: "Document Parsing",
+  scrape_website: "Website Scraping",
+  linkedin_enrichment: "LinkedIn Enrichment",
+};
+
 const STATUS_BADGE_CLASS: Record<string, string> = {
   completed: "bg-emerald-500/10 text-emerald-700 border-emerald-500/30 dark:text-emerald-300",
   running: "bg-sky-500/10 text-sky-700 border-sky-500/30 dark:text-sky-300",
@@ -99,6 +104,9 @@ function normalizePercent(value: number | undefined): number {
 function formatLabel(value: string): string {
   if (PHASE_LABELS[value]) {
     return PHASE_LABELS[value];
+  }
+  if (AGENT_LABELS[value]) {
+    return AGENT_LABELS[value];
   }
   return value
     .replace(/([a-z])([A-Z])/g, "$1 $2")
@@ -1023,17 +1031,7 @@ export function AdminPipelineLivePanel({
                         Provider: {previewText(trace.rawProviderError, 220)}
                       </p>
                     )}
-                    <div className="mt-2 grid gap-2 md:grid-cols-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="justify-start gap-2 text-xs"
-                        onClick={() => setSelectedTrace(trace)}
-                      >
-                        <FileText className="h-3.5 w-3.5" />
-                        Input Prompt
-                      </Button>
+                    <div className="mt-2">
                       <Button
                         type="button"
                         variant="outline"
@@ -1042,7 +1040,7 @@ export function AdminPipelineLivePanel({
                         onClick={() => setSelectedTrace(trace)}
                       >
                         <Eye className="h-3.5 w-3.5" />
-                        Output
+                        View Trace
                       </Button>
                     </div>
                     <p className="mt-2 text-xs text-muted-foreground">

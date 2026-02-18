@@ -16,6 +16,7 @@ import {
   parseRedisUrl,
 } from "../../../queue/processors/base.processor";
 import { NotificationGateway } from "../../../notification/notification.gateway";
+import type { PhaseProgressCallback } from "../interfaces/progress-callback.interface";
 import { PipelinePhase } from "../interfaces/pipeline.interface";
 import { ExtractionService } from "../services/extraction.service";
 import { PipelineStateService } from "../services/pipeline-state.service";
@@ -64,11 +65,82 @@ export class ExtractionProcessor
   protected async process(
     job: Job<AiExtractionJobData>,
   ): Promise<Omit<AiExtractionJobResult, "jobId" | "duration" | "success">> {
-    const { startupId } = job.data;
+    const { startupId, userId, pipelineRunId } = job.data;
 
     if (job.data.type !== "ai_extraction") {
       throw new Error("Invalid job type for extraction processor");
     }
+
+    const onStepProgress: PhaseProgressCallback = {
+      onStepStart: (stepKey) => {
+        void this.pipelineService
+          .onAgentProgress({
+            startupId,
+            userId,
+            pipelineRunId,
+            phase: PipelinePhase.EXTRACTION,
+            key: stepKey,
+            status: "running",
+            progress: 0,
+            lifecycleEvent: "started",
+          })
+          .catch((progressError) => {
+            this.logger.warn(
+              `Failed to mark extraction sub-step running for ${stepKey}: ${
+                progressError instanceof Error
+                  ? progressError.message
+                  : String(progressError)
+              }`,
+            );
+          });
+      },
+      onStepComplete: (stepKey, summary) => {
+        void this.pipelineService
+          .onAgentProgress({
+            startupId,
+            userId,
+            pipelineRunId,
+            phase: PipelinePhase.EXTRACTION,
+            key: stepKey,
+            status: "completed",
+            progress: 100,
+            lifecycleEvent: "completed",
+            dataSummary: summary,
+          })
+          .catch((progressError) => {
+            this.logger.warn(
+              `Failed to mark extraction sub-step completed for ${stepKey}: ${
+                progressError instanceof Error
+                  ? progressError.message
+                  : String(progressError)
+              }`,
+            );
+          });
+      },
+      onStepFailed: (stepKey, error) => {
+        void this.pipelineService
+          .onAgentProgress({
+            startupId,
+            userId,
+            pipelineRunId,
+            phase: PipelinePhase.EXTRACTION,
+            key: stepKey,
+            status: "failed",
+            progress: 0,
+            error,
+            lifecycleEvent: "failed",
+          })
+          .catch((progressError) => {
+            this.logger.warn(
+              `Failed to mark extraction sub-step failed for ${stepKey}: ${
+                progressError instanceof Error
+                  ? progressError.message
+                  : String(progressError)
+              }`,
+            );
+          });
+      },
+    };
 
     const runResult = await runPipelinePhase({
       job,
@@ -77,7 +149,7 @@ export class ExtractionProcessor
       pipelineState: this.pipelineState,
       pipelineService: this.pipelineService,
       notificationGateway: this.notificationGateway,
-      run: () => this.extractionService.run(startupId),
+      run: () => this.extractionService.run(startupId, onStepProgress),
     });
 
     return {

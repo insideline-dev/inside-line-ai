@@ -16,6 +16,7 @@ import {
   parseRedisUrl,
 } from "../../../queue/processors/base.processor";
 import { NotificationGateway } from "../../../notification/notification.gateway";
+import type { PhaseProgressCallback } from "../interfaces/progress-callback.interface";
 import { PipelinePhase } from "../interfaces/pipeline.interface";
 import { PipelineStateService } from "../services/pipeline-state.service";
 import { PipelineService } from "../services/pipeline.service";
@@ -64,11 +65,82 @@ export class ScrapingProcessor
   protected async process(
     job: Job<AiScrapingJobData>,
   ): Promise<Omit<AiScrapingJobResult, "jobId" | "duration" | "success">> {
-    const { startupId } = job.data;
+    const { startupId, userId, pipelineRunId } = job.data;
 
     if (job.data.type !== "ai_scraping") {
       throw new Error("Invalid job type for scraping processor");
     }
+
+    const onStepProgress: PhaseProgressCallback = {
+      onStepStart: (stepKey) => {
+        void this.pipelineService
+          .onAgentProgress({
+            startupId,
+            userId,
+            pipelineRunId,
+            phase: PipelinePhase.SCRAPING,
+            key: stepKey,
+            status: "running",
+            progress: 0,
+            lifecycleEvent: "started",
+          })
+          .catch((progressError) => {
+            this.logger.warn(
+              `Failed to mark scraping sub-step running for ${stepKey}: ${
+                progressError instanceof Error
+                  ? progressError.message
+                  : String(progressError)
+              }`,
+            );
+          });
+      },
+      onStepComplete: (stepKey, summary) => {
+        void this.pipelineService
+          .onAgentProgress({
+            startupId,
+            userId,
+            pipelineRunId,
+            phase: PipelinePhase.SCRAPING,
+            key: stepKey,
+            status: "completed",
+            progress: 100,
+            lifecycleEvent: "completed",
+            dataSummary: summary,
+          })
+          .catch((progressError) => {
+            this.logger.warn(
+              `Failed to mark scraping sub-step completed for ${stepKey}: ${
+                progressError instanceof Error
+                  ? progressError.message
+                  : String(progressError)
+              }`,
+            );
+          });
+      },
+      onStepFailed: (stepKey, error) => {
+        void this.pipelineService
+          .onAgentProgress({
+            startupId,
+            userId,
+            pipelineRunId,
+            phase: PipelinePhase.SCRAPING,
+            key: stepKey,
+            status: "failed",
+            progress: 0,
+            error,
+            lifecycleEvent: "failed",
+          })
+          .catch((progressError) => {
+            this.logger.warn(
+              `Failed to mark scraping sub-step failed for ${stepKey}: ${
+                progressError instanceof Error
+                  ? progressError.message
+                  : String(progressError)
+              }`,
+            );
+          });
+      },
+    };
 
     const runResult = await runPipelinePhase({
       job,
@@ -77,7 +149,7 @@ export class ScrapingProcessor
       pipelineState: this.pipelineState,
       pipelineService: this.pipelineService,
       notificationGateway: this.notificationGateway,
-      run: () => this.scrapingService.run(startupId),
+      run: () => this.scrapingService.run(startupId, onStepProgress),
     });
 
     return {

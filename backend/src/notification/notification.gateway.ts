@@ -50,6 +50,7 @@ interface PipelineEventPayloads {
       rawProviderError?: string;
       lastEvent?: string;
       lastEventAt?: string;
+      dataSummary?: Record<string, unknown>;
     };
   };
   'agent:completed': {
@@ -77,6 +78,7 @@ interface PipelineEventPayloads {
       rawProviderError?: string;
       lastEvent?: string;
       lastEventAt?: string;
+      dataSummary?: Record<string, unknown>;
     };
   };
 }

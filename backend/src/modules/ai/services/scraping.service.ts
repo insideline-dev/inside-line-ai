@@ -13,6 +13,7 @@ import type {
   ScrapingResult,
   WebsiteScrapedData,
 } from "../interfaces/phase-results.interface";
+import type { PhaseProgressCallback } from "../interfaces/progress-callback.interface";
 import { PipelinePhase } from "../interfaces/pipeline.interface";
 import { LinkedinEnrichmentService } from "./linkedin-enrichment.service";
 import { PipelineStateService } from "./pipeline-state.service";
@@ -30,6 +31,13 @@ interface TeamBioInput {
   role: string;
   bio: string;
   imageUrl?: string;
+}
+
+interface LinkedinEnrichmentRunResult {
+  teamMembers: EnrichedTeamMember[];
+  cacheHits: number;
+  liveRequested: number;
+  liveEnriched: number;
 }
 
 @Injectable()
@@ -55,7 +63,10 @@ export class ScrapingService {
       ) ?? "logs/ai-scraping-debug.jsonl";
   }
 
-  async run(startupId: string): Promise<ScrapingResult> {
+  async run(
+    startupId: string,
+    progress?: PhaseProgressCallback,
+  ): Promise<ScrapingResult> {
     this.logger.log(`[Scraping] Starting scraping phase for startup ${startupId}`);
 
     const [record] = await this.drizzle.db
@@ -78,22 +89,31 @@ export class ScrapingService {
       `[Scraping] Loaded startup context | website=${effectiveWebsite ?? "none"} | submittedTeamMembers=${submittedTeamMembers.length}`,
     );
 
-    const website = await this.scrapeWebsite(effectiveWebsite, scrapeErrors);
-    const discoveredWebsiteLeaders = this.extractLeadershipCandidates(
-      website?.teamBios ?? [],
-    );
-    const discoveredWebsiteLinkedinMembers = this.extractLinkedinCandidatesFromWebsiteLinks(
-      website?.links ?? [],
-    );
-    const discoveredLinkedinLeaders = await this.discoverCompanyLinkedinLeadership(
-      record.name,
-      [
-        ...submittedTeamMembers,
-        ...discoveredWebsiteLeaders,
-        ...discoveredWebsiteLinkedinMembers,
-      ],
-      effectiveWebsite ?? undefined,
-    );
+    const website = await this.scrapeWebsite(effectiveWebsite, scrapeErrors, progress);
+    progress?.onStepStart("team_discovery");
+    let discoveredWebsiteLeaders: TeamMemberInput[] = [];
+    let discoveredWebsiteLinkedinMembers: TeamMemberInput[] = [];
+    let discoveredLinkedinLeaders: TeamMemberInput[] = [];
+    try {
+      discoveredWebsiteLeaders = this.extractLeadershipCandidates(
+        website?.teamBios ?? [],
+      );
+      discoveredWebsiteLinkedinMembers = this.extractLinkedinCandidatesFromWebsiteLinks(
+        website?.links ?? [],
+      );
+      discoveredLinkedinLeaders = await this.discoverCompanyLinkedinLeadership(
+        record.name,
+        [
+          ...submittedTeamMembers,
+          ...discoveredWebsiteLeaders,
+          ...discoveredWebsiteLinkedinMembers,
+        ],
+        effectiveWebsite ?? undefined,
+      );
+    } catch (error) {
+      progress?.onStepFailed("team_discovery", this.asMessage(error));
+      throw error;
+    }
     const enrichmentFounders: TeamMemberInput[] = (enrichment?.discoveredFounders ?? [])
       .filter((f) => f.confidence >= 0.5)
       .map((f) => ({
@@ -108,17 +128,32 @@ export class ScrapingService {
       discoveredLinkedinLeaders,
       enrichmentFounders,
     );
+    progress?.onStepComplete("team_discovery", {
+      submitted: submittedTeamMembers.length,
+      websiteLeaders: discoveredWebsiteLeaders.length,
+      linkedinDiscovered:
+        discoveredWebsiteLinkedinMembers.length + discoveredLinkedinLeaders.length,
+      total: teamMembers.length,
+    });
     this.logger.log(
       `[Scraping] Team member seed built | submitted=${submittedTeamMembers.length} | discoveredWebsiteLeaders=${discoveredWebsiteLeaders.length} | discoveredWebsiteLinkedin=${discoveredWebsiteLinkedinMembers.length} | discoveredLinkedinLeaders=${discoveredLinkedinLeaders.length} | final=${teamMembers.length}`,
     );
 
-    const enrichedTeam = await this.enrichTeamMembers(
-      record.userId,
-      teamMembers,
-      record.name,
-      record.website,
-      scrapeErrors,
-    );
+    progress?.onStepStart("linkedin_enrichment");
+    let linkedinEnrichmentResult: LinkedinEnrichmentRunResult;
+    try {
+      linkedinEnrichmentResult = await this.enrichTeamMembers(
+        record.userId,
+        teamMembers,
+        record.name,
+        record.website,
+        scrapeErrors,
+      );
+    } catch (error) {
+      progress?.onStepFailed("linkedin_enrichment", this.asMessage(error));
+      throw error;
+    }
+    const enrichedTeam = linkedinEnrichmentResult.teamMembers;
     const submittedNames = new Set(
       submittedTeamMembers.map((member) => member.name.trim().toLowerCase()),
     );
@@ -135,6 +170,13 @@ export class ScrapingService {
         return true;
       }
       return member.enrichmentStatus === "success";
+    });
+    progress?.onStepComplete("linkedin_enrichment", {
+      requested: teamMembers.length,
+      cacheHits: linkedinEnrichmentResult.cacheHits,
+      liveEnriched: linkedinEnrichmentResult.liveEnriched,
+      verified: verifiedTeamMembers.length,
+      dropped: droppedUnverifiedTeamMembers.length,
     });
 
     const result: ScrapingResult = {
@@ -441,28 +483,61 @@ export class ScrapingService {
   private async scrapeWebsite(
     websiteUrl: string | null,
     errors: ScrapeError[],
+    progress?: PhaseProgressCallback,
   ): Promise<WebsiteScrapedData | null> {
+    progress?.onStepStart("cache_check");
     if (!websiteUrl) {
       this.logger.debug("[Scraping] Website URL missing; skipping website scrape");
+      progress?.onStepFailed("cache_check", "Website URL missing");
       return null;
     }
 
+    let cached: WebsiteScrapedData | null = null;
     try {
-      const cached = await this.scrapingCache.getWebsiteCache(websiteUrl);
-      if (cached) {
-        this.logger.log(`[Scraping] Website cache hit for ${websiteUrl}`);
-        return cached;
-      }
+      cached = await this.scrapingCache.getWebsiteCache(websiteUrl);
+    } catch (error) {
+      const message = this.asMessage(error);
+      progress?.onStepFailed("cache_check", message);
+      errors.push({
+        type: "website",
+        target: websiteUrl,
+        error: message,
+      });
+      this.logger.warn(`[Scraping] Website cache lookup failed for ${websiteUrl}: ${message}`);
+      return null;
+    }
 
+    if (cached) {
+      this.logger.log(`[Scraping] Website cache hit for ${websiteUrl}`);
+      progress?.onStepComplete("cache_check", {
+        hit: true,
+        url: websiteUrl,
+      });
+      return cached;
+    }
+
+    progress?.onStepComplete("cache_check", {
+      hit: false,
+      url: websiteUrl,
+    });
+    progress?.onStepStart("website_scrape");
+
+    try {
       this.logger.log(`[Scraping] Website cache miss for ${websiteUrl}; running deep scrape`);
       const scraped = await this.websiteScraper.deepScrape(websiteUrl);
       await this.scrapingCache.setWebsiteCache(websiteUrl, scraped);
       this.logger.debug(
         `[Scraping] Website scrape complete | pages=${scraped.metadata.pageCount} | links=${scraped.links.length} | teamBios=${scraped.teamBios.length}`,
       );
+      progress?.onStepComplete("website_scrape", {
+        pages: scraped.metadata.pageCount,
+        links: scraped.links.length,
+        teamBios: scraped.teamBios.length,
+      });
       return scraped;
     } catch (error) {
       const message = this.asMessage(error);
+      progress?.onStepFailed("website_scrape", message);
       errors.push({
         type: "website",
         target: websiteUrl,
@@ -479,10 +554,15 @@ export class ScrapingService {
     companyName: string,
     websiteUrl: string | null,
     errors: ScrapeError[],
-  ): Promise<EnrichedTeamMember[]> {
+  ): Promise<LinkedinEnrichmentRunResult> {
     if (members.length === 0) {
       this.logger.debug("[Scraping] No team members provided for LinkedIn profile resolution");
-      return [];
+      return {
+        teamMembers: [],
+        cacheHits: 0,
+        liveRequested: 0,
+        liveEnriched: 0,
+      };
     }
 
     this.logger.log(
@@ -647,7 +727,12 @@ export class ScrapingService {
       `[Scraping] LinkedIn final status summary ${JSON.stringify(finalStatuses)}`,
     );
 
-    return finalTeam;
+    return {
+      teamMembers: finalTeam,
+      cacheHits: cacheHitsByUrl.size,
+      liveRequested: membersToEnrich.length,
+      liveEnriched: liveEnriched.length,
+    };
   }
 
   private buildNotableClaims(

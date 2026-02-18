@@ -10,6 +10,7 @@ import {
   type StartupFormContext,
   type StartupTeamMemberReference,
 } from "../interfaces/phase-results.interface";
+import type { PhaseProgressCallback } from "../interfaces/progress-callback.interface";
 import { ExtractionSchema } from "../schemas";
 import { FieldExtractorService, type ExtractedFields } from "./field-extractor.service";
 import { MistralOcrService } from "./mistral-ocr.service";
@@ -44,7 +45,10 @@ export class ExtractionService {
     );
   }
 
-  async run(startupId: string): Promise<ExtractionResult> {
+  async run(
+    startupId: string,
+    progress?: PhaseProgressCallback,
+  ): Promise<ExtractionResult> {
     this.logger.log(`[Extraction] Starting extraction phase for startup ${startupId}`);
 
     const [record] = await this.drizzle.db
@@ -86,6 +90,8 @@ export class ExtractionService {
 
     let deckUrl: string | null = null;
     let pdfBuffer: Buffer | null = null;
+    let deckSource: "storage" | "url" | null = null;
+    progress?.onStepStart("pdf_fetch");
 
     if (record.pitchDeckPath) {
       try {
@@ -97,6 +103,7 @@ export class ExtractionService {
           `[Extraction] Generated signed deck URL ${this.redactUrl(deckUrl)}`,
         );
         pdfBuffer = await this.fetchPdfBuffer(deckUrl);
+        deckSource = "storage";
         this.logger.debug(
           `[Extraction] Downloaded PDF from pitchDeckPath | bytes=${pdfBuffer.byteLength}`,
         );
@@ -116,6 +123,7 @@ export class ExtractionService {
         );
         deckUrl = record.pitchDeckUrl;
         pdfBuffer = await this.fetchPdfBuffer(record.pitchDeckUrl);
+        deckSource = "url";
         this.logger.debug(
           `[Extraction] Downloaded PDF from pitchDeckUrl | bytes=${pdfBuffer.byteLength}`,
         );
@@ -129,6 +137,10 @@ export class ExtractionService {
     }
 
     if (!pdfBuffer) {
+      progress?.onStepFailed(
+        "pdf_fetch",
+        "Deck file unavailable after all fetch attempts",
+      );
       warnings.push("Deck file is unavailable; using startup form data only");
       this.logger.warn(
         `[Extraction] Deck unavailable after all fetch attempts for startup ${startupId}; using startup context fallback`,
@@ -147,11 +159,16 @@ export class ExtractionService {
       );
       return fallbackResult;
     }
+    progress?.onStepComplete("pdf_fetch", {
+      source: deckSource ?? "unknown",
+      bytes: pdfBuffer.byteLength,
+    });
 
     let source: ExtractionResult["source"] = "startup-context";
     let extractedText = "";
     let pageCount = 0;
 
+    progress?.onStepStart("text_extraction");
     try {
       this.logger.log(`[Extraction] Running pdf-parse text extraction for startup ${startupId}`);
       const pdfResult = await this.pdfTextExtractor.extractText(pdfBuffer);
@@ -163,19 +180,30 @@ export class ExtractionService {
         this.logger.log(
           `[Extraction] pdf-parse succeeded | pages=${pdfResult.pageCount} | chars=${pdfResult.text.length}`,
         );
+        progress?.onStepComplete("text_extraction", {
+          method: "pdf-parse",
+          pages: pdfResult.pageCount,
+          chars: pdfResult.text.length,
+        });
       } else {
         warnings.push("PDF appears scanned/image-only; switching to OCR");
         this.logger.warn(
           `[Extraction] pdf-parse returned no text | pages=${pdfResult.pageCount}; switching to OCR`,
+        );
+        progress?.onStepFailed(
+          "text_extraction",
+          "PDF parse returned no extractable text",
         );
       }
     } catch (error) {
       const message = this.asMessage(error);
       warnings.push(`pdf-parse failed: ${message}`);
       this.logger.warn(`[Extraction] pdf-parse failed: ${message}`);
+      progress?.onStepFailed("text_extraction", message);
     }
 
     if (!extractedText && deckUrl) {
+      progress?.onStepStart("ocr_fallback");
       try {
         this.logger.log(
           `[Extraction] Running OCR fallback for startup ${startupId} using ${this.redactUrl(deckUrl)}`,
@@ -187,10 +215,16 @@ export class ExtractionService {
         this.logger.log(
           `[Extraction] OCR succeeded | pages=${ocrResult.pages.length} | chars=${ocrResult.text.length}`,
         );
+        progress?.onStepComplete("ocr_fallback", {
+          method: "mistral-ocr",
+          pages: ocrResult.pages.length,
+          chars: ocrResult.text.length,
+        });
       } catch (error) {
         const message = this.asMessage(error);
         warnings.push(`Mistral OCR failed: ${message}`);
         this.logger.warn(`[Extraction] OCR failed: ${message}`);
+        progress?.onStepFailed("ocr_fallback", message);
       }
     }
 
@@ -206,7 +240,18 @@ export class ExtractionService {
     this.logger.debug(
       `[Extraction] Running field extraction | source=${source} | rawChars=${extractedText.length} | pageCount=${pageCount}`,
     );
-    const aiFields = await this.fieldExtractor.extractFields(extractedText, record);
+    progress?.onStepStart("field_extraction");
+    let aiFields: ExtractedFields;
+    try {
+      aiFields = await this.fieldExtractor.extractFields(extractedText, record);
+      progress?.onStepComplete("field_extraction", {
+        fieldsExtracted: this.collectExtractedFieldKeys(aiFields),
+        source,
+      });
+    } catch (error) {
+      progress?.onStepFailed("field_extraction", this.asMessage(error));
+      throw error;
+    }
 
     const result = this.buildResult(
       record,
@@ -457,5 +502,22 @@ export class ExtractionService {
     }
 
     lines.push(`${label}: ${String(value)}`);
+  }
+
+  private collectExtractedFieldKeys(fields: ExtractedFields): string[] {
+    return Object.entries(fields)
+      .filter(([, value]) => {
+        if (value === null || value === undefined) {
+          return false;
+        }
+        if (typeof value === "string") {
+          return value.trim().length > 0;
+        }
+        if (Array.isArray(value)) {
+          return value.length > 0;
+        }
+        return true;
+      })
+      .map(([key]) => key);
   }
 }

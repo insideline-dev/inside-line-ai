@@ -27,7 +27,19 @@ import { AdminEditTab } from "@/components/startup-view/AdminEditTab";
 import { AdminPipelineLivePanel } from "@/components/startup-view/AdminPipelineLivePanel";
 import {
   RefreshCw,
+  Download,
+  ChevronDown,
+  FileText,
+  BarChart2,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { downloadMemo, downloadReport } from "@/lib/pdf/download";
+import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
 import {
   useStartupControllerFindOne,
@@ -78,6 +90,7 @@ function unwrapApiResponse<T>(payload: unknown): T {
 
 function AdminReviewPage() {
   const { id } = Route.useParams();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [adminNotes, setAdminNotes] = useState("");
@@ -86,6 +99,7 @@ function AdminReviewPage() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showMatchDialog, setShowMatchDialog] = useState(false);
   const [reanalyzingSection, setReanalyzingSection] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
 
   const { data: startupResponse, isLoading } = useStartupControllerFindOne(id);
   const startup = startupResponse
@@ -265,24 +279,76 @@ function AdminReviewPage() {
     });
   };
 
+  const pdfData = evaluation
+    ? {
+        startup,
+        evaluation,
+        weights: stageWeights as Record<string, number> | null,
+        watermarkEmail: user?.email ?? null,
+      }
+    : null;
+
+  const handleDownload = async (type: "memo" | "report") => {
+    if (!pdfData) return;
+    if (!pdfData.watermarkEmail) {
+      toast.error("Unable to generate watermark", {
+        description: "User email is required for PDF watermarking.",
+      });
+      return;
+    }
+    setDownloading(true);
+    try {
+      if (type === "memo") await downloadMemo(pdfData);
+      else await downloadReport(pdfData);
+      toast.success(`${type === "memo" ? "Investment Memo" : "Analysis Report"} downloaded`);
+    } catch (e) {
+      toast.error("Failed to generate PDF", { description: (e as Error).message });
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <StartupHeader
         startup={startup}
         backLink="/admin"
         actions={
-          <Button
-            variant="outline"
-            onClick={() => reanalyzeMutation.mutate({ id })}
-            disabled={reanalyzeMutation.isPending}
-          >
-            {reanalyzeMutation.isPending ? (
-              <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <RefreshCw className="w-4 h-4 mr-2" />
+          <div className="flex gap-2">
+            {evaluation && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" disabled={downloading || !user?.email}>
+                    <Download className="w-4 h-4 mr-2" />
+                    Download
+                    <ChevronDown className="w-4 h-4 ml-1" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => handleDownload("memo")}>
+                    <FileText className="w-4 h-4 mr-2" />
+                    Download Memo
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleDownload("report")}>
+                    <BarChart2 className="w-4 h-4 mr-2" />
+                    Download Report
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
-            Re-evaluate
-          </Button>
+            <Button
+              variant="outline"
+              onClick={() => reanalyzeMutation.mutate({ id })}
+              disabled={reanalyzeMutation.isPending}
+            >
+              {reanalyzeMutation.isPending ? (
+                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <RefreshCw className="w-4 h-4 mr-2" />
+              )}
+              Re-evaluate
+            </Button>
+          </div>
         }
       />
 

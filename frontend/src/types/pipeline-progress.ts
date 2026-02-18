@@ -39,6 +39,7 @@ export interface PipelineAgentProgress {
   rawProviderError?: string;
   lastEvent?: PipelineAgentEventType;
   lastEventAt?: string;
+  dataSummary?: Record<string, unknown>;
 }
 
 export interface PipelinePhaseProgress {

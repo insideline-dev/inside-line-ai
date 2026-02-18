@@ -8,6 +8,7 @@ import { startup } from "../../startup/entities";
 import type { EvaluationFallbackReason } from "../interfaces/agent.interface";
 import type { EnrichmentResult } from "../interfaces/phase-results.interface";
 import { ModelPurpose, PipelinePhase } from "../interfaces/pipeline.interface";
+import type { PhaseProgressCallback } from "../interfaces/progress-callback.interface";
 import {
   ENRICHMENT_GAP_ANALYSIS_SYSTEM_PROMPT,
   ENRICHMENT_GAP_ANALYSIS_USER_PROMPT_TEMPLATE,
@@ -132,6 +133,7 @@ interface EnrichmentSynthesisResult {
   prompt: string;
   output: EnrichmentResult;
   usedFallback: boolean;
+  usedTextFallback: boolean;
   attempt: number;
   retryCount: number;
   error?: string;
@@ -143,6 +145,7 @@ interface SearchRunResult {
   formattedResults: string;
   responses: BraveSearchResponse[];
   totalResults: number;
+  queriesRun: number;
 }
 
 interface GroundingSourceCarrier {
@@ -155,6 +158,7 @@ interface GroundingSourceCarrier {
 
 export interface EnrichmentRunOptions {
   onAgentStart?: (agentKey: string) => void;
+  onStepProgress?: PhaseProgressCallback;
   onAgentComplete?: (payload: {
     agentKey: string;
     inputPrompt?: string;
@@ -205,33 +209,90 @@ export class EnrichmentService {
         PipelinePhase.EXTRACTION,
       );
 
-      const missingFields = this.identifyMissingFields(record);
-      const suspiciousFields = this.identifySuspiciousFields(record, extraction);
+      options?.onStepProgress?.onStepStart("gap_analysis");
+      let missingFields: string[] = [];
+      let suspiciousFields: string[] = [];
+      try {
+        missingFields = this.identifyMissingFields(record);
+        suspiciousFields = this.identifySuspiciousFields(record, extraction);
+        options?.onStepProgress?.onStepComplete("gap_analysis", {
+          missing: missingFields,
+          suspicious: suspiciousFields,
+        });
+      } catch (error) {
+        options?.onStepProgress?.onStepFailed(
+          "gap_analysis",
+          this.errorMessage(error),
+        );
+        throw error;
+      }
 
       this.logger.log(
         `[Enrichment] Gap analysis | missing=${missingFields.length} | suspicious=${suspiciousFields.length}`,
       );
 
       // Run Brave searches in parallel (if configured)
-      const searchResults = await this.runSearches(record);
+      options?.onStepProgress?.onStepStart("web_search");
+      let searchResults: SearchRunResult;
+      try {
+        searchResults = await this.runSearches(record);
+        options?.onStepProgress?.onStepComplete("web_search", {
+          queriesRun: searchResults.queriesRun,
+          totalResults: searchResults.totalResults,
+        });
+      } catch (error) {
+        options?.onStepProgress?.onStepFailed(
+          "web_search",
+          this.errorMessage(error),
+        );
+        throw error;
+      }
 
       // Synthesize via Gemini
-      const synthesis = await this.synthesize(
-        record,
-        extraction,
-        missingFields,
-        suspiciousFields,
-        searchResults,
-      );
+      options?.onStepProgress?.onStepStart("ai_synthesis");
+      let synthesis: EnrichmentSynthesisResult;
+      try {
+        synthesis = await this.synthesize(
+          record,
+          extraction,
+          missingFields,
+          suspiciousFields,
+          searchResults,
+        );
+        options?.onStepProgress?.onStepComplete("ai_synthesis", {
+          attempt: synthesis.attempt,
+          usedTextFallback: synthesis.usedTextFallback,
+        });
+      } catch (error) {
+        options?.onStepProgress?.onStepFailed(
+          "ai_synthesis",
+          this.errorMessage(error),
+        );
+        throw error;
+      }
       renderedPrompt = synthesis.prompt;
       const enrichmentResult = synthesis.output;
 
       // Apply DB writes
-      const dbFieldsUpdated = await this.applyDbWrites(record, enrichmentResult);
-      enrichmentResult.dbFieldsUpdated = dbFieldsUpdated;
+      options?.onStepProgress?.onStepStart("db_writes");
+      let dbWriteResult: { fieldsUpdated: string[]; foundersAdded: number };
+      try {
+        dbWriteResult = await this.applyDbWrites(record, enrichmentResult);
+        options?.onStepProgress?.onStepComplete("db_writes", {
+          fieldsUpdated: dbWriteResult.fieldsUpdated,
+          foundersAdded: dbWriteResult.foundersAdded,
+        });
+      } catch (error) {
+        options?.onStepProgress?.onStepFailed(
+          "db_writes",
+          this.errorMessage(error),
+        );
+        throw error;
+      }
+      enrichmentResult.dbFieldsUpdated = dbWriteResult.fieldsUpdated;
 
       this.logger.log(
-        `[Enrichment] Completed | enriched=${enrichmentResult.fieldsEnriched.length} | corrected=${enrichmentResult.fieldsCorrected.length} | stillMissing=${enrichmentResult.fieldsStillMissing.length} | dbUpdated=${dbFieldsUpdated.length}`,
+        `[Enrichment] Completed | enriched=${enrichmentResult.fieldsEnriched.length} | corrected=${enrichmentResult.fieldsCorrected.length} | stillMissing=${enrichmentResult.fieldsStillMissing.length} | dbUpdated=${dbWriteResult.fieldsUpdated.length}`,
       );
 
       options?.onAgentComplete?.({
@@ -305,6 +366,7 @@ export class EnrichmentService {
         formattedResults: "No web search results available (Brave Search not configured).",
         responses: [],
         totalResults: 0,
+        queriesRun: 0,
       };
     }
 
@@ -341,6 +403,7 @@ export class EnrichmentService {
       formattedResults: this.formatSearchResults(results),
       responses: results,
       totalResults,
+      queriesRun: queries.length,
     };
   }
 
@@ -433,6 +496,7 @@ export class EnrichmentService {
               dbFieldsUpdated: [],
             },
             usedFallback: false,
+            usedTextFallback: false,
             attempt,
             retryCount: Math.max(0, attempt - 1),
           };
@@ -462,6 +526,7 @@ export class EnrichmentService {
               dbFieldsUpdated: [],
             },
             usedFallback: false,
+            usedTextFallback: true,
             attempt,
             retryCount: Math.max(0, attempt - 1),
           };
@@ -499,6 +564,7 @@ export class EnrichmentService {
       prompt,
       output: this.buildEmptyResult(),
       usedFallback: true,
+      usedTextFallback: false,
       attempt: maxAttempts,
       retryCount: Math.max(0, maxAttempts - 1),
       fallbackReason: lastFallbackReason,
@@ -1453,11 +1519,12 @@ export class EnrichmentService {
   private async applyDbWrites(
     record: StartupRecord,
     enrichment: EnrichmentResult,
-  ): Promise<string[]> {
+  ): Promise<{ fieldsUpdated: string[]; foundersAdded: number }> {
     const correctionThreshold = this.aiConfig.getEnrichmentCorrectionThreshold();
     const gapFillThreshold = 0.3;
     const updates: Record<string, unknown> = {};
     const updatedFields: string[] = [];
+    let foundersAdded = 0;
 
     // Gap fills
     for (const { dbColumn, label } of GAP_FILLABLE_FIELDS) {
@@ -1519,12 +1586,16 @@ export class EnrichmentService {
       if (newMembers.length > 0) {
         updates.teamMembers = [...record.teamMembers, ...newMembers];
         updatedFields.push(`teamMembers (+${newMembers.length} discovered)`);
+        foundersAdded = newMembers.length;
       }
     }
 
     if (Object.keys(updates).length === 0) {
       this.logger.debug("[Enrichment] No DB updates to apply");
-      return [];
+      return {
+        fieldsUpdated: [],
+        foundersAdded: 0,
+      };
     }
 
     this.logger.log(`[Enrichment] Applying ${Object.keys(updates).length} DB updates`);
@@ -1533,7 +1604,10 @@ export class EnrichmentService {
       .set(updates)
       .where(eq(startup.id, record.id));
 
-    return updatedFields;
+    return {
+      fieldsUpdated: updatedFields,
+      foundersAdded,
+    };
   }
 
   private isGeminiModel(modelName: string): boolean {

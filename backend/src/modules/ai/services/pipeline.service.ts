@@ -453,6 +453,7 @@ export class PipelineService {
     fallbackReason?: EvaluationFallbackReason;
     rawProviderError?: string;
     lifecycleEvent?: "started" | "retrying" | "completed" | "failed" | "fallback";
+    dataSummary?: Record<string, unknown>;
   }): Promise<void> {
     await this.progressTracker.updateAgentProgress(params);
   }

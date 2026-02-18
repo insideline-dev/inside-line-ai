@@ -114,6 +114,7 @@ export interface AgentProgressEvent {
     rawProviderError?: string;
     lastEvent?: "started" | "retrying" | "completed" | "failed" | "fallback";
     lastEventAt?: string;
+    dataSummary?: Record<string, unknown>;
   };
 }
 

@@ -47,7 +47,6 @@ import {
   Handshake,
   DollarSign,
   Trophy,
-  ListChecks,
   type LucideIcon,
 } from "lucide-react";
 import { useAuth, useLogout } from "@/lib/auth";
@@ -85,9 +84,6 @@ const roleNavItems: Record<UserRole, NavItem[]> = {
     { title: "Conversations", url: "/admin/conversations", icon: MessageSquare },
     { title: "Scoring", url: "/admin/scoring", icon: Scale },
     { title: "Integrations", url: "/admin/integrations", icon: Link2 },
-    { title: "System Config", url: "/admin/config", icon: Settings },
-    { title: "Job Queue", url: "/admin/queue", icon: ListChecks },
-    { title: "Bulk Data", url: "/admin/bulk-data", icon: FileText },
   ],
   scout: [
     { title: "Dashboard", url: "/scout", icon: Binoculars },

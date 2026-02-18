@@ -919,6 +919,25 @@ describe("StartupService", () => {
   describe("adminRetryAgent", () => {
     it("should queue targeted retry for agent retry request", async () => {
       mockDb.limit.mockResolvedValueOnce([mockStartup]);
+      pipelineService.getPipelineStatus.mockResolvedValueOnce({
+        pipelineRunId: "run-existing",
+        startupId: mockStartupId,
+        userId: mockUserId,
+        status: PipelineStatus.COMPLETED,
+        quality: "standard",
+        currentPhase: PipelinePhase.SYNTHESIS,
+        phases: {} as any,
+        results: {},
+        retryCounts: {},
+        telemetry: {
+          startedAt: new Date().toISOString(),
+          totalTokens: { input: 0, output: 0 },
+          phases: {} as any,
+          agents: {},
+        },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      } as unknown as PipelineState);
 
       const result = await service.adminRetryAgent(mockStartupId, mockUserId, {
         phase: "evaluation" as any,
@@ -934,7 +953,73 @@ describe("StartupService", () => {
           agentKey: "market",
         },
       );
+      expect(result.mode).toBe("agent_retry");
+      expect(pipelineService.startPipeline).not.toHaveBeenCalled();
       expect(pipelineFeedbackService.record).toHaveBeenCalledTimes(1);
+    });
+
+    it("falls back to full reanalysis when pipeline state is missing", async () => {
+      mockDb.limit.mockResolvedValueOnce([mockStartup]);
+      pipelineService.getPipelineStatus.mockResolvedValueOnce(null);
+
+      const result = await service.adminRetryAgent(mockStartupId, mockUserId, {
+        phase: "evaluation" as any,
+        agent: "market",
+        feedback: "Re-check TAM assumptions using current benchmarks.",
+      });
+
+      expect(result.accepted).toBe(true);
+      expect(result.mode).toBe("full_reanalysis_fallback");
+      expect(pipelineService.retryAgent).not.toHaveBeenCalled();
+      expect(pipelineService.startPipeline).toHaveBeenCalledWith(
+        mockStartupId,
+        mockUserId,
+      );
+    });
+
+    it("accepts competitor as a valid research agent", async () => {
+      mockDb.limit.mockResolvedValueOnce([mockStartup]);
+      pipelineService.getPipelineStatus.mockResolvedValueOnce({
+        pipelineRunId: "run-existing",
+        startupId: mockStartupId,
+        userId: mockUserId,
+        status: PipelineStatus.COMPLETED,
+        quality: "standard",
+        currentPhase: PipelinePhase.SYNTHESIS,
+        phases: {
+          [PipelinePhase.EXTRACTION]: { status: "completed" as any },
+          [PipelinePhase.ENRICHMENT]: { status: "completed" as any },
+          [PipelinePhase.SCRAPING]: { status: "completed" as any },
+          [PipelinePhase.RESEARCH]: { status: "completed" as any },
+          [PipelinePhase.EVALUATION]: { status: "completed" as any },
+          [PipelinePhase.SYNTHESIS]: { status: "completed" as any },
+        } as any,
+        results: {},
+        retryCounts: {},
+        telemetry: {
+          startedAt: new Date().toISOString(),
+          totalTokens: { input: 0, output: 0 },
+          phases: {} as any,
+          agents: {},
+        },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      } as unknown as PipelineState);
+
+      const result = await service.adminRetryAgent(mockStartupId, mockUserId, {
+        phase: "research" as any,
+        agent: "competitor",
+      });
+
+      expect(result.accepted).toBe(true);
+      expect(result.mode).toBe("agent_retry");
+      expect(pipelineService.retryAgent).toHaveBeenCalledWith(
+        mockStartupId,
+        {
+          phase: "research",
+          agentKey: "competitor",
+        },
+      );
     });
 
     it("should reject unsupported phase-agent combinations", async () => {

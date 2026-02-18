@@ -723,6 +723,12 @@ export class PipelineService {
     currentPhase: PipelinePhase,
   ): Promise<string> {
     const nextRunId = randomUUID();
+    const initialPhaseStatuses = Object.fromEntries(
+      Object.entries(state.phases).map(([phase, value]) => [
+        phase,
+        value.status,
+      ]),
+    ) as Partial<Record<PipelinePhase, PhaseStatus>>;
 
     if (state.status === PipelineStatus.RUNNING) {
       await this.updatePipelineRunStatus(
@@ -745,6 +751,8 @@ export class PipelineService {
       userId: state.userId,
       pipelineRunId: nextRunId,
       phases: this.phaseTransition.getConfig().phases.map((entry) => entry.phase),
+      initialPhaseStatuses,
+      currentPhase,
     });
     await this.progressTracker.setPipelineStatus({
       startupId: state.startupId,

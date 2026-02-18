@@ -84,15 +84,18 @@ export class SynthesisService {
       evaluation,
       stageWeights: normalizedWeights as unknown as Record<string, number>,
     });
+    const synthesizedOutput = generated.usedFallback
+      ? await this.reusePreviousNarrativeOnFallback(startupId, generated.output)
+      : generated.output;
 
     const overallScore = this.scoreComputation.computeWeightedScore(sectionScores, normalizedWeights);
 
     this.logger.log(
-      `[Synthesis] Agent output | Strengths: ${generated.output.strengths.length} | Concerns: ${generated.output.concerns.length}`,
+      `[Synthesis] Agent output | Strengths: ${synthesizedOutput.strengths.length} | Concerns: ${synthesizedOutput.concerns.length}`,
     );
 
     const synthesis = this.buildSynthesisResult(
-      generated.output,
+      synthesizedOutput,
       sectionScores,
       overallScore,
       evaluation,
@@ -441,6 +444,103 @@ export class SynthesisService {
       ...researchSources.map((source) => ({ ...source })),
       ...evaluationAgentSources,
     ];
+  }
+
+  private async reusePreviousNarrativeOnFallback(
+    startupId: string,
+    fallbackOutput: SynthesisAgentOutput,
+  ): Promise<SynthesisAgentOutput> {
+    try {
+      const [existing] = await this.drizzle.db
+        .select({
+          executiveSummary: startupEvaluation.executiveSummary,
+          keyStrengths: startupEvaluation.keyStrengths,
+          keyRisks: startupEvaluation.keyRisks,
+          recommendations: startupEvaluation.recommendations,
+          investorMemo: startupEvaluation.investorMemo,
+          founderReport: startupEvaluation.founderReport,
+          dataConfidenceNotes: startupEvaluation.dataConfidenceNotes,
+        })
+        .from(startupEvaluation)
+        .where(eq(startupEvaluation.startupId, startupId))
+        .limit(1);
+
+      if (!existing) {
+        return fallbackOutput;
+      }
+
+      const executiveSummary =
+        typeof existing.executiveSummary === "string"
+          ? existing.executiveSummary.trim()
+          : "";
+      const strengths = this.toStringArray(existing.keyStrengths);
+      const risks = this.toStringArray(existing.keyRisks);
+      const recommendations = this.toStringArray(existing.recommendations);
+      const investorMemo = this.toStringValue(existing.investorMemo);
+      const founderReport = this.toStringValue(existing.founderReport);
+
+      const hasReusableNarrative =
+        executiveSummary.length > 0 ||
+        strengths.length > 0 ||
+        risks.length > 0 ||
+        recommendations.length > 0 ||
+        Boolean(investorMemo) ||
+        Boolean(founderReport);
+
+      if (!hasReusableNarrative) {
+        return fallbackOutput;
+      }
+
+      const previousConfidenceNotes =
+        typeof existing.dataConfidenceNotes === "string"
+          ? existing.dataConfidenceNotes.trim()
+          : "";
+      const preservationNote =
+        "Latest synthesis attempt returned empty structured output; previous narrative was preserved.";
+
+      return {
+        ...fallbackOutput,
+        executiveSummary:
+          executiveSummary.length > 0
+            ? executiveSummary
+            : fallbackOutput.executiveSummary,
+        strengths:
+          strengths.length > 0 ? strengths : fallbackOutput.strengths,
+        concerns: risks.length > 0 ? risks : fallbackOutput.concerns,
+        nextSteps:
+          recommendations.length > 0
+            ? recommendations
+            : fallbackOutput.nextSteps,
+        investorMemo: investorMemo ?? fallbackOutput.investorMemo,
+        founderReport: founderReport ?? fallbackOutput.founderReport,
+        dataConfidenceNotes: [previousConfidenceNotes, preservationNote]
+          .filter((item) => item.length > 0)
+          .join(" "),
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `[Synthesis] Unable to preserve previous narrative after fallback: ${message}`,
+      );
+      return fallbackOutput;
+    }
+  }
+
+  private toStringArray(value: unknown): string[] {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    return value
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0);
+  }
+
+  private toStringValue(value: unknown): string | null {
+    return typeof value === "string" && value.trim().length > 0
+      ? value.trim()
+      : null;
   }
 
   private async performPostSynthesisOps(

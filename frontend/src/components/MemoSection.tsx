@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { TrendingUp, TrendingDown, Minus, Info, RefreshCw, MessageSquare, ChevronDown, ChevronUp } from "lucide-react";
+import { toast } from "sonner";
 import type { LucideIcon } from "lucide-react";
 
 interface AdminFeedbackProps {
@@ -94,8 +95,15 @@ export function MemoSection({
   const TrendIcon = trend === "up" ? TrendingUp : trend === "down" ? TrendingDown : Minus;
 
   const handleReanalyze = async () => {
-    if (adminFeedback && feedbackComment.trim()) {
-      await adminFeedback.onReanalyze(adminFeedback.sectionKey, adminFeedback.evaluationId, feedbackComment.trim());
+    const trimmed = feedbackComment.trim();
+    if (adminFeedback && trimmed) {
+      if (trimmed.length < 10) {
+        toast.error("Feedback is too short", {
+          description: "Please provide at least 10 characters of guidance.",
+        });
+        return;
+      }
+      await adminFeedback.onReanalyze(adminFeedback.sectionKey, adminFeedback.evaluationId, trimmed);
       setShowFeedback(false);
     }
   };
@@ -170,7 +178,7 @@ export function MemoSection({
               <Button
                 size="sm"
                 onClick={handleReanalyze}
-                disabled={!feedbackComment.trim() || adminFeedback.isReanalyzing}
+                disabled={feedbackComment.trim().length < 10 || adminFeedback.isReanalyzing}
                 data-testid={`button-reanalyze-${adminFeedback.sectionKey}`}
               >
                 {adminFeedback.isReanalyzing ? (

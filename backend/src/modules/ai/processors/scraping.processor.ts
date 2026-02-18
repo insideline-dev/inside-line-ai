@@ -17,6 +17,7 @@ import {
 } from "../../../queue/processors/base.processor";
 import { NotificationGateway } from "../../../notification/notification.gateway";
 import { PipelinePhase } from "../interfaces/pipeline.interface";
+import { PipelineAgentTraceService } from "../services/pipeline-agent-trace.service";
 import { PipelineStateService } from "../services/pipeline-state.service";
 import { PipelineService } from "../services/pipeline.service";
 import { ScrapingService } from "../services/scraping.service";
@@ -35,6 +36,7 @@ export class ScrapingProcessor
     private pipelineState: PipelineStateService,
     private pipelineService: PipelineService,
     private notificationGateway: NotificationGateway,
+    private pipelineAgentTrace: PipelineAgentTraceService,
   ) {
     const redisUrl = config.get<string>("REDIS_URL", "redis://localhost:6379");
     const queuePrefix = config.get<string>("QUEUE_PREFIX");
@@ -64,7 +66,7 @@ export class ScrapingProcessor
   protected async process(
     job: Job<AiScrapingJobData>,
   ): Promise<Omit<AiScrapingJobResult, "jobId" | "duration" | "success">> {
-    const { startupId } = job.data;
+    const { startupId, userId, pipelineRunId } = job.data;
 
     if (job.data.type !== "ai_scraping") {
       throw new Error("Invalid job type for scraping processor");
@@ -77,7 +79,98 @@ export class ScrapingProcessor
       pipelineState: this.pipelineState,
       pipelineService: this.pipelineService,
       notificationGateway: this.notificationGateway,
-      run: () => this.scrapingService.run(startupId),
+      run: () =>
+        this.scrapingService.run(startupId, {
+          onAgentStart: (agentKey) => {
+            this.pipelineService
+              .onAgentProgress({
+                startupId,
+                userId,
+                pipelineRunId,
+                phase: PipelinePhase.SCRAPING,
+                key: agentKey,
+                status: "running",
+                progress: 0,
+                attempt: 1,
+                retryCount: 0,
+                lifecycleEvent: "started",
+              })
+              .catch((progressError) => {
+                this.logger.warn(
+                  `Failed to mark scraping agent running for ${agentKey}: ${
+                    progressError instanceof Error
+                      ? progressError.message
+                      : String(progressError)
+                  }`,
+                );
+              });
+          },
+          onAgentComplete: ({
+            agentKey,
+            status,
+            error,
+            inputPrompt,
+            outputJson,
+            outputText,
+            attempt,
+            retryCount,
+          }) => {
+            const resolvedAttempt = Math.max(1, attempt ?? 1);
+            const resolvedRetryCount = Math.max(
+              0,
+              retryCount ?? resolvedAttempt - 1,
+            );
+            const isFailed = status === "failed";
+
+            this.pipelineService
+              .onAgentProgress({
+                startupId,
+                userId,
+                pipelineRunId,
+                phase: PipelinePhase.SCRAPING,
+                key: agentKey,
+                status: isFailed ? "failed" : "completed",
+                progress: isFailed ? 0 : 100,
+                error,
+                attempt: resolvedAttempt,
+                retryCount: resolvedRetryCount,
+                lifecycleEvent: isFailed ? "failed" : "completed",
+              })
+              .catch((progressError) => {
+                this.logger.warn(
+                  `Failed to update scraping agent progress for ${agentKey}: ${
+                    progressError instanceof Error
+                      ? progressError.message
+                      : String(progressError)
+                  }`,
+                );
+              });
+
+            this.pipelineAgentTrace
+              .recordRun({
+                startupId,
+                pipelineRunId,
+                phase: PipelinePhase.SCRAPING,
+                agentKey,
+                status: isFailed ? "failed" : "completed",
+                error,
+                inputPrompt,
+                outputJson,
+                outputText,
+                attempt: resolvedAttempt,
+                retryCount: resolvedRetryCount,
+              })
+              .catch((traceError) => {
+                this.logger.warn(
+                  `Failed to persist scraping trace for ${agentKey}: ${
+                    traceError instanceof Error
+                      ? traceError.message
+                      : String(traceError)
+                  }`,
+                );
+              });
+          },
+        }),
     });
 
     return {

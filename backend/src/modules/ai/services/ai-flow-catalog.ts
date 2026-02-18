@@ -50,8 +50,9 @@ export const AI_FLOW_DEFINITIONS: AiFlowDefinition[] = [
       {
         id: "stage_2",
         title: "Stage 2: Data Extraction",
-        description: "Parse pitch materials and scrape the website on top of gap-filled context.",
-        nodeIds: ["extract_fields", "scrape_website"],
+        description:
+          "Parse pitch materials, scrape the website, and enrich LinkedIn team context.",
+        nodeIds: ["extract_fields", "scrape_website", "linkedin_enrichment"],
       },
       {
         id: "stage_3",
@@ -122,12 +123,22 @@ export const AI_FLOW_DEFINITIONS: AiFlowDefinition[] = [
         outputs: ["Website pages", "Content snippets"],
       },
       {
+        id: "linkedin_enrichment",
+        label: "LinkedIn Enrichment",
+        description:
+          "Discover and enrich founder/team profiles from LinkedIn and company context.",
+        kind: "system",
+        promptKeys: [],
+        inputs: ["Extracted founders", "Website team links", "Company metadata"],
+        outputs: ["LinkedIn profile snapshots", "Enriched team context"],
+      },
+      {
         id: "research_orchestrator",
         label: "Research Orchestrator",
         description: "Coordinates all research agents and aggregates outputs.",
         kind: "system",
         promptKeys: [],
-        inputs: ["Gap fill", "Extraction", "Scraping context"],
+        inputs: ["Gap fill", "Extraction", "Scraping context", "LinkedIn context"],
         outputs: ["Research phase result"],
       },
       {
@@ -305,9 +316,13 @@ export const AI_FLOW_DEFINITIONS: AiFlowDefinition[] = [
     edges: [
       { from: "gap_fill_hybrid", to: "extract_fields" },
       { from: "gap_fill_hybrid", to: "scrape_website" },
+      { from: "gap_fill_hybrid", to: "linkedin_enrichment" },
       { from: "gap_fill_hybrid", to: "research_orchestrator" },
       { from: "extract_fields", to: "research_orchestrator" },
       { from: "scrape_website", to: "research_orchestrator" },
+      { from: "extract_fields", to: "linkedin_enrichment" },
+      { from: "scrape_website", to: "linkedin_enrichment" },
+      { from: "linkedin_enrichment", to: "research_orchestrator" },
       { from: "research_orchestrator", to: "research_team" },
       { from: "research_orchestrator", to: "research_market" },
       { from: "research_orchestrator", to: "research_product" },

@@ -9,6 +9,7 @@ import { startup } from "../../startup/entities";
 import type {
   EnrichedTeamMember,
   EnrichmentResult,
+  ExtractionResult,
   ScrapeError,
   ScrapingResult,
   WebsiteScrapedData,
@@ -30,6 +31,25 @@ interface TeamBioInput {
   role: string;
   bio: string;
   imageUrl?: string;
+}
+
+export const SCRAPING_AGENT_WEBSITE_KEY = "scrape_website";
+export const SCRAPING_AGENT_LINKEDIN_KEY = "linkedin_enrichment";
+
+export interface ScrapingAgentCompletionPayload {
+  agentKey: string;
+  status: "completed" | "failed";
+  inputPrompt?: string;
+  outputText?: string;
+  outputJson?: unknown;
+  error?: string;
+  attempt?: number;
+  retryCount?: number;
+}
+
+export interface ScrapingRunOptions {
+  onAgentStart?: (agentKey: string) => void;
+  onAgentComplete?: (payload: ScrapingAgentCompletionPayload) => void;
 }
 
 @Injectable()
@@ -55,7 +75,7 @@ export class ScrapingService {
       ) ?? "logs/ai-scraping-debug.jsonl";
   }
 
-  async run(startupId: string): Promise<ScrapingResult> {
+  async run(startupId: string, options?: ScrapingRunOptions): Promise<ScrapingResult> {
     this.logger.log(`[Scraping] Starting scraping phase for startup ${startupId}`);
 
     const [record] = await this.drizzle.db
@@ -70,55 +90,122 @@ export class ScrapingService {
 
     // Load enrichment result to use corrected/discovered data
     const enrichment = await this.loadEnrichmentResult(startupId);
+    const extraction = await this.loadExtractionResult(startupId);
     const effectiveWebsite = enrichment?.website?.value ?? record.website;
 
     const scrapeErrors: ScrapeError[] = [];
     const submittedTeamMembers = this.mapTeamMembers(record.teamMembers ?? []);
+    const extractionFounderMembers = this.mapFounderNames(
+      extraction?.founderNames ?? [],
+    );
     this.logger.debug(
-      `[Scraping] Loaded startup context | website=${effectiveWebsite ?? "none"} | submittedTeamMembers=${submittedTeamMembers.length}`,
+      `[Scraping] Loaded startup context | website=${effectiveWebsite ?? "none"} | submittedTeamMembers=${submittedTeamMembers.length} | extractionFounders=${extractionFounderMembers.length}`,
     );
 
+    options?.onAgentStart?.(SCRAPING_AGENT_WEBSITE_KEY);
+    const websiteErrorCountBefore = scrapeErrors.length;
     const website = await this.scrapeWebsite(effectiveWebsite, scrapeErrors);
+    const websiteErrors = scrapeErrors
+      .slice(websiteErrorCountBefore)
+      .filter((error) => error.type === "website");
+    const websiteFailed = Boolean(effectiveWebsite) && !website && websiteErrors.length > 0;
+    const websiteOutput = {
+      requestedUrl: effectiveWebsite ?? null,
+      resolvedUrl: website?.url ?? null,
+      scraped: Boolean(website),
+      skipped: !effectiveWebsite,
+      pageCount: website?.metadata.pageCount ?? 0,
+      linkCount: website?.links.length ?? 0,
+      teamBioCount: website?.teamBios.length ?? 0,
+      error: websiteFailed
+        ? (websiteErrors[websiteErrors.length - 1]?.error ?? "Website scraping failed")
+        : undefined,
+    };
+    options?.onAgentComplete?.({
+      agentKey: SCRAPING_AGENT_WEBSITE_KEY,
+      status: websiteFailed ? "failed" : "completed",
+      error: websiteFailed ? websiteOutput.error : undefined,
+      outputText: websiteFailed
+        ? `Website scraping failed for ${effectiveWebsite}`
+        : !effectiveWebsite
+          ? "Website scraping skipped: startup website URL is missing."
+          : `Website scraping completed for ${website?.url ?? effectiveWebsite}`,
+      outputJson: websiteOutput,
+      attempt: 1,
+      retryCount: 0,
+    });
+
     const discoveredWebsiteLeaders = this.extractLeadershipCandidates(
       website?.teamBios ?? [],
     );
     const discoveredWebsiteLinkedinMembers = this.extractLinkedinCandidatesFromWebsiteLinks(
       website?.links ?? [],
     );
-    const discoveredLinkedinLeaders = await this.discoverCompanyLinkedinLeadership(
-      record.name,
-      [
-        ...submittedTeamMembers,
-        ...discoveredWebsiteLeaders,
-        ...discoveredWebsiteLinkedinMembers,
-      ],
-      effectiveWebsite ?? undefined,
-    );
-    const enrichmentFounders: TeamMemberInput[] = (enrichment?.discoveredFounders ?? [])
-      .filter((f) => f.confidence >= 0.5)
-      .map((f) => ({
-        name: f.name,
-        role: f.role,
-        linkedinUrl: f.linkedinUrl,
-      }));
-    const teamMembers = this.mergeTeamMembers(
-      submittedTeamMembers,
-      discoveredWebsiteLeaders,
-      discoveredWebsiteLinkedinMembers,
-      discoveredLinkedinLeaders,
-      enrichmentFounders,
-    );
-    this.logger.log(
-      `[Scraping] Team member seed built | submitted=${submittedTeamMembers.length} | discoveredWebsiteLeaders=${discoveredWebsiteLeaders.length} | discoveredWebsiteLinkedin=${discoveredWebsiteLinkedinMembers.length} | discoveredLinkedinLeaders=${discoveredLinkedinLeaders.length} | final=${teamMembers.length}`,
-    );
+    options?.onAgentStart?.(SCRAPING_AGENT_LINKEDIN_KEY);
 
-    const enrichedTeam = await this.enrichTeamMembers(
-      record.userId,
-      teamMembers,
-      record.name,
-      record.website,
-      scrapeErrors,
-    );
+    let discoveredLinkedinLeaders: TeamMemberInput[] = [];
+    let teamMembers: TeamMemberInput[] = [];
+    let enrichedTeam: EnrichedTeamMember[] = [];
+
+    try {
+      discoveredLinkedinLeaders = await this.discoverCompanyLinkedinLeadership(
+        record.name,
+        [
+          ...submittedTeamMembers,
+          ...discoveredWebsiteLeaders,
+          ...discoveredWebsiteLinkedinMembers,
+        ],
+        effectiveWebsite ?? undefined,
+      );
+      const enrichmentFounderMembers: TeamMemberInput[] =
+        (enrichment?.discoveredFounders ?? [])
+          .filter((founder) => founder.confidence >= 0.5)
+          .map((founder) => ({
+            name: founder.name,
+            role: founder.role,
+            linkedinUrl: founder.linkedinUrl,
+          }));
+      teamMembers = this.mergeTeamMembers(
+        submittedTeamMembers,
+        extractionFounderMembers,
+        discoveredWebsiteLeaders,
+        discoveredWebsiteLinkedinMembers,
+        discoveredLinkedinLeaders,
+        enrichmentFounderMembers,
+      );
+      this.logger.log(
+        `[Scraping] Team member seed built | submitted=${submittedTeamMembers.length} | extractionFounders=${extractionFounderMembers.length} | enrichmentFounders=${enrichmentFounderMembers.length} | discoveredWebsiteLeaders=${discoveredWebsiteLeaders.length} | discoveredWebsiteLinkedin=${discoveredWebsiteLinkedinMembers.length} | discoveredLinkedinLeaders=${discoveredLinkedinLeaders.length} | final=${teamMembers.length}`,
+      );
+
+      enrichedTeam = await this.enrichTeamMembers(
+        record.userId,
+        teamMembers,
+        record.name,
+        record.website,
+        scrapeErrors,
+      );
+    } catch (error) {
+      const message = this.asMessage(error);
+      options?.onAgentComplete?.({
+        agentKey: SCRAPING_AGENT_LINKEDIN_KEY,
+        status: "failed",
+        error: message,
+        outputText: `LinkedIn enrichment failed for ${record.name}: ${message}`,
+        outputJson: {
+          companyName: record.name,
+          submittedTeamMembers: submittedTeamMembers.length,
+          extractionFounderMembers: extractionFounderMembers.length,
+          enrichmentFounderMembers: (enrichment?.discoveredFounders ?? []).length,
+          discoveredWebsiteLeaders: discoveredWebsiteLeaders.length,
+          discoveredWebsiteLinkedinMembers: discoveredWebsiteLinkedinMembers.length,
+          discoveredLinkedinLeaders: discoveredLinkedinLeaders.length,
+        },
+        attempt: 1,
+        retryCount: 0,
+      });
+      throw error;
+    }
+
     const submittedNames = new Set(
       submittedTeamMembers.map((member) => member.name.trim().toLowerCase()),
     );
@@ -135,6 +222,36 @@ export class ScrapingService {
         return true;
       }
       return member.enrichmentStatus === "success";
+    });
+    const linkedinStatuses = enrichedTeam.reduce<Record<string, number>>((acc, member) => {
+      const key = member.enrichmentStatus ?? "unknown";
+      acc[key] = (acc[key] ?? 0) + 1;
+      return acc;
+    }, {});
+    const linkedinErrors = scrapeErrors
+      .filter((error) => error.type === "linkedin")
+      .map((error) => `${error.target}: ${error.error}`);
+    options?.onAgentComplete?.({
+      agentKey: SCRAPING_AGENT_LINKEDIN_KEY,
+      status: "completed",
+      outputText: `LinkedIn enrichment completed | requested=${teamMembers.length} | verified=${verifiedTeamMembers.length} | dropped=${droppedUnverifiedTeamMembers.length}`,
+      outputJson: {
+        companyName: record.name,
+        submittedTeamMembers: submittedTeamMembers.length,
+        extractionFounderMembers: extractionFounderMembers.length,
+        enrichmentFounderMembers: (enrichment?.discoveredFounders ?? []).length,
+        discoveredWebsiteLeaders: discoveredWebsiteLeaders.length,
+        discoveredWebsiteLinkedinMembers: discoveredWebsiteLinkedinMembers.length,
+        discoveredLinkedinLeaders: discoveredLinkedinLeaders.length,
+        requestedTeamMembers: teamMembers.length,
+        enrichedTeamMembers: enrichedTeam.length,
+        verifiedTeamMembers: verifiedTeamMembers.length,
+        droppedUnverifiedTeamMembers: droppedUnverifiedTeamMembers.length,
+        enrichmentStatuses: linkedinStatuses,
+        errors: linkedinErrors,
+      },
+      attempt: 1,
+      retryCount: 0,
     });
 
     const result: ScrapingResult = {
@@ -177,6 +294,14 @@ export class ScrapingService {
       startupName: record.name,
       startupWebsite: record.website ?? null,
       submittedTeamMembers,
+      extractionFounderTeamMembers: extractionFounderMembers,
+      enrichmentFounderTeamMembers: (enrichment?.discoveredFounders ?? [])
+        .filter((founder) => founder.confidence >= 0.5)
+        .map((founder) => ({
+          name: founder.name,
+          role: founder.role,
+          linkedinUrl: founder.linkedinUrl,
+        })),
       discoveredWebsiteLeadershipTeamMembers: discoveredWebsiteLeaders,
       discoveredWebsiteLinkedinTeamMembers: discoveredWebsiteLinkedinMembers,
       discoveredLinkedinLeadershipTeamMembers: discoveredLinkedinLeaders,
@@ -223,6 +348,16 @@ export class ScrapingService {
     }));
   }
 
+  private mapFounderNames(founderNames: string[]): TeamMemberInput[] {
+    return founderNames
+      .map((founder) => founder.trim())
+      .filter((founder) => founder.length > 0)
+      .map((founder) => ({
+        name: founder,
+        role: "Founder",
+      }));
+  }
+
   private extractLeadershipCandidates(teamBios: TeamBioInput[]): TeamMemberInput[] {
     const leadershipRolePattern =
       /\b(founder|co[\s-]?founder|chief|ceo|cto|coo|cfo|cmo|cpo|president|vice president|vp|head|director|managing director|general manager|partner)\b/i;
@@ -249,6 +384,7 @@ export class ScrapingService {
 
   private mergeTeamMembers(
     submitted: TeamMemberInput[],
+    discoveredFromExtraction: TeamMemberInput[],
     discoveredFromWebsite: TeamMemberInput[],
     discoveredFromWebsiteLinkedin: TeamMemberInput[],
     discoveredFromLinkedin: TeamMemberInput[],
@@ -273,6 +409,7 @@ export class ScrapingService {
     };
 
     submitted.forEach(upsert);
+    discoveredFromExtraction.forEach(upsert);
     discoveredFromWebsite.forEach(upsert);
     discoveredFromWebsiteLinkedin.forEach(upsert);
     discoveredFromLinkedin.forEach(upsert);
@@ -708,6 +845,15 @@ export class ScrapingService {
     if (!this.pipelineState) return null;
     try {
       return await this.pipelineState.getPhaseResult(startupId, PipelinePhase.ENRICHMENT);
+    } catch {
+      return null;
+    }
+  }
+
+  private async loadExtractionResult(startupId: string): Promise<ExtractionResult | null> {
+    if (!this.pipelineState) return null;
+    try {
+      return await this.pipelineState.getPhaseResult(startupId, PipelinePhase.EXTRACTION);
     } catch {
       return null;
     }

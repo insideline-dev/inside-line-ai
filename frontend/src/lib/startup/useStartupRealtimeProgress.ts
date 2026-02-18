@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   getStartupControllerGetProgressQueryKey,
+  getStartupControllerFindOneQueryKey,
   useStartupControllerGetProgress,
 } from "@/api/generated/startup/startup";
 import {
@@ -157,7 +158,28 @@ function normalizeTerminalAgentStates(progress: PipelineProgressData): void {
   }
 }
 
+function normalizeCompletedPipelinePhases(progress: PipelineProgressData): void {
+  if (progress.pipelineStatus !== "completed") {
+    return;
+  }
+
+  const now = new Date().toISOString();
+  for (const phase of Object.values(progress.phases)) {
+    if (isTerminalPhaseStatus(phase.status)) {
+      phase.progress = calculatePhaseProgress(phase);
+      continue;
+    }
+
+    phase.status = "completed";
+    phase.startedAt = phase.startedAt ?? now;
+    phase.completedAt = phase.completedAt ?? now;
+    delete phase.error;
+    phase.progress = 100;
+  }
+}
+
 function recomputeProgress(progress: PipelineProgressData): PipelineProgressData {
+  normalizeCompletedPipelinePhases(progress);
   normalizeTerminalAgentStates(progress);
 
   const phaseEntries = Object.entries(progress.phases);
@@ -365,6 +387,8 @@ export function useStartupRealtimeProgress(
           return recomputeProgress(next);
         }),
       );
+      queryClient.invalidateQueries({ queryKey });
+      if (id) queryClient.invalidateQueries({ queryKey: getStartupControllerFindOneQueryKey(id) });
     },
     onPipelineFailed: (data: PipelineStatusEvent) => {
       if (!queryKey) return;
@@ -384,6 +408,8 @@ export function useStartupRealtimeProgress(
           return recomputeProgress(next);
         }),
       );
+      queryClient.invalidateQueries({ queryKey });
+      if (id) queryClient.invalidateQueries({ queryKey: getStartupControllerFindOneQueryKey(id) });
     },
     onPipelineCancelled: (data: PipelineStatusEvent) => {
       if (!queryKey) return;
@@ -403,6 +429,8 @@ export function useStartupRealtimeProgress(
           return recomputeProgress(next);
         }),
       );
+      queryClient.invalidateQueries({ queryKey });
+      if (id) queryClient.invalidateQueries({ queryKey: getStartupControllerFindOneQueryKey(id) });
     },
     onPhaseUpdate: (data: PhaseEvent) => {
       if (!queryKey) return;

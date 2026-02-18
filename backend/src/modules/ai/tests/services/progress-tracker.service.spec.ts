@@ -81,6 +81,33 @@ describe("ProgressTrackerService", () => {
     );
   });
 
+  it("seeds initial phase statuses for manual reruns", async () => {
+    const progress = await service.initProgress({
+      startupId: "startup-1",
+      userId: "user-1",
+      pipelineRunId: "run-rerun-1",
+      phases: Object.values(PipelinePhase),
+      currentPhase: PipelinePhase.EVALUATION,
+      initialPhaseStatuses: {
+        [PipelinePhase.ENRICHMENT]: PhaseStatus.COMPLETED,
+        [PipelinePhase.EXTRACTION]: PhaseStatus.COMPLETED,
+        [PipelinePhase.SCRAPING]: PhaseStatus.COMPLETED,
+        [PipelinePhase.RESEARCH]: PhaseStatus.COMPLETED,
+        [PipelinePhase.EVALUATION]: PhaseStatus.PENDING,
+        [PipelinePhase.SYNTHESIS]: PhaseStatus.PENDING,
+      },
+    });
+
+    expect(progress.currentPhase).toBe(PipelinePhase.EVALUATION);
+    expect(progress.phases.enrichment.status).toBe(PhaseStatus.COMPLETED);
+    expect(progress.phases.extraction.status).toBe(PhaseStatus.COMPLETED);
+    expect(progress.phases.scraping.status).toBe(PhaseStatus.COMPLETED);
+    expect(progress.phases.research.status).toBe(PhaseStatus.COMPLETED);
+    expect(progress.phases.evaluation.status).toBe(PhaseStatus.PENDING);
+    expect(progress.phases.synthesis.status).toBe(PhaseStatus.PENDING);
+    expect(progress.overallProgress).toBe(67);
+  });
+
   it("updates phase progress and computes overall percentage", async () => {
     await service.initProgress({
       startupId: "startup-1",

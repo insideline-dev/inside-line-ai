@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { Card, CardContent } from "@/components/ui/card";
@@ -75,6 +75,32 @@ interface StageScoringWeight {
   weights: ScoringWeights;
 }
 
+type AdminStartupTab =
+  | "pipeline-live"
+  | "summary"
+  | "memo"
+  | "product"
+  | "team"
+  | "competitors"
+  | "sources"
+  | "edit"
+  | "raw";
+
+interface RetryTrackingState {
+  phase: "research" | "evaluation";
+  agentKey: string;
+  requestedAt: string;
+}
+
+function formatLabel(value: string): string {
+  return value
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^\w/, (char) => char.toUpperCase());
+}
+
 function unwrapApiResponse<T>(payload: unknown): T {
   if (
     payload &&
@@ -100,11 +126,19 @@ function AdminReviewPage() {
   const [showMatchDialog, setShowMatchDialog] = useState(false);
   const [reanalyzingSection, setReanalyzingSection] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
+  const [activeTab, setActiveTab] = useState<AdminStartupTab>("pipeline-live");
+  const [initializedTabForStartupId, setInitializedTabForStartupId] = useState<
+    string | null
+  >(null);
+  const [trackedRetry, setTrackedRetry] = useState<RetryTrackingState | null>(
+    null,
+  );
 
   const { data: startupResponse, isLoading } = useStartupControllerFindOne(id);
   const startup = startupResponse
     ? unwrapApiResponse<StartupDetail>(startupResponse)
     : undefined;
+  const evaluation = startup?.evaluation as Evaluation | undefined;
 
   const { data: scoringDefaults } = useAdminControllerGetAllScoringWeights();
   const stageScoringWeights = scoringDefaults
@@ -177,14 +211,35 @@ function AdminReviewPage() {
 
   const retryAgentMutation = useAdminControllerRetryStartupAgent({
     mutation: {
-      onSuccess: (_result, variables) => {
+      onSuccess: (result, variables) => {
         queryClient.invalidateQueries({ queryKey: getStartupControllerFindOneQueryKey(id) });
         queryClient.invalidateQueries({ queryKey: getAdminControllerGetAllStartupsQueryKey() });
+        const retryResult = unwrapApiResponse<Record<string, unknown>>(result);
+        const mode =
+          retryResult && typeof retryResult.mode === "string"
+            ? (retryResult.mode as string)
+            : undefined;
         toast.success("Section re-analysis triggered", {
-          description: `${variables.data.agent} has been queued for re-analysis.`,
+          description:
+            mode === "full_reanalysis_fallback"
+              ? `No cached pipeline state found. Full reanalysis started with guidance for ${formatLabel(
+                  variables.data.agent,
+                )}.`
+              : `${formatLabel(
+                  variables.data.agent,
+                )} has been queued. Tracking progress in Pipeline Live.`,
         });
       },
-      onError: (error: Error) => {
+      onError: (error: Error, variables) => {
+        setTrackedRetry((current) => {
+          if (!current) {
+            return current;
+          }
+          return current.phase === variables.data.phase &&
+            current.agentKey === variables.data.agent
+            ? null
+            : current;
+        });
         toast.error("Failed to re-analyze section", { description: error.message });
       },
       onSettled: () => {
@@ -223,6 +278,30 @@ function AdminReviewPage() {
     },
   });
 
+  useEffect(() => {
+    setTrackedRetry(null);
+    setReanalyzingSection(null);
+    setInitializedTabForStartupId(null);
+  }, [id]);
+
+  useEffect(() => {
+    if (!startup?.id) {
+      return;
+    }
+    if (initializedTabForStartupId === startup.id) {
+      return;
+    }
+    setActiveTab(
+      startup.status === "analyzing" || !evaluation ? "pipeline-live" : "summary",
+    );
+    setInitializedTabForStartupId(startup.id);
+  }, [
+    evaluation,
+    initializedTabForStartupId,
+    startup?.id,
+    startup?.status,
+  ]);
+
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -243,12 +322,9 @@ function AdminReviewPage() {
     );
   }
 
-  const evaluation = startup.evaluation as Evaluation | undefined;
   const canApproveReject = ["pending_review", "analyzing", "analyzed"].includes(
     startup.status
   );
-  const defaultTabValue =
-    startup.status === "analyzing" || !evaluation ? "pipeline-live" : "summary";
 
   const handleSectionReanalyze = async (
     sectionKey: string,
@@ -256,6 +332,12 @@ function AdminReviewPage() {
     comment: string,
   ) => {
     setReanalyzingSection(sectionKey);
+    setTrackedRetry({
+      phase: "evaluation",
+      agentKey: sectionKey,
+      requestedAt: new Date().toISOString(),
+    });
+    setActiveTab("pipeline-live");
     await retryAgentMutation.mutateAsync({
       id,
       data: {
@@ -270,6 +352,12 @@ function AdminReviewPage() {
     phase: "research" | "evaluation",
     agentKey: string,
   ) => {
+    setTrackedRetry({
+      phase,
+      agentKey,
+      requestedAt: new Date().toISOString(),
+    });
+    setActiveTab("pipeline-live");
     await retryAgentMutation.mutateAsync({
       id,
       data: {
@@ -353,7 +441,11 @@ function AdminReviewPage() {
       />
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
-        <Tabs defaultValue={defaultTabValue} className="w-full min-w-0">
+        <Tabs
+          value={activeTab}
+          onValueChange={(value) => setActiveTab(value as AdminStartupTab)}
+          className="w-full min-w-0"
+        >
           <TabsList className="flex h-auto w-full flex-wrap rounded-xl bg-muted/60 p-2">
             <TabsTrigger value="pipeline-live" className="w-full sm:w-auto">
               Pipeline Live
@@ -377,6 +469,8 @@ function AdminReviewPage() {
               startupId={startup.id}
               startupStatus={startup.status}
               onRetryAgent={handleLiveAgentRetry}
+              trackedRetry={trackedRetry}
+              onClearTrackedRetry={() => setTrackedRetry(null)}
             />
           </TabsContent>
 

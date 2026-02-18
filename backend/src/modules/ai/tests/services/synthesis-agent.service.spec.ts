@@ -285,7 +285,9 @@ describe("SynthesisAgent", () => {
   });
 
   it("runDetailed returns fallback reason metadata on empty output errors", async () => {
-    generateTextMock.mockRejectedValueOnce(new Error("No object generated"));
+    generateTextMock
+      .mockRejectedValueOnce(new Error("No object generated"))
+      .mockRejectedValueOnce(new Error("No object generated"));
 
     const pipeline = createEvaluationPipelineInput();
     const result = await service.runDetailed({
@@ -301,6 +303,43 @@ describe("SynthesisAgent", () => {
     expect(result.error).toBe(
       "Model returned empty structured output; fallback result generated.",
     );
+    expect(result.retryCount).toBe(1);
+    expect(generateTextMock).toHaveBeenCalledTimes(2);
     expect(result.output.overallScore).toBe(0);
+  });
+
+  it("retries once and succeeds when second synthesis attempt returns output", async () => {
+    generateTextMock
+      .mockRejectedValueOnce(new Error("No object generated"))
+      .mockResolvedValueOnce({
+        output: {
+          overallScore: 81.3,
+          recommendation: "Consider",
+          executiveSummary: "Strong upside with manageable risk profile.",
+          strengths: ["Efficient channel mix"],
+          concerns: ["Regulatory volatility"],
+          investmentThesis: "High potential if execution remains disciplined.",
+          nextSteps: ["Validate contribution margin trend"],
+          confidenceLevel: "Medium",
+          investorMemo: "Investor memo body",
+          founderReport: "Founder report body",
+          dataConfidenceNotes: "Evidence quality is moderate.",
+        },
+      });
+
+    const pipeline = createEvaluationPipelineInput();
+    const result = await service.runDetailed({
+      extraction: pipeline.extraction,
+      scraping: pipeline.scraping,
+      research: pipeline.research,
+      evaluation: createMockEvaluationResult(),
+      stageWeights: { team: 0.25, traction: 0.2, market: 0.2, product: 0.15, dealTerms: 0.1, exitPotential: 0.1 },
+    });
+
+    expect(result.usedFallback).toBe(false);
+    expect(result.retryCount).toBe(1);
+    expect(result.attempt).toBe(2);
+    expect(result.output.recommendation).toBe("Consider");
+    expect(generateTextMock).toHaveBeenCalledTimes(2);
   });
 });

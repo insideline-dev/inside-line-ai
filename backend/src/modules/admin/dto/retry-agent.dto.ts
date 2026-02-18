@@ -16,7 +16,7 @@ const EvaluationAgentKeys = [
   "exitPotential",
 ] as const;
 
-const ResearchAgentKeys = ["team", "market", "product", "news"] as const;
+const ResearchAgentKeys = ["team", "market", "product", "news", "competitor"] as const;
 
 export const RetryAgentSchema = z
   .object({

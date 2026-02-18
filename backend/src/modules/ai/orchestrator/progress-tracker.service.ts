@@ -100,23 +100,55 @@ export class ProgressTrackerService {
     userId: string;
     pipelineRunId: string;
     phases: PipelinePhase[];
+    initialPhaseStatuses?: Partial<Record<PipelinePhase, PhaseStatus>>;
+    currentPhase?: PipelinePhase;
   }): Promise<PipelineProgressPayload> {
     return this.withMutationLock(params.startupId, async () => {
       const now = new Date().toISOString();
       const phaseSet = new Set(params.phases);
       const phases = this.createInitialPhases(phaseSet);
 
+      if (params.initialPhaseStatuses) {
+        for (const phase of Object.values(PipelinePhase)) {
+          const seededStatus = params.initialPhaseStatuses[phase];
+          if (!seededStatus) {
+            continue;
+          }
+          const seeded = phases[phase];
+          seeded.status = seededStatus;
+          if (seededStatus === PhaseStatus.RUNNING || seededStatus === PhaseStatus.WAITING) {
+            seeded.startedAt = now;
+          }
+          if (isPhaseTerminal(seededStatus)) {
+            seeded.completedAt = now;
+          }
+        }
+      }
+
+      const phasesCompleted = (Object.entries(phases) as Array<
+        [PipelinePhase, PhaseProgress]
+      >)
+        .filter(([, value]) => value.status === PhaseStatus.COMPLETED)
+        .map(([phase]) => phase);
+      const overallProgress = Math.round(
+        (phasesCompleted.length / Object.keys(phases).length) * 100,
+      );
+
       const payload: PipelineProgressPayload = {
         pipelineRunId: params.pipelineRunId,
         startupId: params.startupId,
         status: PipelineStatus.RUNNING,
-        currentPhase: params.phases[0] ?? PipelinePhase.EXTRACTION,
-        overallProgress: 0,
-        phasesCompleted: [],
+        currentPhase: params.currentPhase ?? (params.phases[0] ?? PipelinePhase.EXTRACTION),
+        overallProgress,
+        phasesCompleted,
         phases,
         agentEvents: [],
         updatedAt: now,
       };
+
+      if (!params.currentPhase) {
+        payload.currentPhase = this.resolveCurrentPhase(payload, payload.currentPhase);
+      }
 
       await this.persistProgress(params.startupId, payload);
       this.notifications.sendPipelineEvent(params.userId, "pipeline:started", {

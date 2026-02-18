@@ -98,7 +98,7 @@ export class StartupIntakeService {
 
     await this.pipeline.startPipeline(created.id, adminUserId);
 
-    await this.notifications.create(
+    await this.notifications.createAndBroadcast(
       adminUserId,
       `New startup submitted via ${source}`,
       `${companyName} was submitted by ${fromEmail}`,
@@ -163,7 +163,7 @@ export class StartupIntakeService {
 
     await this.pipeline.startPipeline(created.id, params.adminUserId);
 
-    await this.notifications.create(
+    await this.notifications.createAndBroadcast(
       params.adminUserId,
       'Startup quick-created',
       `${params.name} was quick-created and pipeline started`,

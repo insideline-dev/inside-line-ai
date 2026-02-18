@@ -19,6 +19,25 @@ import { BraveSearchService, type BraveSearchResponse } from "./brave-search.ser
 
 export const ENRICHMENT_AGENT_KEY = "gap_fill_hybrid";
 
+type EnrichmentWithoutDbWrites = Omit<EnrichmentResult, "dbFieldsUpdated">;
+
+const TIER_1_SOURCE_DOMAINS = [
+  "crunchbase.com",
+  "sec.gov",
+  "ycombinator.com",
+];
+
+const TIER_2_SOURCE_DOMAINS = [
+  "techcrunch.com",
+  "reuters.com",
+  "bloomberg.com",
+  "forbes.com",
+  "wsj.com",
+  "ft.com",
+  "venturebeat.com",
+  "linkedin.com",
+];
+
 const enrichmentOutputSchema = z.object({
   companyName: z.object({ value: z.string(), confidence: z.number(), source: z.string() }).optional(),
   companyDescription: z.object({ value: z.string(), confidence: z.number(), source: z.string() }).optional(),
@@ -118,6 +137,12 @@ interface EnrichmentSynthesisResult {
   error?: string;
   fallbackReason?: EvaluationFallbackReason;
   rawProviderError?: string;
+}
+
+interface SearchRunResult {
+  formattedResults: string;
+  responses: BraveSearchResponse[];
+  totalResults: number;
 }
 
 interface GroundingSourceCarrier {
@@ -273,10 +298,14 @@ export class EnrichmentService {
     return suspicious;
   }
 
-  private async runSearches(record: StartupRecord): Promise<string> {
+  private async runSearches(record: StartupRecord): Promise<SearchRunResult> {
     if (!this.braveSearch.isConfigured()) {
       this.logger.warn("[Enrichment] Brave Search not configured — skipping web searches");
-      return "No web search results available (Brave Search not configured).";
+      return {
+        formattedResults: "No web search results available (Brave Search not configured).",
+        responses: [],
+        totalResults: 0,
+      };
     }
 
     const companyName = record.name;
@@ -304,7 +333,15 @@ export class EnrichmentService {
       }
     }
 
-    return this.formatSearchResults(results);
+    const totalResults = results.reduce(
+      (count, response) => count + response.results.length,
+      0,
+    );
+    return {
+      formattedResults: this.formatSearchResults(results),
+      responses: results,
+      totalResults,
+    };
   }
 
   private formatSearchResults(results: BraveSearchResponse[]): string {
@@ -331,7 +368,7 @@ export class EnrichmentService {
     extraction: { rawText?: string; founderNames?: string[] } | null,
     missingFields: string[],
     suspiciousFields: string[],
-    searchResults: string,
+    searchResults: SearchRunResult,
   ): Promise<EnrichmentSynthesisResult> {
     const teamMembersText = record.teamMembers?.length
       ? record.teamMembers.map((m) => `- ${m.name} (${m.role}) ${m.linkedinUrl || ""}`).join("\n")
@@ -356,7 +393,7 @@ export class EnrichmentService {
       .replace("{{extractionSummary}}", extractionSummary)
       .replace("{{missingFields}}", missingFields.join(", ") || "None")
       .replace("{{suspiciousFields}}", suspiciousFields.join("\n") || "None")
-      .replace("{{searchResults}}", searchResults);
+      .replace("{{searchResults}}", searchResults.formattedResults);
 
     const modelName = this.aiConfig.getModelForPurpose(ModelPurpose.ENRICHMENT);
     const provider = this.aiProvider.resolveModelForPurpose(
@@ -378,22 +415,28 @@ export class EnrichmentService {
         model: provider,
         canUseGoogleSearchTool,
       });
+      const structuredError = structured.success
+        ? this.tryFinalizeSynthesisCandidate({
+            candidate: structured.data,
+            groundedSources: structured.sources,
+            record,
+            missingFields,
+            searchResults,
+          })
+        : null;
       if (structured.success) {
-        const mergedSources = this.mergeSources(
-          structured.data.sources,
-          structured.sources,
-        );
-        return {
-          prompt,
-          output: {
-            ...structured.data,
-            sources: mergedSources,
-            dbFieldsUpdated: [],
-          },
-          usedFallback: false,
-          attempt,
-          retryCount: Math.max(0, attempt - 1),
-        };
+        if (structuredError?.success) {
+          return {
+            prompt,
+            output: {
+              ...structuredError.data,
+              dbFieldsUpdated: [],
+            },
+            usedFallback: false,
+            attempt,
+            retryCount: Math.max(0, attempt - 1),
+          };
+        }
       }
 
       const textFallback = await this.tryTextAttempt({
@@ -401,27 +444,37 @@ export class EnrichmentService {
         model: provider,
         canUseGoogleSearchTool,
       });
+      const textError = textFallback.success
+        ? this.tryFinalizeSynthesisCandidate({
+            candidate: textFallback.data,
+            groundedSources: textFallback.sources,
+            record,
+            missingFields,
+            searchResults,
+          })
+        : null;
       if (textFallback.success) {
-        const mergedSources = this.mergeSources(
-          textFallback.data.sources,
-          textFallback.sources,
-        );
-        return {
-          prompt,
-          output: {
-            ...textFallback.data,
-            sources: mergedSources,
-            dbFieldsUpdated: [],
-          },
-          usedFallback: false,
-          attempt,
-          retryCount: Math.max(0, attempt - 1),
-        };
+        if (textError?.success) {
+          return {
+            prompt,
+            output: {
+              ...textError.data,
+              dbFieldsUpdated: [],
+            },
+            usedFallback: false,
+            attempt,
+            retryCount: Math.max(0, attempt - 1),
+          };
+        }
       }
 
       const attemptError = this.joinErrorMessages(
-        structured.error,
-        textFallback.error,
+        structured.success
+          ? (structuredError?.success ? "" : structuredError?.error ?? "Structured synthesis output rejected")
+          : structured.error,
+        textFallback.success
+          ? (textError?.success ? "" : textError?.error ?? "Text synthesis output rejected")
+          : textFallback.error,
       );
       lastError = attemptError;
       lastFallbackReason = this.classifyFallbackReason(attemptError);
@@ -452,6 +505,949 @@ export class EnrichmentService {
       rawProviderError: this.sanitizeRawProviderError(lastError),
       error: this.fallbackMessage(lastFallbackReason),
     };
+  }
+
+  private tryFinalizeSynthesisCandidate(input: {
+    candidate: EnrichmentWithoutDbWrites;
+    groundedSources: Array<{ url: string; title: string; type: string }>;
+    record: StartupRecord;
+    missingFields: string[];
+    searchResults: SearchRunResult;
+  }):
+    | { success: true; data: EnrichmentWithoutDbWrites }
+    | { success: false; error: string } {
+    const mergedSources = this.mergeSources(
+      input.candidate.sources,
+      input.groundedSources,
+    );
+
+    const normalized = this.normalizeEnrichmentOutput(
+      {
+        ...input.candidate,
+        sources: mergedSources,
+      },
+      input.record,
+      input.missingFields,
+    );
+
+    const primaryCheck = this.isSubstantiveEnrichment(
+      normalized,
+      input.record,
+      input.searchResults,
+    );
+    if (primaryCheck.ok) {
+      return { success: true, data: normalized };
+    }
+
+    const deterministicBackup = this.buildDeterministicBackupFromSearch(
+      input.searchResults.responses,
+      input.record.name,
+      input.record.website ?? undefined,
+    );
+    const supplemented = this.normalizeEnrichmentOutput(
+      this.mergeEnrichmentOutput(normalized, deterministicBackup),
+      input.record,
+      input.missingFields,
+    );
+
+    const supplementedCheck = this.isSubstantiveEnrichment(
+      supplemented,
+      input.record,
+      input.searchResults,
+    );
+    if (supplementedCheck.ok) {
+      this.logger.debug(
+        `[Enrichment] Deterministic backup supplemented weak model output (results=${input.searchResults.totalResults})`,
+      );
+      return { success: true, data: supplemented };
+    }
+
+    return {
+      success: false,
+      error:
+        supplementedCheck.reason ??
+        primaryCheck.reason ??
+        "Non-substantive enrichment output despite available web evidence",
+    };
+  }
+
+  private normalizeEnrichmentOutput(
+    candidate: Partial<EnrichmentWithoutDbWrites>,
+    record: StartupRecord,
+    missingFields: string[],
+  ): EnrichmentWithoutDbWrites {
+    const shaped = this.coerceEnrichmentShape(candidate);
+    const normalized: EnrichmentWithoutDbWrites = {
+      ...shaped,
+      discoveredFounders: this.normalizeFounders(shaped.discoveredFounders),
+      fundingHistory: this.normalizeFundingHistory(shaped.fundingHistory),
+      pitchDeckUrls: this.normalizePitchDeckUrls(shaped.pitchDeckUrls),
+      socialProfiles: this.normalizeSocialProfiles(shaped.socialProfiles),
+      productSignals: this.normalizeProductSignals(shaped.productSignals),
+      tractionSignals: this.normalizeTractionSignals(shaped.tractionSignals),
+      correctionDetails: this.normalizeCorrectionDetails(shaped.correctionDetails),
+      sources: this.mergeSources(shaped.sources, []),
+      fieldsEnriched: [],
+      fieldsStillMissing: [],
+      fieldsCorrected: [],
+    };
+
+    const fieldsEnriched = this.computeFieldsEnriched(record, normalized);
+    const fieldsCorrected = this.computeFieldsCorrected(normalized);
+    const fieldsStillMissing = this.computeFieldsStillMissing(
+      missingFields,
+      normalized,
+    );
+
+    return {
+      ...normalized,
+      fieldsEnriched,
+      fieldsStillMissing,
+      fieldsCorrected,
+    };
+  }
+
+  private coerceEnrichmentShape(
+    candidate: Partial<EnrichmentWithoutDbWrites>,
+  ): EnrichmentWithoutDbWrites {
+    return {
+      companyName: candidate.companyName,
+      companyDescription: candidate.companyDescription,
+      tagline: candidate.tagline,
+      industry: candidate.industry,
+      stage: candidate.stage,
+      website: candidate.website,
+      foundingDate: candidate.foundingDate,
+      headquarters: candidate.headquarters,
+      discoveredFounders: candidate.discoveredFounders ?? [],
+      fundingHistory: candidate.fundingHistory ?? [],
+      pitchDeckUrls: candidate.pitchDeckUrls ?? [],
+      socialProfiles: candidate.socialProfiles ?? {},
+      productSignals: candidate.productSignals ?? {},
+      tractionSignals: candidate.tractionSignals ?? {},
+      fieldsEnriched: candidate.fieldsEnriched ?? [],
+      fieldsStillMissing: candidate.fieldsStillMissing ?? [],
+      fieldsCorrected: candidate.fieldsCorrected ?? [],
+      correctionDetails: candidate.correctionDetails ?? [],
+      sources: candidate.sources ?? [],
+    };
+  }
+
+  private computeFieldsEnriched(
+    record: StartupRecord,
+    enrichment: EnrichmentWithoutDbWrites,
+  ): string[] {
+    const enriched = new Set<string>();
+    const scalarMappings: Array<{
+      dbColumn: keyof StartupRecord;
+      key:
+        | "companyName"
+        | "companyDescription"
+        | "tagline"
+        | "industry"
+        | "stage"
+        | "website"
+        | "headquarters";
+    }> = [
+      { dbColumn: "name", key: "companyName" },
+      { dbColumn: "description", key: "companyDescription" },
+      { dbColumn: "tagline", key: "tagline" },
+      { dbColumn: "industry", key: "industry" },
+      { dbColumn: "stage", key: "stage" },
+      { dbColumn: "website", key: "website" },
+      { dbColumn: "location", key: "headquarters" },
+    ];
+
+    for (const mapping of scalarMappings) {
+      const candidate = this.readConfidenceFieldValue(enrichment[mapping.key]);
+      if (!candidate) continue;
+
+      const current = this.readDbString(record[mapping.dbColumn]);
+      if (!current || !this.valuesEquivalent(current, candidate, mapping.dbColumn === "website")) {
+        enriched.add(String(mapping.dbColumn));
+      }
+    }
+
+    if (enrichment.discoveredFounders.length > 0) enriched.add("teamMembers");
+    if (enrichment.fundingHistory.length > 0) enriched.add("fundingHistory");
+    if (enrichment.pitchDeckUrls.length > 0) enriched.add("pitchDeckUrls");
+    if (Object.keys(enrichment.socialProfiles).length > 0) enriched.add("socialProfiles");
+    if (Object.keys(enrichment.productSignals).length > 0) enriched.add("productSignals");
+    if (Object.keys(enrichment.tractionSignals).length > 0) enriched.add("tractionSignals");
+
+    return Array.from(enriched);
+  }
+
+  private computeFieldsCorrected(enrichment: EnrichmentWithoutDbWrites): string[] {
+    const corrected = new Set<string>();
+    for (const detail of enrichment.correctionDetails) {
+      const normalized = detail.field.trim().toLowerCase();
+      const knownField = CORRECTABLE_FIELDS.find(
+        (field) =>
+          field.label.toLowerCase() === normalized ||
+          String(field.dbColumn).toLowerCase() === normalized,
+      );
+      if (knownField) {
+        corrected.add(String(knownField.dbColumn));
+      } else if (normalized.length > 0) {
+        corrected.add(normalized);
+      }
+    }
+    return Array.from(corrected);
+  }
+
+  private computeFieldsStillMissing(
+    missingFields: string[],
+    enrichment: EnrichmentWithoutDbWrites,
+  ): string[] {
+    const stillMissing: string[] = [];
+    for (const field of missingFields) {
+      if (!this.isMissingFieldFilled(field, enrichment)) {
+        stillMissing.push(field);
+      }
+    }
+    return Array.from(new Set(stillMissing));
+  }
+
+  private isMissingFieldFilled(
+    field: string,
+    enrichment: EnrichmentWithoutDbWrites,
+  ): boolean {
+    if (field === "teamMembers") {
+      return enrichment.discoveredFounders.length > 0;
+    }
+    if (field === "description") {
+      return Boolean(this.readConfidenceFieldValue(enrichment.companyDescription));
+    }
+    if (field === "location") {
+      return Boolean(this.readConfidenceFieldValue(enrichment.headquarters));
+    }
+
+    const direct = this.readConfidenceFieldValue(
+      enrichment[field as keyof EnrichmentWithoutDbWrites] as
+        | { value?: unknown }
+        | undefined,
+    );
+    return Boolean(direct);
+  }
+
+  private isSubstantiveEnrichment(
+    enrichment: EnrichmentWithoutDbWrites,
+    record: StartupRecord,
+    searchResults: SearchRunResult,
+  ): { ok: true } | { ok: false; reason: string } {
+    if (searchResults.totalResults === 0) {
+      return { ok: true };
+    }
+
+    const scalarSignals = this.countScalarSignals(enrichment, record);
+    const structuredSignals =
+      enrichment.discoveredFounders.length +
+      enrichment.fundingHistory.length +
+      enrichment.pitchDeckUrls.length +
+      enrichment.correctionDetails.length +
+      Object.keys(enrichment.socialProfiles).length +
+      Object.keys(enrichment.productSignals).length +
+      Object.keys(enrichment.tractionSignals).length;
+
+    if (scalarSignals + structuredSignals === 0) {
+      return {
+        ok: false,
+        reason:
+          "Non-substantive enrichment output: no meaningful gaps filled from available web evidence",
+      };
+    }
+
+    if (!this.hasEvidenceCitation(enrichment)) {
+      return {
+        ok: false,
+        reason:
+          "Non-substantive enrichment output: missing source citations for extracted claims",
+      };
+    }
+
+    return { ok: true };
+  }
+
+  private countScalarSignals(
+    enrichment: EnrichmentWithoutDbWrites,
+    record: StartupRecord,
+  ): number {
+    const scalarMappings: Array<{
+      dbColumn: keyof StartupRecord;
+      key:
+        | "companyName"
+        | "companyDescription"
+        | "tagline"
+        | "industry"
+        | "stage"
+        | "website"
+        | "headquarters";
+    }> = [
+      { dbColumn: "name", key: "companyName" },
+      { dbColumn: "description", key: "companyDescription" },
+      { dbColumn: "tagline", key: "tagline" },
+      { dbColumn: "industry", key: "industry" },
+      { dbColumn: "stage", key: "stage" },
+      { dbColumn: "website", key: "website" },
+      { dbColumn: "location", key: "headquarters" },
+    ];
+
+    let signals = 0;
+    for (const mapping of scalarMappings) {
+      const candidate = this.readConfidenceFieldValue(enrichment[mapping.key]);
+      if (!candidate) continue;
+
+      const current = this.readDbString(record[mapping.dbColumn]);
+      if (!current || !this.valuesEquivalent(current, candidate, mapping.dbColumn === "website")) {
+        signals += 1;
+      }
+    }
+    return signals;
+  }
+
+  private hasEvidenceCitation(enrichment: EnrichmentWithoutDbWrites): boolean {
+    if (enrichment.sources.length > 0) {
+      return true;
+    }
+
+    const scalarSources = [
+      enrichment.companyName?.source,
+      enrichment.companyDescription?.source,
+      enrichment.tagline?.source,
+      enrichment.industry?.source,
+      enrichment.stage?.source,
+      enrichment.website?.source,
+      enrichment.foundingDate?.source,
+      enrichment.headquarters?.source,
+    ];
+    if (scalarSources.some((source) => this.extractUrlsFromText(source).length > 0)) {
+      return true;
+    }
+
+    if (
+      enrichment.fundingHistory.some((entry) => this.extractUrlsFromText(entry.source).length > 0) ||
+      enrichment.pitchDeckUrls.some((entry) => this.extractUrlsFromText(entry.source).length > 0)
+    ) {
+      return true;
+    }
+
+    return false;
+  }
+
+  private mergeEnrichmentOutput(
+    primary: Partial<EnrichmentWithoutDbWrites>,
+    backup: Partial<EnrichmentWithoutDbWrites>,
+  ): EnrichmentWithoutDbWrites {
+    const merged = this.coerceEnrichmentShape(primary);
+    const scalarKeys: Array<
+      | "companyName"
+      | "companyDescription"
+      | "tagline"
+      | "industry"
+      | "stage"
+      | "website"
+      | "foundingDate"
+      | "headquarters"
+    > = [
+      "companyName",
+      "companyDescription",
+      "tagline",
+      "industry",
+      "stage",
+      "website",
+      "foundingDate",
+      "headquarters",
+    ];
+
+    for (const key of scalarKeys) {
+      if (!merged[key] && backup[key]) {
+        merged[key] = backup[key];
+      }
+    }
+
+    merged.discoveredFounders = this.normalizeFounders([
+      ...merged.discoveredFounders,
+      ...(backup.discoveredFounders ?? []),
+    ]);
+    merged.fundingHistory = this.normalizeFundingHistory([
+      ...merged.fundingHistory,
+      ...(backup.fundingHistory ?? []),
+    ]);
+    merged.pitchDeckUrls = this.normalizePitchDeckUrls([
+      ...merged.pitchDeckUrls,
+      ...(backup.pitchDeckUrls ?? []),
+    ]);
+    merged.socialProfiles = this.normalizeSocialProfiles({
+      ...(backup.socialProfiles ?? {}),
+      ...merged.socialProfiles,
+    });
+    merged.productSignals = this.normalizeProductSignals({
+      ...(backup.productSignals ?? {}),
+      ...merged.productSignals,
+    });
+    merged.tractionSignals = this.normalizeTractionSignals({
+      ...(backup.tractionSignals ?? {}),
+      ...merged.tractionSignals,
+    });
+    merged.correctionDetails = this.normalizeCorrectionDetails([
+      ...(merged.correctionDetails ?? []),
+      ...(backup.correctionDetails ?? []),
+    ]);
+    merged.sources = this.mergeSources(
+      merged.sources,
+      backup.sources ?? [],
+    );
+    return merged;
+  }
+
+  private buildDeterministicBackupFromSearch(
+    responses: BraveSearchResponse[],
+    companyName: string,
+    officialWebsite?: string,
+  ): Partial<EnrichmentWithoutDbWrites> {
+    if (responses.length === 0) {
+      return {};
+    }
+
+    const founderMap = new Map<string, EnrichmentWithoutDbWrites["discoveredFounders"][number]>();
+    const fundingMap = new Map<string, EnrichmentWithoutDbWrites["fundingHistory"][number]>();
+    const pitchDeckMap = new Map<string, EnrichmentWithoutDbWrites["pitchDeckUrls"][number]>();
+    const sourceMap = new Map<string, { url: string; title: string; type: string }>();
+    const socialProfiles: EnrichmentWithoutDbWrites["socialProfiles"] = {};
+    const companyNameLower = companyName.trim().toLowerCase();
+
+    for (const response of responses) {
+      for (const result of response.results) {
+        const normalizedUrl = this.normalizeSourceUrl(result.url);
+        if (!normalizedUrl) {
+          continue;
+        }
+
+        sourceMap.set(normalizedUrl, {
+          url: normalizedUrl,
+          title: result.title || "Search result",
+          type: "search",
+        });
+
+        if (!socialProfiles.crunchbaseUrl && this.urlMatchesDomain(normalizedUrl, "crunchbase.com")) {
+          socialProfiles.crunchbaseUrl = normalizedUrl;
+        }
+        if (!socialProfiles.linkedinCompanyUrl && normalizedUrl.includes("linkedin.com/company/")) {
+          socialProfiles.linkedinCompanyUrl = normalizedUrl;
+        }
+        if (!socialProfiles.twitterUrl && (this.urlMatchesDomain(normalizedUrl, "twitter.com") || this.urlMatchesDomain(normalizedUrl, "x.com"))) {
+          socialProfiles.twitterUrl = normalizedUrl;
+        }
+        if (!socialProfiles.angelListUrl && (this.urlMatchesDomain(normalizedUrl, "angel.co") || this.urlMatchesDomain(normalizedUrl, "wellfound.com"))) {
+          socialProfiles.angelListUrl = normalizedUrl;
+        }
+        if (!socialProfiles.githubUrl && this.urlMatchesDomain(normalizedUrl, "github.com")) {
+          socialProfiles.githubUrl = normalizedUrl;
+        }
+
+        if (
+          this.urlMatchesDomain(normalizedUrl, "docsend.com") ||
+          this.urlMatchesDomain(normalizedUrl, "slideshare.net")
+        ) {
+          if (!pitchDeckMap.has(normalizedUrl)) {
+            const tier = this.classifySourceTier(normalizedUrl, officialWebsite);
+            pitchDeckMap.set(normalizedUrl, {
+              url: normalizedUrl,
+              source: normalizedUrl,
+              confidence: tier === "tier1" ? 0.85 : tier === "tier2" ? 0.72 : 0.58,
+            });
+          }
+        }
+
+        const founder = this.extractFounderFromSearchResult(
+          result.title,
+          result.description,
+          normalizedUrl,
+          companyNameLower,
+          officialWebsite,
+        );
+        if (founder) {
+          const founderKey = founder.name.trim().toLowerCase();
+          if (!founderMap.has(founderKey) || (founderMap.get(founderKey)?.confidence ?? 0) < founder.confidence) {
+            founderMap.set(founderKey, founder);
+          }
+        }
+
+        const funding = this.extractFundingFromSearchResult(
+          result.title,
+          result.description,
+          normalizedUrl,
+        );
+        if (funding) {
+          const fundingKey = `${funding.round.toLowerCase()}::${funding.date ?? "na"}::${funding.source}`;
+          if (!fundingMap.has(fundingKey)) {
+            fundingMap.set(fundingKey, funding);
+          }
+        }
+      }
+    }
+
+    return {
+      discoveredFounders: Array.from(founderMap.values()),
+      fundingHistory: Array.from(fundingMap.values()),
+      pitchDeckUrls: Array.from(pitchDeckMap.values()),
+      socialProfiles,
+      sources: Array.from(sourceMap.values()),
+    };
+  }
+
+  private extractFounderFromSearchResult(
+    title: string,
+    description: string,
+    url: string,
+    companyNameLower: string,
+    officialWebsite?: string,
+  ): EnrichmentWithoutDbWrites["discoveredFounders"][number] | null {
+    if (!url.includes("linkedin.com/in/")) {
+      return null;
+    }
+
+    const name = this.extractNameFromSearchTitle(title);
+    if (!name) {
+      return null;
+    }
+
+    const context = `${title} ${description}`.toLowerCase();
+    if (
+      companyNameLower &&
+      !context.includes(companyNameLower) &&
+      !this.urlMatchesDomain(url, this.hostnameFromUrl(officialWebsite))
+    ) {
+      return null;
+    }
+
+    const roleMatch = `${title} ${description}`.match(
+      /\b(CEO|CTO|CPO|COO|Founder|Co[- ]?founder|President)\b/i,
+    );
+    const tier = this.classifySourceTier(url, officialWebsite);
+    const baseConfidence = tier === "tier1" ? 0.86 : tier === "tier2" ? 0.74 : 0.6;
+
+    return {
+      name,
+      role: roleMatch ? roleMatch[0] : "Founder",
+      linkedinUrl: url,
+      confidence: Math.min(0.95, baseConfidence + (roleMatch ? 0.05 : 0)),
+    };
+  }
+
+  private extractFundingFromSearchResult(
+    title: string,
+    description: string,
+    sourceUrl: string,
+  ): EnrichmentWithoutDbWrites["fundingHistory"][number] | null {
+    const text = `${title} ${description}`;
+    if (!/(raised|funding|series|valuation|debt financing)/i.test(text)) {
+      return null;
+    }
+
+    const roundMatch = text.match(
+      /\b(Series\s+[A-Z]|Pre[- ]Seed|Seed|Debt Financing|Convertible Note|Venture Round|Angel)\b/i,
+    );
+    const amount = this.parseFundingAmount(text);
+    if (!roundMatch && !amount) {
+      return null;
+    }
+
+    const date = this.parseFundingDate(text);
+    const investors = this.parseLeadInvestor(text);
+    return {
+      round: roundMatch ? this.normalizeRoundLabel(roundMatch[0]) : "Funding Round",
+      amount: amount?.amount,
+      currency: amount?.currency,
+      date: date ?? undefined,
+      investors: investors ? [investors] : undefined,
+      source: sourceUrl,
+    };
+  }
+
+  private parseFundingAmount(
+    text: string,
+  ): { amount: number; currency: string } | null {
+    const match = text.match(/\$\s?([\d,.]+)\s*(billion|million|thousand|[bmk])?/i);
+    if (!match) {
+      return null;
+    }
+
+    const base = Number(match[1]?.replace(/,/g, ""));
+    if (!Number.isFinite(base)) {
+      return null;
+    }
+
+    const suffix = match[2]?.toLowerCase();
+    const multiplier =
+      suffix === "billion" || suffix === "b"
+        ? 1_000_000_000
+        : suffix === "million" || suffix === "m"
+          ? 1_000_000
+          : suffix === "thousand" || suffix === "k"
+            ? 1_000
+            : 1;
+
+    return {
+      amount: Math.round(base * multiplier),
+      currency: "USD",
+    };
+  }
+
+  private parseFundingDate(text: string): string | null {
+    const isoMatch = text.match(/\b(20\d{2}-\d{2}-\d{2})\b/);
+    if (isoMatch?.[1]) {
+      return isoMatch[1];
+    }
+
+    const monthMatch = text.match(
+      /\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+20\d{2}\b/i,
+    );
+    if (!monthMatch?.[0]) {
+      return null;
+    }
+    const parsed = new Date(monthMatch[0]);
+    if (Number.isNaN(parsed.getTime())) {
+      return null;
+    }
+    return parsed.toISOString().slice(0, 10);
+  }
+
+  private parseLeadInvestor(text: string): string | null {
+    const ledByMatch = text.match(/\bled by ([A-Z][A-Za-z0-9&.\- ]{1,80})/i);
+    if (!ledByMatch?.[1]) {
+      return null;
+    }
+    return ledByMatch[1].trim();
+  }
+
+  private normalizeRoundLabel(round: string): string {
+    return round
+      .toLowerCase()
+      .split(/\s+/)
+      .map((part) =>
+        part.length === 0 ? part : `${part[0].toUpperCase()}${part.slice(1)}`,
+      )
+      .join(" ")
+      .replace("Co-founder", "Co-Founder")
+      .replace("Pre-seed", "Pre-Seed");
+  }
+
+  private extractNameFromSearchTitle(title: string): string | null {
+    const trimmed = title.trim();
+    if (!trimmed) {
+      return null;
+    }
+    const left = trimmed.split("|")[0]?.trim() ?? trimmed;
+    const candidate = left.split(" - ")[0]?.trim() ?? left;
+    if (!/^[A-Z][a-zA-Z'`.-]+(?:\s+[A-Z][a-zA-Z'`.-]+){1,3}$/.test(candidate)) {
+      return null;
+    }
+    return candidate;
+  }
+
+  private normalizeFounders(
+    founders: EnrichmentWithoutDbWrites["discoveredFounders"],
+  ): EnrichmentWithoutDbWrites["discoveredFounders"] {
+    const dedupe = new Map<string, EnrichmentWithoutDbWrites["discoveredFounders"][number]>();
+    for (const founder of founders) {
+      const name = founder.name?.trim();
+      if (!name) continue;
+      const key = name.toLowerCase();
+      const existing = dedupe.get(key);
+      if (!existing || existing.confidence < founder.confidence) {
+        dedupe.set(key, {
+          ...founder,
+          name,
+        });
+      }
+    }
+    return Array.from(dedupe.values());
+  }
+
+  private normalizeFundingHistory(
+    fundingHistory: EnrichmentWithoutDbWrites["fundingHistory"],
+  ): EnrichmentWithoutDbWrites["fundingHistory"] {
+    const dedupe = new Map<string, EnrichmentWithoutDbWrites["fundingHistory"][number]>();
+    for (const entry of fundingHistory) {
+      if (!entry.round || !entry.source) continue;
+      const key = `${entry.round.toLowerCase()}::${entry.date ?? "na"}::${entry.source}`;
+      if (!dedupe.has(key)) {
+        dedupe.set(key, entry);
+      }
+    }
+    return Array.from(dedupe.values());
+  }
+
+  private normalizePitchDeckUrls(
+    urls: EnrichmentWithoutDbWrites["pitchDeckUrls"],
+  ): EnrichmentWithoutDbWrites["pitchDeckUrls"] {
+    const dedupe = new Map<string, EnrichmentWithoutDbWrites["pitchDeckUrls"][number]>();
+    for (const entry of urls) {
+      const normalizedUrl = this.normalizeSourceUrl(entry.url);
+      if (!normalizedUrl) continue;
+      if (!dedupe.has(normalizedUrl)) {
+        dedupe.set(normalizedUrl, {
+          ...entry,
+          url: normalizedUrl,
+        });
+      }
+    }
+    return Array.from(dedupe.values());
+  }
+
+  private normalizeSocialProfiles(
+    profiles: EnrichmentWithoutDbWrites["socialProfiles"],
+  ): EnrichmentWithoutDbWrites["socialProfiles"] {
+    const normalized: EnrichmentWithoutDbWrites["socialProfiles"] = {};
+    for (const [key, value] of Object.entries(profiles)) {
+      if (typeof value !== "string" || value.trim().length === 0) continue;
+      const normalizedUrl = this.normalizeSourceUrl(value);
+      if (!normalizedUrl) continue;
+      normalized[key as keyof EnrichmentWithoutDbWrites["socialProfiles"]] = normalizedUrl;
+    }
+    return normalized;
+  }
+
+  private normalizeProductSignals(
+    signals: EnrichmentWithoutDbWrites["productSignals"],
+  ): EnrichmentWithoutDbWrites["productSignals"] {
+    const normalized: EnrichmentWithoutDbWrites["productSignals"] = {};
+    const pricing = this.cleanString(signals.pricing);
+    const customers = this.dedupeStringArray(signals.customers);
+    const techStack = this.dedupeStringArray(signals.techStack);
+    const integrations = this.dedupeStringArray(signals.integrations);
+    if (pricing) normalized.pricing = pricing;
+    if (customers) normalized.customers = customers;
+    if (techStack) normalized.techStack = techStack;
+    if (integrations) normalized.integrations = integrations;
+    return normalized;
+  }
+
+  private normalizeTractionSignals(
+    signals: EnrichmentWithoutDbWrites["tractionSignals"],
+  ): EnrichmentWithoutDbWrites["tractionSignals"] {
+    const socialFollowers =
+      signals.socialFollowers && typeof signals.socialFollowers === "object"
+        ? Object.fromEntries(
+            Object.entries(signals.socialFollowers)
+              .filter((entry) => Number.isFinite(entry[1]) && entry[1] > 0)
+              .map(([key, value]) => [key, Math.round(value)]),
+          )
+        : undefined;
+
+    const normalized: EnrichmentWithoutDbWrites["tractionSignals"] = {};
+    if (typeof signals.employeeCount === "number" && signals.employeeCount > 0) {
+      normalized.employeeCount = Math.round(signals.employeeCount);
+    }
+    const traffic = this.cleanString(signals.webTrafficEstimate);
+    if (traffic) normalized.webTrafficEstimate = traffic;
+    const appStoreRating = this.cleanString(signals.appStoreRating);
+    if (appStoreRating) normalized.appStoreRating = appStoreRating;
+    if (socialFollowers && Object.keys(socialFollowers).length > 0) {
+      normalized.socialFollowers = socialFollowers;
+    }
+    return normalized;
+  }
+
+  private normalizeCorrectionDetails(
+    corrections: EnrichmentWithoutDbWrites["correctionDetails"],
+  ): EnrichmentWithoutDbWrites["correctionDetails"] {
+    const dedupe = new Map<string, EnrichmentWithoutDbWrites["correctionDetails"][number]>();
+    for (const correction of corrections) {
+      const field = correction.field?.trim();
+      if (!field || !correction.newValue) continue;
+      const key = `${field.toLowerCase()}::${correction.newValue}`;
+      if (!dedupe.has(key)) {
+        dedupe.set(key, {
+          ...correction,
+          field,
+        });
+      }
+    }
+    return Array.from(dedupe.values());
+  }
+
+  private cleanString(value: string | undefined): string | undefined {
+    if (typeof value !== "string") return undefined;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+
+  private dedupeStringArray(values: string[] | undefined): string[] | undefined {
+    if (!Array.isArray(values)) return undefined;
+    const normalized = Array.from(
+      new Set(
+        values
+          .map((value) => (typeof value === "string" ? value.trim() : ""))
+          .filter((value) => value.length > 0),
+      ),
+    );
+    return normalized.length > 0 ? normalized : undefined;
+  }
+
+  private readConfidenceFieldValue(
+    value:
+      | { value?: unknown; confidence?: unknown; source?: unknown }
+      | undefined,
+  ): string | null {
+    if (!value || typeof value.value !== "string") {
+      return null;
+    }
+    const trimmed = value.value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+
+  private readDbString(value: unknown): string | null {
+    if (typeof value !== "string") {
+      return null;
+    }
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+
+  private valuesEquivalent(
+    current: string,
+    candidate: string,
+    isUrl: boolean,
+  ): boolean {
+    if (isUrl) {
+      const normalizedCurrent = this.normalizeComparableUrl(current);
+      const normalizedCandidate = this.normalizeComparableUrl(candidate);
+      return normalizedCurrent !== null &&
+        normalizedCandidate !== null &&
+        normalizedCurrent === normalizedCandidate;
+    }
+    return current.trim().toLowerCase() === candidate.trim().toLowerCase();
+  }
+
+  private normalizeComparableUrl(value: string): string | null {
+    const normalized = this.normalizeSourceUrl(value);
+    if (!normalized) return null;
+    try {
+      const parsed = new URL(normalized);
+      const path = parsed.pathname.replace(/\/+$/, "");
+      return `${parsed.hostname.toLowerCase()}${path.toLowerCase()}`;
+    } catch {
+      return normalized.toLowerCase();
+    }
+  }
+
+  private normalizeSourceUrl(value: string | undefined): string | null {
+    if (typeof value !== "string") {
+      return null;
+    }
+    const trimmed = value.trim();
+    if (!/^https?:\/\//i.test(trimmed)) {
+      return null;
+    }
+    try {
+      const parsed = new URL(trimmed);
+      parsed.hash = "";
+      return parsed.toString();
+    } catch {
+      return null;
+    }
+  }
+
+  private extractUrlsFromText(value: string | undefined): string[] {
+    if (!value) {
+      return [];
+    }
+    const matches = value.match(/https?:\/\/[^\s)\]}]+/gi) ?? [];
+    const urls = new Set<string>();
+    for (const match of matches) {
+      const normalized = this.normalizeSourceUrl(match);
+      if (normalized) {
+        urls.add(normalized);
+      }
+    }
+    return Array.from(urls);
+  }
+
+  private classifySourceTier(
+    url: string,
+    officialWebsite?: string,
+  ): "tier1" | "tier2" | "tier3" {
+    const host = this.hostnameFromUrl(url);
+    if (!host) {
+      return "tier3";
+    }
+
+    const officialHost = this.hostnameFromUrl(officialWebsite);
+    if (officialHost && this.hostMatchesDomain(host, officialHost)) {
+      return "tier1";
+    }
+
+    if (TIER_1_SOURCE_DOMAINS.some((domain) => this.hostMatchesDomain(host, domain))) {
+      return "tier1";
+    }
+    if (TIER_2_SOURCE_DOMAINS.some((domain) => this.hostMatchesDomain(host, domain))) {
+      return "tier2";
+    }
+    return "tier3";
+  }
+
+  private hostnameFromUrl(value: string | undefined): string | null {
+    const normalized = this.normalizeSourceUrl(value);
+    if (!normalized) {
+      return null;
+    }
+    try {
+      return new URL(normalized).hostname.toLowerCase().replace(/^www\./, "");
+    } catch {
+      return null;
+    }
+  }
+
+  private urlMatchesDomain(url: string, domain: string | null): boolean {
+    if (!domain) return false;
+    const host = this.hostnameFromUrl(url);
+    if (!host) return false;
+    return this.hostMatchesDomain(host, domain.toLowerCase().replace(/^www\./, ""));
+  }
+
+  private hostMatchesDomain(host: string, domain: string): boolean {
+    return host === domain || host.endsWith(`.${domain}`);
+  }
+
+  private passesCorrectionEvidenceGate(
+    fieldDef: CorrectableField,
+    enrichment: EnrichmentResult,
+    officialWebsite?: string,
+  ): boolean {
+    const evidenceUrls = new Set<string>();
+    for (const source of enrichment.sources ?? []) {
+      const normalized = this.normalizeSourceUrl(source.url);
+      if (normalized) evidenceUrls.add(normalized);
+    }
+
+    const fieldSource = (
+      enrichment[fieldDef.enrichmentKey as keyof EnrichmentResult] as
+        | { source?: string }
+        | undefined
+    )?.source;
+    for (const url of this.extractUrlsFromText(fieldSource)) {
+      evidenceUrls.add(url);
+    }
+
+    const domains = new Set<string>();
+    let hasHighTierEvidence = false;
+    for (const url of evidenceUrls) {
+      const host = this.hostnameFromUrl(url);
+      if (!host) continue;
+      domains.add(host);
+      const tier = this.classifySourceTier(url, officialWebsite);
+      if (tier === "tier1" || tier === "tier2") {
+        hasHighTierEvidence = true;
+      }
+    }
+
+    if (domains.size < 2) {
+      return false;
+    }
+    return hasHighTierEvidence;
   }
 
   private async applyDbWrites(
@@ -489,6 +1485,17 @@ export class EnrichmentService {
       if (!fieldDef) continue;
 
       if (correction.confidence >= correctionThreshold) {
+        const passesEvidenceGate = this.passesCorrectionEvidenceGate(
+          fieldDef,
+          enrichment,
+          record.website ?? undefined,
+        );
+        if (!passesEvidenceGate) {
+          this.logger.debug(
+            `[Enrichment] Skipping correction for ${fieldDef.label}: insufficient high-quality supporting sources`,
+          );
+          continue;
+        }
         updates[fieldDef.dbColumn] = correction.newValue;
         updatedFields.push(
           `${fieldDef.label} (corrected: "${correction.oldValue}" → "${correction.newValue}", confidence=${correction.confidence.toFixed(2)})`,
@@ -831,7 +1838,8 @@ export class EnrichmentService {
       normalized.includes("schema validation failed") ||
       normalized.includes("parseable json payload") ||
       normalized.includes("json parse") ||
-      normalized.includes("unterminated")
+      normalized.includes("unterminated") ||
+      normalized.includes("non-substantive")
     ) {
       return "SCHEMA_OUTPUT_INVALID";
     }

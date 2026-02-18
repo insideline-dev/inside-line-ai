@@ -1,8 +1,10 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { eq, and, desc, count as drizzleCount } from 'drizzle-orm';
 import { DrizzleService } from '../database';
 import { notification, Notification, NewNotification, NotificationType } from './entities';
 import type { GetNotificationsQuery } from './dto';
+import type { NotificationGateway } from './notification.gateway';
 
 export type PaginatedNotifications = {
   data: Notification[];
@@ -17,8 +19,12 @@ export type PaginatedNotifications = {
 @Injectable()
 export class NotificationService {
   private readonly logger = new Logger(NotificationService.name);
+  private gateway: NotificationGateway | null = null;
 
-  constructor(private drizzle: DrizzleService) {}
+  constructor(
+    private drizzle: DrizzleService,
+    private moduleRef: ModuleRef,
+  ) {}
 
   async create(
     userId: string,
@@ -51,6 +57,28 @@ export class NotificationService {
       .returning();
 
     this.logger.log(`Created ${created.length} notifications`);
+    return created;
+  }
+
+  async createAndBroadcast(
+    userId: string,
+    title: string,
+    message: string,
+    type: NotificationType = NotificationType.INFO,
+    link?: string,
+  ): Promise<Notification> {
+    const created = await this.create(userId, title, message, type, link);
+    const gateway = this.getGateway();
+    if (!gateway) {
+      return created;
+    }
+
+    await gateway.sendNotification(userId, {
+      ...created,
+      link: created.link ?? undefined,
+    });
+    const unreadCount = await this.getUnreadCount(userId);
+    await gateway.sendUnreadCount(userId, unreadCount);
     return created;
   }
 
@@ -122,5 +150,24 @@ export class NotificationService {
       .where(and(eq(notification.userId, userId), eq(notification.read, false)));
 
     return unreadCount;
+  }
+
+  private getGateway(): NotificationGateway | null {
+    if (this.gateway) {
+      return this.gateway;
+    }
+
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { NotificationGateway: Gateway } = require('./notification.gateway');
+      this.gateway = this.moduleRef.get<NotificationGateway>(Gateway, {
+        strict: false,
+      });
+      return this.gateway;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.debug(`Notification gateway unavailable: ${message}`);
+      return null;
+    }
   }
 }

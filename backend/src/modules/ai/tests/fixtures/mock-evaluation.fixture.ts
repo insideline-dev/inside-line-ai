@@ -119,6 +119,9 @@ export function createMockEvaluationResult(
       minimumRequired: 8,
       failedKeys: [],
       errors: [],
+      fallbackAgents: 0,
+      fallbackKeys: [],
+      warnings: [],
       degraded: false,
     },
   };

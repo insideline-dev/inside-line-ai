@@ -6,7 +6,8 @@ import { AgentMailClientService } from '../../integrations/agentmail/agentmail-c
 import { ClaraConversationService } from '../clara-conversation.service';
 import { ClaraAiService } from '../clara-ai.service';
 import { ClaraSubmissionService } from '../clara-submission.service';
-import { ClaraIntent, ConversationStatus, MessageDirection } from '../interfaces/clara.interface';
+import { ClaraToolsService } from '../clara-tools.service';
+import { ConversationStatus, MessageDirection } from '../interfaces/clara.interface';
 
 describe('ClaraService', () => {
   let service: ClaraService;
@@ -14,8 +15,14 @@ describe('ClaraService', () => {
   let drizzleService: ReturnType<typeof createMockDrizzle>;
   let agentMailClient: Record<string, jest.Mock>;
   let conversationService: Record<string, jest.Mock>;
-  let claraAi: { classifyIntent: jest.Mock; generateResponse: jest.Mock };
+  let claraAi: {
+    isLikelySubmission: jest.Mock;
+    runAgentLoop: jest.Mock;
+    generateResponse: jest.Mock;
+    extractCompanyFromFilename: jest.Mock;
+  };
   let submissionService: { handleSubmission: jest.Mock };
+  let toolsService: { buildTools: jest.Mock };
 
   const mockConversation = {
     id: 'conv-1',
@@ -92,12 +99,10 @@ describe('ClaraService', () => {
       findByStartupId: jest.fn().mockResolvedValue(null),
     };
     claraAi = {
-      classifyIntent: jest.fn().mockResolvedValue({
-        intent: ClaraIntent.GREETING,
-        confidence: 0.9,
-        reasoning: 'Greeting detected',
-      }),
+      isLikelySubmission: jest.fn().mockReturnValue(false),
+      runAgentLoop: jest.fn().mockResolvedValue('Agent response'),
       generateResponse: jest.fn().mockResolvedValue('Generated response'),
+      extractCompanyFromFilename: jest.fn().mockReturnValue(undefined),
     };
     submissionService = {
       handleSubmission: jest.fn().mockResolvedValue({
@@ -106,6 +111,9 @@ describe('ClaraService', () => {
         status: 'draft',
         isDuplicate: false,
       }),
+    };
+    toolsService = {
+      buildTools: jest.fn().mockReturnValue({}),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -117,6 +125,7 @@ describe('ClaraService', () => {
         { provide: ClaraConversationService, useValue: conversationService },
         { provide: ClaraAiService, useValue: claraAi },
         { provide: ClaraSubmissionService, useValue: submissionService },
+        { provide: ClaraToolsService, useValue: toolsService },
       ],
     }).compile();
 
@@ -146,6 +155,7 @@ describe('ClaraService', () => {
           { provide: ClaraConversationService, useValue: conversationService },
           { provide: ClaraAiService, useValue: claraAi },
           { provide: ClaraSubmissionService, useValue: submissionService },
+          { provide: ClaraToolsService, useValue: toolsService },
         ],
       }).compile();
 
@@ -165,6 +175,7 @@ describe('ClaraService', () => {
           { provide: ClaraConversationService, useValue: conversationService },
           { provide: ClaraAiService, useValue: claraAi },
           { provide: ClaraSubmissionService, useValue: submissionService },
+          { provide: ClaraToolsService, useValue: toolsService },
         ],
       }).compile();
 
@@ -184,6 +195,7 @@ describe('ClaraService', () => {
           { provide: ClaraConversationService, useValue: conversationService },
           { provide: ClaraAiService, useValue: claraAi },
           { provide: ClaraSubmissionService, useValue: submissionService },
+          { provide: ClaraToolsService, useValue: toolsService },
         ],
       }).compile();
 
@@ -220,12 +232,8 @@ describe('ClaraService', () => {
       };
 
       agentMailClient.getMessage.mockResolvedValueOnce(messageWithAttachment);
-      claraAi.classifyIntent.mockResolvedValueOnce({
-        intent: ClaraIntent.SUBMISSION,
-        confidence: 0.95,
-        reasoning: 'Submission detected',
-        extractedCompanyName: 'TestCo',
-      });
+      claraAi.isLikelySubmission.mockReturnValueOnce(true);
+      claraAi.extractCompanyFromFilename.mockReturnValueOnce('TestCo');
 
       drizzleService.db.limit.mockResolvedValueOnce([]); // no investor user
 
@@ -238,7 +246,7 @@ describe('ClaraService', () => {
         'John Doe',
         null,
       );
-      expect(claraAi.classifyIntent).toHaveBeenCalled();
+      expect(claraAi.isLikelySubmission).toHaveBeenCalled();
       expect(submissionService.handleSubmission).toHaveBeenCalledWith(
         expect.objectContaining({
           messageId: 'msg-123',
@@ -279,17 +287,13 @@ describe('ClaraService', () => {
       };
 
       agentMailClient.getMessage.mockResolvedValueOnce(messageWithAttachment);
-      claraAi.classifyIntent.mockResolvedValueOnce({
-        intent: ClaraIntent.SUBMISSION,
-        confidence: 0.95,
-        reasoning: 'Submission detected',
-        extractedCompanyName: 'TestCo',
-      });
+      claraAi.isLikelySubmission.mockReturnValueOnce(true);
       submissionService.handleSubmission.mockResolvedValueOnce({
         startupId: 'startup-1',
         startupName: 'TestCo',
         status: 'processing',
         isDuplicate: true,
+        isEnriched: false,
       });
 
       drizzleService.db.limit.mockResolvedValueOnce([]);
@@ -306,74 +310,19 @@ describe('ClaraService', () => {
     });
   });
 
-  describe('handleIncomingMessage - greeting flow', () => {
-    it('should send greeting response', async () => {
+  describe('handleIncomingMessage - non-submission flow', () => {
+    it('should run agent loop when not a submission', async () => {
       drizzleService.db.limit.mockResolvedValueOnce([]);
+      // isLikelySubmission defaults to false in beforeEach
 
       await service.handleIncomingMessage('inbox-1', 'thread-123', 'msg-123');
 
-      expect(claraAi.generateResponse).toHaveBeenCalledWith(ClaraIntent.GREETING, expect.any(Object));
+      expect(toolsService.buildTools).toHaveBeenCalled();
+      expect(claraAi.runAgentLoop).toHaveBeenCalled();
       expect(agentMailClient.replyToMessage).toHaveBeenCalledWith(
         'inbox-1',
         'msg-123',
-        expect.objectContaining({ text: 'Generated response' }),
-      );
-    });
-  });
-
-  describe('handleIncomingMessage - low confidence submission', () => {
-    it('should ask for more info when confidence is low and no pitch deck', async () => {
-      claraAi.classifyIntent.mockResolvedValueOnce({
-        intent: ClaraIntent.SUBMISSION,
-        confidence: 0.2,
-        reasoning: 'Unclear submission',
-      });
-      claraAi.generateResponse.mockResolvedValueOnce('Hello there!');
-
-      drizzleService.db.limit.mockResolvedValueOnce([]);
-
-      await service.handleIncomingMessage('inbox-1', 'thread-123', 'msg-123');
-
-      expect(conversationService.updateStatus).toHaveBeenCalledWith(
-        'conv-1',
-        ConversationStatus.AWAITING_INFO,
-      );
-      expect(agentMailClient.replyToMessage).toHaveBeenCalledWith(
-        'inbox-1',
-        'msg-123',
-        expect.objectContaining({
-          text: expect.stringContaining('attach a PDF pitch deck'),
-        }),
-      );
-    });
-
-    it('should proceed with submission if confidence is low but pitch deck is attached', async () => {
-      const messageWithAttachment = {
-        ...mockMessage,
-        attachments: [
-          {
-            filename: 'deck.pdf',
-            contentType: 'application/pdf',
-            attachmentId: 'att-1',
-          },
-        ],
-      };
-
-      agentMailClient.getMessage.mockResolvedValueOnce(messageWithAttachment);
-      claraAi.classifyIntent.mockResolvedValueOnce({
-        intent: ClaraIntent.SUBMISSION,
-        confidence: 0.25,
-        reasoning: 'Low confidence but has deck',
-      });
-
-      drizzleService.db.limit.mockResolvedValueOnce([]);
-
-      await service.handleIncomingMessage('inbox-1', 'thread-123', 'msg-123');
-
-      expect(submissionService.handleSubmission).toHaveBeenCalled();
-      expect(conversationService.updateStatus).toHaveBeenCalledWith(
-        'conv-1',
-        ConversationStatus.PROCESSING,
+        expect.objectContaining({ text: 'Agent response' }),
       );
     });
   });
@@ -391,6 +340,7 @@ describe('ClaraService', () => {
           { provide: ClaraConversationService, useValue: conversationService },
           { provide: ClaraAiService, useValue: claraAi },
           { provide: ClaraSubmissionService, useValue: submissionService },
+          { provide: ClaraToolsService, useValue: toolsService },
         ],
       }).compile();
 
@@ -491,6 +441,7 @@ describe('ClaraService', () => {
           { provide: ClaraConversationService, useValue: conversationService },
           { provide: ClaraAiService, useValue: claraAi },
           { provide: ClaraSubmissionService, useValue: submissionService },
+          { provide: ClaraToolsService, useValue: toolsService },
         ],
       }).compile();
 

@@ -21,6 +21,7 @@ import { ModelPurpose, PipelinePhase } from "../interfaces/pipeline.interface";
 import { ALL_RESEARCH_AGENTS } from "../agents/research";
 import { SynthesisAgent, type SynthesisAgentInput } from "../agents/synthesis";
 import {
+  AI_PROMPT_KEYS,
   EVALUATION_PROMPT_KEY_BY_AGENT,
   RESEARCH_PROMPT_KEY_BY_AGENT,
   AI_PROMPT_CATALOG,
@@ -34,6 +35,7 @@ import { PipelineStateService } from "./pipeline-state.service";
 import { PipelineFeedbackService } from "./pipeline-feedback.service";
 import { ScoreComputationService } from "./score-computation.service";
 import { StartupStage } from "../../startup/entities/startup.schema";
+import { buildEvaluationCommonBaseline } from "./evaluation-prompt-baseline";
 import {
   BusinessModelEvaluationAgent,
   CompetitiveAdvantageEvaluationAgent,
@@ -47,6 +49,7 @@ import {
   TeamEvaluationAgent,
   TractionEvaluationAgent,
 } from "../agents/evaluation";
+import { buildResearchPromptVariables } from "./research-prompt-variables";
 
 type PreviewInput = {
   startupId?: string;
@@ -66,6 +69,34 @@ type PreviewInput = {
 
 type TemplateVariable = string | number | null | undefined;
 type TemplateVariables = Record<string, TemplateVariable>;
+type PipelinePromptKey = Extract<
+  AiPromptKey,
+  `research.${string}` | `evaluation.${string}`
+>;
+
+type ParsedContextSection = {
+  title: string;
+  data: unknown;
+};
+
+type PipelineContextAgentPreview = {
+  phase: PipelinePhase.RESEARCH | PipelinePhase.EVALUATION;
+  agentKey: string;
+  promptKey: PipelinePromptKey;
+  promptSource: "db" | "code";
+  promptRevisionId: string | null;
+  effectiveStage: StartupStage | null;
+  resolvedVariables: TemplateVariables;
+  renderedSystemPrompt: string;
+  renderedUserPrompt: string;
+  parsedContextJson: unknown | null;
+  parsedContextSections: ParsedContextSection[] | null;
+  hashes: {
+    renderedSystemPrompt: string;
+    renderedUserPrompt: string;
+    variables: string;
+  };
+};
 
 type PromptContextField = {
   path: string;
@@ -80,6 +111,51 @@ type PromptRuntimeSchema = {
   fields: PromptContextField[];
   notes: string[];
 };
+
+const EVALUATION_STARTUP_SNAPSHOT_FIELDS: PromptContextField[] = [
+  {
+    path: "contextJson.startupSnapshot.companyName",
+    label: "Startup Snapshot Company Name",
+    type: "string",
+    sourceVariable: "contextJson",
+  },
+  {
+    path: "contextJson.startupSnapshot.industry",
+    label: "Startup Snapshot Industry",
+    type: "string",
+    sourceVariable: "contextJson",
+  },
+  {
+    path: "contextJson.startupSnapshot.stage",
+    label: "Startup Snapshot Stage",
+    type: "string",
+    sourceVariable: "contextJson",
+  },
+  {
+    path: "contextJson.startupSnapshot.location",
+    label: "Startup Snapshot Location",
+    type: "string",
+    sourceVariable: "contextJson",
+  },
+  {
+    path: "contextJson.startupSnapshot.website",
+    label: "Startup Snapshot Website",
+    type: "string",
+    sourceVariable: "contextJson",
+  },
+  {
+    path: "contextJson.startupSnapshot.founderNames",
+    label: "Startup Snapshot Founder Names",
+    type: "array",
+    sourceVariable: "contextJson",
+  },
+  {
+    path: "contextJson.startupSnapshot.adminFeedback",
+    label: "Startup Snapshot Admin Feedback",
+    type: "array",
+    sourceVariable: "contextJson",
+  },
+];
 
 const RUNTIME_SCHEMA_BY_KEY: Record<AiPromptKey, PromptRuntimeSchema> = {
   "extraction.fields": {
@@ -97,161 +173,220 @@ const RUNTIME_SCHEMA_BY_KEY: Record<AiPromptKey, PromptRuntimeSchema> = {
   "research.team": {
     requiredPhases: [PipelinePhase.EXTRACTION, PipelinePhase.SCRAPING],
     fields: [
-      { path: "contextJson.companyName", label: "Company Name", type: "string", sourceVariable: "contextJson" },
-      { path: "contextJson.teamMembers", label: "Team Members", type: "array", sourceVariable: "contextJson" },
-      { path: "contextJson.startupFormContext", label: "Startup Form Context", type: "object", sourceVariable: "contextJson" },
-      { path: "contextJson.adminFeedback", label: "Admin Feedback", type: "array", sourceVariable: "contextJson" },
+      { path: "companyName", label: "Company Name", type: "string", sourceVariable: "companyName" },
+      { path: "sector", label: "Sector", type: "string", sourceVariable: "sector" },
+      { path: "teamMembers", label: "Team Members", type: "string", sourceVariable: "teamMembers" },
+      { path: "deckClaims", label: "Deck Claims", type: "string", sourceVariable: "deckClaims" },
+      { path: "adminGuidance", label: "Admin Guidance", type: "string", sourceVariable: "adminGuidance" },
+      { path: "contextJson", label: "Full Context JSON (fallback)", type: "object", sourceVariable: "contextJson" },
     ],
-    notes: ["Built from research team context builder + startup form context + phase/agent feedback."],
+    notes: ["Built from extraction/scraping context plus optional admin feedback.", "Named variables are canonical; contextJson remains for backward compatibility."],
   },
   "research.market": {
     requiredPhases: [PipelinePhase.EXTRACTION, PipelinePhase.SCRAPING],
     fields: [
-      { path: "contextJson.industry", label: "Industry", type: "string", sourceVariable: "contextJson" },
-      { path: "contextJson.geographicFocus", label: "Geographic Focus", type: "array", sourceVariable: "contextJson" },
-      { path: "contextJson.targetMarket", label: "Target Market", type: "string", sourceVariable: "contextJson" },
-      { path: "contextJson.adminFeedback", label: "Admin Feedback", type: "array", sourceVariable: "contextJson" },
+      { path: "companyName", label: "Company Name", type: "string", sourceVariable: "companyName" },
+      { path: "sector", label: "Sector", type: "string", sourceVariable: "sector" },
+      { path: "location", label: "Location", type: "string", sourceVariable: "location" },
+      { path: "claimedTam", label: "Claimed TAM", type: "string", sourceVariable: "claimedTam" },
+      { path: "claimedGrowthRate", label: "Claimed Growth Rate", type: "string", sourceVariable: "claimedGrowthRate" },
+      { path: "targetMarket", label: "Target Market", type: "string", sourceVariable: "targetMarket" },
+      { path: "productDescription", label: "Product Description", type: "string", sourceVariable: "productDescription" },
+      { path: "adminGuidance", label: "Admin Guidance", type: "string", sourceVariable: "adminGuidance" },
+      { path: "contextJson", label: "Full Context JSON (fallback)", type: "object", sourceVariable: "contextJson" },
     ],
-    notes: ["Built from research market context builder + startup form context + phase/agent feedback."],
+    notes: ["Built from extraction/scraping context plus optional admin feedback.", "Named variables are canonical; contextJson remains for backward compatibility."],
   },
   "research.product": {
     requiredPhases: [PipelinePhase.EXTRACTION, PipelinePhase.SCRAPING],
     fields: [
-      { path: "contextJson.productDescription", label: "Product Description", type: "string", sourceVariable: "contextJson" },
-      { path: "contextJson.websiteProductPages", label: "Website Product Pages", type: "array", sourceVariable: "contextJson" },
-      { path: "contextJson.websiteHeadings", label: "Website Headings", type: "array", sourceVariable: "contextJson" },
-      { path: "contextJson.adminFeedback", label: "Admin Feedback", type: "array", sourceVariable: "contextJson" },
+      { path: "companyName", label: "Company Name", type: "string", sourceVariable: "companyName" },
+      { path: "sector", label: "Sector", type: "string", sourceVariable: "sector" },
+      { path: "website", label: "Website", type: "string", sourceVariable: "website" },
+      { path: "productDescription", label: "Product Description", type: "string", sourceVariable: "productDescription" },
+      { path: "claimedTechStack", label: "Claimed Tech Stack", type: "string", sourceVariable: "claimedTechStack" },
+      { path: "adminGuidance", label: "Admin Guidance", type: "string", sourceVariable: "adminGuidance" },
+      { path: "contextJson", label: "Full Context JSON (fallback)", type: "object", sourceVariable: "contextJson" },
     ],
-    notes: ["Built from research product context builder + startup form context + phase/agent feedback."],
+    notes: ["Built from extraction/scraping context plus optional admin feedback.", "Named variables are canonical; contextJson remains for backward compatibility."],
   },
   "research.news": {
     requiredPhases: [PipelinePhase.EXTRACTION, PipelinePhase.SCRAPING],
     fields: [
-      { path: "contextJson.companyName", label: "Company Name", type: "string", sourceVariable: "contextJson" },
-      { path: "contextJson.industry", label: "Industry", type: "string", sourceVariable: "contextJson" },
-      { path: "contextJson.knownFunding", label: "Known Funding", type: "array", sourceVariable: "contextJson" },
-      { path: "contextJson.adminFeedback", label: "Admin Feedback", type: "array", sourceVariable: "contextJson" },
+      { path: "companyName", label: "Company Name", type: "string", sourceVariable: "companyName" },
+      { path: "website", label: "Website", type: "string", sourceVariable: "website" },
+      { path: "founderNames", label: "Founder Names", type: "string", sourceVariable: "founderNames" },
+      { path: "adminGuidance", label: "Admin Guidance", type: "string", sourceVariable: "adminGuidance" },
+      { path: "contextJson", label: "Full Context JSON (fallback)", type: "object", sourceVariable: "contextJson" },
     ],
-    notes: ["Built from research news context builder + startup form context + phase/agent feedback."],
+    notes: ["Built from extraction/scraping context plus optional admin feedback.", "Named variables are canonical; contextJson remains for backward compatibility."],
   },
   "research.competitor": {
     requiredPhases: [PipelinePhase.EXTRACTION, PipelinePhase.SCRAPING],
     fields: [
-      { path: "contextJson.companyName", label: "Company Name", type: "string", sourceVariable: "contextJson" },
-      { path: "contextJson.websiteHeadings", label: "Website Headings", type: "array", sourceVariable: "contextJson" },
-      { path: "contextJson.companyDescription", label: "Company Description", type: "string", sourceVariable: "contextJson" },
-      { path: "contextJson.adminFeedback", label: "Admin Feedback", type: "array", sourceVariable: "contextJson" },
+      { path: "companyName", label: "Company Name", type: "string", sourceVariable: "companyName" },
+      { path: "sector", label: "Sector", type: "string", sourceVariable: "sector" },
+      { path: "website", label: "Website", type: "string", sourceVariable: "website" },
+      { path: "productDescription", label: "Product Description", type: "string", sourceVariable: "productDescription" },
+      { path: "knownCompetitors", label: "Known Competitors", type: "string", sourceVariable: "knownCompetitors" },
+      { path: "claimedDifferentiation", label: "Claimed Differentiation", type: "string", sourceVariable: "claimedDifferentiation" },
+      { path: "adminGuidance", label: "Admin Guidance", type: "string", sourceVariable: "adminGuidance" },
+      { path: "contextJson", label: "Full Context JSON (fallback)", type: "object", sourceVariable: "contextJson" },
     ],
-    notes: ["Built from research competitor context builder + startup form context + phase/agent feedback."],
+    notes: ["Built from extraction/scraping context plus optional admin feedback.", "Named variables are canonical; contextJson remains for backward compatibility."],
   },
   "evaluation.team": {
     requiredPhases: [PipelinePhase.EXTRACTION, PipelinePhase.SCRAPING, PipelinePhase.RESEARCH],
     fields: [
+      ...EVALUATION_STARTUP_SNAPSHOT_FIELDS,
       { path: "contextJson.teamMembers", label: "Team Members", type: "array", sourceVariable: "contextJson" },
       { path: "contextJson.linkedinProfiles", label: "LinkedIn Profiles", type: "array", sourceVariable: "contextJson" },
       { path: "contextJson.teamResearch", label: "Team Research", type: "object", sourceVariable: "contextJson" },
       { path: "contextSections", label: "Formatted Context Sections", type: "string", sourceVariable: "contextSections" },
     ],
-    notes: ["Context sections are generated from evaluation context object fields in deterministic order."],
+    notes: [
+      "Context sections are generated from evaluation context object fields in deterministic order.",
+      "Startup Snapshot baseline is always prepended as the first section.",
+    ],
   },
   "evaluation.market": {
     requiredPhases: [PipelinePhase.EXTRACTION, PipelinePhase.SCRAPING, PipelinePhase.RESEARCH],
     fields: [
+      ...EVALUATION_STARTUP_SNAPSHOT_FIELDS,
       { path: "contextJson.marketResearch", label: "Market Research", type: "object", sourceVariable: "contextJson" },
       { path: "contextJson.competitiveLandscape", label: "Competitive Landscape", type: "array", sourceVariable: "contextJson" },
       { path: "contextSections", label: "Formatted Context Sections", type: "string", sourceVariable: "contextSections" },
     ],
-    notes: ["Context includes stage-aware extraction output and research market payloads."],
+    notes: [
+      "Context includes stage-aware extraction output and research market payloads.",
+      "Startup Snapshot baseline is always prepended as the first section.",
+    ],
   },
   "evaluation.product": {
     requiredPhases: [PipelinePhase.EXTRACTION, PipelinePhase.SCRAPING, PipelinePhase.RESEARCH],
     fields: [
+      ...EVALUATION_STARTUP_SNAPSHOT_FIELDS,
       { path: "contextJson.productResearch", label: "Product Research", type: "object", sourceVariable: "contextJson" },
       { path: "contextJson.websiteProductPages", label: "Website Product Pages", type: "array", sourceVariable: "contextJson" },
       { path: "contextJson.extractedFeatures", label: "Extracted Features", type: "array", sourceVariable: "contextJson" },
       { path: "contextSections", label: "Formatted Context Sections", type: "string", sourceVariable: "contextSections" },
     ],
-    notes: ["Context combines deck, scrape, and research product evidence."],
+    notes: [
+      "Context combines deck, scrape, and research product evidence.",
+      "Startup Snapshot baseline is always prepended as the first section.",
+    ],
   },
   "evaluation.traction": {
     requiredPhases: [PipelinePhase.EXTRACTION, PipelinePhase.SCRAPING, PipelinePhase.RESEARCH],
     fields: [
+      ...EVALUATION_STARTUP_SNAPSHOT_FIELDS,
       { path: "contextJson.tractionMetrics", label: "Traction Metrics", type: "object", sourceVariable: "contextJson" },
       { path: "contextJson.newsResearch", label: "News Research", type: "object", sourceVariable: "contextJson" },
       { path: "contextJson.previousFunding", label: "Previous Funding", type: "array", sourceVariable: "contextJson" },
       { path: "contextSections", label: "Formatted Context Sections", type: "string", sourceVariable: "contextSections" },
     ],
-    notes: ["Context highlights traction signals from scraped proof points and news."],
+    notes: [
+      "Context highlights traction signals from scraped proof points and news.",
+      "Startup Snapshot baseline is always prepended as the first section.",
+    ],
   },
   "evaluation.businessModel": {
     requiredPhases: [PipelinePhase.EXTRACTION, PipelinePhase.SCRAPING, PipelinePhase.RESEARCH],
     fields: [
+      ...EVALUATION_STARTUP_SNAPSHOT_FIELDS,
       { path: "contextJson.pricing", label: "Pricing", type: "object", sourceVariable: "contextJson" },
       { path: "contextJson.unitEconomics", label: "Unit Economics", type: "object", sourceVariable: "contextJson" },
       { path: "contextJson.marketContext", label: "Market Context", type: "object", sourceVariable: "contextJson" },
       { path: "contextSections", label: "Formatted Context Sections", type: "string", sourceVariable: "contextSections" },
     ],
-    notes: ["Context combines deck business model data and multi-agent research context."],
+    notes: [
+      "Context combines deck business model data and multi-agent research context.",
+      "Startup Snapshot baseline is always prepended as the first section.",
+    ],
   },
   "evaluation.gtm": {
     requiredPhases: [PipelinePhase.EXTRACTION, PipelinePhase.SCRAPING, PipelinePhase.RESEARCH],
     fields: [
+      ...EVALUATION_STARTUP_SNAPSHOT_FIELDS,
       { path: "contextJson.websiteMarketingPages", label: "Website Marketing Pages", type: "array", sourceVariable: "contextJson" },
       { path: "contextJson.distributionChannels", label: "Distribution Channels", type: "array", sourceVariable: "contextJson" },
       { path: "contextJson.customerAcquisitionStrategy", label: "Customer Acquisition Strategy", type: "string", sourceVariable: "contextJson" },
       { path: "contextSections", label: "Formatted Context Sections", type: "string", sourceVariable: "contextSections" },
     ],
-    notes: ["Context includes market/product/competitor-derived GTM signals."],
+    notes: [
+      "Context includes market/product/competitor-derived GTM signals.",
+      "Startup Snapshot baseline is always prepended as the first section.",
+    ],
   },
   "evaluation.financials": {
     requiredPhases: [PipelinePhase.EXTRACTION, PipelinePhase.SCRAPING, PipelinePhase.RESEARCH],
     fields: [
+      ...EVALUATION_STARTUP_SNAPSHOT_FIELDS,
       { path: "contextJson.financialProjections", label: "Financial Projections", type: "object", sourceVariable: "contextJson" },
       { path: "contextJson.previousFunding", label: "Previous Funding", type: "array", sourceVariable: "contextJson" },
       { path: "contextJson.currentValuation", label: "Current Valuation", type: "number", sourceVariable: "contextJson" },
       { path: "contextSections", label: "Formatted Context Sections", type: "string", sourceVariable: "contextSections" },
     ],
-    notes: ["Context captures valuation/fundraise assumptions and external funding references."],
+    notes: [
+      "Context captures valuation/fundraise assumptions and external funding references.",
+      "Startup Snapshot baseline is always prepended as the first section.",
+    ],
   },
   "evaluation.competitiveAdvantage": {
     requiredPhases: [PipelinePhase.EXTRACTION, PipelinePhase.SCRAPING, PipelinePhase.RESEARCH],
     fields: [
+      ...EVALUATION_STARTUP_SNAPSHOT_FIELDS,
       { path: "contextJson.marketResearch", label: "Market Research", type: "object", sourceVariable: "contextJson" },
       { path: "contextJson.competitiveLandscape", label: "Competitive Landscape", type: "array", sourceVariable: "contextJson" },
       { path: "contextJson.productResearch", label: "Product Research", type: "object", sourceVariable: "contextJson" },
       { path: "contextSections", label: "Formatted Context Sections", type: "string", sourceVariable: "contextSections" },
     ],
-    notes: ["Context aggregates defensibility evidence across team, market, and product research."],
+    notes: [
+      "Context aggregates defensibility evidence across team, market, and product research.",
+      "Startup Snapshot baseline is always prepended as the first section.",
+    ],
   },
   "evaluation.legal": {
     requiredPhases: [PipelinePhase.EXTRACTION, PipelinePhase.SCRAPING, PipelinePhase.RESEARCH],
     fields: [
+      ...EVALUATION_STARTUP_SNAPSHOT_FIELDS,
       { path: "contextJson.complianceMentions", label: "Compliance Mentions", type: "array", sourceVariable: "contextJson" },
       { path: "contextJson.regulatoryLandscape", label: "Regulatory Landscape", type: "array", sourceVariable: "contextJson" },
       { path: "contextJson.corporateStructure", label: "Corporate Structure", type: "object", sourceVariable: "contextJson" },
       { path: "contextSections", label: "Formatted Context Sections", type: "string", sourceVariable: "contextSections" },
     ],
-    notes: ["Context includes legal/compliance signals from extraction, scraping, and news."],
+    notes: [
+      "Context includes legal/compliance signals from extraction, scraping, and news.",
+      "Startup Snapshot baseline is always prepended as the first section.",
+    ],
   },
   "evaluation.dealTerms": {
     requiredPhases: [PipelinePhase.EXTRACTION, PipelinePhase.SCRAPING, PipelinePhase.RESEARCH],
     fields: [
+      ...EVALUATION_STARTUP_SNAPSHOT_FIELDS,
       { path: "contextJson.fundingTarget", label: "Funding Target", type: "number", sourceVariable: "contextJson" },
       { path: "contextJson.currentValuation", label: "Current Valuation", type: "number", sourceVariable: "contextJson" },
       { path: "contextJson.raiseType", label: "Raise Type", type: "string", sourceVariable: "contextJson" },
       { path: "contextSections", label: "Formatted Context Sections", type: "string", sourceVariable: "contextSections" },
     ],
-    notes: ["Context includes deal terms from extraction plus competitor/market comparables."],
+    notes: [
+      "Context includes deal terms from extraction plus competitor/market comparables.",
+      "Startup Snapshot baseline is always prepended as the first section.",
+    ],
   },
   "evaluation.exitPotential": {
     requiredPhases: [PipelinePhase.EXTRACTION, PipelinePhase.SCRAPING, PipelinePhase.RESEARCH],
     fields: [
+      ...EVALUATION_STARTUP_SNAPSHOT_FIELDS,
       { path: "contextJson.marketSize", label: "Market Size", type: "object", sourceVariable: "contextJson" },
       { path: "contextJson.competitorMandA", label: "Competitor M&A", type: "array", sourceVariable: "contextJson" },
       { path: "contextJson.exitOpportunities", label: "Exit Opportunities", type: "array", sourceVariable: "contextJson" },
       { path: "contextSections", label: "Formatted Context Sections", type: "string", sourceVariable: "contextSections" },
     ],
-    notes: ["Context combines market size, M&A signals, and long-term scalability evidence."],
+    notes: [
+      "Context combines market size, M&A signals, and long-term scalability evidence.",
+      "Startup Snapshot baseline is always prepended as the first section.",
+    ],
   },
   "synthesis.final": {
     requiredPhases: [
@@ -301,6 +436,16 @@ const RUNTIME_SCHEMA_BY_KEY: Record<AiPromptKey, PromptRuntimeSchema> = {
       { path: "historyBlock", label: "History Block", type: "string", sourceVariable: "historyBlock" },
     ],
     notes: ["Clara response context is intent-driven plus startup status snippets and short thread history."],
+  },
+  "clara.agent": {
+    requiredPhases: [],
+    fields: [
+      { path: "fromEmail", label: "From Email", type: "string", sourceVariable: "fromEmail" },
+      { path: "subject", label: "Subject", type: "string", sourceVariable: "subject" },
+      { path: "body", label: "Body", type: "string", sourceVariable: "body" },
+      { path: "historyBlock", label: "History Block", type: "string", sourceVariable: "historyBlock" },
+    ],
+    notes: ["Clara agent loop context. Tools handle data retrieval; prompt provides sender identity and conversation history."],
   },
 };
 
@@ -368,6 +513,15 @@ export class AiPromptRuntimeService {
       promptConfig.userPrompt,
       resolved.variables,
     );
+    const isEvaluationPrompt = key.startsWith("evaluation.");
+    const parsedContextJson = isEvaluationPrompt
+      ? this.parseContextJsonVariable(resolved.variables.contextJson)
+      : null;
+    const parsedContextSections = isEvaluationPrompt
+      ? this.parseContextSectionsVariable(resolved.variables.contextSections)
+      : null;
+    const sectionTitles =
+      parsedContextSections?.map((section) => section.title) ?? [];
 
     const model = this.resolveModelPreview(key);
 
@@ -387,6 +541,9 @@ export class AiPromptRuntimeService {
       },
       model,
       resolvedVariables: resolved.variables,
+      parsedContextJson,
+      parsedContextSections,
+      sectionTitles,
       hashes: {
         renderedSystemPrompt: this.sha256(renderedSystemPrompt),
         renderedUserPrompt: this.sha256(renderedUserPrompt),
@@ -401,6 +558,85 @@ export class AiPromptRuntimeService {
           ),
         ),
       },
+    };
+  }
+
+  async previewPipelineContexts(input: {
+    startupId: string;
+    stage?: StartupStage | null;
+  }) {
+    const startupId = this.requireStartupId(input.startupId, "research.team");
+    const extraction = await this.requirePhaseResult<ExtractionResult>(
+      startupId,
+      PipelinePhase.EXTRACTION,
+      "research.team",
+    );
+    const effectiveStage = this.normalizeStage(input.stage ?? extraction.stage);
+    const pipelinePromptKeys = this.getPipelinePromptKeys();
+    const agents: PipelineContextAgentPreview[] = [];
+
+    for (const promptKey of pipelinePromptKeys) {
+      const resolved = await this.resolveVariablesForKey(promptKey, {
+        startupId,
+        stage: effectiveStage,
+      });
+
+      const promptConfig = await this.promptService.resolve({
+        key: promptKey,
+        stage: resolved.stage,
+      });
+
+      const renderedSystemPrompt = this.promptService.renderTemplate(
+        promptConfig.systemPrompt,
+        resolved.variables,
+      );
+      const renderedUserPrompt = this.promptService.renderTemplate(
+        promptConfig.userPrompt,
+        resolved.variables,
+      );
+      const parsedContextJson = this.parseContextJsonVariable(
+        resolved.variables.contextJson,
+      );
+      const parsedContextSections = this.parseContextSectionsVariable(
+        resolved.variables.contextSections,
+      );
+
+      agents.push({
+        phase: promptKey.startsWith("research.")
+          ? PipelinePhase.RESEARCH
+          : PipelinePhase.EVALUATION,
+        agentKey: this.getPipelineAgentKeyFromPromptKey(promptKey),
+        promptKey,
+        promptSource: promptConfig.source,
+        promptRevisionId: promptConfig.revisionId,
+        effectiveStage: resolved.stage,
+        resolvedVariables: resolved.variables,
+        renderedSystemPrompt,
+        renderedUserPrompt,
+        parsedContextJson,
+        parsedContextSections,
+        hashes: {
+          renderedSystemPrompt: this.sha256(renderedSystemPrompt),
+          renderedUserPrompt: this.sha256(renderedUserPrompt),
+          variables: this.sha256(
+            JSON.stringify(
+              Object.keys(resolved.variables)
+                .sort()
+                .reduce<Record<string, TemplateVariable>>((acc, current) => {
+                  acc[current] = resolved.variables[current];
+                  return acc;
+                }, {}),
+            ),
+          ),
+        },
+      });
+    }
+
+    return {
+      startupId,
+      effectiveStage,
+      generatedAt: new Date().toISOString(),
+      agents,
     };
   }
 
@@ -451,6 +687,19 @@ export class AiPromptRuntimeService {
                 : "no",
           historyBlock: input.historyBlock ?? "No prior conversation.",
           startupStage: input.stage ?? "unknown",
+        },
+      };
+    }
+
+    if (key === "clara.agent") {
+      return {
+        stage: this.normalizeStage(input.stage),
+        startupId: input.startupId ?? null,
+        variables: {
+          fromEmail: input.fromEmail ?? "unknown@example.com",
+          subject: input.subject ?? "(no subject)",
+          body: input.body ?? "(empty)",
+          historyBlock: input.historyBlock ?? "No prior conversation.",
         },
       };
     }
@@ -551,20 +800,19 @@ export class AiPromptRuntimeService {
     const agent = ALL_RESEARCH_AGENTS[agentKey];
     const context = agent.contextBuilder(pipelineInput);
     const feedbackContext = await this.loadResearchFeedbackContext(startupId, agentKey);
-
-    const promptContext = {
-      ...context,
-      startupFormContext: extraction.startupContext ?? {},
+    const { templateVariables } = buildResearchPromptVariables({
+      key: agentKey,
+      agentName: agent.name,
+      pipelineInput,
+      agentContext: context,
       adminFeedback: feedbackContext,
-    };
+    });
 
     return {
       stage: this.normalizeStage(input.stage ?? extraction.stage),
       startupId,
       variables: {
-        contextJson: `<user_provided_data>\n${JSON.stringify(promptContext)}\n</user_provided_data>`,
-        agentName: agent.name,
-        agentKey,
+        ...templateVariables,
       },
     };
   }
@@ -596,6 +844,10 @@ export class AiPromptRuntimeService {
     const feedbackNotes = await this.loadEvaluationFeedbackNotes(startupId, evaluationKey);
 
     const promptContext = {
+      startupSnapshot: buildEvaluationCommonBaseline({
+        extraction,
+        adminFeedback: feedbackNotes,
+      }),
       ...agent.buildContext(pipelineInput),
       startupFormContext: extraction.startupContext ?? {},
       adminFeedback: feedbackNotes,
@@ -875,6 +1127,100 @@ export class AiPromptRuntimeService {
     }
 
     return sections.join("\n\n");
+  }
+
+  private getPipelinePromptKeys(): PipelinePromptKey[] {
+    return AI_PROMPT_KEYS.filter(
+      (key): key is PipelinePromptKey =>
+        key.startsWith("research.") || key.startsWith("evaluation."),
+    );
+  }
+
+  private getPipelineAgentKeyFromPromptKey(key: PipelinePromptKey): string {
+    if (key.startsWith("research.")) {
+      return this.getResearchAgentKeyFromPromptKey(
+        key as Extract<AiPromptKey, `research.${string}`>,
+      );
+    }
+
+    return this.getEvaluationAgentFromPromptKey(
+      key as Extract<AiPromptKey, `evaluation.${string}`>,
+    ).evaluationKey;
+  }
+
+  private parseContextJsonVariable(value: TemplateVariable): unknown | null {
+    if (typeof value !== "string") {
+      return null;
+    }
+
+    const payload = this.unwrapUserProvidedDataWrapper(value.trim());
+    if (!payload) {
+      return null;
+    }
+
+    return this.tryParseJson(payload) ?? payload;
+  }
+
+  private parseContextSectionsVariable(
+    value: TemplateVariable,
+  ): ParsedContextSection[] | null {
+    if (typeof value !== "string") {
+      return null;
+    }
+
+    const normalized = value.trim();
+    if (!normalized) {
+      return null;
+    }
+
+    const sections: ParsedContextSection[] = [];
+    const chunks = normalized.split(/\n\n(?=##\s)/g);
+
+    for (const chunk of chunks) {
+      const trimmed = chunk.trim();
+      if (!trimmed.startsWith("## ")) {
+        continue;
+      }
+
+      const firstLineBreak = trimmed.indexOf("\n");
+      const title =
+        firstLineBreak === -1
+          ? trimmed.slice(3).trim()
+          : trimmed.slice(3, firstLineBreak).trim();
+      const body =
+        firstLineBreak === -1
+          ? ""
+          : trimmed.slice(firstLineBreak + 1).trim();
+      const payload = this.unwrapUserProvidedDataWrapper(body);
+
+      sections.push({
+        title,
+        data: this.tryParseJson(payload) ?? payload,
+      });
+    }
+
+    return sections.length > 0 ? sections : null;
+  }
+
+  private unwrapUserProvidedDataWrapper(value: string): string {
+    const trimmed = value.trim();
+    const match = trimmed.match(
+      /^<user_provided_data>\s*([\s\S]*?)\s*<\/user_provided_data>$/i,
+    );
+
+    return match?.[1]?.trim() ?? trimmed;
+  }
+
+  private tryParseJson(value: string): unknown | null {
+    if (!value) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(value);
+    } catch {
+      return null;
+    }
   }
 
   private getResearchAgentKeyFromPromptKey(

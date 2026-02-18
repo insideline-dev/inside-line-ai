@@ -29,6 +29,22 @@ const requiredStringFromNull = (fallback: string) =>
     z.string().min(1),
   );
 
+const stringArray = z.preprocess(
+  (value) =>
+    Array.isArray(value)
+      ? value.filter((item): item is string => typeof item === "string")
+      : [],
+  z.array(z.string()),
+).default([]);
+
+const urlArray = z.preprocess(
+  (value) =>
+    Array.isArray(value)
+      ? value.filter((item): item is string => typeof item === "string")
+      : [],
+  z.array(z.string().url()),
+).default([]);
+
 export const CompetitorDetailSchema = z.object({
   name: requiredStringFromNull("Unknown competitor"),
   description: requiredStringFromNull("Description unavailable"),
@@ -37,11 +53,11 @@ export const CompetitorDetailSchema = z.object({
   fundingStage: optionalString,
   employeeCount: optionalNonNegativeNumber,
   productOverview: requiredStringFromNull("Product overview unavailable"),
-  keyFeatures: z.array(z.string()).default([]),
+  keyFeatures: stringArray,
   pricing: optionalString,
   targetMarket: optionalString,
-  differentiators: z.array(z.string()).default([]),
-  weaknesses: z.array(z.string()).default([]),
+  differentiators: stringArray,
+  weaknesses: stringArray,
   threatLevel: optionalThreatLevel,
 });
 
@@ -58,7 +74,7 @@ export const CompetitorResearchSchema = z.object({
   indirectCompetitors: z.array(IndirectCompetitorDetailSchema).default([]),
   marketPositioning: z.string().default(""),
   competitiveLandscapeSummary: z.string().default(""),
-  sources: z.array(z.string().url()).default([]),
+  sources: urlArray,
 });
 
 export type CompetitorResearch = z.infer<typeof CompetitorResearchSchema>;

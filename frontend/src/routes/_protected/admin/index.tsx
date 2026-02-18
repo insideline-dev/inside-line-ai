@@ -18,13 +18,20 @@ export const Route = createFileRoute("/_protected/admin/")({
   component: AdminDashboard,
 });
 
-interface StatsData {
-  pendingReview: number;
-  analyzing: number;
-  approved: number;
-  rejected: number;
-  totalInvestors: number;
-  totalMatches: number;
+interface PlatformStats {
+  users: {
+    total: number;
+    byRole: Record<string, number>;
+  };
+  startups: {
+    total: number;
+    byStatus: Record<string, number>;
+    pending: number;
+  };
+  matches: {
+    total: number;
+    highScore: number;
+  };
 }
 
 interface StartupItem {
@@ -162,8 +169,8 @@ function AdminDashboard() {
       staleTime: 30_000,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       refetchInterval: (query: any) => {
-        const data = query.state.data as { data: StatsData } | undefined;
-        return (data?.data?.analyzing ?? 0) > 0 ? 5000 : false;
+        const data = query.state.data as PlatformStats | undefined;
+        return (data?.startups?.byStatus?.analyzing ?? 0) > 0 ? 5000 : false;
       },
     },
   });
@@ -183,12 +190,12 @@ function AdminDashboard() {
     }
   );
 
-  const statsData = statsResponse?.data as StatsData | undefined;
-  const startups = (startupsResponse?.data as StartupItem[] | undefined) ?? [];
+  const statsData = statsResponse as unknown as PlatformStats | undefined;
+  const startups = ((startupsResponse as unknown as { data: StartupItem[] } | undefined)?.data) ?? [];
 
   // Toast notification when analyzing count drops
   useEffect(() => {
-    const currentAnalyzingCount = statsData?.analyzing ?? 0;
+    const currentAnalyzingCount = statsData?.startups?.byStatus?.analyzing ?? 0;
     const prevCount = prevAnalyzingCountRef.current;
 
     if (prevCount > 0 && currentAnalyzingCount < prevCount) {
@@ -198,52 +205,53 @@ function AdminDashboard() {
       });
     }
     prevAnalyzingCountRef.current = currentAnalyzingCount;
-  }, [statsData?.analyzing]);
+  }, [statsData?.startups?.byStatus?.analyzing]);
 
   const handleTabChange = (value: string) => {
     setActiveTab(value);
     setPage(1);
   };
 
+  const byStatus = statsData?.startups?.byStatus;
   const stats = [
     {
       label: "Pending",
-      value: statsData?.pendingReview ?? 0,
+      value: (byStatus?.pending_review ?? 0) + (byStatus?.submitted ?? 0),
       icon: Clock,
       bgColor: "bg-chart-4/10",
       iconColor: "text-chart-4",
     },
     {
       label: "Analyzing",
-      value: statsData?.analyzing ?? 0,
+      value: byStatus?.analyzing ?? 0,
       icon: Sparkles,
       bgColor: "bg-chart-5/10",
       iconColor: "text-chart-5",
     },
     {
       label: "Approved",
-      value: statsData?.approved ?? 0,
+      value: byStatus?.approved ?? 0,
       icon: CheckCircle,
       bgColor: "bg-chart-2/10",
       iconColor: "text-chart-2",
     },
     {
       label: "Rejected",
-      value: statsData?.rejected ?? 0,
+      value: byStatus?.rejected ?? 0,
       icon: XCircle,
       bgColor: "bg-destructive/10",
       iconColor: "text-destructive",
     },
     {
       label: "Investors",
-      value: statsData?.totalInvestors ?? 0,
+      value: statsData?.users?.byRole?.investor ?? 0,
       icon: Users,
       bgColor: "bg-chart-3/10",
       iconColor: "text-chart-3",
     },
     {
       label: "Matches",
-      value: statsData?.totalMatches ?? 0,
+      value: statsData?.matches?.total ?? 0,
       icon: Target,
       bgColor: "bg-chart-1/10",
       iconColor: "text-chart-1",
@@ -251,8 +259,8 @@ function AdminDashboard() {
   ];
 
   const tabs = [
-    { value: "pending_review", label: "Pending Review", count: statsData?.pendingReview },
-    { value: "analyzing", label: "Analyzing", count: statsData?.analyzing },
+    { value: "pending_review", label: "Pending Review", count: byStatus?.pending_review },
+    { value: "analyzing", label: "Analyzing", count: byStatus?.analyzing },
     { value: "approved", label: "Approved", count: 0 },
     { value: "rejected", label: "Rejected", count: 0 },
     { value: "all", label: "All", count: 0 },

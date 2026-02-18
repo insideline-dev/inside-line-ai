@@ -152,6 +152,26 @@ function UserManagement() {
     },
   });
 
+  const approveWaitlistMutation = useMutation({
+    mutationFn: (id: string) =>
+      customFetch<EarlyAccessInvite>(
+        `/admin/early-access/waitlist/${id}/approve`,
+        { method: "POST" },
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["admin", "early-access", "waitlist"],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["admin", "early-access", "invites"],
+      });
+      toast.success("Waitlist entry approved — invite sent");
+    },
+    onError: (err) => {
+      toast.error(err.message || "Failed to approve waitlist entry");
+    },
+  });
+
   const copyInviteLink = async () => {
     if (!latestInviteUrl) {
       return;
@@ -361,6 +381,9 @@ function UserManagement() {
                     <th className="text-left py-3 px-3 font-medium text-muted-foreground">
                       Added
                     </th>
+                    <th className="text-left py-3 px-3 font-medium text-muted-foreground">
+                      Actions
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -371,16 +394,30 @@ function UserManagement() {
                       <td className="py-3 px-3">{entry.companyName}</td>
                       <td className="py-3 px-3">{entry.role}</td>
                       <td className="py-3 px-3">
-                        <a
-                          href={entry.website}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="underline underline-offset-2"
-                        >
-                          {entry.website}
-                        </a>
+                        {entry.website ? (
+                          <a
+                            href={entry.website}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="underline underline-offset-2"
+                          >
+                            {entry.website}
+                          </a>
+                        ) : (
+                          "-"
+                        )}
                       </td>
                       <td className="py-3 px-3">{formatDate(entry.createdAt)}</td>
+                      <td className="py-3 px-3">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={approveWaitlistMutation.isPending}
+                          onClick={() => approveWaitlistMutation.mutate(entry.id)}
+                        >
+                          Approve
+                        </Button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

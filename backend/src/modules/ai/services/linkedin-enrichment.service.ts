@@ -175,7 +175,7 @@ export class LinkedinEnrichmentService {
           linkedinUrl: member.linkedinUrl,
           enrichmentStatus: 'error',
           matchConfidence: 0,
-          confidenceReason: 'LinkedIn enrichment failed with an unexpected error',
+          confidenceReason: 'LinkedIn profile resolution failed with an unexpected error',
         });
       }
     }

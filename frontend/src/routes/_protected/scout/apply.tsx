@@ -7,14 +7,22 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { useScoutControllerApply } from "@/api/generated/scout/scout";
+import {
+  getScoutControllerGetMyApplicationsQueryKey,
+  useScoutControllerApply,
+  useScoutControllerGetInvestors,
+} from "@/api/generated/scout/scout";
+import { useQueryClient } from "@tanstack/react-query";
+import type { ScoutInvestorsResponseDtoDataItem } from "@/api/generated/model";
 
 export const Route = createFileRoute("/_protected/scout/apply")({
   component: ScoutApplication,
 });
 
 const applyScoutSchema = z.object({
+  investorId: z.string().uuid("Investor is required"),
   name: z.string().min(2, "Name must be at least 2 characters").max(200),
   email: z.string().email("Invalid email address"),
   linkedinUrl: z.string().url("Must be a valid URL"),
@@ -27,9 +35,11 @@ const applyScoutSchema = z.object({
 type ApplyScoutForm = z.infer<typeof applyScoutSchema>;
 
 function ScoutApplication() {
-  const form = useForm({
-    resolver: zodResolver(applyScoutSchema) as any,
+  const queryClient = useQueryClient();
+  const form = useForm<ApplyScoutForm>({
+    resolver: zodResolver(applyScoutSchema),
     defaultValues: {
+      investorId: "",
       name: "",
       email: "",
       linkedinUrl: "",
@@ -40,11 +50,28 @@ function ScoutApplication() {
     },
   });
 
+  const { data: investorsResponse, isLoading: loadingInvestors } = useScoutControllerGetInvestors();
+  const investors = (investorsResponse?.data.data ?? []) as ScoutInvestorsResponseDtoDataItem[];
+
+  const availableInvestors = investors.filter(
+    (investor) => investor.applicationStatus === null,
+  );
+
   const { mutate, isPending } = useScoutControllerApply({
     mutation: {
-      onSuccess: () => {
+      onSuccess: async () => {
         toast.success("Application submitted successfully");
-        form.reset();
+        await queryClient.invalidateQueries({
+          queryKey: getScoutControllerGetMyApplicationsQueryKey(),
+        });
+        form.reset({
+          ...form.getValues(),
+          investorId: "",
+          experience: "",
+          motivation: "",
+          dealflowSources: "",
+          portfolio: "",
+        });
       },
       onError: (error) => {
         toast.error((error as Error).message || "Failed to submit application");
@@ -53,16 +80,13 @@ function ScoutApplication() {
   });
 
   const onSubmit = (values: ApplyScoutForm) => {
-    // TODO: Get investorId from route params or user context when available
-    const investorId = "00000000-0000-0000-0000-000000000001";
-
     const portfolio = values.portfolio
       ? values.portfolio.split("\n").map((url) => url.trim()).filter(Boolean)
       : [];
 
     mutate({
       data: {
-        investorId,
+        investorId: values.investorId,
         name: values.name,
         email: values.email,
         linkedinUrl: values.linkedinUrl,
@@ -70,7 +94,7 @@ function ScoutApplication() {
         motivation: values.motivation,
         dealflowSources: values.dealflowSources,
         portfolio,
-      } as any, // Type mismatch due to outdated OpenAPI spec
+      },
     });
   };
 
@@ -91,6 +115,36 @@ function ScoutApplication() {
         <CardContent>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              <FormField
+                control={form.control}
+                name="investorId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Investor</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value} disabled={loadingInvestors}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder={loadingInvestors ? "Loading investors..." : "Select investor"} />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {availableInvestors.map((investor) => (
+                          <SelectItem key={investor.id} value={investor.id}>
+                            {investor.name} ({investor.email})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>
+                      {availableInvestors.length > 0
+                        ? "Choose the investor you want to scout for."
+                        : "No open investor applications are available for your account."}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
               <FormField
                 control={form.control}
                 name="name"
@@ -217,7 +271,7 @@ function ScoutApplication() {
                 )}
               />
 
-              <Button type="submit" disabled={isPending} className="w-full">
+              <Button type="submit" disabled={isPending || !availableInvestors.length} className="w-full">
                 {isPending ? "Submitting..." : "Submit Application"}
               </Button>
             </form>

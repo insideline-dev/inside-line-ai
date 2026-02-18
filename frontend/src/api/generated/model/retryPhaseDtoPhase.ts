@@ -11,6 +11,7 @@ export type RetryPhaseDtoPhase = typeof RetryPhaseDtoPhase[keyof typeof RetryPha
 
 export const RetryPhaseDtoPhase = {
   extraction: 'extraction',
+  enrichment: 'enrichment',
   scraping: 'scraping',
   research: 'research',
   evaluation: 'evaluation',

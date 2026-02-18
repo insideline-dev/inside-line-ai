@@ -43,15 +43,15 @@ export const AI_FLOW_DEFINITIONS: AiFlowDefinition[] = [
     stages: [
       {
         id: "stage_1",
-        title: "Stage 1: Data Extraction",
-        description: "Read pitch materials and build structured startup context.",
-        nodeIds: ["extract_fields", "scrape_website"],
+        title: "Stage 1: Hybrid Gap Fill",
+        description: "Run AI + Brave Search to fill missing startup profile fields first.",
+        nodeIds: ["gap_fill_hybrid"],
       },
       {
         id: "stage_2",
-        title: "Stage 2: Team Enrichment",
-        description: "Discover and enrich founder/team profile context.",
-        nodeIds: ["linkedin_enrichment"],
+        title: "Stage 2: Data Extraction",
+        description: "Parse pitch materials and scrape the website on top of gap-filled context.",
+        nodeIds: ["extract_fields", "scrape_website"],
       },
       {
         id: "stage_3",
@@ -95,6 +95,15 @@ export const AI_FLOW_DEFINITIONS: AiFlowDefinition[] = [
     ],
     nodes: [
       {
+        id: "gap_fill_hybrid",
+        label: "Hybrid Gap Fill",
+        description: "Use AI synthesis + Brave Search evidence to fill missing startup fields.",
+        kind: "system",
+        promptKeys: [],
+        inputs: ["Startup profile", "Existing company metadata", "Brave search results"],
+        outputs: ["Gap-filled fields", "Corrections", "Evidence summary"],
+      },
+      {
         id: "extract_fields",
         label: "Document Parsing",
         description: "Extract startup fields from pitch deck text.",
@@ -113,21 +122,12 @@ export const AI_FLOW_DEFINITIONS: AiFlowDefinition[] = [
         outputs: ["Website pages", "Content snippets"],
       },
       {
-        id: "linkedin_enrichment",
-        label: "LinkedIn Enrichment",
-        description: "Discover team members and enrich founder profiles.",
-        kind: "system",
-        promptKeys: [],
-        inputs: ["Founders", "Company metadata"],
-        outputs: ["LinkedIn profile snapshots"],
-      },
-      {
         id: "research_orchestrator",
         label: "Research Orchestrator",
         description: "Coordinates all research agents and aggregates outputs.",
         kind: "system",
         promptKeys: [],
-        inputs: ["Extraction", "Scraping", "LinkedIn context"],
+        inputs: ["Gap fill", "Extraction", "Scraping context"],
         outputs: ["Research phase result"],
       },
       {
@@ -303,9 +303,11 @@ export const AI_FLOW_DEFINITIONS: AiFlowDefinition[] = [
       },
     ],
     edges: [
+      { from: "gap_fill_hybrid", to: "extract_fields" },
+      { from: "gap_fill_hybrid", to: "scrape_website" },
+      { from: "gap_fill_hybrid", to: "research_orchestrator" },
       { from: "extract_fields", to: "research_orchestrator" },
       { from: "scrape_website", to: "research_orchestrator" },
-      { from: "linkedin_enrichment", to: "research_orchestrator" },
       { from: "research_orchestrator", to: "research_team" },
       { from: "research_orchestrator", to: "research_market" },
       { from: "research_orchestrator", to: "research_product" },

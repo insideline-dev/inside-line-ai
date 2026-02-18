@@ -9,10 +9,12 @@ import {
 } from "../../interfaces/pipeline.interface";
 import type { PipelineStateService } from "../../services/pipeline-state.service";
 import type { PipelineService } from "../../services/pipeline.service";
+import type { PipelineAgentTraceService } from "../../services/pipeline-agent-trace.service";
 import type { SynthesisService } from "../../services/synthesis.service";
 import type { NotificationGateway } from "../../../../notification/notification.gateway";
 import type { AiSynthesisJobData } from "../../../../queue/interfaces";
 import { createMockSynthesisResult } from "../fixtures/mock-synthesis.fixture";
+import { SYNTHESIS_AGENT_KEY } from "../../services/synthesis.service";
 
 describe("SynthesisProcessor", () => {
   let processor: SynthesisProcessor;
@@ -21,6 +23,7 @@ describe("SynthesisProcessor", () => {
   let pipelineState: jest.Mocked<PipelineStateService>;
   let pipelineService: jest.Mocked<PipelineService>;
   let notificationGateway: jest.Mocked<NotificationGateway>;
+  let pipelineAgentTrace: jest.Mocked<PipelineAgentTraceService>;
 
   beforeEach(() => {
     config = {
@@ -31,7 +34,19 @@ describe("SynthesisProcessor", () => {
     } as unknown as jest.Mocked<ConfigService>;
 
     synthesisService = {
-      run: jest.fn().mockResolvedValue(createMockSynthesisResult()),
+      runDetailed: jest.fn().mockResolvedValue({
+        synthesis: createMockSynthesisResult(),
+        trace: {
+          agentKey: SYNTHESIS_AGENT_KEY,
+          status: "completed",
+          attempt: 1,
+          retryCount: 0,
+          usedFallback: false,
+          inputPrompt: "Synthesis prompt",
+          outputText: JSON.stringify(createMockSynthesisResult()),
+          outputJson: createMockSynthesisResult(),
+        },
+      }),
     } as unknown as jest.Mocked<SynthesisService>;
 
     pipelineState = {
@@ -98,11 +113,16 @@ describe("SynthesisProcessor", () => {
     pipelineService = {
       onPhaseCompleted: jest.fn().mockResolvedValue(undefined),
       onPhaseFailed: jest.fn().mockResolvedValue(undefined),
+      onAgentProgress: jest.fn().mockResolvedValue(undefined),
     } as unknown as jest.Mocked<PipelineService>;
 
     notificationGateway = {
       sendJobStatus: jest.fn(),
     } as unknown as jest.Mocked<NotificationGateway>;
+
+    pipelineAgentTrace = {
+      recordRun: jest.fn().mockResolvedValue(undefined),
+    } as unknown as jest.Mocked<PipelineAgentTraceService>;
 
     processor = new SynthesisProcessor(
       config as unknown as ConfigService,
@@ -110,6 +130,7 @@ describe("SynthesisProcessor", () => {
       pipelineState as unknown as PipelineStateService,
       pipelineService as unknown as PipelineService,
       notificationGateway as unknown as NotificationGateway,
+      pipelineAgentTrace as unknown as PipelineAgentTraceService,
     );
   });
 
@@ -135,7 +156,36 @@ describe("SynthesisProcessor", () => {
       PipelinePhase.SYNTHESIS,
       PhaseStatus.RUNNING,
     );
-    expect(synthesisService.run).toHaveBeenCalledWith("startup-1");
+    expect(synthesisService.runDetailed).toHaveBeenCalledWith("startup-1");
+    expect(pipelineService.onAgentProgress).toHaveBeenCalledWith(
+      expect.objectContaining({
+        startupId: "startup-1",
+        pipelineRunId: "run-1",
+        phase: PipelinePhase.SYNTHESIS,
+        key: SYNTHESIS_AGENT_KEY,
+        status: "running",
+        lifecycleEvent: "started",
+      }),
+    );
+    expect(pipelineService.onAgentProgress).toHaveBeenCalledWith(
+      expect.objectContaining({
+        startupId: "startup-1",
+        pipelineRunId: "run-1",
+        phase: PipelinePhase.SYNTHESIS,
+        key: SYNTHESIS_AGENT_KEY,
+        status: "completed",
+        lifecycleEvent: "completed",
+      }),
+    );
+    expect(pipelineAgentTrace.recordRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        startupId: "startup-1",
+        pipelineRunId: "run-1",
+        phase: PipelinePhase.SYNTHESIS,
+        agentKey: SYNTHESIS_AGENT_KEY,
+        status: "completed",
+      }),
+    );
     expect(pipelineState.setPhaseResult).toHaveBeenCalledWith(
       "startup-1",
       PipelinePhase.SYNTHESIS,
@@ -153,7 +203,9 @@ describe("SynthesisProcessor", () => {
   });
 
   it("marks phase failed when synthesis service throws", async () => {
-    synthesisService.run.mockRejectedValueOnce(new Error("synthesis failed"));
+    synthesisService.runDetailed.mockRejectedValueOnce(
+      new Error("synthesis failed"),
+    );
 
     const job = {
       id: "job-1",
@@ -183,6 +235,84 @@ describe("SynthesisProcessor", () => {
       "startup-1",
       PipelinePhase.SYNTHESIS,
       "synthesis failed",
+    );
+    expect(pipelineService.onAgentProgress).toHaveBeenCalledWith(
+      expect.objectContaining({
+        startupId: "startup-1",
+        pipelineRunId: "run-1",
+        phase: PipelinePhase.SYNTHESIS,
+        key: SYNTHESIS_AGENT_KEY,
+        status: "failed",
+        lifecycleEvent: "failed",
+        error: "synthesis failed",
+      }),
+    );
+    expect(pipelineAgentTrace.recordRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        startupId: "startup-1",
+        pipelineRunId: "run-1",
+        phase: PipelinePhase.SYNTHESIS,
+        agentKey: SYNTHESIS_AGENT_KEY,
+        status: "failed",
+        error: "synthesis failed",
+      }),
+    );
+  });
+
+  it("marks lifecycle as fallback when synthesis returns fallback output", async () => {
+    synthesisService.runDetailed.mockResolvedValueOnce({
+      synthesis: createMockSynthesisResult(),
+      trace: {
+        agentKey: SYNTHESIS_AGENT_KEY,
+        status: "fallback",
+        attempt: 1,
+        retryCount: 0,
+        usedFallback: true,
+        inputPrompt: "Synthesis prompt",
+        outputText: "fallback output",
+        outputJson: { overallScore: 0 },
+        error: "Model returned empty structured output; fallback result generated.",
+        fallbackReason: "EMPTY_STRUCTURED_OUTPUT",
+        rawProviderError: "No object generated",
+      },
+    });
+
+    const job = {
+      id: "job-1",
+      data: {
+        type: "ai_synthesis",
+        startupId: "startup-1",
+        pipelineRunId: "run-1",
+        userId: "user-1",
+      } satisfies AiSynthesisJobData,
+    } as unknown as Job<AiSynthesisJobData>;
+
+    await (
+      processor as unknown as {
+        process: (job: Job<AiSynthesisJobData>) => Promise<{ type: string }>;
+      }
+    ).process(job);
+
+    expect(pipelineService.onAgentProgress).toHaveBeenCalledWith(
+      expect.objectContaining({
+        startupId: "startup-1",
+        pipelineRunId: "run-1",
+        phase: PipelinePhase.SYNTHESIS,
+        key: SYNTHESIS_AGENT_KEY,
+        status: "completed",
+        lifecycleEvent: "fallback",
+        usedFallback: true,
+      }),
+    );
+    expect(pipelineAgentTrace.recordRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        startupId: "startup-1",
+        pipelineRunId: "run-1",
+        phase: PipelinePhase.SYNTHESIS,
+        agentKey: SYNTHESIS_AGENT_KEY,
+        status: "fallback",
+        usedFallback: true,
+      }),
     );
   });
 });

@@ -24,6 +24,22 @@ const requiredStringFromNull = (fallback: string) =>
     z.string().min(1),
   );
 
+const stringArray = z.preprocess(
+  (value) =>
+    Array.isArray(value)
+      ? value.filter((item): item is string => typeof item === "string")
+      : [],
+  z.array(z.string()),
+).default([]);
+
+const urlArray = z.preprocess(
+  (value) =>
+    Array.isArray(value)
+      ? value.filter((item): item is string => typeof item === "string")
+      : [],
+  z.array(z.string().url()),
+).default([]);
+
 const optionalThreatLevel = z.preprocess(
   nullToUndefined,
   z.enum(["high", "medium", "low"]).optional(),
@@ -45,11 +61,11 @@ export const MarketIndirectCompetitorSchema = z.object({
 });
 
 export const MarketResearchSchema = z.object({
-  marketReports: z.array(z.string()).default([]),
+  marketReports: stringArray,
   competitors: z.array(MarketCompetitorSchema).default([]),
-  indirectCompetitors: z.array(z.string()).default([]),
+  indirectCompetitors: stringArray,
   indirectCompetitorsDetailed: z.array(MarketIndirectCompetitorSchema).default([]),
-  marketTrends: z.array(z.string()).default([]),
+  marketTrends: stringArray,
   marketSize: z
     .object({
       tam: optionalNonNegativeNumber,
@@ -57,7 +73,7 @@ export const MarketResearchSchema = z.object({
       som: optionalNonNegativeNumber,
     })
     .default({}),
-  sources: z.array(z.string().url()).default([]),
+  sources: urlArray,
 });
 
 export type MarketResearch = z.infer<typeof MarketResearchSchema>;

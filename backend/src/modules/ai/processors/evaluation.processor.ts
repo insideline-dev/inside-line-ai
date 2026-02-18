@@ -67,6 +67,9 @@ export class EvaluationProcessor
   ): Promise<Omit<AiEvaluationJobResult, "jobId" | "duration" | "success">> {
     const { startupId, pipelineRunId, userId } = job.data;
     const agentKey = this.readAgentRetryKey(job.data.metadata);
+    const phaseRetryCount = this.readPhaseRetryCount(job.data.metadata);
+    const agentAttemptIds = new Map<EvaluationAgentKey, string>();
+    const agentAttemptNumbers = new Map<EvaluationAgentKey, number>();
 
     if (job.data.type !== "ai_evaluation") {
       throw new Error("Invalid job type for evaluation processor");
@@ -83,6 +86,15 @@ export class EvaluationProcessor
         this.evaluationService.run(startupId, {
           agentKey,
           onAgentStart: (agent) => {
+            const attemptId = this.buildAgentAttemptId(
+              pipelineRunId,
+              PipelinePhase.EVALUATION,
+              agent,
+              phaseRetryCount,
+              1,
+            );
+            agentAttemptIds.set(agent, attemptId);
+            agentAttemptNumbers.set(agent, 1);
             this.pipelineService
               .onAgentProgress({
                 startupId,
@@ -92,6 +104,10 @@ export class EvaluationProcessor
                 key: agent,
                 status: "running",
                 progress: 0,
+                phaseRetryCount,
+                agentAttemptId: attemptId,
+                attempt: 1,
+                retryCount: 0,
               })
               .catch((progressError) => {
                 this.logger.warn(
@@ -107,10 +123,30 @@ export class EvaluationProcessor
             agent,
             output,
             usedFallback,
+            attempt,
+            retryCount,
             error,
             fallbackReason,
             rawProviderError,
           }) => {
+            const resolvedAttempt = Math.max(
+              1,
+              attempt ?? agentAttemptNumbers.get(agent) ?? 1,
+            );
+            const resolvedRetryCount = Math.max(
+              0,
+              retryCount ?? resolvedAttempt - 1,
+            );
+            agentAttemptNumbers.set(agent, resolvedAttempt);
+            const attemptId =
+              agentAttemptIds.get(agent) ??
+              this.buildAgentAttemptId(
+                pipelineRunId,
+                PipelinePhase.EVALUATION,
+                agent,
+                phaseRetryCount,
+                resolvedAttempt,
+              );
             const isFailed = Boolean(error) && usedFallback !== true;
             this.pipelineService
               .onAgentProgress({
@@ -121,6 +157,10 @@ export class EvaluationProcessor
                 key: agent,
                 status: isFailed ? "failed" : "completed",
                 progress: isFailed ? 0 : 100,
+                attempt: resolvedAttempt,
+                retryCount: resolvedRetryCount,
+                phaseRetryCount,
+                agentAttemptId: attemptId,
                 error: error,
                 usedFallback,
                 fallbackReason,
@@ -150,6 +190,8 @@ export class EvaluationProcessor
                 agent,
                 output,
                 usedFallback,
+                attempt: resolvedAttempt,
+                retryCount: resolvedRetryCount,
                 error,
                 fallbackReason,
                 rawProviderError,
@@ -168,6 +210,17 @@ export class EvaluationProcessor
             if (event !== "retrying") {
               return;
             }
+            const resolvedAttempt = Math.max(1, attempt ?? 1);
+            const resolvedRetryCount = Math.max(0, retryCount ?? 0);
+            const attemptId = this.buildAgentAttemptId(
+              pipelineRunId,
+              PipelinePhase.EVALUATION,
+              agent,
+              phaseRetryCount,
+              resolvedAttempt,
+            );
+            agentAttemptIds.set(agent, attemptId);
+            agentAttemptNumbers.set(agent, resolvedAttempt);
 
             this.pipelineService
               .onAgentProgress({
@@ -182,8 +235,10 @@ export class EvaluationProcessor
                 fallbackReason,
                 rawProviderError,
                 lifecycleEvent: event,
-                attempt,
-                retryCount,
+                attempt: resolvedAttempt,
+                retryCount: resolvedRetryCount,
+                phaseRetryCount,
+                agentAttemptId: attemptId,
               })
               .catch((progressError) => {
                 this.logger.warn(
@@ -231,5 +286,29 @@ export class EvaluationProcessor
     }
 
     return undefined;
+  }
+
+  private readPhaseRetryCount(
+    metadata: Record<string, unknown> | undefined,
+  ): number {
+    const retryCount = metadata?.retryCount;
+    if (
+      typeof retryCount === "number" &&
+      Number.isFinite(retryCount) &&
+      retryCount >= 0
+    ) {
+      return Math.floor(retryCount);
+    }
+    return 0;
+  }
+
+  private buildAgentAttemptId(
+    pipelineRunId: string,
+    phase: PipelinePhase,
+    agent: string,
+    phaseRetryCount: number,
+    attempt: number,
+  ): string {
+    return `${pipelineRunId}:${phase}:${agent}:phase-${phaseRetryCount}:attempt-${attempt}`;
   }
 }

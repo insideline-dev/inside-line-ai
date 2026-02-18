@@ -1,21 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataTable } from "@/components/DataTable";
-import { customFetch } from "@/api/client";
+import { useScoutControllerGetLeaderboard } from "@/api/generated/scout/scout";
+import type { ScoutLeaderboardResponseDtoItem } from "@/api/generated/model";
 
 export const Route = createFileRoute("/_protected/scout/leaderboard")({
   component: LeaderboardPage,
 });
-
-type LeaderboardRow = {
-  id: string;
-  name: string;
-  submissions: number;
-  conversions: number;
-  earnings: number;
-};
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-US", {
@@ -26,10 +18,7 @@ function formatCurrency(value: number) {
 }
 
 function LeaderboardPage() {
-  const { data, isLoading, error } = useQuery({
-    queryKey: ["scout", "leaderboard"],
-    queryFn: () => customFetch<LeaderboardRow[]>("/scout/leaderboard"),
-  });
+  const { data, isLoading, error } = useScoutControllerGetLeaderboard();
 
   if (isLoading) {
     return (
@@ -55,7 +44,7 @@ function LeaderboardPage() {
     );
   }
 
-  const rows = data ?? [];
+  const rows = (data?.data ?? []) as ScoutLeaderboardResponseDtoItem[];
   const rankedRows = rows.map((row, index) => ({
     ...row,
     rank: index + 1,

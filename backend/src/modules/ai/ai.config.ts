@@ -3,6 +3,7 @@ import { ModelPurpose, PipelinePhase } from "./interfaces/pipeline.interface";
 
 export const AI_PIPELINE_PHASES: PipelinePhase[] = [
   PipelinePhase.EXTRACTION,
+  PipelinePhase.ENRICHMENT,
   PipelinePhase.SCRAPING,
   PipelinePhase.RESEARCH,
   PipelinePhase.EVALUATION,
@@ -11,6 +12,7 @@ export const AI_PIPELINE_PHASES: PipelinePhase[] = [
 
 export const AI_PHASE_QUEUE_MAP: Record<PipelinePhase, QueueName> = {
   [PipelinePhase.EXTRACTION]: QUEUE_NAMES.AI_EXTRACTION,
+  [PipelinePhase.ENRICHMENT]: QUEUE_NAMES.AI_ENRICHMENT,
   [PipelinePhase.SCRAPING]: QUEUE_NAMES.AI_SCRAPING,
   [PipelinePhase.RESEARCH]: QUEUE_NAMES.AI_RESEARCH,
   [PipelinePhase.EVALUATION]: QUEUE_NAMES.AI_EVALUATION,
@@ -19,6 +21,7 @@ export const AI_PHASE_QUEUE_MAP: Record<PipelinePhase, QueueName> = {
 
 export const DEFAULT_MODEL_BY_PURPOSE: Record<ModelPurpose, string> = {
   [ModelPurpose.EXTRACTION]: "gemini-3-flash-preview",
+  [ModelPurpose.ENRICHMENT]: "gemini-3-flash-preview",
   [ModelPurpose.RESEARCH]: "gemini-3-flash-preview",
   [ModelPurpose.EVALUATION]: "gemini-3-flash-preview",
   [ModelPurpose.SYNTHESIS]: "gemini-3-flash-preview",

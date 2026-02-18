@@ -102,6 +102,40 @@ describe("SynthesisAgent", () => {
     expect(output.investorMemo).toContain("Investor memo");
   });
 
+  it("runDetailed captures prompt/output trace fields", async () => {
+    generateTextMock.mockResolvedValueOnce({
+      output: {
+        overallScore: 79.2,
+        recommendation: "Consider",
+        executiveSummary: "Balanced opportunity with execution risk.",
+        strengths: ["Strong team"],
+        concerns: ["GTM evidence still early"],
+        investmentThesis: "Invest with milestone-based conviction.",
+        nextSteps: ["Validate channel scalability"],
+        confidenceLevel: "Medium",
+        investorMemo: "Investor memo body",
+        founderReport: "Founder report body",
+        dataConfidenceNotes: "Data quality is moderate-high.",
+      },
+    });
+
+    const pipeline = createEvaluationPipelineInput();
+    const result = await service.runDetailed({
+      extraction: pipeline.extraction,
+      scraping: pipeline.scraping,
+      research: pipeline.research,
+      evaluation: createMockEvaluationResult(),
+      stageWeights: { team: 0.25, traction: 0.2, market: 0.2, product: 0.15, dealTerms: 0.1, exitPotential: 0.1 },
+    });
+
+    expect(result.usedFallback).toBe(false);
+    expect(result.inputPrompt).toContain("<evaluation_data>");
+    expect(result.outputJson).toEqual(
+      expect.objectContaining({ recommendation: "Consider" }),
+    );
+    expect(result.outputText).toContain("overallScore");
+  });
+
   it("expands short executive summary into a detailed multi-paragraph narrative", async () => {
     generateTextMock.mockResolvedValueOnce({
       output: {
@@ -248,5 +282,25 @@ describe("SynthesisAgent", () => {
     expect(output.executiveSummary).toContain("Synthesis failed");
     expect(output.concerns).toContain("Automated synthesis could not be completed");
     expect(output.confidenceLevel).toBe("Low");
+  });
+
+  it("runDetailed returns fallback reason metadata on empty output errors", async () => {
+    generateTextMock.mockRejectedValueOnce(new Error("No object generated"));
+
+    const pipeline = createEvaluationPipelineInput();
+    const result = await service.runDetailed({
+      extraction: pipeline.extraction,
+      scraping: pipeline.scraping,
+      research: pipeline.research,
+      evaluation: createMockEvaluationResult(),
+      stageWeights: { team: 0.25, traction: 0.2, market: 0.2, product: 0.15, dealTerms: 0.1, exitPotential: 0.1 },
+    });
+
+    expect(result.usedFallback).toBe(true);
+    expect(result.fallbackReason).toBe("EMPTY_STRUCTURED_OUTPUT");
+    expect(result.error).toBe(
+      "Model returned empty structured output; fallback result generated.",
+    );
+    expect(result.output.overallScore).toBe(0);
   });
 });

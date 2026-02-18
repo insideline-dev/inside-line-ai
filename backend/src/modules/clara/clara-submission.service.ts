@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { and, eq, ilike } from "drizzle-orm";
+import { and, eq, sql, desc } from "drizzle-orm";
 import { DrizzleService } from "../../database";
 import { StorageService } from "../../storage";
 import { ASSET_TYPES } from "../../storage/storage.config";
@@ -11,18 +11,12 @@ import { NotificationService } from "../../notification/notification.service";
 import { NotificationType } from "../../notification/entities";
 import { ClaraAiService } from "./clara-ai.service";
 import { deriveStartupGeography } from "../geography";
-import type { AttachmentMeta, MessageContext } from "./interfaces/clara.interface";
+import type { AttachmentMeta, MessageContext, SubmissionResult } from "./interfaces/clara.interface";
 
 const PDF_MAGIC_BYTES = Buffer.from("%PDF-");
 const MAX_RETRIES = 3;
 const RETRY_DELAYS = [1000, 2000, 4000];
-
-interface SubmissionResult {
-  startupId: string;
-  startupName: string;
-  isDuplicate: boolean;
-  status: string;
-}
+const FUZZY_THRESHOLD = 0.4;
 
 @Injectable()
 export class ClaraSubmissionService {
@@ -60,12 +54,19 @@ export class ClaraSubmissionService {
       ) ??
       "Untitled Startup";
 
-    const duplicate = await this.findDuplicate(companyName, ownerUserId);
+    const duplicate = await this.findFuzzyDuplicate(companyName, ownerUserId);
     if (duplicate) {
+      const enriched = await this.enrichExistingStartup(
+        duplicate.id,
+        ownerUserId,
+        processedAttachments,
+        ctx.bodyText,
+      );
       return {
         startupId: duplicate.id,
         startupName: duplicate.name,
         isDuplicate: true,
+        isEnriched: enriched,
         status: duplicate.status,
       };
     }
@@ -259,17 +260,52 @@ export class ClaraSubmissionService {
     };
   }
 
-  private async findDuplicate(
+  private async findFuzzyDuplicate(
     companyName: string,
     ownerUserId: string,
   ): Promise<{ id: string; name: string; status: string } | null> {
-    const escaped = companyName.replace(/[%_\\]/g, (ch) => `\\${ch}`);
     const [match] = await this.drizzle.db
-      .select({ id: startup.id, name: startup.name, status: startup.status })
+      .select({
+        id: startup.id,
+        name: startup.name,
+        status: startup.status,
+      })
       .from(startup)
-      .where(and(eq(startup.userId, ownerUserId), ilike(startup.name, escaped)))
+      .where(
+        and(
+          eq(startup.userId, ownerUserId),
+          sql`similarity(${startup.name}, ${companyName}) > ${FUZZY_THRESHOLD}`,
+        ),
+      )
+      .orderBy(desc(sql`similarity(${startup.name}, ${companyName})`))
       .limit(1);
     return match ?? null;
+  }
+
+  private async enrichExistingStartup(
+    startupId: string,
+    ownerUserId: string,
+    attachments: AttachmentMeta[],
+    _bodyText: string | null,
+  ): Promise<boolean> {
+    const newDeck = attachments.find(
+      (a) => a.isPitchDeck && a.status === "uploaded" && a.storagePath,
+    );
+
+    if (!newDeck) return false;
+
+    await this.drizzle.db
+      .update(startup)
+      .set({ pitchDeckPath: newDeck.storagePath })
+      .where(eq(startup.id, startupId));
+
+    await this.pipeline.startPipeline(startupId, ownerUserId);
+
+    this.logger.log(
+      `Enriched startup ${startupId} with new pitch deck, re-triggered pipeline`,
+    );
+
+    return true;
   }
 
   private extractCompanyFromBody(body: string | null): string | null {

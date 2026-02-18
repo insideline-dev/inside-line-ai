@@ -153,18 +153,29 @@ export class PipelineAgentTraceService {
     fallbackReason: EvaluationFallbackReason | undefined,
     rawProviderError: string | undefined,
   ): Record<string, unknown> | unknown[] | null {
-    if (!outputJson || Array.isArray(outputJson)) {
+    const traceMeta = {
+      ...(fallbackReason ? { fallbackReason } : {}),
+      ...(rawProviderError ? { rawProviderError } : {}),
+    };
+    const hasTraceMeta = Object.keys(traceMeta).length > 0;
+
+    if (!hasTraceMeta) {
       return outputJson;
     }
-    if (!fallbackReason && !rawProviderError) {
-      return outputJson;
+    if (!outputJson) {
+      return {
+        __traceMeta: traceMeta,
+      };
+    }
+    if (Array.isArray(outputJson)) {
+      return {
+        __traceMeta: traceMeta,
+        __traceOutput: outputJson,
+      };
     }
     return {
       ...outputJson,
-      __traceMeta: {
-        ...(fallbackReason ? { fallbackReason } : {}),
-        ...(rawProviderError ? { rawProviderError } : {}),
-      },
+      __traceMeta: traceMeta,
     };
   }
 

@@ -300,6 +300,27 @@ describe('UnipileService', () => {
       expect(cacheService.setCache).not.toHaveBeenCalled();
     });
 
+    it('should return null for recoverable 422 invalid_recipient errors', async () => {
+      cacheService.getCached.mockResolvedValueOnce(null);
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: false,
+        status: 422,
+        text: async () =>
+          JSON.stringify({
+            status: 422,
+            type: 'errors/invalid_recipient',
+            title: 'Recipient cannot be reached',
+            detail:
+              'Make sure that the recipient ID is valid and that the corresponding profile is not locked.',
+          }),
+      });
+
+      const result = await service.getProfile('user-1', 'https://linkedin.com/in/locked-profile');
+
+      expect(result).toBeNull();
+      expect(cacheService.setCache).not.toHaveBeenCalled();
+    });
+
     it('should throw BadRequestException on API error', async () => {
       cacheService.getCached.mockResolvedValueOnce(null);
       (global.fetch as jest.Mock).mockResolvedValueOnce({

@@ -43,6 +43,7 @@ type SignalTone = "neutral" | "success" | "info" | "warning" | "danger";
 
 const PHASE_LABELS: Record<string, string> = {
   extraction: "Extraction",
+  enrichment: "Gap Fill",
   scraping: "Scraping",
   research: "Research",
   evaluation: "Evaluation",
@@ -234,6 +235,25 @@ function normalizeAgentError(value: string | undefined): string | undefined {
   return value;
 }
 
+function normalizeTraceError(trace: PipelineAgentTrace): string | undefined {
+  if (!trace.error) {
+    return undefined;
+  }
+  const normalized = trace.error.toLowerCase();
+  const hasCapturedOutput =
+    (typeof trace.outputText === "string" && trace.outputText.trim().length > 0) ||
+    trace.outputJson !== undefined;
+  if (
+    hasCapturedOutput &&
+    (normalized.includes("no output generated") ||
+      normalized.includes("no object generated") ||
+      normalized.includes("empty response"))
+  ) {
+    return "Model returned non-conforming structured output; fallback result was generated from captured output.";
+  }
+  return normalizeAgentError(trace.error);
+}
+
 function formatFallbackReason(
   reason: string | undefined,
 ): string | undefined {
@@ -261,7 +281,19 @@ function toPrettyOutput(trace: PipelineAgentTrace | null): string {
       return String(trace.outputJson);
     }
   }
+  if (typeof trace.rawProviderError === "string" && trace.rawProviderError.trim().length > 0) {
+    return `Provider error:\n${trace.rawProviderError}`;
+  }
   return "Output not captured";
+}
+
+function formatCaptureStatus(
+  status: PipelineAgentTrace["captureStatus"] | undefined,
+): string {
+  if (status === "captured") return "Captured";
+  if (status === "provider_error_only") return "Provider Error Only";
+  if (status === "missing") return "Missing";
+  return "Unknown";
 }
 
 function phaseSortKey(phase: string): number {
@@ -361,37 +393,40 @@ export function AdminPipelineLivePanel({
   }, [phaseEntries]);
 
   const eventTimeline = useMemo<PipelineAgentEvent[]>(() => {
-    const events = Array.isArray(progress?.agentEvents) ? [...progress.agentEvents] : [];
+    const activeRunId = progress?.pipelineRunId;
+    const events = Array.isArray(progress?.agentEvents)
+      ? progress.agentEvents.filter(
+          (event) =>
+            !activeRunId ||
+            !event.pipelineRunId ||
+            event.pipelineRunId === activeRunId,
+        )
+      : [];
     events.sort(
       (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
     );
     const seen = new Set<string>();
     const deduped: PipelineAgentEvent[] = [];
     for (const event of events) {
-      const signature = [
-        event.phase,
-        event.agentKey,
-        event.event,
-        event.attempt ?? 0,
-        event.retryCount ?? 0,
-        event.error ?? "",
-        event.fallbackReason ?? "",
-        event.rawProviderError ?? "",
-      ].join("|");
-      if (seen.has(signature)) {
+      if (seen.has(event.id)) {
         continue;
       }
-      seen.add(signature);
+      seen.add(event.id);
       deduped.push(event);
       if (deduped.length >= 80) {
         break;
       }
     }
     return deduped;
-  }, [progress?.agentEvents]);
+  }, [progress?.agentEvents, progress?.pipelineRunId]);
 
   const agentTraceTimeline = useMemo<PipelineAgentTrace[]>(() => {
-    const traces = Array.isArray(progress?.agentTraces) ? [...progress.agentTraces] : [];
+    const activeRunId = progress?.pipelineRunId;
+    const traces = Array.isArray(progress?.agentTraces)
+      ? progress.agentTraces.filter(
+          (trace) => !activeRunId || trace.pipelineRunId === activeRunId,
+        )
+      : [];
     traces.sort(
       (a, b) =>
         new Date(b.startedAt ?? b.completedAt ?? 0).getTime() -
@@ -838,7 +873,8 @@ export function AdminPipelineLivePanel({
                           : trace.status === "running"
                             ? "info"
                             : "success"
-                    ]}`}
+                    ]} cursor-pointer`}
+                    onClick={() => setSelectedTrace(trace)}
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <p className="text-sm font-medium">
@@ -851,6 +887,7 @@ export function AdminPipelineLivePanel({
                     <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted-foreground">
                       <span>Attempt: {trace.attempt ?? 1}</span>
                       <span>Retries: {trace.retryCount ?? 0}</span>
+                      <span>Capture: {formatCaptureStatus(trace.captureStatus)}</span>
                       <span>Started: {formatTime(trace.startedAt)}</span>
                     </div>
                     {trace.error && (
@@ -861,7 +898,7 @@ export function AdminPipelineLivePanel({
                             : "text-destructive"
                         }`}
                       >
-                        {normalizeAgentError(trace.error)}
+                        {normalizeTraceError(trace)}
                       </p>
                     )}
                     {trace.rawProviderError && trace.status === "fallback" && (

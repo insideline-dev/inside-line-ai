@@ -69,6 +69,7 @@ describe('StartupController', () => {
       submit: jest.fn(),
       resubmit: jest.fn(),
       getJobs: jest.fn(),
+      adminGetJobs: jest.fn(),
       getUploadUrl: jest.fn(),
       findApproved: jest.fn(),
       findApprovedById: jest.fn(),
@@ -261,7 +262,6 @@ describe('StartupController', () => {
     it('should return analysis jobs', async () => {
       const jobs = {
         jobs: [],
-        message: 'Job tracking not implemented yet',
       };
 
       startupService.getJobs.mockResolvedValueOnce(jobs);
@@ -270,6 +270,24 @@ describe('StartupController', () => {
 
       expect(result).toEqual(jobs);
       expect(startupService.getJobs).toHaveBeenCalledWith(mockStartup.id, mockUser.id);
+    });
+
+    it('should return admin jobs when requester is admin', async () => {
+      const jobs = {
+        jobs: [{ id: "job-1", jobType: "matching" }],
+      };
+      const adminUser = {
+        ...mockUser,
+        role: UserRole.ADMIN,
+      } as User;
+
+      startupService.adminGetJobs.mockResolvedValueOnce(jobs as any);
+
+      const result = await controller.getJobs(adminUser, mockStartup.id);
+
+      expect(result).toEqual(jobs);
+      expect(startupService.adminGetJobs).toHaveBeenCalledWith(mockStartup.id);
+      expect(startupService.getJobs).not.toHaveBeenCalled();
     });
   });
 

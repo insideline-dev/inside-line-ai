@@ -18,6 +18,7 @@ import { EarlyAccessService } from '../../early-access';
 import { UserRole } from '../../../auth/entities/auth.schema';
 import { StartupStatus } from '../../startup/entities/startup.schema';
 import { PipelinePhase } from '../../ai/interfaces/pipeline.interface';
+import { DrizzleService } from '../../../database';
 
 describe('AdminController', () => {
   let controller: AdminController;
@@ -28,6 +29,7 @@ describe('AdminController', () => {
   let queueManagementService: jest.Mocked<QueueManagementService>;
   let startupService: jest.Mocked<StartupService>;
   let startupIntakeService: jest.Mocked<StartupIntakeService>;
+  let adminMatchingService: jest.Mocked<AdminMatchingService>;
   let aiPromptService: jest.Mocked<AiPromptService>;
   let aiPromptRuntimeService: jest.Mocked<AiPromptRuntimeService>;
   let earlyAccessService: jest.Mocked<EarlyAccessService>;
@@ -45,6 +47,14 @@ describe('AdminController', () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AdminController],
       providers: [
+        {
+          provide: DrizzleService,
+          useValue: {
+            db: {
+              select: jest.fn(),
+            },
+          },
+        },
         {
           provide: AnalyticsService,
           useValue: {
@@ -130,6 +140,7 @@ describe('AdminController', () => {
           provide: AdminMatchingService,
           useValue: {
             triggerMatchForStartup: jest.fn(),
+            getLatestMatchingStatus: jest.fn(),
           },
         },
         {
@@ -149,6 +160,7 @@ describe('AdminController', () => {
           useValue: {
             getContextSchema: jest.fn(),
             previewPrompt: jest.fn(),
+            previewPipelineContexts: jest.fn(),
           },
         },
         {
@@ -171,6 +183,7 @@ describe('AdminController', () => {
     queueManagementService = module.get(QueueManagementService);
     startupService = module.get(StartupService);
     startupIntakeService = module.get(StartupIntakeService);
+    adminMatchingService = module.get(AdminMatchingService);
     aiPromptService = module.get(AiPromptService);
     aiPromptRuntimeService = module.get(AiPromptRuntimeService);
     earlyAccessService = module.get(EarlyAccessService);
@@ -381,6 +394,45 @@ describe('AdminController', () => {
         expect(startupService.reanalyze).toHaveBeenCalledWith(
           'startup-1',
           mockAdmin.id,
+        );
+      });
+    });
+
+    describe('POST /admin/startups/:id/match', () => {
+      it('should queue investor matching for approved startup', async () => {
+        const payload = {
+          startupId: 'startup-1',
+          analysisJobId: 'analysis-job-1',
+          queueJobId: 'queue-job-1',
+          status: 'queued',
+          triggerSource: 'manual',
+        };
+        adminMatchingService.triggerMatchForStartup.mockResolvedValueOnce(payload as any);
+
+        const result = await controller.matchStartupInvestors(mockAdmin, 'startup-1');
+
+        expect(result).toEqual(payload);
+        expect(adminMatchingService.triggerMatchForStartup).toHaveBeenCalledWith(
+          'startup-1',
+          mockAdmin.id,
+        );
+      });
+    });
+
+    describe('GET /admin/startups/:id/matching/status', () => {
+      it('should return latest matching status', async () => {
+        const payload = {
+          startupId: 'startup-1',
+          status: 'completed',
+          jobId: 'analysis-job-1',
+        };
+        adminMatchingService.getLatestMatchingStatus.mockResolvedValueOnce(payload as any);
+
+        const result = await controller.getStartupMatchingStatus('startup-1');
+
+        expect(result).toEqual(payload);
+        expect(adminMatchingService.getLatestMatchingStatus).toHaveBeenCalledWith(
+          'startup-1',
         );
       });
     });
@@ -702,6 +754,26 @@ describe('AdminController', () => {
 
       expect(result).toEqual(payload);
       expect(aiPromptRuntimeService.previewPrompt).toHaveBeenCalledWith('research.team', body);
+    });
+
+    it('should return pipeline context preview payload', async () => {
+      const payload = {
+        startupId: 'ed8f8dcb-4145-4af3-92ce-c8d879ec43db',
+        effectiveStage: 'seed',
+        generatedAt: new Date().toISOString(),
+        agents: [],
+      };
+      const body = {
+        startupId: 'ed8f8dcb-4145-4af3-92ce-c8d879ec43db',
+        stage: 'seed',
+      };
+
+      aiPromptRuntimeService.previewPipelineContexts.mockResolvedValueOnce(payload as any);
+
+      const result = await controller.previewAiPipelineContext(body as any);
+
+      expect(result).toEqual(payload);
+      expect(aiPromptRuntimeService.previewPipelineContexts).toHaveBeenCalledWith(body);
     });
   });
 });

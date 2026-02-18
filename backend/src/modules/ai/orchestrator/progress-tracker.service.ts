@@ -22,12 +22,15 @@ const FallbackReasonSchema = z.enum([
 
 const AgentLifecycleEventSchema = z.object({
   id: z.string(),
+  pipelineRunId: z.string(),
   phase: z.nativeEnum(PipelinePhase),
   agentKey: z.string(),
   event: z.enum(["started", "retrying", "completed", "failed", "fallback"]),
   timestamp: z.string(),
   attempt: z.number().int().min(1).optional(),
   retryCount: z.number().int().min(0).optional(),
+  phaseRetryCount: z.number().int().min(0).optional(),
+  agentAttemptId: z.string().optional(),
   error: z.string().optional(),
   fallbackReason: FallbackReasonSchema.optional(),
   rawProviderError: z.string().optional(),
@@ -42,6 +45,8 @@ const AgentProgressSchema = z.object({
   error: z.string().optional(),
   attempts: z.number().int().min(0).optional(),
   retryCount: z.number().int().min(0).optional(),
+  phaseRetryCount: z.number().int().min(0).optional(),
+  agentAttemptId: z.string().optional(),
   usedFallback: z.boolean().optional(),
   fallbackReason: FallbackReasonSchema.optional(),
   rawProviderError: z.string().optional(),
@@ -219,6 +224,8 @@ export class ProgressTrackerService {
     error?: string;
     attempt?: number;
     retryCount?: number;
+    phaseRetryCount?: number;
+    agentAttemptId?: string;
     usedFallback?: boolean;
     fallbackReason?: EvaluationFallbackReason;
     rawProviderError?: string;
@@ -234,11 +241,40 @@ export class ProgressTrackerService {
         status: PhaseStatus.PENDING,
         agents: {},
       };
+      const incomingPhaseRetryCount =
+        typeof params.phaseRetryCount === "number" && Number.isFinite(params.phaseRetryCount)
+          ? Math.max(0, Math.floor(params.phaseRetryCount))
+          : Math.max(0, Math.floor(phase.retryCount ?? 0));
+      const currentPhaseRetryCount = Math.max(
+        0,
+        Math.floor(phase.retryCount ?? 0),
+      );
+      if (incomingPhaseRetryCount < currentPhaseRetryCount) {
+        this.logger.debug(
+          `[Pipeline] Ignoring stale agent update for ${params.key} in ${params.phase}: incoming phase retry ${incomingPhaseRetryCount} < current ${currentPhaseRetryCount}`,
+        );
+        return;
+      }
+      if (incomingPhaseRetryCount > currentPhaseRetryCount) {
+        phase.retryCount = incomingPhaseRetryCount;
+        phase.agents = {};
+      } else if (typeof phase.retryCount !== "number") {
+        phase.retryCount = incomingPhaseRetryCount;
+      }
 
       const existing = phase.agents[params.key] ?? {
         key: params.key,
         status: "pending" as const,
       };
+      const incomingAgentAttemptId =
+        typeof params.agentAttemptId === "string" &&
+        params.agentAttemptId.trim().length > 0
+          ? params.agentAttemptId.trim()
+          : undefined;
+      const isDifferentAttempt =
+        Boolean(existing.agentAttemptId) &&
+        Boolean(incomingAgentAttemptId) &&
+        existing.agentAttemptId !== incomingAgentAttemptId;
       const next: AgentProgress = {
         ...existing,
         key: params.key,
@@ -256,10 +292,23 @@ export class ProgressTrackerService {
         this.isAgentTerminalStatus(existing.status) &&
         !this.isAgentTerminalStatus(params.status)
       ) {
+        if (isDifferentAttempt) {
+          this.logger.debug(
+            `[Pipeline] Ignoring stale non-terminal update for agent ${params.key} in ${params.phase} (existing attempt=${existing.agentAttemptId}, incoming attempt=${incomingAgentAttemptId})`,
+          );
+          return;
+        }
         this.logger.debug(
           `[Pipeline] Ignoring stale non-terminal update for agent ${params.key} in ${params.phase} (existing=${existing.status}, incoming=${params.status}, lifecycle=${lifecycleEvent})`,
         );
         return;
+      }
+
+      if (isDifferentAttempt && params.status === "running") {
+        next.startedAt = now;
+        delete next.completedAt;
+        delete next.error;
+        next.progress = 0;
       }
 
       if (params.status === "running" && !next.startedAt) {
@@ -330,11 +379,18 @@ export class ProgressTrackerService {
       }
       next.lastEvent = lifecycleEvent;
       next.lastEventAt = now;
+      next.phaseRetryCount = incomingPhaseRetryCount;
+      if (incomingAgentAttemptId) {
+        next.agentAttemptId = incomingAgentAttemptId;
+      } else if (!next.agentAttemptId) {
+        next.agentAttemptId = `${params.pipelineRunId}:${params.phase}:${params.key}:phase-${incomingPhaseRetryCount}:attempt-${next.attempts ?? 1}`;
+      }
 
       phase.agents[params.key] = next;
       payload.phases[params.phase] = phase;
       payload.agentEvents = this.appendAgentEvent(payload.agentEvents ?? [], {
-        id: `${now}:${params.phase}:${params.key}:${lifecycleEvent}`,
+        id: `${now}:${params.phase}:${params.key}:${lifecycleEvent}:${next.agentAttemptId ?? "na"}:${next.attempts ?? 1}:${next.retryCount ?? 0}`,
+        pipelineRunId: params.pipelineRunId,
         phase: params.phase,
         agentKey: params.key,
         event: lifecycleEvent,
@@ -344,6 +400,8 @@ export class ProgressTrackerService {
             ? Math.max(1, Math.floor(params.attempt))
             : next.attempts,
         retryCount: next.retryCount,
+        phaseRetryCount: next.phaseRetryCount,
+        agentAttemptId: next.agentAttemptId,
         error: params.error,
         fallbackReason: params.fallbackReason ?? next.fallbackReason,
         rawProviderError: params.rawProviderError ?? next.rawProviderError,
@@ -363,6 +421,8 @@ export class ProgressTrackerService {
         error: next.error,
         attempts: next.attempts,
         retryCount: next.retryCount,
+        phaseRetryCount: next.phaseRetryCount,
+        agentAttemptId: next.agentAttemptId,
         usedFallback: next.usedFallback,
         fallbackReason: next.fallbackReason,
         rawProviderError: next.rawProviderError,
@@ -495,7 +555,7 @@ export class ProgressTrackerService {
       pipelineRunId,
       startupId,
       status: PipelineStatus.RUNNING,
-      currentPhase: PipelinePhase.EXTRACTION,
+      currentPhase: PipelinePhase.ENRICHMENT,
       overallProgress: 0,
       phasesCompleted: [],
       phases,
@@ -528,17 +588,7 @@ export class ProgressTrackerService {
     next: AgentLifecycleEvent,
   ): AgentLifecycleEvent[] {
     const MAX_EVENTS = 300;
-    const duplicate = existing.some(
-      (event) =>
-        event.phase === next.phase &&
-        event.agentKey === next.agentKey &&
-        event.event === next.event &&
-        (event.attempt ?? 0) === (next.attempt ?? 0) &&
-        (event.retryCount ?? 0) === (next.retryCount ?? 0) &&
-        (event.error ?? "") === (next.error ?? "") &&
-        (event.fallbackReason ?? "") === (next.fallbackReason ?? "") &&
-        (event.rawProviderError ?? "") === (next.rawProviderError ?? ""),
-    );
+    const duplicate = existing.some((event) => event.id === next.id);
     if (duplicate) {
       return existing;
     }
@@ -919,6 +969,14 @@ export class ProgressTrackerService {
         retryCount:
           typeof record.retryCount === "number"
             ? Math.max(0, Math.floor(record.retryCount))
+            : undefined,
+        phaseRetryCount:
+          typeof record.phaseRetryCount === "number"
+            ? Math.max(0, Math.floor(record.phaseRetryCount))
+            : undefined,
+        agentAttemptId:
+          typeof record.agentAttemptId === "string"
+            ? record.agentAttemptId
             : undefined,
         usedFallback:
           typeof record.usedFallback === "boolean"

@@ -43,6 +43,7 @@ export const createMockAuthService = () => ({
 });
 
 export const createMockUserAuthService = () => ({
+  findUserById: mock(() => Promise.resolve(mockUser)),
   createEmailVerificationToken: mock(() => Promise.resolve('verify-token')),
   verifyEmail: mock(() => Promise.resolve(mockUser)),
   resendVerificationEmail: mock(() => Promise.resolve('verify-token')),

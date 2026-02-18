@@ -14,18 +14,55 @@ import {
   ScoutApplicationStatus,
   ScoutSubmission,
 } from './entities/scout.schema';
-import { startup, StartupStatus } from '../startup/entities/startup.schema';
-import { deriveStartupGeography } from '../geography';
+import { startup } from '../startup/entities/startup.schema';
+import { startupMatch } from '../investor/entities/investor.schema';
+import { user, UserRole } from '../../auth/entities/auth.schema';
+import { StartupService } from '../startup/startup.service';
 import type { ScoutSubmitStartup, GetSubmissionsQuery } from './dto';
 
+export type ScoutSubmissionListItem = {
+  id: string;
+  submissionId: string;
+  investorId: string;
+  investorName: string | null;
+  investorEmail: string | null;
+  commissionRate: number | null;
+  notes: string | null;
+  name: string;
+  tagline: string;
+  description: string;
+  website: string;
+  location: string;
+  industry: string;
+  stage: string;
+  fundingTarget: number;
+  teamSize: number;
+  status: string;
+  overallScore: number | null;
+  roundCurrency: string | null;
+  createdAt: Date;
+  submittedAt: Date | null;
+  updatedAt: Date;
+};
+
 export type PaginatedSubmissions = {
-  data: ScoutSubmission[];
+  data: ScoutSubmissionListItem[];
   meta: {
     page: number;
     limit: number;
     total: number;
     totalPages: number;
   };
+};
+
+export type ScoutStartupMatchPreview = {
+  investorId: string;
+  investorName: string | null;
+  overallScore: number | null;
+  thesisFitScore: number | null;
+  fitRationale: string | null;
+  status: string | null;
+  createdAt: Date | null;
 };
 
 const DEFAULT_COMMISSION_RATE = 500; // 5% in basis points
@@ -37,14 +74,8 @@ export class SubmissionService {
   constructor(
     private drizzle: DrizzleService,
     private notification: NotificationService,
+    private startupService: StartupService,
   ) {}
-
-  private generateSlug(name: string): string {
-    return name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '');
-  }
 
   async submit(
     scoutId: string,
@@ -68,52 +99,42 @@ export class SubmissionService {
       );
     }
 
-    return this.drizzle.db.transaction(async (tx) => {
-      const slug = this.generateSlug(dto.startupData.name);
-      const geography = deriveStartupGeography(dto.startupData.location);
+    const createdStartup = await this.startupService.create(
+      scoutId,
+      dto.startupData,
+      UserRole.SCOUT,
+      { scoutId },
+    );
 
-      const [createdStartup] = await tx
-        .insert(startup)
-        .values({
-          userId: scoutId,
-          slug,
-          ...dto.startupData,
-          normalizedRegion: geography.normalizedRegion,
-          geoCountryCode: geography.countryCode,
-          geoLevel1: geography.level1,
-          geoLevel2: geography.level2,
-          geoLevel3: geography.level3,
-          geoPath: geography.path,
-          status: StartupStatus.SUBMITTED,
-          submittedAt: new Date(),
-        })
-        .returning();
+    const [submission] = await this.drizzle.db
+      .insert(scoutSubmission)
+      .values({
+        scoutId,
+        startupId: createdStartup.id,
+        investorId: dto.investorId,
+        commissionRate: DEFAULT_COMMISSION_RATE,
+        notes: dto.notes || null,
+      })
+      .returning();
 
-      const [submission] = await tx
-        .insert(scoutSubmission)
-        .values({
-          scoutId,
-          startupId: createdStartup.id,
-          investorId: dto.investorId,
-          commissionRate: DEFAULT_COMMISSION_RATE,
-          notes: dto.notes || null,
-        })
-        .returning();
+    const submittedStartup = await this.startupService.submit(
+      createdStartup.id,
+      scoutId,
+    );
 
-      await this.notification.create(
-        dto.investorId,
-        'New Scout Referral',
-        `Scout has submitted ${dto.startupData.name} for your review`,
-        NotificationType.INFO,
-        `/investor/submissions/${submission.id}`,
-      );
+    await this.notification.create(
+      dto.investorId,
+      'New Scout Referral',
+      `Scout has submitted ${dto.startupData.name} for your review`,
+      NotificationType.INFO,
+      `/investor/submissions/${submission.id}`,
+    );
 
-      this.logger.log(
-        `Scout ${scoutId} submitted startup ${createdStartup.id} to investor ${dto.investorId}`,
-      );
+    this.logger.log(
+      `Scout ${scoutId} submitted startup ${createdStartup.id} to investor ${dto.investorId}`,
+    );
 
-      return { startup: createdStartup, submission };
-    });
+    return { startup: submittedStartup, submission };
   }
 
   async findAll(
@@ -133,8 +154,33 @@ export class SubmissionService {
 
     const [items, [{ count }]] = await Promise.all([
       this.drizzle.db
-        .select()
+        .select({
+          id: startup.id,
+          submissionId: scoutSubmission.id,
+          investorId: scoutSubmission.investorId,
+          investorName: user.name,
+          investorEmail: user.email,
+          commissionRate: scoutSubmission.commissionRate,
+          notes: scoutSubmission.notes,
+          name: startup.name,
+          tagline: startup.tagline,
+          description: startup.description,
+          website: startup.website,
+          location: startup.location,
+          industry: startup.industry,
+          stage: startup.stage,
+          fundingTarget: startup.fundingTarget,
+          teamSize: startup.teamSize,
+          status: startup.status,
+          overallScore: startup.overallScore,
+          roundCurrency: startup.roundCurrency,
+          createdAt: startup.createdAt,
+          submittedAt: startup.submittedAt,
+          updatedAt: startup.updatedAt,
+        })
         .from(scoutSubmission)
+        .innerJoin(startup, eq(startup.id, scoutSubmission.startupId))
+        .leftJoin(user, eq(user.id, scoutSubmission.investorId))
         .where(whereClause)
         .orderBy(desc(scoutSubmission.createdAt))
         .limit(limit)
@@ -167,8 +213,33 @@ export class SubmissionService {
 
     const [items, [{ count }]] = await Promise.all([
       this.drizzle.db
-        .select()
+        .select({
+          id: startup.id,
+          submissionId: scoutSubmission.id,
+          investorId: scoutSubmission.investorId,
+          investorName: user.name,
+          investorEmail: user.email,
+          commissionRate: scoutSubmission.commissionRate,
+          notes: scoutSubmission.notes,
+          name: startup.name,
+          tagline: startup.tagline,
+          description: startup.description,
+          website: startup.website,
+          location: startup.location,
+          industry: startup.industry,
+          stage: startup.stage,
+          fundingTarget: startup.fundingTarget,
+          teamSize: startup.teamSize,
+          status: startup.status,
+          overallScore: startup.overallScore,
+          roundCurrency: startup.roundCurrency,
+          createdAt: startup.createdAt,
+          submittedAt: startup.submittedAt,
+          updatedAt: startup.updatedAt,
+        })
         .from(scoutSubmission)
+        .innerJoin(startup, eq(startup.id, scoutSubmission.startupId))
+        .leftJoin(user, eq(user.id, scoutSubmission.investorId))
         .where(whereClause)
         .orderBy(desc(scoutSubmission.createdAt))
         .limit(limit)
@@ -188,5 +259,64 @@ export class SubmissionService {
         totalPages: Math.ceil(count / limit),
       },
     };
+  }
+
+  private async assertSubmissionAccess(scoutId: string, startupId: string) {
+    const [submission] = await this.drizzle.db
+      .select()
+      .from(scoutSubmission)
+      .where(
+        and(
+          eq(scoutSubmission.scoutId, scoutId),
+          eq(scoutSubmission.startupId, startupId),
+        ),
+      )
+      .limit(1);
+
+    if (!submission) {
+      throw new NotFoundException('Scout submission not found');
+    }
+  }
+
+  async getStartupDetail(
+    scoutId: string,
+    startupId: string,
+    isAdmin = false,
+  ) {
+    if (isAdmin) {
+      return this.startupService.adminFindOne(startupId);
+    }
+
+    await this.assertSubmissionAccess(scoutId, startupId);
+    return this.startupService.findOne(startupId, scoutId);
+  }
+
+  async getStartupMatches(
+    scoutId: string,
+    startupId: string,
+    limit = 3,
+    isAdmin = false,
+  ): Promise<{ data: ScoutStartupMatchPreview[] }> {
+    if (!isAdmin) {
+      await this.assertSubmissionAccess(scoutId, startupId);
+    }
+
+    const matches = await this.drizzle.db
+      .select({
+        investorId: startupMatch.investorId,
+        investorName: user.name,
+        overallScore: startupMatch.overallScore,
+        thesisFitScore: startupMatch.thesisFitScore,
+        fitRationale: startupMatch.fitRationale,
+        status: startupMatch.status,
+        createdAt: startupMatch.createdAt,
+      })
+      .from(startupMatch)
+      .leftJoin(user, eq(user.id, startupMatch.investorId))
+      .where(eq(startupMatch.startupId, startupId))
+      .orderBy(desc(startupMatch.overallScore))
+      .limit(limit);
+
+    return { data: matches };
   }
 }

@@ -1,30 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataTable } from "@/components/DataTable";
 import { Badge } from "@/components/ui/badge";
-import { customFetch } from "@/api/client";
+import {
+  useScoutControllerGetCommissions,
+  useScoutControllerGetTotalEarnings,
+} from "@/api/generated/scout/scout";
+import type { ScoutCommissionsResponseDtoItem } from "@/api/generated/model";
 
 export const Route = createFileRoute("/_protected/scout/commissions")({
   component: CommissionsPage,
 });
-
-type Commission = {
-  id: string;
-  dealSize: number;
-  commissionRate: number;
-  commissionAmount: number;
-  status: "pending" | "paid";
-  paidAt?: string | null;
-  createdAt: string;
-};
-
-type CommissionTotals = {
-  total: number;
-  pending: number;
-  paid: number;
-};
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-US", {
@@ -35,14 +22,12 @@ function formatCurrency(value: number) {
 }
 
 function CommissionsPage() {
-  const { data: commissions, isLoading: loadingCommissions, error } = useQuery({
-    queryKey: ["scout", "commissions"],
-    queryFn: () => customFetch<Commission[]>("/scout/commissions"),
-  });
-  const { data: totals } = useQuery({
-    queryKey: ["scout", "commissions", "total"],
-    queryFn: () => customFetch<CommissionTotals>("/scout/commissions/total"),
-  });
+  const {
+    data: commissionsResponse,
+    isLoading: loadingCommissions,
+    error,
+  } = useScoutControllerGetCommissions();
+  const { data: totalsResponse } = useScoutControllerGetTotalEarnings();
 
   if (loadingCommissions) {
     return (
@@ -68,7 +53,8 @@ function CommissionsPage() {
     );
   }
 
-  const rows = commissions ?? [];
+  const rows = (commissionsResponse?.data ?? []) as ScoutCommissionsResponseDtoItem[];
+  const totals = totalsResponse?.data;
 
   return (
     <div className="space-y-6">

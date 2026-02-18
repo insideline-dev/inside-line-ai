@@ -6,10 +6,12 @@
 export const QUEUE_NAMES = {
   TASK: "task-queue",
   AI_EXTRACTION: "ai-extraction",
+  AI_ENRICHMENT: "ai-enrichment",
   AI_SCRAPING: "ai-scraping",
   AI_RESEARCH: "ai-research",
   AI_EVALUATION: "ai-evaluation",
   AI_SYNTHESIS: "ai-synthesis",
+  AI_MATCHING: "ai-matching",
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
@@ -40,10 +42,12 @@ export const DEFAULT_JOB_OPTIONS = {
 export const QUEUE_CONCURRENCY = {
   [QUEUE_NAMES.TASK]: 10,
   [QUEUE_NAMES.AI_EXTRACTION]: 4,
+  [QUEUE_NAMES.AI_ENRICHMENT]: 4,
   [QUEUE_NAMES.AI_SCRAPING]: 4,
   [QUEUE_NAMES.AI_RESEARCH]: 6,
   [QUEUE_NAMES.AI_EVALUATION]: 8,
   [QUEUE_NAMES.AI_SYNTHESIS]: 2,
+  [QUEUE_NAMES.AI_MATCHING]: 3,
 } as const;
 
 // Safe defaults; real values should be resolved via ConfigService.
@@ -53,6 +57,10 @@ export const DEFAULT_QUEUE_DEPTH_LIMITS: QueueDepthLimits = {
     maxPerUser: 20,
   },
   [QUEUE_NAMES.AI_EXTRACTION]: {
+    maxDepth: 500,
+    maxPerUser: 5,
+  },
+  [QUEUE_NAMES.AI_ENRICHMENT]: {
     maxDepth: 500,
     maxPerUser: 5,
   },
@@ -69,6 +77,10 @@ export const DEFAULT_QUEUE_DEPTH_LIMITS: QueueDepthLimits = {
     maxPerUser: 5,
   },
   [QUEUE_NAMES.AI_SYNTHESIS]: {
+    maxDepth: 500,
+    maxPerUser: 5,
+  },
+  [QUEUE_NAMES.AI_MATCHING]: {
     maxDepth: 500,
     maxPerUser: 5,
   },
@@ -105,6 +117,16 @@ export function resolveQueueDepthLimits(
       maxPerUser: toPositiveInt(
         getNumber("QUEUE_MAX_PER_USER_AI_EXTRACTION", DEFAULT_QUEUE_DEPTH_LIMITS[QUEUE_NAMES.AI_EXTRACTION].maxPerUser),
         DEFAULT_QUEUE_DEPTH_LIMITS[QUEUE_NAMES.AI_EXTRACTION].maxPerUser,
+      ),
+    },
+    [QUEUE_NAMES.AI_ENRICHMENT]: {
+      maxDepth: toPositiveInt(
+        getNumber("QUEUE_MAX_DEPTH_AI_ENRICHMENT", DEFAULT_QUEUE_DEPTH_LIMITS[QUEUE_NAMES.AI_ENRICHMENT].maxDepth),
+        DEFAULT_QUEUE_DEPTH_LIMITS[QUEUE_NAMES.AI_ENRICHMENT].maxDepth,
+      ),
+      maxPerUser: toPositiveInt(
+        getNumber("QUEUE_MAX_PER_USER_AI_ENRICHMENT", DEFAULT_QUEUE_DEPTH_LIMITS[QUEUE_NAMES.AI_ENRICHMENT].maxPerUser),
+        DEFAULT_QUEUE_DEPTH_LIMITS[QUEUE_NAMES.AI_ENRICHMENT].maxPerUser,
       ),
     },
     [QUEUE_NAMES.AI_SCRAPING]: {
@@ -145,6 +167,16 @@ export function resolveQueueDepthLimits(
       maxPerUser: toPositiveInt(
         getNumber("QUEUE_MAX_PER_USER_AI_SYNTHESIS", DEFAULT_QUEUE_DEPTH_LIMITS[QUEUE_NAMES.AI_SYNTHESIS].maxPerUser),
         DEFAULT_QUEUE_DEPTH_LIMITS[QUEUE_NAMES.AI_SYNTHESIS].maxPerUser,
+      ),
+    },
+    [QUEUE_NAMES.AI_MATCHING]: {
+      maxDepth: toPositiveInt(
+        getNumber("QUEUE_MAX_DEPTH_AI_MATCHING", DEFAULT_QUEUE_DEPTH_LIMITS[QUEUE_NAMES.AI_MATCHING].maxDepth),
+        DEFAULT_QUEUE_DEPTH_LIMITS[QUEUE_NAMES.AI_MATCHING].maxDepth,
+      ),
+      maxPerUser: toPositiveInt(
+        getNumber("QUEUE_MAX_PER_USER_AI_MATCHING", DEFAULT_QUEUE_DEPTH_LIMITS[QUEUE_NAMES.AI_MATCHING].maxPerUser),
+        DEFAULT_QUEUE_DEPTH_LIMITS[QUEUE_NAMES.AI_MATCHING].maxPerUser,
       ),
     },
   };

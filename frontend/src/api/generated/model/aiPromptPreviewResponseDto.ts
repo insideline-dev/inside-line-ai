@@ -8,6 +8,7 @@
 import type { AiPromptPreviewResponseDtoHashes } from './aiPromptPreviewResponseDtoHashes';
 import type { AiPromptPreviewResponseDtoKey } from './aiPromptPreviewResponseDtoKey';
 import type { AiPromptPreviewResponseDtoModel } from './aiPromptPreviewResponseDtoModel';
+import type { AiPromptPreviewResponseDtoParsedContextSectionsItem } from './aiPromptPreviewResponseDtoParsedContextSectionsItem';
 import type { AiPromptPreviewResponseDtoPrompt } from './aiPromptPreviewResponseDtoPrompt';
 import type { AiPromptPreviewResponseDtoResolvedVariables } from './aiPromptPreviewResponseDtoResolvedVariables';
 import type { AiPromptPreviewResponseDtoSource } from './aiPromptPreviewResponseDtoSource';
@@ -18,5 +19,9 @@ export interface AiPromptPreviewResponseDto {
   prompt: AiPromptPreviewResponseDtoPrompt;
   model: AiPromptPreviewResponseDtoModel;
   resolvedVariables: AiPromptPreviewResponseDtoResolvedVariables;
+  parsedContextJson?: unknown | null;
+  /** @nullable */
+  parsedContextSections?: AiPromptPreviewResponseDtoParsedContextSectionsItem[] | null;
+  sectionTitles?: string[];
   hashes: AiPromptPreviewResponseDtoHashes;
 }

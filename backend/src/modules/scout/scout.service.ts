@@ -27,6 +27,15 @@ export type PaginatedApplications = {
   };
 };
 
+export type ScoutInvestorOption = {
+  id: string;
+  name: string;
+  email: string;
+  image: string | null;
+  hasApplied: boolean;
+  applicationStatus: ScoutApplicationStatus | null;
+};
+
 @Injectable()
 export class ScoutService {
   private readonly logger = new Logger(ScoutService.name);
@@ -82,6 +91,38 @@ export class ScoutService {
       `User ${userId} applied to be scout for investor ${dto.investorId}`,
     );
     return application;
+  }
+
+  async listInvestors(userId: string): Promise<ScoutInvestorOption[]> {
+    const [investors, applications] = await Promise.all([
+      this.drizzle.db
+        .select({
+          id: userTable.id,
+          name: userTable.name,
+          email: userTable.email,
+          image: userTable.image,
+        })
+        .from(userTable)
+        .where(eq(userTable.role, UserRole.INVESTOR))
+        .orderBy(userTable.name),
+      this.drizzle.db
+        .select({
+          investorId: scoutApplication.investorId,
+          status: scoutApplication.status,
+        })
+        .from(scoutApplication)
+        .where(eq(scoutApplication.userId, userId)),
+    ]);
+
+    const applicationsByInvestorId = new Map(
+      applications.map((app) => [app.investorId, app.status]),
+    );
+
+    return investors.map((investor) => ({
+      ...investor,
+      hasApplied: applicationsByInvestorId.has(investor.id),
+      applicationStatus: applicationsByInvestorId.get(investor.id) ?? null,
+    }));
   }
 
   async findApplications(

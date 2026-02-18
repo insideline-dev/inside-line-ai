@@ -3,12 +3,15 @@ import { and, eq } from "drizzle-orm";
 import { generateText, Output } from "ai";
 import { z } from "zod";
 import { DrizzleService } from "../../../database";
-import { ModelPurpose } from "../interfaces/pipeline.interface";
 import type { SynthesisResult } from "../interfaces/phase-results.interface";
 import { AiProviderService } from "../providers/ai-provider.service";
 import { investorThesis, startupMatch } from "../../investor/entities";
 import { AiPromptService } from "./ai-prompt.service";
 import { AiConfigService } from "./ai-config.service";
+import {
+  ScoreComputationService,
+  type SectionScores,
+} from "./score-computation.service";
 import {
   canonicalizeGeographicFocus,
   geographySelectionMatchesStartupPath,
@@ -19,6 +22,7 @@ const ThesisFitSchema = z.object({
   thesisFitScore: z.number().int().min(0).max(100),
   fitRationale: z.string().min(1),
 });
+const THESIS_ALIGNMENT_MODEL = "gemini-3-flash-preview";
 
 interface StartupMatchInput {
   startupId: string;
@@ -44,16 +48,21 @@ interface InvestorCandidate {
   geographicFocusNodes: string[] | null;
   thesisNarrative: string | null;
   notes: string | null;
+  minThesisFitScore: number | null;
+  minStartupScore: number | null;
 }
 
 export interface InvestorMatchResult {
   investorId: string;
+  overallScore: number;
   thesisFitScore: number;
+  compositeFitScore: number;
   fitRationale: string;
 }
 
 export interface InvestorMatchingOutput {
   candidatesEvaluated: number;
+  failedCandidates: number;
   matches: InvestorMatchResult[];
 }
 
@@ -66,10 +75,12 @@ export class InvestorMatchingService {
     private providers: AiProviderService,
     private promptService: AiPromptService,
     private aiConfig: AiConfigService,
+    private scoreComputation: ScoreComputationService,
   ) {}
 
   async matchStartup(input: StartupMatchInput): Promise<InvestorMatchingOutput> {
-    const threshold = input.threshold ?? this.aiConfig.getMatchingMinThesisFitScore();
+    const explicitThreshold = input.threshold;
+    const defaultThreshold = this.aiConfig.getMatchingMinThesisFitScore();
     const startupGeoPath =
       input.startup.geoPath?.length && input.startup.geoPath.length > 0
         ? input.startup.geoPath.map((value) => value.trim().toLowerCase())
@@ -87,6 +98,8 @@ export class InvestorMatchingService {
         geographicFocusNodes: investorThesis.geographicFocusNodes,
         thesisNarrative: investorThesis.thesisNarrative,
         notes: investorThesis.notes,
+        minThesisFitScore: investorThesis.minThesisFitScore,
+        minStartupScore: investorThesis.minStartupScore,
       })
       .from(investorThesis)
       .where(eq(investorThesis.isActive, true));
@@ -95,22 +108,63 @@ export class InvestorMatchingService {
       this.passesFirstFilter(candidate, input, startupGeoPath),
     );
 
+    type EvaluatedCandidate = InvestorMatchResult & {
+      isMatch: boolean;
+      usedFallback: boolean;
+    };
+
     const aligned = await Promise.all(
       firstFilterPassed.map(async (candidate) => {
         const fit = await this.alignThesis(candidate, input);
-        await this.persistMatch(input, candidate.userId, fit);
+        const weightedStartupScore = await this.computeInvestorWeightedScore(
+          input,
+          candidate.userId,
+        );
+        const compositeFitScore = this.computeCompositeFitScore(
+          fit.thesisFitScore,
+          weightedStartupScore,
+        );
+        await this.persistMatch(
+          input,
+          candidate.userId,
+          fit.thesisFitScore,
+          weightedStartupScore,
+          compositeFitScore,
+          fit.fitRationale,
+        );
+
+        const candidateThreshold =
+          explicitThreshold ??
+          candidate.minThesisFitScore ??
+          defaultThreshold;
+        const minStartupScore = candidate.minStartupScore ?? 0;
+        const isMatch =
+          fit.thesisFitScore >= candidateThreshold &&
+          weightedStartupScore >= minStartupScore &&
+          compositeFitScore >= candidateThreshold;
 
         return {
           investorId: candidate.userId,
+          overallScore: weightedStartupScore,
           thesisFitScore: fit.thesisFitScore,
+          compositeFitScore,
           fitRationale: fit.fitRationale,
-        } satisfies InvestorMatchResult;
+          isMatch,
+          usedFallback: fit.usedFallback,
+        } satisfies EvaluatedCandidate;
       }),
     );
 
     return {
       candidatesEvaluated: firstFilterPassed.length,
-      matches: aligned.filter((match) => match.thesisFitScore >= threshold),
+      failedCandidates: aligned.filter((match) => match.usedFallback).length,
+      matches: aligned.filter((match) => match.isMatch).map((match) => ({
+        investorId: match.investorId,
+        overallScore: match.overallScore,
+        thesisFitScore: match.thesisFitScore,
+        compositeFitScore: match.compositeFitScore,
+        fitRationale: match.fitRationale,
+      })),
     };
   }
 
@@ -154,7 +208,7 @@ export class InvestorMatchingService {
   private async alignThesis(
     candidate: InvestorCandidate,
     input: StartupMatchInput,
-  ): Promise<z.infer<typeof ThesisFitSchema>> {
+  ): Promise<z.infer<typeof ThesisFitSchema> & { usedFallback: boolean }> {
     try {
       const promptConfig = await this.promptService.resolve({
         key: "matching.thesis",
@@ -162,9 +216,7 @@ export class InvestorMatchingService {
       });
 
       const { output } = await generateText({
-        model: this.providers.resolveModelForPurpose(
-          ModelPurpose.THESIS_ALIGNMENT,
-        ),
+        model: this.providers.resolveModel(THESIS_ALIGNMENT_MODEL),
         output: Output.object({ schema: ThesisFitSchema }),
         temperature: this.aiConfig.getMatchingTemperature(),
         maxOutputTokens: this.aiConfig.getMatchingMaxOutputTokens(),
@@ -179,7 +231,10 @@ export class InvestorMatchingService {
         }),
       });
 
-      return ThesisFitSchema.parse(output);
+      return {
+        ...ThesisFitSchema.parse(output),
+        usedFallback: false,
+      };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.warn(
@@ -190,14 +245,50 @@ export class InvestorMatchingService {
         thesisFitScore: this.aiConfig.getMatchingFallbackScore(),
         fitRationale:
           "Alignment fallback used due to model/runtime issue; requires manual review.",
+        usedFallback: true,
       };
     }
+  }
+
+  private async computeInvestorWeightedScore(
+    input: StartupMatchInput,
+    investorId: string,
+  ): Promise<number> {
+    const sectionScores: SectionScores = {
+      team: input.synthesis.sectionScores.team,
+      market: input.synthesis.sectionScores.market,
+      product: input.synthesis.sectionScores.product,
+      traction: input.synthesis.sectionScores.traction,
+      businessModel: input.synthesis.sectionScores.businessModel,
+      gtm: input.synthesis.sectionScores.gtm,
+      financials: input.synthesis.sectionScores.financials,
+      competitiveAdvantage: input.synthesis.sectionScores.competitiveAdvantage,
+      legal: input.synthesis.sectionScores.legal,
+      dealTerms: input.synthesis.sectionScores.dealTerms,
+      exitPotential: input.synthesis.sectionScores.exitPotential,
+    };
+
+    return this.scoreComputation.computeWithInvestorPreferences(
+      sectionScores,
+      input.startup.stage,
+      investorId,
+    );
+  }
+
+  private computeCompositeFitScore(
+    thesisFitScore: number,
+    weightedStartupScore: number,
+  ): number {
+    return Math.round(thesisFitScore * 0.7 + weightedStartupScore * 0.3);
   }
 
   private async persistMatch(
     input: StartupMatchInput,
     investorId: string,
-    fit: z.infer<typeof ThesisFitSchema>,
+    thesisFitScore: number,
+    weightedStartupScore: number,
+    compositeFitScore: number,
+    fitRationale: string,
   ): Promise<void> {
     const [existing] = await this.drizzle.db
       .select({ id: startupMatch.id })
@@ -211,15 +302,15 @@ export class InvestorMatchingService {
       .limit(1);
 
     const updatePayload = {
-      overallScore: Math.round(input.synthesis.overallScore),
+      overallScore: Math.round(weightedStartupScore),
       marketScore: Math.round(input.synthesis.sectionScores.market),
       teamScore: Math.round(input.synthesis.sectionScores.team),
       productScore: Math.round(input.synthesis.sectionScores.product),
       tractionScore: Math.round(input.synthesis.sectionScores.traction),
       financialsScore: Math.round(input.synthesis.sectionScores.financials),
-      matchReason: fit.fitRationale,
-      thesisFitScore: fit.thesisFitScore,
-      fitRationale: fit.fitRationale,
+      matchReason: `Composite fit ${compositeFitScore}/100 (thesis ${thesisFitScore}, weighted startup ${Math.round(weightedStartupScore)}). ${fitRationale}`,
+      thesisFitScore,
+      fitRationale,
       updatedAt: new Date(),
     };
 
@@ -234,15 +325,15 @@ export class InvestorMatchingService {
     await this.drizzle.db.insert(startupMatch).values({
       investorId,
       startupId: input.startupId,
-      overallScore: Math.round(input.synthesis.overallScore),
+      overallScore: Math.round(weightedStartupScore),
       marketScore: Math.round(input.synthesis.sectionScores.market),
       teamScore: Math.round(input.synthesis.sectionScores.team),
       productScore: Math.round(input.synthesis.sectionScores.product),
       tractionScore: Math.round(input.synthesis.sectionScores.traction),
       financialsScore: Math.round(input.synthesis.sectionScores.financials),
-      matchReason: fit.fitRationale,
-      thesisFitScore: fit.thesisFitScore,
-      fitRationale: fit.fitRationale,
+      matchReason: `Composite fit ${compositeFitScore}/100 (thesis ${thesisFitScore}, weighted startup ${Math.round(weightedStartupScore)}). ${fitRationale}`,
+      thesisFitScore,
+      fitRationale,
     });
   }
 

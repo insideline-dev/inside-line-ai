@@ -30,6 +30,14 @@ const requiredStringFromNull = (fallback: string) =>
     z.string().min(1),
   );
 
+const stringArray = z.preprocess(
+  (value) =>
+    Array.isArray(value)
+      ? value.filter((item): item is string => typeof item === "string")
+      : [],
+  z.array(z.string()),
+).default([]);
+
 const CompetitiveDirectCompetitorSchema = z.object({
   name: requiredStringFromNull("Unknown competitor"),
   description: requiredStringFromNull("Description unavailable"),
@@ -47,11 +55,11 @@ const CompetitiveIndirectCompetitorSchema = z.object({
 
 export const CompetitiveAdvantageEvaluationSchema = BaseEvaluationSchema.extend(
   {
-    moats: z.array(z.string()).default([]),
+    moats: stringArray,
     competitivePosition: requiredStringFromNull("Competitive position requires manual review"),
-    barriers: z.array(z.string()).default([]),
-    directCompetitors: z.array(z.string()).default([]),
-    indirectCompetitors: z.array(z.string()).default([]),
+    barriers: stringArray,
+    directCompetitors: stringArray,
+    indirectCompetitors: stringArray,
     directCompetitorsDetailed: z.array(CompetitiveDirectCompetitorSchema).default([]),
     indirectCompetitorsDetailed: z.array(CompetitiveIndirectCompetitorSchema).default([]),
   },

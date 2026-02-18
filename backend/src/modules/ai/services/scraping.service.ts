@@ -8,11 +8,14 @@ import { DrizzleService } from "../../../database";
 import { startup } from "../../startup/entities";
 import type {
   EnrichedTeamMember,
+  EnrichmentResult,
   ScrapeError,
   ScrapingResult,
   WebsiteScrapedData,
 } from "../interfaces/phase-results.interface";
+import { PipelinePhase } from "../interfaces/pipeline.interface";
 import { LinkedinEnrichmentService } from "./linkedin-enrichment.service";
+import { PipelineStateService } from "./pipeline-state.service";
 import { ScrapingCacheService } from "./scraping-cache.service";
 import { WebsiteScraperService } from "./website-scraper.service";
 
@@ -41,6 +44,7 @@ export class ScrapingService {
     private linkedinEnrichment: LinkedinEnrichmentService,
     private scrapingCache: ScrapingCacheService,
     @Optional() private config?: ConfigService,
+    @Optional() private pipelineState?: PipelineStateService,
   ) {
     this.debugLogEnabled =
       this.config?.get<boolean>("AI_SCRAPING_DEBUG_LOG_ENABLED", true) ?? true;
@@ -64,13 +68,17 @@ export class ScrapingService {
       throw new Error(`Startup ${startupId} not found`);
     }
 
+    // Load enrichment result to use corrected/discovered data
+    const enrichment = await this.loadEnrichmentResult(startupId);
+    const effectiveWebsite = enrichment?.website?.value ?? record.website;
+
     const scrapeErrors: ScrapeError[] = [];
     const submittedTeamMembers = this.mapTeamMembers(record.teamMembers ?? []);
     this.logger.debug(
-      `[Scraping] Loaded startup context | website=${record.website ?? "none"} | submittedTeamMembers=${submittedTeamMembers.length}`,
+      `[Scraping] Loaded startup context | website=${effectiveWebsite ?? "none"} | submittedTeamMembers=${submittedTeamMembers.length}`,
     );
 
-    const website = await this.scrapeWebsite(record.website, scrapeErrors);
+    const website = await this.scrapeWebsite(effectiveWebsite, scrapeErrors);
     const discoveredWebsiteLeaders = this.extractLeadershipCandidates(
       website?.teamBios ?? [],
     );
@@ -84,13 +92,21 @@ export class ScrapingService {
         ...discoveredWebsiteLeaders,
         ...discoveredWebsiteLinkedinMembers,
       ],
-      record.website ?? undefined,
+      effectiveWebsite ?? undefined,
     );
+    const enrichmentFounders: TeamMemberInput[] = (enrichment?.discoveredFounders ?? [])
+      .filter((f) => f.confidence >= 0.5)
+      .map((f) => ({
+        name: f.name,
+        role: f.role,
+        linkedinUrl: f.linkedinUrl,
+      }));
     const teamMembers = this.mergeTeamMembers(
       submittedTeamMembers,
       discoveredWebsiteLeaders,
       discoveredWebsiteLinkedinMembers,
       discoveredLinkedinLeaders,
+      enrichmentFounders,
     );
     this.logger.log(
       `[Scraping] Team member seed built | submitted=${submittedTeamMembers.length} | discoveredWebsiteLeaders=${discoveredWebsiteLeaders.length} | discoveredWebsiteLinkedin=${discoveredWebsiteLinkedinMembers.length} | discoveredLinkedinLeaders=${discoveredLinkedinLeaders.length} | final=${teamMembers.length}`,
@@ -236,6 +252,7 @@ export class ScrapingService {
     discoveredFromWebsite: TeamMemberInput[],
     discoveredFromWebsiteLinkedin: TeamMemberInput[],
     discoveredFromLinkedin: TeamMemberInput[],
+    discoveredFromEnrichment: TeamMemberInput[],
   ): TeamMemberInput[] {
     const byName = new Map<string, TeamMemberInput>();
 
@@ -259,6 +276,7 @@ export class ScrapingService {
     discoveredFromWebsite.forEach(upsert);
     discoveredFromWebsiteLinkedin.forEach(upsert);
     discoveredFromLinkedin.forEach(upsert);
+    discoveredFromEnrichment.forEach(upsert);
 
     return Array.from(byName.values());
   }
@@ -463,12 +481,12 @@ export class ScrapingService {
     errors: ScrapeError[],
   ): Promise<EnrichedTeamMember[]> {
     if (members.length === 0) {
-      this.logger.debug("[Scraping] No team members provided for LinkedIn enrichment");
+      this.logger.debug("[Scraping] No team members provided for LinkedIn profile resolution");
       return [];
     }
 
     this.logger.log(
-      `[Scraping] Starting LinkedIn enrichment | members=${members.length} | withLinkedIn=${members.filter((member) => Boolean(member.linkedinUrl)).length}`,
+      `[Scraping] Starting LinkedIn profile resolution | members=${members.length} | withLinkedIn=${members.filter((member) => Boolean(member.linkedinUrl)).length}`,
     );
 
     const cacheHitsByUrl = new Map<string, EnrichedTeamMember>();
@@ -520,7 +538,7 @@ export class ScrapingService {
     let liveEnriched: EnrichedTeamMember[] = [];
     if (membersToEnrich.length > 0) {
       this.logger.log(
-        `[Scraping] Executing live LinkedIn enrichment for ${membersToEnrich.length} members`,
+        `[Scraping] Executing live LinkedIn profile resolution for ${membersToEnrich.length} members`,
       );
       try {
         liveEnriched = await this.linkedinEnrichment.enrichTeamMembers(
@@ -534,7 +552,7 @@ export class ScrapingService {
           return acc;
         }, {});
         this.logger.debug(
-          `[Scraping] Live LinkedIn enrichment finished ${JSON.stringify(liveStatuses)}`,
+          `[Scraping] Live LinkedIn profile resolution finished ${JSON.stringify(liveStatuses)}`,
         );
       } catch (error) {
         const message = this.asMessage(error);
@@ -544,7 +562,7 @@ export class ScrapingService {
           error: message,
         });
         this.logger.error(
-          `[Scraping] LinkedIn enrichment request failed for ${companyName || "team"}: ${message}`,
+          `[Scraping] LinkedIn profile resolution request failed for ${companyName || "team"}: ${message}`,
         );
         liveEnriched = membersToEnrich.map((member) => ({
           name: member.name,
@@ -552,7 +570,7 @@ export class ScrapingService {
           linkedinUrl: member.linkedinUrl,
           enrichmentStatus: "error",
           matchConfidence: 0,
-          confidenceReason: `LinkedIn enrichment request failed: ${message}`,
+          confidenceReason: `LinkedIn profile resolution request failed: ${message}`,
         }));
       }
     }
@@ -612,7 +630,7 @@ export class ScrapingService {
         errors.push({
           type: "linkedin",
           target: member.name,
-          error: "LinkedIn enrichment failed",
+          error: "LinkedIn profile resolution failed",
         });
       }
     }
@@ -623,7 +641,7 @@ export class ScrapingService {
       return acc;
     }, {});
     this.logger.log(
-      `[Scraping] LinkedIn enrichment completed | cacheHits=${cacheHitsByUrl.size} | liveRequested=${membersToEnrich.length} | finalCount=${finalTeam.length}`,
+      `[Scraping] LinkedIn profile resolution completed | cacheHits=${cacheHitsByUrl.size} | liveRequested=${membersToEnrich.length} | finalCount=${finalTeam.length}`,
     );
     this.logger.debug(
       `[Scraping] LinkedIn final status summary ${JSON.stringify(finalStatuses)}`,
@@ -684,5 +702,14 @@ export class ScrapingService {
     }
 
     return resolve(process.cwd(), filePath);
+  }
+
+  private async loadEnrichmentResult(startupId: string): Promise<EnrichmentResult | null> {
+    if (!this.pipelineState) return null;
+    try {
+      return await this.pipelineState.getPhaseResult(startupId, PipelinePhase.ENRICHMENT);
+    } catch {
+      return null;
+    }
   }
 }

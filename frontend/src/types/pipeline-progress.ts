@@ -1,5 +1,6 @@
 export const PIPELINE_PHASE_ORDER = [
   "extraction",
+  "enrichment",
   "scraping",
   "research",
   "evaluation",
@@ -31,6 +32,8 @@ export interface PipelineAgentProgress {
   error?: string;
   attempts?: number;
   retryCount?: number;
+  phaseRetryCount?: number;
+  agentAttemptId?: string;
   usedFallback?: boolean;
   fallbackReason?: PipelineFallbackReason;
   rawProviderError?: string;
@@ -50,12 +53,15 @@ export interface PipelinePhaseProgress {
 
 export interface PipelineAgentEvent {
   id: string;
+  pipelineRunId?: string;
   phase: PipelinePhaseKey;
   agentKey: string;
   event: PipelineAgentEventType;
   timestamp: string;
   attempt?: number;
   retryCount?: number;
+  phaseRetryCount?: number;
+  agentAttemptId?: string;
   error?: string;
   fallbackReason?: PipelineFallbackReason;
   rawProviderError?: string;
@@ -76,6 +82,7 @@ export interface PipelineAgentTrace {
   error?: string | null;
   fallbackReason?: PipelineFallbackReason;
   rawProviderError?: string;
+  captureStatus?: "captured" | "missing" | "provider_error_only";
   startedAt?: string;
   completedAt?: string | null;
 }

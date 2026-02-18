@@ -76,6 +76,13 @@ function isTerminalAgentStatus(status: string | undefined): boolean {
   return status === "completed" || status === "failed";
 }
 
+function normalizeNonNegativeInt(value: number | undefined, fallback = 0): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return fallback;
+  }
+  return Math.max(0, Math.floor(value));
+}
+
 function isOlderTimestamp(
   incoming: string | undefined,
   existing: string | undefined,
@@ -467,15 +474,42 @@ export function useStartupRealtimeProgress(
 
           const phase = ensurePhase(next, data.phase);
           const now = new Date().toISOString();
+          const incomingPhaseRetryCount = normalizeNonNegativeInt(
+            data.agent.phaseRetryCount,
+            normalizeNonNegativeInt(phase.retryCount, 0),
+          );
+          const currentPhaseRetryCount = normalizeNonNegativeInt(
+            phase.retryCount,
+            0,
+          );
+          if (incomingPhaseRetryCount < currentPhaseRetryCount) {
+            return recomputeProgress(next);
+          }
+          if (incomingPhaseRetryCount > currentPhaseRetryCount) {
+            phase.agents = {};
+          }
+          phase.retryCount = incomingPhaseRetryCount;
           const existing = (phase.agents ?? {})[data.agent.key] ?? {
             key: data.agent.key,
             status: "pending",
           };
+          const incomingAgentAttemptId =
+            typeof data.agent.agentAttemptId === "string" &&
+            data.agent.agentAttemptId.trim().length > 0
+              ? data.agent.agentAttemptId.trim()
+              : undefined;
+          const isDifferentAttempt =
+            Boolean(existing.agentAttemptId) &&
+            Boolean(incomingAgentAttemptId) &&
+            existing.agentAttemptId !== incomingAgentAttemptId;
 
           if (
             isOlderTimestamp(data.agent.lastEventAt, existing.lastEventAt) ||
             (isTerminalAgentStatus(existing.status) &&
-              !isTerminalAgentStatus(data.agent.status))
+              !isTerminalAgentStatus(data.agent.status) &&
+              (!isDifferentAttempt ||
+                incomingPhaseRetryCount <=
+                  normalizeNonNegativeInt(existing.phaseRetryCount, 0)))
           ) {
             return recomputeProgress(next);
           }
@@ -497,6 +531,10 @@ export function useStartupRealtimeProgress(
                 : existing.completedAt),
             attempts: data.agent.attempts ?? existing.attempts,
             retryCount: data.agent.retryCount ?? existing.retryCount,
+            phaseRetryCount:
+              data.agent.phaseRetryCount ?? existing.phaseRetryCount,
+            agentAttemptId:
+              incomingAgentAttemptId ?? existing.agentAttemptId,
             usedFallback: data.agent.usedFallback ?? existing.usedFallback,
             fallbackReason:
               data.agent.fallbackReason ?? existing.fallbackReason,

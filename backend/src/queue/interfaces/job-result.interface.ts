@@ -71,6 +71,7 @@ export type AnalysisJobResult =
 export interface AiPipelineBaseJobResult extends BaseJobResult {
   type:
     | "ai_extraction"
+    | "ai_enrichment"
     | "ai_scraping"
     | "ai_research"
     | "ai_evaluation"
@@ -82,6 +83,10 @@ export interface AiPipelineBaseJobResult extends BaseJobResult {
 
 export interface AiExtractionJobResult extends AiPipelineBaseJobResult {
   type: "ai_extraction";
+}
+
+export interface AiEnrichmentJobResult extends AiPipelineBaseJobResult {
+  type: "ai_enrichment";
 }
 
 export interface AiScrapingJobResult extends AiPipelineBaseJobResult {
@@ -100,11 +105,30 @@ export interface AiSynthesisJobResult extends AiPipelineBaseJobResult {
   type: "ai_synthesis";
 }
 
+export interface AiMatchingJobResult extends BaseJobResult {
+  type: "ai_matching";
+  startupId: string;
+  analysisJobId: string;
+  data: {
+    triggerSource: "approval" | "manual" | "retry";
+    candidatesEvaluated: number;
+    matchesFound: number;
+    failedCandidates: number;
+    notificationsSent: number;
+    notificationError?: string;
+  };
+}
+
 export type AiPipelineJobResult =
   | AiExtractionJobResult
+  | AiEnrichmentJobResult
   | AiScrapingJobResult
   | AiResearchJobResult
   | AiEvaluationJobResult
   | AiSynthesisJobResult;
 
-export type JobResult = TaskJobResult | AnalysisJobResult | AiPipelineJobResult;
+export type JobResult =
+  | TaskJobResult
+  | AnalysisJobResult
+  | AiPipelineJobResult
+  | AiMatchingJobResult;

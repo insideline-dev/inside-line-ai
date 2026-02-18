@@ -33,6 +33,7 @@ import type {
   AdminControllerGetStartupStatsParams,
   AdminControllerGetUsersParams,
   AdminControllerRetryJobParams,
+  AiPipelineContextPreviewResponseDto,
   AiPromptContextSchemaResponseDto,
   AiPromptDefinitionsResponseDto,
   AiPromptFlowResponseDto,
@@ -42,6 +43,7 @@ import type {
   AiPromptSeedResultDto,
   CreateAiPromptRevisionDto,
   CreateEarlyAccessInviteDto,
+  PreviewAiPipelineContextRequestDto,
   PreviewAiPromptRequestDto,
   QuickCreateStartupDto,
   RetryAgentDto,
@@ -1387,7 +1389,88 @@ export function useAdminControllerGetWaitlistEntries<TData = Awaited<ReturnType<
 
 
 
-export type adminControllerGetAllStartupsResponse200 = {
+/**
+ * @summary Approve a waitlist entry by generating an invite
+ */
+export type adminControllerApproveWaitlistEntryResponse201 = {
+  data: void
+  status: 201
+}
+    
+export type adminControllerApproveWaitlistEntryResponseSuccess = (adminControllerApproveWaitlistEntryResponse201) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerApproveWaitlistEntryResponse = (adminControllerApproveWaitlistEntryResponseSuccess)
+
+export const getAdminControllerApproveWaitlistEntryUrl = (id: string,) => {
+
+
+  
+
+  return `/admin/early-access/waitlist/${id}/approve`
+}
+
+export const adminControllerApproveWaitlistEntry = async (id: string, options?: RequestInit): Promise<adminControllerApproveWaitlistEntryResponse> => {
+  
+  return customFetch<adminControllerApproveWaitlistEntryResponse>(getAdminControllerApproveWaitlistEntryUrl(id),
+  {      
+    ...options,
+    method: 'POST'
+    
+    
+  }
+);}
+
+
+
+
+export const getAdminControllerApproveWaitlistEntryMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerApproveWaitlistEntry>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminControllerApproveWaitlistEntry>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['adminControllerApproveWaitlistEntry'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminControllerApproveWaitlistEntry>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  adminControllerApproveWaitlistEntry(id,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminControllerApproveWaitlistEntryMutationResult = NonNullable<Awaited<ReturnType<typeof adminControllerApproveWaitlistEntry>>>
+    
+    export type AdminControllerApproveWaitlistEntryMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Approve a waitlist entry by generating an invite
+ */
+export const useAdminControllerApproveWaitlistEntry = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerApproveWaitlistEntry>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof adminControllerApproveWaitlistEntry>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getAdminControllerApproveWaitlistEntryMutationOptions(options), queryClient);
+    }
+    export type adminControllerGetAllStartupsResponse200 = {
   data: void
   status: 200
 }
@@ -1922,7 +2005,117 @@ export const useAdminControllerMatchStartupInvestors = <TError = ErrorType<unkno
       > => {
       return useMutation(getAdminControllerMatchStartupInvestorsMutationOptions(options), queryClient);
     }
-    export type adminControllerReanalyzeStartupResponse201 = {
+    /**
+ * @summary Get latest investor matching status for startup
+ */
+export type adminControllerGetStartupMatchingStatusResponse200 = {
+  data: void
+  status: 200
+}
+    
+export type adminControllerGetStartupMatchingStatusResponseSuccess = (adminControllerGetStartupMatchingStatusResponse200) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerGetStartupMatchingStatusResponse = (adminControllerGetStartupMatchingStatusResponseSuccess)
+
+export const getAdminControllerGetStartupMatchingStatusUrl = (id: string,) => {
+
+
+  
+
+  return `/admin/startups/${id}/matching/status`
+}
+
+export const adminControllerGetStartupMatchingStatus = async (id: string, options?: RequestInit): Promise<adminControllerGetStartupMatchingStatusResponse> => {
+  
+  return customFetch<adminControllerGetStartupMatchingStatusResponse>(getAdminControllerGetStartupMatchingStatusUrl(id),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getAdminControllerGetStartupMatchingStatusQueryKey = (id: string,) => {
+    return [
+    `/admin/startups/${id}/matching/status`
+    ] as const;
+    }
+
+    
+export const getAdminControllerGetStartupMatchingStatusQueryOptions = <TData = Awaited<ReturnType<typeof adminControllerGetStartupMatchingStatus>>, TError = ErrorType<unknown>>(id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetStartupMatchingStatus>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAdminControllerGetStartupMatchingStatusQueryKey(id);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof adminControllerGetStartupMatchingStatus>>> = ({ signal }) => adminControllerGetStartupMatchingStatus(id, { signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetStartupMatchingStatus>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type AdminControllerGetStartupMatchingStatusQueryResult = NonNullable<Awaited<ReturnType<typeof adminControllerGetStartupMatchingStatus>>>
+export type AdminControllerGetStartupMatchingStatusQueryError = ErrorType<unknown>
+
+
+export function useAdminControllerGetStartupMatchingStatus<TData = Awaited<ReturnType<typeof adminControllerGetStartupMatchingStatus>>, TError = ErrorType<unknown>>(
+ id: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetStartupMatchingStatus>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof adminControllerGetStartupMatchingStatus>>,
+          TError,
+          Awaited<ReturnType<typeof adminControllerGetStartupMatchingStatus>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAdminControllerGetStartupMatchingStatus<TData = Awaited<ReturnType<typeof adminControllerGetStartupMatchingStatus>>, TError = ErrorType<unknown>>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetStartupMatchingStatus>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof adminControllerGetStartupMatchingStatus>>,
+          TError,
+          Awaited<ReturnType<typeof adminControllerGetStartupMatchingStatus>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAdminControllerGetStartupMatchingStatus<TData = Awaited<ReturnType<typeof adminControllerGetStartupMatchingStatus>>, TError = ErrorType<unknown>>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetStartupMatchingStatus>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get latest investor matching status for startup
+ */
+
+export function useAdminControllerGetStartupMatchingStatus<TData = Awaited<ReturnType<typeof adminControllerGetStartupMatchingStatus>>, TError = ErrorType<unknown>>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetStartupMatchingStatus>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getAdminControllerGetStartupMatchingStatusQueryOptions(id,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+export type adminControllerReanalyzeStartupResponse201 = {
   data: void
   status: 201
 }
@@ -3118,6 +3311,88 @@ export const useAdminControllerPreviewAiPrompt = <TError = ErrorType<unknown>,
       return useMutation(getAdminControllerPreviewAiPromptMutationOptions(options), queryClient);
     }
     /**
+ * @summary Preview runtime context passed to all research and evaluation agents for a startup
+ */
+export type adminControllerPreviewAiPipelineContextResponse200 = {
+  data: AiPipelineContextPreviewResponseDto
+  status: 200
+}
+    
+export type adminControllerPreviewAiPipelineContextResponseSuccess = (adminControllerPreviewAiPipelineContextResponse200) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerPreviewAiPipelineContextResponse = (adminControllerPreviewAiPipelineContextResponseSuccess)
+
+export const getAdminControllerPreviewAiPipelineContextUrl = () => {
+
+
+  
+
+  return `/admin/ai-prompts/pipeline-context-preview`
+}
+
+export const adminControllerPreviewAiPipelineContext = async (previewAiPipelineContextRequestDto: PreviewAiPipelineContextRequestDto, options?: RequestInit): Promise<adminControllerPreviewAiPipelineContextResponse> => {
+  
+  return customFetch<adminControllerPreviewAiPipelineContextResponse>(getAdminControllerPreviewAiPipelineContextUrl(),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      previewAiPipelineContextRequestDto,)
+  }
+);}
+
+
+
+
+export const getAdminControllerPreviewAiPipelineContextMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerPreviewAiPipelineContext>>, TError,{data: BodyType<PreviewAiPipelineContextRequestDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminControllerPreviewAiPipelineContext>>, TError,{data: BodyType<PreviewAiPipelineContextRequestDto>}, TContext> => {
+
+const mutationKey = ['adminControllerPreviewAiPipelineContext'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminControllerPreviewAiPipelineContext>>, {data: BodyType<PreviewAiPipelineContextRequestDto>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  adminControllerPreviewAiPipelineContext(data,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminControllerPreviewAiPipelineContextMutationResult = NonNullable<Awaited<ReturnType<typeof adminControllerPreviewAiPipelineContext>>>
+    export type AdminControllerPreviewAiPipelineContextMutationBody = BodyType<PreviewAiPipelineContextRequestDto>
+    export type AdminControllerPreviewAiPipelineContextMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Preview runtime context passed to all research and evaluation agents for a startup
+ */
+export const useAdminControllerPreviewAiPipelineContext = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerPreviewAiPipelineContext>>, TError,{data: BodyType<PreviewAiPipelineContextRequestDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof adminControllerPreviewAiPipelineContext>>,
+        TError,
+        {data: BodyType<PreviewAiPipelineContextRequestDto>},
+        TContext
+      > => {
+      return useMutation(getAdminControllerPreviewAiPipelineContextMutationOptions(options), queryClient);
+    }
+    /**
  * @summary Update prompt draft revision
  */
 export type adminControllerUpdateAiPromptRevisionResponse200 = {
@@ -4187,7 +4462,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getAdminControllerNormalizeLocationsMutationOptions(options), queryClient);
     }
-    export type adminControllerGetConversationsResponse200 = {
+    /**
+ * @summary List Clara AI conversations
+ */
+export type adminControllerGetConversationsResponse200 = {
   data: void
   status: 200
 }
@@ -4275,6 +4553,9 @@ export function useAdminControllerGetConversations<TData = Awaited<ReturnType<ty
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetConversations>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List Clara AI conversations
+ */
 
 export function useAdminControllerGetConversations<TData = Awaited<ReturnType<typeof adminControllerGetConversations>>, TError = ErrorType<unknown>>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetConversations>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
@@ -4282,6 +4563,116 @@ export function useAdminControllerGetConversations<TData = Awaited<ReturnType<ty
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getAdminControllerGetConversationsQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+/**
+ * @summary Get messages for a Clara conversation
+ */
+export type adminControllerGetConversationMessagesResponse200 = {
+  data: void
+  status: 200
+}
+    
+export type adminControllerGetConversationMessagesResponseSuccess = (adminControllerGetConversationMessagesResponse200) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerGetConversationMessagesResponse = (adminControllerGetConversationMessagesResponseSuccess)
+
+export const getAdminControllerGetConversationMessagesUrl = (id: string,) => {
+
+
+  
+
+  return `/admin/conversations/${id}/messages`
+}
+
+export const adminControllerGetConversationMessages = async (id: string, options?: RequestInit): Promise<adminControllerGetConversationMessagesResponse> => {
+  
+  return customFetch<adminControllerGetConversationMessagesResponse>(getAdminControllerGetConversationMessagesUrl(id),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getAdminControllerGetConversationMessagesQueryKey = (id: string,) => {
+    return [
+    `/admin/conversations/${id}/messages`
+    ] as const;
+    }
+
+    
+export const getAdminControllerGetConversationMessagesQueryOptions = <TData = Awaited<ReturnType<typeof adminControllerGetConversationMessages>>, TError = ErrorType<unknown>>(id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetConversationMessages>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAdminControllerGetConversationMessagesQueryKey(id);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof adminControllerGetConversationMessages>>> = ({ signal }) => adminControllerGetConversationMessages(id, { signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetConversationMessages>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type AdminControllerGetConversationMessagesQueryResult = NonNullable<Awaited<ReturnType<typeof adminControllerGetConversationMessages>>>
+export type AdminControllerGetConversationMessagesQueryError = ErrorType<unknown>
+
+
+export function useAdminControllerGetConversationMessages<TData = Awaited<ReturnType<typeof adminControllerGetConversationMessages>>, TError = ErrorType<unknown>>(
+ id: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetConversationMessages>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof adminControllerGetConversationMessages>>,
+          TError,
+          Awaited<ReturnType<typeof adminControllerGetConversationMessages>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAdminControllerGetConversationMessages<TData = Awaited<ReturnType<typeof adminControllerGetConversationMessages>>, TError = ErrorType<unknown>>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetConversationMessages>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof adminControllerGetConversationMessages>>,
+          TError,
+          Awaited<ReturnType<typeof adminControllerGetConversationMessages>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAdminControllerGetConversationMessages<TData = Awaited<ReturnType<typeof adminControllerGetConversationMessages>>, TError = ErrorType<unknown>>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetConversationMessages>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get messages for a Clara conversation
+ */
+
+export function useAdminControllerGetConversationMessages<TData = Awaited<ReturnType<typeof adminControllerGetConversationMessages>>, TError = ErrorType<unknown>>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetConversationMessages>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getAdminControllerGetConversationMessagesQueryOptions(id,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

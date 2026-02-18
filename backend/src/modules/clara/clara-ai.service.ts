@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { generateText, Output } from "ai";
+import { generateText, Output, stepCountIs, type ToolSet } from "ai";
 import { z } from "zod";
 import { AiProviderService } from "../ai/providers/ai-provider.service";
 import { ModelPurpose } from "../ai/interfaces/pipeline.interface";
@@ -244,6 +244,80 @@ export class ClaraAiService {
         return "Thank you for the additional information. I've noted this for the ongoing analysis.";
       case ClaraIntent.GREETING:
         return "Hi! I'm Clara, your AI assistant at Inside Line. You can forward pitch decks to me and I'll run a comprehensive analysis covering team, market, product, traction, and financials. Just send a PDF and I'll take it from there!";
+    }
+  }
+
+  isLikelySubmission(ctx: MessageContext): boolean {
+    const hasPdf = ctx.attachments.some(
+      (a) =>
+        a.contentType === "application/pdf" ||
+        /deck|pitch/i.test(a.filename),
+    );
+    const isNew = ctx.conversationHistory.length === 0;
+    return hasPdf && (isNew || !ctx.startupId);
+  }
+
+  async runAgentLoop(
+    ctx: MessageContext,
+    tools: ToolSet,
+  ): Promise<string> {
+    try {
+      const history = ctx.conversationHistory
+        .slice(-5)
+        .map(
+          (m) =>
+            `[${m.direction}] ${m.bodyText?.slice(0, 300) ?? "(no body)"}`,
+        )
+        .join("\n");
+
+      const systemPrompt = [
+        "You are Clara, a smart and friendly AI assistant for Inside Line, an investor deal-flow platform.",
+        "",
+        "## Your Capabilities",
+        "You can look up information for investors using the tools available to you:",
+        "- Their matched startups and scores",
+        "- Their deal pipeline status",
+        "- Detailed startup information (fuzzy name search)",
+        "- Quick startup status checks",
+        "- Their investment thesis",
+        "- Their notes on startups",
+        "- Their portfolio companies",
+        "- Search startups by name",
+        "",
+        "## Guidelines",
+        "- Be concise and professional but warm. Use the investor's name when available.",
+        "- Use tools to gather data before answering questions. Don't guess.",
+        "- If the sender has no linked account, explain they can register on Inside Line.",
+        "- If asked about submitting a startup, explain they can forward a pitch deck PDF.",
+        "- Sign off as Clara.",
+        "- Format responses for email (plain text, no markdown).",
+        "- Never fabricate data. If a tool returns no results, say so.",
+      ].join("\n");
+
+      const userPrompt = [
+        `From: ${ctx.fromName ?? ctx.fromEmail} <${ctx.fromEmail}>`,
+        `Subject: ${ctx.subject ?? "(no subject)"}`,
+        "",
+        ctx.bodyText?.slice(0, 3000) ?? "(empty body)",
+        "",
+        history ? `Recent conversation:\n${history}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      const { text } = await generateText({
+        model: this.providers.resolveModelForPurpose(ModelPurpose.EXTRACTION),
+        tools,
+        stopWhen: stepCountIs(5),
+        temperature: 0.3,
+        system: systemPrompt,
+        prompt: userPrompt,
+      });
+
+      return text;
+    } catch (error) {
+      this.logger.warn(`Agent loop failed: ${error}`);
+      return this.fallbackResponse(ClaraIntent.GREETING);
     }
   }
 

@@ -9,10 +9,12 @@ import {
 describe("queue.config", () => {
   it("includes ai pipeline queues", () => {
     expect(QUEUE_NAMES.AI_EXTRACTION).toBe("ai-extraction");
+    expect(QUEUE_NAMES.AI_ENRICHMENT).toBe("ai-enrichment");
     expect(QUEUE_NAMES.AI_SCRAPING).toBe("ai-scraping");
     expect(QUEUE_NAMES.AI_RESEARCH).toBe("ai-research");
     expect(QUEUE_NAMES.AI_EVALUATION).toBe("ai-evaluation");
     expect(QUEUE_NAMES.AI_SYNTHESIS).toBe("ai-synthesis");
+    expect(QUEUE_NAMES.AI_MATCHING).toBe("ai-matching");
   });
 
   it("defines concurrency and depth limits for each queue", () => {

@@ -8,6 +8,7 @@ import { AgentMailClientService } from "../integrations/agentmail/agentmail-clie
 import { ClaraConversationService } from "./clara-conversation.service";
 import { ClaraAiService } from "./clara-ai.service";
 import { ClaraSubmissionService } from "./clara-submission.service";
+import { ClaraToolsService } from "./clara-tools.service";
 import {
   ClaraIntent,
   ConversationStatus,
@@ -29,6 +30,7 @@ export class ClaraService {
     private conversationService: ClaraConversationService,
     private claraAi: ClaraAiService,
     private submissionService: ClaraSubmissionService,
+    private toolsService: ClaraToolsService,
   ) {
     this.claraInboxId = this.config.get<string>("CLARA_INBOX_ID") ?? null;
     this.adminUserId =
@@ -109,123 +111,79 @@ export class ClaraService {
         conversationStatus: conversation.status as ConversationStatus,
       };
 
-      const classification = await this.claraAi.classifyIntent(ctx);
-
-      await this.conversationService.logMessage({
-        conversationId: conversation.id,
-        messageId,
-        direction: MessageDirection.INBOUND,
-        fromEmail,
-        subject: message.subject,
-        bodyText: message.text,
-        intent: classification.intent,
-        intentConfidence: classification.confidence,
-        attachments,
-        processed: true,
-      });
-
-      await this.conversationService.updateLastIntent(
-        conversation.id,
-        classification.intent,
-      );
-
       let replyText: string;
-      let extra: {
-        startupName?: string;
-        startupStatus?: string;
-        score?: number;
-        startupStage?: string;
-      } = {};
+      let intent: ClaraIntent;
 
-      switch (classification.intent) {
-        case ClaraIntent.SUBMISSION: {
-          if (
-            classification.confidence < 0.3 &&
-            attachments.filter((a) => a.isPitchDeck).length === 0
-          ) {
-            await this.conversationService.updateStatus(
-              conversation.id,
-              ConversationStatus.AWAITING_INFO,
-            );
-            replyText = await this.claraAi.generateResponse(
-              ClaraIntent.GREETING,
-              ctx,
-            );
-            replyText +=
-              "\n\nIt looks like you might want to submit a startup for analysis, but I couldn't find a pitch deck attachment. Could you please attach a PDF pitch deck?";
-            break;
-          }
+      if (this.claraAi.isLikelySubmission(ctx)) {
+        intent = ClaraIntent.SUBMISSION;
 
-          const result = await this.submissionService.handleSubmission(
-            ctx,
-            this.adminUserId,
-            classification.extractedCompanyName,
-          );
+        await this.conversationService.logMessage({
+          conversationId: conversation.id,
+          messageId,
+          direction: MessageDirection.INBOUND,
+          fromEmail,
+          subject: message.subject,
+          bodyText: message.text,
+          intent,
+          intentConfidence: 0.95,
+          attachments,
+          processed: true,
+        });
 
-          await this.conversationService.linkStartup(
-            conversation.id,
-            result.startupId,
-          );
-          await this.conversationService.updateStatus(
-            conversation.id,
-            ConversationStatus.PROCESSING,
-          );
+        await this.conversationService.updateLastIntent(conversation.id, intent);
 
-          extra = {
-            startupName: result.startupName,
-            startupStatus: result.status,
-            startupStage: startupContext.startupStage ?? "seed",
-          };
+        const extractedName = this.claraAi.extractCompanyFromFilename(
+          attachments.find((a) => a.isPitchDeck)?.filename,
+        );
 
-          if (result.isDuplicate) {
-            replyText = `We already have ${result.startupName} in our system (status: ${result.status}). I've linked this conversation to the existing record.`;
-          } else {
-            replyText = await this.claraAi.generateResponse(
-              ClaraIntent.SUBMISSION,
-              ctx,
-              extra,
-            );
-          }
-          break;
-        }
+        const result = await this.submissionService.handleSubmission(
+          ctx,
+          this.adminUserId,
+          extractedName,
+        );
 
-        case ClaraIntent.QUESTION: {
-          extra = await this.getStartupExtra(conversation.startupId);
+        await this.conversationService.linkStartup(conversation.id, result.startupId);
+        await this.conversationService.updateStatus(
+          conversation.id,
+          ConversationStatus.PROCESSING,
+        );
+
+        const extra = {
+          startupName: result.startupName,
+          startupStatus: result.status,
+          startupStage: startupContext.startupStage ?? "seed",
+        };
+
+        if (result.isDuplicate) {
+          replyText = result.isEnriched
+            ? `We already have ${result.startupName} in our system. I've updated it with the new pitch deck you sent and re-triggered the analysis. You'll receive an updated report when it's ready.`
+            : `We already have ${result.startupName} in our system (status: ${result.status}). I've linked this conversation to the existing record.`;
+        } else {
           replyText = await this.claraAi.generateResponse(
-            ClaraIntent.QUESTION,
+            ClaraIntent.SUBMISSION,
             ctx,
             extra,
           );
-          break;
         }
+      } else {
+        intent = ClaraIntent.GREETING;
 
-        case ClaraIntent.REPORT_REQUEST: {
-          extra = await this.getStartupExtra(conversation.startupId);
-          replyText = await this.claraAi.generateResponse(
-            ClaraIntent.REPORT_REQUEST,
-            ctx,
-            extra,
-          );
-          break;
-        }
+        await this.conversationService.logMessage({
+          conversationId: conversation.id,
+          messageId,
+          direction: MessageDirection.INBOUND,
+          fromEmail,
+          subject: message.subject,
+          bodyText: message.text,
+          intent,
+          attachments,
+          processed: true,
+        });
 
-        case ClaraIntent.FOLLOW_UP: {
-          extra = await this.getStartupExtra(conversation.startupId);
-          replyText = await this.claraAi.generateResponse(
-            ClaraIntent.FOLLOW_UP,
-            ctx,
-            extra,
-          );
-          break;
-        }
+        await this.conversationService.updateLastIntent(conversation.id, intent);
 
-        case ClaraIntent.GREETING: {
-          replyText = await this.claraAi.generateResponse(
-            ClaraIntent.GREETING,
-            ctx,
-          );
-          break;
-        }
+        const tools = this.toolsService.buildTools(ctx.investorUserId);
+        replyText = await this.claraAi.runAgentLoop(ctx, tools);
       }
 
       await this.agentMailClient.replyToMessage(inboxId, messageId, {
@@ -241,9 +199,7 @@ export class ClaraService {
         processed: true,
       });
 
-      this.logger.log(
-        `Processed message ${messageId}: intent=${classification.intent} confidence=${classification.confidence}`,
-      );
+      this.logger.log(`Processed message ${messageId}: intent=${intent}`);
     } catch (error) {
       this.logger.error(
         `Failed to handle message ${messageId}: ${error}`,

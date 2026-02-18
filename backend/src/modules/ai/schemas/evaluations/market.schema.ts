@@ -30,6 +30,14 @@ const requiredStringFromNull = (fallback: string) =>
     z.string().min(1),
   );
 
+const stringArray = z.preprocess(
+  (value) =>
+    Array.isArray(value)
+      ? value.filter((item): item is string => typeof item === "string")
+      : [],
+  z.array(z.string()),
+).default([]);
+
 const MarketCompetitorDetailSchema = z.object({
   name: requiredStringFromNull("Unknown competitor"),
   description: requiredStringFromNull("Description unavailable"),
@@ -51,8 +59,8 @@ export const MarketEvaluationSchema = BaseEvaluationSchema.extend({
   tamEstimate: optionalNonNegativeNumber,
   marketTiming: requiredStringFromNull("Market timing requires manual review"),
   credibilityScore: z.number().int().min(0).max(100),
-  directCompetitors: z.array(z.string()).default([]),
-  indirectCompetitors: z.array(z.string()).default([]),
+  directCompetitors: stringArray,
+  indirectCompetitors: stringArray,
   directCompetitorsDetailed: z.array(MarketCompetitorDetailSchema).default([]),
   indirectCompetitorsDetailed: z.array(MarketIndirectCompetitorDetailSchema).default([]),
 });

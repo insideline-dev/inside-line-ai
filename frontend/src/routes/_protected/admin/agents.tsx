@@ -12,6 +12,7 @@ import {
   useAdminControllerGetAiPrompts,
   useAdminControllerPublishAiPromptRevision,
   useAdminControllerPreviewAiPrompt,
+  useAdminControllerPreviewAiPipelineContext,
   useAdminControllerSeedAiPrompts,
   useAdminControllerUpdateAiPromptRevision,
 } from "@/api/generated/admin/admin";
@@ -23,6 +24,7 @@ import type {
   AiPromptFlowResponseDtoFlowsItem,
   AiPromptFlowResponseDtoFlowsItemNodesItem,
   AiPromptPreviewResponseDto,
+  AiPipelineContextPreviewResponseDto,
   AiPromptFlowResponseDtoFlowsItemNodesItemPromptKeysItem,
   AiPromptRevisionsResponseDto,
   AiPromptSeedResultDto,
@@ -65,6 +67,7 @@ import {
   RefreshCw,
   Rocket,
   Save,
+  Search,
   Target,
   Workflow,
 } from "lucide-react";
@@ -139,7 +142,82 @@ function formatPreviewValue(value: unknown): string {
   }
 }
 
+function extractNamedRuntimeVariables(
+  variables: Record<string, unknown> | undefined,
+): Array<[string, unknown]> {
+  if (!variables) {
+    return [];
+  }
+
+  return Object.entries(variables).filter(
+    ([key]) =>
+      ![
+        "contextJson",
+        "contextSections",
+        "agentName",
+        "agentKey",
+      ].includes(key),
+  );
+}
+
+type PreviewContextSection = {
+  title: string;
+  data: unknown;
+};
+
+function getPreviewParsedSections(
+  preview: AiPromptPreviewResponseDto | null,
+): PreviewContextSection[] {
+  if (!preview) {
+    return [];
+  }
+
+  const raw = (preview as unknown as { parsedContextSections?: unknown })
+    .parsedContextSections;
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+
+  return raw
+    .map((item) => {
+      if (!item || typeof item !== "object") {
+        return null;
+      }
+      const candidate = item as { title?: unknown; data?: unknown };
+      if (typeof candidate.title !== "string") {
+        return null;
+      }
+      return { title: candidate.title, data: candidate.data };
+    })
+    .filter((item): item is PreviewContextSection => item !== null);
+}
+
+function getPreviewParsedContextJson(
+  preview: AiPromptPreviewResponseDto | null,
+): unknown | null {
+  if (!preview) {
+    return null;
+  }
+  const raw = (preview as unknown as { parsedContextJson?: unknown })
+    .parsedContextJson;
+  return raw ?? null;
+}
+
+function getPreviewSectionTitles(preview: AiPromptPreviewResponseDto | null): string[] {
+  if (!preview) {
+    return [];
+  }
+  const raw = (preview as unknown as { sectionTitles?: unknown }).sectionTitles;
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  return raw.filter((item): item is string => typeof item === "string");
+}
+
 function pickNodeIcon(nodeId: string) {
+  if (nodeId.includes("gap") || nodeId.includes("hybrid") || nodeId.includes("brave")) {
+    return Search;
+  }
   if (nodeId.includes("extract")) return FileSearch;
   if (nodeId.includes("scrape")) return Globe;
   if (nodeId.includes("linkedin")) return Linkedin;
@@ -227,6 +305,8 @@ function AdminAgentsPage() {
   const [previewStartupId, setPreviewStartupId] = useState("");
   const [previewStage, setPreviewStage] = useState<"auto" | StageOption>("auto");
   const [previewResult, setPreviewResult] = useState<AiPromptPreviewResponseDto | null>(null);
+  const [pipelineContextPreviewResult, setPipelineContextPreviewResult] =
+    useState<AiPipelineContextPreviewResponseDto | null>(null);
 
   const definitionsQuery = useAdminControllerGetAiPrompts();
   const flowQuery = useAdminControllerGetAiPromptFlow();
@@ -329,6 +409,7 @@ function AdminAgentsPage() {
   const currentPromptKey = selectedNode?.promptKeys.includes(selectedPromptKey as PromptKey)
     ? (selectedPromptKey as PromptKey)
     : (selectedNode?.promptKeys[0] ?? null);
+  const isEvaluationPrompt = currentPromptKey?.startsWith("evaluation.") ?? false;
 
   const revisionsQuery = useAdminControllerGetAiPromptRevisions(currentPromptKey ?? "", {
     query: {
@@ -491,6 +572,21 @@ function AdminAgentsPage() {
       onError: (error) => toast.error((error as Error).message || "Failed to generate preview"),
     },
   });
+  const pipelineContextPreviewMutation =
+    useAdminControllerPreviewAiPipelineContext({
+      mutation: {
+        onSuccess: (result) => {
+          const payload =
+            extractResponseData<AiPipelineContextPreviewResponseDto>(result);
+          setPipelineContextPreviewResult(payload);
+          toast.success("Pipeline context preview generated");
+        },
+        onError: (error) =>
+          toast.error(
+            (error as Error).message || "Failed to generate pipeline context preview",
+          ),
+      },
+    });
 
   const isSaving =
     createDraftMutation.isPending || updateDraftMutation.isPending || publishMutation.isPending;
@@ -539,6 +635,23 @@ function AdminAgentsPage() {
   const runtimeFields = contextSchema?.contextFields ?? [];
   const requiredPhases = contextSchema?.requiredPhases ?? [];
   const contextNotes = contextSchema?.notes ?? [];
+  const evaluationContextSourcePaths = useMemo(() => {
+    if (!isEvaluationPrompt) {
+      return [] as string[];
+    }
+
+    const paths = runtimeFields
+      .map((field) => field.path)
+      .filter(
+        (path) => path.startsWith("contextJson.") && path !== "contextJson",
+      )
+      .map((path) => path.replace(/^contextJson\./, ""));
+
+    return Array.from(new Set(paths));
+  }, [isEvaluationPrompt, runtimeFields]);
+  const previewParsedSections = getPreviewParsedSections(previewResult);
+  const previewParsedContextJson = getPreviewParsedContextJson(previewResult);
+  const previewSectionTitles = getPreviewSectionTitles(previewResult);
 
   const handlePreview = () => {
     if (!currentPromptKey) return;
@@ -559,6 +672,20 @@ function AdminAgentsPage() {
     previewMutation.mutate({
       key: currentPromptKey,
       data: payload,
+    });
+  };
+
+  const handlePipelineContextPreview = () => {
+    if (!previewStartupId.trim()) {
+      toast.error("Startup ID is required for pipeline context preview");
+      return;
+    }
+
+    pipelineContextPreviewMutation.mutate({
+      data: {
+        startupId: previewStartupId.trim(),
+        stage: previewStage === "auto" ? undefined : previewStage,
+      },
     });
   };
 
@@ -756,6 +883,7 @@ function AdminAgentsPage() {
                       <TabsTrigger value="variables">Variables</TabsTrigger>
                       <TabsTrigger value="revisions">Revisions</TabsTrigger>
                       <TabsTrigger value="runtime-preview">Runtime Preview</TabsTrigger>
+                      <TabsTrigger value="pipeline-context">Pipeline Context</TabsTrigger>
                       <TabsTrigger value="context">Graph Context (Static)</TabsTrigger>
                     </TabsList>
 
@@ -837,6 +965,34 @@ function AdminAgentsPage() {
                             />
                           </div>
 
+                          {isEvaluationPrompt ? (
+                            <div className="rounded-md border bg-muted/30 p-3">
+                              <p className="text-sm font-medium">
+                                Evaluation Context Visibility
+                              </p>
+                              <p className="mt-1 text-sm text-muted-foreground">
+                                <code>{"{{contextSections}}"}</code> is expanded at
+                                runtime from structured evaluation context fields.
+                                A shared <code>Startup Snapshot</code> baseline is
+                                prepended for all evaluation agents.
+                              </p>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                {previewSectionTitles.length > 0
+                                  ? `Last preview section titles: ${previewSectionTitles.join(", ")}`
+                                  : "Run Runtime Preview with a startup ID to inspect exact section payloads."}
+                              </p>
+                              {evaluationContextSourcePaths.length > 0 ? (
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  {evaluationContextSourcePaths.map((path) => (
+                                    <Badge key={path} variant="outline">
+                                      {`contextJson.${path}`}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              ) : null}
+                            </div>
+                          ) : null}
+
                           <div className="flex flex-wrap items-center gap-2">
                             <Button onClick={handleSaveDraft} disabled={!currentPromptKey || isSaving}>
                               <Save className="mr-2 h-4 w-4" />
@@ -896,6 +1052,17 @@ function AdminAgentsPage() {
                               )}
                             </div>
                           </div>
+
+                          {isEvaluationPrompt ? (
+                            <div className="rounded-md border bg-muted/30 p-3">
+                              <p className="text-sm font-medium">Evaluation Context Composition</p>
+                              <p className="mt-1 text-sm text-muted-foreground">
+                                Evaluation prompts typically use <code>{"{{contextSections}}"}</code>, which is composed from structured evaluation context fields at runtime.
+                                A shared <code>Startup Snapshot</code> baseline is always prepended before agent-specific sections.
+                                Use Runtime Preview to inspect the exact expanded sections and raw JSON payload.
+                              </p>
+                            </div>
+                          ) : null}
 
                           <div>
                             <p className="mb-2 text-sm font-medium">Required Pipeline Phases</p>
@@ -1134,6 +1301,234 @@ function AdminAgentsPage() {
                                     </div>
                                   ))}
                                 </div>
+                              </div>
+
+                              {isEvaluationPrompt ? (
+                                <div className="space-y-2">
+                                  <Label>Evaluation Context (Expanded)</Label>
+                                  {(() => {
+                                    const startupSnapshotSection =
+                                      previewParsedSections.find(
+                                        (section) =>
+                                          section.title === "Startup Snapshot",
+                                      ) ?? null;
+                                    return startupSnapshotSection ? (
+                                      <div className="rounded-md border p-3">
+                                        <p className="text-xs font-semibold">
+                                          Startup Snapshot
+                                        </p>
+                                        <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded bg-muted/40 p-2 text-xs">
+                                          {formatPreviewValue(
+                                            startupSnapshotSection.data,
+                                          )}
+                                        </pre>
+                                      </div>
+                                    ) : null;
+                                  })()}
+                                  <div className="rounded-md border p-3">
+                                    <p className="text-xs text-muted-foreground">
+                                      Section titles:{" "}
+                                      {previewSectionTitles.length > 0
+                                        ? previewSectionTitles.join(", ")
+                                        : "None"}
+                                    </p>
+                                  </div>
+
+                                  {previewParsedSections.length > 0 ? (
+                                    <div className="space-y-2">
+                                      {previewParsedSections.map((section, index) => (
+                                        section.title === "Startup Snapshot" ? null : (
+                                        <div
+                                          key={`${section.title}-${index}`}
+                                          className="rounded-md border p-3"
+                                        >
+                                          <p className="text-xs font-semibold">
+                                            {section.title}
+                                          </p>
+                                          <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded bg-muted/40 p-2 text-xs">
+                                            {formatPreviewValue(section.data)}
+                                          </pre>
+                                        </div>
+                                        )
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <p className="text-sm text-muted-foreground">
+                                      No parsed evaluation sections returned for this preview.
+                                    </p>
+                                  )}
+
+                                  <div className="space-y-1">
+                                    <Label className="text-xs">
+                                      Parsed Context JSON
+                                    </Label>
+                                    <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded bg-muted/40 p-2 text-xs">
+                                      {formatPreviewValue(previewParsedContextJson)}
+                                    </pre>
+                                  </div>
+                                </div>
+                              ) : null}
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    </TabsContent>
+
+                    <TabsContent value="pipeline-context">
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-base">Pipeline Context Inspector</CardTitle>
+                          <CardDescription>
+                            Inspect the exact context payload and rendered prompt for every research and evaluation agent.
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                          <div className="grid gap-3 md:grid-cols-[1fr_220px_auto]">
+                            <div className="space-y-2">
+                              <Label>Startup ID (required)</Label>
+                              <Input
+                                value={previewStartupId}
+                                onChange={(event) => setPreviewStartupId(event.target.value)}
+                                placeholder="UUID of startup to inspect"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Stage Override</Label>
+                              <Select
+                                value={previewStage}
+                                onValueChange={(value) => setPreviewStage(value as "auto" | StageOption)}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Auto" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="auto">Auto</SelectItem>
+                                  {STAGES.map((stage) => (
+                                    <SelectItem key={stage} value={stage}>
+                                      {formatStage(stage)}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="flex items-end">
+                              <Button
+                                onClick={handlePipelineContextPreview}
+                                disabled={pipelineContextPreviewMutation.isPending}
+                              >
+                                {pipelineContextPreviewMutation.isPending
+                                  ? "Generating..."
+                                  : "Generate Context Preview"}
+                              </Button>
+                            </div>
+                          </div>
+
+                          {!pipelineContextPreviewResult ? (
+                            <p className="text-sm text-muted-foreground">
+                              Generate a preview to inspect context passed to each research and evaluation agent.
+                            </p>
+                          ) : (
+                            <div className="space-y-4">
+                              <div className="rounded-md border p-3">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <Badge>{pipelineContextPreviewResult.startupId}</Badge>
+                                  {pipelineContextPreviewResult.effectiveStage ? (
+                                    <Badge variant="secondary">
+                                      {formatStage(pipelineContextPreviewResult.effectiveStage)}
+                                    </Badge>
+                                  ) : (
+                                    <Badge variant="secondary">Global</Badge>
+                                  )}
+                                  <Badge variant="outline">
+                                    Agents: {pipelineContextPreviewResult.agents.length}
+                                  </Badge>
+                                </div>
+                                <p className="mt-2 text-xs text-muted-foreground">
+                                  Generated: {new Date(pipelineContextPreviewResult.generatedAt).toLocaleString()}
+                                </p>
+                              </div>
+
+                              <div className="space-y-3">
+                                {pipelineContextPreviewResult.agents.map((agent) => (
+                                  <div key={`${agent.promptKey}-${agent.agentKey}`} className="rounded-md border p-3">
+                                    {(() => {
+                                      const namedVariables = extractNamedRuntimeVariables(
+                                        (agent.resolvedVariables ?? {}) as Record<string, unknown>,
+                                      );
+                                      return (
+                                        <>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <Badge>{agent.phase}</Badge>
+                                      <Badge variant="outline">{agent.agentKey}</Badge>
+                                      <Badge variant="outline">{agent.promptKey}</Badge>
+                                      <Badge
+                                        variant={agent.promptSource === "db" ? "default" : "secondary"}
+                                      >
+                                        prompt: {agent.promptSource}
+                                      </Badge>
+                                      {agent.promptRevisionId ? (
+                                        <Badge variant="outline">{agent.promptRevisionId.slice(0, 8)}</Badge>
+                                      ) : (
+                                        <Badge variant="secondary">code fallback</Badge>
+                                      )}
+                                    </div>
+
+                                    <div className="mt-3 space-y-1">
+                                      <Label className="text-xs">Named Runtime Variables</Label>
+                                      <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded bg-muted/40 p-2 text-xs">
+                                        {namedVariables.length > 0
+                                          ? formatPreviewValue(
+                                              Object.fromEntries(namedVariables),
+                                            )
+                                          : "No named variables resolved."}
+                                      </pre>
+                                    </div>
+
+                                    <div className="mt-3 grid gap-3 md:grid-cols-2">
+                                      <div className="space-y-1">
+                                        <Label className="text-xs">Parsed Context JSON</Label>
+                                        <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded bg-muted/40 p-2 text-xs">
+                                          {formatPreviewValue(agent.parsedContextJson)}
+                                        </pre>
+                                      </div>
+                                      <div className="space-y-1">
+                                        <Label className="text-xs">Parsed Context Sections</Label>
+                                        <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded bg-muted/40 p-2 text-xs">
+                                          {formatPreviewValue(agent.parsedContextSections)}
+                                        </pre>
+                                      </div>
+                                    </div>
+
+                                    <div className="mt-3 space-y-1">
+                                      <Label className="text-xs">Resolved Variables</Label>
+                                      <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded bg-muted/40 p-2 text-xs">
+                                        {formatPreviewValue(agent.resolvedVariables)}
+                                      </pre>
+                                    </div>
+
+                                    <div className="mt-3 grid gap-3 md:grid-cols-2">
+                                      <div className="space-y-1">
+                                        <Label className="text-xs">Rendered System Prompt</Label>
+                                        <Textarea
+                                          readOnly
+                                          value={agent.renderedSystemPrompt}
+                                          className="min-h-[160px] font-mono text-xs"
+                                        />
+                                      </div>
+                                      <div className="space-y-1">
+                                        <Label className="text-xs">Rendered User Prompt</Label>
+                                        <Textarea
+                                          readOnly
+                                          value={agent.renderedUserPrompt}
+                                          className="min-h-[160px] font-mono text-xs"
+                                        />
+                                      </div>
+                                    </div>
+                                        </>
+                                      );
+                                    })()}
+                                  </div>
+                                ))}
                               </div>
                             </div>
                           )}

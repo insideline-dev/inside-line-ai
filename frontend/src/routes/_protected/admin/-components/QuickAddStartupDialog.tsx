@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { Zap } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -87,14 +87,15 @@ export function QuickAddStartupDialog() {
           const data = response?.data ?? response;
           if (data?.isDuplicate) {
             toast.warning("Duplicate detected", {
-              description: (
-                <span>
-                  {data.startupName} already exists.{" "}
-                  <Link to="/admin/startup/$id" params={{ id: data.startupId }} className="underline font-medium">
-                    View startup
-                  </Link>
-                </span>
-              ),
+              description: `${data.startupName} already exists.`,
+              action: {
+                label: "View startup",
+                onClick: () =>
+                  navigate({
+                    to: "/admin/startup/$id",
+                    params: { id: data.startupId },
+                  }),
+              },
             });
             return;
           }

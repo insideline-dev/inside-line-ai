@@ -31,4 +31,5 @@ export const AiPromptDefinitionsResponseDtoItemKey = {
   matchingthesis: 'matching.thesis',
   claraintent: 'clara.intent',
   clararesponse: 'clara.response',
+  claraagent: 'clara.agent',
 } as const;

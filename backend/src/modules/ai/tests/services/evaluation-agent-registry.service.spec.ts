@@ -8,6 +8,7 @@ import { EvaluationAgentRegistryService } from "../../services/evaluation-agent-
 import { PipelineStateService } from "../../services/pipeline-state.service";
 import type { PhaseTransitionService } from "../../orchestrator/phase-transition.service";
 import type { PipelineFeedbackService } from "../../services/pipeline-feedback.service";
+import type { PipelineAgentTraceService } from "../../services/pipeline-agent-trace.service";
 import { createEvaluationPipelineInput } from "../fixtures/evaluation-pipeline.fixture";
 
 const ALL_KEYS: EvaluationAgentKey[] = [
@@ -67,6 +68,7 @@ function createRegistry(
   pipelineState: PipelineStateService,
   phaseTransition: PhaseTransitionService,
   pipelineFeedback: PipelineFeedbackService,
+  pipelineAgentTrace?: PipelineAgentTraceService,
 ): EvaluationAgentRegistryService {
   const constructorArgs = [
     agents[0],
@@ -83,6 +85,7 @@ function createRegistry(
     pipelineState,
     phaseTransition,
     pipelineFeedback,
+    pipelineAgentTrace,
   ] as unknown as ConstructorParameters<typeof EvaluationAgentRegistryService>;
 
   return new EvaluationAgentRegistryService(...constructorArgs);
@@ -334,5 +337,57 @@ describe("EvaluationAgentRegistryService", () => {
 
     expect(result.usedFallback).toBe(true);
     expect(pipelineFeedback.markConsumedByScope).not.toHaveBeenCalled();
+  });
+
+  it("waits for pending trace writes before returning", async () => {
+    let traceResolved = false;
+    const traceService = {
+      recordRun: jest.fn().mockImplementation(
+        () =>
+          new Promise<void>((resolve) => {
+            setTimeout(() => {
+              traceResolved = true;
+              resolve();
+            }, 20);
+          }),
+      ),
+    } as unknown as PipelineAgentTraceService;
+
+    const agents = ALL_KEYS.map((key) => createAgent(key));
+    (agents[0].run as jest.Mock).mockImplementationOnce(
+      async (
+        _pipelineData: unknown,
+        options?: { onTrace?: (event: unknown) => void },
+      ) => {
+        options?.onTrace?.({
+          agent: "team",
+          status: "completed",
+          inputPrompt: "prompt",
+          outputText: "{}",
+          outputJson: { score: 80 },
+          attempt: 1,
+          retryCount: 0,
+          usedFallback: false,
+        });
+        return {
+          key: "team",
+          output: { score: 80, keyFindings: [], risks: [], dataGaps: [], sources: [] },
+          usedFallback: false,
+        };
+      },
+    );
+
+    const service = createRegistry(
+      agents,
+      pipelineState as unknown as PipelineStateService,
+      phaseTransition as unknown as PhaseTransitionService,
+      pipelineFeedback as unknown as PipelineFeedbackService,
+      traceService,
+    );
+
+    await service.runAll("startup-9", pipelineData);
+
+    expect(traceService.recordRun).toHaveBeenCalled();
+    expect(traceResolved).toBe(true);
   });
 });

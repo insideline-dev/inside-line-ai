@@ -180,6 +180,10 @@ export class StartupService {
     userId: string,
     dto: CreateStartup,
     submittedByRole: UserRole = UserRole.FOUNDER,
+    options?: {
+      scoutId?: string;
+      isPrivate?: boolean;
+    },
   ) {
     return this.drizzle.withRLS(userId, async (db) => {
       const slug = this.generateSlug(dto.name);
@@ -191,7 +195,8 @@ export class StartupService {
         .values({
           userId,
           submittedByRole,
-          isPrivate: isInvestorSubmission,
+          scoutId: options?.scoutId ?? (submittedByRole === UserRole.SCOUT ? userId : undefined),
+          isPrivate: options?.isPrivate ?? isInvestorSubmission,
           slug,
           ...dto,
           normalizedRegion: geography.normalizedRegion,
@@ -1357,11 +1362,19 @@ export class StartupService {
 
     const record = value as Record<string, unknown>;
     const meta = record.__traceMeta;
+    const traceOutput = record.__traceOutput;
     const outputJson = { ...record };
     delete outputJson.__traceMeta;
+    delete outputJson.__traceOutput;
+    const resolvedOutputJson =
+      traceOutput !== undefined
+        ? traceOutput
+        : Object.keys(outputJson).length > 0
+          ? outputJson
+          : null;
 
     if (!meta || typeof meta !== "object" || Array.isArray(meta)) {
-      return { outputJson };
+      return { outputJson: resolvedOutputJson };
     }
 
     const metaRecord = meta as Record<string, unknown>;
@@ -1381,7 +1394,7 @@ export class StartupService {
     return {
       fallbackReason,
       rawProviderError,
-      outputJson,
+      outputJson: resolvedOutputJson,
     };
   }
 
@@ -1453,6 +1466,8 @@ export class StartupService {
                   ? {
                       attempts: agent.attempts,
                       retryCount: agent.retryCount,
+                      phaseRetryCount: agent.phaseRetryCount,
+                      agentAttemptId: agent.agentAttemptId,
                       usedFallback: agent.usedFallback,
                       fallbackReason: agent.fallbackReason,
                       rawProviderError: agent.rawProviderError,
@@ -1484,12 +1499,15 @@ export class StartupService {
           ? {
               agentEvents: (trackedProgress.agentEvents ?? []).map((event) => ({
                 id: event.id,
+                pipelineRunId: event.pipelineRunId,
                 phase: event.phase,
                 agentKey: event.agentKey,
                 event: event.event,
                 timestamp: event.timestamp,
                 attempt: event.attempt,
                 retryCount: event.retryCount,
+                phaseRetryCount: event.phaseRetryCount,
+                agentAttemptId: event.agentAttemptId,
                 error: event.error,
                 fallbackReason: event.fallbackReason,
                 rawProviderError: event.rawProviderError,
@@ -1620,6 +1638,7 @@ export class StartupService {
         | "MODEL_OR_PROVIDER_ERROR"
         | "UNHANDLED_AGENT_EXCEPTION";
       rawProviderError?: string;
+      captureStatus?: "captured" | "missing" | "provider_error_only";
       startedAt?: string;
       completedAt?: string | null;
     }>
@@ -1646,22 +1665,39 @@ export class StartupService {
       return [];
     }
 
-    return rows.map((row) => ({
-      ...this.parseTraceMeta(row.outputJson),
-      id: row.id,
-      pipelineRunId: row.pipelineRunId,
-      phase: row.phase,
-      agentKey: row.agentKey,
-      status: row.status,
-      attempt: row.attempt,
-      retryCount: row.retryCount,
-      usedFallback: row.usedFallback,
-      inputPrompt: row.inputPrompt ?? null,
-      outputText: row.outputText ?? null,
-      error: row.error ?? null,
-      startedAt: row.startedAt ? row.startedAt.toISOString() : undefined,
-      completedAt: row.completedAt ? row.completedAt.toISOString() : null,
-    }));
+    return rows.map((row) => {
+      const traceMeta = this.parseTraceMeta(row.outputJson);
+      const outputText = row.outputText ?? null;
+      const hasOutputText =
+        typeof outputText === "string" && outputText.trim().length > 0;
+      const hasOutputJson = traceMeta.outputJson !== undefined && traceMeta.outputJson !== null;
+      const hasProviderError =
+        typeof traceMeta.rawProviderError === "string" &&
+        traceMeta.rawProviderError.trim().length > 0;
+      const captureStatus = hasOutputText || hasOutputJson
+        ? "captured"
+        : hasProviderError
+          ? "provider_error_only"
+          : "missing";
+
+      return {
+        ...traceMeta,
+        id: row.id,
+        pipelineRunId: row.pipelineRunId,
+        phase: row.phase,
+        agentKey: row.agentKey,
+        status: row.status,
+        attempt: row.attempt,
+        retryCount: row.retryCount,
+        usedFallback: row.usedFallback,
+        inputPrompt: row.inputPrompt ?? null,
+        outputText,
+        error: row.error ?? null,
+        captureStatus,
+        startedAt: row.startedAt ? row.startedAt.toISOString() : undefined,
+        completedAt: row.completedAt ? row.completedAt.toISOString() : null,
+      };
+    });
   }
 
   private resolvePhaseProgress(
@@ -1707,6 +1743,7 @@ export class StartupService {
 
   private isValidPipelinePhase(phase: unknown): phase is PipelinePhase {
     return (
+      phase === PipelinePhase.ENRICHMENT ||
       phase === PipelinePhase.EXTRACTION ||
       phase === PipelinePhase.SCRAPING ||
       phase === PipelinePhase.RESEARCH ||
@@ -1743,6 +1780,15 @@ export class StartupService {
       return this.firstIssueMessage(
         (result as { warnings?: unknown }).warnings,
       );
+    }
+
+    if (phase === PipelinePhase.ENRICHMENT) {
+      const missingField = this.firstIssueMessage(
+        (result as { fieldsStillMissing?: unknown }).fieldsStillMissing,
+      );
+      return missingField
+        ? `Missing after gap fill: ${missingField}`
+        : undefined;
     }
 
     if (phase === PipelinePhase.SCRAPING) {

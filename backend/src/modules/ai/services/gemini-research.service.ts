@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { google } from "@ai-sdk/google";
-import { generateText } from "ai";
+import { generateText, Output } from "ai";
 import { z } from "zod";
 import { INTERNAL_PIPELINE_SOURCE } from "../agents/evaluation/evaluation-utils";
 import type { ResearchAgentKey } from "../interfaces/agent.interface";
@@ -27,6 +27,14 @@ interface ResearchResponse<TOutput extends { sources: string[] }> {
   retryCount: number;
 }
 
+interface SourceCarrier {
+  sources?: Array<{ title?: string; url?: string }>;
+  providerMetadata?: unknown;
+  experimental_providerMetadata?: unknown;
+}
+
+type GenerateTextModel = Parameters<typeof generateText>[0]["model"];
+
 @Injectable()
 export class GeminiResearchService {
   private readonly logger = new Logger(GeminiResearchService.name);
@@ -41,100 +49,117 @@ export class GeminiResearchService {
   ): Promise<ResearchResponse<TOutput>> {
     const fallback = request.fallback();
     const modelName = this.aiConfig.getModelForPurpose(ModelPurpose.RESEARCH);
-    const model = this.providers.resolveModelForPurpose(ModelPurpose.RESEARCH);
+    const model = this.providers.resolveModelForPurpose(
+      ModelPurpose.RESEARCH,
+    ) as GenerateTextModel;
     const canUseGoogleSearchTool = this.isGeminiModel(modelName);
     const maxAttempts = this.getResearchMaxAttempts();
+    const hardTimeoutMs = this.getResearchAgentHardTimeoutMs();
+    const startedAt = Date.now();
     let lastError = "Unknown research error";
 
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-      try {
-        const response = await this.withTimeout(
-          generateText({
-            model,
-            system: request.systemPrompt,
-            prompt: request.prompt,
-            tools: canUseGoogleSearchTool
-              ? {
-                  google_search: google.tools.googleSearch({}),
-                }
-              : undefined,
-            temperature: this.aiConfig.getResearchTemperature(),
-          }),
-          this.getResearchTimeoutMs(),
-          `Research agent ${request.agent} timed out`,
-        );
-
-        const extractedSources = this.extractSources(response, request.agent);
-        const sourceUrls = extractedSources
-          .map((entry) => entry.url)
-          .filter((url): url is string => Boolean(url));
-
-        const parsed = this.parseTextToObject(response.text, request.schema);
-        if (!parsed.success) {
-          lastError = parsed.error;
-          const shouldRetry =
-            attempt < maxAttempts && this.isRetryableParseError(parsed.error);
-          if (shouldRetry) {
-            const delayMs = this.getRetryDelayMs(attempt);
-            this.logger.warn(
-              `Research agent ${request.agent} attempt ${attempt}/${maxAttempts} returned schema-invalid output, retrying in ${delayMs}ms: ${parsed.error}`,
-            );
-            await this.sleep(delayMs);
-            continue;
-          }
-          const fallbackSources = Array.isArray(fallback.sources) ? fallback.sources : [];
-          return {
-            output: {
-              ...fallback,
-              sources: this.mergeSourceUrls(fallbackSources, sourceUrls),
-            },
-            sources: extractedSources,
-            usedFallback: true,
-            error: parsed.error,
-            outputText: response.text,
-            attempt,
-            retryCount: Math.max(0, attempt - 1),
-          };
-        }
-
+      const remainingBudgetMs = this.getRemainingBudgetMs(
+        startedAt,
+        hardTimeoutMs,
+      );
+      if (remainingBudgetMs <= 0) {
+        lastError = `Research agent ${request.agent} exceeded hard timeout`;
+        break;
+      }
+      const attemptTimeoutMs = this.getAttemptTimeoutMs(remainingBudgetMs);
+      const structured = await this.tryStructuredAttempt({
+        agent: request.agent,
+        model,
+        prompt: request.prompt,
+        systemPrompt: request.systemPrompt,
+        schema: request.schema,
+        canUseGoogleSearchTool,
+        timeoutMs: attemptTimeoutMs,
+      });
+      if (structured.success) {
         return {
           output: {
-            ...parsed.data,
-            sources: this.mergeSourceUrls(parsed.data.sources, sourceUrls),
+            ...structured.data,
+            sources: this.mergeSourceUrls(
+              structured.data.sources,
+              structured.sourceUrls,
+            ),
           },
-          sources: extractedSources,
+          sources: structured.sources,
           usedFallback: false,
-          outputText: response.text,
-          attempt,
-          retryCount: Math.max(0, attempt - 1),
-        };
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        lastError = message;
-        const shouldRetry =
-          attempt < maxAttempts && this.isRetryableError(message);
-        if (shouldRetry) {
-          const delayMs = this.getRetryDelayMs(attempt);
-          this.logger.warn(
-            `Research agent ${request.agent} attempt ${attempt}/${maxAttempts} failed, retrying in ${delayMs}ms: ${message}`,
-          );
-          await this.sleep(delayMs);
-          continue;
-        }
-
-        const promptSize = request.prompt.length + request.systemPrompt.length;
-        this.logger.warn(
-          `Research agent ${request.agent} failed (model: ${modelName}, prompt size: ${promptSize}), using fallback: ${message}`,
-        );
-        return {
-          output: fallback,
-          sources: this.toInternalSource(request.agent),
-          usedFallback: true,
-          error: message,
+          outputText: structured.outputText,
           attempt,
           retryCount: Math.max(0, attempt - 1),
         };
       }
+
+      const text = await this.tryTextAttempt({
+        agent: request.agent,
+        model,
+        prompt: request.prompt,
+        systemPrompt: request.systemPrompt,
+        schema: request.schema,
+        canUseGoogleSearchTool,
+        timeoutMs: attemptTimeoutMs,
+      });
+      if (text.success) {
+        return {
+          output: {
+            ...text.data,
+            sources: this.mergeSourceUrls(text.data.sources, text.sourceUrls),
+          },
+          sources: text.sources,
+          usedFallback: false,
+          outputText: text.outputText,
+          attempt,
+          retryCount: Math.max(0, attempt - 1),
+        };
+      }
+
+      const errorMessage = this.joinErrorMessages(structured.error, text.error);
+      lastError = errorMessage;
+      const shouldRetry =
+        attempt < maxAttempts &&
+        (structured.retryable || text.retryable || this.isRetryableParseError(errorMessage));
+      if (shouldRetry) {
+        const delayMs = Math.min(
+          this.getRetryDelayMs(attempt),
+          Math.max(0, this.getRemainingBudgetMs(startedAt, hardTimeoutMs) - 50),
+        );
+        if (delayMs <= 0) {
+          lastError = `Research agent ${request.agent} exceeded hard timeout`;
+          break;
+        }
+        this.logger.warn(
+          `Research agent ${request.agent} attempt ${attempt}/${maxAttempts} failed, retrying in ${delayMs}ms: ${errorMessage}`,
+        );
+        await this.sleep(delayMs);
+        continue;
+      }
+
+      const promptSize = request.prompt.length + request.systemPrompt.length;
+      const mergedSources = this.mergeSourceEntries(structured.sources, text.sources);
+      const sourceUrls = this.mergeSourceUrls(
+        this.extractSourceUrls(structured.sources),
+        this.extractSourceUrls(text.sources),
+      );
+      const fallbackSources = Array.isArray(fallback.sources) ? fallback.sources : [];
+      this.logger.warn(
+        `Research agent ${request.agent} failed (model: ${modelName}, prompt size: ${promptSize}), using fallback: ${errorMessage}`,
+      );
+      return {
+        output: {
+          ...fallback,
+          sources: this.mergeSourceUrls(fallbackSources, sourceUrls),
+        },
+        sources: mergedSources.length > 0 ? mergedSources : this.toInternalSource(request.agent),
+        usedFallback: true,
+        error: errorMessage,
+        outputText: text.outputText ?? structured.outputText,
+        attempt,
+        retryCount: Math.max(0, attempt - 1),
+      };
     }
 
     return {
@@ -147,12 +172,171 @@ export class GeminiResearchService {
     };
   }
 
-  private getResearchMaxAttempts(): number {
-    const raw = Number(process.env.AI_RESEARCH_MAX_ATTEMPTS ?? 3);
-    if (!Number.isFinite(raw)) {
-      return 3;
+  private async tryStructuredAttempt<TOutput extends { sources: string[] }>(input: {
+    agent: ResearchAgentKey;
+    model: GenerateTextModel;
+    prompt: string;
+    systemPrompt: string;
+    schema: z.ZodSchema<TOutput>;
+    canUseGoogleSearchTool: boolean;
+    timeoutMs: number;
+  }): Promise<
+    | {
+        success: true;
+        data: TOutput;
+        sources: SourceEntry[];
+        sourceUrls: string[];
+        outputText: string;
+      }
+    | {
+        success: false;
+        error: string;
+        retryable: boolean;
+        sources: SourceEntry[];
+        outputText?: string;
+      }
+  > {
+    try {
+      const response = await this.withTimeout(
+        generateText({
+          model: input.model,
+          system: input.systemPrompt,
+          prompt: input.prompt,
+          output: Output.object({ schema: input.schema }),
+          tools: input.canUseGoogleSearchTool
+            ? {
+                google_search: google.tools.googleSearch({}),
+              }
+            : undefined,
+          temperature: this.aiConfig.getResearchTemperature(),
+        }),
+        input.timeoutMs,
+        `Research agent ${input.agent} timed out`,
+      );
+
+      const parsed = input.schema.safeParse(response.output);
+      if (!parsed.success) {
+        const textFallback = this.parseTextToObject(
+          this.resolveRawOutputText(response, undefined),
+          input.schema,
+        );
+        if (textFallback.success) {
+          const sources = this.extractSources(response as SourceCarrier, input.agent);
+          return {
+            success: true,
+            data: textFallback.data,
+            sources,
+            sourceUrls: this.extractSourceUrls(sources),
+            outputText: this.resolveRawOutputText(response, textFallback.data),
+          };
+        }
+
+        const schemaError = this.formatSchemaIssues(parsed.error);
+        const error = schemaError.length > 0
+          ? `Schema validation failed: ${schemaError}; ${textFallback.error}`
+          : `Schema validation failed: ${textFallback.error}`;
+        return {
+          success: false,
+          error,
+          retryable: true,
+          sources: this.extractSources(response as SourceCarrier, input.agent),
+          outputText: this.resolveRawOutputText(response, response.output),
+        };
+      }
+
+      const sources = this.extractSources(response as SourceCarrier, input.agent);
+      return {
+        success: true,
+        data: parsed.data,
+        sources,
+        sourceUrls: this.extractSourceUrls(sources),
+        outputText: this.resolveRawOutputText(response, parsed.data),
+      };
+    } catch (error) {
+      const message = this.errorMessage(error);
+      return {
+        success: false,
+        error: message,
+        retryable:
+          this.isRetryableError(message) ||
+          this.isRetryableParseError(message) ||
+          this.isNoStructuredOutputError(message),
+        sources: [],
+      };
     }
-    return Math.max(1, Math.floor(raw));
+  }
+
+  private async tryTextAttempt<TOutput>(input: {
+    agent: ResearchAgentKey;
+    model: GenerateTextModel;
+    prompt: string;
+    systemPrompt: string;
+    schema: z.ZodSchema<TOutput>;
+    canUseGoogleSearchTool: boolean;
+    timeoutMs: number;
+  }): Promise<
+    | {
+        success: true;
+        data: TOutput;
+        sources: SourceEntry[];
+        sourceUrls: string[];
+        outputText: string;
+      }
+    | {
+        success: false;
+        error: string;
+        retryable: boolean;
+        sources: SourceEntry[];
+        outputText?: string;
+      }
+  > {
+    try {
+      const response = await this.withTimeout(
+        generateText({
+          model: input.model,
+          system: input.systemPrompt,
+          prompt: input.prompt,
+          tools: input.canUseGoogleSearchTool
+            ? {
+                google_search: google.tools.googleSearch({}),
+              }
+            : undefined,
+          temperature: this.aiConfig.getResearchTemperature(),
+        }),
+        input.timeoutMs,
+        `Research agent ${input.agent} timed out`,
+      );
+
+      const responseRecord = (response ?? {}) as SourceCarrier & { text?: string };
+      const outputText = this.resolveRawOutputText(responseRecord, undefined);
+      const parsed = this.parseTextToObject(outputText, input.schema);
+      if (!parsed.success) {
+        return {
+          success: false,
+          error: parsed.error,
+          retryable: this.isRetryableParseError(parsed.error),
+          sources: this.extractSources(responseRecord, input.agent),
+          outputText,
+        };
+      }
+
+      const sources = this.extractSources(responseRecord, input.agent);
+      return {
+        success: true,
+        data: parsed.data,
+        sources,
+        sourceUrls: this.extractSourceUrls(sources),
+        outputText,
+      };
+    } catch (error) {
+      const message = this.errorMessage(error);
+      return {
+        success: false,
+        error: message,
+        retryable: this.isRetryableError(message),
+        sources: [],
+      };
+    }
   }
 
   private getRetryDelayMs(attempt: number): number {
@@ -182,7 +366,18 @@ export class GeminiResearchService {
     const normalized = message.toLowerCase();
     return (
       normalized.includes("schema validation failed") ||
-      normalized.includes("parseable json payload")
+      normalized.includes("parseable json payload") ||
+      normalized.includes("no output generated") ||
+      normalized.includes("no object generated")
+    );
+  }
+
+  private isNoStructuredOutputError(message: string): boolean {
+    const normalized = message.toLowerCase();
+    return (
+      normalized.includes("no output generated") ||
+      normalized.includes("no object generated") ||
+      normalized.includes("empty response")
     );
   }
 
@@ -217,24 +412,60 @@ export class GeminiResearchService {
   }
 
   private extractJsonCandidate(text: string): unknown {
-    const fencedMatch = text.match(/```json\s*([\s\S]*?)\s*```/i);
-    if (fencedMatch?.[1]) {
-      try {
-        return JSON.parse(fencedMatch[1]);
-      } catch {
-        return null;
+    const direct = this.tryParseJsonObject(text.trim());
+    if (direct) {
+      return direct;
+    }
+
+    const fencedMatches = text.matchAll(/```(?:json)?\s*([\s\S]*?)\s*```/gi);
+    for (const match of fencedMatches) {
+      if (!match[1]) {
+        continue;
+      }
+      const parsed = this.tryParseJsonObject(match[1]);
+      if (parsed) {
+        return parsed;
       }
     }
 
-    const startIndex = text.indexOf("{");
-    const endIndex = text.lastIndexOf("}");
-    if (startIndex < 0 || endIndex <= startIndex) {
+    const unescapedQuoted = this.tryParseEscapedJsonString(text.trim());
+    if (unescapedQuoted) {
+      return unescapedQuoted;
+    }
+
+    for (const candidate of this.extractBalancedJsonObjects(text)) {
+      const parsed = this.tryParseJsonObject(candidate);
+      if (parsed) {
+        return parsed;
+      }
+    }
+
+    return null;
+  }
+
+  private tryParseEscapedJsonString(text: string): unknown {
+    if (!text.startsWith("\"") || !text.endsWith("\"")) {
       return null;
     }
 
     try {
-      const candidate = text.slice(startIndex, endIndex + 1);
-      const parsed = JSON.parse(candidate);
+      const unescaped = JSON.parse(text);
+      if (typeof unescaped !== "string") {
+        return null;
+      }
+      return this.tryParseJsonObject(unescaped);
+    } catch {
+      return null;
+    }
+  }
+
+  private tryParseJsonObject(text: string): unknown {
+    if (!text) {
+      return null;
+    }
+
+    try {
+      const parsed = JSON.parse(text);
       if (typeof parsed !== "object" || Array.isArray(parsed) || parsed === null) {
         return null;
       }
@@ -242,6 +473,50 @@ export class GeminiResearchService {
     } catch {
       return null;
     }
+  }
+
+  private extractBalancedJsonObjects(text: string): string[] {
+    const candidates: string[] = [];
+    let start = -1;
+    let depth = 0;
+    let inString = false;
+    let escaping = false;
+
+    for (let index = 0; index < text.length; index += 1) {
+      const char = text[index];
+
+      if (escaping) {
+        escaping = false;
+        continue;
+      }
+      if (char === "\\") {
+        escaping = true;
+        continue;
+      }
+      if (char === "\"") {
+        inString = !inString;
+        continue;
+      }
+      if (inString) {
+        continue;
+      }
+      if (char === "{") {
+        if (depth === 0) {
+          start = index;
+        }
+        depth += 1;
+        continue;
+      }
+      if (char === "}" && depth > 0) {
+        depth -= 1;
+        if (depth === 0 && start >= 0) {
+          candidates.push(text.slice(start, index + 1));
+          start = -1;
+        }
+      }
+    }
+
+    return candidates;
   }
 
   private mergeSourceUrls(
@@ -274,11 +549,7 @@ export class GeminiResearchService {
   }
 
   private extractSources(
-    response: {
-      sources?: Array<{ title?: string; url?: string }>;
-      providerMetadata?: unknown;
-      experimental_providerMetadata?: unknown;
-    },
+    response: SourceCarrier,
     agent: ResearchAgentKey,
   ): SourceEntry[] {
     const dedupe = new Map<string, SourceEntry>();
@@ -325,6 +596,26 @@ export class GeminiResearchService {
     return Array.from(dedupe.values());
   }
 
+  private extractSourceUrls(sources: SourceEntry[]): string[] {
+    return sources
+      .map((entry) => entry.url)
+      .filter((url): url is string => Boolean(url));
+  }
+
+  private mergeSourceEntries(
+    first: SourceEntry[],
+    second: SourceEntry[],
+  ): SourceEntry[] {
+    const dedupe = new Map<string, SourceEntry>();
+    for (const source of [...first, ...second]) {
+      const key = source.url ?? `${source.agent}:${source.name}`;
+      if (!dedupe.has(key)) {
+        dedupe.set(key, source);
+      }
+    }
+    return Array.from(dedupe.values());
+  }
+
   private toInternalSource(agent: ResearchAgentKey): SourceEntry[] {
     return [
       {
@@ -349,13 +640,86 @@ export class GeminiResearchService {
     return typeof value === "string" && value.length > 0 ? value : undefined;
   }
 
+  private resolveRawOutputText(
+    response: { text?: string },
+    output?: unknown,
+  ): string {
+    if (typeof response.text === "string" && response.text.trim().length > 0) {
+      return response.text;
+    }
+    if (output !== undefined) {
+      return this.safeStringify(output);
+    }
+    return "";
+  }
+
+  private safeStringify(value: unknown): string {
+    try {
+      return JSON.stringify(value, null, 2);
+    } catch {
+      return String(value);
+    }
+  }
+
+  private errorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
+  }
+
+  private joinErrorMessages(first: string, second: string): string {
+    if (!first) {
+      return second;
+    }
+    if (!second || first === second) {
+      return first;
+    }
+    return `${first}; ${second}`;
+  }
+
   private isGeminiModel(modelName: string): boolean {
     return modelName.toLowerCase().startsWith("gemini");
   }
 
-  private getResearchTimeoutMs(): number {
-    // Use explicit override when set; otherwise fall back to global pipeline timeout.
-    return this.aiConfig.getResearchTimeoutMs();
+  private getAttemptTimeoutMs(remainingBudgetMs: number): number {
+    const configuredAttemptTimeout = this.getResearchAttemptTimeoutMs();
+    const boundedTimeout = Math.min(configuredAttemptTimeout, remainingBudgetMs);
+    return Math.max(1, boundedTimeout);
+  }
+
+  private getRemainingBudgetMs(startedAt: number, hardTimeoutMs: number): number {
+    if (!Number.isFinite(hardTimeoutMs) || hardTimeoutMs <= 0) {
+      return Number.MAX_SAFE_INTEGER;
+    }
+
+    return hardTimeoutMs - (Date.now() - startedAt);
+  }
+
+  private getResearchAttemptTimeoutMs(): number {
+    const config = this.aiConfig as Partial<AiConfigService> & {
+      getResearchTimeoutMs?: () => number;
+    };
+    if (typeof config.getResearchAttemptTimeoutMs === "function") {
+      return config.getResearchAttemptTimeoutMs();
+    }
+    if (typeof config.getResearchTimeoutMs === "function") {
+      return config.getResearchTimeoutMs();
+    }
+    return 90_000;
+  }
+
+  private getResearchMaxAttempts(): number {
+    const config = this.aiConfig as Partial<AiConfigService>;
+    if (typeof config.getResearchMaxAttempts === "function") {
+      return config.getResearchMaxAttempts();
+    }
+    return 3;
+  }
+
+  private getResearchAgentHardTimeoutMs(): number {
+    const config = this.aiConfig as Partial<AiConfigService>;
+    if (typeof config.getResearchAgentHardTimeoutMs === "function") {
+      return config.getResearchAgentHardTimeoutMs();
+    }
+    return this.getResearchAttemptTimeoutMs() * this.getResearchMaxAttempts() + 30_000;
   }
 
   private async withTimeout<T>(

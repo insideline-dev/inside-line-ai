@@ -37,6 +37,8 @@ export interface ResearchRunOptions {
     usedFallback: boolean;
     error?: string;
     rejected: boolean;
+    attempt?: number;
+    retryCount?: number;
   }) => void;
 }
 
@@ -63,12 +65,16 @@ export class ResearchService {
       startupId,
       PipelinePhase.SCRAPING,
     );
+    const enrichment = await this.pipelineState.getPhaseResult(
+      startupId,
+      PipelinePhase.ENRICHMENT,
+    );
 
     if (!extraction || !scraping) {
       throw new Error("Research requires extraction and scraping results");
     }
 
-    const pipelineInput: ResearchPipelineInput = { extraction, scraping };
+    const pipelineInput: ResearchPipelineInput = { extraction, scraping, enrichment: enrichment ?? undefined };
     const pipelineRunId = await this.resolvePipelineRunId(startupId);
     const currentResult = options?.agentKey
       ? await this.pipelineState.getPhaseResult(startupId, PipelinePhase.RESEARCH)
@@ -107,6 +113,8 @@ export class ResearchService {
         usedFallback: agentResult.usedFallback,
         error: agentResult.error,
         rejected: agentResult.rejected,
+        attempt: agentResult.attempt,
+        retryCount: agentResult.retryCount,
       });
       this.mergeAgentResult(result, key, agentResult, dedupeSources);
 
@@ -404,6 +412,8 @@ export class ResearchService {
       usedFallback: boolean;
       error?: string;
       rejected: boolean;
+      attempt?: number;
+      retryCount?: number;
     }) => void;
     model: string;
   }): Promise<void> {
@@ -423,6 +433,8 @@ export class ResearchService {
       usedFallback: agentResult.usedFallback,
       error: agentResult.error,
       rejected: agentResult.rejected,
+      attempt: agentResult.attempt,
+      retryCount: agentResult.retryCount,
     });
     this.mergeAgentResult(result, key, agentResult, dedupeSources);
 

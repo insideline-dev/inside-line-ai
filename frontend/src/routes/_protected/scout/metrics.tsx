@@ -1,22 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { customFetch } from "@/api/client";
+import { useScoutControllerGetMetrics } from "@/api/generated/scout/scout";
 
 export const Route = createFileRoute("/_protected/scout/metrics")({
   component: MetricsPage,
 });
 
-type Metrics = {
-  totalSubmissions: number;
-};
-
 function MetricsPage() {
-  const { data, isLoading, error } = useQuery({
-    queryKey: ["scout", "metrics"],
-    queryFn: () => customFetch<Metrics>("/scout/metrics"),
-  });
+  const { data, isLoading, error } = useScoutControllerGetMetrics();
 
   if (isLoading) {
     return (
@@ -59,7 +51,7 @@ function MetricsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="text-2xl font-semibold tabular-nums">
-            {data?.totalSubmissions ?? 0}
+            {data?.data.totalSubmissions ?? 0}
           </CardContent>
         </Card>
       </div>

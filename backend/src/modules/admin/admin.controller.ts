@@ -25,6 +25,11 @@ import { RolesGuard } from '../startup/guards';
 import { Roles } from '../startup/decorators/roles.decorator';
 import { StartupService } from '../startup/startup.service';
 import { StartupIntakeService } from '../startup/startup-intake.service';
+import { DrizzleService } from '../../database';
+import { claraConversation } from '../clara/entities/clara-conversation.schema';
+import { claraMessage } from '../clara/entities/clara-message.schema';
+import { startup } from '../startup/entities/startup.schema';
+import { desc, eq } from 'drizzle-orm';
 import { AnalyticsService } from './analytics.service';
 import { UserManagementService } from './user-management.service';
 import { ScoringConfigService } from './scoring-config.service';
@@ -57,6 +62,8 @@ import {
   AiPromptContextSchemaResponseDto,
   PreviewAiPromptRequestDto,
   AiPromptPreviewResponseDto,
+  PreviewAiPipelineContextRequestDto,
+  AiPipelineContextPreviewResponseDto,
   QuickCreateStartupDto,
 } from './dto';
 import { GetStartupsQueryDto } from '../startup/dto';
@@ -76,6 +83,7 @@ type User = {
 @Roles(UserRole.ADMIN)
 export class AdminController {
   constructor(
+    private drizzle: DrizzleService,
     private analyticsService: AnalyticsService,
     private userManagementService: UserManagementService,
     private scoringConfigService: ScoringConfigService,
@@ -181,6 +189,15 @@ export class AdminController {
     return this.earlyAccessService.listWaitlist();
   }
 
+  @Post('early-access/waitlist/:id/approve')
+  @ApiOperation({ summary: 'Approve a waitlist entry by generating an invite' })
+  async approveWaitlistEntry(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser('id') adminId: string,
+  ) {
+    return this.earlyAccessService.approveWaitlistEntry(id, adminId);
+  }
+
   // ============ STARTUP MANAGEMENT ENDPOINTS ============
   // These reuse existing StartupService methods that already have admin logic
 
@@ -231,9 +248,18 @@ export class AdminController {
   @Post('startups/:id/match')
   @ApiOperation({ summary: 'Trigger investor thesis matching for an approved startup' })
   async matchStartupInvestors(
+    @CurrentUser() admin: User,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
-    return this.adminMatchingService.triggerMatchForStartup(id);
+    return this.adminMatchingService.triggerMatchForStartup(id, admin.id);
+  }
+
+  @Get('startups/:id/matching/status')
+  @ApiOperation({ summary: 'Get latest investor matching status for startup' })
+  async getStartupMatchingStatus(
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.adminMatchingService.getLatestMatchingStatus(id);
   }
 
   @Post('startups/:id/reanalyze')
@@ -326,6 +352,15 @@ export class AdminController {
     @Body() dto: PreviewAiPromptRequestDto,
   ) {
     return this.aiPromptRuntimeService.previewPrompt(key, dto);
+  }
+
+  @Post('ai-prompts/pipeline-context-preview')
+  @ApiOperation({ summary: "Preview runtime context passed to all research and evaluation agents for a startup" })
+  @ApiResponse({ status: 200, type: AiPipelineContextPreviewResponseDto })
+  async previewAiPipelineContext(
+    @Body() dto: PreviewAiPipelineContextRequestDto,
+  ) {
+    return this.aiPromptRuntimeService.previewPipelineContexts(dto);
   }
 
   @Post('ai-prompts/:key/revisions')
@@ -487,15 +522,60 @@ export class AdminController {
     return this.analyticsService.normalizeLocations();
   }
 
+  // ============ CLARA CONVERSATIONS ============
+
+  @Get('conversations')
+  @ApiOperation({ summary: 'List Clara AI conversations' })
+  async getConversations() {
+    const rows = await this.drizzle.db
+      .select({
+        id: claraConversation.id,
+        threadId: claraConversation.threadId,
+        investorEmail: claraConversation.investorEmail,
+        investorName: claraConversation.investorName,
+        startupId: claraConversation.startupId,
+        startupName: startup.name,
+        status: claraConversation.status,
+        lastIntent: claraConversation.lastIntent,
+        messageCount: claraConversation.messageCount,
+        lastMessageAt: claraConversation.lastMessageAt,
+        createdAt: claraConversation.createdAt,
+      })
+      .from(claraConversation)
+      .leftJoin(startup, eq(claraConversation.startupId, startup.id))
+      .orderBy(desc(claraConversation.lastMessageAt));
+
+    return { data: rows, total: rows.length };
+  }
+
+  @Get('conversations/:id/messages')
+  @ApiOperation({ summary: 'Get messages for a Clara conversation' })
+  async getConversationMessages(
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    const messages = await this.drizzle.db
+      .select({
+        id: claraMessage.id,
+        direction: claraMessage.direction,
+        fromEmail: claraMessage.fromEmail,
+        subject: claraMessage.subject,
+        bodyText: claraMessage.bodyText,
+        intent: claraMessage.intent,
+        intentConfidence: claraMessage.intentConfidence,
+        processed: claraMessage.processed,
+        errorMessage: claraMessage.errorMessage,
+        createdAt: claraMessage.createdAt,
+      })
+      .from(claraMessage)
+      .where(eq(claraMessage.conversationId, id))
+      .orderBy(claraMessage.createdAt);
+
+    return { data: messages };
+  }
+
   // ============================================================================
   // AI PLACEHOLDERS
   // ============================================================================
-
-  // AI_PLACEHOLDER
-  @Get('conversations')
-  async getConversations() {
-    return { data: [], total: 0, message: 'AI feature coming soon' };
-  }
 
   // AI_PLACEHOLDER
   @Get('agents')

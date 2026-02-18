@@ -1,4 +1,5 @@
 import type {
+  EnrichmentResult,
   ExtractionResult,
   ScrapingResult,
   ResearchResult,
@@ -8,6 +9,7 @@ import type {
 
 export enum PipelinePhase {
   EXTRACTION = "extraction",
+  ENRICHMENT = "enrichment",
   SCRAPING = "scraping",
   RESEARCH = "research",
   EVALUATION = "evaluation",
@@ -32,6 +34,7 @@ export enum PipelineStatus {
 
 export enum ModelPurpose {
   EXTRACTION = "extraction",
+  ENRICHMENT = "enrichment",
   RESEARCH = "research",
   EVALUATION = "evaluation",
   SYNTHESIS = "synthesis",
@@ -87,6 +90,7 @@ export interface PhaseResult {
 
 export interface PhaseResultMap {
   [PipelinePhase.EXTRACTION]: ExtractionResult;
+  [PipelinePhase.ENRICHMENT]: EnrichmentResult;
   [PipelinePhase.SCRAPING]: ScrapingResult;
   [PipelinePhase.RESEARCH]: ResearchResult;
   [PipelinePhase.EVALUATION]: EvaluationResult;

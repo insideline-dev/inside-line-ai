@@ -7,12 +7,20 @@ const requiredStringFromNull = (fallback: string) =>
     z.string().min(1),
   );
 
+const stringArray = z.preprocess(
+  (value) =>
+    Array.isArray(value)
+      ? value.filter((item): item is string => typeof item === "string")
+      : [],
+  z.array(z.string()),
+).default([]);
+
 export const TeamMemberEvaluationSchema = z.object({
   name: requiredStringFromNull("Unknown member"),
   role: requiredStringFromNull("Unknown role"),
   background: requiredStringFromNull("Background unavailable"),
-  strengths: z.array(z.string()).default([]),
-  concerns: z.array(z.string()).default([]),
+  strengths: stringArray,
+  concerns: stringArray,
 });
 
 export const TeamEvaluationSchema = BaseEvaluationSchema.extend({

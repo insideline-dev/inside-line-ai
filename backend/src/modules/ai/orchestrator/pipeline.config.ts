@@ -42,9 +42,18 @@ export const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
   },
   phases: [
     {
-      phase: PipelinePhase.EXTRACTION,
+      phase: PipelinePhase.ENRICHMENT,
       dependsOn: [],
-      canRunParallelWith: [PipelinePhase.SCRAPING],
+      canRunParallelWith: [],
+      timeoutMs: 5 * 60 * 1000,
+      maxRetries: 2,
+      required: false,
+      queue: QUEUE_NAMES.AI_ENRICHMENT,
+    },
+    {
+      phase: PipelinePhase.EXTRACTION,
+      dependsOn: [PipelinePhase.ENRICHMENT],
+      canRunParallelWith: [],
       timeoutMs: 8 * 60 * 1000,
       maxRetries: 2,
       required: false,
@@ -52,8 +61,8 @@ export const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
     },
     {
       phase: PipelinePhase.SCRAPING,
-      dependsOn: [],
-      canRunParallelWith: [PipelinePhase.EXTRACTION],
+      dependsOn: [PipelinePhase.ENRICHMENT],
+      canRunParallelWith: [],
       timeoutMs: 10 * 60 * 1000,
       maxRetries: 2,
       required: false,

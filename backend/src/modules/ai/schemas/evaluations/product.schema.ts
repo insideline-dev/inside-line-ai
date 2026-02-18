@@ -7,11 +7,19 @@ const requiredStringFromNull = (fallback: string) =>
     z.string().min(1),
   );
 
+const stringArray = z.preprocess(
+  (value) =>
+    Array.isArray(value)
+      ? value.filter((item): item is string => typeof item === "string")
+      : [],
+  z.array(z.string()),
+).default([]);
+
 export const ProductEvaluationSchema = BaseEvaluationSchema.extend({
   productDescription: requiredStringFromNull("Product description requires manual review"),
   uniqueValue: requiredStringFromNull("Unique value requires manual review"),
-  technologyStack: z.array(z.string()).default([]),
-  keyFeatures: z.array(z.string()).default([]),
+  technologyStack: stringArray,
+  keyFeatures: stringArray,
   productMaturity: requiredStringFromNull("Product maturity requires manual review"),
 });
 

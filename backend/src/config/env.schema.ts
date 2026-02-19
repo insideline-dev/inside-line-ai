@@ -119,6 +119,8 @@ export const envSchema = z.object({
   AI_AGENT_TRACE_RETENTION_DAYS: z.coerce.number().default(30),
   AI_AGENT_TRACE_MAX_PROMPT_CHARS: z.coerce.number().default(30000),
   AI_AGENT_TRACE_MAX_OUTPUT_CHARS: z.coerce.number().default(50000),
+  AI_AGENT_TRACE_MAX_JSON_BYTES: z.coerce.number().default(250000),
+  AI_AGENT_TRACE_MAX_META_BYTES: z.coerce.number().default(50000),
   SCRAPING_MAX_LINKS_PER_PAGE: z.coerce.number().default(100),
   SCRAPING_MAX_PATH_DEPTH: z.coerce.number().default(4),
   SCRAPING_BATCH_DELAY_MS: z.coerce.number().default(500),

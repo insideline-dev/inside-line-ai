@@ -301,24 +301,71 @@ function formatFallbackReason(
     .join(" ");
 }
 
+function toPrettyJson(value: unknown): string {
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
+function toPrettyInput(trace: PipelineAgentTrace | null): string {
+  if (!trace) {
+    return "";
+  }
+  const sections: string[] = [];
+  if (typeof trace.inputText === "string" && trace.inputText.trim().length > 0) {
+    sections.push(`Input Text:\n${trace.inputText}`);
+  } else if (
+    typeof trace.inputPrompt === "string" &&
+    trace.inputPrompt.trim().length > 0
+  ) {
+    sections.push(`Input Prompt:\n${trace.inputPrompt}`);
+  }
+  if (trace.inputJson !== undefined && trace.inputJson !== null) {
+    sections.push(`Input JSON:\n${toPrettyJson(trace.inputJson)}`);
+  }
+  if (sections.length > 0) return sections.join("\n\n");
+  return "Input not captured";
+}
+
 function toPrettyOutput(trace: PipelineAgentTrace | null): string {
   if (!trace) {
     return "";
   }
+  const sections: string[] = [];
   if (typeof trace.outputText === "string" && trace.outputText.trim().length > 0) {
-    return trace.outputText;
+    sections.push(`Output Text:\n${trace.outputText}`);
   }
   if (trace.outputJson !== undefined && trace.outputJson !== null) {
-    try {
-      return JSON.stringify(trace.outputJson, null, 2);
-    } catch {
-      return String(trace.outputJson);
-    }
+    sections.push(`Output JSON:\n${toPrettyJson(trace.outputJson)}`);
   }
   if (typeof trace.rawProviderError === "string" && trace.rawProviderError.trim().length > 0) {
-    return `Provider error:\n${trace.rawProviderError}`;
+    sections.push(`Provider error:\n${trace.rawProviderError}`);
   }
+  if (sections.length > 0) return sections.join("\n\n");
   return "Output not captured";
+}
+
+function toPrettyMeta(trace: PipelineAgentTrace | null): string {
+  if (!trace) {
+    return "";
+  }
+  if (trace.meta && Object.keys(trace.meta).length > 0) {
+    return toPrettyJson(trace.meta);
+  }
+  return "Metadata not captured";
+}
+
+function isPhaseStepTrace(trace: PipelineAgentTrace): boolean {
+  return trace.traceKind === "phase_step";
+}
+
+function readTraceOperation(trace: PipelineAgentTrace): string | undefined {
+  const operation = trace.meta?.operation;
+  return typeof operation === "string" && operation.trim().length > 0
+    ? operation
+    : undefined;
 }
 
 function formatCaptureStatus(
@@ -613,7 +660,16 @@ export function AdminPipelineLivePanel({
         new Date(a.startedAt ?? a.completedAt ?? 0).getTime(),
     );
     return traces.slice(0, 100);
-  }, [progress?.agentTraces]);
+  }, [progress?.agentTraces, progress?.pipelineRunId]);
+
+  const aiAgentTraceTimeline = useMemo(
+    () => agentTraceTimeline.filter((trace) => !isPhaseStepTrace(trace)),
+    [agentTraceTimeline],
+  );
+  const stepTraceTimeline = useMemo(
+    () => agentTraceTimeline.filter((trace) => isPhaseStepTrace(trace)),
+    [agentTraceTimeline],
+  );
 
   const runningAgentsCount = flattenedAgents.filter(
     (agent) => agent.data.status === "running",
@@ -1135,82 +1191,154 @@ export function AdminPipelineLivePanel({
           </div>
         </div>
 
-        <div className="space-y-2">
-          <h3 className="text-sm font-semibold">Agent Traces</h3>
-          <ScrollArea className="h-[280px] rounded-lg border">
-            <div className="space-y-2 p-3">
-              {agentTraceTimeline.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  Prompt/output traces are not available yet for this run.
-                </p>
-              ) : (
-                agentTraceTimeline.map((trace) => (
-                  <div
-                    key={trace.id}
-                    className={`rounded-md border p-2.5 ${SURFACE_TONE_CLASS[
-                      trace.status === "failed"
-                        ? "danger"
-                        : trace.status === "fallback"
-                          ? "warning"
-                          : trace.status === "running"
-                            ? "info"
-                            : "success"
-                    ]} cursor-pointer`}
-                    onClick={() => setSelectedTrace(trace)}
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-sm font-medium">
-                        {formatLabel(trace.agentKey)} · {formatLabel(String(trace.phase))}
+        <div className="grid gap-3 lg:grid-cols-2">
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold">AI Agent Traces</h3>
+            <ScrollArea className="h-[280px] rounded-lg border">
+              <div className="space-y-2 p-3">
+                {aiAgentTraceTimeline.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No AI-agent traces captured yet for this run.
+                  </p>
+                ) : (
+                  aiAgentTraceTimeline.map((trace) => (
+                    <div
+                      key={trace.id}
+                      className={`rounded-md border p-2.5 ${SURFACE_TONE_CLASS[
+                        trace.status === "failed"
+                          ? "danger"
+                          : trace.status === "fallback"
+                            ? "warning"
+                            : trace.status === "running"
+                              ? "info"
+                              : "success"
+                      ]} cursor-pointer`}
+                      onClick={() => setSelectedTrace(trace)}
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-sm font-medium">
+                          {formatLabel(trace.agentKey)} · {formatLabel(String(trace.phase))}
+                        </p>
+                        <Badge variant="outline" className={statusClass(trace.status)}>
+                          {trace.status}
+                        </Badge>
+                      </div>
+                      <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted-foreground">
+                        <span>Attempt: {trace.attempt ?? 1}</span>
+                        <span>Retries: {trace.retryCount ?? 0}</span>
+                        <span>Capture: {formatCaptureStatus(trace.captureStatus)}</span>
+                        <span>Started: {formatTime(trace.startedAt)}</span>
+                      </div>
+                      {trace.error && (
+                        <p
+                          className={`mt-1 text-xs ${
+                            trace.status === "fallback"
+                              ? "text-amber-700 dark:text-amber-300"
+                              : "text-destructive"
+                          }`}
+                        >
+                          {normalizeTraceError(trace)}
+                        </p>
+                      )}
+                      {trace.rawProviderError && trace.status === "fallback" && (
+                        <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                          Provider: {previewText(trace.rawProviderError, 220)}
+                        </p>
+                      )}
+                      <div className="mt-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="justify-start gap-2 text-xs"
+                          onClick={() => setSelectedTrace(trace)}
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                          View Trace
+                        </Button>
+                      </div>
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        Input: {previewText(toPrettyInput(trace))}
                       </p>
-                      <Badge variant="outline" className={statusClass(trace.status)}>
-                        {trace.status}
-                      </Badge>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Output: {previewText(toPrettyOutput(trace))}
+                      </p>
                     </div>
-                    <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted-foreground">
-                      <span>Attempt: {trace.attempt ?? 1}</span>
-                      <span>Retries: {trace.retryCount ?? 0}</span>
-                      <span>Capture: {formatCaptureStatus(trace.captureStatus)}</span>
-                      <span>Started: {formatTime(trace.startedAt)}</span>
-                    </div>
-                    {trace.error && (
-                      <p
-                        className={`mt-1 text-xs ${
-                          trace.status === "fallback"
-                            ? "text-amber-700 dark:text-amber-300"
-                            : "text-destructive"
-                        }`}
-                      >
-                        {normalizeTraceError(trace)}
-                      </p>
-                    )}
-                    {trace.rawProviderError && trace.status === "fallback" && (
-                      <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
-                        Provider: {previewText(trace.rawProviderError, 220)}
-                      </p>
-                    )}
-                    <div className="mt-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="justify-start gap-2 text-xs"
+                  ))
+                )}
+              </div>
+            </ScrollArea>
+          </div>
+
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold">Step Traces</h3>
+            <ScrollArea className="h-[280px] rounded-lg border">
+              <div className="space-y-2 p-3">
+                {stepTraceTimeline.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No step-level traces captured yet for this run.
+                  </p>
+                ) : (
+                  stepTraceTimeline.map((trace) => {
+                    const operation = readTraceOperation(trace);
+                    return (
+                      <div
+                        key={trace.id}
+                        className={`rounded-md border p-2.5 ${SURFACE_TONE_CLASS[
+                          trace.status === "failed"
+                            ? "danger"
+                            : trace.status === "fallback"
+                              ? "warning"
+                              : trace.status === "running"
+                                ? "info"
+                                : "success"
+                        ]} cursor-pointer`}
                         onClick={() => setSelectedTrace(trace)}
                       >
-                        <Eye className="h-3.5 w-3.5" />
-                        View Trace
-                      </Button>
-                    </div>
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      Prompt: {previewText(trace.inputPrompt)}
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Output: {previewText(toPrettyOutput(trace))}
-                    </p>
-                  </div>
-                ))
-              )}
-            </div>
-          </ScrollArea>
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-sm font-medium">
+                            {formatLabel(trace.stepKey || trace.agentKey)} · {formatLabel(String(trace.phase))}
+                          </p>
+                          <Badge variant="outline" className={statusClass(trace.status)}>
+                            {trace.status}
+                          </Badge>
+                        </div>
+                        <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted-foreground">
+                          <span>Kind: Step</span>
+                          {operation && <span>Operation: {operation}</span>}
+                          <span>Capture: {formatCaptureStatus(trace.captureStatus)}</span>
+                          <span>Started: {formatTime(trace.startedAt)}</span>
+                        </div>
+                        {trace.error && (
+                          <p className="mt-1 text-xs text-destructive">
+                            {normalizeTraceError(trace)}
+                          </p>
+                        )}
+                        <div className="mt-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="justify-start gap-2 text-xs"
+                            onClick={() => setSelectedTrace(trace)}
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                            View Trace
+                          </Button>
+                        </div>
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          Input: {previewText(toPrettyInput(trace))}
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Output: {previewText(toPrettyOutput(trace))}
+                        </p>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </ScrollArea>
+          </div>
         </div>
 
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -1238,8 +1366,8 @@ export function AdminPipelineLivePanel({
             <DialogHeader>
               <DialogTitle>
                 {selectedTrace
-                  ? `${formatLabel(selectedTrace.agentKey)} · ${formatLabel(String(selectedTrace.phase))} Trace`
-                  : "Agent Trace"}
+                  ? `${formatLabel(selectedTrace.stepKey || selectedTrace.agentKey)} · ${formatLabel(String(selectedTrace.phase))} ${isPhaseStepTrace(selectedTrace) ? "Step" : "Agent"} Trace`
+                  : "Trace"}
               </DialogTitle>
             </DialogHeader>
             {selectedTrace?.status === "fallback" && (
@@ -1256,9 +1384,9 @@ export function AdminPipelineLivePanel({
             )}
             <div className="grid gap-3 md:grid-cols-2">
               <div className="space-y-1">
-                <p className="text-xs font-medium text-muted-foreground">Input Prompt</p>
+                <p className="text-xs font-medium text-muted-foreground">Input</p>
                 <pre className="max-h-[440px] overflow-auto rounded-md border bg-muted/30 p-3 text-xs leading-relaxed whitespace-pre-wrap">
-                  {selectedTrace?.inputPrompt?.trim() || "Input prompt not captured."}
+                  {toPrettyInput(selectedTrace)}
                 </pre>
               </div>
               <div className="space-y-1">
@@ -1267,6 +1395,12 @@ export function AdminPipelineLivePanel({
                   {toPrettyOutput(selectedTrace)}
                 </pre>
               </div>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground">Metadata</p>
+              <pre className="max-h-[220px] overflow-auto rounded-md border bg-muted/30 p-3 text-xs leading-relaxed whitespace-pre-wrap">
+                {toPrettyMeta(selectedTrace)}
+              </pre>
             </div>
           </DialogContent>
         </Dialog>

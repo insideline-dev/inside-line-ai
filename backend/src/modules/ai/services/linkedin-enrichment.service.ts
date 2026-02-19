@@ -27,6 +27,21 @@ interface RejectedCandidateDecision {
   reason: string;
 }
 
+export interface LinkedinEnrichmentTraceEvent {
+  operation: string;
+  status: "running" | "completed" | "failed";
+  inputJson?: unknown;
+  outputJson?: unknown;
+  inputText?: string;
+  outputText?: string;
+  error?: string;
+  meta?: Record<string, unknown>;
+}
+
+interface LinkedinEnrichmentOptions {
+  onTrace?: (event: LinkedinEnrichmentTraceEvent) => void;
+}
+
 @Injectable()
 export class LinkedinEnrichmentService {
   private readonly logger = new Logger(LinkedinEnrichmentService.name);
@@ -70,6 +85,7 @@ export class LinkedinEnrichmentService {
     companyName: string,
     existingMembers: TeamMemberInput[],
     companyWebsite?: string,
+    options?: LinkedinEnrichmentOptions,
   ): Promise<TeamMemberInput[]> {
     const normalizedCompany = companyName?.trim();
     if (!normalizedCompany || !this.unipileService.isConfigured()) {
@@ -86,16 +102,51 @@ export class LinkedinEnrichmentService {
     );
 
     const candidates = new Map<string, TeamMemberInput>();
+    const traceOptions = options?.onTrace ? { onTrace: options.onTrace } : undefined;
     for (const query of this.companyLeadershipQueries) {
       let matches: LinkedInProfile[] = [];
-      try {
-        matches = await this.unipileService.searchProfilesInCompany(
+      this.emitTrace(options, {
+        operation: "unipile.search_profiles_in_company",
+        status: "running",
+        inputJson: {
           query,
-          normalizedCompany,
-          companyWebsite,
-        );
+          companyName: normalizedCompany,
+          companyWebsite: companyWebsite ?? null,
+        },
+      });
+      try {
+        matches = traceOptions
+          ? await this.unipileService.searchProfilesInCompany(
+              query,
+              normalizedCompany,
+              companyWebsite,
+              traceOptions,
+            )
+          : await this.unipileService.searchProfilesInCompany(
+              query,
+              normalizedCompany,
+              companyWebsite,
+            );
+        this.emitTrace(options, {
+          operation: "unipile.search_profiles_in_company",
+          status: "completed",
+          inputJson: {
+            query,
+            companyName: normalizedCompany,
+          },
+          outputJson: matches,
+        });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
+        this.emitTrace(options, {
+          operation: "unipile.search_profiles_in_company",
+          status: "failed",
+          inputJson: {
+            query,
+            companyName: normalizedCompany,
+          },
+          error: message,
+        });
         this.logger.debug(
           `[LinkedInDiscovery] query=${query} company=${normalizedCompany} failed: ${message}`,
         );
@@ -137,6 +188,7 @@ export class LinkedinEnrichmentService {
     userId: string,
     members: TeamMemberInput[],
     startupContext?: StartupContextInput,
+    options?: LinkedinEnrichmentOptions,
   ): Promise<EnrichedTeamMember[]> {
     if (members.length === 0) {
       return [];
@@ -158,17 +210,28 @@ export class LinkedinEnrichmentService {
     for (let index = 0; index < members.length; index += this.batchSize) {
       const batch = members.slice(index, index + this.batchSize);
       const settled = await Promise.allSettled(
-        batch.map((member) => this.enrichMember(userId, member, startupContext)),
+        batch.map((member) =>
+          this.enrichMember(userId, member, startupContext, options),
+        ),
       );
 
       for (let batchIndex = 0; batchIndex < settled.length; batchIndex += 1) {
         const result = settled[batchIndex];
+        const member = batch[batchIndex];
         if (result.status === 'fulfilled') {
+          this.emitTrace(options, {
+            operation: "linkedin.enrich_member",
+            status: "completed",
+            inputJson: {
+              member,
+              startupContext,
+            },
+            outputJson: result.value,
+          });
           enriched.push(result.value);
           continue;
         }
 
-        const member = batch[batchIndex];
         enriched.push({
           name: member.name,
           role: member.role,
@@ -176,6 +239,18 @@ export class LinkedinEnrichmentService {
           enrichmentStatus: 'error',
           matchConfidence: 0,
           confidenceReason: 'LinkedIn profile resolution failed with an unexpected error',
+        });
+        this.emitTrace(options, {
+          operation: "linkedin.enrich_member",
+          status: "failed",
+          inputJson: {
+            member,
+            startupContext,
+          },
+          error:
+            result.reason instanceof Error
+              ? result.reason.message
+              : String(result.reason),
         });
       }
     }
@@ -187,15 +262,17 @@ export class LinkedinEnrichmentService {
     userId: string,
     member: TeamMemberInput,
     startupContext?: StartupContextInput,
+    options?: LinkedinEnrichmentOptions,
   ): Promise<EnrichedTeamMember> {
     const attemptedUrls: string[] = [];
     const rejectedCandidates: RejectedCandidateDecision[] = [];
     let candidateUrls: string[] = member.linkedinUrl
       ? [member.linkedinUrl]
-      : await this.getSearchCandidateUrls(member, startupContext);
+      : await this.getSearchCandidateUrls(member, startupContext, [], options);
     let usedSearchFallback = !member.linkedinUrl;
     let sawRecoverableFetchError = false;
     let lastAttemptedUrl: string | undefined;
+    const traceOptions = options?.onTrace ? { onTrace: options.onTrace } : undefined;
 
     if (candidateUrls.length === 0) {
       return {
@@ -213,7 +290,13 @@ export class LinkedinEnrichmentService {
       attemptedUrls.push(linkedinUrl);
 
       try {
-        const profile = await this.unipileService.getProfile(userId, linkedinUrl);
+        const profile = traceOptions
+          ? await this.unipileService.getProfile(
+              userId,
+              linkedinUrl,
+              traceOptions,
+            )
+          : await this.unipileService.getProfile(userId, linkedinUrl);
         if (!profile) {
           rejectedCandidates.push({
             linkedinUrl,
@@ -276,6 +359,7 @@ export class LinkedinEnrichmentService {
           member,
           startupContext,
           attemptedUrls,
+          options,
         );
         if (fallbackUrls.length > 0) {
           this.logger.debug(
@@ -317,11 +401,38 @@ export class LinkedinEnrichmentService {
     member: TeamMemberInput,
     startupContext?: StartupContextInput,
     excludeUrls: string[] = [],
+    options?: LinkedinEnrichmentOptions,
   ): Promise<string[]> {
-    const matches = await this.unipileService.searchProfiles(
-      member.name,
-      startupContext?.companyName,
-    );
+    this.emitTrace(options, {
+      operation: "unipile.search_profiles",
+      status: "running",
+      inputJson: {
+        name: member.name,
+        company: startupContext?.companyName ?? null,
+        excludeUrls,
+      },
+    });
+    const traceOptions = options?.onTrace ? { onTrace: options.onTrace } : undefined;
+    const matches = traceOptions
+      ? await this.unipileService.searchProfiles(
+          member.name,
+          startupContext?.companyName,
+          traceOptions,
+        )
+      : await this.unipileService.searchProfiles(
+          member.name,
+          startupContext?.companyName,
+        );
+    this.emitTrace(options, {
+      operation: "unipile.search_profiles",
+      status: "completed",
+      inputJson: {
+        name: member.name,
+        company: startupContext?.companyName ?? null,
+        excludeUrls,
+      },
+      outputJson: matches,
+    });
     const excluded = new Set(excludeUrls.map((url) => this.normalizeLinkedinUrl(url)));
     const deduped = new Set<string>();
     const candidates: string[] = [];
@@ -349,6 +460,13 @@ export class LinkedinEnrichmentService {
     }
 
     return candidates;
+  }
+
+  private emitTrace(
+    options: LinkedinEnrichmentOptions | undefined,
+    event: LinkedinEnrichmentTraceEvent,
+  ): void {
+    options?.onTrace?.(event);
   }
 
   private normalizeLinkedinUrl(url: string): string {

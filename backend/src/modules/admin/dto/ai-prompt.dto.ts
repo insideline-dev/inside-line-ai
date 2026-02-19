@@ -1,13 +1,17 @@
 import { createZodDto } from "nestjs-zod";
 import { z } from "zod";
 import { AI_PROMPT_KEYS } from "../../ai/services/ai-prompt-catalog";
+import { AI_RUNTIME_ALLOWED_MODEL_NAMES } from "../../ai/services/ai-runtime-config.schema";
 import { StartupStage } from "../../startup/entities/startup.schema";
 
 const PromptKeySchema = z.enum(AI_PROMPT_KEYS);
 const PromptSurfaceSchema = z.enum(["pipeline", "clara"]);
 const PromptStatusSchema = z.enum(["draft", "published", "archived"]);
+const ModelConfigStatusSchema = z.enum(["draft", "published", "archived"]);
 const FlowNodeKindSchema = z.enum(["prompt", "system"]);
 const PromptSearchModeSchema = z.enum(["off", "provider_grounded_search"]);
+const ModelConfigSourceSchema = z.enum(["default", "published", "revision_override"]);
+const FlowPortTypeSchema = z.enum(["text", "object", "array", "number"]);
 const ContextFieldTypeSchema = z.enum([
   "string",
   "number",
@@ -105,14 +109,80 @@ export const AiPromptSeedResultSchema = z.object({
   totalTargetSlots: z.number().int(),
 });
 
+export const CreateAiModelConfigDraftSchema = z.object({
+  modelName: z.enum(AI_RUNTIME_ALLOWED_MODEL_NAMES),
+  searchMode: PromptSearchModeSchema,
+  stage: z.nativeEnum(StartupStage).nullable().optional(),
+  notes: z.string().trim().max(4000).optional(),
+});
+
+export const UpdateAiModelConfigDraftSchema = z
+  .object({
+    modelName: z.enum(AI_RUNTIME_ALLOWED_MODEL_NAMES).optional(),
+    searchMode: PromptSearchModeSchema.optional(),
+    notes: z.string().trim().max(4000).optional(),
+  })
+  .refine(
+    (value) =>
+      value.modelName !== undefined ||
+      value.searchMode !== undefined ||
+      value.notes !== undefined,
+    { message: "At least one field must be provided" },
+  );
+
+const ResolvedModelConfigSchema = z.object({
+  source: ModelConfigSourceSchema,
+  revisionId: z.string().uuid().nullable(),
+  stage: z.nativeEnum(StartupStage).nullable(),
+  purpose: z.string(),
+  modelName: z.string(),
+  provider: z.string(),
+  searchMode: PromptSearchModeSchema,
+  supportedSearchModes: z.array(PromptSearchModeSchema),
+});
+
+const AiModelConfigRevisionSchema = z.object({
+  id: z.string().uuid(),
+  stage: z.nativeEnum(StartupStage).nullable(),
+  status: ModelConfigStatusSchema,
+  modelName: z.string(),
+  searchMode: PromptSearchModeSchema,
+  notes: z.string().nullable(),
+  version: z.number().int(),
+  createdBy: z.string().uuid().nullable(),
+  publishedBy: z.string().uuid().nullable(),
+  publishedAt: z.iso.datetime().nullable(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+});
+
+export const AiModelConfigResponseSchema = z.object({
+  resolved: ResolvedModelConfigSchema,
+  revisions: z.array(AiModelConfigRevisionSchema),
+  allowedModels: z.array(z.string()),
+});
+
+export const AiPromptOutputSchemaResponseSchema = z.object({
+  key: PromptKeySchema,
+  jsonSchema: z.unknown(),
+  note: z.string(),
+});
+
+const AiFlowPortSchema = z.object({
+  label: z.string(),
+  type: FlowPortTypeSchema,
+  fromNodeId: z.string().optional(),
+  toNodeIds: z.array(z.string()).optional(),
+});
+
 const AiFlowNodeSchema = z.object({
   id: z.string(),
   label: z.string(),
   description: z.string(),
   kind: FlowNodeKindSchema,
   promptKeys: z.array(PromptKeySchema),
-  inputs: z.array(z.string()),
-  outputs: z.array(z.string()),
+  inputs: z.array(AiFlowPortSchema),
+  outputs: z.array(AiFlowPortSchema),
 });
 
 const AiFlowStageSchema = z.object({
@@ -251,17 +321,25 @@ export const AiPipelineContextPreviewResponseSchema = z.object({
 
 export type CreateAiPromptRevision = z.infer<typeof CreateAiPromptRevisionSchema>;
 export type UpdateAiPromptRevision = z.infer<typeof UpdateAiPromptRevisionSchema>;
+export type CreateAiModelConfigDraft = z.infer<typeof CreateAiModelConfigDraftSchema>;
+export type UpdateAiModelConfigDraft = z.infer<typeof UpdateAiModelConfigDraftSchema>;
 
 export class CreateAiPromptRevisionDto extends createZodDto(CreateAiPromptRevisionSchema) {}
 export class UpdateAiPromptRevisionDto extends createZodDto(UpdateAiPromptRevisionSchema) {}
+export class CreateAiModelConfigDraftDto extends createZodDto(CreateAiModelConfigDraftSchema) {}
+export class UpdateAiModelConfigDraftDto extends createZodDto(UpdateAiModelConfigDraftSchema) {}
 export class AiPromptDefinitionsResponseDto extends createZodDto(AiPromptDefinitionsResponseSchema) {}
 export class AiPromptRevisionsResponseDto extends createZodDto(AiPromptRevisionsResponseSchema) {}
 export class AiPromptRevisionResponseDto extends createZodDto(AiPromptRevisionSchema) {}
 export class AiPromptSeedResultDto extends createZodDto(AiPromptSeedResultSchema) {}
+export class AiModelConfigResponseDto extends createZodDto(AiModelConfigResponseSchema) {}
 export class AiPromptFlowResponseDto extends createZodDto(AiPromptFlowResponseSchema) {}
 export class AiPromptContextSchemaResponseDto extends createZodDto(AiPromptContextSchemaResponseSchema) {}
 export class PreviewAiPromptRequestDto extends createZodDto(PreviewAiPromptRequestSchema) {}
 export class AiPromptPreviewResponseDto extends createZodDto(AiPromptPreviewResponseSchema) {}
+export class AiPromptOutputSchemaResponseDto extends createZodDto(
+  AiPromptOutputSchemaResponseSchema,
+) {}
 export class PreviewAiPipelineContextRequestDto extends createZodDto(
   PreviewAiPipelineContextRequestSchema,
 ) {}

@@ -21,6 +21,7 @@ import {
 } from "./agents/evaluation";
 import { AiConfigService } from "./services/ai-config.service";
 import { AiDebugLogService } from "./services/ai-debug-log.service";
+import { AiModelConfigService } from "./services/ai-model-config.service";
 import { AiPromptService } from "./services/ai-prompt.service";
 import { AiPromptRuntimeService } from "./services/ai-prompt-runtime.service";
 import {
@@ -72,6 +73,7 @@ import { EnrichmentService } from "./services/enrichment.service";
     AiProviderService,
     AiConfigService,
     AiDebugLogService,
+    AiModelConfigService,
     AiPromptService,
     AiPromptRuntimeService,
     PipelineStateService,
@@ -121,6 +123,7 @@ import { EnrichmentService } from "./services/enrichment.service";
   exports: [
     AiProviderService,
     AiConfigService,
+    AiModelConfigService,
     AiPromptService,
     AiPromptRuntimeService,
     PipelineStateService,

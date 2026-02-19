@@ -58,6 +58,7 @@ function buildService(opts: {
   aiText?: string;
   correctionThreshold?: number;
   braveConfigured?: boolean;
+  braveSearchResponses?: Array<{ query: string; results: Array<{ title: string; url: string; description: string }> }>;
   enrichmentModel?: string;
 }) {
   const record = opts.record ?? makeStartupRecord();
@@ -84,9 +85,15 @@ function buildService(opts: {
     getPhaseResult: jest.fn().mockResolvedValue(null),
   } as unknown as jest.Mocked<PipelineStateService>;
 
+  const responses = opts.braveSearchResponses ?? [{ query: "q", results: [] }];
+  let responseIndex = 0;
   const braveSearch = {
     isConfigured: jest.fn().mockReturnValue(opts.braveConfigured ?? false),
-    search: jest.fn().mockResolvedValue({ query: "q", results: [] }),
+    search: jest.fn().mockImplementation(async () => {
+      const index = Math.min(responseIndex, responses.length - 1);
+      responseIndex += 1;
+      return responses[index]!;
+    }),
   } as unknown as jest.Mocked<BraveSearchService>;
 
   const aiProvider = {
@@ -226,6 +233,89 @@ describe("EnrichmentService", () => {
       expect(completion?.attempt).toBe(1);
       expect(completion?.retryCount).toBe(0);
     });
+
+    it("treats schema-valid but non-substantive output as invalid when web evidence exists", async () => {
+      const aiJson = makeEnrichmentJson();
+      generateTextMock.mockResolvedValue({ text: aiJson });
+
+      const { service } = buildService({
+        braveConfigured: true,
+        braveSearchResponses: [
+          {
+            query: "Acme profile",
+            results: [
+              {
+                title: "Acme - Wikipedia",
+                url: "https://en.wikipedia.org/wiki/Acme",
+                description: "General information page",
+              },
+            ],
+          },
+        ],
+      });
+
+      let completion:
+        | { usedFallback: boolean; fallbackReason?: string; retryCount?: number }
+        | undefined;
+      const result = await service.run(STARTUP_ID, {
+        onAgentComplete: (payload) => {
+          completion = payload;
+        },
+      });
+
+      expect(result.fieldsEnriched).toHaveLength(0);
+      expect(completion?.usedFallback).toBe(true);
+      expect(completion?.fallbackReason).toBe("SCHEMA_OUTPUT_INVALID");
+      expect(completion?.retryCount).toBe(1);
+    });
+
+    it("applies deterministic backup extraction when model output is weak", async () => {
+      const aiJson = makeEnrichmentJson();
+      generateTextMock.mockResolvedValue({ text: aiJson });
+
+      const { service } = buildService({
+        braveConfigured: true,
+        braveSearchResponses: [
+          {
+            query: "Acme founder CEO LinkedIn",
+            results: [
+              {
+                title: "Jane Doe - Acme Inc | LinkedIn",
+                url: "https://www.linkedin.com/in/jane-doe/",
+                description: "CEO and co-founder at Acme Inc",
+              },
+              {
+                title: "Acme Pitch Deck | PDF",
+                url: "https://www.slideshare.net/slideshow/acme-pitch-deck/123",
+                description: "Pitch deck for Acme Inc",
+              },
+              {
+                title: "Acme - Crunchbase Company Profile",
+                url: "https://www.crunchbase.com/organization/acme-inc",
+                description: "Acme company profile and funding history",
+              },
+            ],
+          },
+        ],
+      });
+
+      let completion:
+        | { usedFallback: boolean; attempt?: number; retryCount?: number }
+        | undefined;
+      const result = await service.run(STARTUP_ID, {
+        onAgentComplete: (payload) => {
+          completion = payload;
+        },
+      });
+
+      expect(result.discoveredFounders.length).toBeGreaterThan(0);
+      expect(result.pitchDeckUrls.length).toBeGreaterThan(0);
+      expect(result.socialProfiles.crunchbaseUrl).toContain("crunchbase.com");
+      expect(result.sources.length).toBeGreaterThan(0);
+      expect(completion?.usedFallback).toBe(false);
+      expect(completion?.attempt).toBe(1);
+      expect(completion?.retryCount).toBe(0);
+    });
   });
 
   describe("identifyMissingFields — gap detection", () => {
@@ -313,6 +403,7 @@ describe("EnrichmentService", () => {
   describe("applyDbWrites — corrections", () => {
     it("applies a correction when confidence > threshold (0.85)", async () => {
       const aiJson = makeEnrichmentJson({
+        website: { value: "https://correct.com", confidence: 0.92, source: "https://www.crunchbase.com/organization/correct" },
         correctionDetails: [
           {
             field: "website",
@@ -321,6 +412,10 @@ describe("EnrichmentService", () => {
             confidence: 0.9,
             reason: "Found authoritative source",
           },
+        ],
+        sources: [
+          { url: "https://www.crunchbase.com/organization/correct", title: "Crunchbase", type: "search" },
+          { url: "https://techcrunch.com/2024/04/18/correct-funding", title: "TechCrunch", type: "search" },
         ],
       });
       generateTextMock.mockResolvedValue({ text: aiJson });
@@ -337,6 +432,7 @@ describe("EnrichmentService", () => {
 
     it("does NOT apply a correction when confidence equals threshold exactly — must exceed", async () => {
       const aiJson = makeEnrichmentJson({
+        website: { value: "https://correct.com", confidence: 0.9, source: "https://www.crunchbase.com/organization/correct" },
         correctionDetails: [
           {
             field: "website",
@@ -345,6 +441,10 @@ describe("EnrichmentService", () => {
             confidence: 0.85,
             reason: "Borderline",
           },
+        ],
+        sources: [
+          { url: "https://www.crunchbase.com/organization/correct", title: "Crunchbase", type: "search" },
+          { url: "https://www.reuters.com/world/us/correct", title: "Reuters", type: "search" },
         ],
       });
       generateTextMock.mockResolvedValue({ text: aiJson });
@@ -364,6 +464,7 @@ describe("EnrichmentService", () => {
 
     it("does NOT apply correction when confidence < threshold", async () => {
       const aiJson = makeEnrichmentJson({
+        website: { value: "https://correct.com", confidence: 0.75, source: "https://www.crunchbase.com/organization/correct" },
         correctionDetails: [
           {
             field: "website",
@@ -372,6 +473,39 @@ describe("EnrichmentService", () => {
             confidence: 0.7,
             reason: "Low confidence",
           },
+        ],
+        sources: [
+          { url: "https://www.crunchbase.com/organization/correct", title: "Crunchbase", type: "search" },
+          { url: "https://techcrunch.com/2024/04/18/correct-funding", title: "TechCrunch", type: "search" },
+        ],
+      });
+      generateTextMock.mockResolvedValue({ text: aiJson });
+
+      const { service, drizzle } = buildService({
+        record: makeStartupRecord({ website: "https://wrong.com" }),
+        correctionThreshold: 0.85,
+      });
+      const result = await service.run(STARTUP_ID);
+
+      expect(drizzle.db.update).not.toHaveBeenCalled();
+      expect(result.dbFieldsUpdated).toHaveLength(0);
+    });
+
+    it("does NOT apply correction when sources are tier-3 only", async () => {
+      const aiJson = makeEnrichmentJson({
+        website: { value: "https://correct.com", confidence: 0.95, source: "https://en.wikipedia.org/wiki/Correct" },
+        correctionDetails: [
+          {
+            field: "website",
+            oldValue: "https://wrong.com",
+            newValue: "https://correct.com",
+            confidence: 0.95,
+            reason: "Looks updated",
+          },
+        ],
+        sources: [
+          { url: "https://en.wikipedia.org/wiki/Correct", title: "Wikipedia", type: "search" },
+          { url: "https://www.slideshare.net/slideshow/correct", title: "SlideShare", type: "search" },
         ],
       });
       generateTextMock.mockResolvedValue({ text: aiJson });

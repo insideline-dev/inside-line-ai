@@ -55,10 +55,21 @@ const PHASE_LABELS: Record<string, string> = {
   synthesis: "Synthesis",
 };
 
-const AGENT_LABELS: Record<string, string> = {
+const STEP_LABELS: Record<string, string> = {
   extract_fields: "Document Parsing",
   scrape_website: "Website Scraping",
+  pdf_fetch: "PDF Fetch",
+  text_extraction: "Text Extraction",
+  ocr_fallback: "OCR Fallback",
+  field_extraction: "Field Extraction",
+  cache_check: "Cache Check",
+  website_scrape: "Website Scrape",
+  team_discovery: "Team Discovery",
   linkedin_enrichment: "LinkedIn Enrichment",
+  gap_analysis: "Gap Analysis",
+  web_search: "Web Search",
+  ai_synthesis: "AI Synthesis",
+  db_writes: "DB Writes",
 };
 
 const STATUS_BADGE_CLASS: Record<string, string> = {
@@ -102,11 +113,11 @@ function normalizePercent(value: number | undefined): number {
 }
 
 function formatLabel(value: string): string {
+  if (STEP_LABELS[value]) {
+    return STEP_LABELS[value];
+  }
   if (PHASE_LABELS[value]) {
     return PHASE_LABELS[value];
-  }
-  if (AGENT_LABELS[value]) {
-    return AGENT_LABELS[value];
   }
   return value
     .replace(/([a-z])([A-Z])/g, "$1 $2")
@@ -335,6 +346,149 @@ function calculatePhaseProgress(phase: PipelinePhaseProgress): number {
 
 function isTerminalPhaseStatus(status: string | undefined): boolean {
   return status === "completed" || status === "failed" || status === "skipped";
+}
+
+function asSummaryRecord(
+  value: unknown,
+): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  return value as Record<string, unknown>;
+}
+
+function readSummaryNumber(
+  summary: Record<string, unknown> | undefined,
+  key: string,
+): number | undefined {
+  const value = summary?.[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function readSummaryString(
+  summary: Record<string, unknown> | undefined,
+  key: string,
+): string | undefined {
+  const value = summary?.[key];
+  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+}
+
+function readSummaryArray(
+  summary: Record<string, unknown> | undefined,
+  key: string,
+): unknown[] | undefined {
+  const value = summary?.[key];
+  return Array.isArray(value) ? value : undefined;
+}
+
+function formatCompactNumber(value: number): string {
+  if (value >= 1_000_000) return `${Math.round(value / 100_000) / 10}M`;
+  if (value >= 1_000) return `${Math.round(value / 100) / 10}K`;
+  return `${Math.round(value)}`;
+}
+
+function buildDataFlowBadges(
+  phase: string,
+  agents: Record<string, PipelineAgentProgress> | undefined,
+): string[] {
+  const summaries = Object.fromEntries(
+    Object.entries(agents ?? {}).map(([key, agent]) => [
+      key,
+      asSummaryRecord(agent.dataSummary),
+    ]),
+  ) as Record<string, Record<string, unknown> | undefined>;
+
+  if (phase === "extraction") {
+    const textSummary = summaries.text_extraction ?? summaries.ocr_fallback;
+    const fieldSummary = summaries.field_extraction;
+    const source =
+      readSummaryString(textSummary, "method") ??
+      readSummaryString(summaries.pdf_fetch, "source");
+    const pages = readSummaryNumber(textSummary, "pages");
+    const chars = readSummaryNumber(textSummary, "chars");
+    const fieldsExtracted = readSummaryArray(fieldSummary, "fieldsExtracted")?.length;
+
+    return [
+      source ? `Source: ${source}` : null,
+      typeof pages === "number" ? `${pages} pages` : null,
+      typeof chars === "number" ? `${formatCompactNumber(chars)} chars` : null,
+      typeof fieldsExtracted === "number" && fieldsExtracted > 0
+        ? `${fieldsExtracted} fields`
+        : null,
+    ].filter((value): value is string => Boolean(value));
+  }
+
+  if (phase === "scraping") {
+    const scrapeSummary = summaries.website_scrape;
+    const teamSummary = summaries.team_discovery;
+    const linkedinSummary = summaries.linkedin_enrichment;
+
+    const pages = readSummaryNumber(scrapeSummary, "pages");
+    const teamTotal = readSummaryNumber(teamSummary, "total");
+    const linkedinEnriched = readSummaryNumber(linkedinSummary, "liveEnriched");
+
+    return [
+      typeof pages === "number" ? `${pages} pages scraped` : null,
+      typeof teamTotal === "number" ? `${teamTotal} team members` : null,
+      typeof linkedinEnriched === "number"
+        ? `${linkedinEnriched} LinkedIn enriched`
+        : null,
+    ].filter((value): value is string => Boolean(value));
+  }
+
+  if (phase === "enrichment") {
+    const gapSummary = summaries.gap_analysis;
+    const dbSummary = summaries.db_writes;
+
+    const fieldsUpdated = readSummaryArray(dbSummary, "fieldsUpdated")?.length;
+    const foundersAdded = readSummaryNumber(dbSummary, "foundersAdded");
+    const missingBefore = readSummaryArray(gapSummary, "missing")?.length;
+    const gapsFilled =
+      typeof missingBefore === "number" && typeof fieldsUpdated === "number"
+        ? Math.min(missingBefore, fieldsUpdated)
+        : undefined;
+
+    return [
+      typeof gapsFilled === "number" && gapsFilled > 0
+        ? `${gapsFilled} gaps filled`
+        : null,
+      typeof foundersAdded === "number" && foundersAdded > 0
+        ? `${foundersAdded} founders discovered`
+        : null,
+      typeof fieldsUpdated === "number" && fieldsUpdated > 0
+        ? `${fieldsUpdated} fields updated`
+        : null,
+    ].filter((value): value is string => Boolean(value));
+  }
+
+  return [];
+}
+
+function DataFlowBadges({
+  phase,
+  agents,
+}: {
+  phase: string;
+  agents: Record<string, PipelineAgentProgress> | undefined;
+}) {
+  const badges = buildDataFlowBadges(phase, agents);
+  if (badges.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="mt-2 flex flex-wrap gap-1.5">
+      {badges.map((badge) => (
+        <Badge
+          key={`${phase}-${badge}`}
+          variant="outline"
+          className="bg-slate-500/5 text-slate-700 border-slate-500/20 dark:text-slate-300"
+        >
+          {badge}
+        </Badge>
+      ))}
+    </div>
+  );
 }
 
 export function AdminPipelineLivePanel({
@@ -730,6 +884,7 @@ export function AdminPipelineLivePanel({
                     <span>Retries: {entry.data.retryCount}</span>
                   )}
                 </div>
+                <DataFlowBadges phase={entry.phase} agents={entry.data.agents} />
                 {(entry.failedAgentCount > 0 ||
                   entry.fallbackAgentCount > 0 ||
                   entry.retriedAgentCount > 0 ||

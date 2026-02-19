@@ -19,6 +19,7 @@ const FallbackReasonSchema = z.enum([
   "MODEL_OR_PROVIDER_ERROR",
   "UNHANDLED_AGENT_EXCEPTION",
 ]);
+const DataSummarySchema = z.record(z.string(), z.unknown());
 
 const AgentLifecycleEventSchema = z.object({
   id: z.string(),
@@ -52,6 +53,7 @@ const AgentProgressSchema = z.object({
   rawProviderError: z.string().optional(),
   lastEvent: z.enum(["started", "retrying", "completed", "failed", "fallback"]).optional(),
   lastEventAt: z.string().optional(),
+  dataSummary: DataSummarySchema.optional(),
 });
 
 const PhaseProgressSchema = z.object({
@@ -262,6 +264,7 @@ export class ProgressTrackerService {
     fallbackReason?: EvaluationFallbackReason;
     rawProviderError?: string;
     lifecycleEvent?: "started" | "retrying" | "completed" | "failed" | "fallback";
+    dataSummary?: Record<string, unknown>;
   }): Promise<void> {
     await this.withMutationLock(params.startupId, async () => {
       const payload = await this.ensureProgress(
@@ -409,6 +412,9 @@ export class ProgressTrackerService {
       } else if (!next.usedFallback) {
         delete next.rawProviderError;
       }
+      if (params.dataSummary) {
+        next.dataSummary = params.dataSummary;
+      }
       next.lastEvent = lifecycleEvent;
       next.lastEventAt = now;
       next.phaseRetryCount = incomingPhaseRetryCount;
@@ -460,6 +466,7 @@ export class ProgressTrackerService {
         rawProviderError: next.rawProviderError,
         lastEvent: next.lastEvent,
         lastEventAt: next.lastEventAt,
+        dataSummary: next.dataSummary,
       };
       this.notifications.sendPipelineEvent(params.userId, event, {
         startupId: params.startupId,
@@ -1025,6 +1032,12 @@ export class ProgressTrackerService {
         rawProviderError:
           typeof record.rawProviderError === "string"
             ? record.rawProviderError
+            : undefined,
+        dataSummary:
+          record.dataSummary &&
+          typeof record.dataSummary === "object" &&
+          !Array.isArray(record.dataSummary)
+            ? (record.dataSummary as Record<string, unknown>)
             : undefined,
         lastEvent:
           record.lastEvent === "started" ||

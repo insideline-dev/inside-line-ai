@@ -468,6 +468,9 @@ export function useStartupRealtimeProgress(
           }
 
           phase.progress = calculatePhaseProgress(phase);
+          const hasTerminalPipelineStatus =
+            typeof next.pipelineStatus === "string" &&
+            TERMINAL_PIPELINE_STATUSES.has(next.pipelineStatus);
 
           if (
             data.status === "running" ||
@@ -475,11 +478,20 @@ export function useStartupRealtimeProgress(
             data.status === "pending"
           ) {
             next.currentPhase = data.phase;
+            if (!hasTerminalPipelineStatus) {
+              next.pipelineStatus = "running";
+              delete next.error;
+            }
           }
           if (data.status === "failed") {
-            next.pipelineStatus = "failed";
-            next.error = data.error;
             next.currentPhase = data.phase;
+            if (data.error) {
+              next.error = data.error;
+            }
+            if (!hasTerminalPipelineStatus) {
+              // A phase failure can still be retried; wait for explicit pipeline terminal events.
+              next.pipelineStatus = "running";
+            }
           }
           return recomputeProgress(next);
         }),

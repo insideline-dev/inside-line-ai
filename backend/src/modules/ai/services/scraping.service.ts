@@ -36,6 +36,8 @@ interface TeamBioInput {
 
 export const SCRAPING_AGENT_WEBSITE_KEY = "scrape_website";
 export const SCRAPING_AGENT_LINKEDIN_KEY = "linkedin_enrichment";
+const SCRAPING_STEP_TEAM_DISCOVERY = "team_discovery";
+const SCRAPING_STEP_LINKEDIN_ENRICHMENT = "linkedin_enrichment_step";
 
 export interface ScrapingAgentCompletionPayload {
   agentKey: string;
@@ -156,7 +158,7 @@ export class ScrapingService {
     });
 
     onAgentStart?.(SCRAPING_AGENT_LINKEDIN_KEY);
-    onStepProgress?.onStepStart("team_discovery");
+    onStepProgress?.onStepStart(SCRAPING_STEP_TEAM_DISCOVERY);
 
     let discoveredLinkedinLeaders: TeamMemberInput[] = [];
     let discoveredWebsiteLeaders: TeamMemberInput[] = [];
@@ -188,7 +190,7 @@ export class ScrapingService {
       );
     } catch (error) {
       const message = this.asMessage(error);
-      onStepProgress?.onStepFailed("team_discovery", message);
+      onStepProgress?.onStepFailed(SCRAPING_STEP_TEAM_DISCOVERY, message);
       onAgentComplete?.({
         agentKey: SCRAPING_AGENT_LINKEDIN_KEY,
         status: "failed",
@@ -217,7 +219,7 @@ export class ScrapingService {
       discoveredLinkedinLeaders,
       enrichmentFounderMembers,
     );
-    onStepProgress?.onStepComplete("team_discovery", {
+    onStepProgress?.onStepComplete(SCRAPING_STEP_TEAM_DISCOVERY, {
       submitted: submittedTeamMembers.length,
       extractionFounders: extractionFounderMembers.length,
       enrichmentFounders: enrichmentFounderMembers.length,
@@ -230,7 +232,7 @@ export class ScrapingService {
       `[Scraping] Team member seed built | submitted=${submittedTeamMembers.length} | extractionFounders=${extractionFounderMembers.length} | enrichmentFounders=${enrichmentFounderMembers.length} | discoveredWebsiteLeaders=${discoveredWebsiteLeaders.length} | discoveredWebsiteLinkedin=${discoveredWebsiteLinkedinMembers.length} | discoveredLinkedinLeaders=${discoveredLinkedinLeaders.length} | final=${teamMembers.length}`,
     );
 
-    onStepProgress?.onStepStart("linkedin_enrichment");
+    onStepProgress?.onStepStart(SCRAPING_STEP_LINKEDIN_ENRICHMENT);
     let linkedinEnrichmentResult: LinkedinEnrichmentRunResult;
     try {
       linkedinEnrichmentResult = await this.enrichTeamMembers(
@@ -242,7 +244,7 @@ export class ScrapingService {
       );
     } catch (error) {
       const message = this.asMessage(error);
-      onStepProgress?.onStepFailed("linkedin_enrichment", message);
+      onStepProgress?.onStepFailed(SCRAPING_STEP_LINKEDIN_ENRICHMENT, message);
       onAgentComplete?.({
         agentKey: SCRAPING_AGENT_LINKEDIN_KEY,
         status: "failed",
@@ -290,7 +292,7 @@ export class ScrapingService {
     const linkedinErrors = scrapeErrors
       .filter((error) => error.type === "linkedin")
       .map((error) => `${error.target}: ${error.error}`);
-    onStepProgress?.onStepComplete("linkedin_enrichment", {
+    onStepProgress?.onStepComplete(SCRAPING_STEP_LINKEDIN_ENRICHMENT, {
       requested: teamMembers.length,
       cacheHits: linkedinEnrichmentResult.cacheHits,
       liveRequested: linkedinEnrichmentResult.liveRequested,

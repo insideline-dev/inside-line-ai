@@ -272,6 +272,7 @@ export function usePipelineStatus(
     socket.on("phase:failed", onPhaseUpdate);
     socket.on("phase:waiting", onPhaseUpdate);
     socket.on("phase:skipped", onPhaseUpdate);
+    socket.on("phase:updated", onPhaseUpdate);
     socket.on("agent:progress", onAgentProgress);
     socket.on("agent:completed", onAgentProgress);
 
@@ -285,6 +286,7 @@ export function usePipelineStatus(
       socket.off("phase:failed", onPhaseUpdate);
       socket.off("phase:waiting", onPhaseUpdate);
       socket.off("phase:skipped", onPhaseUpdate);
+      socket.off("phase:updated", onPhaseUpdate);
       socket.off("agent:progress", onAgentProgress);
       socket.off("agent:completed", onAgentProgress);
     };

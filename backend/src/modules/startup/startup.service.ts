@@ -653,7 +653,7 @@ export class StartupService {
     const existingState = await this.aiPipeline.getPipelineStatus(id);
     if (!existingState) {
       mode = "full_reanalysis_fallback";
-      await this.aiPipeline.startPipeline(id, found.userId);
+      await this.aiPipeline.startPipeline(id, adminId);
       this.logger.warn(
         `Pipeline state missing for startup ${id}; falling back to full reanalysis for admin retry request`,
       );

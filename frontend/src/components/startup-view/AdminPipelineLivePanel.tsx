@@ -65,6 +65,7 @@ const STEP_LABELS: Record<string, string> = {
   cache_check: "Cache Check",
   website_scrape: "Website Scrape",
   team_discovery: "Team Discovery",
+  linkedin_enrichment_step: "LinkedIn Enrichment",
   linkedin_enrichment: "LinkedIn Enrichment",
   gap_analysis: "Gap Analysis",
   web_search: "Web Search",
@@ -421,7 +422,8 @@ function buildDataFlowBadges(
   if (phase === "scraping") {
     const scrapeSummary = summaries.website_scrape;
     const teamSummary = summaries.team_discovery;
-    const linkedinSummary = summaries.linkedin_enrichment;
+    const linkedinSummary =
+      summaries.linkedin_enrichment_step ?? summaries.linkedin_enrichment;
 
     const pages = readSummaryNumber(scrapeSummary, "pages");
     const teamTotal = readSummaryNumber(teamSummary, "total");

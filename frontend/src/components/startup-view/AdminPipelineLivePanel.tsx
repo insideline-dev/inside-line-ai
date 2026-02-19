@@ -17,6 +17,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useStartupRealtimeProgress } from "@/lib/startup/useStartupRealtimeProgress";
+import { PhaseDataInspector } from "./PhaseDataInspector";
 import {
   PIPELINE_PHASE_ORDER,
   type PipelineAgentEvent,
@@ -997,6 +998,11 @@ export function AdminPipelineLivePanel({
             ))}
           </div>
         </div>
+
+        <PhaseDataInspector
+          phaseResults={progress?.phaseResults}
+          phases={progress?.phases}
+        />
 
         <div className="grid gap-4 xl:grid-cols-2">
           <div className="space-y-2">

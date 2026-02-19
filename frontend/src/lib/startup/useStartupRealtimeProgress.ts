@@ -570,6 +570,7 @@ export function useStartupRealtimeProgress(
               data.agent.rawProviderError ?? existing.rawProviderError,
             lastEvent: data.agent.lastEvent ?? existing.lastEvent,
             lastEventAt: data.agent.lastEventAt ?? existing.lastEventAt,
+            dataSummary: data.agent.dataSummary ?? existing.dataSummary,
           };
 
           phase.agents = {

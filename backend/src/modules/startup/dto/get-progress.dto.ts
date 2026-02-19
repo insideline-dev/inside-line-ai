@@ -27,6 +27,7 @@ export const ProgressAgentSchema = z.object({
     .enum(["started", "retrying", "completed", "failed", "fallback"])
     .optional(),
   lastEventAt: z.string().optional(),
+  dataSummary: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const ProgressPhaseSchema = z.object({

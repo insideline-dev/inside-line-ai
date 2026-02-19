@@ -14,6 +14,7 @@ import type {
   ScrapingResult,
   WebsiteScrapedData,
 } from "../interfaces/phase-results.interface";
+import type { PhaseProgressCallback } from "../interfaces/progress-callback.interface";
 import { PipelinePhase } from "../interfaces/pipeline.interface";
 import { LinkedinEnrichmentService } from "./linkedin-enrichment.service";
 import { PipelineStateService } from "./pipeline-state.service";
@@ -48,8 +49,16 @@ export interface ScrapingAgentCompletionPayload {
 }
 
 export interface ScrapingRunOptions {
+  onStepProgress?: PhaseProgressCallback;
   onAgentStart?: (agentKey: string) => void;
   onAgentComplete?: (payload: ScrapingAgentCompletionPayload) => void;
+}
+
+interface LinkedinEnrichmentRunResult {
+  teamMembers: EnrichedTeamMember[];
+  cacheHits: number;
+  liveRequested: number;
+  liveEnriched: number;
 }
 
 @Injectable()
@@ -75,7 +84,14 @@ export class ScrapingService {
       ) ?? "logs/ai-scraping-debug.jsonl";
   }
 
-  async run(startupId: string, options?: ScrapingRunOptions): Promise<ScrapingResult> {
+  async run(
+    startupId: string,
+    options?: ScrapingRunOptions | PhaseProgressCallback,
+  ): Promise<ScrapingResult> {
+    const { onStepProgress, onAgentStart, onAgentComplete } = this.resolveRunOptions(
+      options,
+    );
+
     this.logger.log(`[Scraping] Starting scraping phase for startup ${startupId}`);
 
     const [record] = await this.drizzle.db
@@ -102,9 +118,13 @@ export class ScrapingService {
       `[Scraping] Loaded startup context | website=${effectiveWebsite ?? "none"} | submittedTeamMembers=${submittedTeamMembers.length} | extractionFounders=${extractionFounderMembers.length}`,
     );
 
-    options?.onAgentStart?.(SCRAPING_AGENT_WEBSITE_KEY);
+    onAgentStart?.(SCRAPING_AGENT_WEBSITE_KEY);
     const websiteErrorCountBefore = scrapeErrors.length;
-    const website = await this.scrapeWebsite(effectiveWebsite, scrapeErrors);
+    const website = await this.scrapeWebsite(
+      effectiveWebsite,
+      scrapeErrors,
+      onStepProgress,
+    );
     const websiteErrors = scrapeErrors
       .slice(websiteErrorCountBefore)
       .filter((error) => error.type === "website");
@@ -121,7 +141,7 @@ export class ScrapingService {
         ? (websiteErrors[websiteErrors.length - 1]?.error ?? "Website scraping failed")
         : undefined,
     };
-    options?.onAgentComplete?.({
+    onAgentComplete?.({
       agentKey: SCRAPING_AGENT_WEBSITE_KEY,
       status: websiteFailed ? "failed" : "completed",
       error: websiteFailed ? websiteOutput.error : undefined,
@@ -135,19 +155,28 @@ export class ScrapingService {
       retryCount: 0,
     });
 
-    const discoveredWebsiteLeaders = this.extractLeadershipCandidates(
-      website?.teamBios ?? [],
-    );
-    const discoveredWebsiteLinkedinMembers = this.extractLinkedinCandidatesFromWebsiteLinks(
-      website?.links ?? [],
-    );
-    options?.onAgentStart?.(SCRAPING_AGENT_LINKEDIN_KEY);
+    onAgentStart?.(SCRAPING_AGENT_LINKEDIN_KEY);
+    onStepProgress?.onStepStart("team_discovery");
 
     let discoveredLinkedinLeaders: TeamMemberInput[] = [];
-    let teamMembers: TeamMemberInput[] = [];
-    let enrichedTeam: EnrichedTeamMember[] = [];
+    let discoveredWebsiteLeaders: TeamMemberInput[] = [];
+    let discoveredWebsiteLinkedinMembers: TeamMemberInput[] = [];
+    const enrichmentFounderMembers: TeamMemberInput[] =
+      (enrichment?.discoveredFounders ?? [])
+        .filter((founder) => founder.confidence >= 0.5)
+        .map((founder) => ({
+          name: founder.name,
+          role: founder.role,
+          linkedinUrl: founder.linkedinUrl,
+        }));
 
     try {
+      discoveredWebsiteLeaders = this.extractLeadershipCandidates(
+        website?.teamBios ?? [],
+      );
+      discoveredWebsiteLinkedinMembers = this.extractLinkedinCandidatesFromWebsiteLinks(
+        website?.links ?? [],
+      );
       discoveredLinkedinLeaders = await this.discoverCompanyLinkedinLeadership(
         record.name,
         [
@@ -157,45 +186,19 @@ export class ScrapingService {
         ],
         effectiveWebsite ?? undefined,
       );
-      const enrichmentFounderMembers: TeamMemberInput[] =
-        (enrichment?.discoveredFounders ?? [])
-          .filter((founder) => founder.confidence >= 0.5)
-          .map((founder) => ({
-            name: founder.name,
-            role: founder.role,
-            linkedinUrl: founder.linkedinUrl,
-          }));
-      teamMembers = this.mergeTeamMembers(
-        submittedTeamMembers,
-        extractionFounderMembers,
-        discoveredWebsiteLeaders,
-        discoveredWebsiteLinkedinMembers,
-        discoveredLinkedinLeaders,
-        enrichmentFounderMembers,
-      );
-      this.logger.log(
-        `[Scraping] Team member seed built | submitted=${submittedTeamMembers.length} | extractionFounders=${extractionFounderMembers.length} | enrichmentFounders=${enrichmentFounderMembers.length} | discoveredWebsiteLeaders=${discoveredWebsiteLeaders.length} | discoveredWebsiteLinkedin=${discoveredWebsiteLinkedinMembers.length} | discoveredLinkedinLeaders=${discoveredLinkedinLeaders.length} | final=${teamMembers.length}`,
-      );
-
-      enrichedTeam = await this.enrichTeamMembers(
-        record.userId,
-        teamMembers,
-        record.name,
-        record.website,
-        scrapeErrors,
-      );
     } catch (error) {
       const message = this.asMessage(error);
-      options?.onAgentComplete?.({
+      onStepProgress?.onStepFailed("team_discovery", message);
+      onAgentComplete?.({
         agentKey: SCRAPING_AGENT_LINKEDIN_KEY,
         status: "failed",
         error: message,
-        outputText: `LinkedIn enrichment failed for ${record.name}: ${message}`,
+        outputText: `LinkedIn team discovery failed for ${record.name}: ${message}`,
         outputJson: {
           companyName: record.name,
           submittedTeamMembers: submittedTeamMembers.length,
           extractionFounderMembers: extractionFounderMembers.length,
-          enrichmentFounderMembers: (enrichment?.discoveredFounders ?? []).length,
+          enrichmentFounderMembers: enrichmentFounderMembers.length,
           discoveredWebsiteLeaders: discoveredWebsiteLeaders.length,
           discoveredWebsiteLinkedinMembers: discoveredWebsiteLinkedinMembers.length,
           discoveredLinkedinLeaders: discoveredLinkedinLeaders.length,
@@ -205,6 +208,62 @@ export class ScrapingService {
       });
       throw error;
     }
+
+    const teamMembers = this.mergeTeamMembers(
+      submittedTeamMembers,
+      extractionFounderMembers,
+      discoveredWebsiteLeaders,
+      discoveredWebsiteLinkedinMembers,
+      discoveredLinkedinLeaders,
+      enrichmentFounderMembers,
+    );
+    onStepProgress?.onStepComplete("team_discovery", {
+      submitted: submittedTeamMembers.length,
+      extractionFounders: extractionFounderMembers.length,
+      enrichmentFounders: enrichmentFounderMembers.length,
+      websiteLeaders: discoveredWebsiteLeaders.length,
+      linkedinDiscovered:
+        discoveredWebsiteLinkedinMembers.length + discoveredLinkedinLeaders.length,
+      total: teamMembers.length,
+    });
+    this.logger.log(
+      `[Scraping] Team member seed built | submitted=${submittedTeamMembers.length} | extractionFounders=${extractionFounderMembers.length} | enrichmentFounders=${enrichmentFounderMembers.length} | discoveredWebsiteLeaders=${discoveredWebsiteLeaders.length} | discoveredWebsiteLinkedin=${discoveredWebsiteLinkedinMembers.length} | discoveredLinkedinLeaders=${discoveredLinkedinLeaders.length} | final=${teamMembers.length}`,
+    );
+
+    onStepProgress?.onStepStart("linkedin_enrichment");
+    let linkedinEnrichmentResult: LinkedinEnrichmentRunResult;
+    try {
+      linkedinEnrichmentResult = await this.enrichTeamMembers(
+        record.userId,
+        teamMembers,
+        record.name,
+        record.website,
+        scrapeErrors,
+      );
+    } catch (error) {
+      const message = this.asMessage(error);
+      onStepProgress?.onStepFailed("linkedin_enrichment", message);
+      onAgentComplete?.({
+        agentKey: SCRAPING_AGENT_LINKEDIN_KEY,
+        status: "failed",
+        error: message,
+        outputText: `LinkedIn enrichment failed for ${record.name}: ${message}`,
+        outputJson: {
+          companyName: record.name,
+          requestedTeamMembers: teamMembers.length,
+          submittedTeamMembers: submittedTeamMembers.length,
+          extractionFounderMembers: extractionFounderMembers.length,
+          enrichmentFounderMembers: enrichmentFounderMembers.length,
+          discoveredWebsiteLeaders: discoveredWebsiteLeaders.length,
+          discoveredWebsiteLinkedinMembers: discoveredWebsiteLinkedinMembers.length,
+          discoveredLinkedinLeaders: discoveredLinkedinLeaders.length,
+        },
+        attempt: 1,
+        retryCount: 0,
+      });
+      throw error;
+    }
+    const enrichedTeam = linkedinEnrichmentResult.teamMembers;
 
     const submittedNames = new Set(
       submittedTeamMembers.map((member) => member.name.trim().toLowerCase()),
@@ -231,7 +290,17 @@ export class ScrapingService {
     const linkedinErrors = scrapeErrors
       .filter((error) => error.type === "linkedin")
       .map((error) => `${error.target}: ${error.error}`);
-    options?.onAgentComplete?.({
+    onStepProgress?.onStepComplete("linkedin_enrichment", {
+      requested: teamMembers.length,
+      cacheHits: linkedinEnrichmentResult.cacheHits,
+      liveRequested: linkedinEnrichmentResult.liveRequested,
+      liveEnriched: linkedinEnrichmentResult.liveEnriched,
+      verified: verifiedTeamMembers.length,
+      dropped: droppedUnverifiedTeamMembers.length,
+      errors: linkedinErrors.length,
+    });
+
+    onAgentComplete?.({
       agentKey: SCRAPING_AGENT_LINKEDIN_KEY,
       status: "completed",
       outputText: `LinkedIn enrichment completed | requested=${teamMembers.length} | verified=${verifiedTeamMembers.length} | dropped=${droppedUnverifiedTeamMembers.length}`,
@@ -239,12 +308,15 @@ export class ScrapingService {
         companyName: record.name,
         submittedTeamMembers: submittedTeamMembers.length,
         extractionFounderMembers: extractionFounderMembers.length,
-        enrichmentFounderMembers: (enrichment?.discoveredFounders ?? []).length,
+        enrichmentFounderMembers: enrichmentFounderMembers.length,
         discoveredWebsiteLeaders: discoveredWebsiteLeaders.length,
         discoveredWebsiteLinkedinMembers: discoveredWebsiteLinkedinMembers.length,
         discoveredLinkedinLeaders: discoveredLinkedinLeaders.length,
         requestedTeamMembers: teamMembers.length,
         enrichedTeamMembers: enrichedTeam.length,
+        cacheHits: linkedinEnrichmentResult.cacheHits,
+        liveRequested: linkedinEnrichmentResult.liveRequested,
+        liveEnriched: linkedinEnrichmentResult.liveEnriched,
         verifiedTeamMembers: verifiedTeamMembers.length,
         droppedUnverifiedTeamMembers: droppedUnverifiedTeamMembers.length,
         enrichmentStatuses: linkedinStatuses,
@@ -295,13 +367,7 @@ export class ScrapingService {
       startupWebsite: record.website ?? null,
       submittedTeamMembers,
       extractionFounderTeamMembers: extractionFounderMembers,
-      enrichmentFounderTeamMembers: (enrichment?.discoveredFounders ?? [])
-        .filter((founder) => founder.confidence >= 0.5)
-        .map((founder) => ({
-          name: founder.name,
-          role: founder.role,
-          linkedinUrl: founder.linkedinUrl,
-        })),
+      enrichmentFounderTeamMembers: enrichmentFounderMembers,
       discoveredWebsiteLeadershipTeamMembers: discoveredWebsiteLeaders,
       discoveredWebsiteLinkedinTeamMembers: discoveredWebsiteLinkedinMembers,
       discoveredLinkedinLeadershipTeamMembers: discoveredLinkedinLeaders,
@@ -336,6 +402,41 @@ export class ScrapingService {
     });
 
     return result;
+  }
+
+  private resolveRunOptions(
+    options?: ScrapingRunOptions | PhaseProgressCallback,
+  ): {
+    onStepProgress?: PhaseProgressCallback;
+    onAgentStart?: (agentKey: string) => void;
+    onAgentComplete?: (payload: ScrapingAgentCompletionPayload) => void;
+  } {
+    if (!options) {
+      return {};
+    }
+
+    if (this.isPhaseProgressCallback(options)) {
+      return {
+        onStepProgress: options,
+      };
+    }
+
+    return {
+      onStepProgress: options.onStepProgress,
+      onAgentStart: options.onAgentStart,
+      onAgentComplete: options.onAgentComplete,
+    };
+  }
+
+  private isPhaseProgressCallback(
+    options: ScrapingRunOptions | PhaseProgressCallback,
+  ): options is PhaseProgressCallback {
+    const progress = options as PhaseProgressCallback;
+    return (
+      typeof progress.onStepStart === "function" ||
+      typeof progress.onStepComplete === "function" ||
+      typeof progress.onStepFailed === "function"
+    );
   }
 
   private mapTeamMembers(
@@ -578,28 +679,65 @@ export class ScrapingService {
   private async scrapeWebsite(
     websiteUrl: string | null,
     errors: ScrapeError[],
+    progress?: PhaseProgressCallback,
   ): Promise<WebsiteScrapedData | null> {
+    progress?.onStepStart("cache_check");
     if (!websiteUrl) {
       this.logger.debug("[Scraping] Website URL missing; skipping website scrape");
+      progress?.onStepComplete("cache_check", {
+        hit: false,
+        skipped: true,
+        reason: "Website URL missing",
+      });
       return null;
     }
 
+    let cached: WebsiteScrapedData | null = null;
     try {
-      const cached = await this.scrapingCache.getWebsiteCache(websiteUrl);
-      if (cached) {
-        this.logger.log(`[Scraping] Website cache hit for ${websiteUrl}`);
-        return cached;
-      }
+      cached = await this.scrapingCache.getWebsiteCache(websiteUrl);
+    } catch (error) {
+      const message = this.asMessage(error);
+      progress?.onStepFailed("cache_check", message);
+      errors.push({
+        type: "website",
+        target: websiteUrl,
+        error: message,
+      });
+      this.logger.warn(`[Scraping] Website cache lookup failed for ${websiteUrl}: ${message}`);
+      return null;
+    }
 
+    if (cached) {
+      this.logger.log(`[Scraping] Website cache hit for ${websiteUrl}`);
+      progress?.onStepComplete("cache_check", {
+        hit: true,
+        url: websiteUrl,
+      });
+      return cached;
+    }
+
+    progress?.onStepComplete("cache_check", {
+      hit: false,
+      url: websiteUrl,
+    });
+    progress?.onStepStart("website_scrape");
+
+    try {
       this.logger.log(`[Scraping] Website cache miss for ${websiteUrl}; running deep scrape`);
       const scraped = await this.websiteScraper.deepScrape(websiteUrl);
       await this.scrapingCache.setWebsiteCache(websiteUrl, scraped);
       this.logger.debug(
         `[Scraping] Website scrape complete | pages=${scraped.metadata.pageCount} | links=${scraped.links.length} | teamBios=${scraped.teamBios.length}`,
       );
+      progress?.onStepComplete("website_scrape", {
+        pages: scraped.metadata.pageCount,
+        links: scraped.links.length,
+        teamBios: scraped.teamBios.length,
+      });
       return scraped;
     } catch (error) {
       const message = this.asMessage(error);
+      progress?.onStepFailed("website_scrape", message);
       errors.push({
         type: "website",
         target: websiteUrl,
@@ -616,10 +754,15 @@ export class ScrapingService {
     companyName: string,
     websiteUrl: string | null,
     errors: ScrapeError[],
-  ): Promise<EnrichedTeamMember[]> {
+  ): Promise<LinkedinEnrichmentRunResult> {
     if (members.length === 0) {
       this.logger.debug("[Scraping] No team members provided for LinkedIn profile resolution");
-      return [];
+      return {
+        teamMembers: [],
+        cacheHits: 0,
+        liveRequested: 0,
+        liveEnriched: 0,
+      };
     }
 
     this.logger.log(
@@ -784,7 +927,12 @@ export class ScrapingService {
       `[Scraping] LinkedIn final status summary ${JSON.stringify(finalStatuses)}`,
     );
 
-    return finalTeam;
+    return {
+      teamMembers: finalTeam,
+      cacheHits: cacheHitsByUrl.size,
+      liveRequested: membersToEnrich.length,
+      liveEnriched: liveEnriched.length,
+    };
   }
 
   private buildNotableClaims(

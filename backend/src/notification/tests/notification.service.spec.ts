@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { NotificationService } from '../notification.service';
 import { DrizzleService } from '../../database';
 import { notification, NotificationType } from '../entities';
@@ -7,6 +8,7 @@ import { notification, NotificationType } from '../entities';
 describe('NotificationService', () => {
   let service: NotificationService;
   let drizzleService: any;
+  let gateway: { sendNotification: ReturnType<typeof jest.fn>; sendUnreadCount: ReturnType<typeof jest.fn> };
 
   const mockNotification = {
     id: 'notif-1',
@@ -40,6 +42,10 @@ describe('NotificationService', () => {
 
   beforeEach(async () => {
     drizzleService = createMockDrizzle();
+    gateway = {
+      sendNotification: jest.fn().mockResolvedValue(undefined),
+      sendUnreadCount: jest.fn().mockResolvedValue(undefined),
+    };
 
     // Default behavior for select
     drizzleService.db.select.mockReturnThis();
@@ -48,6 +54,12 @@ describe('NotificationService', () => {
       providers: [
         NotificationService,
         { provide: DrizzleService, useValue: drizzleService },
+        {
+          provide: ModuleRef,
+          useValue: {
+            get: jest.fn().mockReturnValue(gateway),
+          },
+        },
       ],
     }).compile();
 
@@ -111,6 +123,34 @@ describe('NotificationService', () => {
       expect(drizzleService.db.values).toHaveBeenCalledWith(
         expect.objectContaining({ type: NotificationType.INFO }),
       );
+    });
+  });
+
+  describe('createAndBroadcast', () => {
+    it('creates notification and emits realtime payload + unread count', async () => {
+      drizzleService.db.returning.mockResolvedValueOnce([mockNotification]);
+      const unreadSpy = jest
+        .spyOn(service, 'getUnreadCount')
+        .mockResolvedValue(3);
+
+      const result = await service.createAndBroadcast(
+        'user-1',
+        'Pipeline complete',
+        'Analysis completed',
+        NotificationType.SUCCESS,
+        '/admin/startup/startup-1',
+      );
+
+      expect(result).toEqual(mockNotification);
+      expect(gateway.sendNotification).toHaveBeenCalledWith(
+        'user-1',
+        expect.objectContaining({
+          id: 'notif-1',
+          title: 'Test Notification',
+        }),
+      );
+      expect(unreadSpy).toHaveBeenCalledWith('user-1');
+      expect(gateway.sendUnreadCount).toHaveBeenCalledWith('user-1', 3);
     });
   });
 

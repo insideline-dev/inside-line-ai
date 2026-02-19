@@ -352,6 +352,7 @@ describe("Startup lifecycle integration: submit -> pipeline complete -> approve 
 
     notifications = {
       createBulk: jest.fn().mockResolvedValue(undefined),
+      createAndBroadcast: jest.fn().mockResolvedValue(undefined),
     } as unknown as jest.Mocked<NotificationService>;
 
     matchingPipelineService = new StartupMatchingPipelineService(
@@ -421,6 +422,7 @@ describe("Startup lifecycle integration: submit -> pipeline complete -> approve 
     lifecyclePipelineService = new PipelineService(
       drizzle,
       queue,
+      notifications,
       matchingState,
       lifecycleAiConfig,
       pipelineFeedback,

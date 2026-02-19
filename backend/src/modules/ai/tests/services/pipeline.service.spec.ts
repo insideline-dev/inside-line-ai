@@ -16,6 +16,7 @@ import { PhaseTransitionService } from "../../orchestrator/phase-transition.serv
 import { ErrorRecoveryService } from "../../orchestrator/error-recovery.service";
 import { PipelineFeedbackService } from "../../services/pipeline-feedback.service";
 import { ModuleRef } from "@nestjs/core";
+import { NotificationService } from "../../../../notification/notification.service";
 
 function createState(
   overrides: Partial<PipelineState> = {},
@@ -110,6 +111,7 @@ describe("PipelineService", () => {
   let errorRecovery: jest.Mocked<ErrorRecoveryService>;
   let pipelineFeedback: jest.Mocked<PipelineFeedbackService>;
   let moduleRef: jest.Mocked<ModuleRef>;
+  let notifications: jest.Mocked<NotificationService>;
 
   const mockDb = {
     update: jest.fn().mockReturnThis(),
@@ -240,9 +242,14 @@ describe("PipelineService", () => {
       get: jest.fn().mockReturnValue(null),
     } as unknown as jest.Mocked<ModuleRef>;
 
+    notifications = {
+      createAndBroadcast: jest.fn().mockResolvedValue(undefined),
+    } as unknown as jest.Mocked<NotificationService>;
+
     service = new PipelineService(
       drizzle,
       queue,
+      notifications,
       stateService,
       aiConfig,
       pipelineFeedback,
@@ -273,6 +280,13 @@ describe("PipelineService", () => {
       PipelinePhase.SCRAPING,
       PhaseStatus.WAITING,
       undefined,
+    );
+    expect(notifications.createAndBroadcast).toHaveBeenCalledWith(
+      "user-1",
+      expect.stringContaining("Analysis started"),
+      "AI pipeline analysis has started.",
+      expect.any(String),
+      "/admin/startup/startup-1",
     );
   });
 
@@ -386,6 +400,13 @@ describe("PipelineService", () => {
         status: PipelineStatus.COMPLETED,
       }),
     );
+    expect(notifications.createAndBroadcast).toHaveBeenCalledWith(
+      "user-1",
+      expect.stringContaining("Analysis completed with warnings"),
+      "too many failures",
+      expect.any(String),
+      "/admin/startup/startup-1",
+    );
   });
 
   it("continues pipeline in degraded mode when optional phase exhausts retries", async () => {
@@ -482,6 +503,13 @@ describe("PipelineService", () => {
         status: "pending_review",
       }),
     );
+    expect(notifications.createAndBroadcast).toHaveBeenCalledWith(
+      "user-1",
+      expect.stringContaining("Analysis completed"),
+      "AI pipeline analysis completed successfully.",
+      expect.any(String),
+      "/admin/startup/startup-1",
+    );
   });
 
   it("cancels pipeline and removes queued jobs", async () => {
@@ -502,6 +530,13 @@ describe("PipelineService", () => {
     );
     expect(errorRecovery.clearAllTimeoutsForStartup).toHaveBeenCalledWith(
       "startup-1",
+    );
+    expect(notifications.createAndBroadcast).toHaveBeenCalledWith(
+      "user-1",
+      expect.stringContaining("Analysis cancelled"),
+      "AI pipeline analysis was cancelled.",
+      expect.any(String),
+      "/admin/startup/startup-1",
     );
   });
 

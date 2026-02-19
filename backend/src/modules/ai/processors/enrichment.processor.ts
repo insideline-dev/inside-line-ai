@@ -16,6 +16,7 @@ import {
   parseRedisUrl,
 } from "../../../queue/processors/base.processor";
 import { NotificationGateway } from "../../../notification/notification.gateway";
+import type { PhaseProgressCallback } from "../interfaces/progress-callback.interface";
 import { PipelinePhase } from "../interfaces/pipeline.interface";
 import { PipelineStateService } from "../services/pipeline-state.service";
 import { PipelineService } from "../services/pipeline.service";
@@ -75,6 +76,77 @@ export class EnrichmentProcessor
       throw new Error("Invalid job type for enrichment processor");
     }
 
+    const onStepProgress: PhaseProgressCallback = {
+      onStepStart: (stepKey) => {
+        this.pipelineService
+          .onAgentProgress({
+            startupId,
+            userId,
+            pipelineRunId,
+            phase: PipelinePhase.ENRICHMENT,
+            key: stepKey,
+            status: "running",
+            progress: 0,
+            lifecycleEvent: "started",
+          })
+          .catch((progressError) => {
+            this.logger.warn(
+              `Failed to mark enrichment sub-step running for ${stepKey}: ${
+                progressError instanceof Error
+                  ? progressError.message
+                  : String(progressError)
+              }`,
+            );
+          });
+      },
+      onStepComplete: (stepKey, summary) => {
+        this.pipelineService
+          .onAgentProgress({
+            startupId,
+            userId,
+            pipelineRunId,
+            phase: PipelinePhase.ENRICHMENT,
+            key: stepKey,
+            status: "completed",
+            progress: 100,
+            lifecycleEvent: "completed",
+            dataSummary: summary,
+          })
+          .catch((progressError) => {
+            this.logger.warn(
+              `Failed to mark enrichment sub-step completed for ${stepKey}: ${
+                progressError instanceof Error
+                  ? progressError.message
+                  : String(progressError)
+              }`,
+            );
+          });
+      },
+      onStepFailed: (stepKey, error) => {
+        this.pipelineService
+          .onAgentProgress({
+            startupId,
+            userId,
+            pipelineRunId,
+            phase: PipelinePhase.ENRICHMENT,
+            key: stepKey,
+            status: "failed",
+            progress: 0,
+            error,
+            lifecycleEvent: "failed",
+          })
+          .catch((progressError) => {
+            this.logger.warn(
+              `Failed to mark enrichment sub-step failed for ${stepKey}: ${
+                progressError instanceof Error
+                  ? progressError.message
+                  : String(progressError)
+              }`,
+            );
+          });
+      },
+    };
+
     const runResult = await runPipelinePhase({
       job,
       phase: PipelinePhase.ENRICHMENT,
@@ -84,6 +156,7 @@ export class EnrichmentProcessor
       notificationGateway: this.notificationGateway,
       run: () =>
         this.enrichmentService.run(startupId, {
+          onStepProgress,
           onAgentStart: (agentKey) => {
             this.pipelineService
               .onAgentProgress({

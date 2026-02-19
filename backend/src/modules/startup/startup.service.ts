@@ -1471,6 +1471,7 @@ export class StartupService {
                   startedAt: agent.startedAt,
                   completedAt: agent.completedAt,
                   error: agent.error,
+                  dataSummary: agent.dataSummary,
                 };
                 const adminAgentFields = includeAdminDetails
                   ? {

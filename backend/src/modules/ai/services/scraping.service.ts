@@ -15,7 +15,10 @@ import type {
 } from "../interfaces/phase-results.interface";
 import type { PhaseProgressCallback } from "../interfaces/progress-callback.interface";
 import { PipelinePhase } from "../interfaces/pipeline.interface";
-import { LinkedinEnrichmentService } from "./linkedin-enrichment.service";
+import {
+  LinkedinEnrichmentService,
+  type LinkedinEnrichmentTraceEvent,
+} from "./linkedin-enrichment.service";
 import { PipelineStateService } from "./pipeline-state.service";
 import { ScrapingCacheService } from "./scraping-cache.service";
 import { WebsiteScraperService } from "./website-scraper.service";
@@ -90,7 +93,13 @@ export class ScrapingService {
     );
 
     const website = await this.scrapeWebsite(effectiveWebsite, scrapeErrors, progress);
-    progress?.onStepStart("team_discovery");
+    progress?.onStepStart("team_discovery", {
+      inputJson: {
+        submittedTeamMembers,
+        websiteTeamBios: website?.teamBios ?? [],
+        websiteLinks: website?.links ?? [],
+      },
+    });
     let discoveredWebsiteLeaders: TeamMemberInput[] = [];
     let discoveredWebsiteLinkedinMembers: TeamMemberInput[] = [];
     let discoveredLinkedinLeaders: TeamMemberInput[] = [];
@@ -109,9 +118,14 @@ export class ScrapingService {
           ...discoveredWebsiteLinkedinMembers,
         ],
         effectiveWebsite ?? undefined,
+        progress,
       );
     } catch (error) {
-      progress?.onStepFailed("team_discovery", this.asMessage(error));
+      progress?.onStepFailed("team_discovery", this.asMessage(error), {
+        outputJson: {
+          error: this.asMessage(error),
+        },
+      });
       throw error;
     }
     const enrichmentFounders: TeamMemberInput[] = (enrichment?.discoveredFounders ?? [])
@@ -129,17 +143,33 @@ export class ScrapingService {
       enrichmentFounders,
     );
     progress?.onStepComplete("team_discovery", {
-      submitted: submittedTeamMembers.length,
-      websiteLeaders: discoveredWebsiteLeaders.length,
-      linkedinDiscovered:
-        discoveredWebsiteLinkedinMembers.length + discoveredLinkedinLeaders.length,
-      total: teamMembers.length,
+      summary: {
+        submitted: submittedTeamMembers.length,
+        websiteLeaders: discoveredWebsiteLeaders.length,
+        linkedinDiscovered:
+          discoveredWebsiteLinkedinMembers.length + discoveredLinkedinLeaders.length,
+        total: teamMembers.length,
+      },
+      outputJson: {
+        submittedTeamMembers,
+        discoveredWebsiteLeaders,
+        discoveredWebsiteLinkedinMembers,
+        discoveredLinkedinLeaders,
+        enrichmentFounders,
+        mergedTeamMembers: teamMembers,
+      },
     });
     this.logger.log(
       `[Scraping] Team member seed built | submitted=${submittedTeamMembers.length} | discoveredWebsiteLeaders=${discoveredWebsiteLeaders.length} | discoveredWebsiteLinkedin=${discoveredWebsiteLinkedinMembers.length} | discoveredLinkedinLeaders=${discoveredLinkedinLeaders.length} | final=${teamMembers.length}`,
     );
 
-    progress?.onStepStart("linkedin_enrichment");
+    progress?.onStepStart("linkedin_enrichment", {
+      inputJson: {
+        requestedTeamMembers: teamMembers,
+        companyName: record.name,
+        websiteUrl: record.website,
+      },
+    });
     let linkedinEnrichmentResult: LinkedinEnrichmentRunResult;
     try {
       linkedinEnrichmentResult = await this.enrichTeamMembers(
@@ -148,9 +178,14 @@ export class ScrapingService {
         record.name,
         record.website,
         scrapeErrors,
+        progress,
       );
     } catch (error) {
-      progress?.onStepFailed("linkedin_enrichment", this.asMessage(error));
+      progress?.onStepFailed("linkedin_enrichment", this.asMessage(error), {
+        outputJson: {
+          error: this.asMessage(error),
+        },
+      });
       throw error;
     }
     const enrichedTeam = linkedinEnrichmentResult.teamMembers;
@@ -172,11 +207,20 @@ export class ScrapingService {
       return member.enrichmentStatus === "success";
     });
     progress?.onStepComplete("linkedin_enrichment", {
-      requested: teamMembers.length,
-      cacheHits: linkedinEnrichmentResult.cacheHits,
-      liveEnriched: linkedinEnrichmentResult.liveEnriched,
-      verified: verifiedTeamMembers.length,
-      dropped: droppedUnverifiedTeamMembers.length,
+      summary: {
+        requested: teamMembers.length,
+        cacheHits: linkedinEnrichmentResult.cacheHits,
+        liveEnriched: linkedinEnrichmentResult.liveEnriched,
+        verified: verifiedTeamMembers.length,
+        dropped: droppedUnverifiedTeamMembers.length,
+      },
+      outputJson: {
+        teamMembersRequested: teamMembers,
+        enrichedTeamMembers: enrichedTeam,
+        verifiedTeamMembers,
+        droppedUnverifiedTeamMembers,
+        scrapeErrors,
+      },
     });
 
     const result: ScrapingResult = {
@@ -464,8 +508,19 @@ export class ScrapingService {
     companyName: string,
     existingMembers: TeamMemberInput[],
     companyWebsite?: string,
+    progress?: PhaseProgressCallback,
   ): Promise<TeamMemberInput[]> {
     try {
+      if (progress?.onStepTrace) {
+        return await this.linkedinEnrichment.discoverCompanyLeadershipMembers(
+          companyName,
+          existingMembers,
+          companyWebsite,
+          {
+            onTrace: (event) => this.emitLinkedinTrace(progress, event),
+          },
+        );
+      }
       return await this.linkedinEnrichment.discoverCompanyLeadershipMembers(
         companyName,
         existingMembers,
@@ -485,10 +540,19 @@ export class ScrapingService {
     errors: ScrapeError[],
     progress?: PhaseProgressCallback,
   ): Promise<WebsiteScrapedData | null> {
-    progress?.onStepStart("cache_check");
+    progress?.onStepStart("cache_check", {
+      inputJson: {
+        url: websiteUrl,
+      },
+    });
     if (!websiteUrl) {
       this.logger.debug("[Scraping] Website URL missing; skipping website scrape");
-      progress?.onStepFailed("cache_check", "Website URL missing");
+      progress?.onStepFailed("cache_check", "Website URL missing", {
+        outputJson: {
+          hit: false,
+          url: websiteUrl,
+        },
+      });
       return null;
     }
 
@@ -497,7 +561,12 @@ export class ScrapingService {
       cached = await this.scrapingCache.getWebsiteCache(websiteUrl);
     } catch (error) {
       const message = this.asMessage(error);
-      progress?.onStepFailed("cache_check", message);
+      progress?.onStepFailed("cache_check", message, {
+        outputJson: {
+          error: message,
+          url: websiteUrl,
+        },
+      });
       errors.push({
         type: "website",
         target: websiteUrl,
@@ -510,17 +579,26 @@ export class ScrapingService {
     if (cached) {
       this.logger.log(`[Scraping] Website cache hit for ${websiteUrl}`);
       progress?.onStepComplete("cache_check", {
-        hit: true,
-        url: websiteUrl,
+        summary: {
+          hit: true,
+          url: websiteUrl,
+        },
+        outputJson: cached,
       });
       return cached;
     }
 
     progress?.onStepComplete("cache_check", {
-      hit: false,
-      url: websiteUrl,
+      summary: {
+        hit: false,
+        url: websiteUrl,
+      },
     });
-    progress?.onStepStart("website_scrape");
+    progress?.onStepStart("website_scrape", {
+      inputJson: {
+        url: websiteUrl,
+      },
+    });
 
     try {
       this.logger.log(`[Scraping] Website cache miss for ${websiteUrl}; running deep scrape`);
@@ -530,14 +608,22 @@ export class ScrapingService {
         `[Scraping] Website scrape complete | pages=${scraped.metadata.pageCount} | links=${scraped.links.length} | teamBios=${scraped.teamBios.length}`,
       );
       progress?.onStepComplete("website_scrape", {
-        pages: scraped.metadata.pageCount,
-        links: scraped.links.length,
-        teamBios: scraped.teamBios.length,
+        summary: {
+          pages: scraped.metadata.pageCount,
+          links: scraped.links.length,
+          teamBios: scraped.teamBios.length,
+        },
+        outputJson: scraped,
       });
       return scraped;
     } catch (error) {
       const message = this.asMessage(error);
-      progress?.onStepFailed("website_scrape", message);
+      progress?.onStepFailed("website_scrape", message, {
+        outputJson: {
+          error: message,
+          url: websiteUrl,
+        },
+      });
       errors.push({
         type: "website",
         target: websiteUrl,
@@ -554,6 +640,7 @@ export class ScrapingService {
     companyName: string,
     websiteUrl: string | null,
     errors: ScrapeError[],
+    progress?: PhaseProgressCallback,
   ): Promise<LinkedinEnrichmentRunResult> {
     if (members.length === 0) {
       this.logger.debug("[Scraping] No team members provided for LinkedIn profile resolution");
@@ -621,11 +708,22 @@ export class ScrapingService {
         `[Scraping] Executing live LinkedIn profile resolution for ${membersToEnrich.length} members`,
       );
       try {
-        liveEnriched = await this.linkedinEnrichment.enrichTeamMembers(
-          userId,
-          membersToEnrich,
-          { companyName, website: websiteUrl ?? undefined },
-        );
+        if (progress?.onStepTrace) {
+          liveEnriched = await this.linkedinEnrichment.enrichTeamMembers(
+            userId,
+            membersToEnrich,
+            { companyName, website: websiteUrl ?? undefined },
+            {
+              onTrace: (event) => this.emitLinkedinTrace(progress, event),
+            },
+          );
+        } else {
+          liveEnriched = await this.linkedinEnrichment.enrichTeamMembers(
+            userId,
+            membersToEnrich,
+            { companyName, website: websiteUrl ?? undefined },
+          );
+        }
         const liveStatuses = liveEnriched.reduce<Record<string, number>>((acc, member) => {
           const key = member.enrichmentStatus ?? "unknown";
           acc[key] = (acc[key] ?? 0) + 1;
@@ -751,6 +849,23 @@ export class ScrapingService {
       claims.push(`Funding target: ${fundingTarget}`);
     }
     return claims;
+  }
+
+  private emitLinkedinTrace(
+    progress: PhaseProgressCallback | undefined,
+    event: LinkedinEnrichmentTraceEvent,
+  ): void {
+    progress?.onStepTrace?.("linkedin_enrichment", event.status, {
+      inputJson: event.inputJson,
+      outputJson: event.outputJson,
+      inputText: event.inputText,
+      outputText: event.outputText,
+      error: event.error,
+      meta: {
+        operation: event.operation,
+        ...(event.meta ?? {}),
+      },
+    });
   }
 
   private asMessage(error: unknown): string {

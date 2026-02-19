@@ -209,20 +209,36 @@ export class EnrichmentService {
         PipelinePhase.EXTRACTION,
       );
 
-      options?.onStepProgress?.onStepStart("gap_analysis");
+      options?.onStepProgress?.onStepStart("gap_analysis", {
+        inputJson: {
+          startupId,
+          startupName: record.name,
+        },
+      });
       let missingFields: string[] = [];
       let suspiciousFields: string[] = [];
       try {
         missingFields = this.identifyMissingFields(record);
         suspiciousFields = this.identifySuspiciousFields(record, extraction);
         options?.onStepProgress?.onStepComplete("gap_analysis", {
-          missing: missingFields,
-          suspicious: suspiciousFields,
+          summary: {
+            missing: missingFields,
+            suspicious: suspiciousFields,
+          },
+          outputJson: {
+            missing: missingFields,
+            suspicious: suspiciousFields,
+          },
         });
       } catch (error) {
         options?.onStepProgress?.onStepFailed(
           "gap_analysis",
           this.errorMessage(error),
+          {
+            outputJson: {
+              error: this.errorMessage(error),
+            },
+          },
         );
         throw error;
       }
@@ -232,24 +248,46 @@ export class EnrichmentService {
       );
 
       // Run Brave searches in parallel (if configured)
-      options?.onStepProgress?.onStepStart("web_search");
+      options?.onStepProgress?.onStepStart("web_search", {
+        inputJson: {
+          startupName: record.name,
+        },
+      });
       let searchResults: SearchRunResult;
       try {
         searchResults = await this.runSearches(record);
         options?.onStepProgress?.onStepComplete("web_search", {
-          queriesRun: searchResults.queriesRun,
-          totalResults: searchResults.totalResults,
+          summary: {
+            queriesRun: searchResults.queriesRun,
+            totalResults: searchResults.totalResults,
+          },
+          outputJson: {
+            queriesRun: searchResults.queriesRun,
+            totalResults: searchResults.totalResults,
+            responses: searchResults.responses,
+          },
         });
       } catch (error) {
         options?.onStepProgress?.onStepFailed(
           "web_search",
           this.errorMessage(error),
+          {
+            outputJson: {
+              error: this.errorMessage(error),
+            },
+          },
         );
         throw error;
       }
 
       // Synthesize via Gemini
-      options?.onStepProgress?.onStepStart("ai_synthesis");
+      options?.onStepProgress?.onStepStart("ai_synthesis", {
+        inputJson: {
+          missingFields,
+          suspiciousFields,
+          searchQueriesRun: searchResults.queriesRun,
+        },
+      });
       let synthesis: EnrichmentSynthesisResult;
       try {
         synthesis = await this.synthesize(
@@ -260,13 +298,22 @@ export class EnrichmentService {
           searchResults,
         );
         options?.onStepProgress?.onStepComplete("ai_synthesis", {
-          attempt: synthesis.attempt,
-          usedTextFallback: synthesis.usedTextFallback,
+          summary: {
+            attempt: synthesis.attempt,
+            usedTextFallback: synthesis.usedTextFallback,
+          },
+          outputJson: synthesis.output,
+          outputText: this.serializeOutput(synthesis.output),
         });
       } catch (error) {
         options?.onStepProgress?.onStepFailed(
           "ai_synthesis",
           this.errorMessage(error),
+          {
+            outputJson: {
+              error: this.errorMessage(error),
+            },
+          },
         );
         throw error;
       }
@@ -274,18 +321,28 @@ export class EnrichmentService {
       const enrichmentResult = synthesis.output;
 
       // Apply DB writes
-      options?.onStepProgress?.onStepStart("db_writes");
+      options?.onStepProgress?.onStepStart("db_writes", {
+        inputJson: enrichmentResult,
+      });
       let dbWriteResult: { fieldsUpdated: string[]; foundersAdded: number };
       try {
         dbWriteResult = await this.applyDbWrites(record, enrichmentResult);
         options?.onStepProgress?.onStepComplete("db_writes", {
-          fieldsUpdated: dbWriteResult.fieldsUpdated,
-          foundersAdded: dbWriteResult.foundersAdded,
+          summary: {
+            fieldsUpdated: dbWriteResult.fieldsUpdated,
+            foundersAdded: dbWriteResult.foundersAdded,
+          },
+          outputJson: dbWriteResult,
         });
       } catch (error) {
         options?.onStepProgress?.onStepFailed(
           "db_writes",
           this.errorMessage(error),
+          {
+            outputJson: {
+              error: this.errorMessage(error),
+            },
+          },
         );
         throw error;
       }

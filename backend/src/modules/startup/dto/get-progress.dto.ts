@@ -69,13 +69,18 @@ export const ProgressAgentTraceSchema = z.object({
   pipelineRunId: z.string(),
   phase: z.string(),
   agentKey: z.string(),
+  traceKind: z.enum(["ai_agent", "phase_step"]).optional(),
+  stepKey: z.string().optional(),
   status: z.enum(["running", "completed", "failed", "fallback"]),
   attempt: z.number().int().min(0).optional(),
   retryCount: z.number().int().min(0).optional(),
   usedFallback: z.boolean().optional(),
+  inputText: z.string().nullable().optional(),
   inputPrompt: z.string().nullable().optional(),
+  inputJson: z.unknown().optional(),
   outputText: z.string().nullable().optional(),
   outputJson: z.unknown().optional(),
+  meta: z.record(z.string(), z.unknown()).optional(),
   error: z.string().nullable().optional(),
   fallbackReason: z
     .enum([

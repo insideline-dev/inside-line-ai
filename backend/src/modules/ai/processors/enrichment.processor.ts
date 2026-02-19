@@ -76,8 +76,46 @@ export class EnrichmentProcessor
       throw new Error("Invalid job type for enrichment processor");
     }
 
+    const recordStepTrace = (
+      stepKey: string,
+      status: "running" | "completed" | "failed",
+      payload?: {
+        inputJson?: unknown;
+        outputJson?: unknown;
+        inputText?: string;
+        outputText?: string;
+        meta?: Record<string, unknown>;
+        error?: string;
+      },
+    ) => {
+      void this.pipelineAgentTrace
+        .recordRun({
+          startupId,
+          pipelineRunId,
+          phase: PipelinePhase.ENRICHMENT,
+          agentKey: stepKey,
+          traceKind: "phase_step",
+          stepKey,
+          status,
+          inputText: payload?.inputText,
+          outputText: payload?.outputText,
+          inputJson: payload?.inputJson,
+          outputJson: payload?.outputJson,
+          meta: payload?.meta,
+          error: payload?.error,
+        })
+        .catch((traceError) => {
+          this.logger.warn(
+            `Failed to persist enrichment step trace for ${stepKey}: ${
+              traceError instanceof Error ? traceError.message : String(traceError)
+            }`,
+          );
+        });
+    };
+
     const onStepProgress: PhaseProgressCallback = {
-      onStepStart: (stepKey) => {
+      onStepStart: (stepKey, trace) => {
+        recordStepTrace(stepKey, "running", trace);
         this.pipelineService
           .onAgentProgress({
             startupId,
@@ -99,7 +137,8 @@ export class EnrichmentProcessor
             );
           });
       },
-      onStepComplete: (stepKey, summary) => {
+      onStepComplete: (stepKey, payload) => {
+        recordStepTrace(stepKey, "completed", payload);
         this.pipelineService
           .onAgentProgress({
             startupId,
@@ -110,7 +149,7 @@ export class EnrichmentProcessor
             status: "completed",
             progress: 100,
             lifecycleEvent: "completed",
-            dataSummary: summary,
+            dataSummary: payload?.summary,
           })
           .catch((progressError) => {
             this.logger.warn(
@@ -122,7 +161,11 @@ export class EnrichmentProcessor
             );
           });
       },
-      onStepFailed: (stepKey, error) => {
+      onStepFailed: (stepKey, error, trace) => {
+        recordStepTrace(stepKey, "failed", {
+          ...trace,
+          error,
+        });
         this.pipelineService
           .onAgentProgress({
             startupId,
@@ -144,6 +187,9 @@ export class EnrichmentProcessor
               }`,
             );
           });
+      },
+      onStepTrace: (stepKey, status, payload) => {
+        recordStepTrace(stepKey, status, payload);
       },
     };
 

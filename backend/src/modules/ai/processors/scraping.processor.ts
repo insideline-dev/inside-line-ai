@@ -18,6 +18,7 @@ import {
 import { NotificationGateway } from "../../../notification/notification.gateway";
 import type { PhaseProgressCallback } from "../interfaces/progress-callback.interface";
 import { PipelinePhase } from "../interfaces/pipeline.interface";
+import { PipelineAgentTraceService } from "../services/pipeline-agent-trace.service";
 import { PipelineStateService } from "../services/pipeline-state.service";
 import { PipelineService } from "../services/pipeline.service";
 import { ScrapingService } from "../services/scraping.service";
@@ -36,6 +37,7 @@ export class ScrapingProcessor
     private pipelineState: PipelineStateService,
     private pipelineService: PipelineService,
     private notificationGateway: NotificationGateway,
+    private pipelineAgentTrace: PipelineAgentTraceService,
   ) {
     const redisUrl = config.get<string>("REDIS_URL", "redis://localhost:6379");
     const queuePrefix = config.get<string>("QUEUE_PREFIX");
@@ -71,8 +73,46 @@ export class ScrapingProcessor
       throw new Error("Invalid job type for scraping processor");
     }
 
+    const recordStepTrace = (
+      stepKey: string,
+      status: "running" | "completed" | "failed",
+      payload?: {
+        inputJson?: unknown;
+        outputJson?: unknown;
+        inputText?: string;
+        outputText?: string;
+        meta?: Record<string, unknown>;
+        error?: string;
+      },
+    ) => {
+      void this.pipelineAgentTrace
+        .recordRun({
+          startupId,
+          pipelineRunId,
+          phase: PipelinePhase.SCRAPING,
+          agentKey: stepKey,
+          traceKind: "phase_step",
+          stepKey,
+          status,
+          inputText: payload?.inputText,
+          outputText: payload?.outputText,
+          inputJson: payload?.inputJson,
+          outputJson: payload?.outputJson,
+          meta: payload?.meta,
+          error: payload?.error,
+        })
+        .catch((traceError) => {
+          this.logger.warn(
+            `Failed to persist scraping step trace for ${stepKey}: ${
+              traceError instanceof Error ? traceError.message : String(traceError)
+            }`,
+          );
+        });
+    };
+
     const onStepProgress: PhaseProgressCallback = {
-      onStepStart: (stepKey) => {
+      onStepStart: (stepKey, trace) => {
+        recordStepTrace(stepKey, "running", trace);
         void this.pipelineService
           .onAgentProgress({
             startupId,
@@ -94,7 +134,8 @@ export class ScrapingProcessor
             );
           });
       },
-      onStepComplete: (stepKey, summary) => {
+      onStepComplete: (stepKey, payload) => {
+        recordStepTrace(stepKey, "completed", payload);
         void this.pipelineService
           .onAgentProgress({
             startupId,
@@ -105,7 +146,7 @@ export class ScrapingProcessor
             status: "completed",
             progress: 100,
             lifecycleEvent: "completed",
-            dataSummary: summary,
+            dataSummary: payload?.summary,
           })
           .catch((progressError) => {
             this.logger.warn(
@@ -117,7 +158,11 @@ export class ScrapingProcessor
             );
           });
       },
-      onStepFailed: (stepKey, error) => {
+      onStepFailed: (stepKey, error, trace) => {
+        recordStepTrace(stepKey, "failed", {
+          ...trace,
+          error,
+        });
         void this.pipelineService
           .onAgentProgress({
             startupId,
@@ -139,6 +184,9 @@ export class ScrapingProcessor
               }`,
             );
           });
+      },
+      onStepTrace: (stepKey, status, payload) => {
+        recordStepTrace(stepKey, status, payload);
       },
     };
 

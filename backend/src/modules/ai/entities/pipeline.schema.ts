@@ -91,6 +91,11 @@ export const pipelineAgentRunStatusEnum = pgEnum("pipeline_agent_run_status", [
   "fallback",
 ]);
 
+export const pipelineTraceKindEnum = pgEnum("pipeline_trace_kind", [
+  "ai_agent",
+  "phase_step",
+]);
+
 export const pipelineAgentRun = pgTable(
   "pipeline_agent_runs",
   {
@@ -103,13 +108,17 @@ export const pipelineAgentRun = pgTable(
       .references(() => startup.id, { onDelete: "cascade" }),
     phase: pipelinePhaseEnum("phase").notNull(),
     agentKey: text("agent_key").notNull(),
+    traceKind: pipelineTraceKindEnum("trace_kind").notNull().default("ai_agent"),
+    stepKey: text("step_key"),
     status: pipelineAgentRunStatusEnum("status").notNull(),
     attempt: integer("attempt").notNull().default(1),
     retryCount: integer("retry_count").notNull().default(0),
     usedFallback: boolean("used_fallback").notNull().default(false),
     inputPrompt: text("input_prompt"),
+    inputJson: jsonb("input_json").$type<unknown>(),
     outputText: text("output_text"),
-    outputJson: jsonb("output_json").$type<Record<string, unknown> | unknown[]>(),
+    outputJson: jsonb("output_json").$type<unknown>(),
+    meta: jsonb("meta").$type<Record<string, unknown>>(),
     error: text("error"),
     startedAt: timestamp("started_at").defaultNow().notNull(),
     completedAt: timestamp("completed_at"),
@@ -126,6 +135,14 @@ export const pipelineAgentRun = pgTable(
       table.startupId,
       table.phase,
       table.agentKey,
+    ),
+    index("pipeline_agent_runs_startup_run_kind_phase_step_started_idx").on(
+      table.startupId,
+      table.pipelineRunId,
+      table.traceKind,
+      table.phase,
+      table.stepKey,
+      table.startedAt,
     ),
     index("pipeline_agent_runs_created_idx").on(table.createdAt),
   ],

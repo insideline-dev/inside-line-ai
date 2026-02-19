@@ -73,13 +73,18 @@ export interface PipelineAgentTrace {
   pipelineRunId: string;
   phase: PipelinePhaseKey;
   agentKey: string;
+  traceKind?: "ai_agent" | "phase_step";
+  stepKey?: string;
   status: "running" | "completed" | "failed" | "fallback";
   attempt?: number;
   retryCount?: number;
   usedFallback?: boolean;
+  inputText?: string | null;
   inputPrompt?: string | null;
+  inputJson?: unknown;
   outputText?: string | null;
   outputJson?: unknown;
+  meta?: Record<string, unknown>;
   error?: string | null;
   fallbackReason?: PipelineFallbackReason;
   rawProviderError?: string;

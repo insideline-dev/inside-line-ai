@@ -33,6 +33,21 @@ interface ParsedUnipileError {
   raw: string;
 }
 
+export interface UnipileTraceEvent {
+  operation: string;
+  status: "running" | "completed" | "failed";
+  inputJson?: unknown;
+  outputJson?: unknown;
+  inputText?: string;
+  outputText?: string;
+  error?: string;
+  meta?: Record<string, unknown>;
+}
+
+interface UnipileTraceOptions {
+  onTrace?: (event: UnipileTraceEvent) => void;
+}
+
 @Injectable()
 export class UnipileService {
   private readonly logger = new Logger(UnipileService.name);
@@ -65,7 +80,11 @@ export class UnipileService {
   /**
    * Fetch LinkedIn profile by URL (with caching)
    */
-  async getProfile(userId: string, linkedinUrl: string): Promise<LinkedInProfile | null> {
+  async getProfile(
+    userId: string,
+    linkedinUrl: string,
+    options?: UnipileTraceOptions,
+  ): Promise<LinkedInProfile | null> {
     if (!this.isConfigured()) {
       throw new ServiceUnavailableException('LinkedIn integration not configured');
     }
@@ -73,6 +92,13 @@ export class UnipileService {
     // Check cache first
     const cached = await this.cacheService.getCached(linkedinUrl);
     if (cached) {
+      this.emitTrace(options, {
+        operation: "unipile.get_profile",
+        status: "completed",
+        inputJson: { linkedinUrl },
+        outputJson: cached,
+        meta: { source: "cache" },
+      });
       if (cached.profileImageUrl) {
         return cached;
       }
@@ -82,7 +108,7 @@ export class UnipileService {
         `Cached LinkedIn profile missing image, refreshing from API: ${linkedinUrl}`,
       );
       try {
-        const refreshed = await this.fetchProfileFromAPI(linkedinUrl);
+        const refreshed = await this.fetchProfileFromAPI(linkedinUrl, options);
         if (refreshed) {
           const identifier = this.extractIdentifierFromUrl(linkedinUrl);
           await this.cacheService
@@ -97,7 +123,7 @@ export class UnipileService {
 
     // Fetch from Unipile API
     try {
-      const profile = await this.fetchProfileFromAPI(linkedinUrl);
+      const profile = await this.fetchProfileFromAPI(linkedinUrl, options);
 
       if (profile) {
         // Extract identifier from URL (e.g., "john-doe-123" from linkedin.com/in/john-doe-123/)
@@ -117,6 +143,12 @@ export class UnipileService {
     } catch (error) {
       const message = this.asMessage(error);
       const stack = error instanceof Error ? error.stack : undefined;
+      this.emitTrace(options, {
+        operation: "unipile.get_profile",
+        status: "failed",
+        inputJson: { linkedinUrl },
+        error: message,
+      });
       this.logger.error(`Failed to fetch LinkedIn profile: ${message}`, stack);
       throw error;
     }
@@ -125,17 +157,27 @@ export class UnipileService {
   /**
    * Search for LinkedIn profiles by name (optionally with company)
    */
-  async searchProfiles(name: string, company?: string): Promise<LinkedInProfile[]> {
+  async searchProfiles(
+    name: string,
+    company?: string,
+    options?: UnipileTraceOptions,
+  ): Promise<LinkedInProfile[]> {
     if (!this.isConfigured()) {
       throw new ServiceUnavailableException('LinkedIn integration not configured');
     }
 
     try {
-      const profiles = await this.searchProfilesFromAPI(name, company);
+      const profiles = await this.searchProfilesFromAPI(name, company, options);
       return profiles;
     } catch (error) {
       const message = this.asMessage(error);
       const stack = error instanceof Error ? error.stack : undefined;
+      this.emitTrace(options, {
+        operation: "unipile.search_profiles",
+        status: "failed",
+        inputJson: { name, company: company ?? null },
+        error: message,
+      });
       this.logger.error(`Failed to search LinkedIn profiles: ${message}`, stack);
       throw error;
     }
@@ -149,9 +191,27 @@ export class UnipileService {
     name: string,
     companyName: string,
     companyWebsite?: string,
+    options?: UnipileTraceOptions,
   ): Promise<LinkedInProfile[]> {
-    const companyId = await this.resolveBestCompanyId(companyName, companyWebsite);
+    const companyId = await this.resolveBestCompanyId(
+      companyName,
+      companyWebsite,
+      options,
+    );
     if (!companyId) {
+      this.emitTrace(options, {
+        operation: "unipile.search_profiles_in_company",
+        status: "completed",
+        inputJson: {
+          name,
+          companyName,
+          companyWebsite: companyWebsite ?? null,
+        },
+        outputJson: [],
+        meta: {
+          reason: "company_not_found",
+        },
+      });
       return [];
     }
 
@@ -161,7 +221,11 @@ export class UnipileService {
       keywords: name,
       company: [companyId],
     };
-    const items = await this.executeLinkedinSearch(body);
+    const items = await this.executeLinkedinSearch(
+      body,
+      "unipile.search_profiles_in_company",
+      options,
+    );
     return items.map((profile) =>
       this.mapUnipileProfileToLinkedInProfile(profile as Record<string, unknown>),
     );
@@ -170,12 +234,29 @@ export class UnipileService {
   /**
    * Fetch profile from Unipile API
    */
-  private async fetchProfileFromAPI(profileUrl: string): Promise<LinkedInProfile | null> {
+  private async fetchProfileFromAPI(
+    profileUrl: string,
+    options?: UnipileTraceOptions,
+  ): Promise<LinkedInProfile | null> {
     const { dsn, apiKey, accountId } = this.getConfigOrThrow();
     const identifier = this.extractIdentifierFromUrl(profileUrl);
     // linkedin_sections=* is required by Unipile to return extended profile data
     // such as experience/education instead of only basic identity fields.
     const url = `https://${dsn}/api/v1/users/${identifier}?account_id=${accountId}&linkedin_sections=*`;
+
+    this.emitTrace(options, {
+      operation: "unipile.fetch_profile",
+      status: "running",
+      inputJson: {
+        profileUrl,
+        identifier,
+        accountId,
+      },
+      meta: {
+        method: "GET",
+        url,
+      },
+    });
 
     const response = await fetch(url, {
       method: 'GET',
@@ -187,11 +268,37 @@ export class UnipileService {
 
     if (!response.ok) {
       if (response.status === 404) {
+        this.emitTrace(options, {
+          operation: "unipile.fetch_profile",
+          status: "completed",
+          inputJson: {
+            profileUrl,
+            identifier,
+          },
+          outputJson: null,
+          meta: {
+            status: response.status,
+          },
+        });
         return null;
       }
       const rawError = await response.text();
       const parsedError = this.parseUnipileError(rawError);
       if (this.isRecipientUnreachableError(response.status, parsedError)) {
+        this.emitTrace(options, {
+          operation: "unipile.fetch_profile",
+          status: "completed",
+          inputJson: {
+            profileUrl,
+            identifier,
+          },
+          outputText: rawError,
+          outputJson: parsedError,
+          meta: {
+            status: response.status,
+            recipientUnreachable: true,
+          },
+        });
         this.logger.debug(
           `LinkedIn profile unavailable for ${profileUrl}: ${
             parsedError.detail || parsedError.title || parsedError.raw
@@ -199,17 +306,47 @@ export class UnipileService {
         );
         return null;
       }
+      this.emitTrace(options, {
+        operation: "unipile.fetch_profile",
+        status: "failed",
+        inputJson: {
+          profileUrl,
+          identifier,
+        },
+        outputText: rawError,
+        outputJson: parsedError,
+        error: `Unipile API error ${response.status}`,
+        meta: {
+          status: response.status,
+        },
+      });
       throw new BadRequestException(`Unipile API error: ${rawError}`);
     }
 
     const data = await response.json();
+    this.emitTrace(options, {
+      operation: "unipile.fetch_profile",
+      status: "completed",
+      inputJson: {
+        profileUrl,
+        identifier,
+      },
+      outputJson: data,
+      meta: {
+        status: response.status,
+      },
+    });
     return this.mapUnipileProfileToLinkedInProfile(data);
   }
 
   /**
    * Search profiles from Unipile API
    */
-  private async searchProfilesFromAPI(name: string, company?: string): Promise<LinkedInProfile[]> {
+  private async searchProfilesFromAPI(
+    name: string,
+    company?: string,
+    options?: UnipileTraceOptions,
+  ): Promise<LinkedInProfile[]> {
     const body: Record<string, unknown> = {
       api: 'classic',
       category: 'people',
@@ -221,7 +358,11 @@ export class UnipileService {
       };
     }
 
-    const items = await this.executeLinkedinSearch(body);
+    const items = await this.executeLinkedinSearch(
+      body,
+      "unipile.search_profiles",
+      options,
+    );
     return items.map((profile) =>
       this.mapUnipileProfileToLinkedInProfile(profile as Record<string, unknown>),
     );
@@ -462,13 +603,18 @@ export class UnipileService {
   private async resolveBestCompanyId(
     companyName: string,
     companyWebsite?: string,
+    options?: UnipileTraceOptions,
   ): Promise<string | null> {
     const body = {
       api: 'classic',
       category: 'companies',
       keywords: companyName,
     };
-    const items = (await this.executeLinkedinSearch(body)) as CompanySearchItem[];
+    const items = (await this.executeLinkedinSearch(
+      body,
+      "unipile.search_companies",
+      options,
+    )) as CompanySearchItem[];
     if (items.length === 0) {
       return null;
     }
@@ -533,9 +679,23 @@ export class UnipileService {
     return match?.[1] || 'unknown';
   }
 
-  private async executeLinkedinSearch(body: Record<string, unknown>): Promise<unknown[]> {
+  private async executeLinkedinSearch(
+    body: Record<string, unknown>,
+    operation: string,
+    options?: UnipileTraceOptions,
+  ): Promise<unknown[]> {
     const { dsn, apiKey, accountId } = this.getConfigOrThrow();
     const url = `https://${dsn}/api/v1/linkedin/search?account_id=${accountId}`;
+
+    this.emitTrace(options, {
+      operation,
+      status: "running",
+      inputJson: body,
+      meta: {
+        method: "POST",
+        url,
+      },
+    });
 
     const response = await fetch(url, {
       method: 'POST',
@@ -549,10 +709,29 @@ export class UnipileService {
 
     if (!response.ok) {
       const error = await response.text();
+      this.emitTrace(options, {
+        operation,
+        status: "failed",
+        inputJson: body,
+        outputText: error,
+        error: `Unipile API error ${response.status}`,
+        meta: {
+          status: response.status,
+        },
+      });
       throw new BadRequestException(`Unipile API error: ${error}`);
     }
 
     const data = (await response.json()) as UnipileSearchResponse;
+    this.emitTrace(options, {
+      operation,
+      status: "completed",
+      inputJson: body,
+      outputJson: data,
+      meta: {
+        status: response.status,
+      },
+    });
     return Array.isArray(data.items) ? data.items : [];
   }
 
@@ -607,5 +786,12 @@ export class UnipileService {
       normalized.includes('profile is not locked') ||
       normalized.includes('locked')
     );
+  }
+
+  private emitTrace(
+    options: UnipileTraceOptions | undefined,
+    event: UnipileTraceEvent,
+  ): void {
+    options?.onTrace?.(event);
   }
 }

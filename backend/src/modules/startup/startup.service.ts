@@ -1634,13 +1634,18 @@ export class StartupService {
       pipelineRunId: string;
       phase: string;
       agentKey: string;
+      traceKind?: "ai_agent" | "phase_step";
+      stepKey?: string;
       status: "running" | "completed" | "failed" | "fallback";
       attempt?: number;
       retryCount?: number;
       usedFallback?: boolean;
+      inputText?: string | null;
       inputPrompt?: string | null;
+      inputJson?: unknown;
       outputText?: string | null;
       outputJson?: unknown;
+      meta?: Record<string, unknown>;
       error?: string | null;
       fallbackReason?:
         | "EMPTY_STRUCTURED_OUTPUT"
@@ -1677,19 +1682,32 @@ export class StartupService {
     }
 
     return rows.map((row) => {
-      const traceMeta = this.parseTraceMeta(row.outputJson);
+      const traceKind =
+        row.traceKind === "phase_step" ? "phase_step" : "ai_agent";
+      const traceMeta =
+        traceKind === "ai_agent"
+          ? this.parseTraceMeta(row.outputJson)
+          : {
+              outputJson: row.outputJson,
+            };
       const outputText = row.outputText ?? null;
       const hasOutputText =
         typeof outputText === "string" && outputText.trim().length > 0;
-      const hasOutputJson = traceMeta.outputJson !== undefined && traceMeta.outputJson !== null;
+      const hasOutputJson =
+        traceMeta.outputJson !== undefined && traceMeta.outputJson !== null;
+      const inputText = row.inputPrompt ?? null;
+      const hasInputText =
+        typeof inputText === "string" && inputText.trim().length > 0;
+      const hasInputJson = row.inputJson !== undefined && row.inputJson !== null;
       const hasProviderError =
         typeof traceMeta.rawProviderError === "string" &&
         traceMeta.rawProviderError.trim().length > 0;
-      const captureStatus = hasOutputText || hasOutputJson
-        ? "captured"
-        : hasProviderError
-          ? "provider_error_only"
-          : "missing";
+      const captureStatus =
+        hasInputText || hasInputJson || hasOutputText || hasOutputJson
+          ? "captured"
+          : hasProviderError
+            ? "provider_error_only"
+            : "missing";
 
       return {
         ...traceMeta,
@@ -1697,12 +1715,20 @@ export class StartupService {
         pipelineRunId: row.pipelineRunId,
         phase: row.phase,
         agentKey: row.agentKey,
+        traceKind,
+        stepKey: row.stepKey ?? undefined,
         status: row.status,
         attempt: row.attempt,
         retryCount: row.retryCount,
         usedFallback: row.usedFallback,
-        inputPrompt: row.inputPrompt ?? null,
+        inputText,
+        inputPrompt: inputText,
+        inputJson: row.inputJson,
         outputText,
+        meta:
+          row.meta && typeof row.meta === "object" && !Array.isArray(row.meta)
+            ? (row.meta as Record<string, unknown>)
+            : undefined,
         error: row.error ?? null,
         captureStatus,
         startedAt: row.startedAt ? row.startedAt.toISOString() : undefined,

@@ -109,6 +109,7 @@ export const ProgressSchema = z.object({
   phases: z.record(z.string(), ProgressPhaseSchema),
   agentEvents: z.array(ProgressAgentEventSchema).optional(),
   agentTraces: z.array(ProgressAgentTraceSchema).optional(),
+  phaseResults: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const GetProgressResponseSchema = z.object({

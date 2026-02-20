@@ -425,6 +425,7 @@ describe("Startup lifecycle integration: submit -> pipeline complete -> approve 
       notifications,
       matchingState,
       lifecycleAiConfig,
+      matchingPipelineService,
       pipelineFeedback,
       progressTracker,
       phaseTransition,

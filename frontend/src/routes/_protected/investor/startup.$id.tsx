@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScoreRing } from "@/components/analysis/ScoreRing";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
 import {
   useStartupControllerFindOne,
@@ -9,6 +10,7 @@ import {
   useStartupControllerGetEvaluation,
 } from "@/api/generated/startup/startup";
 import { useInvestorControllerGetEffectiveWeights } from "@/api/generated/investor/investor";
+import { useInvestorControllerGetMatchDetails } from "@/api/generated/investor/investor";
 import {
   StartupHeader,
   SummaryCard,
@@ -53,6 +55,9 @@ function InvestorStartupDetailPage() {
     query: { retry: false },
   });
   const { data: evalRes, isLoading: evalLoading, error: evalError } = useStartupControllerGetEvaluation(id);
+  const { data: matchRes } = useInvestorControllerGetMatchDetails(id, {
+    query: { retry: false },
+  });
 
   const ownStartup = ownStartupRes
     ? unwrapApiResponse<Record<string, unknown>>(ownStartupRes)
@@ -73,6 +78,9 @@ function InvestorStartupDetailPage() {
     : undefined;
   const evaluation = evalRes
     ? unwrapApiResponse<Record<string, unknown>>(evalRes)
+    : undefined;
+  const match = matchRes
+    ? unwrapApiResponse<Record<string, unknown>>(matchRes)
     : undefined;
   const isLoading = ownStartupLoading || approvedStartupLoading || evalLoading;
   const error = approvedStartupError || evalError;
@@ -114,6 +122,26 @@ function InvestorStartupDetailPage() {
         showRecommendation
         weights={weights as any}
       />
+
+      {(typeof match?.thesisFitScore === "number" || typeof match?.fitRationale === "string") && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Thesis Alignment</CardTitle>
+            <CardDescription>How this startup fits your investment thesis.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {typeof match?.thesisFitScore === "number" && (
+              <div className="inline-flex items-center gap-3">
+                <ScoreRing score={match.thesisFitScore as number} size="sm" showLabel={false} variant="secondary" />
+                <span className="text-sm text-muted-foreground">Thesis fit score</span>
+              </div>
+            )}
+            {typeof match?.fitRationale === "string" && match.fitRationale.trim().length > 0 && (
+              <p className="text-sm text-muted-foreground">{match.fitRationale as string}</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Tabs defaultValue="memo" className="space-y-6">
         <TabsList>

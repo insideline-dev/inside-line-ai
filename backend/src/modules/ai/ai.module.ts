@@ -47,6 +47,7 @@ import { LinkedinEnrichmentService } from "./services/linkedin-enrichment.servic
 import { InvestorMatchingService } from "./services/investor-matching.service";
 import { LocationNormalizerService } from "./services/location-normalizer.service";
 import { MemoGeneratorService } from "./services/memo-generator.service";
+import { ResearchParametersService } from "./services/research-parameters.service";
 import { ResearchService } from "./services/research.service";
 import { ScoreComputationService } from "./services/score-computation.service";
 import { ScrapingCacheService } from "./services/scraping-cache.service";
@@ -57,6 +58,7 @@ import { StartupMatchingPipelineService } from "./services/startup-matching-pipe
 import { WebsiteScraperService } from "./services/website-scraper.service";
 import { BraveSearchService } from "./services/brave-search.service";
 import { EnrichmentService } from "./services/enrichment.service";
+import { ClaraEmailContextService } from "./services/clara-email-context.service";
 
 @Global()
 @Module({
@@ -88,7 +90,9 @@ import { EnrichmentService } from "./services/enrichment.service";
     LinkedinEnrichmentService,
     BraveSearchService,
     EnrichmentService,
+    ClaraEmailContextService,
     ScrapingCacheService,
+    ResearchParametersService,
     ResearchService,
     SynthesisAgent,
     ScoreComputationService,

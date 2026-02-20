@@ -12,7 +12,7 @@ export const CompetitorResearchAgent: ResearchAgentConfig<CompetitorResearch> = 
   systemPrompt: COMPETITOR_RESEARCH_SYSTEM_PROMPT,
   humanPromptTemplate: COMPETITOR_RESEARCH_HUMAN_PROMPT,
   schema: CompetitorResearchSchema,
-  contextBuilder: ({ extraction, scraping }) => ({
+  contextBuilder: ({ extraction, scraping, researchParameters }) => ({
     companyName: extraction.companyName,
     industry: extraction.industry,
     tagline: extraction.tagline,
@@ -20,6 +20,9 @@ export const CompetitorResearchAgent: ResearchAgentConfig<CompetitorResearch> = 
     website: extraction.website,
     websiteHeadings:
       scraping.website?.headings.filter((h) => h.trim().length > 0) ?? [],
+    knownCompetitors: researchParameters?.knownCompetitors,
+    specificMarket: researchParameters?.specificMarket,
+    businessModel: researchParameters?.businessModel,
   }),
   fallback: () => ({
     competitors: [],

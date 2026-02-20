@@ -13,11 +13,15 @@ export const MarketResearchAgent: ResearchAgentConfig<MarketResearch> = {
   systemPrompt: MARKET_RESEARCH_SYSTEM_PROMPT,
   humanPromptTemplate: MARKET_RESEARCH_HUMAN_PROMPT,
   schema: MarketResearchSchema,
-  contextBuilder: ({ extraction, scraping }) => ({
+  contextBuilder: ({ extraction, scraping, researchParameters }) => ({
     industry: extraction.industry,
-    geographicFocus: extraction.location ? [extraction.location] : [],
+    geographicFocus: researchParameters?.geographicFocus ?? (extraction.location ? [extraction.location] : []),
     companyDescription: extraction.rawText,
-    targetMarket: scraping.notableClaims[0] ?? extraction.tagline,
+    targetMarket: researchParameters?.specificMarket ?? scraping.notableClaims[0] ?? extraction.tagline,
+    targetCustomers: researchParameters?.targetCustomers,
+    claimedTam: researchParameters?.claimedMetrics?.tam,
+    claimedGrowthRate: researchParameters?.claimedMetrics?.growthRate,
+    businessModel: researchParameters?.businessModel,
   }),
   fallback: ({ extraction }) => {
     const websiteUrl = toValidUrl(extraction.website);
@@ -37,6 +41,12 @@ export const MarketResearchAgent: ResearchAgentConfig<MarketResearch> = {
         sam: undefined,
         som: undefined,
       },
+      marketDrivers: [],
+      marketChallenges: [],
+      regulatoryLandscape: undefined,
+      totalAddressableMarket: undefined,
+      marketGrowthRate: undefined,
+      tamValidation: undefined,
       sources: websiteUrl ? [websiteUrl] : [],
     };
   },

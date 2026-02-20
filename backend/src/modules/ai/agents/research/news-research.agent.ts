@@ -13,15 +13,16 @@ export const NewsResearchAgent: ResearchAgentConfig<NewsResearch> = {
   systemPrompt: NEWS_RESEARCH_SYSTEM_PROMPT,
   humanPromptTemplate: NEWS_RESEARCH_HUMAN_PROMPT,
   schema: NewsResearchSchema,
-  contextBuilder: ({ extraction }) => ({
+  contextBuilder: ({ extraction, researchParameters }) => ({
     companyName: extraction.companyName,
     industry: extraction.industry,
-    geographicFocus: extraction.location,
+    geographicFocus: researchParameters?.geographicFocus ?? extraction.location,
     foundingDate: undefined,
     knownFunding:
       typeof extraction.fundingAsk === "number"
         ? [{ date: "unknown", amount: extraction.fundingAsk }]
         : [],
+    specificMarket: researchParameters?.specificMarket,
   }),
   fallback: ({ extraction }) => {
     const websiteUrl = toValidUrl(extraction.website);
@@ -35,6 +36,7 @@ export const NewsResearchAgent: ResearchAgentConfig<NewsResearch> = {
       recentEvents: [
         `No critical negative events detected in fallback mode for ${extraction.companyName}.`,
       ],
+      sentimentOverview: undefined,
       sources: websiteUrl ? [websiteUrl] : [],
     };
   },

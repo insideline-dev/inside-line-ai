@@ -161,6 +161,11 @@ export function createEvaluationPipelineInput(): EvaluationPipelineInput {
             company: "Clipaf",
             experience: ["PlantOps", "FactoryFlow"],
             url: "https://linkedin.com/in/amina-rao",
+            patents: [],
+            previousExits: [],
+            notableAchievements: [],
+            educationHighlights: [],
+            sources: [],
           },
         ],
         previousCompanies: ["PlantOps", "FactoryFlow"],
@@ -215,6 +220,8 @@ export function createEvaluationPipelineInput(): EvaluationPipelineInput {
           sam: 2_200_000_000,
           som: 180_000_000,
         },
+        marketDrivers: [],
+        marketChallenges: [],
         sources: ["https://market.example.com/report"],
       },
       product: {
@@ -234,6 +241,9 @@ export function createEvaluationPipelineInput(): EvaluationPipelineInput {
           summary: "Customers highlight implementation speed and reporting quality.",
           sentiment: "positive",
         },
+        reviews: [],
+        strengths: [],
+        weaknesses: [],
         sources: ["https://product.example.com/review"],
       },
       news: {
@@ -276,6 +286,8 @@ export function createEvaluationPipelineInput(): EvaluationPipelineInput {
             differentiators: ["Larger integration ecosystem", "More mature analytics"],
             weaknesses: ["Generic platform, not AI-native", "Complex implementation"],
             threatLevel: "high",
+            productFeatures: [],
+            recentNews: [],
           },
           {
             name: "OpsPilot",
@@ -289,6 +301,8 @@ export function createEvaluationPipelineInput(): EvaluationPipelineInput {
             differentiators: ["Simpler UX", "Faster deployment"],
             weaknesses: ["No compliance focus", "Limited to workflow orchestration"],
             threatLevel: "medium",
+            productFeatures: [],
+            recentNews: [],
           },
         ],
         indirectCompetitors: [

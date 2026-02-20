@@ -3996,6 +3996,225 @@
         ]
       }
     },
+    "/admin/ai-prompts/{key}/model-config": {
+      "get": {
+        "operationId": "AdminController_getAiModelConfig",
+        "parameters": [
+          {
+            "name": "key",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiModelConfigResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get resolved model config, revisions history, and allowed models",
+        "tags": [
+          "Admin"
+        ]
+      },
+      "post": {
+        "operationId": "AdminController_createAiModelConfigDraft",
+        "parameters": [
+          {
+            "name": "key",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAiModelConfigDraftDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiModelConfigResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Create model config draft revision",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/ai-prompts/{key}/model-config/{revisionId}": {
+      "patch": {
+        "operationId": "AdminController_updateAiModelConfigDraft",
+        "parameters": [
+          {
+            "name": "key",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "revisionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAiModelConfigDraftDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiModelConfigResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Update model config draft revision",
+        "tags": [
+          "Admin"
+        ]
+      },
+      "delete": {
+        "operationId": "AdminController_deleteAiModelConfigDraft",
+        "parameters": [
+          {
+            "name": "key",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "revisionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Archive model config draft revision (soft delete)",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/ai-prompts/{key}/model-config/{revisionId}/publish": {
+      "post": {
+        "operationId": "AdminController_publishAiModelConfigDraft",
+        "parameters": [
+          {
+            "name": "key",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "revisionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiModelConfigResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Publish model config draft revision",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/ai-prompts/{key}/output-schema": {
+      "get": {
+        "operationId": "AdminController_getAiPromptOutputSchema",
+        "parameters": [
+          {
+            "name": "key",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiPromptOutputSchemaResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get output JSON schema for a prompt key",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
     "/admin/ai-prompts/{key}/context-schema": {
       "get": {
         "operationId": "AdminController_getAiPromptContextSchema",
@@ -7133,6 +7352,14 @@
                             "minimum": 0,
                             "maximum": 9007199254740991
                           },
+                          "phaseRetryCount": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "agentAttemptId": {
+                            "type": "string"
+                          },
                           "usedFallback": {
                             "type": "boolean"
                           },
@@ -7161,6 +7388,10 @@
                           },
                           "lastEventAt": {
                             "type": "string"
+                          },
+                          "dataSummary": {
+                            "type": "object",
+                            "additionalProperties": true
                           }
                         },
                         "required": [
@@ -7216,6 +7447,14 @@
                       "minimum": 0,
                       "maximum": 9007199254740991
                     },
+                    "phaseRetryCount": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "agentAttemptId": {
+                      "type": "string"
+                    },
                     "error": {
                       "type": "string"
                     },
@@ -7259,6 +7498,16 @@
                     "agentKey": {
                       "type": "string"
                     },
+                    "traceKind": {
+                      "type": "string",
+                      "enum": [
+                        "ai_agent",
+                        "phase_step"
+                      ]
+                    },
+                    "stepKey": {
+                      "type": "string"
+                    },
                     "status": {
                       "type": "string",
                       "enum": [
@@ -7281,15 +7530,24 @@
                     "usedFallback": {
                       "type": "boolean"
                     },
+                    "inputText": {
+                      "type": "string",
+                      "nullable": true
+                    },
                     "inputPrompt": {
                       "type": "string",
                       "nullable": true
                     },
+                    "inputJson": {},
                     "outputText": {
                       "type": "string",
                       "nullable": true
                     },
                     "outputJson": {},
+                    "meta": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
                     "error": {
                       "type": "string",
                       "nullable": true
@@ -7307,6 +7565,14 @@
                     "rawProviderError": {
                       "type": "string"
                     },
+                    "captureStatus": {
+                      "type": "string",
+                      "enum": [
+                        "captured",
+                        "missing",
+                        "provider_error_only"
+                      ]
+                    },
                     "startedAt": {
                       "type": "string"
                     },
@@ -7323,6 +7589,10 @@
                     "status"
                   ]
                 }
+              },
+              "phaseResults": {
+                "type": "object",
+                "additionalProperties": true
               }
             },
             "required": [
@@ -9141,13 +9411,67 @@
                       "inputs": {
                         "type": "array",
                         "items": {
-                          "type": "string"
+                          "type": "object",
+                          "properties": {
+                            "label": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "text",
+                                "object",
+                                "array",
+                                "number"
+                              ]
+                            },
+                            "fromNodeId": {
+                              "type": "string"
+                            },
+                            "toNodeIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": [
+                            "label",
+                            "type"
+                          ]
                         }
                       },
                       "outputs": {
                         "type": "array",
                         "items": {
-                          "type": "string"
+                          "type": "object",
+                          "properties": {
+                            "label": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "text",
+                                "object",
+                                "array",
+                                "number"
+                              ]
+                            },
+                            "fromNodeId": {
+                              "type": "string"
+                            },
+                            "toNodeIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": [
+                            "label",
+                            "type"
+                          ]
                         }
                       }
                     },
@@ -9534,6 +9858,292 @@
           "allowedVariables",
           "requiredVariables",
           "variableDefinitions"
+        ]
+      },
+      "AiModelConfigResponseDto": {
+        "type": "object",
+        "properties": {
+          "resolved": {
+            "type": "object",
+            "properties": {
+              "source": {
+                "type": "string",
+                "enum": [
+                  "default",
+                  "published",
+                  "revision_override"
+                ]
+              },
+              "revisionId": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "nullable": true
+              },
+              "stage": {
+                "type": "string",
+                "enum": [
+                  "pre_seed",
+                  "seed",
+                  "series_a",
+                  "series_b",
+                  "series_c",
+                  "series_d",
+                  "series_e",
+                  "series_f_plus"
+                ],
+                "nullable": true
+              },
+              "purpose": {
+                "type": "string"
+              },
+              "modelName": {
+                "type": "string"
+              },
+              "provider": {
+                "type": "string"
+              },
+              "searchMode": {
+                "type": "string",
+                "enum": [
+                  "off",
+                  "provider_grounded_search"
+                ]
+              },
+              "supportedSearchModes": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "off",
+                    "provider_grounded_search"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "source",
+              "revisionId",
+              "stage",
+              "purpose",
+              "modelName",
+              "provider",
+              "searchMode",
+              "supportedSearchModes"
+            ]
+          },
+          "revisions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "stage": {
+                  "type": "string",
+                  "enum": [
+                    "pre_seed",
+                    "seed",
+                    "series_a",
+                    "series_b",
+                    "series_c",
+                    "series_d",
+                    "series_e",
+                    "series_f_plus"
+                  ],
+                  "nullable": true
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "draft",
+                    "published",
+                    "archived"
+                  ]
+                },
+                "modelName": {
+                  "type": "string"
+                },
+                "searchMode": {
+                  "type": "string",
+                  "enum": [
+                    "off",
+                    "provider_grounded_search"
+                  ]
+                },
+                "notes": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "version": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "createdBy": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                  "nullable": true
+                },
+                "publishedBy": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                  "nullable": true
+                },
+                "publishedAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                  "nullable": true
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                },
+                "updatedAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                }
+              },
+              "required": [
+                "id",
+                "stage",
+                "status",
+                "modelName",
+                "searchMode",
+                "notes",
+                "version",
+                "createdBy",
+                "publishedBy",
+                "publishedAt",
+                "createdAt",
+                "updatedAt"
+              ]
+            }
+          },
+          "allowedModels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "resolved",
+          "revisions",
+          "allowedModels"
+        ]
+      },
+      "CreateAiModelConfigDraftDto": {
+        "type": "object",
+        "properties": {
+          "modelName": {
+            "type": "string",
+            "enum": [
+              "gpt-5.2",
+              "gemini-3.0-flash-preview"
+            ]
+          },
+          "searchMode": {
+            "type": "string",
+            "enum": [
+              "off",
+              "provider_grounded_search"
+            ]
+          },
+          "stage": {
+            "type": "string",
+            "enum": [
+              "pre_seed",
+              "seed",
+              "series_a",
+              "series_b",
+              "series_c",
+              "series_d",
+              "series_e",
+              "series_f_plus"
+            ],
+            "nullable": true
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 4000
+          }
+        },
+        "required": [
+          "modelName",
+          "searchMode"
+        ]
+      },
+      "UpdateAiModelConfigDraftDto": {
+        "type": "object",
+        "properties": {
+          "modelName": {
+            "type": "string",
+            "enum": [
+              "gpt-5.2",
+              "gemini-3.0-flash-preview"
+            ]
+          },
+          "searchMode": {
+            "type": "string",
+            "enum": [
+              "off",
+              "provider_grounded_search"
+            ]
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 4000
+          }
+        }
+      },
+      "AiPromptOutputSchemaResponseDto": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "enum": [
+              "extraction.fields",
+              "research.team",
+              "research.market",
+              "research.product",
+              "research.news",
+              "research.competitor",
+              "evaluation.team",
+              "evaluation.market",
+              "evaluation.product",
+              "evaluation.traction",
+              "evaluation.businessModel",
+              "evaluation.gtm",
+              "evaluation.financials",
+              "evaluation.competitiveAdvantage",
+              "evaluation.legal",
+              "evaluation.dealTerms",
+              "evaluation.exitPotential",
+              "synthesis.final",
+              "matching.thesis",
+              "clara.intent",
+              "clara.response",
+              "clara.agent"
+            ]
+          },
+          "jsonSchema": {},
+          "note": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "jsonSchema",
+          "note"
         ]
       },
       "AiPromptContextSchemaResponseDto": {

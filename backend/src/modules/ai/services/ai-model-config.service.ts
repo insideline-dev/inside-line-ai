@@ -234,6 +234,48 @@ export class AiModelConfigService {
     return published;
   }
 
+  async archiveRevision(key: string, revisionId: string) {
+    const definition = await this.getOrCreateDefinition(key);
+
+    const [existing] = await this.drizzle.db
+      .select()
+      .from(aiModelConfigRevision)
+      .where(
+        and(
+          eq(aiModelConfigRevision.id, revisionId),
+          eq(aiModelConfigRevision.definitionId, definition.id),
+        ),
+      )
+      .limit(1);
+
+    if (!existing) {
+      throw new NotFoundException(
+        `Model config revision ${revisionId} not found for ${key}`,
+      );
+    }
+
+    if (existing.status === "published") {
+      throw new BadRequestException(
+        "Published revisions cannot be archived directly",
+      );
+    }
+
+    if (existing.status === "archived") {
+      return existing;
+    }
+
+    const [archived] = await this.drizzle.db
+      .update(aiModelConfigRevision)
+      .set({
+        status: "archived",
+        updatedAt: new Date(),
+      })
+      .where(eq(aiModelConfigRevision.id, revisionId))
+      .returning();
+
+    return archived;
+  }
+
   async resolveConfig(params: {
     key: AiPromptKey;
     stage?: StartupStage | string | null;

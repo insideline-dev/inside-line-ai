@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -50,13 +50,12 @@ import {
   useAdminControllerApproveStartup,
   useAdminControllerReanalyzeStartup,
   useAdminControllerRetryStartupAgent,
+  useAdminControllerRejectStartup,
   useAdminControllerGetAllScoringWeights,
   useAdminControllerMatchStartupInvestors,
-  getAdminControllerRejectStartupUrl,
   getAdminControllerGetStatsQueryKey,
   getAdminControllerGetAllStartupsQueryKey,
 } from "@/api/generated/admin/admin";
-import { customFetch } from "@/api/client";
 import type { ScoringWeights } from "@/lib/score-utils";
 
 export const Route = createFileRoute("/_protected/admin/startup/$id")({
@@ -171,26 +170,25 @@ function AdminReviewPage() {
     },
   });
 
-  const rejectMutation = useMutation({
-    mutationFn: async (reason: string) => {
-      return customFetch(getAdminControllerRejectStartupUrl(id), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason }),
-      });
+  const rejectMutation = useAdminControllerRejectStartup({
+    request: {
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason: adminNotes }),
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: getStartupControllerFindOneQueryKey(id) });
-      queryClient.invalidateQueries({ queryKey: getAdminControllerGetStatsQueryKey() });
-      queryClient.invalidateQueries({ queryKey: getAdminControllerGetAllStartupsQueryKey() });
-      toast.success("Startup rejected", {
-        description: "The startup has been rejected.",
-      });
-      setShowRejectDialog(false);
-      setAdminNotes("");
-    },
-    onError: (error: Error) => {
-      toast.error("Failed to reject startup", { description: error.message });
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getStartupControllerFindOneQueryKey(id) });
+        queryClient.invalidateQueries({ queryKey: getAdminControllerGetStatsQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getAdminControllerGetAllStartupsQueryKey() });
+        toast.success("Startup rejected", {
+          description: "The startup has been rejected.",
+        });
+        setShowRejectDialog(false);
+        setAdminNotes("");
+      },
+      onError: (error: Error) => {
+        toast.error("Failed to reject startup", { description: error.message });
+      },
     },
   });
 
@@ -604,7 +602,7 @@ function AdminReviewPage() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => rejectMutation.mutate(adminNotes)}
+              onClick={() => rejectMutation.mutate({ id })}
               disabled={rejectMutation.isPending || !adminNotes.trim()}
               className="bg-destructive text-destructive-foreground"
             >

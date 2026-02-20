@@ -5,7 +5,6 @@ import {
   CheckCircle2,
   Clock3,
   Eye,
-  FileText,
   Loader2,
   RefreshCw,
   RotateCcw,
@@ -18,6 +17,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useStartupRealtimeProgress } from "@/lib/startup/useStartupRealtimeProgress";
+import { PhaseDataInspector } from "./PhaseDataInspector";
 import {
   PIPELINE_PHASE_ORDER,
   type PipelineAgentEvent,
@@ -56,7 +56,9 @@ const PHASE_LABELS: Record<string, string> = {
   synthesis: "Synthesis",
 };
 
-const SUBSTEP_LABELS: Record<string, string> = {
+const STEP_LABELS: Record<string, string> = {
+  extract_fields: "Document Parsing",
+  scrape_website: "Website Scraping",
   pdf_fetch: "PDF Fetch",
   text_extraction: "Text Extraction",
   ocr_fallback: "OCR Fallback",
@@ -64,6 +66,7 @@ const SUBSTEP_LABELS: Record<string, string> = {
   cache_check: "Cache Check",
   website_scrape: "Website Scrape",
   team_discovery: "Team Discovery",
+  linkedin_enrichment_step: "LinkedIn Enrichment",
   linkedin_enrichment: "LinkedIn Enrichment",
   gap_analysis: "Gap Analysis",
   web_search: "Web Search",
@@ -112,8 +115,8 @@ function normalizePercent(value: number | undefined): number {
 }
 
 function formatLabel(value: string): string {
-  if (SUBSTEP_LABELS[value]) {
-    return SUBSTEP_LABELS[value];
+  if (STEP_LABELS[value]) {
+    return STEP_LABELS[value];
   }
   if (PHASE_LABELS[value]) {
     return PHASE_LABELS[value];
@@ -467,7 +470,8 @@ function buildDataFlowBadges(
   if (phase === "scraping") {
     const scrapeSummary = summaries.website_scrape;
     const teamSummary = summaries.team_discovery;
-    const linkedinSummary = summaries.linkedin_enrichment;
+    const linkedinSummary =
+      summaries.linkedin_enrichment_step ?? summaries.linkedin_enrichment;
 
     const pages = readSummaryNumber(scrapeSummary, "pages");
     const teamTotal = readSummaryNumber(teamSummary, "total");
@@ -995,6 +999,11 @@ export function AdminPipelineLivePanel({
           </div>
         </div>
 
+        <PhaseDataInspector
+          phaseResults={progress?.phaseResults}
+          phases={progress?.phases}
+        />
+
         <div className="grid gap-4 xl:grid-cols-2">
           <div className="space-y-2">
             <h3 className="text-sm font-semibold">Agent Status</h3>
@@ -1242,17 +1251,7 @@ export function AdminPipelineLivePanel({
                           Provider: {previewText(trace.rawProviderError, 220)}
                         </p>
                       )}
-                      <div className="mt-2 grid gap-2 md:grid-cols-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="justify-start gap-2 text-xs"
-                          onClick={() => setSelectedTrace(trace)}
-                        >
-                          <FileText className="h-3.5 w-3.5" />
-                          Input
-                        </Button>
+                      <div className="mt-2">
                         <Button
                           type="button"
                           variant="outline"
@@ -1261,7 +1260,7 @@ export function AdminPipelineLivePanel({
                           onClick={() => setSelectedTrace(trace)}
                         >
                           <Eye className="h-3.5 w-3.5" />
-                          Output
+                          View Trace
                         </Button>
                       </div>
                       <p className="mt-2 text-xs text-muted-foreground">
@@ -1294,9 +1293,11 @@ export function AdminPipelineLivePanel({
                         className={`rounded-md border p-2.5 ${SURFACE_TONE_CLASS[
                           trace.status === "failed"
                             ? "danger"
-                            : trace.status === "running"
-                              ? "info"
-                              : "success"
+                            : trace.status === "fallback"
+                              ? "warning"
+                              : trace.status === "running"
+                                ? "info"
+                                : "success"
                         ]} cursor-pointer`}
                         onClick={() => setSelectedTrace(trace)}
                       >
@@ -1319,17 +1320,7 @@ export function AdminPipelineLivePanel({
                             {normalizeTraceError(trace)}
                           </p>
                         )}
-                        <div className="mt-2 grid gap-2 md:grid-cols-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="justify-start gap-2 text-xs"
-                            onClick={() => setSelectedTrace(trace)}
-                          >
-                            <FileText className="h-3.5 w-3.5" />
-                            Input
-                          </Button>
+                        <div className="mt-2">
                           <Button
                             type="button"
                             variant="outline"
@@ -1338,7 +1329,7 @@ export function AdminPipelineLivePanel({
                             onClick={() => setSelectedTrace(trace)}
                           >
                             <Eye className="h-3.5 w-3.5" />
-                            Output
+                            View Trace
                           </Button>
                         </div>
                         <p className="mt-2 text-xs text-muted-foreground">

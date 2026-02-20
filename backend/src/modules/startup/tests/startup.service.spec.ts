@@ -959,7 +959,12 @@ describe("StartupService", () => {
     });
 
     it("falls back to full reanalysis when pipeline state is missing", async () => {
-      mockDb.limit.mockResolvedValueOnce([mockStartup]);
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          ...mockStartup,
+          userId: "different-owner-id",
+        },
+      ]);
       pipelineService.getPipelineStatus.mockResolvedValueOnce(null);
 
       const result = await service.adminRetryAgent(mockStartupId, mockUserId, {

@@ -105,6 +105,7 @@ export interface PipelineProgressData {
   phases: Record<string, PipelinePhaseProgress>;
   agentEvents?: PipelineAgentEvent[];
   agentTraces?: PipelineAgentTrace[];
+  phaseResults?: Record<string, unknown>;
 }
 
 export interface StartupProgressResponse {

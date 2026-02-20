@@ -157,6 +157,21 @@ export class StartupService {
     "dealTerms",
     "exitPotential",
   ]);
+  private static readonly PHASE_STEP_AGENT_KEYS = new Set([
+    "pdf_fetch",
+    "text_extraction",
+    "ocr_fallback",
+    "field_extraction",
+    "gap_analysis",
+    "web_search",
+    "ai_synthesis",
+    "db_writes",
+    "cache_check",
+    "website_scrape",
+    "team_discovery",
+    "linkedin_enrichment_step",
+    "linkedin_enrichment",
+  ]);
 
   constructor(
     private drizzle: DrizzleService,
@@ -653,7 +668,7 @@ export class StartupService {
     const existingState = await this.aiPipeline.getPipelineStatus(id);
     if (!existingState) {
       mode = "full_reanalysis_fallback";
-      await this.aiPipeline.startPipeline(id, found.userId);
+      await this.aiPipeline.startPipeline(id, adminId);
       this.logger.warn(
         `Pipeline state missing for startup ${id}; falling back to full reanalysis for admin retry request`,
       );
@@ -1508,6 +1523,7 @@ export class StartupService {
         ),
         ...(includeAdminDetails
           ? {
+              phaseResults: pipelineState?.results ?? {},
               agentEvents: (trackedProgress.agentEvents ?? []).map((event) => ({
                 id: event.id,
                 pipelineRunId: event.pipelineRunId,
@@ -1594,7 +1610,9 @@ export class StartupService {
             })(),
           ]),
         ),
-        ...(includeAdminDetails ? { agentTraces } : {}),
+        ...(includeAdminDetails
+          ? { phaseResults: pipelineState.results ?? {}, agentTraces }
+          : {}),
       };
       return response;
     }
@@ -1682,8 +1700,14 @@ export class StartupService {
     }
 
     return rows.map((row) => {
+      const inferredStepKey =
+        row.stepKey ??
+        (this.isPhaseStepAgentKey(row.agentKey) ? row.agentKey : undefined);
       const traceKind =
-        row.traceKind === "phase_step" ? "phase_step" : "ai_agent";
+        row.traceKind === "phase_step" ||
+        (!row.traceKind && Boolean(inferredStepKey))
+          ? "phase_step"
+          : "ai_agent";
       const traceMeta =
         traceKind === "ai_agent"
           ? this.parseTraceMeta(row.outputJson)
@@ -1716,7 +1740,7 @@ export class StartupService {
         phase: row.phase,
         agentKey: row.agentKey,
         traceKind,
-        stepKey: row.stepKey ?? undefined,
+        stepKey: traceKind === "phase_step" ? inferredStepKey : undefined,
         status: row.status,
         attempt: row.attempt,
         retryCount: row.retryCount,
@@ -1735,6 +1759,10 @@ export class StartupService {
         completedAt: row.completedAt ? row.completedAt.toISOString() : null,
       };
     });
+  }
+
+  private isPhaseStepAgentKey(agentKey: string): boolean {
+    return StartupService.PHASE_STEP_AGENT_KEYS.has(agentKey);
   }
 
   private resolvePhaseProgress(

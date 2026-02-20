@@ -5,7 +5,9 @@
  * Inside Line API Documentation
  * OpenAPI spec version: 2.0
  */
+import type { AiPromptFlowResponseDtoFlowsItemNodesItemInputsItem } from './aiPromptFlowResponseDtoFlowsItemNodesItemInputsItem';
 import type { AiPromptFlowResponseDtoFlowsItemNodesItemKind } from './aiPromptFlowResponseDtoFlowsItemNodesItemKind';
+import type { AiPromptFlowResponseDtoFlowsItemNodesItemOutputsItem } from './aiPromptFlowResponseDtoFlowsItemNodesItemOutputsItem';
 import type { AiPromptFlowResponseDtoFlowsItemNodesItemPromptKeysItem } from './aiPromptFlowResponseDtoFlowsItemNodesItemPromptKeysItem';
 
 export type AiPromptFlowResponseDtoFlowsItemNodesItem = {
@@ -14,6 +16,6 @@ export type AiPromptFlowResponseDtoFlowsItemNodesItem = {
   description: string;
   kind: AiPromptFlowResponseDtoFlowsItemNodesItemKind;
   promptKeys: AiPromptFlowResponseDtoFlowsItemNodesItemPromptKeysItem[];
-  inputs: string[];
-  outputs: string[];
+  inputs: AiPromptFlowResponseDtoFlowsItemNodesItemInputsItem[];
+  outputs: AiPromptFlowResponseDtoFlowsItemNodesItemOutputsItem[];
 };

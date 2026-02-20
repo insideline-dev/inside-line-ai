@@ -47,6 +47,7 @@ import { Route as ProtectedAdminUsersRouteImport } from './routes/_protected/adm
 import { Route as ProtectedAdminScoutsRouteImport } from './routes/_protected/admin/scouts'
 import { Route as ProtectedAdminScoringRouteImport } from './routes/_protected/admin/scoring'
 import { Route as ProtectedAdminIntegrationsRouteImport } from './routes/_protected/admin/integrations'
+import { Route as ProtectedAdminFlowRouteImport } from './routes/_protected/admin/flow'
 import { Route as ProtectedAdminConversationsRouteImport } from './routes/_protected/admin/conversations'
 import { Route as ProtectedAdminAnalyticsRouteImport } from './routes/_protected/admin/analytics'
 import { Route as ProtectedAdminAgentsRouteImport } from './routes/_protected/admin/agents'
@@ -254,6 +255,11 @@ const ProtectedAdminIntegrationsRoute =
     path: '/integrations',
     getParentRoute: () => ProtectedAdminRoute,
   } as any)
+const ProtectedAdminFlowRoute = ProtectedAdminFlowRouteImport.update({
+  id: '/flow',
+  path: '/flow',
+  getParentRoute: () => ProtectedAdminRoute,
+} as any)
 const ProtectedAdminConversationsRoute =
   ProtectedAdminConversationsRouteImport.update({
     id: '/conversations',
@@ -309,6 +315,7 @@ export interface FileRoutesByFullPath {
   '/admin/agents': typeof ProtectedAdminAgentsRoute
   '/admin/analytics': typeof ProtectedAdminAnalyticsRoute
   '/admin/conversations': typeof ProtectedAdminConversationsRoute
+  '/admin/flow': typeof ProtectedAdminFlowRoute
   '/admin/integrations': typeof ProtectedAdminIntegrationsRoute
   '/admin/scoring': typeof ProtectedAdminScoringRoute
   '/admin/scouts': typeof ProtectedAdminScoutsRoute
@@ -351,6 +358,7 @@ export interface FileRoutesByTo {
   '/admin/agents': typeof ProtectedAdminAgentsRoute
   '/admin/analytics': typeof ProtectedAdminAnalyticsRoute
   '/admin/conversations': typeof ProtectedAdminConversationsRoute
+  '/admin/flow': typeof ProtectedAdminFlowRoute
   '/admin/integrations': typeof ProtectedAdminIntegrationsRoute
   '/admin/scoring': typeof ProtectedAdminScoringRoute
   '/admin/scouts': typeof ProtectedAdminScoutsRoute
@@ -399,6 +407,7 @@ export interface FileRoutesById {
   '/_protected/admin/agents': typeof ProtectedAdminAgentsRoute
   '/_protected/admin/analytics': typeof ProtectedAdminAnalyticsRoute
   '/_protected/admin/conversations': typeof ProtectedAdminConversationsRoute
+  '/_protected/admin/flow': typeof ProtectedAdminFlowRoute
   '/_protected/admin/integrations': typeof ProtectedAdminIntegrationsRoute
   '/_protected/admin/scoring': typeof ProtectedAdminScoringRoute
   '/_protected/admin/scouts': typeof ProtectedAdminScoutsRoute
@@ -447,6 +456,7 @@ export interface FileRouteTypes {
     | '/admin/agents'
     | '/admin/analytics'
     | '/admin/conversations'
+    | '/admin/flow'
     | '/admin/integrations'
     | '/admin/scoring'
     | '/admin/scouts'
@@ -489,6 +499,7 @@ export interface FileRouteTypes {
     | '/admin/agents'
     | '/admin/analytics'
     | '/admin/conversations'
+    | '/admin/flow'
     | '/admin/integrations'
     | '/admin/scoring'
     | '/admin/scouts'
@@ -536,6 +547,7 @@ export interface FileRouteTypes {
     | '/_protected/admin/agents'
     | '/_protected/admin/analytics'
     | '/_protected/admin/conversations'
+    | '/_protected/admin/flow'
     | '/_protected/admin/integrations'
     | '/_protected/admin/scoring'
     | '/_protected/admin/scouts'
@@ -845,6 +857,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProtectedAdminIntegrationsRouteImport
       parentRoute: typeof ProtectedAdminRoute
     }
+    '/_protected/admin/flow': {
+      id: '/_protected/admin/flow'
+      path: '/flow'
+      fullPath: '/admin/flow'
+      preLoaderRoute: typeof ProtectedAdminFlowRouteImport
+      parentRoute: typeof ProtectedAdminRoute
+    }
     '/_protected/admin/conversations': {
       id: '/_protected/admin/conversations'
       path: '/conversations'
@@ -901,6 +920,7 @@ interface ProtectedAdminRouteChildren {
   ProtectedAdminAgentsRoute: typeof ProtectedAdminAgentsRoute
   ProtectedAdminAnalyticsRoute: typeof ProtectedAdminAnalyticsRoute
   ProtectedAdminConversationsRoute: typeof ProtectedAdminConversationsRoute
+  ProtectedAdminFlowRoute: typeof ProtectedAdminFlowRoute
   ProtectedAdminIntegrationsRoute: typeof ProtectedAdminIntegrationsRoute
   ProtectedAdminScoringRoute: typeof ProtectedAdminScoringRoute
   ProtectedAdminScoutsRoute: typeof ProtectedAdminScoutsRoute
@@ -913,6 +933,7 @@ const ProtectedAdminRouteChildren: ProtectedAdminRouteChildren = {
   ProtectedAdminAgentsRoute: ProtectedAdminAgentsRoute,
   ProtectedAdminAnalyticsRoute: ProtectedAdminAnalyticsRoute,
   ProtectedAdminConversationsRoute: ProtectedAdminConversationsRoute,
+  ProtectedAdminFlowRoute: ProtectedAdminFlowRoute,
   ProtectedAdminIntegrationsRoute: ProtectedAdminIntegrationsRoute,
   ProtectedAdminScoringRoute: ProtectedAdminScoringRoute,
   ProtectedAdminScoutsRoute: ProtectedAdminScoutsRoute,

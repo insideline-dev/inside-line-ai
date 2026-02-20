@@ -1,24 +1,29 @@
 import { Injectable, Logger, Optional } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { generateText, Output } from "ai";
 import { eq } from "drizzle-orm";
 import { appendFile, mkdir } from "fs/promises";
 import { dirname, resolve } from "path";
+import { z } from "zod";
 import { rotateIfNeeded } from "../../../common/logging/rotate-log";
 import { DrizzleService } from "../../../database";
 import { startup } from "../../startup/entities";
 import type {
   EnrichedTeamMember,
   EnrichmentResult,
+  ExtractionResult,
   ScrapeError,
   ScrapingResult,
   WebsiteScrapedData,
 } from "../interfaces/phase-results.interface";
 import type { PhaseProgressCallback } from "../interfaces/progress-callback.interface";
-import { PipelinePhase } from "../interfaces/pipeline.interface";
+import { ModelPurpose, PipelinePhase } from "../interfaces/pipeline.interface";
 import {
   LinkedinEnrichmentService,
   type LinkedinEnrichmentTraceEvent,
 } from "./linkedin-enrichment.service";
+import { AiConfigService } from "./ai-config.service";
+import { AiProviderService } from "../providers/ai-provider.service";
 import { PipelineStateService } from "./pipeline-state.service";
 import { ScrapingCacheService } from "./scraping-cache.service";
 import { WebsiteScraperService } from "./website-scraper.service";
@@ -56,6 +61,8 @@ export class ScrapingService {
     private scrapingCache: ScrapingCacheService,
     @Optional() private config?: ConfigService,
     @Optional() private pipelineState?: PipelineStateService,
+    @Optional() private aiProvider?: AiProviderService,
+    @Optional() private aiConfig?: AiConfigService,
   ) {
     this.debugLogEnabled =
       this.config?.get<boolean>("AI_SCRAPING_DEBUG_LOG_ENABLED", true) ?? true;
@@ -128,6 +135,15 @@ export class ScrapingService {
       });
       throw error;
     }
+    const extraction = await this.loadExtractionResult(startupId);
+    let discoveredDeckMembers: TeamMemberInput[] = [];
+    if (extraction?.rawText) {
+      discoveredDeckMembers = await this.discoverTeamMembersFromDeck(
+        extraction.rawText,
+        progress,
+      );
+    }
+
     const enrichmentFounders: TeamMemberInput[] = (enrichment?.discoveredFounders ?? [])
       .filter((f) => f.confidence >= 0.5)
       .map((f) => ({
@@ -140,6 +156,7 @@ export class ScrapingService {
       discoveredWebsiteLeaders,
       discoveredWebsiteLinkedinMembers,
       discoveredLinkedinLeaders,
+      discoveredDeckMembers,
       enrichmentFounders,
     );
     progress?.onStepComplete("team_discovery", {
@@ -148,6 +165,7 @@ export class ScrapingService {
         websiteLeaders: discoveredWebsiteLeaders.length,
         linkedinDiscovered:
           discoveredWebsiteLinkedinMembers.length + discoveredLinkedinLeaders.length,
+        deckDiscovered: discoveredDeckMembers.length,
         total: teamMembers.length,
       },
       outputJson: {
@@ -155,12 +173,13 @@ export class ScrapingService {
         discoveredWebsiteLeaders,
         discoveredWebsiteLinkedinMembers,
         discoveredLinkedinLeaders,
+        discoveredDeckMembers,
         enrichmentFounders,
         mergedTeamMembers: teamMembers,
       },
     });
     this.logger.log(
-      `[Scraping] Team member seed built | submitted=${submittedTeamMembers.length} | discoveredWebsiteLeaders=${discoveredWebsiteLeaders.length} | discoveredWebsiteLinkedin=${discoveredWebsiteLinkedinMembers.length} | discoveredLinkedinLeaders=${discoveredLinkedinLeaders.length} | final=${teamMembers.length}`,
+      `[Scraping] Team member seed built | submitted=${submittedTeamMembers.length} | websiteLeaders=${discoveredWebsiteLeaders.length} | websiteLinkedin=${discoveredWebsiteLinkedinMembers.length} | linkedinLeaders=${discoveredLinkedinLeaders.length} | deckDiscovered=${discoveredDeckMembers.length} | final=${teamMembers.length}`,
     );
 
     progress?.onStepStart("linkedin_enrichment", {
@@ -266,6 +285,7 @@ export class ScrapingService {
       discoveredWebsiteLeadershipTeamMembers: discoveredWebsiteLeaders,
       discoveredWebsiteLinkedinTeamMembers: discoveredWebsiteLinkedinMembers,
       discoveredLinkedinLeadershipTeamMembers: discoveredLinkedinLeaders,
+      discoveredDeckTeamMembers: discoveredDeckMembers,
       requestedTeamMembers: teamMembers,
       memberConfidenceLog: result.teamMembers.map((member) => ({
         name: member.name,
@@ -338,6 +358,7 @@ export class ScrapingService {
     discoveredFromWebsite: TeamMemberInput[],
     discoveredFromWebsiteLinkedin: TeamMemberInput[],
     discoveredFromLinkedin: TeamMemberInput[],
+    discoveredFromDeck: TeamMemberInput[],
     discoveredFromEnrichment: TeamMemberInput[],
   ): TeamMemberInput[] {
     const byName = new Map<string, TeamMemberInput>();
@@ -362,6 +383,7 @@ export class ScrapingService {
     discoveredFromWebsite.forEach(upsert);
     discoveredFromWebsiteLinkedin.forEach(upsert);
     discoveredFromLinkedin.forEach(upsert);
+    discoveredFromDeck.forEach(upsert);
     discoveredFromEnrichment.forEach(upsert);
 
     return Array.from(byName.values());
@@ -902,6 +924,102 @@ export class ScrapingService {
     }
 
     return resolve(process.cwd(), filePath);
+  }
+
+  private async discoverTeamMembersFromDeck(
+    rawText: string,
+    progress?: PhaseProgressCallback,
+  ): Promise<TeamMemberInput[]> {
+    if (!this.aiProvider || !this.aiConfig) {
+      this.logger.debug("[Scraping] AI provider not available; skipping deck team discovery");
+      return [];
+    }
+
+    const truncated = rawText.slice(0, 25_000);
+    if (truncated.trim().length < 100) {
+      return [];
+    }
+
+    progress?.onStepStart("deck_team_discovery", {
+      inputJson: { rawTextLength: truncated.length },
+    });
+
+    const DeckTeamDiscoverySchema = z.object({
+      members: z
+        .array(
+          z.object({
+            name: z.string(),
+            role: z.string(),
+            linkedinUrl: z.string().optional(),
+            bio: z.string().optional(),
+          }),
+        )
+        .max(10),
+    });
+
+    try {
+      const model = this.aiProvider.resolveModelForPurpose(ModelPurpose.EXTRACTION);
+
+      const { experimental_output: output } = await generateText({
+        model,
+        system: `You are a pitch deck analyst. Analyze the following pitch deck text to identify the TOP 6-10 most impactful leadership team members.
+
+INCLUDE (in order of priority):
+1. Founders and Co-founders
+2. C-suite executives (CEO, CTO, CFO, COO, CMO, CRO, CPO, etc.)
+3. VPs (VP of Engineering, VP of Sales, VP of Product, etc.)
+4. Directors (Director of Engineering, Director of Marketing, etc.)
+
+LIMIT: Return only the TOP 10 most senior/impactful people. Prioritize founders and C-level first.
+
+DO NOT INCLUDE:
+- Advisors (even if they have an "Advisor" title)
+- Board members (unless they are also executives)
+- People mentioned in endorsements/testimonials
+- Customers or partners
+- Industry figures mentioned as references
+- Anyone from OTHER companies providing quotes
+- Regular employees below Director level
+
+Return each person with their full name, their role/title, and optionally their LinkedIn URL and a short bio if mentioned.`,
+        prompt: truncated,
+        output: Output.object({ schema: DeckTeamDiscoverySchema }),
+      });
+
+      const members = (output ?? { members: [] }).members;
+
+      const result: TeamMemberInput[] = members
+        .filter((m) => m.name.trim().length >= 2)
+        .map((m) => ({
+          name: m.name.trim(),
+          role: m.role?.trim() || undefined,
+          linkedinUrl: m.linkedinUrl?.trim() || undefined,
+        }));
+
+      this.logger.log(`[Scraping] Deck team discovery found ${result.length} members`);
+      progress?.onStepComplete("deck_team_discovery", {
+        summary: { discovered: result.length },
+        outputJson: { members: result },
+      });
+
+      return result;
+    } catch (error) {
+      const message = this.asMessage(error);
+      this.logger.warn(`[Scraping] Deck team discovery failed: ${message}`);
+      progress?.onStepFailed("deck_team_discovery", message, {
+        outputJson: { error: message },
+      });
+      return [];
+    }
+  }
+
+  private async loadExtractionResult(startupId: string): Promise<ExtractionResult | null> {
+    if (!this.pipelineState) return null;
+    try {
+      return await this.pipelineState.getPhaseResult(startupId, PipelinePhase.EXTRACTION);
+    } catch {
+      return null;
+    }
   }
 
   private async loadEnrichmentResult(startupId: string): Promise<EnrichmentResult | null> {

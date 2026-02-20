@@ -32,11 +32,37 @@ describe("TeamResearchAgent", () => {
       "companyDescription",
       "companyName",
       "industry",
+      "productDescription",
+      "specificMarket",
       "teamMembers",
       "websiteUrl",
     ]);
     expect(context).not.toHaveProperty("claimedTAM");
-    expect(context).not.toHaveProperty("productDescription");
     expect(context).not.toHaveProperty("knownFunding");
+    expect(context.specificMarket).toBeUndefined();
+    expect(context.productDescription).toBeUndefined();
+  });
+
+  it("uses researchParameters when available", () => {
+    const inputWithParams: ResearchPipelineInput = {
+      ...pipelineInput,
+      researchParameters: {
+        companyName: "Inside Line",
+        sector: "SaaS",
+        specificMarket: "AI-powered startup diligence",
+        productDescription: "Automated VC due diligence platform",
+        targetCustomers: "Venture capital firms",
+        knownCompetitors: ["Harmonic", "Sourcescrub"],
+        geographicFocus: "United States",
+        businessModel: "SaaS subscription",
+        fundingStage: "seed",
+        teamMembers: [],
+        claimedMetrics: { tam: "$5B", growthRate: "25% CAGR" },
+      },
+    };
+    const context = TeamResearchAgent.contextBuilder(inputWithParams);
+
+    expect(context.specificMarket).toBe("AI-powered startup diligence");
+    expect(context.productDescription).toBe("Automated VC due diligence platform");
   });
 });

@@ -25,6 +25,10 @@ type ResearchTemplateVariables = {
   claimedTechStack: string;
   knownCompetitors: string;
   claimedDifferentiation: string;
+  targetCustomers: string;
+  geographicFocus: string;
+  businessModel: string;
+  fundingStage: string;
 };
 
 const DEFAULT_TEXT = "Not provided";
@@ -287,6 +291,8 @@ export const buildResearchPromptVariables = (input: {
   const claimedDifferentiation =
     firstNonEmpty(extraction.tagline, scraping.notableClaims[0]) ?? DEFAULT_TEXT;
 
+  const rp = pipelineInput.researchParameters;
+
   const promptContext = {
     ...agentContext,
     startupFormContext,
@@ -311,13 +317,19 @@ export const buildResearchPromptVariables = (input: {
       deckClaims,
       adminGuidance,
       location,
-      claimedTam,
-      claimedGrowthRate,
-      targetMarket,
-      productDescription: truncate(productDescription, 8000),
+      claimedTam: rp?.claimedMetrics?.tam ?? claimedTam,
+      claimedGrowthRate: rp?.claimedMetrics?.growthRate ?? claimedGrowthRate,
+      targetMarket: rp?.specificMarket || targetMarket,
+      productDescription: truncate(rp?.productDescription || productDescription, 8000),
       claimedTechStack,
-      knownCompetitors,
+      knownCompetitors: rp?.knownCompetitors?.length
+        ? toBulletList(rp.knownCompetitors)
+        : knownCompetitors,
       claimedDifferentiation,
+      targetCustomers: rp?.targetCustomers || DEFAULT_TEXT,
+      geographicFocus: rp?.geographicFocus || DEFAULT_TEXT,
+      businessModel: rp?.businessModel || DEFAULT_TEXT,
+      fundingStage: rp?.fundingStage || DEFAULT_TEXT,
     },
   };
 };

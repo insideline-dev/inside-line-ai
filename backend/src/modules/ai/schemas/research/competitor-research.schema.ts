@@ -59,6 +59,15 @@ export const CompetitorDetailSchema = z.object({
   differentiators: stringArray,
   weaknesses: stringArray,
   threatLevel: optionalThreatLevel,
+  funding: z.object({
+    totalRaised: optionalString,
+    lastRound: optionalString,
+    lastRoundDate: optionalString,
+    keyInvestors: stringArray,
+  }).optional(),
+  productFeatures: stringArray,
+  recentNews: stringArray,
+  marketShare: optionalString,
 });
 
 export const IndirectCompetitorDetailSchema = z.object({

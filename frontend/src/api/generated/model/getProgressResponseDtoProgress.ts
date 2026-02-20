@@ -58,11 +58,18 @@ export type GetProgressResponseDtoProgress = {
    * @maximum 9007199254740991
    */
   retryCount?: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  phaseRetryCount?: number;
+  agentAttemptId?: string;
   usedFallback?: boolean;
   fallbackReason?: 'EMPTY_STRUCTURED_OUTPUT' | 'TIMEOUT' | 'SCHEMA_OUTPUT_INVALID' | 'MODEL_OR_PROVIDER_ERROR' | 'UNHANDLED_AGENT_EXCEPTION';
   rawProviderError?: string;
   lastEvent?: 'started' | 'retrying' | 'completed' | 'failed' | 'fallback';
   lastEventAt?: string;
+  dataSummary?: { [key: string]: unknown };
 }};
 }};
   agentEvents?: ({
@@ -82,6 +89,12 @@ export type GetProgressResponseDtoProgress = {
    * @maximum 9007199254740991
    */
   retryCount?: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  phaseRetryCount?: number;
+  agentAttemptId?: string;
   error?: string;
   fallbackReason?: 'EMPTY_STRUCTURED_OUTPUT' | 'TIMEOUT' | 'SCHEMA_OUTPUT_INVALID' | 'MODEL_OR_PROVIDER_ERROR' | 'UNHANDLED_AGENT_EXCEPTION';
   rawProviderError?: string;
@@ -91,6 +104,8 @@ export type GetProgressResponseDtoProgress = {
   pipelineRunId: string;
   phase: string;
   agentKey: string;
+  traceKind?: 'ai_agent' | 'phase_step';
+  stepKey?: string;
   status: 'running' | 'completed' | 'failed' | 'fallback';
   /**
    * @minimum 0
@@ -104,16 +119,22 @@ export type GetProgressResponseDtoProgress = {
   retryCount?: number;
   usedFallback?: boolean;
   /** @nullable */
+  inputText?: string | null;
+  /** @nullable */
   inputPrompt?: string | null;
+  inputJson?: unknown;
   /** @nullable */
   outputText?: string | null;
   outputJson?: unknown;
+  meta?: { [key: string]: unknown };
   /** @nullable */
   error?: string | null;
   fallbackReason?: 'EMPTY_STRUCTURED_OUTPUT' | 'TIMEOUT' | 'SCHEMA_OUTPUT_INVALID' | 'MODEL_OR_PROVIDER_ERROR' | 'UNHANDLED_AGENT_EXCEPTION';
   rawProviderError?: string;
+  captureStatus?: 'captured' | 'missing' | 'provider_error_only';
   startedAt?: string;
   /** @nullable */
   completedAt?: string | null;
 })[];
+  phaseResults?: { [key: string]: unknown };
 } | null;

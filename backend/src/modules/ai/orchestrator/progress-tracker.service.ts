@@ -627,7 +627,20 @@ export class ProgressTrackerService {
     next: AgentLifecycleEvent,
   ): AgentLifecycleEvent[] {
     const MAX_EVENTS = 300;
-    const duplicate = existing.some((event) => event.id === next.id);
+    const duplicate = existing.some(
+      (event) =>
+        event.id === next.id ||
+        (event.pipelineRunId === next.pipelineRunId &&
+          event.phase === next.phase &&
+          event.agentKey === next.agentKey &&
+          event.event === next.event &&
+          (event.agentAttemptId ?? null) === (next.agentAttemptId ?? null) &&
+          (event.attempt ?? null) === (next.attempt ?? null) &&
+          (event.retryCount ?? null) === (next.retryCount ?? null) &&
+          (event.phaseRetryCount ?? null) === (next.phaseRetryCount ?? null) &&
+          (event.error ?? null) === (next.error ?? null) &&
+          (event.fallbackReason ?? null) === (next.fallbackReason ?? null)),
+    );
     if (duplicate) {
       return existing;
     }

@@ -549,7 +549,7 @@ export class EnrichmentService {
     ];
 
     if (remainingGaps?.has("teamMembers") || remainingGaps?.has("contactName")) {
-      queries.push({ query: `${companyName} founder CEO team site:linkedin.com OR site:crunchbase.com`, options: { count: 5 } });
+      queries.push({ query: `${companyName} founder CEO team site:crunchbase.com`, options: { count: 5 } });
     }
     if (remainingGaps?.has("fundingTarget") || remainingGaps?.has("stage")) {
       queries.push({ query: `${companyName} funding round raised series site:crunchbase.com OR site:techcrunch.com`, options: { count: 5 } });
@@ -1854,26 +1854,6 @@ export class EnrichmentService {
         updatedFields.push(
           `${fieldDef.label} (corrected: "${correction.oldValue}" → "${correction.newValue}", confidence=${correction.confidence.toFixed(2)})`,
         );
-      }
-    }
-
-    // Merge discovered founders into teamMembers
-    if (enrichment.discoveredFounders.length > 0 && record.teamMembers) {
-      const existingNames = new Set(
-        record.teamMembers.map((m) => m.name.trim().toLowerCase()),
-      );
-      const newMembers = enrichment.discoveredFounders
-        .filter((f) => f.confidence >= 0.5 && !existingNames.has(f.name.trim().toLowerCase()))
-        .map((f) => ({
-          name: f.name,
-          role: f.role ?? "Founder",
-          linkedinUrl: f.linkedinUrl ?? "",
-        }));
-
-      if (newMembers.length > 0) {
-        updates.teamMembers = [...record.teamMembers, ...newMembers];
-        updatedFields.push(`teamMembers (+${newMembers.length} discovered)`);
-        foundersAdded = newMembers.length;
       }
     }
 

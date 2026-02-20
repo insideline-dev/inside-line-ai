@@ -18,6 +18,7 @@ import {
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
+import { z } from 'zod';
 import { JwtAuthGuard } from '../../auth/guards';
 import { CurrentUser } from '../../auth/decorators';
 import { UserRole } from '../../auth/entities/auth.schema';
@@ -41,8 +42,11 @@ import { BulkDataService } from './bulk-data.service';
 import { AdminMatchingService } from './admin-matching.service';
 import { AiPromptService } from '../ai/services/ai-prompt.service';
 import { AiPromptRuntimeService } from '../ai/services/ai-prompt-runtime.service';
+import { AiModelConfigService } from '../ai/services/ai-model-config.service';
+import { AI_RUNTIME_ALLOWED_MODEL_NAMES } from '../ai/services/ai-runtime-config.schema';
 import { QUEUE_NAMES, QueueName } from '../../queue';
 import { EarlyAccessService, CreateEarlyAccessInviteDto } from '../early-access';
+import { AI_SCHEMAS } from '../ai/schemas';
 import {
   GetUsersQueryDto,
   UpdateUserDto,
@@ -54,14 +58,18 @@ import {
   RetryAgentDto,
   CreateAiPromptRevisionDto,
   UpdateAiPromptRevisionDto,
+  CreateAiModelConfigDraftDto,
+  UpdateAiModelConfigDraftDto,
   AiPromptDefinitionsResponseDto,
   AiPromptRevisionsResponseDto,
   AiPromptRevisionResponseDto,
   AiPromptSeedResultDto,
+  AiModelConfigResponseDto,
   AiPromptFlowResponseDto,
   AiPromptContextSchemaResponseDto,
   PreviewAiPromptRequestDto,
   AiPromptPreviewResponseDto,
+  AiPromptOutputSchemaResponseDto,
   PreviewAiPipelineContextRequestDto,
   AiPipelineContextPreviewResponseDto,
   QuickCreateStartupDto,
@@ -97,8 +105,48 @@ export class AdminController {
     private adminMatchingService: AdminMatchingService,
     private aiPromptService: AiPromptService,
     private aiPromptRuntimeService: AiPromptRuntimeService,
+    private aiModelConfigService: AiModelConfigService,
     private earlyAccessService: EarlyAccessService,
   ) {}
+
+  private resolveOutputSchemaForKey(key: string): z.ZodTypeAny | null {
+    const schemaMap: Record<string, z.ZodTypeAny> = {
+      'extraction.fields': AI_SCHEMAS.extraction,
+      'research.team': AI_SCHEMAS.research.team,
+      'research.market': AI_SCHEMAS.research.market,
+      'research.product': AI_SCHEMAS.research.product,
+      'research.news': AI_SCHEMAS.research.news,
+      'research.competitor': AI_SCHEMAS.research.competitor,
+      'evaluation.team': AI_SCHEMAS.evaluation.team,
+      'evaluation.market': AI_SCHEMAS.evaluation.market,
+      'evaluation.product': AI_SCHEMAS.evaluation.product,
+      'evaluation.traction': AI_SCHEMAS.evaluation.traction,
+      'evaluation.businessModel': AI_SCHEMAS.evaluation.businessModel,
+      'evaluation.gtm': AI_SCHEMAS.evaluation.gtm,
+      'evaluation.financials': AI_SCHEMAS.evaluation.financials,
+      'evaluation.competitiveAdvantage': AI_SCHEMAS.evaluation.competitiveAdvantage,
+      'evaluation.legal': AI_SCHEMAS.evaluation.legal,
+      'evaluation.dealTerms': AI_SCHEMAS.evaluation.dealTerms,
+      'evaluation.exitPotential': AI_SCHEMAS.evaluation.exitPotential,
+      'synthesis.final': AI_SCHEMAS.synthesis,
+      'matching.thesis': AI_SCHEMAS.thesisAlignment,
+    };
+
+    return schemaMap[key] ?? null;
+  }
+
+  private async buildAiModelConfigResponse(key: string) {
+    const { definition, revisions } = await this.aiModelConfigService.listRevisionsByKey(key);
+    const resolved = await this.aiModelConfigService.resolveConfig({
+      key: definition.key as Parameters<AiModelConfigService['resolveConfig']>[0]['key'],
+    });
+
+    return {
+      resolved,
+      revisions,
+      allowedModels: [...AI_RUNTIME_ALLOWED_MODEL_NAMES],
+    };
+  }
 
   // ============ ANALYTICS ENDPOINTS ============
 
@@ -335,6 +383,75 @@ export class AdminController {
   @ApiResponse({ status: 200, type: AiPromptRevisionsResponseDto })
   async getAiPromptRevisions(@Param('key') key: string) {
     return this.aiPromptService.getRevisionsByKey(key);
+  }
+
+  @Get('ai-prompts/:key/model-config')
+  @ApiOperation({ summary: "Get resolved model config, revisions history, and allowed models" })
+  @ApiResponse({ status: 200, type: AiModelConfigResponseDto })
+  async getAiModelConfig(@Param('key') key: string) {
+    return this.buildAiModelConfigResponse(key);
+  }
+
+  @Post('ai-prompts/:key/model-config')
+  @ApiOperation({ summary: "Create model config draft revision" })
+  @ApiResponse({ status: 201, type: AiModelConfigResponseDto })
+  async createAiModelConfigDraft(
+    @CurrentUser() admin: User,
+    @Param('key') key: string,
+    @Body() dto: CreateAiModelConfigDraftDto,
+  ) {
+    await this.aiModelConfigService.createDraft(key, admin.id, dto);
+    return this.buildAiModelConfigResponse(key);
+  }
+
+  @Patch('ai-prompts/:key/model-config/:revisionId')
+  @ApiOperation({ summary: "Update model config draft revision" })
+  @ApiResponse({ status: 200, type: AiModelConfigResponseDto })
+  async updateAiModelConfigDraft(
+    @Param('key') key: string,
+    @Param('revisionId', ParseUUIDPipe) revisionId: string,
+    @Body() dto: UpdateAiModelConfigDraftDto,
+  ) {
+    await this.aiModelConfigService.updateDraft(key, revisionId, dto);
+    return this.buildAiModelConfigResponse(key);
+  }
+
+  @Post('ai-prompts/:key/model-config/:revisionId/publish')
+  @ApiOperation({ summary: "Publish model config draft revision" })
+  @ApiResponse({ status: 201, type: AiModelConfigResponseDto })
+  async publishAiModelConfigDraft(
+    @CurrentUser() admin: User,
+    @Param('key') key: string,
+    @Param('revisionId', ParseUUIDPipe) revisionId: string,
+  ) {
+    await this.aiModelConfigService.publishRevision(key, revisionId, admin.id);
+    return this.buildAiModelConfigResponse(key);
+  }
+
+  @Delete('ai-prompts/:key/model-config/:revisionId')
+  @ApiOperation({ summary: "Archive model config draft revision (soft delete)" })
+  async deleteAiModelConfigDraft(
+    @Param('key') key: string,
+    @Param('revisionId', ParseUUIDPipe) revisionId: string,
+  ) {
+    await this.aiModelConfigService.archiveRevision(key, revisionId);
+    return { success: true, message: 'Revision archived' };
+  }
+
+  @Get('ai-prompts/:key/output-schema')
+  @ApiOperation({ summary: "Get output JSON schema for a prompt key" })
+  @ApiResponse({ status: 200, type: AiPromptOutputSchemaResponseDto })
+  async getAiPromptOutputSchema(@Param('key') key: string) {
+    const zodSchema = this.resolveOutputSchemaForKey(key);
+    if (!zodSchema) {
+      throw new BadRequestException(`No output schema found for key: ${key}`);
+    }
+
+    return {
+      key,
+      jsonSchema: z.toJSONSchema(zodSchema),
+      note: 'Schema defined in code. Editable schema config coming in a future update.',
+    };
   }
 
   @Get('ai-prompts/:key/context-schema')

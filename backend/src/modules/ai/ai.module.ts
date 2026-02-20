@@ -59,6 +59,7 @@ import { WebsiteScraperService } from "./services/website-scraper.service";
 import { BraveSearchService } from "./services/brave-search.service";
 import { EnrichmentService } from "./services/enrichment.service";
 
+
 @Global()
 @Module({
   imports: [
@@ -131,6 +132,7 @@ import { EnrichmentService } from "./services/enrichment.service";
     PipelineService,
     InvestorMatchingService,
     StartupMatchingPipelineService,
+    OrchestratorModule,
   ],
 })
 export class AiModule {}

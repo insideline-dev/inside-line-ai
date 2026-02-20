@@ -376,78 +376,69 @@ function PipelinePage() {
         </div>
       </div>
 
-      {/* My Private Analysis */}
+      {/* Private startups shown inline with the main pipeline view */}
       {myStartupsResponse.isLoading ? (
-        <div className="space-y-4">
-          <div className="flex items-center gap-2">
-            <Lock className="h-4 w-4 text-muted-foreground" />
-            <h2 className="text-lg font-semibold">My Private Analysis</h2>
-          </div>
-          <div className="grid gap-4 md:grid-cols-2">
-            {[1, 2].map((i) => (
-              <Skeleton key={i} className="h-36 w-full" />
-            ))}
-          </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          {[1, 2].map((i) => (
+            <Skeleton key={i} className="h-36 w-full" />
+          ))}
         </div>
       ) : myStartups.length > 0 ? (
-        <div className="space-y-4">
-          <div className="flex items-center gap-2">
-            <Lock className="h-4 w-4 text-muted-foreground" />
-            <h2 className="text-lg font-semibold">My Private Analysis</h2>
-            <Badge variant="secondary">{myStartups.length}</Badge>
-          </div>
-          <div className="grid gap-4 md:grid-cols-2">
-            {myStartups.map((startup) => (
-              <Card key={startup.id}>
-                <CardContent className="p-4 space-y-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="font-semibold truncate">{startup.name}</p>
-                      <p className="text-sm text-muted-foreground line-clamp-1">
-                        {startup.description || "No description"}
-                      </p>
-                    </div>
-                    <ScoreRing
-                      score={startup.status === "approved" ? startup.overallScore ?? 0 : 0}
-                      size="sm"
-                      showLabel={false}
-                    />
+        <div className="grid gap-4 md:grid-cols-2">
+          {myStartups.map((startup) => (
+            <Card key={startup.id}>
+              <CardContent className="p-4 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-semibold truncate">{startup.name}</p>
+                    <p className="text-sm text-muted-foreground line-clamp-1">
+                      {startup.description || "No description"}
+                    </p>
                   </div>
+                  <ScoreRing
+                    score={startup.status === "approved" ? startup.overallScore ?? 0 : 0}
+                    size="sm"
+                    showLabel={false}
+                  />
+                </div>
 
-                  <div className="flex items-center gap-2">
-                    {getStartupStatusBadge(startup.status)}
-                    <Badge variant="outline" className="capitalize">
-                      {formatStageLabel(startup.stage)}
-                    </Badge>
-                  </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="gap-1">
+                    <Lock className="h-3 w-3" />
+                    Private
+                  </Badge>
+                  {getStartupStatusBadge(startup.status)}
+                  <Badge variant="outline" className="capitalize">
+                    {formatStageLabel(startup.stage)}
+                  </Badge>
+                </div>
 
-                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                    <span className="inline-flex items-center gap-1">
-                      <MapPin className="h-3 w-3" />
-                      {startup.location || "Unknown"}
-                    </span>
-                    <span className="inline-flex items-center gap-1">
-                      <Clock className="h-3 w-3" />
-                      {formatDate(startup.createdAt)}
-                    </span>
-                  </div>
+                <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                  <span className="inline-flex items-center gap-1">
+                    <MapPin className="h-3 w-3" />
+                    {startup.location || "Unknown"}
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    {formatDate(startup.createdAt)}
+                  </span>
+                </div>
 
-                  {(startup.status === "submitted" || startup.status === "analyzing") && (
-                    <AnalysisProgressBar startupId={startup.id} />
-                  )}
+                {(startup.status === "submitted" || startup.status === "analyzing") && (
+                  <AnalysisProgressBar startupId={startup.id} />
+                )}
 
-                  {(startup.status === "approved" || startup.status === "pending_review") && (
-                    <Button asChild size="sm" className="w-full">
-                      <Link to="/investor/startup/$id" params={{ id: String(startup.id) }}>
-                        {startup.status === "pending_review" ? "Review Analysis" : "View Analysis"}
-                        <ArrowRight className="ml-2 h-4 w-4" />
-                      </Link>
-                    </Button>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                {(startup.status === "approved" || startup.status === "pending_review") && (
+                  <Button asChild size="sm" className="w-full">
+                    <Link to="/investor/startup/$id" params={{ id: String(startup.id) }}>
+                      {startup.status === "pending_review" ? "Review Analysis" : "View Analysis"}
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </Link>
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          ))}
         </div>
       ) : null}
 

@@ -227,7 +227,13 @@ export class InvestorController {
     @Param('stage') stage: StartupStage,
     @Body() dto: UpdateScoringPreferencesDto,
   ) {
-    return this.scoringPreferencesService.upsert(user.id, stage, dto);
+    const preference = await this.scoringPreferencesService.upsert(
+      user.id,
+      stage,
+      dto,
+    );
+    await this.matchService.regenerateMatches(user.id);
+    return preference;
   }
 
   @Delete('scoring/preferences/:stage')
@@ -236,12 +242,14 @@ export class InvestorController {
     @Param('stage') stage: StartupStage,
   ) {
     await this.scoringPreferencesService.reset(user.id, stage);
+    await this.matchService.regenerateMatches(user.id);
     return { success: true, message: 'Scoring preference reset to defaults' };
   }
 
   @Delete('scoring/preferences')
   async resetAllScoringPreferences(@CurrentUser() user: User) {
     await this.scoringPreferencesService.resetAll(user.id);
+    await this.matchService.regenerateMatches(user.id);
     return { success: true, message: 'All scoring preferences reset to defaults' };
   }
 

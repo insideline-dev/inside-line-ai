@@ -5,6 +5,7 @@ import {
   ResearchResult,
   ScrapingResult,
 } from "./phase-results.interface";
+import type { ResearchParameters } from "./research-parameters.interface";
 
 export type ResearchAgentKey = "team" | "market" | "product" | "news" | "competitor";
 
@@ -25,6 +26,7 @@ export interface ResearchPipelineInput {
   extraction: ExtractionResult;
   scraping: ScrapingResult;
   enrichment?: EnrichmentResult;
+  researchParameters?: ResearchParameters;
 }
 
 export interface EvaluationPipelineInput {

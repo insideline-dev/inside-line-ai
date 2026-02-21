@@ -14,6 +14,7 @@ import { BulkDataService } from '../bulk-data.service';
 import { AdminMatchingService } from '../admin-matching.service';
 import { AiPromptService } from '../../ai/services/ai-prompt.service';
 import { AiPromptRuntimeService } from '../../ai/services/ai-prompt-runtime.service';
+import { AiModelConfigService } from '../../ai/services/ai-model-config.service';
 import { EarlyAccessService } from '../../early-access';
 import { UserRole } from '../../../auth/entities/auth.schema';
 import { StartupStatus } from '../../startup/entities/startup.schema';
@@ -161,6 +162,16 @@ describe('AdminController', () => {
             getContextSchema: jest.fn(),
             previewPrompt: jest.fn(),
             previewPipelineContexts: jest.fn(),
+          },
+        },
+        {
+          provide: AiModelConfigService,
+          useValue: {
+            listRevisionsByKey: jest.fn(),
+            resolveConfig: jest.fn(),
+            createDraft: jest.fn(),
+            updateDraft: jest.fn(),
+            publishRevision: jest.fn(),
           },
         },
         {

@@ -3,6 +3,7 @@ import { ResearchService } from "../../services/research.service";
 import { PipelineStateService } from "../../services/pipeline-state.service";
 import { GeminiResearchService } from "../../services/gemini-research.service";
 import { PipelineFeedbackService } from "../../services/pipeline-feedback.service";
+import { ResearchParametersService } from "../../services/research-parameters.service";
 import { AiPromptService } from "../../services/ai-prompt.service";
 import { PipelinePhase } from "../../interfaces/pipeline.interface";
 import type {
@@ -11,13 +12,29 @@ import type {
   ScrapingResult,
   SourceEntry,
 } from "../../interfaces/phase-results.interface";
+import type { ResearchParameters } from "../../interfaces/research-parameters.interface";
 
 describe("ResearchService", () => {
   let service: ResearchService;
   let pipelineState: jest.Mocked<PipelineStateService>;
   let geminiResearch: jest.Mocked<GeminiResearchService>;
   let pipelineFeedback: jest.Mocked<PipelineFeedbackService>;
+  let researchParametersService: jest.Mocked<ResearchParametersService>;
   let promptService: jest.Mocked<AiPromptService>;
+
+  const mockResearchParameters: ResearchParameters = {
+    companyName: "Inside Line",
+    sector: "SaaS",
+    specificMarket: "AI-powered startup screening and diligence",
+    productDescription: "Inside Line automates diligence workflows for investor teams.",
+    targetCustomers: "Venture capital firms and angel investors",
+    knownCompetitors: ["Harmonic", "Affinity"],
+    geographicFocus: "United States",
+    businessModel: "SaaS",
+    fundingStage: "seed",
+    teamMembers: [{ name: "Alex", role: "CEO" }],
+    claimedMetrics: {},
+  };
 
   const extraction: ExtractionResult = {
     companyName: "Inside Line",
@@ -148,6 +165,10 @@ describe("ResearchService", () => {
       markConsumedByScope: jest.fn().mockResolvedValue(0),
     } as unknown as jest.Mocked<PipelineFeedbackService>;
 
+    researchParametersService = {
+      generate: jest.fn().mockResolvedValue(mockResearchParameters),
+    } as unknown as jest.Mocked<ResearchParametersService>;
+
     promptService = {
       resolve: jest.fn().mockResolvedValue({
         key: "research.team",
@@ -171,6 +192,7 @@ describe("ResearchService", () => {
       geminiResearch,
       pipelineFeedback,
       promptService,
+      researchParametersService,
     );
   });
 
@@ -441,6 +463,33 @@ describe("ResearchService", () => {
     await service.run("startup-1", { agentKey: "market" });
 
     expect(pipelineFeedback.markConsumedByScope).not.toHaveBeenCalled();
+  });
+
+  it("calls researchParametersService.generate before dispatching agents", async () => {
+    const callOrder: string[] = [];
+    researchParametersService.generate.mockImplementation(async () => {
+      callOrder.push("researchParameters");
+      return mockResearchParameters;
+    });
+
+    // Need a full run so just track order via the existing geminiResearch mock
+    const origResearch = geminiResearch.research.getMockImplementation()!;
+    geminiResearch.research.mockImplementation(async (args) => {
+      callOrder.push(`agent:${args.agent}`);
+      return origResearch(args);
+    });
+
+    await service.run("startup-1");
+
+    expect(researchParametersService.generate).toHaveBeenCalledTimes(1);
+    expect(callOrder[0]).toBe("researchParameters");
+    expect(callOrder.slice(1).every((c) => c.startsWith("agent:"))).toBe(true);
+  });
+
+  it("includes researchParameters in the returned result", async () => {
+    const result = await service.run("startup-1");
+
+    expect(result.researchParameters).toEqual(mockResearchParameters);
   });
 
   it("emits per-agent start and completion callbacks", async () => {

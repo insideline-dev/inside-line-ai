@@ -42,17 +42,8 @@ export const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
   },
   phases: [
     {
-      phase: PipelinePhase.ENRICHMENT,
-      dependsOn: [],
-      canRunParallelWith: [],
-      timeoutMs: 5 * 60 * 1000,
-      maxRetries: 2,
-      required: false,
-      queue: QUEUE_NAMES.AI_ENRICHMENT,
-    },
-    {
       phase: PipelinePhase.EXTRACTION,
-      dependsOn: [PipelinePhase.ENRICHMENT],
+      dependsOn: [],
       canRunParallelWith: [],
       timeoutMs: 8 * 60 * 1000,
       maxRetries: 2,
@@ -60,9 +51,18 @@ export const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
       queue: QUEUE_NAMES.AI_EXTRACTION,
     },
     {
+      phase: PipelinePhase.ENRICHMENT,
+      dependsOn: [PipelinePhase.EXTRACTION],
+      canRunParallelWith: [PipelinePhase.SCRAPING],
+      timeoutMs: 5 * 60 * 1000,
+      maxRetries: 2,
+      required: false,
+      queue: QUEUE_NAMES.AI_ENRICHMENT,
+    },
+    {
       phase: PipelinePhase.SCRAPING,
-      dependsOn: [PipelinePhase.ENRICHMENT],
-      canRunParallelWith: [],
+      dependsOn: [PipelinePhase.EXTRACTION],
+      canRunParallelWith: [PipelinePhase.ENRICHMENT],
       timeoutMs: 10 * 60 * 1000,
       maxRetries: 2,
       required: false,
@@ -70,7 +70,7 @@ export const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
     },
     {
       phase: PipelinePhase.RESEARCH,
-      dependsOn: [PipelinePhase.EXTRACTION, PipelinePhase.SCRAPING],
+      dependsOn: [PipelinePhase.ENRICHMENT, PipelinePhase.SCRAPING],
       canRunParallelWith: [],
       timeoutMs: 10 * 60 * 1000,
       maxRetries: 2,

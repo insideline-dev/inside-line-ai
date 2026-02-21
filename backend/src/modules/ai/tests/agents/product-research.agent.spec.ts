@@ -50,14 +50,43 @@ describe("ProductResearchAgent", () => {
     const context = ProductResearchAgent.contextBuilder(pipelineInput);
 
     expect(Object.keys(context).sort()).toEqual([
+      "businessModel",
       "demoUrl",
       "knownCompetitors",
       "productDescription",
+      "specificMarket",
       "websiteHeadings",
       "websiteProductPages",
     ]);
     expect(context).not.toHaveProperty("teamMembers");
     expect(context).not.toHaveProperty("claimedTAM");
     expect(context).not.toHaveProperty("knownFunding");
+    expect(context.businessModel).toBeUndefined();
+    expect(context.specificMarket).toBeUndefined();
+  });
+
+  it("uses researchParameters when available", () => {
+    const inputWithParams: ResearchPipelineInput = {
+      ...pipelineInput,
+      researchParameters: {
+        companyName: "Inside Line",
+        sector: "SaaS",
+        specificMarket: "AI-powered startup diligence",
+        productDescription: "Automated VC due diligence platform",
+        targetCustomers: "Venture capital firms",
+        knownCompetitors: ["Harmonic", "Sourcescrub"],
+        geographicFocus: "United States",
+        businessModel: "SaaS subscription",
+        fundingStage: "seed",
+        teamMembers: [],
+        claimedMetrics: { tam: "$5B", growthRate: "25% CAGR" },
+      },
+    };
+    const context = ProductResearchAgent.contextBuilder(inputWithParams);
+
+    expect(context.productDescription).toBe("Automated VC due diligence platform");
+    expect(context.knownCompetitors).toEqual(["Harmonic", "Sourcescrub"]);
+    expect(context.businessModel).toBe("SaaS subscription");
+    expect(context.specificMarket).toBe("AI-powered startup diligence");
   });
 });

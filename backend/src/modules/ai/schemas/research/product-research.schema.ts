@@ -21,7 +21,7 @@ const urlArray = z.preprocess(
 
 const optionalString = z.preprocess(
   nullToUndefined,
-  z.string().optional(),
+  z.string().min(1).optional(),
 );
 
 const optionalSentiment = z.preprocess(
@@ -40,6 +40,21 @@ export const ProductResearchSchema = z.object({
       sentiment: optionalSentiment,
     })
     .default({}),
+  reviews: z.array(z.object({
+    source: z.string(),
+    rating: optionalString,
+    summary: z.string(),
+    url: optionalString,
+  })).default([]),
+  strengths: stringArray,
+  weaknesses: stringArray,
+  competitivePosition: optionalString,
+  marketDynamics: z.object({
+    entryBarriers: optionalString,
+    substitutes: stringArray,
+    buyerPower: optionalString,
+    supplierPower: optionalString,
+  }).optional(),
   sources: urlArray,
 });
 

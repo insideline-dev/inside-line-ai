@@ -101,6 +101,9 @@ export class SynthesisService {
       evaluation,
     );
 
+    const percentileRank = await this.scoreComputation.computePercentileRank(synthesis.overallScore);
+    synthesis.percentileRank = percentileRank;
+
     await this.persistResults(startupId, synthesis, evaluation, scraping, research);
 
     this.logger.log(

@@ -1,3 +1,4 @@
+import type { ResearchParameters } from "./research-parameters.interface";
 import type {
   BusinessModelEvaluation,
   CompetitiveAdvantageEvaluation,
@@ -151,6 +152,7 @@ export interface EnrichedTeamMember {
       description?: string;
     }>;
   };
+  teamMemberSource?: "submitted" | "website" | "linkedin" | "deck" | "enrichment";
   enrichmentStatus: "success" | "not_configured" | "not_found" | "error";
   enrichedAt?: string;
 }
@@ -186,6 +188,7 @@ export interface ResearchResult {
   competitor: CompetitorResearch | null;
   sources: SourceEntry[];
   errors: Array<{ agent: "team" | "market" | "product" | "news" | "competitor"; error: string }>;
+  researchParameters?: ResearchParameters;
 }
 
 export interface EvaluationSummary {
@@ -309,6 +312,12 @@ export interface EnrichmentResult {
   website?: EnrichmentConfidenceField<string>;
   foundingDate?: EnrichmentConfidenceField<string>;
   headquarters?: EnrichmentConfidenceField<string>;
+  fundingTarget?: EnrichmentConfidenceField<number>;
+  contactName?: EnrichmentConfidenceField<string>;
+  contactEmail?: EnrichmentConfidenceField<string>;
+  sectorIndustry?: EnrichmentConfidenceField<string>;
+  sectorIndustryGroup?: EnrichmentConfidenceField<string>;
+  productDescription?: EnrichmentConfidenceField<string>;
   discoveredFounders: EnrichmentDiscoveredFounder[];
   fundingHistory: EnrichmentFundingEntry[];
   pitchDeckUrls: EnrichmentPitchDeckUrl[];
@@ -321,6 +330,26 @@ export interface EnrichmentResult {
   correctionDetails: EnrichmentCorrectionDetail[];
   sources: Array<{ url: string; title: string; type: string }>;
   dbFieldsUpdated: string[];
+  dataProvenance?: {
+    fromExtraction: string[];
+    fromEmail: string[];
+    fromWebSearch: string[];
+    fromAiSynthesis: string[];
+  };
+  webSearchSkipped?: boolean;
+}
+
+export interface ClaraEmailContext {
+  conversations: Array<{
+    investorEmail: string;
+    investorName: string | null;
+    messages: Array<{
+      subject: string | null;
+      bodyText: string | null;
+      direction: string;
+    }>;
+  }>;
+  summary: string;
 }
 
 export interface SynthesisResult {
@@ -332,6 +361,7 @@ export interface SynthesisResult {
   investmentThesis: string;
   nextSteps: string[];
   confidenceLevel: "High" | "Medium" | "Low";
+  percentileRank?: number;
   sectionScores: {
     team: number;
     market: number;

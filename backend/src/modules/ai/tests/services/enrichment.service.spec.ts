@@ -12,6 +12,7 @@ import type { PipelineStateService } from "../../services/pipeline-state.service
 import type { BraveSearchService } from "../../services/brave-search.service";
 import type { AiProviderService } from "../../providers/ai-provider.service";
 import type { AiConfigService } from "../../services/ai-config.service";
+import type { ClaraEmailContextService } from "../../services/clara-email-context.service";
 
 // ---- helpers ----
 
@@ -113,15 +114,20 @@ function buildService(opts: {
     generateTextMock.mockResolvedValue({ text: opts.aiText });
   }
 
+  const claraEmailContext = {
+    getEmailContext: jest.fn().mockResolvedValue(null),
+  } as unknown as jest.Mocked<ClaraEmailContextService>;
+
   const service = new EnrichmentService(
     drizzle as unknown as DrizzleService,
     pipelineState as unknown as PipelineStateService,
     braveSearch as unknown as BraveSearchService,
     aiProvider as unknown as AiProviderService,
     aiConfig as unknown as AiConfigService,
+    claraEmailContext as unknown as ClaraEmailContextService,
   );
 
-  return { service, drizzle, pipelineState, braveSearch, aiConfig };
+  return { service, drizzle, pipelineState, braveSearch, aiConfig, claraEmailContext };
 }
 
 // ---- tests ----
@@ -338,6 +344,11 @@ describe("EnrichmentService", () => {
         tagline: "Make it",
         industry: "SaaS",
         location: "NYC",
+        contactName: "Alice",
+        contactEmail: "alice@acme.com",
+        sectorIndustry: "Software",
+        sectorIndustryGroup: "Technology",
+        productDescription: "A cool product",
         teamMembers: [{ name: "Alice", role: "CEO" }],
       });
 

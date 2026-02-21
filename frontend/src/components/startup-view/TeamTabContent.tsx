@@ -258,9 +258,7 @@ function buildTeamMembers(
   const extractedFounders = teamData?.enrichedMembers || teamData?.founders || [];
   const teamEvalMembers =
     teamData?.teamMembers || teamData?.members || teamData?.teamEvaluation?.members || [];
-  const researchTeamMembers =
-    (evaluation as any)?.comprehensiveResearchData?.extractedData?.teamMembers ||
-    [];
+  const researchTeamMembers: any[] = [];
   const submittedKeys = new Set(
     (submittedMembers || []).map((member) => normalizeKey(member.name)).filter(Boolean),
   );

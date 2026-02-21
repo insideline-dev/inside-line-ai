@@ -41,6 +41,8 @@ describe("PdfTextExtractorService", () => {
     const result = await service.extractText(Buffer.from([1, 2, 3]));
 
     expect(result.hasContent).toBe(true);
+    expect(result.hasSparsePages).toBe(true);
+    expect(result.sparsePageCount).toBe(2);
     expect(result.pageCount).toBe(2);
     expect(result.text).toContain("This pitch deck");
     expect(destroyMock).toHaveBeenCalledTimes(1);
@@ -57,12 +59,68 @@ describe("PdfTextExtractorService", () => {
 
     expect(result.hasContent).toBe(false);
     expect(result.pageCount).toBe(3);
+    expect(result.hasSparsePages).toBe(true);
+    expect(result.sparsePageCount).toBe(3);
   });
 
   it("throws on empty buffer", async () => {
     await expect(service.extractText(Buffer.alloc(0))).rejects.toThrow(
       "Invalid PDF buffer: file is empty",
     );
+  });
+
+  it("detects sparse pages when some slides are image-only", async () => {
+    const richText = "This pitch deck explains a SaaS product with market traction and strong team execution across multiple verticals and regions with detailed financial projections.";
+    getTextMock.mockResolvedValue({
+      text: richText + " " + richText,
+      total: 5,
+      pages: [
+        { num: 1, text: richText },
+        { num: 2, text: "" },
+        { num: 3, text: "1" },
+        { num: 4, text: "" },
+        { num: 5, text: richText },
+      ],
+    });
+
+    const result = await service.extractText(Buffer.from([1, 2, 3]));
+
+    expect(result.hasContent).toBe(true);
+    expect(result.hasSparsePages).toBe(true);
+    expect(result.sparsePageCount).toBe(3);
+  });
+
+  it("does not flag sparse pages when only title slide is sparse", async () => {
+    getTextMock.mockResolvedValue({
+      text: "Title. " + "A".repeat(400),
+      total: 10,
+      pages: [
+        { num: 1, text: "Title." },
+        ...Array.from({ length: 9 }, (_, i) => ({
+          num: i + 2,
+          text: "A".repeat(30),
+        })),
+      ],
+    });
+
+    const result = await service.extractText(Buffer.from([1, 2, 3]));
+
+    expect(result.hasContent).toBe(true);
+    expect(result.hasSparsePages).toBe(false);
+    expect(result.sparsePageCount).toBe(1);
+  });
+
+  it("returns hasSparsePages=false when pages array is empty", async () => {
+    getTextMock.mockResolvedValue({
+      text: "",
+      total: 0,
+      pages: [],
+    });
+
+    const result = await service.extractText(Buffer.from([1, 2, 3]));
+
+    expect(result.hasSparsePages).toBe(false);
+    expect(result.sparsePageCount).toBe(0);
   });
 
   it("wraps parser failures with extraction context", async () => {

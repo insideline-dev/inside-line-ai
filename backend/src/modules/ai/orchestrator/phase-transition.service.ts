@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import {
   PhaseStatus,
   PipelinePhase,
@@ -12,6 +12,7 @@ import {
   isPhaseTerminal,
   validatePipelineConfig,
 } from "./pipeline.config";
+import { PipelineFlowConfigService } from "../services/pipeline-flow-config.service";
 
 export interface TransitionDecision {
   queue: PipelinePhase[];
@@ -21,12 +22,31 @@ export interface TransitionDecision {
 }
 
 @Injectable()
-export class PhaseTransitionService {
-  private readonly config: PipelineConfig;
+export class PhaseTransitionService implements OnModuleInit {
+  private readonly logger = new Logger(PhaseTransitionService.name);
+  private config: PipelineConfig;
 
-  constructor() {
+  constructor(
+    private pipelineFlowConfigService: PipelineFlowConfigService,
+  ) {
     this.config = DEFAULT_PIPELINE_CONFIG;
     validatePipelineConfig(this.config);
+  }
+
+  async onModuleInit() {
+    await this.refreshConfig();
+  }
+
+  async refreshConfig(): Promise<void> {
+    try {
+      this.config = await this.pipelineFlowConfigService.getEffectiveConfig();
+      validatePipelineConfig(this.config);
+    } catch (err) {
+      this.logger.warn(
+        `Failed to load published pipeline config, using DEFAULT: ${(err as Error).message}`,
+      );
+      this.config = DEFAULT_PIPELINE_CONFIG;
+    }
   }
 
   getConfig(): PipelineConfig {

@@ -46,6 +46,9 @@ import type {
   CreateAiModelConfigDraftDto,
   CreateAiPromptRevisionDto,
   CreateEarlyAccessInviteDto,
+  CreatePipelineFlowConfigDto,
+  PipelineFlowConfigListResponseDto,
+  PipelineFlowConfigResponseDto,
   PreviewAiPipelineContextRequestDto,
   PreviewAiPromptRequestDto,
   QuickCreateStartupDto,
@@ -53,6 +56,7 @@ import type {
   RetryPhaseDto,
   UpdateAiModelConfigDraftDto,
   UpdateAiPromptRevisionDto,
+  UpdatePipelineFlowConfigDto,
   UpdateStageWeightsDto,
   UpdateUserDto
 } from '.././model';
@@ -5240,7 +5244,554 @@ export function useAdminControllerGetConversationMessages<TData = Awaited<Return
 
 
 
-export type adminControllerGetAgentsResponse200 = {
+/**
+ * @summary List all pipeline flow configs
+ */
+export type adminControllerListPipelineFlowConfigsResponse200 = {
+  data: PipelineFlowConfigListResponseDto
+  status: 200
+}
+    
+export type adminControllerListPipelineFlowConfigsResponseSuccess = (adminControllerListPipelineFlowConfigsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerListPipelineFlowConfigsResponse = (adminControllerListPipelineFlowConfigsResponseSuccess)
+
+export const getAdminControllerListPipelineFlowConfigsUrl = () => {
+
+
+  
+
+  return `/admin/pipeline-flow-configs`
+}
+
+export const adminControllerListPipelineFlowConfigs = async ( options?: RequestInit): Promise<adminControllerListPipelineFlowConfigsResponse> => {
+  
+  return customFetch<adminControllerListPipelineFlowConfigsResponse>(getAdminControllerListPipelineFlowConfigsUrl(),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getAdminControllerListPipelineFlowConfigsQueryKey = () => {
+    return [
+    `/admin/pipeline-flow-configs`
+    ] as const;
+    }
+
+    
+export const getAdminControllerListPipelineFlowConfigsQueryOptions = <TData = Awaited<ReturnType<typeof adminControllerListPipelineFlowConfigs>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerListPipelineFlowConfigs>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAdminControllerListPipelineFlowConfigsQueryKey();
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof adminControllerListPipelineFlowConfigs>>> = ({ signal }) => adminControllerListPipelineFlowConfigs({ signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof adminControllerListPipelineFlowConfigs>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type AdminControllerListPipelineFlowConfigsQueryResult = NonNullable<Awaited<ReturnType<typeof adminControllerListPipelineFlowConfigs>>>
+export type AdminControllerListPipelineFlowConfigsQueryError = ErrorType<unknown>
+
+
+export function useAdminControllerListPipelineFlowConfigs<TData = Awaited<ReturnType<typeof adminControllerListPipelineFlowConfigs>>, TError = ErrorType<unknown>>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerListPipelineFlowConfigs>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof adminControllerListPipelineFlowConfigs>>,
+          TError,
+          Awaited<ReturnType<typeof adminControllerListPipelineFlowConfigs>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAdminControllerListPipelineFlowConfigs<TData = Awaited<ReturnType<typeof adminControllerListPipelineFlowConfigs>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerListPipelineFlowConfigs>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof adminControllerListPipelineFlowConfigs>>,
+          TError,
+          Awaited<ReturnType<typeof adminControllerListPipelineFlowConfigs>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAdminControllerListPipelineFlowConfigs<TData = Awaited<ReturnType<typeof adminControllerListPipelineFlowConfigs>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerListPipelineFlowConfigs>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List all pipeline flow configs
+ */
+
+export function useAdminControllerListPipelineFlowConfigs<TData = Awaited<ReturnType<typeof adminControllerListPipelineFlowConfigs>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerListPipelineFlowConfigs>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getAdminControllerListPipelineFlowConfigsQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+/**
+ * @summary Create a draft pipeline flow config
+ */
+export type adminControllerCreatePipelineFlowConfigResponse201 = {
+  data: PipelineFlowConfigResponseDto
+  status: 201
+}
+    
+export type adminControllerCreatePipelineFlowConfigResponseSuccess = (adminControllerCreatePipelineFlowConfigResponse201) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerCreatePipelineFlowConfigResponse = (adminControllerCreatePipelineFlowConfigResponseSuccess)
+
+export const getAdminControllerCreatePipelineFlowConfigUrl = () => {
+
+
+  
+
+  return `/admin/pipeline-flow-configs`
+}
+
+export const adminControllerCreatePipelineFlowConfig = async (createPipelineFlowConfigDto: CreatePipelineFlowConfigDto, options?: RequestInit): Promise<adminControllerCreatePipelineFlowConfigResponse> => {
+  
+  return customFetch<adminControllerCreatePipelineFlowConfigResponse>(getAdminControllerCreatePipelineFlowConfigUrl(),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      createPipelineFlowConfigDto,)
+  }
+);}
+
+
+
+
+export const getAdminControllerCreatePipelineFlowConfigMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerCreatePipelineFlowConfig>>, TError,{data: BodyType<CreatePipelineFlowConfigDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminControllerCreatePipelineFlowConfig>>, TError,{data: BodyType<CreatePipelineFlowConfigDto>}, TContext> => {
+
+const mutationKey = ['adminControllerCreatePipelineFlowConfig'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminControllerCreatePipelineFlowConfig>>, {data: BodyType<CreatePipelineFlowConfigDto>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  adminControllerCreatePipelineFlowConfig(data,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminControllerCreatePipelineFlowConfigMutationResult = NonNullable<Awaited<ReturnType<typeof adminControllerCreatePipelineFlowConfig>>>
+    export type AdminControllerCreatePipelineFlowConfigMutationBody = BodyType<CreatePipelineFlowConfigDto>
+    export type AdminControllerCreatePipelineFlowConfigMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Create a draft pipeline flow config
+ */
+export const useAdminControllerCreatePipelineFlowConfig = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerCreatePipelineFlowConfig>>, TError,{data: BodyType<CreatePipelineFlowConfigDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof adminControllerCreatePipelineFlowConfig>>,
+        TError,
+        {data: BodyType<CreatePipelineFlowConfigDto>},
+        TContext
+      > => {
+      return useMutation(getAdminControllerCreatePipelineFlowConfigMutationOptions(options), queryClient);
+    }
+    /**
+ * @summary Get published (active) pipeline flow config
+ */
+export type adminControllerGetActivePipelineFlowConfigResponse200 = {
+  data: PipelineFlowConfigResponseDto
+  status: 200
+}
+    
+export type adminControllerGetActivePipelineFlowConfigResponseSuccess = (adminControllerGetActivePipelineFlowConfigResponse200) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerGetActivePipelineFlowConfigResponse = (adminControllerGetActivePipelineFlowConfigResponseSuccess)
+
+export const getAdminControllerGetActivePipelineFlowConfigUrl = () => {
+
+
+  
+
+  return `/admin/pipeline-flow-configs/active`
+}
+
+export const adminControllerGetActivePipelineFlowConfig = async ( options?: RequestInit): Promise<adminControllerGetActivePipelineFlowConfigResponse> => {
+  
+  return customFetch<adminControllerGetActivePipelineFlowConfigResponse>(getAdminControllerGetActivePipelineFlowConfigUrl(),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getAdminControllerGetActivePipelineFlowConfigQueryKey = () => {
+    return [
+    `/admin/pipeline-flow-configs/active`
+    ] as const;
+    }
+
+    
+export const getAdminControllerGetActivePipelineFlowConfigQueryOptions = <TData = Awaited<ReturnType<typeof adminControllerGetActivePipelineFlowConfig>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetActivePipelineFlowConfig>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAdminControllerGetActivePipelineFlowConfigQueryKey();
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof adminControllerGetActivePipelineFlowConfig>>> = ({ signal }) => adminControllerGetActivePipelineFlowConfig({ signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetActivePipelineFlowConfig>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type AdminControllerGetActivePipelineFlowConfigQueryResult = NonNullable<Awaited<ReturnType<typeof adminControllerGetActivePipelineFlowConfig>>>
+export type AdminControllerGetActivePipelineFlowConfigQueryError = ErrorType<unknown>
+
+
+export function useAdminControllerGetActivePipelineFlowConfig<TData = Awaited<ReturnType<typeof adminControllerGetActivePipelineFlowConfig>>, TError = ErrorType<unknown>>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetActivePipelineFlowConfig>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof adminControllerGetActivePipelineFlowConfig>>,
+          TError,
+          Awaited<ReturnType<typeof adminControllerGetActivePipelineFlowConfig>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAdminControllerGetActivePipelineFlowConfig<TData = Awaited<ReturnType<typeof adminControllerGetActivePipelineFlowConfig>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetActivePipelineFlowConfig>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof adminControllerGetActivePipelineFlowConfig>>,
+          TError,
+          Awaited<ReturnType<typeof adminControllerGetActivePipelineFlowConfig>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAdminControllerGetActivePipelineFlowConfig<TData = Awaited<ReturnType<typeof adminControllerGetActivePipelineFlowConfig>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetActivePipelineFlowConfig>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get published (active) pipeline flow config
+ */
+
+export function useAdminControllerGetActivePipelineFlowConfig<TData = Awaited<ReturnType<typeof adminControllerGetActivePipelineFlowConfig>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetActivePipelineFlowConfig>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getAdminControllerGetActivePipelineFlowConfigQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+/**
+ * @summary Update a draft pipeline flow config
+ */
+export type adminControllerUpdatePipelineFlowConfigResponse200 = {
+  data: PipelineFlowConfigResponseDto
+  status: 200
+}
+    
+export type adminControllerUpdatePipelineFlowConfigResponseSuccess = (adminControllerUpdatePipelineFlowConfigResponse200) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerUpdatePipelineFlowConfigResponse = (adminControllerUpdatePipelineFlowConfigResponseSuccess)
+
+export const getAdminControllerUpdatePipelineFlowConfigUrl = (id: string,) => {
+
+
+  
+
+  return `/admin/pipeline-flow-configs/${id}`
+}
+
+export const adminControllerUpdatePipelineFlowConfig = async (id: string,
+    updatePipelineFlowConfigDto: UpdatePipelineFlowConfigDto, options?: RequestInit): Promise<adminControllerUpdatePipelineFlowConfigResponse> => {
+  
+  return customFetch<adminControllerUpdatePipelineFlowConfigResponse>(getAdminControllerUpdatePipelineFlowConfigUrl(id),
+  {      
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updatePipelineFlowConfigDto,)
+  }
+);}
+
+
+
+
+export const getAdminControllerUpdatePipelineFlowConfigMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerUpdatePipelineFlowConfig>>, TError,{id: string;data: BodyType<UpdatePipelineFlowConfigDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminControllerUpdatePipelineFlowConfig>>, TError,{id: string;data: BodyType<UpdatePipelineFlowConfigDto>}, TContext> => {
+
+const mutationKey = ['adminControllerUpdatePipelineFlowConfig'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminControllerUpdatePipelineFlowConfig>>, {id: string;data: BodyType<UpdatePipelineFlowConfigDto>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  adminControllerUpdatePipelineFlowConfig(id,data,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminControllerUpdatePipelineFlowConfigMutationResult = NonNullable<Awaited<ReturnType<typeof adminControllerUpdatePipelineFlowConfig>>>
+    export type AdminControllerUpdatePipelineFlowConfigMutationBody = BodyType<UpdatePipelineFlowConfigDto>
+    export type AdminControllerUpdatePipelineFlowConfigMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Update a draft pipeline flow config
+ */
+export const useAdminControllerUpdatePipelineFlowConfig = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerUpdatePipelineFlowConfig>>, TError,{id: string;data: BodyType<UpdatePipelineFlowConfigDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof adminControllerUpdatePipelineFlowConfig>>,
+        TError,
+        {id: string;data: BodyType<UpdatePipelineFlowConfigDto>},
+        TContext
+      > => {
+      return useMutation(getAdminControllerUpdatePipelineFlowConfigMutationOptions(options), queryClient);
+    }
+    /**
+ * @summary Archive a pipeline flow config
+ */
+export type adminControllerArchivePipelineFlowConfigResponse200 = {
+  data: void
+  status: 200
+}
+    
+export type adminControllerArchivePipelineFlowConfigResponseSuccess = (adminControllerArchivePipelineFlowConfigResponse200) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerArchivePipelineFlowConfigResponse = (adminControllerArchivePipelineFlowConfigResponseSuccess)
+
+export const getAdminControllerArchivePipelineFlowConfigUrl = (id: string,) => {
+
+
+  
+
+  return `/admin/pipeline-flow-configs/${id}`
+}
+
+export const adminControllerArchivePipelineFlowConfig = async (id: string, options?: RequestInit): Promise<adminControllerArchivePipelineFlowConfigResponse> => {
+  
+  return customFetch<adminControllerArchivePipelineFlowConfigResponse>(getAdminControllerArchivePipelineFlowConfigUrl(id),
+  {      
+    ...options,
+    method: 'DELETE'
+    
+    
+  }
+);}
+
+
+
+
+export const getAdminControllerArchivePipelineFlowConfigMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerArchivePipelineFlowConfig>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminControllerArchivePipelineFlowConfig>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['adminControllerArchivePipelineFlowConfig'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminControllerArchivePipelineFlowConfig>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  adminControllerArchivePipelineFlowConfig(id,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminControllerArchivePipelineFlowConfigMutationResult = NonNullable<Awaited<ReturnType<typeof adminControllerArchivePipelineFlowConfig>>>
+    
+    export type AdminControllerArchivePipelineFlowConfigMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Archive a pipeline flow config
+ */
+export const useAdminControllerArchivePipelineFlowConfig = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerArchivePipelineFlowConfig>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof adminControllerArchivePipelineFlowConfig>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getAdminControllerArchivePipelineFlowConfigMutationOptions(options), queryClient);
+    }
+    /**
+ * @summary Publish a draft pipeline flow config
+ */
+export type adminControllerPublishPipelineFlowConfigResponse201 = {
+  data: PipelineFlowConfigResponseDto
+  status: 201
+}
+    
+export type adminControllerPublishPipelineFlowConfigResponseSuccess = (adminControllerPublishPipelineFlowConfigResponse201) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerPublishPipelineFlowConfigResponse = (adminControllerPublishPipelineFlowConfigResponseSuccess)
+
+export const getAdminControllerPublishPipelineFlowConfigUrl = (id: string,) => {
+
+
+  
+
+  return `/admin/pipeline-flow-configs/${id}/publish`
+}
+
+export const adminControllerPublishPipelineFlowConfig = async (id: string, options?: RequestInit): Promise<adminControllerPublishPipelineFlowConfigResponse> => {
+  
+  return customFetch<adminControllerPublishPipelineFlowConfigResponse>(getAdminControllerPublishPipelineFlowConfigUrl(id),
+  {      
+    ...options,
+    method: 'POST'
+    
+    
+  }
+);}
+
+
+
+
+export const getAdminControllerPublishPipelineFlowConfigMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerPublishPipelineFlowConfig>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminControllerPublishPipelineFlowConfig>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['adminControllerPublishPipelineFlowConfig'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminControllerPublishPipelineFlowConfig>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  adminControllerPublishPipelineFlowConfig(id,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminControllerPublishPipelineFlowConfigMutationResult = NonNullable<Awaited<ReturnType<typeof adminControllerPublishPipelineFlowConfig>>>
+    
+    export type AdminControllerPublishPipelineFlowConfigMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Publish a draft pipeline flow config
+ */
+export const useAdminControllerPublishPipelineFlowConfig = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerPublishPipelineFlowConfig>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof adminControllerPublishPipelineFlowConfig>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getAdminControllerPublishPipelineFlowConfigMutationOptions(options), queryClient);
+    }
+    export type adminControllerGetAgentsResponse200 = {
   data: void
   status: 200
 }

@@ -43,6 +43,8 @@ import { AdminMatchingService } from './admin-matching.service';
 import { AiPromptService } from '../ai/services/ai-prompt.service';
 import { AiPromptRuntimeService } from '../ai/services/ai-prompt-runtime.service';
 import { AiModelConfigService } from '../ai/services/ai-model-config.service';
+import { PipelineFlowConfigService } from '../ai/services/pipeline-flow-config.service';
+import { PhaseTransitionService } from '../ai/orchestrator/phase-transition.service';
 import { AI_RUNTIME_ALLOWED_MODEL_NAMES } from '../ai/services/ai-runtime-config.schema';
 import { QUEUE_NAMES, QueueName } from '../../queue';
 import { EarlyAccessService, CreateEarlyAccessInviteDto } from '../early-access';
@@ -73,6 +75,10 @@ import {
   PreviewAiPipelineContextRequestDto,
   AiPipelineContextPreviewResponseDto,
   QuickCreateStartupDto,
+  CreatePipelineFlowConfigDto,
+  UpdatePipelineFlowConfigDto,
+  PipelineFlowConfigResponseDto,
+  PipelineFlowConfigListResponseDto,
 } from './dto';
 import { GetStartupsQueryDto } from '../startup/dto';
 
@@ -107,6 +113,8 @@ export class AdminController {
     private aiPromptRuntimeService: AiPromptRuntimeService,
     private aiModelConfigService: AiModelConfigService,
     private earlyAccessService: EarlyAccessService,
+    private pipelineFlowConfigService: PipelineFlowConfigService,
+    private phaseTransitionService: PhaseTransitionService,
   ) {}
 
   private resolveOutputSchemaForKey(key: string): z.ZodTypeAny | null {
@@ -520,6 +528,24 @@ export class AdminController {
     return this.aiPromptService.seedFromCode(admin.id);
   }
 
+  @Post('ai-prompts/reseed-from-code')
+  @ApiOperation({ summary: "Force re-seed evaluation prompts: archives existing and seeds fresh from code catalog" })
+  async reseedAiPrompts(@CurrentUser() admin: User) {
+    return this.aiPromptService.reseedFromCode(admin.id, [
+      "evaluation.team",
+      "evaluation.market",
+      "evaluation.product",
+      "evaluation.traction",
+      "evaluation.businessModel",
+      "evaluation.gtm",
+      "evaluation.financials",
+      "evaluation.competitiveAdvantage",
+      "evaluation.legal",
+      "evaluation.dealTerms",
+      "evaluation.exitPotential",
+    ]);
+  }
+
   // ============ DATA IMPORT/EXPORT ENDPOINTS ============
 
   @Post('data/import/users')
@@ -688,6 +714,64 @@ export class AdminController {
       .orderBy(claraMessage.createdAt);
 
     return { data: messages };
+  }
+
+  // ============ PIPELINE FLOW CONFIG ============
+
+  @Get('pipeline-flow-configs')
+  @ApiOperation({ summary: "List all pipeline flow configs" })
+  @ApiResponse({ status: 200, type: PipelineFlowConfigListResponseDto })
+  async listPipelineFlowConfigs() {
+    return this.pipelineFlowConfigService.listAll();
+  }
+
+  @Get('pipeline-flow-configs/active')
+  @ApiOperation({ summary: "Get published (active) pipeline flow config" })
+  @ApiResponse({ status: 200, type: PipelineFlowConfigResponseDto })
+  async getActivePipelineFlowConfig() {
+    const config = await this.pipelineFlowConfigService.getPublished();
+    return config ?? { data: null };
+  }
+
+  @Post('pipeline-flow-configs')
+  @ApiOperation({ summary: "Create a draft pipeline flow config" })
+  @ApiResponse({ status: 201, type: PipelineFlowConfigResponseDto })
+  async createPipelineFlowConfig(
+    @CurrentUser() admin: User,
+    @Body() dto: CreatePipelineFlowConfigDto,
+  ) {
+    return this.pipelineFlowConfigService.createDraft(admin.id, dto);
+  }
+
+  @Patch('pipeline-flow-configs/:id')
+  @ApiOperation({ summary: "Update a draft pipeline flow config" })
+  @ApiResponse({ status: 200, type: PipelineFlowConfigResponseDto })
+  async updatePipelineFlowConfig(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdatePipelineFlowConfigDto,
+  ) {
+    return this.pipelineFlowConfigService.updateDraft(id, dto);
+  }
+
+  @Post('pipeline-flow-configs/:id/publish')
+  @ApiOperation({ summary: "Publish a draft pipeline flow config" })
+  @ApiResponse({ status: 201, type: PipelineFlowConfigResponseDto })
+  async publishPipelineFlowConfig(
+    @CurrentUser() admin: User,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    const result = await this.pipelineFlowConfigService.publishDraft(id, admin.id);
+    await this.phaseTransitionService.refreshConfig();
+    return result;
+  }
+
+  @Delete('pipeline-flow-configs/:id')
+  @ApiOperation({ summary: "Archive a pipeline flow config" })
+  async archivePipelineFlowConfig(
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    await this.pipelineFlowConfigService.archive(id);
+    return { success: true, message: 'Config archived' };
   }
 
   // ============================================================================

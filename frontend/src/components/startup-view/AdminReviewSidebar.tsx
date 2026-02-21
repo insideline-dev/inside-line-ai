@@ -57,7 +57,7 @@ export function AdminReviewSidebar({
 }: AdminReviewSidebarProps) {
   const score = evaluation?.overallScore ?? startup.overallScore ?? 0;
   const percentile =
-    startup.percentileRank != null ? `Top ${100 - startup.percentileRank}%` : "N/A";
+    startup.percentileRank != null ? `Top ${Math.round(100 - startup.percentileRank)}%` : "N/A";
 
   return (
     <div className="space-y-4">
@@ -139,7 +139,7 @@ export function AdminReviewSidebar({
           <CardTitle className="text-base">Quick Stats</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2.5">
-          <StatRow label="Score" value={`${score}/100`} />
+          <StatRow label="Score" value={`${Math.round(score)}/100`} />
           <StatRow label="Percentile" value={percentile} />
           <StatRow label="Round" value={formatCompactCurrency(startup.fundingTarget)} />
           <StatRow label="Valuation" value={formatCompactCurrency(startup.valuation)} />

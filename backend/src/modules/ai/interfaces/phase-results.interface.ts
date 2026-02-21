@@ -17,6 +17,7 @@ import type {
   TeamResearch,
   TractionEvaluation,
 } from "../schemas";
+import type { InvestorMemo, FounderReport } from "../schemas/synthesis.schema";
 
 export interface StartupFileReference {
   path: string;
@@ -375,8 +376,8 @@ export interface SynthesisResult {
     dealTerms: number;
     exitPotential: number;
   };
-  investorMemo: string;
-  founderReport: string;
+  investorMemo: InvestorMemo;
+  founderReport: FounderReport;
   dataConfidenceNotes: string;
   investorMemoUrl?: string;
   founderReportUrl?: string;

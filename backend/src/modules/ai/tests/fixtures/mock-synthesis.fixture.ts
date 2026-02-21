@@ -38,10 +38,20 @@ export function createMockSynthesisResult(
       dealTerms: 73,
       exitPotential: 76,
     },
-    investorMemo:
-      "## Investor Memo\n\nClipaf is positioned in a large industrial workflow market with early enterprise pull.",
-    founderReport:
-      "## Founder Report\n\nTop priority is proving scalable GTM efficiency over the next two quarters.",
+    investorMemo: {
+      executiveSummary: "Test executive summary",
+      summary: "Test summary",
+      sections: [],
+      recommendation: "Consider",
+      riskLevel: "medium",
+      dealHighlights: ["highlight 1"],
+      keyDueDiligenceAreas: ["area 1"],
+    },
+    founderReport: {
+      summary: "Test founder summary",
+      sections: [],
+      actionItems: ["action 1"],
+    },
     dataConfidenceNotes:
       "Evaluation completed with full 11/11 agent coverage.",
     ...overrides,

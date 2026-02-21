@@ -1,5 +1,6 @@
 import { useEffect } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useFieldArray } from "react-hook-form";
+import { Trash2, Plus } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { PencilLine } from "lucide-react";
 import { toast } from "sonner";
@@ -55,6 +56,7 @@ type AdminEditFormValues = {
   previousFundingCurrency: string;
   previousInvestors?: string;
   previousRoundType?: string;
+  teamMembers: Array<{ name: string; role: string; linkedinUrl: string }>;
 };
 
 interface AdminEditTabProps {
@@ -112,6 +114,11 @@ function toFormValues(startup: Startup): AdminEditFormValues {
     previousFundingCurrency: startup.previousFundingCurrency ?? "USD",
     previousInvestors: startup.previousInvestors ?? "",
     previousRoundType: startup.previousRoundType ?? "",
+    teamMembers: (startup.teamMembers ?? []).map((m) => ({
+      name: m.name,
+      role: m.role,
+      linkedinUrl: m.linkedinUrl ?? "",
+    })),
   };
 }
 
@@ -131,6 +138,11 @@ export function AdminEditTab({ startup }: AdminEditTabProps) {
   useEffect(() => {
     form.reset(toFormValues(startup));
   }, [form, startup]);
+
+  const { fields, append, remove } = useFieldArray({
+    control: form.control,
+    name: "teamMembers",
+  });
 
   const valuationKnown = form.watch("valuationKnown");
   const leadSecured = form.watch("leadSecured");
@@ -214,6 +226,9 @@ export function AdminEditTab({ startup }: AdminEditTabProps) {
       previousRoundType: hasPreviousFundingValue
         ? normalizeOptionalText(values.previousRoundType)
         : undefined,
+      teamMembers: values.teamMembers
+        ?.filter((m) => m.name.trim())
+        .map((m) => ({ name: m.name.trim(), role: m.role.trim(), linkedinUrl: m.linkedinUrl.trim() })),
     };
 
     updateMutation.mutate({
@@ -644,6 +659,69 @@ export function AdminEditTab({ startup }: AdminEditTabProps) {
                 />
               </div>
             )}
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Team Members</CardTitle>
+                <CardDescription>Edit team member details and LinkedIn URLs</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {fields.map((field, index) => (
+                  <div key={field.id} className="flex gap-2 items-start">
+                    <FormField
+                      control={form.control}
+                      name={`teamMembers.${index}.name`}
+                      render={({ field }) => (
+                        <FormItem className="flex-1">
+                          <FormControl>
+                            <Input placeholder="Name" {...field} />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name={`teamMembers.${index}.role`}
+                      render={({ field }) => (
+                        <FormItem className="flex-1">
+                          <FormControl>
+                            <Input placeholder="Role" {...field} />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name={`teamMembers.${index}.linkedinUrl`}
+                      render={({ field }) => (
+                        <FormItem className="flex-[2]">
+                          <FormControl>
+                            <Input placeholder="LinkedIn URL" {...field} />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => remove(index)}
+                      className="shrink-0 mt-0.5"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => append({ name: "", role: "", linkedinUrl: "" })}
+                >
+                  <Plus className="h-4 w-4 mr-1" /> Add Team Member
+                </Button>
+              </CardContent>
+            </Card>
 
             <div className="flex justify-end">
               <Button type="submit" disabled={updateMutation.isPending}>

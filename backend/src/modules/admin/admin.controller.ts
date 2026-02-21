@@ -528,6 +528,24 @@ export class AdminController {
     return this.aiPromptService.seedFromCode(admin.id);
   }
 
+  @Post('ai-prompts/reseed-from-code')
+  @ApiOperation({ summary: "Force re-seed evaluation prompts: archives existing and seeds fresh from code catalog" })
+  async reseedAiPrompts(@CurrentUser() admin: User) {
+    return this.aiPromptService.reseedFromCode(admin.id, [
+      "evaluation.team",
+      "evaluation.market",
+      "evaluation.product",
+      "evaluation.traction",
+      "evaluation.businessModel",
+      "evaluation.gtm",
+      "evaluation.financials",
+      "evaluation.competitiveAdvantage",
+      "evaluation.legal",
+      "evaluation.dealTerms",
+      "evaluation.exitPotential",
+    ]);
+  }
+
   // ============ DATA IMPORT/EXPORT ENDPOINTS ============
 
   @Post('data/import/users')

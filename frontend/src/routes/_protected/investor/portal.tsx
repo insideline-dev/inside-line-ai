@@ -119,7 +119,18 @@ function InvestorPortalPage() {
   const isSaving = isCreating || isUpdating;
   const portalBaseUrl = useMemo(() => {
     if (typeof window === "undefined") return "/apply/";
-    return `${window.location.origin}/apply/`;
+    try {
+      const currentUrl = new URL(window.location.origin);
+      const hostname = currentUrl.hostname.startsWith("app.")
+        ? currentUrl.hostname.slice(4)
+        : currentUrl.hostname;
+      const normalizedOrigin = `${currentUrl.protocol}//${hostname}${
+        currentUrl.port ? `:${currentUrl.port}` : ""
+      }`;
+      return `${normalizedOrigin}/apply/`;
+    } catch {
+      return `${window.location.origin}/apply/`;
+    }
   }, []);
   const portalPublicUrl = useMemo(
     () => `${portalBaseUrl}${sanitizeSlug(formData.slug)}`,

@@ -15,6 +15,7 @@ import { ProgressTrackerService } from "../../orchestrator/progress-tracker.serv
 import { PhaseTransitionService } from "../../orchestrator/phase-transition.service";
 import { ErrorRecoveryService } from "../../orchestrator/error-recovery.service";
 import { PipelineFeedbackService } from "../../services/pipeline-feedback.service";
+import { StartupMatchingPipelineService } from "../../services/startup-matching-pipeline.service";
 import { ModuleRef } from "@nestjs/core";
 import { NotificationService } from "../../../../notification/notification.service";
 
@@ -110,14 +111,38 @@ describe("PipelineService", () => {
   let phaseTransition: jest.Mocked<PhaseTransitionService>;
   let errorRecovery: jest.Mocked<ErrorRecoveryService>;
   let pipelineFeedback: jest.Mocked<PipelineFeedbackService>;
+  let startupMatching: jest.Mocked<StartupMatchingPipelineService>;
   let moduleRef: jest.Mocked<ModuleRef>;
   let notifications: jest.Mocked<NotificationService>;
 
   const mockDb = {
-    update: jest.fn().mockReturnThis(),
+    mode: "none" as "none" | "select" | "update" | "insert",
+    select: jest.fn(function (this: { mode: string }) {
+      this.mode = "select";
+      return this;
+    }),
+    from: jest.fn().mockReturnThis(),
+    limit: jest.fn().mockImplementation(function (this: { mode: string }) {
+      if (this.mode === "select") {
+        return Promise.resolve([{ status: "analyzing", name: "Test Startup" }]);
+      }
+      return Promise.resolve(undefined);
+    }),
+    update: jest.fn(function (this: { mode: string }) {
+      this.mode = "update";
+      return this;
+    }),
     set: jest.fn().mockReturnThis(),
-    where: jest.fn().mockResolvedValue(undefined),
-    insert: jest.fn().mockReturnThis(),
+    where: jest.fn().mockImplementation(function (this: { mode: string }) {
+      if (this.mode === "select") {
+        return this;
+      }
+      return Promise.resolve(undefined);
+    }),
+    insert: jest.fn(function (this: { mode: string }) {
+      this.mode = "insert";
+      return this;
+    }),
     values: jest.fn().mockResolvedValue(undefined),
   };
 
@@ -238,6 +263,16 @@ describe("PipelineService", () => {
       markConsumedByScope: jest.fn().mockResolvedValue(0),
     } as unknown as jest.Mocked<PipelineFeedbackService>;
 
+    startupMatching = {
+      queueStartupMatching: jest.fn().mockResolvedValue({
+        startupId: "startup-1",
+        analysisJobId: "analysis-job-1",
+        queueJobId: "queue-job-1",
+        status: "queued",
+        triggerSource: "retry",
+      }),
+    } as unknown as jest.Mocked<StartupMatchingPipelineService>;
+
     moduleRef = {
       get: jest.fn().mockReturnValue(null),
     } as unknown as jest.Mocked<ModuleRef>;
@@ -252,6 +287,7 @@ describe("PipelineService", () => {
       notifications,
       stateService,
       aiConfig,
+      startupMatching,
       pipelineFeedback,
       progressTracker,
       phaseTransition,
@@ -510,6 +546,35 @@ describe("PipelineService", () => {
       expect.any(String),
       "/admin/startup/startup-1",
     );
+  });
+
+  it("queues deferred matching when startup was already approved", async () => {
+    const state = createState({}, {
+      [PipelinePhase.EXTRACTION]: PhaseStatus.COMPLETED,
+      [PipelinePhase.SCRAPING]: PhaseStatus.COMPLETED,
+      [PipelinePhase.RESEARCH]: PhaseStatus.COMPLETED,
+      [PipelinePhase.EVALUATION]: PhaseStatus.COMPLETED,
+      [PipelinePhase.SYNTHESIS]: PhaseStatus.COMPLETED,
+    });
+    stateService.get.mockResolvedValue(state);
+    stateService.getPhaseResult.mockResolvedValueOnce({
+      overallScore: 91,
+    });
+    phaseTransition.decideNextPhases.mockReturnValueOnce({
+      queue: [],
+      blockedByRequiredFailure: false,
+      pipelineComplete: true,
+      degraded: false,
+    });
+    mockDb.limit.mockResolvedValue([{ status: "approved", name: "Test Startup" }]);
+
+    await service.onPhaseCompleted("startup-1", PipelinePhase.SYNTHESIS);
+
+    expect(startupMatching.queueStartupMatching).toHaveBeenCalledWith({
+      startupId: "startup-1",
+      requestedBy: "user-1",
+      triggerSource: "retry",
+    });
   });
 
   it("cancels pipeline and removes queued jobs", async () => {

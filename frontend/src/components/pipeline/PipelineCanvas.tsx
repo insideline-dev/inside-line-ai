@@ -1,9 +1,7 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ReactFlow,
   Background,
-  Controls,
-  MiniMap,
   useNodesState,
   useEdgesState,
   addEdge,
@@ -14,9 +12,9 @@ import {
   type Connection,
   MarkerType,
   Panel,
+  type ReactFlowInstance,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { PipelineNode, type PipelineNodeData } from "./PipelineNode";
 import { NodeConfigSheet } from "./NodeConfigSheet";
 import { getLayoutedElements } from "./layout";
 import type {
@@ -24,17 +22,47 @@ import type {
   AiPromptFlowResponseDtoFlowsItemNodesItem,
 } from "@/api/generated/model";
 import type { PhaseConfig } from "./types";
+import { FixedDataNode } from "./nodes/FixedDataNode";
+import { AiAgentNode } from "./nodes/AiAgentNode";
+import { OrchestratorNode } from "./nodes/OrchestratorNode";
+import type { PipelineCanvasNodeData } from "./nodes/types";
+import { CanvasToolbar } from "./CanvasToolbar";
 
 const nodeTypes: NodeTypes = {
-  pipeline: PipelineNode,
+  fixedData: FixedDataNode,
+  aiAgent: AiAgentNode,
+  orchestrator: OrchestratorNode,
 };
 
+function getNodeType(node: AiPromptFlowResponseDtoFlowsItemNodesItem): "orchestrator" | "fixedData" | "aiAgent" {
+  if (node.id.includes("orchestrator")) return "orchestrator";
+  if (node.kind === "system") return "fixedData";
+  return "aiAgent";
+}
+
+function edgeColorFromType(type?: string) {
+  if (type === "object") return "#2563eb";
+  if (type === "array") return "#16a34a";
+  if (type === "number") return "#d97706";
+  return "#64748b";
+}
+
 function flowToReactFlow(flow: AiPromptFlowResponseDtoFlowsItem) {
-  const nodes: Node<PipelineNodeData>[] = flow.nodes.map((node) => {
+  const childCountByOrchestrator = flow.edges.reduce<Record<string, number>>((acc, edge) => {
+    if (edge.from.includes("orchestrator")) {
+      acc[edge.from] = (acc[edge.from] ?? 0) + 1;
+    }
+    return acc;
+  }, {});
+
+  const nodes: Node<PipelineCanvasNodeData>[] = flow.nodes.map((node) => {
     const stage = flow.stages.find((s) => s.nodeIds.includes(node.id));
+    const type = getNodeType(node);
+    const enabled = (node as unknown as { enabled?: boolean }).enabled;
+
     return {
       id: node.id,
-      type: "pipeline" as const,
+      type,
       position: { x: 0, y: 0 },
       data: {
         label: node.label,
@@ -42,19 +70,29 @@ function flowToReactFlow(flow: AiPromptFlowResponseDtoFlowsItem) {
         kind: node.kind as "prompt" | "system",
         stage: stage?.title,
         promptKeys: node.promptKeys,
+        enabled,
+        schemaFieldCount: node.outputs.length,
+        childCount: childCountByOrchestrator[node.id] ?? 0,
       },
     };
   });
 
-  const edges: Edge[] = flow.edges.map((edge, i) => ({
-    id: `e-${edge.from}-${edge.to}-${i}`,
-    source: edge.from,
-    target: edge.to,
-    label: edge.label,
-    animated: false,
-    style: { strokeWidth: 1.5 },
-    markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14 },
-  }));
+  const edges: Edge[] = flow.edges.map((edge, i) => {
+    const sourceNode = flow.nodes.find((node) => node.id === edge.from);
+    const sourceType = sourceNode?.outputs?.[0]?.type;
+    const edgeColor = edgeColorFromType(sourceType);
+
+    return {
+      id: `e-${edge.from}-${edge.to}-${i}`,
+      source: edge.from,
+      target: edge.to,
+      label: edge.label ?? sourceType,
+      animated: true,
+      style: { strokeWidth: 1.75, stroke: edgeColor },
+      labelStyle: { fill: edgeColor, fontSize: 10 },
+      markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14, color: edgeColor },
+    };
+  });
 
   return getLayoutedElements(nodes, edges, "LR");
 }
@@ -63,64 +101,96 @@ interface PipelineCanvasProps {
   flow: AiPromptFlowResponseDtoFlowsItem;
   pipelineConfig?: PhaseConfig[];
   onPipelineConfigChange?: (configs: PhaseConfig[]) => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
+  onUndo?: () => void;
+  onRedo?: () => void;
+  isDirty?: boolean;
+  onSaveDraft?: () => void;
+  onPublish?: () => void;
+  saveDisabled?: boolean;
+  publishDisabled?: boolean;
 }
 
-export function PipelineCanvas({
-  flow,
-  pipelineConfig,
-  onPipelineConfigChange,
-}: PipelineCanvasProps) {
+function CanvasInner(props: PipelineCanvasProps) {
   const { nodes: initialNodes, edges: initialEdges } = useMemo(
-    () => flowToReactFlow(flow),
-    [flow],
+    () => flowToReactFlow(props.flow),
+    [props.flow],
   );
 
-  const [nodes, , onNodesChange] = useNodesState(initialNodes);
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+  const [reactFlow, setReactFlow] = useState<ReactFlowInstance | null>(null);
+
+  useEffect(() => {
+    setNodes(initialNodes);
+    setEdges(initialEdges);
+  }, [initialNodes, initialEdges, setNodes, setEdges]);
 
   const onConnect = useCallback(
     (connection: Connection) =>
-      setEdges((eds) =>
+      setEdges((currentEdges) =>
         addEdge(
-          { ...connection, animated: false, style: { strokeWidth: 1.5 }, markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14 } },
-          eds,
+          {
+            ...connection,
+            animated: true,
+            style: { strokeWidth: 1.75 },
+            markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14 },
+          },
+          currentEdges,
         ),
       ),
     [setEdges],
   );
+
   const [selectedNode, setSelectedNode] =
     useState<AiPromptFlowResponseDtoFlowsItemNodesItem | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
 
   const onNodeClick: NodeMouseHandler = useCallback(
     (_event: React.MouseEvent, node: Node) => {
-      const flowNode = flow.nodes.find((n) => n.id === node.id);
+      const flowNode = props.flow.nodes.find((n) => n.id === node.id);
       if (flowNode) {
         setSelectedNode(flowNode);
         setSheetOpen(true);
       }
     },
-    [flow.nodes],
+    [props.flow.nodes],
   );
 
+  useEffect(() => {
+    const listener = (event: KeyboardEvent) => {
+      const isUndo = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z" && !event.shiftKey;
+      const isRedo = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z" && event.shiftKey;
+      if (isUndo && props.onUndo) {
+        event.preventDefault();
+        props.onUndo();
+      }
+      if (isRedo && props.onRedo) {
+        event.preventDefault();
+        props.onRedo();
+      }
+    };
+    window.addEventListener("keydown", listener);
+    return () => window.removeEventListener("keydown", listener);
+  }, [props.onUndo, props.onRedo]);
+
   const selectedPhaseConfig = useMemo(() => {
-    if (!selectedNode || !pipelineConfig) return undefined;
-    return pipelineConfig.find((p) =>
-      // Match by checking if the node belongs to the phase's stage
-      selectedNode.id.startsWith(p.phase) ||
-      selectedNode.id.includes(p.phase),
+    if (!selectedNode || !props.pipelineConfig) return undefined;
+    return props.pipelineConfig.find((p) =>
+      selectedNode.id.startsWith(p.phase) || selectedNode.id.includes(p.phase),
     );
-  }, [selectedNode, pipelineConfig]);
+  }, [selectedNode, props.pipelineConfig]);
 
   const handlePhaseConfigChange = useCallback(
     (partial: Partial<PhaseConfig>) => {
-      if (!selectedPhaseConfig || !pipelineConfig || !onPipelineConfigChange) return;
-      const updated = pipelineConfig.map((p) =>
-        p.phase === selectedPhaseConfig.phase ? { ...p, ...partial } : p,
+      if (!selectedPhaseConfig || !props.pipelineConfig || !props.onPipelineConfigChange) return;
+      const updated = props.pipelineConfig.map((phase) =>
+        phase.phase === selectedPhaseConfig.phase ? { ...phase, ...partial } : phase,
       );
-      onPipelineConfigChange(updated);
+      props.onPipelineConfigChange(updated);
     },
-    [selectedPhaseConfig, pipelineConfig, onPipelineConfigChange],
+    [selectedPhaseConfig, props.pipelineConfig, props.onPipelineConfigChange],
   );
 
   return (
@@ -138,17 +208,26 @@ export function PipelineCanvas({
         minZoom={0.3}
         maxZoom={2}
         proOptions={{ hideAttribution: true }}
+        onInit={setReactFlow}
       >
         <Background gap={16} size={1} />
-        <Controls />
-        <MiniMap
-          nodeStrokeWidth={3}
-          pannable
-          zoomable
-          className="!bg-background/80"
-        />
-        <Panel position="top-left" className="text-xs text-muted-foreground">
-          {flow.name} — {flow.nodes.length} nodes, {flow.edges.length} edges
+        <Panel position="top-left" className="w-[min(100%,980px)]">
+          <CanvasToolbar
+            canUndo={Boolean(props.canUndo)}
+            canRedo={Boolean(props.canRedo)}
+            onUndo={props.onUndo ?? (() => undefined)}
+            onRedo={props.onRedo ?? (() => undefined)}
+            onZoomIn={() => reactFlow?.zoomIn()}
+            onZoomOut={() => reactFlow?.zoomOut()}
+            onFitView={() => reactFlow?.fitView({ padding: 0.2 })}
+            nodeCount={props.flow.nodes.length}
+            edgeCount={props.flow.edges.length}
+            isDirty={Boolean(props.isDirty)}
+            onSaveDraft={props.onSaveDraft ?? (() => undefined)}
+            onPublish={props.onPublish ?? (() => undefined)}
+            saveDisabled={props.saveDisabled}
+            publishDisabled={props.publishDisabled}
+          />
         </Panel>
       </ReactFlow>
 
@@ -156,11 +235,13 @@ export function PipelineCanvas({
         open={sheetOpen}
         onOpenChange={setSheetOpen}
         node={selectedNode}
-        allNodes={flow.nodes}
-        edges={edges}
         phaseConfig={selectedPhaseConfig}
         onPhaseConfigChange={handlePhaseConfigChange}
       />
     </div>
   );
+}
+
+export function PipelineCanvas(props: PipelineCanvasProps) {
+  return <CanvasInner {...props} />;
 }

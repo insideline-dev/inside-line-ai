@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Sheet,
   SheetContent,
@@ -21,9 +21,10 @@ import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Bot, Cog, ArrowRight } from "lucide-react";
 import type { AiPromptFlowResponseDtoFlowsItemNodesItem } from "@/api/generated/model";
-import type { Edge } from "@xyflow/react";
+import { useAdminControllerGetAiAgentUpstreamFields } from "@/api/generated/admin/admin";
 import { NodePromptEditor } from "./NodePromptEditor";
-import { SchemaTreeView } from "./SchemaTreeView";
+import { AddAgentDialog } from "./dialogs/AddAgentDialog";
+import { OrchestratorAgentManager } from "./dialogs/OrchestratorAgentManager";
 
 interface PhaseConfigData {
   timeoutMs: number;
@@ -36,8 +37,6 @@ interface NodeConfigSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   node: AiPromptFlowResponseDtoFlowsItemNodesItem | null;
-  allNodes: AiPromptFlowResponseDtoFlowsItemNodesItem[];
-  edges: Edge[];
   phaseConfig?: PhaseConfigData;
   onPhaseConfigChange?: (config: Partial<PhaseConfigData>) => void;
 }
@@ -46,28 +45,37 @@ export function NodeConfigSheet({
   open,
   onOpenChange,
   node,
-  allNodes,
-  edges,
   phaseConfig,
   onPhaseConfigChange,
 }: NodeConfigSheetProps) {
   const [activePromptKey, setActivePromptKey] = useState<string | null>(null);
-  const [pickedPaths, setPickedPaths] = useState<string[]>([]);
 
   if (!node) return null;
 
   const isSystem = node.kind === "system";
   const selectedKey = activePromptKey ?? node.promptKeys[0] ?? null;
 
-  // Find all nodes that feed INTO this node via edges
-  const upstreamNodeIds = edges
-    .filter((e) => e.target === node.id)
-    .map((e) => e.source);
-  const upstreamNodes = allNodes.filter((n) => upstreamNodeIds.includes(n.id));
+  const { data: upstreamData, isLoading: isUpstreamLoading } =
+    useAdminControllerGetAiAgentUpstreamFields(node.id, {
+      query: { enabled: open && !!node.id },
+    });
 
-  const handleFieldPick = (path: string) => {
-    setPickedPaths((prev) => (prev.includes(path) ? prev : [...prev, path]));
-  };
+  const upstreamItems = useMemo(() => {
+    const payload = upstreamData as
+      | {
+          data?: {
+            items?: Array<{ nodeId: string; label: string; fields: string[] }>;
+          };
+          items?: Array<{ nodeId: string; label: string; fields: string[] }>;
+        }
+      | undefined;
+    return payload?.data?.items ?? payload?.items ?? [];
+  }, [upstreamData]);
+
+  const upstreamPaths = useMemo(
+    () => Array.from(new Set(upstreamItems.flatMap((item) => item.fields))).sort(),
+    [upstreamItems],
+  );
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -80,6 +88,9 @@ export function NodeConfigSheet({
               <Bot className="h-5 w-5 text-primary" />
             )}
             <SheetTitle className="text-lg">{node.label}</SheetTitle>
+            {node.id.includes("orchestrator") ? (
+              <AddAgentDialog orchestratorId={node.id} />
+            ) : null}
           </div>
           <SheetDescription>{node.description}</SheetDescription>
           <div className="flex gap-1.5 pt-1">
@@ -103,6 +114,10 @@ export function NodeConfigSheet({
 
           {/* ── Queue Config ── */}
           <TabsContent value="queue" className="space-y-4 mt-4">
+            {node.id.includes("orchestrator") ? (
+              <OrchestratorAgentManager orchestratorId={node.id} />
+            ) : null}
+
             {phaseConfig ? (
               <>
                 <div className="space-y-2">
@@ -219,14 +234,18 @@ export function NodeConfigSheet({
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <Label className="text-sm font-medium">Data from connected agents</Label>
-                {upstreamNodes.length === 0 && (
+                {upstreamItems.length === 0 && !isUpstreamLoading && (
                   <span className="text-xs text-muted-foreground">
                     Connect agents in the canvas to see their outputs here
                   </span>
                 )}
               </div>
 
-              {upstreamNodes.length === 0 ? (
+              {isUpstreamLoading ? (
+                <div className="rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">
+                  Loading upstream fields...
+                </div>
+              ) : upstreamItems.length === 0 ? (
                 <div className="rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">
                   Drag from another node's handle to this node to link them.
                   <br />
@@ -234,40 +253,30 @@ export function NodeConfigSheet({
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {upstreamNodes.map((upstream) => (
-                    upstream.promptKeys.length > 0 ? (
-                      <SchemaTreeView
-                        key={upstream.id}
-                        nodeLabel={upstream.label}
-                        promptKeys={upstream.promptKeys}
-                        onPick={handleFieldPick}
-                      />
-                    ) : (
-                      <div key={upstream.id} className="text-xs text-muted-foreground">
-                        {upstream.label} — no prompt schema
+                  {upstreamItems.map((upstream) => (
+                    <div key={upstream.nodeId} className="space-y-2 rounded-md border p-3">
+                      <p className="text-xs font-medium text-muted-foreground">
+                        {upstream.label}
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {upstream.fields.map((field) => (
+                          <Badge
+                            key={field}
+                            variant="outline"
+                            className="text-[10px] font-mono"
+                          >
+                            {`{{${field}}}`}
+                          </Badge>
+                        ))}
                       </div>
-                    )
+                    </div>
                   ))}
                 </div>
               )}
 
-              {pickedPaths.length > 0 && (
-                <div className="space-y-1.5 rounded-md bg-blue-500/5 border border-blue-500/20 p-3">
-                  <p className="text-xs font-medium text-blue-600">
-                    Picked fields — go to Prompts tab to insert
-                  </p>
-                  <div className="flex flex-wrap gap-1">
-                    {pickedPaths.map((p) => (
-                      <Badge
-                        key={p}
-                        variant="outline"
-                        className="text-[10px] font-mono border-blue-400/50 text-blue-500 cursor-pointer"
-                        onClick={() => setPickedPaths((prev) => prev.filter((x) => x !== p))}
-                      >
-                        {`{{${p}}}`} ✕
-                      </Badge>
-                    ))}
-                  </div>
+              {upstreamPaths.length > 0 && (
+                <div className="rounded-md border border-blue-500/20 bg-blue-500/5 p-3 text-xs text-blue-700">
+                  Open the Prompts tab and use Insert Variable to include upstream fields.
                 </div>
               )}
             </div>
@@ -298,7 +307,7 @@ export function NodeConfigSheet({
                 {selectedKey && (
                   <NodePromptEditor
                     promptKey={selectedKey}
-                    upstreamPaths={pickedPaths}
+                    upstreamPaths={upstreamPaths}
                   />
                 )}
               </div>

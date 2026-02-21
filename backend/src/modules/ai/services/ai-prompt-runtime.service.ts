@@ -414,6 +414,56 @@ const RUNTIME_SCHEMA_BY_KEY: Record<AiPromptKey, PromptRuntimeSchema> = {
     ],
     notes: ["Matching prompts run per investor thesis. Preview uses request thesis or first active thesis as fallback."],
   },
+  "pipeline.orchestrator": {
+    requiredPhases: [],
+    fields: [
+      { path: "startupId", label: "Startup ID", type: "string", sourceVariable: "startupId" },
+      { path: "autoApprove", label: "Auto Approve", type: "string", sourceVariable: "autoApprove" },
+      { path: "companyName", label: "Company Name", type: "string", sourceVariable: "companyName" },
+    ],
+    notes: ["Pipeline orchestrator coordinates all analysis agents for a startup evaluation."],
+  },
+  "extraction.linkedin": {
+    requiredPhases: [],
+    fields: [
+      { path: "companyName", label: "Company Name", type: "string", sourceVariable: "companyName" },
+      { path: "website", label: "Website", type: "string", sourceVariable: "website" },
+      { path: "discoveredTeamMembers", label: "Discovered Team Members", type: "string", sourceVariable: "discoveredTeamMembers" },
+      { path: "existingTeamMembers", label: "Existing Team Members", type: "string", sourceVariable: "existingTeamMembers" },
+    ],
+    notes: ["LinkedIn enrichment stage discovers and enriches team member profiles."],
+  },
+  "research.orchestrator": {
+    requiredPhases: [],
+    fields: [
+      { path: "companyName", label: "Company Name", type: "string", sourceVariable: "companyName" },
+      { path: "sector", label: "Sector", type: "string", sourceVariable: "sector" },
+      { path: "website", label: "Website", type: "string", sourceVariable: "website" },
+      { path: "deckContent", label: "Deck Content", type: "string", sourceVariable: "deckContent" },
+      { path: "websiteContent", label: "Website Content", type: "string", sourceVariable: "websiteContent" },
+      { path: "teamMembers", label: "Team Members", type: "string", sourceVariable: "teamMembers" },
+    ],
+    notes: ["Research orchestrator coordinates 4 specialized deep research agents."],
+  },
+  "matching.investorThesis": {
+    requiredPhases: [],
+    fields: [
+      { path: "fundName", label: "Fund Name", type: "string", sourceVariable: "fundName" },
+      { path: "fundDescription", label: "Fund Description", type: "string", sourceVariable: "fundDescription" },
+      { path: "stages", label: "Target Stages", type: "string", sourceVariable: "stages" },
+      { path: "sectors", label: "Target Sectors", type: "string", sourceVariable: "sectors" },
+      { path: "geographies", label: "Target Geographies", type: "string", sourceVariable: "geographies" },
+      { path: "businessModels", label: "Business Models", type: "string", sourceVariable: "businessModels" },
+      { path: "checkSizeMin", label: "Check Size Min", type: "string", sourceVariable: "checkSizeMin" },
+      { path: "checkSizeMax", label: "Check Size Max", type: "string", sourceVariable: "checkSizeMax" },
+      { path: "minRevenue", label: "Min Revenue", type: "string", sourceVariable: "minRevenue" },
+      { path: "minGrowthRate", label: "Min Growth Rate", type: "string", sourceVariable: "minGrowthRate" },
+      { path: "thesisNarrative", label: "Thesis Narrative", type: "string", sourceVariable: "thesisNarrative" },
+      { path: "antiPortfolio", label: "Anti-Portfolio", type: "string", sourceVariable: "antiPortfolio" },
+      { path: "portfolioCompanies", label: "Portfolio Companies", type: "string", sourceVariable: "portfolioCompanies" },
+    ],
+    notes: ["Investor thesis generation creates holistic thesis summaries from investor profile data."],
+  },
   "clara.intent": {
     requiredPhases: [],
     fields: [

@@ -4,6 +4,7 @@ import * as cheerio from "cheerio";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import type { WebsiteScrapedData } from "../interfaces/phase-results.interface";
+import { Crawl4aiService } from "./crawl4ai.service";
 
 interface ScrapedPage {
   url: string;
@@ -40,7 +41,10 @@ export class WebsiteScraperService {
     "metadata.google.internal",
   ]);
 
-  constructor(@Optional() private config?: ConfigService) {
+  constructor(
+    @Optional() private config?: ConfigService,
+    @Optional() private crawl4ai?: Crawl4aiService,
+  ) {
     this.maxSubpages = this.validatePositiveInt(
       this.config?.get<number>("SCRAPING_MAX_SUBPAGES", 40) ?? 40, 1, 200,
     );
@@ -69,10 +73,36 @@ export class WebsiteScraperService {
     return clamped;
   }
 
+  private async fetchHtmlViaCrawl4ai(urls: string[]): Promise<Map<string, string>> {
+    const htmlMap = new Map<string, string>();
+    if (!this.crawl4ai?.isConfigured()) return htmlMap;
+
+    const results = await this.crawl4ai.crawl(urls);
+    for (const result of results) {
+      if (result.success && result.html) {
+        htmlMap.set(result.url, result.html);
+      } else if (!result.success) {
+        this.logger.debug(`[Crawl4AI] Failed for ${result.url}: ${result.errorMessage}`);
+      }
+    }
+    return htmlMap;
+  }
+
   async deepScrape(url: string): Promise<WebsiteScrapedData> {
     const homepageUrl = this.normalizeUrl(url, true);
     this.logger.log(`[Scrape] Starting deep scrape for ${homepageUrl}`);
-    const homepage = await this.fetchAndParsePage(homepageUrl);
+
+    let homepage: ScrapedPage;
+    const crawl4aiHtml = await this.fetchHtmlViaCrawl4ai([homepageUrl]);
+    const homepageHtml = crawl4aiHtml.get(homepageUrl);
+
+    if (homepageHtml) {
+      homepage = this.parseHtml(homepageUrl, homepageHtml);
+      this.logger.log("[Scrape] Homepage scraped via Crawl4AI");
+    } else {
+      homepage = await this.fetchAndParsePage(homepageUrl);
+      this.logger.log("[Scrape] Homepage scraped via fetch (Crawl4AI fallback)");
+    }
 
     const subpageCandidates = this.discoverSubpages(homepage.links, homepageUrl);
     this.logger.debug(
@@ -210,28 +240,41 @@ export class WebsiteScraperService {
 
   private async scrapeSubpages(urls: string[]): Promise<ScrapedPage[]> {
     const pages: ScrapedPage[] = [];
+    let crawl4aiCount = 0;
+    let fetchCount = 0;
 
-    for (let index = 0; index < urls.length; index += this.batchSize) {
+    // Try Crawl4AI for all URLs first
+    const crawl4aiHtml = await this.fetchHtmlViaCrawl4ai(urls);
+    const fallbackUrls: string[] = [];
+
+    for (const url of urls) {
+      const html = crawl4aiHtml.get(url);
+      if (html) {
+        pages.push(this.parseHtml(url, html));
+        crawl4aiCount++;
+      } else {
+        fallbackUrls.push(url);
+      }
+    }
+
+    // Fetch fallback for URLs that Crawl4AI didn't handle
+    for (let index = 0; index < fallbackUrls.length; index += this.batchSize) {
       if (index > 0 && this.batchDelayMs > 0) {
         await new Promise<void>((resolve) => setTimeout(resolve, this.batchDelayMs));
       }
 
-      const batch = urls.slice(index, index + this.batchSize);
+      const batch = fallbackUrls.slice(index, index + this.batchSize);
       this.logger.debug(
-        `[Scrape] Processing subpage batch ${Math.floor(index / this.batchSize) + 1} (${batch.length} urls)`,
+        `[Scrape] Processing fetch fallback batch ${Math.floor(index / this.batchSize) + 1} (${batch.length} urls)`,
       );
       const settled = await Promise.allSettled(
         batch.map((url) => this.fetchAndParsePage(url, true)),
-      );
-      const fulfilled = settled.filter((result) => result.status === "fulfilled").length;
-      const rejected = settled.length - fulfilled;
-      this.logger.debug(
-        `[Scrape] Batch ${Math.floor(index / this.batchSize) + 1} completed | success=${fulfilled} | failed=${rejected}`,
       );
 
       for (const result of settled) {
         if (result.status === "fulfilled" && result.value) {
           pages.push(result.value);
+          fetchCount++;
           continue;
         }
 
@@ -243,7 +286,66 @@ export class WebsiteScraperService {
       }
     }
 
+    this.logger.log(
+      `[Scrape] ${crawl4aiCount} subpages via Crawl4AI, ${fetchCount} via fetch fallback`,
+    );
+
     return pages;
+  }
+
+  private parseHtml(pageUrl: string, html: string): ScrapedPage {
+    const $ = cheerio.load(html);
+
+    const title =
+      $("title").text().trim() ||
+      $('meta[property="og:title"]').attr("content")?.trim() ||
+      "";
+    const description =
+      $('meta[name="description"]').attr("content")?.trim() ||
+      $('meta[property="og:description"]').attr("content")?.trim() ||
+      "";
+
+    const headings = $("h1, h2, h3, h4, h5, h6")
+      .toArray()
+      .map((node) => $(node).text().replace(/\s+/g, " ").trim())
+      .filter(Boolean);
+
+    const links = $("a[href]")
+      .toArray()
+      .map((node) => {
+        const href = $(node).attr("href")?.trim() ?? "";
+        const text = $(node).text().replace(/\s+/g, " ").trim();
+        const normalized = this.resolveLink(href, pageUrl);
+        return normalized ? { url: normalized, text } : null;
+      })
+      .filter((entry): entry is { url: string; text: string } => Boolean(entry))
+      .slice(0, this.maxLinksPerPage);
+
+    const bodyTextRoot = $("body").clone();
+    bodyTextRoot.find("script, style, noscript, template").remove();
+    const content = bodyTextRoot.text().replace(/\s+/g, " ").trim();
+
+    const page: ScrapedPage = {
+      url: this.normalizeUrl(pageUrl, pageUrl.endsWith("/")),
+      title,
+      description,
+      content,
+      headings,
+      links,
+      teamBios: this.extractTeamBios($),
+      pricing: this.extractPricing($),
+      customerLogos: this.extractCustomerLogos($, pageUrl),
+      testimonials: this.extractTestimonials($),
+      metadata: {
+        ogImage: $('meta[property="og:image"]').attr("content")?.trim(),
+        keywords: $('meta[name="keywords"]').attr("content")?.trim(),
+        author: $('meta[name="author"]').attr("content")?.trim(),
+      },
+    };
+    this.logger.debug(
+      `[Scrape] Parsed page ${page.url} | Title: ${page.title || "n/a"} | Headings: ${page.headings.length} | Links: ${page.links.length}`,
+    );
+    return page;
   }
 
   private async fetchAndParsePage(
@@ -273,58 +375,7 @@ export class WebsiteScraperService {
       }
 
       const html = await response.text();
-      const $ = cheerio.load(html);
-
-      const title =
-        $("title").text().trim() ||
-        $('meta[property="og:title"]').attr("content")?.trim() ||
-        "";
-      const description =
-        $('meta[name="description"]').attr("content")?.trim() ||
-        $('meta[property="og:description"]').attr("content")?.trim() ||
-        "";
-
-      const headings = $("h1, h2, h3, h4, h5, h6")
-        .toArray()
-        .map((node) => $(node).text().replace(/\s+/g, " ").trim())
-        .filter(Boolean);
-
-      const links = $("a[href]")
-        .toArray()
-        .map((node) => {
-          const href = $(node).attr("href")?.trim() ?? "";
-          const text = $(node).text().replace(/\s+/g, " ").trim();
-          const normalized = this.resolveLink(href, pageUrl);
-          return normalized ? { url: normalized, text } : null;
-        })
-        .filter((entry): entry is { url: string; text: string } => Boolean(entry))
-        .slice(0, this.maxLinksPerPage);
-
-      const bodyTextRoot = $("body").clone();
-      bodyTextRoot.find("script, style, noscript, template").remove();
-      const content = bodyTextRoot.text().replace(/\s+/g, " ").trim();
-
-      const page: ScrapedPage = {
-        url: this.normalizeUrl(pageUrl, pageUrl.endsWith("/")),
-        title,
-        description,
-        content,
-        headings,
-        links,
-        teamBios: this.extractTeamBios($),
-        pricing: this.extractPricing($),
-        customerLogos: this.extractCustomerLogos($, pageUrl),
-        testimonials: this.extractTestimonials($),
-        metadata: {
-          ogImage: $('meta[property="og:image"]').attr("content")?.trim(),
-          keywords: $('meta[name="keywords"]').attr("content")?.trim(),
-          author: $('meta[name="author"]').attr("content")?.trim(),
-        },
-      };
-      this.logger.debug(
-        `[Scrape] Parsed page ${page.url} | Title: ${page.title || "n/a"} | Headings: ${page.headings.length} | Links: ${page.links.length}`,
-      );
-      return page;
+      return this.parseHtml(pageUrl, html);
     } catch (error) {
       const message = this.asMessage(error);
       if (tolerateErrors) {

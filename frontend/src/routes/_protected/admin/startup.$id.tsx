@@ -31,6 +31,7 @@ import {
   ChevronDown,
   FileText,
   BarChart2,
+  StopCircle,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -53,6 +54,7 @@ import {
   useAdminControllerRejectStartup,
   useAdminControllerGetAllScoringWeights,
   useAdminControllerMatchStartupInvestors,
+  useAdminControllerCancelStartupPipeline,
   getAdminControllerGetStatsQueryKey,
   getAdminControllerGetAllStartupsQueryKey,
 } from "@/api/generated/admin/admin";
@@ -276,6 +278,21 @@ function AdminReviewPage() {
     },
   });
 
+  const cancelPipelineMutation = useAdminControllerCancelStartupPipeline({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getStartupControllerFindOneQueryKey(id) });
+        queryClient.invalidateQueries({ queryKey: getAdminControllerGetAllStartupsQueryKey() });
+        toast.success("Pipeline cancelled", {
+          description: "The AI pipeline has been stopped.",
+        });
+      },
+      onError: (error: Error) => {
+        toast.error("Failed to cancel pipeline", { description: error.message });
+      },
+    },
+  });
+
   useEffect(() => {
     setTrackedRetry(null);
     setReanalyzingSection(null);
@@ -434,6 +451,21 @@ function AdminReviewPage() {
               )}
               Re-evaluate
             </Button>
+            {startup?.status === "analyzing" && (
+              <Button
+                variant="destructive"
+                size="default"
+                onClick={() => {
+                  if (window.confirm("Cancel the running pipeline? This will stop all queued jobs.")) {
+                    cancelPipelineMutation.mutate({ id });
+                  }
+                }}
+                disabled={cancelPipelineMutation.isPending}
+              >
+                <StopCircle className="w-4 h-4 mr-2" />
+                {cancelPipelineMutation.isPending ? "Cancelling…" : "Cancel Pipeline"}
+              </Button>
+            )}
           </div>
         }
       />
@@ -469,6 +501,15 @@ function AdminReviewPage() {
               onRetryAgent={handleLiveAgentRetry}
               trackedRetry={trackedRetry}
               onClearTrackedRetry={() => setTrackedRetry(null)}
+              onCancelPipeline={
+                startup.status === "analyzing"
+                  ? () => {
+                      if (window.confirm("Cancel the running pipeline? This will stop all queued jobs.")) {
+                        cancelPipelineMutation.mutate({ id });
+                      }
+                    }
+                  : undefined
+              }
             />
           </TabsContent>
 

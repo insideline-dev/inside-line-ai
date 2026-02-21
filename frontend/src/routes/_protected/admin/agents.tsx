@@ -74,8 +74,10 @@ import {
   Layers,
   Linkedin,
   Newspaper,
+  Eye,
   RefreshCw,
   Rocket,
+  RotateCcw,
   Save,
   Search,
   Target,
@@ -544,6 +546,8 @@ function AdminAgentsPage() {
   const [searchMode, setSearchMode] = useState<"off" | "provider_grounded_search">("off");
   const [modelStage, setModelStage] = useState<"global" | StageOption>("global");
   const [modelNotes, setModelNotes] = useState("");
+  const [activeEditorTab, setActiveEditorTab] = useState("prompts");
+  const [revisionStageFilter, setRevisionStageFilter] = useState<"all" | "global" | StageOption>("all");
   const [schemaViewMode, setSchemaViewMode] = useState<"tree" | "json">("tree");
   const [previewStartupId, setPreviewStartupId] = useState("");
   const [previewStage, setPreviewStage] = useState<"auto" | StageOption>("auto");
@@ -693,6 +697,11 @@ function AdminAgentsPage() {
   }, [outputSchemaQuery.data]);
 
   const revisions = revisionsPayload?.revisions ?? [];
+  const filteredRevisions = useMemo(() => {
+    if (revisionStageFilter === "all") return revisions;
+    const filterValue = revisionStageFilter === "global" ? null : revisionStageFilter;
+    return revisions.filter((r) => r.stage === filterValue);
+  }, [revisions, revisionStageFilter]);
   const modelConfigRevisions = modelConfigPayload?.revisions ?? [];
   const selectedDefinition = currentPromptKey
     ? definitionsByKey.get(currentPromptKey) ?? null
@@ -959,6 +968,28 @@ function AdminAgentsPage() {
     publishMutation.mutate({ key: currentPromptKey, revisionId });
   };
 
+  const handleLoadRevision = (revision: PromptRevision) => {
+    setSystemPrompt(revision.systemPrompt);
+    setUserPrompt(revision.userPrompt);
+    setNotes(revision.notes ?? "");
+    setEditorStage(revision.stage ?? "global");
+    setActiveEditorTab("prompts");
+    toast.success(`Loaded v${revision.version} (${formatStage(revision.stage)}) into editor`);
+  };
+
+  const handleRestoreAsDraft = (revision: PromptRevision) => {
+    if (!currentPromptKey) return;
+    createDraftMutation.mutate({
+      key: currentPromptKey,
+      data: {
+        stage: revision.stage,
+        systemPrompt: revision.systemPrompt,
+        userPrompt: revision.userPrompt,
+        notes: revision.notes ?? undefined,
+      },
+    });
+  };
+
   const handleSaveModelConfigDraft = () => {
     if (!currentPromptKey || !modelName) {
       toast.error("Select a model before saving");
@@ -1214,7 +1245,7 @@ function AdminAgentsPage() {
                   </div>
                 ) : (
                   <div className="min-w-0 space-y-4 pb-6">
-                    <Tabs defaultValue="prompts" className="min-w-0 space-y-4">
+                    <Tabs value={activeEditorTab} onValueChange={setActiveEditorTab} className="min-w-0 space-y-4">
                     <div className="overflow-x-auto pb-1">
                     <TabsList className="w-max min-w-full whitespace-nowrap">
                       <TabsTrigger value="prompts">Prompts</TabsTrigger>
@@ -1497,39 +1528,96 @@ function AdminAgentsPage() {
                     <TabsContent value="revisions">
                       <Card>
                         <CardHeader>
-                          <CardTitle className="text-base">Revision History</CardTitle>
-                          <CardDescription>
-                            Draft, published, and archived revisions for this prompt key.
-                          </CardDescription>
+                          <div className="flex items-center justify-between gap-4">
+                            <div>
+                              <CardTitle className="text-base">Revision History</CardTitle>
+                              <CardDescription>
+                                Draft, published, and archived revisions for this prompt key.
+                              </CardDescription>
+                            </div>
+                            <Select
+                              value={revisionStageFilter}
+                              onValueChange={(v) => setRevisionStageFilter(v as typeof revisionStageFilter)}
+                            >
+                              <SelectTrigger className="w-[140px]">
+                                <SelectValue placeholder="Filter stage" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="all">All Stages</SelectItem>
+                                <SelectItem value="global">Global</SelectItem>
+                                {STAGES.map((stage) => (
+                                  <SelectItem key={stage} value={stage}>
+                                    {formatStage(stage)}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
                         </CardHeader>
                         <CardContent className="space-y-3">
                           {revisionsQuery.isLoading ? (
                             Array.from({ length: 3 }).map((_, index) => (
                               <Skeleton key={index} className="h-16 w-full" />
                             ))
-                          ) : revisions.length === 0 ? (
-                            <p className="text-sm text-muted-foreground">No revisions found for this prompt key.</p>
+                          ) : filteredRevisions.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">
+                              {revisions.length === 0
+                                ? "No revisions found for this prompt key."
+                                : "No revisions match the selected stage filter."}
+                            </p>
                           ) : (
-                            revisions.map((revision: PromptRevision) => (
+                            filteredRevisions.map((revision: PromptRevision) => (
                               <div key={revision.id} className="rounded-md border p-3">
                                 <div className="flex flex-wrap items-center gap-2">
-                                  <Badge variant={revision.status === "published" ? "default" : "outline"}>
+                                  <Badge variant={revision.status === "published" ? "default" : revision.status === "draft" ? "secondary" : "outline"}>
                                     {revision.status}
                                   </Badge>
                                   <Badge variant="secondary">{formatStage(revision.stage)}</Badge>
                                   <span className="text-xs text-muted-foreground">v{revision.version}</span>
-                                  <span className="text-xs text-muted-foreground">{revision.id}</span>
-                                  {revision.status === "draft" ? (
+                                  <div className="ml-auto flex items-center gap-1">
                                     <Button
                                       size="sm"
-                                      variant="secondary"
-                                      className="ml-auto"
-                                      onClick={() => handlePublish(revision.id)}
+                                      variant="ghost"
+                                      onClick={() => handleLoadRevision(revision)}
+                                      title="Load into editor"
                                     >
-                                      Publish
+                                      <Eye className="mr-1 h-3 w-3" />
+                                      Load
                                     </Button>
-                                  ) : null}
+                                    {revision.status === "draft" ? (
+                                      <Button
+                                        size="sm"
+                                        variant="secondary"
+                                        onClick={() => handlePublish(revision.id)}
+                                      >
+                                        Publish
+                                      </Button>
+                                    ) : null}
+                                    {revision.status === "archived" ? (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => handleRestoreAsDraft(revision)}
+                                        disabled={createDraftMutation.isPending}
+                                      >
+                                        <RotateCcw className="mr-1 h-3 w-3" />
+                                        Restore
+                                      </Button>
+                                    ) : null}
+                                  </div>
                                 </div>
+                                {revision.userPrompt ? (
+                                  <p className="mt-2 truncate text-xs text-muted-foreground">
+                                    {revision.userPrompt.length > 80
+                                      ? `${revision.userPrompt.slice(0, 80)}...`
+                                      : revision.userPrompt}
+                                  </p>
+                                ) : null}
+                                {revision.notes ? (
+                                  <p className="mt-1 truncate text-xs italic text-muted-foreground">
+                                    {revision.notes}
+                                  </p>
+                                ) : null}
                                 <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
                                   <Clock className="h-3 w-3" />
                                   Updated {new Date(revision.updatedAt).toLocaleString()}

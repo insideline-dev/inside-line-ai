@@ -57,6 +57,7 @@ import { ScrapingService } from "./services/scraping.service";
 import { SynthesisAgent } from "./agents/synthesis";
 import { SynthesisService } from "./services/synthesis.service";
 import { StartupMatchingPipelineService } from "./services/startup-matching-pipeline.service";
+import { Crawl4aiService } from "./services/crawl4ai.service";
 import { WebsiteScraperService } from "./services/website-scraper.service";
 import { BraveSearchService } from "./services/brave-search.service";
 import { EnrichmentService } from "./services/enrichment.service";
@@ -91,6 +92,7 @@ import { ClaraEmailContextService } from "./services/clara-email-context.service
     MistralOcrService,
     FieldExtractorService,
     ScrapingService,
+    Crawl4aiService,
     WebsiteScraperService,
     LinkedinEnrichmentService,
     BraveSearchService,

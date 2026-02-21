@@ -3130,6 +3130,45 @@
         ]
       }
     },
+    "/admin/investors": {
+      "get": {
+        "operationId": "AdminController_listInvestors",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "List all investors with profile and thesis summary",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/investors/{userId}": {
+      "get": {
+        "operationId": "AdminController_getInvestorDetail",
+        "parameters": [
+          {
+            "name": "userId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get full investor detail (profile, thesis, matches, scoring)",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
     "/admin/integrations/health": {
       "get": {
         "operationId": "AdminController_getIntegrationHealth",
@@ -3800,6 +3839,29 @@
         ]
       }
     },
+    "/admin/startups/{id}/cancel-pipeline": {
+      "post": {
+        "operationId": "AdminController_cancelStartupPipeline",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
     "/admin/scoring/weights": {
       "get": {
         "operationId": "AdminController_getAllScoringWeights",
@@ -4424,6 +4486,21 @@
           }
         },
         "summary": "Seed prompt defaults for global and stage-specific variants",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/ai-prompts/reseed-from-code": {
+      "post": {
+        "operationId": "AdminController_reseedAiPrompts",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Force re-seed evaluation prompts: archives existing and seeds fresh from code catalog",
         "tags": [
           "Admin"
         ]
@@ -9310,6 +9387,10 @@
                 "evaluation.exitPotential",
                 "synthesis.final",
                 "matching.thesis",
+                "pipeline.orchestrator",
+                "extraction.linkedin",
+                "research.orchestrator",
+                "matching.investorThesis",
                 "clara.intent",
                 "clara.response",
                 "clara.agent"
@@ -9570,6 +9651,10 @@
                             "evaluation.exitPotential",
                             "synthesis.final",
                             "matching.thesis",
+                            "pipeline.orchestrator",
+                            "extraction.linkedin",
+                            "research.orchestrator",
+                            "matching.investorThesis",
                             "clara.intent",
                             "clara.response",
                             "clara.agent"
@@ -9724,6 +9809,10 @@
                   "evaluation.exitPotential",
                   "synthesis.final",
                   "matching.thesis",
+                  "pipeline.orchestrator",
+                  "extraction.linkedin",
+                  "research.orchestrator",
+                  "matching.investorThesis",
                   "clara.intent",
                   "clara.response",
                   "clara.agent"
@@ -10298,6 +10387,10 @@
               "evaluation.exitPotential",
               "synthesis.final",
               "matching.thesis",
+              "pipeline.orchestrator",
+              "extraction.linkedin",
+              "research.orchestrator",
+              "matching.investorThesis",
               "clara.intent",
               "clara.response",
               "clara.agent"
@@ -10339,6 +10432,10 @@
               "evaluation.exitPotential",
               "synthesis.final",
               "matching.thesis",
+              "pipeline.orchestrator",
+              "extraction.linkedin",
+              "research.orchestrator",
+              "matching.investorThesis",
               "clara.intent",
               "clara.response",
               "clara.agent"
@@ -10534,6 +10631,10 @@
               "evaluation.exitPotential",
               "synthesis.final",
               "matching.thesis",
+              "pipeline.orchestrator",
+              "extraction.linkedin",
+              "research.orchestrator",
+              "matching.investorThesis",
               "clara.intent",
               "clara.response",
               "clara.agent"
@@ -10790,6 +10891,10 @@
                     "evaluation.exitPotential",
                     "synthesis.final",
                     "matching.thesis",
+                    "pipeline.orchestrator",
+                    "extraction.linkedin",
+                    "research.orchestrator",
+                    "matching.investorThesis",
                     "clara.intent",
                     "clara.response",
                     "clara.agent"

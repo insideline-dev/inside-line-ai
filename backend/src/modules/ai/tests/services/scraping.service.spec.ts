@@ -1,4 +1,12 @@
-import { beforeEach, describe, expect, it, jest } from "bun:test";
+import { beforeEach, describe, expect, it, jest, mock } from "bun:test";
+
+const generateTextMock = jest.fn();
+
+mock.module("ai", () => ({
+  generateText: generateTextMock,
+  Output: { object: ({ schema }: { schema: unknown }) => schema },
+}));
+
 import { DrizzleService } from "../../../../database";
 import {
   SCRAPING_AGENT_LINKEDIN_KEY,
@@ -9,7 +17,10 @@ import { WebsiteScraperService } from "../../services/website-scraper.service";
 import { LinkedinEnrichmentService } from "../../services/linkedin-enrichment.service";
 import { ScrapingCacheService } from "../../services/scraping-cache.service";
 import { PipelineStateService } from "../../services/pipeline-state.service";
+import { AiProviderService } from "../../providers/ai-provider.service";
+import { AiConfigService } from "../../services/ai-config.service";
 import { PipelinePhase } from "../../interfaces/pipeline.interface";
+import type { PhaseProgressCallback } from "../../interfaces/progress-callback.interface";
 
 describe("ScrapingService", () => {
   let service: ScrapingService;
@@ -26,6 +37,8 @@ describe("ScrapingService", () => {
   };
 
   beforeEach(() => {
+    generateTextMock.mockReset();
+
     mockDb.limit.mockResolvedValue([
       {
         id: "startup-1",
@@ -319,6 +332,173 @@ describe("ScrapingService", () => {
 
     expect(result.teamMembers).toHaveLength(1);
     expect(result.teamMembers[0]?.name).toBe("Ismael Belkhayat");
+  });
+
+  describe("deck-based team discovery", () => {
+    let pipelineState: jest.Mocked<PipelineStateService>;
+    let aiProvider: jest.Mocked<AiProviderService>;
+    let aiConfig: jest.Mocked<AiConfigService>;
+    const resolvedModel = { providerModel: "gpt-4o-mini" };
+
+    beforeEach(() => {
+      pipelineState = {
+        getPhaseResult: jest.fn().mockResolvedValue(null),
+      } as unknown as jest.Mocked<PipelineStateService>;
+
+      aiProvider = {
+        resolveModelForPurpose: jest.fn().mockReturnValue(resolvedModel),
+      } as unknown as jest.Mocked<AiProviderService>;
+
+      aiConfig = {} as jest.Mocked<AiConfigService>;
+
+      service = new ScrapingService(
+        drizzle,
+        websiteScraper,
+        linkedin,
+        cache,
+        undefined,
+        pipelineState,
+        aiProvider,
+        aiConfig,
+      );
+    });
+
+    it("discovers team members from pitch deck raw text", async () => {
+      pipelineState.getPhaseResult.mockImplementation(async (_id, phase) => {
+        if (phase === PipelinePhase.EXTRACTION) {
+          return {
+            companyName: "Inside Line",
+            tagline: "AI startup screening",
+            founderNames: ["Alex Founder"],
+            industry: "SaaS",
+            stage: "seed",
+            location: "NYC",
+            website: "https://inside-line.test",
+            rawText: "Our Team\n\nJane Smith - CTO\nWith 15 years of experience...\n\nBob Johnson - VP Engineering\nFormer Google engineer...",
+          };
+        }
+        return null;
+      });
+
+      generateTextMock.mockResolvedValueOnce({
+        experimental_output: {
+          members: [
+            { name: "Jane Smith", role: "CTO", bio: "15 years of experience" },
+            { name: "Bob Johnson", role: "VP Engineering", bio: "Former Google engineer" },
+          ],
+        },
+      });
+
+      linkedin.enrichTeamMembers.mockImplementationOnce(async (_, members) =>
+        members.map((member) => ({
+          name: member.name,
+          role: member.role,
+          linkedinUrl: member.linkedinUrl,
+          enrichmentStatus: "success" as const,
+        })),
+      );
+
+      const result = await service.run("startup-1");
+
+      expect(generateTextMock).toHaveBeenCalledTimes(1);
+      expect(aiProvider.resolveModelForPurpose).toHaveBeenCalled();
+
+      const enrichmentCall = linkedin.enrichTeamMembers.mock.calls.at(-1);
+      const enrichedSeed = enrichmentCall?.[1] ?? [];
+      const names = enrichedSeed.map((m: { name: string }) => m.name);
+      expect(names).toContain("Jane Smith");
+      expect(names).toContain("Bob Johnson");
+
+      const jane = result.teamMembers.find((m) => m.name === "Jane Smith");
+      expect(jane).toBeDefined();
+      expect(jane?.role).toBe("CTO");
+    });
+
+    it("emits progress steps for deck team discovery", async () => {
+      pipelineState.getPhaseResult.mockImplementation(async (_id, phase) => {
+        if (phase === PipelinePhase.EXTRACTION) {
+          return {
+            companyName: "Test Co",
+            tagline: "",
+            founderNames: [],
+            industry: "Tech",
+            stage: "seed",
+            location: "",
+            website: "",
+            rawText: "Team slide content with enough text to pass the minimum length check for processing. Our leadership team includes experienced professionals from top technology companies. The founders bring deep domain expertise in artificial intelligence and machine learning.",
+          };
+        }
+        return null;
+      });
+
+      generateTextMock.mockResolvedValueOnce({
+        experimental_output: {
+          members: [{ name: "Alice CEO", role: "CEO" }],
+        },
+      });
+
+      linkedin.enrichTeamMembers.mockImplementationOnce(async (_, members) =>
+        members.map((member) => ({
+          name: member.name,
+          role: member.role,
+          enrichmentStatus: "success" as const,
+        })),
+      );
+
+      const stepStarts: string[] = [];
+      const stepCompletes: string[] = [];
+      const progress: PhaseProgressCallback = {
+        onStepStart: (step) => { stepStarts.push(step); },
+        onStepComplete: (step) => { stepCompletes.push(step); },
+        onStepFailed: jest.fn(),
+      };
+
+      await service.run("startup-1", progress);
+
+      expect(stepStarts).toContain("deck_team_discovery");
+      expect(stepCompletes).toContain("deck_team_discovery");
+    });
+
+    it("returns empty array and emits failure step when AI call fails", async () => {
+      pipelineState.getPhaseResult.mockImplementation(async (_id, phase) => {
+        if (phase === PipelinePhase.EXTRACTION) {
+          return {
+            companyName: "Test Co",
+            tagline: "",
+            founderNames: [],
+            industry: "Tech",
+            stage: "seed",
+            location: "",
+            website: "",
+            rawText: "Team slide content with enough text to pass the minimum length check for processing. Our leadership team includes experienced professionals from top technology companies. The founders bring deep domain expertise in artificial intelligence and machine learning.",
+          };
+        }
+        return null;
+      });
+
+      generateTextMock.mockRejectedValueOnce(new Error("provider timeout"));
+
+      const stepFails: string[] = [];
+      const progress: PhaseProgressCallback = {
+        onStepStart: jest.fn(),
+        onStepComplete: jest.fn(),
+        onStepFailed: (step) => { stepFails.push(step); },
+      };
+
+      const result = await service.run("startup-1", progress);
+
+      expect(stepFails).toContain("deck_team_discovery");
+      // Pipeline should not crash — submitted members still go through
+      expect(result.teamMembers.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it("skips deck discovery when no extraction result is available", async () => {
+      pipelineState.getPhaseResult.mockResolvedValue(null);
+
+      await service.run("startup-1");
+
+      expect(generateTextMock).not.toHaveBeenCalled();
+    });
   });
 
   it("uses extraction founder names as linkedin enrichment seeds when startup team is empty", async () => {

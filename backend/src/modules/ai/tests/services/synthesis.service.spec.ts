@@ -94,7 +94,7 @@ describe("SynthesisService", () => {
         exitPotential: 0.02,
       }),
       computeWeightedScore: jest.fn().mockReturnValue(79.4),
-      computePercentileRank: jest.fn().mockResolvedValue(88),
+      computePercentileRank: jest.fn().mockResolvedValue(75),
     } as unknown as jest.Mocked<ScoreComputationService>;
 
     aiConfig = {
@@ -133,6 +133,7 @@ describe("SynthesisService", () => {
     );
     expect(drizzle.db.transaction).toHaveBeenCalledTimes(1);
     expect(result.overallScore).toBe(79.4);
+    expect(result.percentileRank).toBe(75);
   });
 
   it("receives fallback result when synthesis agent fails", async () => {

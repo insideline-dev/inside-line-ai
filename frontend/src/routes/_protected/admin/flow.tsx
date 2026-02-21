@@ -23,12 +23,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Save,
-  Upload,
   RotateCcw,
   Loader2,
 } from "lucide-react";
 import type { AiPromptFlowResponseDtoFlowsItem } from "@/api/generated/model";
+import { useUndoRedo } from "@/components/pipeline/hooks/use-undo-redo";
 
 export const Route = createFileRoute("/_protected/admin/flow")({
   component: AdminFlowPage,
@@ -64,9 +63,7 @@ function AdminFlowPage() {
   const queryClient = useQueryClient();
   const [selectedFlowId, setSelectedFlowId] = useState<string>("pipeline");
   const [draftId, setDraftId] = useState<string | null>(null);
-  const [pipelineConfig, setPipelineConfig] = useState<PhaseConfig[]>(
-    DEFAULT_PIPELINE_CONFIG.phases,
-  );
+  const history = useUndoRedo<PhaseConfig[]>(DEFAULT_PIPELINE_CONFIG.phases);
   const [isDirty, setIsDirty] = useState(false);
 
   const { data: flowData, isLoading: flowLoading } =
@@ -79,8 +76,8 @@ function AdminFlowPage() {
     mutation: {
       onSuccess: (data) => {
         const result = extractResponseData<{ id: string }>(data);
-        setDraftId(result.id);
-        setIsDirty(false);
+      setDraftId(result.id);
+      setIsDirty(false);
         toast.success("Draft saved");
         queryClient.invalidateQueries({
           queryKey: getAdminControllerListPipelineFlowConfigsQueryKey(),
@@ -127,10 +124,10 @@ function AdminFlowPage() {
 
   const handlePipelineConfigChange = useCallback(
     (updated: PhaseConfig[]) => {
-      setPipelineConfig(updated);
+      history.push(updated);
       setIsDirty(true);
     },
-    [],
+    [history],
   );
 
   const handleSaveDraft = () => {
@@ -144,7 +141,7 @@ function AdminFlowPage() {
       } as Record<string, unknown>,
       pipelineConfig: {
         ...DEFAULT_PIPELINE_CONFIG,
-        phases: pipelineConfig,
+        phases: history.present,
       } as unknown as Record<string, unknown>,
     };
 
@@ -164,17 +161,25 @@ function AdminFlowPage() {
   };
 
   const handleReset = () => {
-    setPipelineConfig(DEFAULT_PIPELINE_CONFIG.phases);
+    history.replace(DEFAULT_PIPELINE_CONFIG.phases);
     setDraftId(null);
     setIsDirty(false);
     toast.info("Reset to defaults");
   };
 
   const handleLoadConfig = (configId: string) => {
-    const config = configs?.data?.find((c: { id: string }) => c.id === configId);
+    const config = configs?.data?.find((c: { id: string }) => c.id === configId) as
+      | ({ pipelineConfig?: PipelineConfig } & { id: string; name: string })
+      | undefined;
     if (!config) return;
-    // Load the config into state — for now just set the draft ID
+
     setDraftId(config.id);
+
+    const loadedPhases = config.pipelineConfig?.phases;
+    if (loadedPhases) {
+      history.push(loadedPhases as PhaseConfig[]);
+    }
+
     toast.info(`Loaded: ${config.name}`);
   };
 
@@ -231,35 +236,6 @@ function AdminFlowPage() {
             <RotateCcw className="h-3.5 w-3.5 mr-1" />
             Reset
           </Button>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleSaveDraft}
-            disabled={isSaving}
-            className="h-8"
-          >
-            {isSaving ? (
-              <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-            ) : (
-              <Save className="h-3.5 w-3.5 mr-1" />
-            )}
-            Save Draft
-          </Button>
-
-          <Button
-            size="sm"
-            onClick={handlePublish}
-            disabled={!draftId || publishMutation.isPending}
-            className="h-8"
-          >
-            {publishMutation.isPending ? (
-              <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-            ) : (
-              <Upload className="h-3.5 w-3.5 mr-1" />
-            )}
-            Publish
-          </Button>
         </div>
       </div>
 
@@ -279,11 +255,20 @@ function AdminFlowPage() {
               <PipelineCanvas
                 flow={f}
                 pipelineConfig={
-                  f.id === "pipeline" ? pipelineConfig : undefined
+                  f.id === "pipeline" ? history.present : undefined
                 }
                 onPipelineConfigChange={
                   f.id === "pipeline" ? handlePipelineConfigChange : undefined
                 }
+                canUndo={history.canUndo}
+                canRedo={history.canRedo}
+                onUndo={history.undo}
+                onRedo={history.redo}
+                isDirty={isDirty}
+                onSaveDraft={handleSaveDraft}
+                onPublish={handlePublish}
+                saveDisabled={isSaving}
+                publishDisabled={!draftId || publishMutation.isPending}
               />
             </div>
           </TabsContent>

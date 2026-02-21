@@ -28,6 +28,16 @@ export interface AiPromptSeedResultDto {
    * @minimum -9007199254740991
    * @maximum 9007199254740991
    */
+  seededSchemaRevisions: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  skippedSchemaRevisions: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
   totalPromptKeys: number;
   /**
    * @minimum -9007199254740991

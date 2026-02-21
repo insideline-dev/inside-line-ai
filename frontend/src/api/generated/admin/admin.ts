@@ -33,6 +33,8 @@ import type {
   AdminControllerGetStartupStatsParams,
   AdminControllerGetUsersParams,
   AdminControllerRetryJobParams,
+  AiAgentConfigListResponseDto,
+  AiAgentConfigResponseDto,
   AiModelConfigResponseDto,
   AiPipelineContextPreviewResponseDto,
   AiPromptContextSchemaResponseDto,
@@ -43,8 +45,12 @@ import type {
   AiPromptRevisionResponseDto,
   AiPromptRevisionsResponseDto,
   AiPromptSeedResultDto,
+  AiSchemaRevisionResponseDto,
+  AiSchemaRevisionsResponseDto,
+  CreateAiAgentConfigDto,
   CreateAiModelConfigDraftDto,
   CreateAiPromptRevisionDto,
+  CreateAiSchemaRevisionDto,
   CreateEarlyAccessInviteDto,
   CreatePipelineFlowConfigDto,
   PipelineFlowConfigListResponseDto,
@@ -54,11 +60,14 @@ import type {
   QuickCreateStartupDto,
   RetryAgentDto,
   RetryPhaseDto,
+  UpdateAiAgentConfigDto,
   UpdateAiModelConfigDraftDto,
   UpdateAiPromptRevisionDto,
+  UpdateAiSchemaRevisionDto,
   UpdatePipelineFlowConfigDto,
   UpdateStageWeightsDto,
-  UpdateUserDto
+  UpdateUserDto,
+  UpstreamNodeFieldsResponseDto
 } from '.././model';
 
 import { customFetch } from '../../client';
@@ -3614,6 +3623,1946 @@ export const useAdminControllerCreateAiModelConfigDraft = <TError = ErrorType<un
       return useMutation(getAdminControllerCreateAiModelConfigDraftMutationOptions(options), queryClient);
     }
     /**
+ * @summary List schema revisions for a prompt key
+ */
+export type adminControllerGetAiSchemaRevisionsResponse200 = {
+  data: AiSchemaRevisionsResponseDto
+  status: 200
+}
+    
+export type adminControllerGetAiSchemaRevisionsResponseSuccess = (adminControllerGetAiSchemaRevisionsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerGetAiSchemaRevisionsResponse = (adminControllerGetAiSchemaRevisionsResponseSuccess)
+
+export const getAdminControllerGetAiSchemaRevisionsUrl = (key: string,) => {
+
+
+  
+
+  return `/admin/ai-prompts/${key}/schema-revisions`
+}
+
+export const adminControllerGetAiSchemaRevisions = async (key: string, options?: RequestInit): Promise<adminControllerGetAiSchemaRevisionsResponse> => {
+  
+  return customFetch<adminControllerGetAiSchemaRevisionsResponse>(getAdminControllerGetAiSchemaRevisionsUrl(key),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getAdminControllerGetAiSchemaRevisionsQueryKey = (key: string,) => {
+    return [
+    `/admin/ai-prompts/${key}/schema-revisions`
+    ] as const;
+    }
+
+    
+export const getAdminControllerGetAiSchemaRevisionsQueryOptions = <TData = Awaited<ReturnType<typeof adminControllerGetAiSchemaRevisions>>, TError = ErrorType<unknown>>(key: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiSchemaRevisions>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAdminControllerGetAiSchemaRevisionsQueryKey(key);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof adminControllerGetAiSchemaRevisions>>> = ({ signal }) => adminControllerGetAiSchemaRevisions(key, { signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(key), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiSchemaRevisions>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type AdminControllerGetAiSchemaRevisionsQueryResult = NonNullable<Awaited<ReturnType<typeof adminControllerGetAiSchemaRevisions>>>
+export type AdminControllerGetAiSchemaRevisionsQueryError = ErrorType<unknown>
+
+
+export function useAdminControllerGetAiSchemaRevisions<TData = Awaited<ReturnType<typeof adminControllerGetAiSchemaRevisions>>, TError = ErrorType<unknown>>(
+ key: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiSchemaRevisions>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof adminControllerGetAiSchemaRevisions>>,
+          TError,
+          Awaited<ReturnType<typeof adminControllerGetAiSchemaRevisions>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAdminControllerGetAiSchemaRevisions<TData = Awaited<ReturnType<typeof adminControllerGetAiSchemaRevisions>>, TError = ErrorType<unknown>>(
+ key: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiSchemaRevisions>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof adminControllerGetAiSchemaRevisions>>,
+          TError,
+          Awaited<ReturnType<typeof adminControllerGetAiSchemaRevisions>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAdminControllerGetAiSchemaRevisions<TData = Awaited<ReturnType<typeof adminControllerGetAiSchemaRevisions>>, TError = ErrorType<unknown>>(
+ key: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiSchemaRevisions>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List schema revisions for a prompt key
+ */
+
+export function useAdminControllerGetAiSchemaRevisions<TData = Awaited<ReturnType<typeof adminControllerGetAiSchemaRevisions>>, TError = ErrorType<unknown>>(
+ key: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiSchemaRevisions>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getAdminControllerGetAiSchemaRevisionsQueryOptions(key,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+/**
+ * @summary Create schema draft revision
+ */
+export type adminControllerCreateAiSchemaRevisionResponse201 = {
+  data: AiSchemaRevisionResponseDto
+  status: 201
+}
+    
+export type adminControllerCreateAiSchemaRevisionResponseSuccess = (adminControllerCreateAiSchemaRevisionResponse201) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerCreateAiSchemaRevisionResponse = (adminControllerCreateAiSchemaRevisionResponseSuccess)
+
+export const getAdminControllerCreateAiSchemaRevisionUrl = (key: string,) => {
+
+
+  
+
+  return `/admin/ai-prompts/${key}/schema-revisions`
+}
+
+export const adminControllerCreateAiSchemaRevision = async (key: string,
+    createAiSchemaRevisionDto: CreateAiSchemaRevisionDto, options?: RequestInit): Promise<adminControllerCreateAiSchemaRevisionResponse> => {
+  
+  return customFetch<adminControllerCreateAiSchemaRevisionResponse>(getAdminControllerCreateAiSchemaRevisionUrl(key),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      createAiSchemaRevisionDto,)
+  }
+);}
+
+
+
+
+export const getAdminControllerCreateAiSchemaRevisionMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerCreateAiSchemaRevision>>, TError,{key: string;data: BodyType<CreateAiSchemaRevisionDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminControllerCreateAiSchemaRevision>>, TError,{key: string;data: BodyType<CreateAiSchemaRevisionDto>}, TContext> => {
+
+const mutationKey = ['adminControllerCreateAiSchemaRevision'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminControllerCreateAiSchemaRevision>>, {key: string;data: BodyType<CreateAiSchemaRevisionDto>}> = (props) => {
+          const {key,data} = props ?? {};
+
+          return  adminControllerCreateAiSchemaRevision(key,data,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminControllerCreateAiSchemaRevisionMutationResult = NonNullable<Awaited<ReturnType<typeof adminControllerCreateAiSchemaRevision>>>
+    export type AdminControllerCreateAiSchemaRevisionMutationBody = BodyType<CreateAiSchemaRevisionDto>
+    export type AdminControllerCreateAiSchemaRevisionMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Create schema draft revision
+ */
+export const useAdminControllerCreateAiSchemaRevision = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerCreateAiSchemaRevision>>, TError,{key: string;data: BodyType<CreateAiSchemaRevisionDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof adminControllerCreateAiSchemaRevision>>,
+        TError,
+        {key: string;data: BodyType<CreateAiSchemaRevisionDto>},
+        TContext
+      > => {
+      return useMutation(getAdminControllerCreateAiSchemaRevisionMutationOptions(options), queryClient);
+    }
+    /**
+ * @summary Alias: list schema revisions for prompt key
+ */
+export type adminControllerGetAiSchemaRevisionsAliasResponse200 = {
+  data: AiSchemaRevisionsResponseDto
+  status: 200
+}
+    
+export type adminControllerGetAiSchemaRevisionsAliasResponseSuccess = (adminControllerGetAiSchemaRevisionsAliasResponse200) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerGetAiSchemaRevisionsAliasResponse = (adminControllerGetAiSchemaRevisionsAliasResponseSuccess)
+
+export const getAdminControllerGetAiSchemaRevisionsAliasUrl = (promptKey: string,) => {
+
+
+  
+
+  return `/admin/ai/schemas/${promptKey}`
+}
+
+export const adminControllerGetAiSchemaRevisionsAlias = async (promptKey: string, options?: RequestInit): Promise<adminControllerGetAiSchemaRevisionsAliasResponse> => {
+  
+  return customFetch<adminControllerGetAiSchemaRevisionsAliasResponse>(getAdminControllerGetAiSchemaRevisionsAliasUrl(promptKey),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getAdminControllerGetAiSchemaRevisionsAliasQueryKey = (promptKey: string,) => {
+    return [
+    `/admin/ai/schemas/${promptKey}`
+    ] as const;
+    }
+
+    
+export const getAdminControllerGetAiSchemaRevisionsAliasQueryOptions = <TData = Awaited<ReturnType<typeof adminControllerGetAiSchemaRevisionsAlias>>, TError = ErrorType<unknown>>(promptKey: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiSchemaRevisionsAlias>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAdminControllerGetAiSchemaRevisionsAliasQueryKey(promptKey);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof adminControllerGetAiSchemaRevisionsAlias>>> = ({ signal }) => adminControllerGetAiSchemaRevisionsAlias(promptKey, { signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(promptKey), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiSchemaRevisionsAlias>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type AdminControllerGetAiSchemaRevisionsAliasQueryResult = NonNullable<Awaited<ReturnType<typeof adminControllerGetAiSchemaRevisionsAlias>>>
+export type AdminControllerGetAiSchemaRevisionsAliasQueryError = ErrorType<unknown>
+
+
+export function useAdminControllerGetAiSchemaRevisionsAlias<TData = Awaited<ReturnType<typeof adminControllerGetAiSchemaRevisionsAlias>>, TError = ErrorType<unknown>>(
+ promptKey: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiSchemaRevisionsAlias>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof adminControllerGetAiSchemaRevisionsAlias>>,
+          TError,
+          Awaited<ReturnType<typeof adminControllerGetAiSchemaRevisionsAlias>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAdminControllerGetAiSchemaRevisionsAlias<TData = Awaited<ReturnType<typeof adminControllerGetAiSchemaRevisionsAlias>>, TError = ErrorType<unknown>>(
+ promptKey: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiSchemaRevisionsAlias>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof adminControllerGetAiSchemaRevisionsAlias>>,
+          TError,
+          Awaited<ReturnType<typeof adminControllerGetAiSchemaRevisionsAlias>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAdminControllerGetAiSchemaRevisionsAlias<TData = Awaited<ReturnType<typeof adminControllerGetAiSchemaRevisionsAlias>>, TError = ErrorType<unknown>>(
+ promptKey: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiSchemaRevisionsAlias>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Alias: list schema revisions for prompt key
+ */
+
+export function useAdminControllerGetAiSchemaRevisionsAlias<TData = Awaited<ReturnType<typeof adminControllerGetAiSchemaRevisionsAlias>>, TError = ErrorType<unknown>>(
+ promptKey: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiSchemaRevisionsAlias>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getAdminControllerGetAiSchemaRevisionsAliasQueryOptions(promptKey,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+/**
+ * @summary Alias: create schema draft revision
+ */
+export type adminControllerCreateAiSchemaRevisionAliasResponse201 = {
+  data: AiSchemaRevisionResponseDto
+  status: 201
+}
+    
+export type adminControllerCreateAiSchemaRevisionAliasResponseSuccess = (adminControllerCreateAiSchemaRevisionAliasResponse201) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerCreateAiSchemaRevisionAliasResponse = (adminControllerCreateAiSchemaRevisionAliasResponseSuccess)
+
+export const getAdminControllerCreateAiSchemaRevisionAliasUrl = (promptKey: string,) => {
+
+
+  
+
+  return `/admin/ai/schemas/${promptKey}`
+}
+
+export const adminControllerCreateAiSchemaRevisionAlias = async (promptKey: string,
+    createAiSchemaRevisionDto: CreateAiSchemaRevisionDto, options?: RequestInit): Promise<adminControllerCreateAiSchemaRevisionAliasResponse> => {
+  
+  return customFetch<adminControllerCreateAiSchemaRevisionAliasResponse>(getAdminControllerCreateAiSchemaRevisionAliasUrl(promptKey),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      createAiSchemaRevisionDto,)
+  }
+);}
+
+
+
+
+export const getAdminControllerCreateAiSchemaRevisionAliasMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerCreateAiSchemaRevisionAlias>>, TError,{promptKey: string;data: BodyType<CreateAiSchemaRevisionDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminControllerCreateAiSchemaRevisionAlias>>, TError,{promptKey: string;data: BodyType<CreateAiSchemaRevisionDto>}, TContext> => {
+
+const mutationKey = ['adminControllerCreateAiSchemaRevisionAlias'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminControllerCreateAiSchemaRevisionAlias>>, {promptKey: string;data: BodyType<CreateAiSchemaRevisionDto>}> = (props) => {
+          const {promptKey,data} = props ?? {};
+
+          return  adminControllerCreateAiSchemaRevisionAlias(promptKey,data,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminControllerCreateAiSchemaRevisionAliasMutationResult = NonNullable<Awaited<ReturnType<typeof adminControllerCreateAiSchemaRevisionAlias>>>
+    export type AdminControllerCreateAiSchemaRevisionAliasMutationBody = BodyType<CreateAiSchemaRevisionDto>
+    export type AdminControllerCreateAiSchemaRevisionAliasMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Alias: create schema draft revision
+ */
+export const useAdminControllerCreateAiSchemaRevisionAlias = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerCreateAiSchemaRevisionAlias>>, TError,{promptKey: string;data: BodyType<CreateAiSchemaRevisionDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof adminControllerCreateAiSchemaRevisionAlias>>,
+        TError,
+        {promptKey: string;data: BodyType<CreateAiSchemaRevisionDto>},
+        TContext
+      > => {
+      return useMutation(getAdminControllerCreateAiSchemaRevisionAliasMutationOptions(options), queryClient);
+    }
+    /**
+ * @summary Update schema draft revision
+ */
+export type adminControllerUpdateAiSchemaRevisionResponse200 = {
+  data: AiSchemaRevisionResponseDto
+  status: 200
+}
+    
+export type adminControllerUpdateAiSchemaRevisionResponseSuccess = (adminControllerUpdateAiSchemaRevisionResponse200) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerUpdateAiSchemaRevisionResponse = (adminControllerUpdateAiSchemaRevisionResponseSuccess)
+
+export const getAdminControllerUpdateAiSchemaRevisionUrl = (key: string,
+    revisionId: string,) => {
+
+
+  
+
+  return `/admin/ai-prompts/${key}/schema-revisions/${revisionId}`
+}
+
+export const adminControllerUpdateAiSchemaRevision = async (key: string,
+    revisionId: string,
+    updateAiSchemaRevisionDto: UpdateAiSchemaRevisionDto, options?: RequestInit): Promise<adminControllerUpdateAiSchemaRevisionResponse> => {
+  
+  return customFetch<adminControllerUpdateAiSchemaRevisionResponse>(getAdminControllerUpdateAiSchemaRevisionUrl(key,revisionId),
+  {      
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateAiSchemaRevisionDto,)
+  }
+);}
+
+
+
+
+export const getAdminControllerUpdateAiSchemaRevisionMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerUpdateAiSchemaRevision>>, TError,{key: string;revisionId: string;data: BodyType<UpdateAiSchemaRevisionDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminControllerUpdateAiSchemaRevision>>, TError,{key: string;revisionId: string;data: BodyType<UpdateAiSchemaRevisionDto>}, TContext> => {
+
+const mutationKey = ['adminControllerUpdateAiSchemaRevision'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminControllerUpdateAiSchemaRevision>>, {key: string;revisionId: string;data: BodyType<UpdateAiSchemaRevisionDto>}> = (props) => {
+          const {key,revisionId,data} = props ?? {};
+
+          return  adminControllerUpdateAiSchemaRevision(key,revisionId,data,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminControllerUpdateAiSchemaRevisionMutationResult = NonNullable<Awaited<ReturnType<typeof adminControllerUpdateAiSchemaRevision>>>
+    export type AdminControllerUpdateAiSchemaRevisionMutationBody = BodyType<UpdateAiSchemaRevisionDto>
+    export type AdminControllerUpdateAiSchemaRevisionMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Update schema draft revision
+ */
+export const useAdminControllerUpdateAiSchemaRevision = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerUpdateAiSchemaRevision>>, TError,{key: string;revisionId: string;data: BodyType<UpdateAiSchemaRevisionDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof adminControllerUpdateAiSchemaRevision>>,
+        TError,
+        {key: string;revisionId: string;data: BodyType<UpdateAiSchemaRevisionDto>},
+        TContext
+      > => {
+      return useMutation(getAdminControllerUpdateAiSchemaRevisionMutationOptions(options), queryClient);
+    }
+    /**
+ * @summary Alias: update schema draft revision
+ */
+export type adminControllerUpdateAiSchemaRevisionAliasResponse200 = {
+  data: AiSchemaRevisionResponseDto
+  status: 200
+}
+    
+export type adminControllerUpdateAiSchemaRevisionAliasResponseSuccess = (adminControllerUpdateAiSchemaRevisionAliasResponse200) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerUpdateAiSchemaRevisionAliasResponse = (adminControllerUpdateAiSchemaRevisionAliasResponseSuccess)
+
+export const getAdminControllerUpdateAiSchemaRevisionAliasUrl = (promptKey: string,
+    revisionId: string,) => {
+
+
+  
+
+  return `/admin/ai/schemas/${promptKey}/${revisionId}`
+}
+
+export const adminControllerUpdateAiSchemaRevisionAlias = async (promptKey: string,
+    revisionId: string,
+    updateAiSchemaRevisionDto: UpdateAiSchemaRevisionDto, options?: RequestInit): Promise<adminControllerUpdateAiSchemaRevisionAliasResponse> => {
+  
+  return customFetch<adminControllerUpdateAiSchemaRevisionAliasResponse>(getAdminControllerUpdateAiSchemaRevisionAliasUrl(promptKey,revisionId),
+  {      
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateAiSchemaRevisionDto,)
+  }
+);}
+
+
+
+
+export const getAdminControllerUpdateAiSchemaRevisionAliasMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerUpdateAiSchemaRevisionAlias>>, TError,{promptKey: string;revisionId: string;data: BodyType<UpdateAiSchemaRevisionDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminControllerUpdateAiSchemaRevisionAlias>>, TError,{promptKey: string;revisionId: string;data: BodyType<UpdateAiSchemaRevisionDto>}, TContext> => {
+
+const mutationKey = ['adminControllerUpdateAiSchemaRevisionAlias'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminControllerUpdateAiSchemaRevisionAlias>>, {promptKey: string;revisionId: string;data: BodyType<UpdateAiSchemaRevisionDto>}> = (props) => {
+          const {promptKey,revisionId,data} = props ?? {};
+
+          return  adminControllerUpdateAiSchemaRevisionAlias(promptKey,revisionId,data,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminControllerUpdateAiSchemaRevisionAliasMutationResult = NonNullable<Awaited<ReturnType<typeof adminControllerUpdateAiSchemaRevisionAlias>>>
+    export type AdminControllerUpdateAiSchemaRevisionAliasMutationBody = BodyType<UpdateAiSchemaRevisionDto>
+    export type AdminControllerUpdateAiSchemaRevisionAliasMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Alias: update schema draft revision
+ */
+export const useAdminControllerUpdateAiSchemaRevisionAlias = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerUpdateAiSchemaRevisionAlias>>, TError,{promptKey: string;revisionId: string;data: BodyType<UpdateAiSchemaRevisionDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof adminControllerUpdateAiSchemaRevisionAlias>>,
+        TError,
+        {promptKey: string;revisionId: string;data: BodyType<UpdateAiSchemaRevisionDto>},
+        TContext
+      > => {
+      return useMutation(getAdminControllerUpdateAiSchemaRevisionAliasMutationOptions(options), queryClient);
+    }
+    /**
+ * @summary Publish schema draft revision
+ */
+export type adminControllerPublishAiSchemaRevisionResponse201 = {
+  data: AiSchemaRevisionResponseDto
+  status: 201
+}
+    
+export type adminControllerPublishAiSchemaRevisionResponseSuccess = (adminControllerPublishAiSchemaRevisionResponse201) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerPublishAiSchemaRevisionResponse = (adminControllerPublishAiSchemaRevisionResponseSuccess)
+
+export const getAdminControllerPublishAiSchemaRevisionUrl = (key: string,
+    revisionId: string,) => {
+
+
+  
+
+  return `/admin/ai-prompts/${key}/schema-revisions/${revisionId}/publish`
+}
+
+export const adminControllerPublishAiSchemaRevision = async (key: string,
+    revisionId: string, options?: RequestInit): Promise<adminControllerPublishAiSchemaRevisionResponse> => {
+  
+  return customFetch<adminControllerPublishAiSchemaRevisionResponse>(getAdminControllerPublishAiSchemaRevisionUrl(key,revisionId),
+  {      
+    ...options,
+    method: 'POST'
+    
+    
+  }
+);}
+
+
+
+
+export const getAdminControllerPublishAiSchemaRevisionMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerPublishAiSchemaRevision>>, TError,{key: string;revisionId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminControllerPublishAiSchemaRevision>>, TError,{key: string;revisionId: string}, TContext> => {
+
+const mutationKey = ['adminControllerPublishAiSchemaRevision'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminControllerPublishAiSchemaRevision>>, {key: string;revisionId: string}> = (props) => {
+          const {key,revisionId} = props ?? {};
+
+          return  adminControllerPublishAiSchemaRevision(key,revisionId,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminControllerPublishAiSchemaRevisionMutationResult = NonNullable<Awaited<ReturnType<typeof adminControllerPublishAiSchemaRevision>>>
+    
+    export type AdminControllerPublishAiSchemaRevisionMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Publish schema draft revision
+ */
+export const useAdminControllerPublishAiSchemaRevision = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerPublishAiSchemaRevision>>, TError,{key: string;revisionId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof adminControllerPublishAiSchemaRevision>>,
+        TError,
+        {key: string;revisionId: string},
+        TContext
+      > => {
+      return useMutation(getAdminControllerPublishAiSchemaRevisionMutationOptions(options), queryClient);
+    }
+    /**
+ * @summary Alias: publish schema draft revision
+ */
+export type adminControllerPublishAiSchemaRevisionAliasResponse201 = {
+  data: AiSchemaRevisionResponseDto
+  status: 201
+}
+    
+export type adminControllerPublishAiSchemaRevisionAliasResponseSuccess = (adminControllerPublishAiSchemaRevisionAliasResponse201) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerPublishAiSchemaRevisionAliasResponse = (adminControllerPublishAiSchemaRevisionAliasResponseSuccess)
+
+export const getAdminControllerPublishAiSchemaRevisionAliasUrl = (promptKey: string,
+    revisionId: string,) => {
+
+
+  
+
+  return `/admin/ai/schemas/${promptKey}/${revisionId}/publish`
+}
+
+export const adminControllerPublishAiSchemaRevisionAlias = async (promptKey: string,
+    revisionId: string, options?: RequestInit): Promise<adminControllerPublishAiSchemaRevisionAliasResponse> => {
+  
+  return customFetch<adminControllerPublishAiSchemaRevisionAliasResponse>(getAdminControllerPublishAiSchemaRevisionAliasUrl(promptKey,revisionId),
+  {      
+    ...options,
+    method: 'POST'
+    
+    
+  }
+);}
+
+
+
+
+export const getAdminControllerPublishAiSchemaRevisionAliasMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerPublishAiSchemaRevisionAlias>>, TError,{promptKey: string;revisionId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminControllerPublishAiSchemaRevisionAlias>>, TError,{promptKey: string;revisionId: string}, TContext> => {
+
+const mutationKey = ['adminControllerPublishAiSchemaRevisionAlias'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminControllerPublishAiSchemaRevisionAlias>>, {promptKey: string;revisionId: string}> = (props) => {
+          const {promptKey,revisionId} = props ?? {};
+
+          return  adminControllerPublishAiSchemaRevisionAlias(promptKey,revisionId,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminControllerPublishAiSchemaRevisionAliasMutationResult = NonNullable<Awaited<ReturnType<typeof adminControllerPublishAiSchemaRevisionAlias>>>
+    
+    export type AdminControllerPublishAiSchemaRevisionAliasMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Alias: publish schema draft revision
+ */
+export const useAdminControllerPublishAiSchemaRevisionAlias = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerPublishAiSchemaRevisionAlias>>, TError,{promptKey: string;revisionId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof adminControllerPublishAiSchemaRevisionAlias>>,
+        TError,
+        {promptKey: string;revisionId: string},
+        TContext
+      > => {
+      return useMutation(getAdminControllerPublishAiSchemaRevisionAliasMutationOptions(options), queryClient);
+    }
+    /**
+ * @summary List all dynamic agent configs
+ */
+export type adminControllerGetAiAgentConfigsResponse200 = {
+  data: AiAgentConfigListResponseDto
+  status: 200
+}
+    
+export type adminControllerGetAiAgentConfigsResponseSuccess = (adminControllerGetAiAgentConfigsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerGetAiAgentConfigsResponse = (adminControllerGetAiAgentConfigsResponseSuccess)
+
+export const getAdminControllerGetAiAgentConfigsUrl = () => {
+
+
+  
+
+  return `/admin/ai/agent-configs`
+}
+
+export const adminControllerGetAiAgentConfigs = async ( options?: RequestInit): Promise<adminControllerGetAiAgentConfigsResponse> => {
+  
+  return customFetch<adminControllerGetAiAgentConfigsResponse>(getAdminControllerGetAiAgentConfigsUrl(),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getAdminControllerGetAiAgentConfigsQueryKey = () => {
+    return [
+    `/admin/ai/agent-configs`
+    ] as const;
+    }
+
+    
+export const getAdminControllerGetAiAgentConfigsQueryOptions = <TData = Awaited<ReturnType<typeof adminControllerGetAiAgentConfigs>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiAgentConfigs>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAdminControllerGetAiAgentConfigsQueryKey();
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof adminControllerGetAiAgentConfigs>>> = ({ signal }) => adminControllerGetAiAgentConfigs({ signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiAgentConfigs>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type AdminControllerGetAiAgentConfigsQueryResult = NonNullable<Awaited<ReturnType<typeof adminControllerGetAiAgentConfigs>>>
+export type AdminControllerGetAiAgentConfigsQueryError = ErrorType<unknown>
+
+
+export function useAdminControllerGetAiAgentConfigs<TData = Awaited<ReturnType<typeof adminControllerGetAiAgentConfigs>>, TError = ErrorType<unknown>>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiAgentConfigs>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof adminControllerGetAiAgentConfigs>>,
+          TError,
+          Awaited<ReturnType<typeof adminControllerGetAiAgentConfigs>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAdminControllerGetAiAgentConfigs<TData = Awaited<ReturnType<typeof adminControllerGetAiAgentConfigs>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiAgentConfigs>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof adminControllerGetAiAgentConfigs>>,
+          TError,
+          Awaited<ReturnType<typeof adminControllerGetAiAgentConfigs>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAdminControllerGetAiAgentConfigs<TData = Awaited<ReturnType<typeof adminControllerGetAiAgentConfigs>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiAgentConfigs>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List all dynamic agent configs
+ */
+
+export function useAdminControllerGetAiAgentConfigs<TData = Awaited<ReturnType<typeof adminControllerGetAiAgentConfigs>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiAgentConfigs>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getAdminControllerGetAiAgentConfigsQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+/**
+ * @summary Alias: list all dynamic agent configs grouped by orchestrator
+ */
+export type adminControllerGetAiAgentsAliasResponse200 = {
+  data: AiAgentConfigListResponseDto
+  status: 200
+}
+    
+export type adminControllerGetAiAgentsAliasResponseSuccess = (adminControllerGetAiAgentsAliasResponse200) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerGetAiAgentsAliasResponse = (adminControllerGetAiAgentsAliasResponseSuccess)
+
+export const getAdminControllerGetAiAgentsAliasUrl = () => {
+
+
+  
+
+  return `/admin/ai/agents`
+}
+
+export const adminControllerGetAiAgentsAlias = async ( options?: RequestInit): Promise<adminControllerGetAiAgentsAliasResponse> => {
+  
+  return customFetch<adminControllerGetAiAgentsAliasResponse>(getAdminControllerGetAiAgentsAliasUrl(),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getAdminControllerGetAiAgentsAliasQueryKey = () => {
+    return [
+    `/admin/ai/agents`
+    ] as const;
+    }
+
+    
+export const getAdminControllerGetAiAgentsAliasQueryOptions = <TData = Awaited<ReturnType<typeof adminControllerGetAiAgentsAlias>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiAgentsAlias>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAdminControllerGetAiAgentsAliasQueryKey();
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof adminControllerGetAiAgentsAlias>>> = ({ signal }) => adminControllerGetAiAgentsAlias({ signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiAgentsAlias>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type AdminControllerGetAiAgentsAliasQueryResult = NonNullable<Awaited<ReturnType<typeof adminControllerGetAiAgentsAlias>>>
+export type AdminControllerGetAiAgentsAliasQueryError = ErrorType<unknown>
+
+
+export function useAdminControllerGetAiAgentsAlias<TData = Awaited<ReturnType<typeof adminControllerGetAiAgentsAlias>>, TError = ErrorType<unknown>>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiAgentsAlias>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof adminControllerGetAiAgentsAlias>>,
+          TError,
+          Awaited<ReturnType<typeof adminControllerGetAiAgentsAlias>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAdminControllerGetAiAgentsAlias<TData = Awaited<ReturnType<typeof adminControllerGetAiAgentsAlias>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiAgentsAlias>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof adminControllerGetAiAgentsAlias>>,
+          TError,
+          Awaited<ReturnType<typeof adminControllerGetAiAgentsAlias>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAdminControllerGetAiAgentsAlias<TData = Awaited<ReturnType<typeof adminControllerGetAiAgentsAlias>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiAgentsAlias>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Alias: list all dynamic agent configs grouped by orchestrator
+ */
+
+export function useAdminControllerGetAiAgentsAlias<TData = Awaited<ReturnType<typeof adminControllerGetAiAgentsAlias>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiAgentsAlias>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getAdminControllerGetAiAgentsAliasQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+/**
+ * @summary List dynamic agent configs by orchestrator
+ */
+export type adminControllerGetAiAgentConfigsByOrchestratorResponse200 = {
+  data: AiAgentConfigListResponseDto
+  status: 200
+}
+    
+export type adminControllerGetAiAgentConfigsByOrchestratorResponseSuccess = (adminControllerGetAiAgentConfigsByOrchestratorResponse200) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerGetAiAgentConfigsByOrchestratorResponse = (adminControllerGetAiAgentConfigsByOrchestratorResponseSuccess)
+
+export const getAdminControllerGetAiAgentConfigsByOrchestratorUrl = (orchestratorId: string,) => {
+
+
+  
+
+  return `/admin/ai/agent-configs/${orchestratorId}`
+}
+
+export const adminControllerGetAiAgentConfigsByOrchestrator = async (orchestratorId: string, options?: RequestInit): Promise<adminControllerGetAiAgentConfigsByOrchestratorResponse> => {
+  
+  return customFetch<adminControllerGetAiAgentConfigsByOrchestratorResponse>(getAdminControllerGetAiAgentConfigsByOrchestratorUrl(orchestratorId),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getAdminControllerGetAiAgentConfigsByOrchestratorQueryKey = (orchestratorId: string,) => {
+    return [
+    `/admin/ai/agent-configs/${orchestratorId}`
+    ] as const;
+    }
+
+    
+export const getAdminControllerGetAiAgentConfigsByOrchestratorQueryOptions = <TData = Awaited<ReturnType<typeof adminControllerGetAiAgentConfigsByOrchestrator>>, TError = ErrorType<unknown>>(orchestratorId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiAgentConfigsByOrchestrator>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAdminControllerGetAiAgentConfigsByOrchestratorQueryKey(orchestratorId);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof adminControllerGetAiAgentConfigsByOrchestrator>>> = ({ signal }) => adminControllerGetAiAgentConfigsByOrchestrator(orchestratorId, { signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(orchestratorId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiAgentConfigsByOrchestrator>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type AdminControllerGetAiAgentConfigsByOrchestratorQueryResult = NonNullable<Awaited<ReturnType<typeof adminControllerGetAiAgentConfigsByOrchestrator>>>
+export type AdminControllerGetAiAgentConfigsByOrchestratorQueryError = ErrorType<unknown>
+
+
+export function useAdminControllerGetAiAgentConfigsByOrchestrator<TData = Awaited<ReturnType<typeof adminControllerGetAiAgentConfigsByOrchestrator>>, TError = ErrorType<unknown>>(
+ orchestratorId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiAgentConfigsByOrchestrator>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof adminControllerGetAiAgentConfigsByOrchestrator>>,
+          TError,
+          Awaited<ReturnType<typeof adminControllerGetAiAgentConfigsByOrchestrator>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAdminControllerGetAiAgentConfigsByOrchestrator<TData = Awaited<ReturnType<typeof adminControllerGetAiAgentConfigsByOrchestrator>>, TError = ErrorType<unknown>>(
+ orchestratorId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiAgentConfigsByOrchestrator>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof adminControllerGetAiAgentConfigsByOrchestrator>>,
+          TError,
+          Awaited<ReturnType<typeof adminControllerGetAiAgentConfigsByOrchestrator>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAdminControllerGetAiAgentConfigsByOrchestrator<TData = Awaited<ReturnType<typeof adminControllerGetAiAgentConfigsByOrchestrator>>, TError = ErrorType<unknown>>(
+ orchestratorId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiAgentConfigsByOrchestrator>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List dynamic agent configs by orchestrator
+ */
+
+export function useAdminControllerGetAiAgentConfigsByOrchestrator<TData = Awaited<ReturnType<typeof adminControllerGetAiAgentConfigsByOrchestrator>>, TError = ErrorType<unknown>>(
+ orchestratorId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiAgentConfigsByOrchestrator>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getAdminControllerGetAiAgentConfigsByOrchestratorQueryOptions(orchestratorId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+/**
+ * @summary Create dynamic custom agent config
+ */
+export type adminControllerCreateAiAgentConfigResponse201 = {
+  data: AiAgentConfigResponseDto
+  status: 201
+}
+    
+export type adminControllerCreateAiAgentConfigResponseSuccess = (adminControllerCreateAiAgentConfigResponse201) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerCreateAiAgentConfigResponse = (adminControllerCreateAiAgentConfigResponseSuccess)
+
+export const getAdminControllerCreateAiAgentConfigUrl = (orchestratorId: string,) => {
+
+
+  
+
+  return `/admin/ai/agent-configs/${orchestratorId}`
+}
+
+export const adminControllerCreateAiAgentConfig = async (orchestratorId: string,
+    createAiAgentConfigDto: CreateAiAgentConfigDto, options?: RequestInit): Promise<adminControllerCreateAiAgentConfigResponse> => {
+  
+  return customFetch<adminControllerCreateAiAgentConfigResponse>(getAdminControllerCreateAiAgentConfigUrl(orchestratorId),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      createAiAgentConfigDto,)
+  }
+);}
+
+
+
+
+export const getAdminControllerCreateAiAgentConfigMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerCreateAiAgentConfig>>, TError,{orchestratorId: string;data: BodyType<CreateAiAgentConfigDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminControllerCreateAiAgentConfig>>, TError,{orchestratorId: string;data: BodyType<CreateAiAgentConfigDto>}, TContext> => {
+
+const mutationKey = ['adminControllerCreateAiAgentConfig'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminControllerCreateAiAgentConfig>>, {orchestratorId: string;data: BodyType<CreateAiAgentConfigDto>}> = (props) => {
+          const {orchestratorId,data} = props ?? {};
+
+          return  adminControllerCreateAiAgentConfig(orchestratorId,data,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminControllerCreateAiAgentConfigMutationResult = NonNullable<Awaited<ReturnType<typeof adminControllerCreateAiAgentConfig>>>
+    export type AdminControllerCreateAiAgentConfigMutationBody = BodyType<CreateAiAgentConfigDto>
+    export type AdminControllerCreateAiAgentConfigMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Create dynamic custom agent config
+ */
+export const useAdminControllerCreateAiAgentConfig = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerCreateAiAgentConfig>>, TError,{orchestratorId: string;data: BodyType<CreateAiAgentConfigDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof adminControllerCreateAiAgentConfig>>,
+        TError,
+        {orchestratorId: string;data: BodyType<CreateAiAgentConfigDto>},
+        TContext
+      > => {
+      return useMutation(getAdminControllerCreateAiAgentConfigMutationOptions(options), queryClient);
+    }
+    /**
+ * @summary Alias: list dynamic agent configs by orchestrator
+ */
+export type adminControllerGetAiAgentsByOrchestratorAliasResponse200 = {
+  data: AiAgentConfigListResponseDto
+  status: 200
+}
+    
+export type adminControllerGetAiAgentsByOrchestratorAliasResponseSuccess = (adminControllerGetAiAgentsByOrchestratorAliasResponse200) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerGetAiAgentsByOrchestratorAliasResponse = (adminControllerGetAiAgentsByOrchestratorAliasResponseSuccess)
+
+export const getAdminControllerGetAiAgentsByOrchestratorAliasUrl = (orchestratorId: string,) => {
+
+
+  
+
+  return `/admin/ai/agents/${orchestratorId}`
+}
+
+export const adminControllerGetAiAgentsByOrchestratorAlias = async (orchestratorId: string, options?: RequestInit): Promise<adminControllerGetAiAgentsByOrchestratorAliasResponse> => {
+  
+  return customFetch<adminControllerGetAiAgentsByOrchestratorAliasResponse>(getAdminControllerGetAiAgentsByOrchestratorAliasUrl(orchestratorId),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getAdminControllerGetAiAgentsByOrchestratorAliasQueryKey = (orchestratorId: string,) => {
+    return [
+    `/admin/ai/agents/${orchestratorId}`
+    ] as const;
+    }
+
+    
+export const getAdminControllerGetAiAgentsByOrchestratorAliasQueryOptions = <TData = Awaited<ReturnType<typeof adminControllerGetAiAgentsByOrchestratorAlias>>, TError = ErrorType<unknown>>(orchestratorId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiAgentsByOrchestratorAlias>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAdminControllerGetAiAgentsByOrchestratorAliasQueryKey(orchestratorId);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof adminControllerGetAiAgentsByOrchestratorAlias>>> = ({ signal }) => adminControllerGetAiAgentsByOrchestratorAlias(orchestratorId, { signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(orchestratorId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiAgentsByOrchestratorAlias>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type AdminControllerGetAiAgentsByOrchestratorAliasQueryResult = NonNullable<Awaited<ReturnType<typeof adminControllerGetAiAgentsByOrchestratorAlias>>>
+export type AdminControllerGetAiAgentsByOrchestratorAliasQueryError = ErrorType<unknown>
+
+
+export function useAdminControllerGetAiAgentsByOrchestratorAlias<TData = Awaited<ReturnType<typeof adminControllerGetAiAgentsByOrchestratorAlias>>, TError = ErrorType<unknown>>(
+ orchestratorId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiAgentsByOrchestratorAlias>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof adminControllerGetAiAgentsByOrchestratorAlias>>,
+          TError,
+          Awaited<ReturnType<typeof adminControllerGetAiAgentsByOrchestratorAlias>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAdminControllerGetAiAgentsByOrchestratorAlias<TData = Awaited<ReturnType<typeof adminControllerGetAiAgentsByOrchestratorAlias>>, TError = ErrorType<unknown>>(
+ orchestratorId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiAgentsByOrchestratorAlias>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof adminControllerGetAiAgentsByOrchestratorAlias>>,
+          TError,
+          Awaited<ReturnType<typeof adminControllerGetAiAgentsByOrchestratorAlias>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAdminControllerGetAiAgentsByOrchestratorAlias<TData = Awaited<ReturnType<typeof adminControllerGetAiAgentsByOrchestratorAlias>>, TError = ErrorType<unknown>>(
+ orchestratorId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiAgentsByOrchestratorAlias>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Alias: list dynamic agent configs by orchestrator
+ */
+
+export function useAdminControllerGetAiAgentsByOrchestratorAlias<TData = Awaited<ReturnType<typeof adminControllerGetAiAgentsByOrchestratorAlias>>, TError = ErrorType<unknown>>(
+ orchestratorId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiAgentsByOrchestratorAlias>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getAdminControllerGetAiAgentsByOrchestratorAliasQueryOptions(orchestratorId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+/**
+ * @summary Alias: create dynamic custom agent config
+ */
+export type adminControllerCreateAiAgentAliasResponse201 = {
+  data: AiAgentConfigResponseDto
+  status: 201
+}
+    
+export type adminControllerCreateAiAgentAliasResponseSuccess = (adminControllerCreateAiAgentAliasResponse201) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerCreateAiAgentAliasResponse = (adminControllerCreateAiAgentAliasResponseSuccess)
+
+export const getAdminControllerCreateAiAgentAliasUrl = (orchestratorId: string,) => {
+
+
+  
+
+  return `/admin/ai/agents/${orchestratorId}`
+}
+
+export const adminControllerCreateAiAgentAlias = async (orchestratorId: string,
+    createAiAgentConfigDto: CreateAiAgentConfigDto, options?: RequestInit): Promise<adminControllerCreateAiAgentAliasResponse> => {
+  
+  return customFetch<adminControllerCreateAiAgentAliasResponse>(getAdminControllerCreateAiAgentAliasUrl(orchestratorId),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      createAiAgentConfigDto,)
+  }
+);}
+
+
+
+
+export const getAdminControllerCreateAiAgentAliasMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerCreateAiAgentAlias>>, TError,{orchestratorId: string;data: BodyType<CreateAiAgentConfigDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminControllerCreateAiAgentAlias>>, TError,{orchestratorId: string;data: BodyType<CreateAiAgentConfigDto>}, TContext> => {
+
+const mutationKey = ['adminControllerCreateAiAgentAlias'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminControllerCreateAiAgentAlias>>, {orchestratorId: string;data: BodyType<CreateAiAgentConfigDto>}> = (props) => {
+          const {orchestratorId,data} = props ?? {};
+
+          return  adminControllerCreateAiAgentAlias(orchestratorId,data,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminControllerCreateAiAgentAliasMutationResult = NonNullable<Awaited<ReturnType<typeof adminControllerCreateAiAgentAlias>>>
+    export type AdminControllerCreateAiAgentAliasMutationBody = BodyType<CreateAiAgentConfigDto>
+    export type AdminControllerCreateAiAgentAliasMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Alias: create dynamic custom agent config
+ */
+export const useAdminControllerCreateAiAgentAlias = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerCreateAiAgentAlias>>, TError,{orchestratorId: string;data: BodyType<CreateAiAgentConfigDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof adminControllerCreateAiAgentAlias>>,
+        TError,
+        {orchestratorId: string;data: BodyType<CreateAiAgentConfigDto>},
+        TContext
+      > => {
+      return useMutation(getAdminControllerCreateAiAgentAliasMutationOptions(options), queryClient);
+    }
+    /**
+ * @summary Update dynamic agent config
+ */
+export type adminControllerUpdateAiAgentConfigResponse200 = {
+  data: AiAgentConfigResponseDto
+  status: 200
+}
+    
+export type adminControllerUpdateAiAgentConfigResponseSuccess = (adminControllerUpdateAiAgentConfigResponse200) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerUpdateAiAgentConfigResponse = (adminControllerUpdateAiAgentConfigResponseSuccess)
+
+export const getAdminControllerUpdateAiAgentConfigUrl = (orchestratorId: string,
+    agentKey: string,) => {
+
+
+  
+
+  return `/admin/ai/agent-configs/${orchestratorId}/${agentKey}`
+}
+
+export const adminControllerUpdateAiAgentConfig = async (orchestratorId: string,
+    agentKey: string,
+    updateAiAgentConfigDto: UpdateAiAgentConfigDto, options?: RequestInit): Promise<adminControllerUpdateAiAgentConfigResponse> => {
+  
+  return customFetch<adminControllerUpdateAiAgentConfigResponse>(getAdminControllerUpdateAiAgentConfigUrl(orchestratorId,agentKey),
+  {      
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateAiAgentConfigDto,)
+  }
+);}
+
+
+
+
+export const getAdminControllerUpdateAiAgentConfigMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerUpdateAiAgentConfig>>, TError,{orchestratorId: string;agentKey: string;data: BodyType<UpdateAiAgentConfigDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminControllerUpdateAiAgentConfig>>, TError,{orchestratorId: string;agentKey: string;data: BodyType<UpdateAiAgentConfigDto>}, TContext> => {
+
+const mutationKey = ['adminControllerUpdateAiAgentConfig'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminControllerUpdateAiAgentConfig>>, {orchestratorId: string;agentKey: string;data: BodyType<UpdateAiAgentConfigDto>}> = (props) => {
+          const {orchestratorId,agentKey,data} = props ?? {};
+
+          return  adminControllerUpdateAiAgentConfig(orchestratorId,agentKey,data,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminControllerUpdateAiAgentConfigMutationResult = NonNullable<Awaited<ReturnType<typeof adminControllerUpdateAiAgentConfig>>>
+    export type AdminControllerUpdateAiAgentConfigMutationBody = BodyType<UpdateAiAgentConfigDto>
+    export type AdminControllerUpdateAiAgentConfigMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Update dynamic agent config
+ */
+export const useAdminControllerUpdateAiAgentConfig = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerUpdateAiAgentConfig>>, TError,{orchestratorId: string;agentKey: string;data: BodyType<UpdateAiAgentConfigDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof adminControllerUpdateAiAgentConfig>>,
+        TError,
+        {orchestratorId: string;agentKey: string;data: BodyType<UpdateAiAgentConfigDto>},
+        TContext
+      > => {
+      return useMutation(getAdminControllerUpdateAiAgentConfigMutationOptions(options), queryClient);
+    }
+    /**
+ * @summary Delete dynamic custom agent config
+ */
+export type adminControllerDeleteAiAgentConfigResponse200 = {
+  data: void
+  status: 200
+}
+    
+export type adminControllerDeleteAiAgentConfigResponseSuccess = (adminControllerDeleteAiAgentConfigResponse200) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerDeleteAiAgentConfigResponse = (adminControllerDeleteAiAgentConfigResponseSuccess)
+
+export const getAdminControllerDeleteAiAgentConfigUrl = (orchestratorId: string,
+    agentKey: string,) => {
+
+
+  
+
+  return `/admin/ai/agent-configs/${orchestratorId}/${agentKey}`
+}
+
+export const adminControllerDeleteAiAgentConfig = async (orchestratorId: string,
+    agentKey: string, options?: RequestInit): Promise<adminControllerDeleteAiAgentConfigResponse> => {
+  
+  return customFetch<adminControllerDeleteAiAgentConfigResponse>(getAdminControllerDeleteAiAgentConfigUrl(orchestratorId,agentKey),
+  {      
+    ...options,
+    method: 'DELETE'
+    
+    
+  }
+);}
+
+
+
+
+export const getAdminControllerDeleteAiAgentConfigMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerDeleteAiAgentConfig>>, TError,{orchestratorId: string;agentKey: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminControllerDeleteAiAgentConfig>>, TError,{orchestratorId: string;agentKey: string}, TContext> => {
+
+const mutationKey = ['adminControllerDeleteAiAgentConfig'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminControllerDeleteAiAgentConfig>>, {orchestratorId: string;agentKey: string}> = (props) => {
+          const {orchestratorId,agentKey} = props ?? {};
+
+          return  adminControllerDeleteAiAgentConfig(orchestratorId,agentKey,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminControllerDeleteAiAgentConfigMutationResult = NonNullable<Awaited<ReturnType<typeof adminControllerDeleteAiAgentConfig>>>
+    
+    export type AdminControllerDeleteAiAgentConfigMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Delete dynamic custom agent config
+ */
+export const useAdminControllerDeleteAiAgentConfig = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerDeleteAiAgentConfig>>, TError,{orchestratorId: string;agentKey: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof adminControllerDeleteAiAgentConfig>>,
+        TError,
+        {orchestratorId: string;agentKey: string},
+        TContext
+      > => {
+      return useMutation(getAdminControllerDeleteAiAgentConfigMutationOptions(options), queryClient);
+    }
+    /**
+ * @summary Alias: update dynamic agent config
+ */
+export type adminControllerUpdateAiAgentAliasResponse200 = {
+  data: AiAgentConfigResponseDto
+  status: 200
+}
+    
+export type adminControllerUpdateAiAgentAliasResponseSuccess = (adminControllerUpdateAiAgentAliasResponse200) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerUpdateAiAgentAliasResponse = (adminControllerUpdateAiAgentAliasResponseSuccess)
+
+export const getAdminControllerUpdateAiAgentAliasUrl = (orchestratorId: string,
+    agentKey: string,) => {
+
+
+  
+
+  return `/admin/ai/agents/${orchestratorId}/${agentKey}`
+}
+
+export const adminControllerUpdateAiAgentAlias = async (orchestratorId: string,
+    agentKey: string,
+    updateAiAgentConfigDto: UpdateAiAgentConfigDto, options?: RequestInit): Promise<adminControllerUpdateAiAgentAliasResponse> => {
+  
+  return customFetch<adminControllerUpdateAiAgentAliasResponse>(getAdminControllerUpdateAiAgentAliasUrl(orchestratorId,agentKey),
+  {      
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateAiAgentConfigDto,)
+  }
+);}
+
+
+
+
+export const getAdminControllerUpdateAiAgentAliasMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerUpdateAiAgentAlias>>, TError,{orchestratorId: string;agentKey: string;data: BodyType<UpdateAiAgentConfigDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminControllerUpdateAiAgentAlias>>, TError,{orchestratorId: string;agentKey: string;data: BodyType<UpdateAiAgentConfigDto>}, TContext> => {
+
+const mutationKey = ['adminControllerUpdateAiAgentAlias'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminControllerUpdateAiAgentAlias>>, {orchestratorId: string;agentKey: string;data: BodyType<UpdateAiAgentConfigDto>}> = (props) => {
+          const {orchestratorId,agentKey,data} = props ?? {};
+
+          return  adminControllerUpdateAiAgentAlias(orchestratorId,agentKey,data,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminControllerUpdateAiAgentAliasMutationResult = NonNullable<Awaited<ReturnType<typeof adminControllerUpdateAiAgentAlias>>>
+    export type AdminControllerUpdateAiAgentAliasMutationBody = BodyType<UpdateAiAgentConfigDto>
+    export type AdminControllerUpdateAiAgentAliasMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Alias: update dynamic agent config
+ */
+export const useAdminControllerUpdateAiAgentAlias = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerUpdateAiAgentAlias>>, TError,{orchestratorId: string;agentKey: string;data: BodyType<UpdateAiAgentConfigDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof adminControllerUpdateAiAgentAlias>>,
+        TError,
+        {orchestratorId: string;agentKey: string;data: BodyType<UpdateAiAgentConfigDto>},
+        TContext
+      > => {
+      return useMutation(getAdminControllerUpdateAiAgentAliasMutationOptions(options), queryClient);
+    }
+    /**
+ * @summary Alias: delete dynamic custom agent config
+ */
+export type adminControllerDeleteAiAgentAliasResponse200 = {
+  data: void
+  status: 200
+}
+    
+export type adminControllerDeleteAiAgentAliasResponseSuccess = (adminControllerDeleteAiAgentAliasResponse200) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerDeleteAiAgentAliasResponse = (adminControllerDeleteAiAgentAliasResponseSuccess)
+
+export const getAdminControllerDeleteAiAgentAliasUrl = (orchestratorId: string,
+    agentKey: string,) => {
+
+
+  
+
+  return `/admin/ai/agents/${orchestratorId}/${agentKey}`
+}
+
+export const adminControllerDeleteAiAgentAlias = async (orchestratorId: string,
+    agentKey: string, options?: RequestInit): Promise<adminControllerDeleteAiAgentAliasResponse> => {
+  
+  return customFetch<adminControllerDeleteAiAgentAliasResponse>(getAdminControllerDeleteAiAgentAliasUrl(orchestratorId,agentKey),
+  {      
+    ...options,
+    method: 'DELETE'
+    
+    
+  }
+);}
+
+
+
+
+export const getAdminControllerDeleteAiAgentAliasMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerDeleteAiAgentAlias>>, TError,{orchestratorId: string;agentKey: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminControllerDeleteAiAgentAlias>>, TError,{orchestratorId: string;agentKey: string}, TContext> => {
+
+const mutationKey = ['adminControllerDeleteAiAgentAlias'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminControllerDeleteAiAgentAlias>>, {orchestratorId: string;agentKey: string}> = (props) => {
+          const {orchestratorId,agentKey} = props ?? {};
+
+          return  adminControllerDeleteAiAgentAlias(orchestratorId,agentKey,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminControllerDeleteAiAgentAliasMutationResult = NonNullable<Awaited<ReturnType<typeof adminControllerDeleteAiAgentAlias>>>
+    
+    export type AdminControllerDeleteAiAgentAliasMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Alias: delete dynamic custom agent config
+ */
+export const useAdminControllerDeleteAiAgentAlias = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerDeleteAiAgentAlias>>, TError,{orchestratorId: string;agentKey: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof adminControllerDeleteAiAgentAlias>>,
+        TError,
+        {orchestratorId: string;agentKey: string},
+        TContext
+      > => {
+      return useMutation(getAdminControllerDeleteAiAgentAliasMutationOptions(options), queryClient);
+    }
+    /**
+ * @summary Toggle dynamic agent enabled state
+ */
+export type adminControllerToggleAiAgentConfigResponse200 = {
+  data: AiAgentConfigResponseDto
+  status: 200
+}
+    
+export type adminControllerToggleAiAgentConfigResponseSuccess = (adminControllerToggleAiAgentConfigResponse200) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerToggleAiAgentConfigResponse = (adminControllerToggleAiAgentConfigResponseSuccess)
+
+export const getAdminControllerToggleAiAgentConfigUrl = (orchestratorId: string,
+    agentKey: string,) => {
+
+
+  
+
+  return `/admin/ai/agent-configs/${orchestratorId}/${agentKey}/toggle`
+}
+
+export const adminControllerToggleAiAgentConfig = async (orchestratorId: string,
+    agentKey: string, options?: RequestInit): Promise<adminControllerToggleAiAgentConfigResponse> => {
+  
+  return customFetch<adminControllerToggleAiAgentConfigResponse>(getAdminControllerToggleAiAgentConfigUrl(orchestratorId,agentKey),
+  {      
+    ...options,
+    method: 'PATCH'
+    
+    
+  }
+);}
+
+
+
+
+export const getAdminControllerToggleAiAgentConfigMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerToggleAiAgentConfig>>, TError,{orchestratorId: string;agentKey: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminControllerToggleAiAgentConfig>>, TError,{orchestratorId: string;agentKey: string}, TContext> => {
+
+const mutationKey = ['adminControllerToggleAiAgentConfig'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminControllerToggleAiAgentConfig>>, {orchestratorId: string;agentKey: string}> = (props) => {
+          const {orchestratorId,agentKey} = props ?? {};
+
+          return  adminControllerToggleAiAgentConfig(orchestratorId,agentKey,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminControllerToggleAiAgentConfigMutationResult = NonNullable<Awaited<ReturnType<typeof adminControllerToggleAiAgentConfig>>>
+    
+    export type AdminControllerToggleAiAgentConfigMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Toggle dynamic agent enabled state
+ */
+export const useAdminControllerToggleAiAgentConfig = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerToggleAiAgentConfig>>, TError,{orchestratorId: string;agentKey: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof adminControllerToggleAiAgentConfig>>,
+        TError,
+        {orchestratorId: string;agentKey: string},
+        TContext
+      > => {
+      return useMutation(getAdminControllerToggleAiAgentConfigMutationOptions(options), queryClient);
+    }
+    /**
+ * @summary Alias: toggle dynamic agent enabled state
+ */
+export type adminControllerToggleAiAgentAliasResponse200 = {
+  data: AiAgentConfigResponseDto
+  status: 200
+}
+    
+export type adminControllerToggleAiAgentAliasResponseSuccess = (adminControllerToggleAiAgentAliasResponse200) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerToggleAiAgentAliasResponse = (adminControllerToggleAiAgentAliasResponseSuccess)
+
+export const getAdminControllerToggleAiAgentAliasUrl = (orchestratorId: string,
+    agentKey: string,) => {
+
+
+  
+
+  return `/admin/ai/agents/${orchestratorId}/${agentKey}/toggle`
+}
+
+export const adminControllerToggleAiAgentAlias = async (orchestratorId: string,
+    agentKey: string, options?: RequestInit): Promise<adminControllerToggleAiAgentAliasResponse> => {
+  
+  return customFetch<adminControllerToggleAiAgentAliasResponse>(getAdminControllerToggleAiAgentAliasUrl(orchestratorId,agentKey),
+  {      
+    ...options,
+    method: 'PATCH'
+    
+    
+  }
+);}
+
+
+
+
+export const getAdminControllerToggleAiAgentAliasMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerToggleAiAgentAlias>>, TError,{orchestratorId: string;agentKey: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminControllerToggleAiAgentAlias>>, TError,{orchestratorId: string;agentKey: string}, TContext> => {
+
+const mutationKey = ['adminControllerToggleAiAgentAlias'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminControllerToggleAiAgentAlias>>, {orchestratorId: string;agentKey: string}> = (props) => {
+          const {orchestratorId,agentKey} = props ?? {};
+
+          return  adminControllerToggleAiAgentAlias(orchestratorId,agentKey,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminControllerToggleAiAgentAliasMutationResult = NonNullable<Awaited<ReturnType<typeof adminControllerToggleAiAgentAlias>>>
+    
+    export type AdminControllerToggleAiAgentAliasMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Alias: toggle dynamic agent enabled state
+ */
+export const useAdminControllerToggleAiAgentAlias = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerToggleAiAgentAlias>>, TError,{orchestratorId: string;agentKey: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof adminControllerToggleAiAgentAlias>>,
+        TError,
+        {orchestratorId: string;agentKey: string},
+        TContext
+      > => {
+      return useMutation(getAdminControllerToggleAiAgentAliasMutationOptions(options), queryClient);
+    }
+    /**
+ * @summary List upstream schema field paths for a node
+ */
+export type adminControllerGetAiAgentUpstreamFieldsResponse200 = {
+  data: UpstreamNodeFieldsResponseDto
+  status: 200
+}
+    
+export type adminControllerGetAiAgentUpstreamFieldsResponseSuccess = (adminControllerGetAiAgentUpstreamFieldsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerGetAiAgentUpstreamFieldsResponse = (adminControllerGetAiAgentUpstreamFieldsResponseSuccess)
+
+export const getAdminControllerGetAiAgentUpstreamFieldsUrl = (nodeId: string,) => {
+
+
+  
+
+  return `/admin/ai/agents/${nodeId}/upstream-fields`
+}
+
+export const adminControllerGetAiAgentUpstreamFields = async (nodeId: string, options?: RequestInit): Promise<adminControllerGetAiAgentUpstreamFieldsResponse> => {
+  
+  return customFetch<adminControllerGetAiAgentUpstreamFieldsResponse>(getAdminControllerGetAiAgentUpstreamFieldsUrl(nodeId),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getAdminControllerGetAiAgentUpstreamFieldsQueryKey = (nodeId: string,) => {
+    return [
+    `/admin/ai/agents/${nodeId}/upstream-fields`
+    ] as const;
+    }
+
+    
+export const getAdminControllerGetAiAgentUpstreamFieldsQueryOptions = <TData = Awaited<ReturnType<typeof adminControllerGetAiAgentUpstreamFields>>, TError = ErrorType<unknown>>(nodeId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiAgentUpstreamFields>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAdminControllerGetAiAgentUpstreamFieldsQueryKey(nodeId);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof adminControllerGetAiAgentUpstreamFields>>> = ({ signal }) => adminControllerGetAiAgentUpstreamFields(nodeId, { signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(nodeId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiAgentUpstreamFields>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type AdminControllerGetAiAgentUpstreamFieldsQueryResult = NonNullable<Awaited<ReturnType<typeof adminControllerGetAiAgentUpstreamFields>>>
+export type AdminControllerGetAiAgentUpstreamFieldsQueryError = ErrorType<unknown>
+
+
+export function useAdminControllerGetAiAgentUpstreamFields<TData = Awaited<ReturnType<typeof adminControllerGetAiAgentUpstreamFields>>, TError = ErrorType<unknown>>(
+ nodeId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiAgentUpstreamFields>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof adminControllerGetAiAgentUpstreamFields>>,
+          TError,
+          Awaited<ReturnType<typeof adminControllerGetAiAgentUpstreamFields>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAdminControllerGetAiAgentUpstreamFields<TData = Awaited<ReturnType<typeof adminControllerGetAiAgentUpstreamFields>>, TError = ErrorType<unknown>>(
+ nodeId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiAgentUpstreamFields>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof adminControllerGetAiAgentUpstreamFields>>,
+          TError,
+          Awaited<ReturnType<typeof adminControllerGetAiAgentUpstreamFields>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAdminControllerGetAiAgentUpstreamFields<TData = Awaited<ReturnType<typeof adminControllerGetAiAgentUpstreamFields>>, TError = ErrorType<unknown>>(
+ nodeId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiAgentUpstreamFields>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List upstream schema field paths for a node
+ */
+
+export function useAdminControllerGetAiAgentUpstreamFields<TData = Awaited<ReturnType<typeof adminControllerGetAiAgentUpstreamFields>>, TError = ErrorType<unknown>>(
+ nodeId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiAgentUpstreamFields>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getAdminControllerGetAiAgentUpstreamFieldsQueryOptions(nodeId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+/**
  * @summary Update model config draft revision
  */
 export type adminControllerUpdateAiModelConfigDraftResponse200 = {

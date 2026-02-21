@@ -21,6 +21,7 @@ import { AiDebugLogService } from "./ai-debug-log.service";
 import { PipelineAgentTraceService } from "./pipeline-agent-trace.service";
 import { DEFAULT_MODEL_BY_PURPOSE } from "../ai.config";
 import { buildResearchPromptVariables } from "./research-prompt-variables";
+import { AgentConfigService } from "./agent-config.service";
 
 type ResearchAgentOutput =
   | NonNullable<ResearchResult["team"]>
@@ -56,6 +57,7 @@ export class ResearchService {
     private pipelineFeedback: PipelineFeedbackService,
     private promptService: AiPromptService,
     private researchParametersService: ResearchParametersService,
+    private agentConfigService: AgentConfigService,
     @Optional() private aiDebugLog?: AiDebugLogService,
     @Optional() private pipelineAgentTrace?: PipelineAgentTraceService,
   ) {}
@@ -101,6 +103,7 @@ export class ResearchService {
     let phaseFeedbackConsumed = false;
 
     const dedupeSources = new Map<string, SourceEntry>();
+    const { phase1Keys, phase2Keys } = await this.resolveResearchKeys();
     const researchModel =
       process.env.AI_MODEL_RESEARCH ??
       DEFAULT_MODEL_BY_PURPOSE[ModelPurpose.RESEARCH];
@@ -157,7 +160,7 @@ export class ResearchService {
 
     // ── Phase 1: team, market, product, news (parallel) ──
     await Promise.all(
-      PHASE_1_KEYS.map(async (key) => {
+      phase1Keys.map(async (key) => {
         const settledResult = await this.settleAgentRun(
           key,
           this.runSingleAgentSafe(
@@ -185,7 +188,7 @@ export class ResearchService {
     // ── Phase 2: competitor (sequential, receives phase 1 context) ──
     const competitorInput = this.buildCompetitorInput(pipelineInput, result);
     await Promise.all(
-      PHASE_2_KEYS.map(async (key) => {
+      phase2Keys.map(async (key) => {
         const settledResult = await this.settleAgentRun(
           key,
           this.runSingleAgentSafe(
@@ -700,6 +703,54 @@ export class ResearchService {
     } catch {
       return String(value);
     }
+  }
+
+  private async resolveResearchKeys(): Promise<{
+    phase1Keys: Array<keyof typeof RESEARCH_AGENTS>;
+    phase2Keys: Array<keyof typeof PHASE_2_RESEARCH_AGENTS>;
+  }> {
+    const configs = await this.agentConfigService.getEnabled(
+      "research_orchestrator",
+      "pipeline",
+    );
+
+    if (configs.length === 0) {
+      return {
+        phase1Keys: [...PHASE_1_KEYS],
+        phase2Keys: [...PHASE_2_KEYS],
+      };
+    }
+
+    const allKeys = new Set(Object.keys(ALL_RESEARCH_AGENTS));
+    const configured = configs
+      .map((config) => ({
+        key: config.agentKey,
+        executionPhase: config.executionPhase,
+      }))
+      .filter((item): item is { key: ResearchAgentKey; executionPhase: number } =>
+        allKeys.has(item.key),
+      );
+
+    if (configured.length === 0) {
+      return {
+        phase1Keys: [...PHASE_1_KEYS],
+        phase2Keys: [...PHASE_2_KEYS],
+      };
+    }
+
+    const phase1Keys = configured
+      .filter((item) => item.executionPhase <= 1)
+      .map((item) => item.key)
+      .filter((key): key is keyof typeof RESEARCH_AGENTS => key in RESEARCH_AGENTS);
+    const phase2Keys = configured
+      .filter((item) => item.executionPhase > 1)
+      .map((item) => item.key)
+      .filter((key): key is keyof typeof PHASE_2_RESEARCH_AGENTS => key in PHASE_2_RESEARCH_AGENTS);
+
+    return {
+      phase1Keys: phase1Keys.length > 0 ? phase1Keys : [...PHASE_1_KEYS],
+      phase2Keys,
+    };
   }
 }
 

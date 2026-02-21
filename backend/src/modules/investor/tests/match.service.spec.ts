@@ -2,12 +2,12 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { MatchService } from '../match.service';
 import { DrizzleService } from '../../../database';
-import { QueueService } from '../../../queue';
+import { StartupMatchingPipelineService } from '../../ai/services/startup-matching-pipeline.service';
 
 describe('MatchService', () => {
   let service: MatchService;
   let drizzleService: jest.Mocked<DrizzleService>;
-  let queueService: jest.Mocked<QueueService>;
+  let startupMatchingPipelineService: jest.Mocked<StartupMatchingPipelineService>;
   const createMockDb = () => ({
     select: jest.fn().mockReturnThis(),
     from: jest.fn().mockReturnThis(),
@@ -58,9 +58,9 @@ describe('MatchService', () => {
           },
         },
         {
-          provide: QueueService,
+          provide: StartupMatchingPipelineService,
           useValue: {
-            addJob: jest.fn(),
+            queueStartupMatching: jest.fn(),
           },
         },
       ],
@@ -68,7 +68,7 @@ describe('MatchService', () => {
 
     service = module.get<MatchService>(MatchService);
     drizzleService = module.get(DrizzleService);
-    queueService = module.get(QueueService);
+    startupMatchingPipelineService = module.get(StartupMatchingPipelineService);
   });
 
   afterEach(() => {
@@ -276,18 +276,17 @@ describe('MatchService', () => {
   });
 
   describe('regenerateMatches', () => {
-    it('should queue regeneration job', async () => {
+    it('should queue matching retries for approved startups', async () => {
+      mockDb.where.mockResolvedValueOnce([{ id: mockStartupId }]);
+
       await service.regenerateMatches(mockInvestorId);
 
-      expect(queueService.addJob).toHaveBeenCalledWith(
-        expect.any(String),
+      expect(startupMatchingPipelineService.queueStartupMatching).toHaveBeenCalledWith(
         expect.objectContaining({
-          type: 'task',
-          userId: mockInvestorId,
-          name: 'regenerate-matches',
-          payload: { investorId: mockInvestorId },
+          startupId: mockStartupId,
+          requestedBy: mockInvestorId,
+          triggerSource: 'retry',
         }),
-        expect.any(Object),
       );
     });
   });

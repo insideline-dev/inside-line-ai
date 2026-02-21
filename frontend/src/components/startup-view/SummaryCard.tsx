@@ -199,7 +199,10 @@ export function SummaryCard({
                 { name: "Exit Potential", score: evaluation.exitPotentialScore, weight: `${weights?.exitPotential ?? 0}%` },
               ].map((section, index) => {
                 const sectionId = section.name.toLowerCase().replace(/\s+/g, '-');
-                const sectionScore = Math.max(0, Math.min(100, Number(section.score || 0)));
+                const sectionScore = Math.max(
+                  0,
+                  Math.min(100, Math.ceil(Number(section.score || 0))),
+                );
                 return (
                   <div key={section.name} className="flex items-center gap-2" data-testid={`row-section-score-${sectionId}`}>
                     <span className="text-xs w-28 shrink-0" data-testid={`text-section-name-${sectionId}`}>{section.name}</span>

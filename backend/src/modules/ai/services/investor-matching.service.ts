@@ -1,11 +1,12 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull, or } from "drizzle-orm";
 import { generateText, Output } from "ai";
 import { z } from "zod";
 import { DrizzleService } from "../../../database";
 import type { SynthesisResult } from "../interfaces/phase-results.interface";
 import { AiProviderService } from "../providers/ai-provider.service";
 import { investorThesis, startupMatch } from "../../investor/entities";
+import { user, UserRole } from "../../../auth/entities/auth.schema";
 import { AiPromptService } from "./ai-prompt.service";
 import { AiConfigService } from "./ai-config.service";
 import {
@@ -38,7 +39,7 @@ interface StartupMatchInput {
 }
 
 interface InvestorCandidate {
-  id: string;
+  id: string | null;
   userId: string;
   industries: string[] | null;
   stages: string[] | null;
@@ -46,6 +47,7 @@ interface InvestorCandidate {
   checkSizeMax: number | null;
   geographicFocus: string[] | null;
   geographicFocusNodes: string[] | null;
+  thesisSummary: string | null;
   thesisNarrative: string | null;
   notes: string | null;
   minThesisFitScore: number | null;
@@ -89,20 +91,30 @@ export class InvestorMatchingService {
     const candidates = await this.drizzle.db
       .select({
         id: investorThesis.id,
-        userId: investorThesis.userId,
+        userId: user.id,
         industries: investorThesis.industries,
         stages: investorThesis.stages,
         checkSizeMin: investorThesis.checkSizeMin,
         checkSizeMax: investorThesis.checkSizeMax,
         geographicFocus: investorThesis.geographicFocus,
         geographicFocusNodes: investorThesis.geographicFocusNodes,
+        thesisSummary: investorThesis.thesisSummary,
         thesisNarrative: investorThesis.thesisNarrative,
         notes: investorThesis.notes,
         minThesisFitScore: investorThesis.minThesisFitScore,
         minStartupScore: investorThesis.minStartupScore,
       })
-      .from(investorThesis)
-      .where(eq(investorThesis.isActive, true));
+      .from(user)
+      .leftJoin(investorThesis, eq(investorThesis.userId, user.id))
+      .where(
+        and(
+          eq(user.role, UserRole.INVESTOR),
+          or(
+            isNull(investorThesis.id),
+            eq(investorThesis.isActive, true),
+          ),
+        ),
+      );
 
     const firstFilterPassed = candidates.filter((candidate) =>
       this.passesFirstFilter(candidate, input, startupGeoPath),
@@ -222,8 +234,9 @@ export class InvestorMatchingService {
         maxOutputTokens: this.aiConfig.getMatchingMaxOutputTokens(),
         system: promptConfig.systemPrompt,
         prompt: this.promptService.renderTemplate(promptConfig.userPrompt, {
+          investorThesisSummary: candidate.thesisSummary ?? "Not available",
           investorThesis:
-            candidate.thesisNarrative ?? candidate.notes ?? "No thesis provided",
+            candidate.thesisNarrative ?? candidate.notes ?? "Not available",
           startupSummary: input.synthesis.executiveSummary,
           recommendation: input.synthesis.recommendation,
           overallScore: input.synthesis.overallScore,

@@ -165,6 +165,7 @@ export const PreviewAiPromptRequestSchema = z.object({
   startupId: z.string().uuid().optional(),
   stage: z.nativeEnum(StartupStage).nullable().optional(),
   investorThesis: z.string().trim().min(1).optional(),
+  investorThesisSummary: z.string().trim().min(1).optional(),
   fromEmail: z.string().email().optional(),
   subject: z.string().optional(),
   body: z.string().optional(),

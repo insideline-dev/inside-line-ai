@@ -9,6 +9,7 @@ import { DraftService } from "../draft.service";
 import { DrizzleService } from "../../../database";
 import { QueueService } from "../../../queue";
 import { StorageService } from "../../../storage";
+import { UserRole } from "../../../auth/entities/auth.schema";
 import { StartupStatus, StartupStage } from "../entities/startup.schema";
 import { AiConfigService } from "../../ai/services/ai-config.service";
 import { PipelineService } from "../../ai/services/pipeline.service";
@@ -67,6 +68,8 @@ describe("StartupService", () => {
     fundingTarget: 1000000,
     teamSize: 5,
     status: StartupStatus.DRAFT,
+    submittedByRole: UserRole.FOUNDER,
+    isPrivate: false,
     pitchDeckUrl: null,
     demoUrl: null,
     submittedAt: null,
@@ -424,6 +427,65 @@ describe("StartupService", () => {
 
       await expect(
         service.update(mockStartupId, mockUserId, { name: "Updated" }),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it("should allow team-only edits for approved private investor submissions", async () => {
+      const approvedInvestorStartup = {
+        ...mockStartup,
+        status: StartupStatus.APPROVED,
+        submittedByRole: UserRole.INVESTOR,
+        isPrivate: true,
+        teamMembers: [
+          {
+            name: "Alice Founder",
+            role: "CEO",
+            linkedinUrl: "https://linkedin.com/in/alice-founder",
+          },
+        ],
+      };
+      const updatedMembers = [
+        {
+          name: "Alice Founder",
+          role: "CEO",
+          linkedinUrl: "https://linkedin.com/in/alice-founder-updated",
+        },
+        {
+          name: "Bob Builder",
+          role: "CTO",
+          linkedinUrl: "https://linkedin.com/in/bob-builder",
+        },
+      ];
+
+      mockDb.limit
+        .mockResolvedValueOnce([approvedInvestorStartup])
+        .mockResolvedValueOnce([]);
+      mockDb.returning.mockResolvedValueOnce([
+        { ...approvedInvestorStartup, teamMembers: updatedMembers },
+      ]);
+
+      const result = await service.update(mockStartupId, mockUserId, {
+        teamMembers: updatedMembers,
+      });
+
+      expect(result.teamMembers).toEqual(updatedMembers);
+      expect(mockDb.update).toHaveBeenCalled();
+    });
+
+    it("should still reject non-team edits for approved private investor submissions", async () => {
+      const approvedInvestorStartup = {
+        ...mockStartup,
+        status: StartupStatus.APPROVED,
+        submittedByRole: UserRole.INVESTOR,
+        isPrivate: true,
+      };
+
+      mockDb.limit
+        .mockResolvedValueOnce([approvedInvestorStartup])
+        .mockResolvedValueOnce([]);
+
+      await expect(
+        service.update(mockStartupId, mockUserId, { name: "Updated Name" }),
       ).rejects.toThrow(ForbiddenException);
     });
   });

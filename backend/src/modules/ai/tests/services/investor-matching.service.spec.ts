@@ -38,7 +38,9 @@ describe("InvestorMatchingService", () => {
           if (selectCalls === 1) {
             return {
               from: jest.fn().mockReturnValue({
-                where: jest.fn().mockResolvedValue(candidates),
+                leftJoin: jest.fn().mockReturnValue({
+                  where: jest.fn().mockResolvedValue(candidates),
+                }),
               }),
             };
           }
@@ -72,7 +74,7 @@ describe("InvestorMatchingService", () => {
         stage: "seed",
         systemPrompt: "You are an investor-startup fit analyst.",
         userPrompt:
-          "## Investor Thesis\n{{investorThesis}}\n\n## Startup Profile\nSummary: {{startupSummary}}\nRecommendation: {{recommendation}}\nOverall Score: {{overallScore}}",
+          "## Investor Thesis Summary\n{{investorThesisSummary}}\n\n## Investor Thesis\n{{investorThesis}}\n\n## Startup Profile\nSummary: {{startupSummary}}\nRecommendation: {{recommendation}}\nOverall Score: {{overallScore}}",
         source: "code",
         revisionId: null,
       }),
@@ -128,6 +130,18 @@ describe("InvestorMatchingService", () => {
     expect(result.candidatesEvaluated).toBe(2);
     expect(generateTextMock).toHaveBeenCalledTimes(2);
     expect(scoreComputation.computeWithInvestorPreferences).toHaveBeenCalledTimes(2);
+    expect(promptService.renderTemplate).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        investorThesisSummary: expect.any(String),
+      }),
+    );
+    expect(promptService.renderTemplate).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        investorThesisSummary: "Not available",
+      }),
+    );
     expect(result.matches.length).toBe(2);
     expect(result.failedCandidates).toBe(0);
   });

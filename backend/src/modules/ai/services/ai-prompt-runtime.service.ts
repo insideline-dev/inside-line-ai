@@ -89,11 +89,15 @@ type PipelineContextAgentPreview = {
   resolvedVariables: TemplateVariables;
   renderedSystemPrompt: string;
   renderedUserPrompt: string;
+  renderedSystemPromptWithDynamic: string;
+  renderedUserPromptWithDynamic: string;
   parsedContextJson: unknown | null;
   parsedContextSections: ParsedContextSection[] | null;
   hashes: {
     renderedSystemPrompt: string;
     renderedUserPrompt: string;
+    renderedSystemPromptWithDynamic: string;
+    renderedUserPromptWithDynamic: string;
     variables: string;
   };
 };
@@ -563,6 +567,14 @@ export class AiPromptRuntimeService {
       promptConfig.userPrompt,
       resolved.variables,
     );
+    const renderedSystemPromptWithDynamic = await this.applyDynamicVariables(
+      renderedSystemPrompt,
+      resolved.startupId,
+    );
+    const renderedUserPromptWithDynamic = await this.applyDynamicVariables(
+      renderedUserPrompt,
+      resolved.startupId,
+    );
     const isEvaluationPrompt = key.startsWith("evaluation.");
     const parsedContextJson = isEvaluationPrompt
       ? this.parseContextJsonVariable(resolved.variables.contextJson)
@@ -588,6 +600,8 @@ export class AiPromptRuntimeService {
         userPromptTemplate: promptConfig.userPrompt,
         renderedSystemPrompt,
         renderedUserPrompt,
+        renderedSystemPromptWithDynamic,
+        renderedUserPromptWithDynamic,
       },
       model,
       resolvedVariables: resolved.variables,
@@ -597,6 +611,12 @@ export class AiPromptRuntimeService {
       hashes: {
         renderedSystemPrompt: this.sha256(renderedSystemPrompt),
         renderedUserPrompt: this.sha256(renderedUserPrompt),
+        renderedSystemPromptWithDynamic: this.sha256(
+          renderedSystemPromptWithDynamic,
+        ),
+        renderedUserPromptWithDynamic: this.sha256(
+          renderedUserPromptWithDynamic,
+        ),
         variables: this.sha256(
           JSON.stringify(
             Object.keys(resolved.variables)
@@ -644,6 +664,14 @@ export class AiPromptRuntimeService {
         promptConfig.userPrompt,
         resolved.variables,
       );
+      const renderedSystemPromptWithDynamic = await this.applyDynamicVariables(
+        renderedSystemPrompt,
+        resolved.startupId,
+      );
+      const renderedUserPromptWithDynamic = await this.applyDynamicVariables(
+        renderedUserPrompt,
+        resolved.startupId,
+      );
       const parsedContextJson = this.parseContextJsonVariable(
         resolved.variables.contextJson,
       );
@@ -663,11 +691,19 @@ export class AiPromptRuntimeService {
         resolvedVariables: resolved.variables,
         renderedSystemPrompt,
         renderedUserPrompt,
+        renderedSystemPromptWithDynamic,
+        renderedUserPromptWithDynamic,
         parsedContextJson,
         parsedContextSections,
         hashes: {
           renderedSystemPrompt: this.sha256(renderedSystemPrompt),
           renderedUserPrompt: this.sha256(renderedUserPrompt),
+          renderedSystemPromptWithDynamic: this.sha256(
+            renderedSystemPromptWithDynamic,
+          ),
+          renderedUserPromptWithDynamic: this.sha256(
+            renderedUserPromptWithDynamic,
+          ),
           variables: this.sha256(
             JSON.stringify(
               Object.keys(resolved.variables)
@@ -1410,6 +1446,167 @@ export class AiPromptRuntimeService {
     }
 
     return definitions;
+  }
+
+  private async applyDynamicVariables(
+    template: string,
+    startupId: string | null,
+  ): Promise<string> {
+    if (!startupId) {
+      return template;
+    }
+
+    const tokens = Array.from(
+      template.matchAll(/{{\s*([a-zA-Z0-9_-]+\.[^{}\s]+)\s*}}/g),
+    ).map((match) => match[1]).filter((value): value is string => Boolean(value));
+
+    if (tokens.length === 0) {
+      return template;
+    }
+
+    const uniqueTokens = Array.from(new Set(tokens));
+    const tokenValues = new Map<string, string>();
+    const phaseCache = new Map<PipelinePhase, unknown | null>();
+
+    for (const token of uniqueTokens) {
+      const [nodeId, ...fieldPathParts] = token.split(".");
+      const fieldPath = fieldPathParts.join(".");
+      if (!nodeId || !fieldPath) {
+        continue;
+      }
+
+      const value = await this.resolveDynamicTokenValue(
+        startupId,
+        nodeId,
+        fieldPath,
+        phaseCache,
+      );
+      tokenValues.set(token, value);
+    }
+
+    let output = template;
+    for (const [token, replacement] of tokenValues.entries()) {
+      const pattern = new RegExp(`{{\\s*${this.escapeRegex(token)}\\s*}}`, "g");
+      output = output.replace(pattern, replacement);
+    }
+
+    return output;
+  }
+
+  private async resolveDynamicTokenValue(
+    startupId: string,
+    nodeId: string,
+    fieldPath: string,
+    phaseCache: Map<PipelinePhase, unknown | null>,
+  ): Promise<string> {
+    const resolved = await this.resolveNodeOutput(startupId, nodeId, phaseCache);
+    if (resolved === null || resolved === undefined) {
+      return "[not available]";
+    }
+
+    const normalizedPath = fieldPath.replace(/\[\]/g, "");
+    const value = this.deepGet(resolved, normalizedPath.split("."));
+    if (value === undefined) {
+      return "[not available]";
+    }
+
+    if (typeof value === "string") {
+      return value;
+    }
+
+    return JSON.stringify(value);
+  }
+
+  private async resolveNodeOutput(
+    startupId: string,
+    nodeId: string,
+    phaseCache: Map<PipelinePhase, unknown | null>,
+  ): Promise<unknown> {
+    const loadPhase = async (phase: PipelinePhase) => {
+      if (!phaseCache.has(phase)) {
+        const result = await this.pipelineState.getPhaseResult(startupId, phase);
+        phaseCache.set(phase, result ?? null);
+      }
+
+      return phaseCache.get(phase) ?? null;
+    };
+
+    if (nodeId === "extract_fields") {
+      return loadPhase(PipelinePhase.EXTRACTION);
+    }
+
+    if (nodeId === "scrape_website") {
+      return loadPhase(PipelinePhase.SCRAPING);
+    }
+
+    if (nodeId === "gap_fill_hybrid" || nodeId === "linkedin_enrichment") {
+      return loadPhase(PipelinePhase.ENRICHMENT);
+    }
+
+    if (nodeId === "synthesis_final") {
+      return loadPhase(PipelinePhase.SYNTHESIS);
+    }
+
+    if (nodeId.startsWith("research_")) {
+      const key = nodeId.replace(/^research_/, "");
+      const research = (await loadPhase(PipelinePhase.RESEARCH)) as
+        | Record<string, unknown>
+        | null;
+      return research?.[key] ?? null;
+    }
+
+    if (nodeId.startsWith("evaluation_")) {
+      const rawKey = nodeId.replace(/^evaluation_/, "");
+      const key = rawKey.replace(/_([a-z])/g, (_, char: string) =>
+        char.toUpperCase(),
+      );
+      const evaluation = (await loadPhase(PipelinePhase.EVALUATION)) as
+        | Record<string, unknown>
+        | null;
+      return evaluation?.[key] ?? null;
+    }
+
+    return null;
+  }
+
+  private deepGet(target: unknown, segments: string[]): unknown {
+    let current = target;
+
+    for (const segment of segments) {
+      if (current === null || current === undefined) {
+        return undefined;
+      }
+
+      if (Array.isArray(current)) {
+        const numericIndex = Number(segment);
+        if (Number.isInteger(numericIndex)) {
+          current = current[numericIndex];
+          continue;
+        }
+
+        current = current
+          .map((value) =>
+            value && typeof value === "object"
+              ? (value as Record<string, unknown>)[segment]
+              : undefined,
+          )
+          .filter((value) => value !== undefined);
+        continue;
+      }
+
+      if (typeof current === "object") {
+        current = (current as Record<string, unknown>)[segment];
+        continue;
+      }
+
+      return undefined;
+    }
+
+    return current;
+  }
+
+  private escapeRegex(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   }
 
   private sha256(value: string): string {

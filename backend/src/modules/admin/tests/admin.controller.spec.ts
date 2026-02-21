@@ -15,6 +15,12 @@ import { AdminMatchingService } from '../admin-matching.service';
 import { AiPromptService } from '../../ai/services/ai-prompt.service';
 import { AiPromptRuntimeService } from '../../ai/services/ai-prompt-runtime.service';
 import { AiModelConfigService } from '../../ai/services/ai-model-config.service';
+import { AgentSchemaRegistryService } from '../../ai/services/agent-schema-registry.service';
+import { PipelineFlowConfigService } from '../../ai/services/pipeline-flow-config.service';
+import { PhaseTransitionService } from '../../ai/orchestrator/phase-transition.service';
+import { AgentConfigService } from '../../ai/services/agent-config.service';
+import { DynamicFlowCatalogService } from '../../ai/services/dynamic-flow-catalog.service';
+import { SchemaCompilerService } from '../../ai/services/schema-compiler.service';
 import { EarlyAccessService } from '../../early-access';
 import { UserRole } from '../../../auth/entities/auth.schema';
 import { StartupStatus } from '../../startup/entities/startup.schema';
@@ -33,6 +39,10 @@ describe('AdminController', () => {
   let adminMatchingService: jest.Mocked<AdminMatchingService>;
   let aiPromptService: jest.Mocked<AiPromptService>;
   let aiPromptRuntimeService: jest.Mocked<AiPromptRuntimeService>;
+  let agentSchemaRegistryService: jest.Mocked<AgentSchemaRegistryService>;
+  let agentConfigService: jest.Mocked<AgentConfigService>;
+  let dynamicFlowCatalogService: jest.Mocked<DynamicFlowCatalogService>;
+  let schemaCompilerService: jest.Mocked<SchemaCompilerService>;
   let earlyAccessService: jest.Mocked<EarlyAccessService>;
 
   const mockAdmin = {
@@ -175,6 +185,56 @@ describe('AdminController', () => {
           },
         },
         {
+          provide: AgentSchemaRegistryService,
+          useValue: {
+            listRevisionsByKey: jest.fn(),
+            createDraft: jest.fn(),
+            updateDraft: jest.fn(),
+            publishRevision: jest.fn(),
+            resolveDescriptor: jest.fn(),
+          },
+        },
+        {
+          provide: AgentConfigService,
+          useValue: {
+            listAll: jest.fn(),
+            listByOrchestrator: jest.fn(),
+            create: jest.fn(),
+            update: jest.fn(),
+            delete: jest.fn(),
+            toggleEnabled: jest.fn(),
+          },
+        },
+        {
+          provide: DynamicFlowCatalogService,
+          useValue: {
+            getFlowGraph: jest.fn(),
+          },
+        },
+        {
+          provide: SchemaCompilerService,
+          useValue: {
+            extractFieldPaths: jest.fn(),
+          },
+        },
+        {
+          provide: PipelineFlowConfigService,
+          useValue: {
+            listAll: jest.fn(),
+            getPublished: jest.fn(),
+            createDraft: jest.fn(),
+            updateDraft: jest.fn(),
+            publishDraft: jest.fn(),
+            archive: jest.fn(),
+          },
+        },
+        {
+          provide: PhaseTransitionService,
+          useValue: {
+            refreshConfig: jest.fn(),
+          },
+        },
+        {
           provide: EarlyAccessService,
           useValue: {
             createInvite: jest.fn(),
@@ -197,6 +257,10 @@ describe('AdminController', () => {
     adminMatchingService = module.get(AdminMatchingService);
     aiPromptService = module.get(AiPromptService);
     aiPromptRuntimeService = module.get(AiPromptRuntimeService);
+    agentSchemaRegistryService = module.get(AgentSchemaRegistryService);
+    agentConfigService = module.get(AgentConfigService);
+    dynamicFlowCatalogService = module.get(DynamicFlowCatalogService);
+    schemaCompilerService = module.get(SchemaCompilerService);
     earlyAccessService = module.get(EarlyAccessService);
   });
 
@@ -716,12 +780,12 @@ describe('AdminController', () => {
 
     it('should return flow graph metadata', async () => {
       const payload = { flows: [{ id: 'pipeline' }] };
-      aiPromptService.getFlowGraph.mockReturnValueOnce(payload as any);
+      dynamicFlowCatalogService.getFlowGraph.mockResolvedValueOnce(payload as any);
 
       const result = await controller.getAiPromptFlow();
 
       expect(result).toEqual(payload);
-      expect(aiPromptService.getFlowGraph).toHaveBeenCalled();
+      expect(dynamicFlowCatalogService.getFlowGraph).toHaveBeenCalled();
     });
 
     it('should seed prompts from code', async () => {
@@ -785,6 +849,153 @@ describe('AdminController', () => {
 
       expect(result).toEqual(payload);
       expect(aiPromptRuntimeService.previewPipelineContexts).toHaveBeenCalledWith(body);
+    });
+
+    it('should list schema revisions', async () => {
+      const payload = {
+        definition: { key: 'evaluation.legal' },
+        revisions: [],
+      };
+
+      agentSchemaRegistryService.listRevisionsByKey.mockResolvedValueOnce(payload as any);
+
+      const result = await controller.getAiSchemaRevisions('evaluation.legal');
+
+      expect(result).toEqual(payload);
+      expect(agentSchemaRegistryService.listRevisionsByKey).toHaveBeenCalledWith('evaluation.legal');
+    });
+
+    it('should create schema revision draft', async () => {
+      const dto = {
+        schemaJson: {
+          type: 'object',
+          fields: {
+            score: { type: 'number', min: 0, max: 100 },
+          },
+        },
+      };
+      const payload = { id: 'rev-1', status: 'draft' };
+
+      agentSchemaRegistryService.createDraft.mockResolvedValueOnce(payload as any);
+
+      const result = await controller.createAiSchemaRevision(
+        mockAdmin as any,
+        'evaluation.legal',
+        dto as any,
+      );
+
+      expect(result).toEqual(payload);
+      expect(agentSchemaRegistryService.createDraft).toHaveBeenCalledWith(
+        'evaluation.legal',
+        mockAdmin.id,
+        dto,
+      );
+    });
+
+    it('should update schema revision draft', async () => {
+      const dto = { notes: 'updated' };
+      const payload = { id: 'rev-1', notes: 'updated' };
+
+      agentSchemaRegistryService.updateDraft.mockResolvedValueOnce(payload as any);
+
+      const result = await controller.updateAiSchemaRevision(
+        'evaluation.legal',
+        'rev-1',
+        dto as any,
+      );
+
+      expect(result).toEqual(payload);
+      expect(agentSchemaRegistryService.updateDraft).toHaveBeenCalledWith(
+        'evaluation.legal',
+        'rev-1',
+        dto,
+      );
+    });
+
+    it('should publish schema revision draft', async () => {
+      const payload = { id: 'rev-1', status: 'published' };
+
+      agentSchemaRegistryService.publishRevision.mockResolvedValueOnce(payload as any);
+
+      const result = await controller.publishAiSchemaRevision(
+        mockAdmin as any,
+        'evaluation.legal',
+        'rev-1',
+      );
+
+      expect(result).toEqual(payload);
+      expect(agentSchemaRegistryService.publishRevision).toHaveBeenCalledWith(
+        'evaluation.legal',
+        'rev-1',
+        mockAdmin.id,
+      );
+    });
+
+    it('should list dynamic agent configs', async () => {
+      const payload = [{ orchestratorNodeId: 'evaluation_orchestrator', agentKey: 'team' }];
+      agentConfigService.listAll.mockResolvedValueOnce(payload as any);
+
+      const result = await controller.getAiAgentConfigs();
+
+      expect(result).toEqual({ items: payload });
+      expect(agentConfigService.listAll).toHaveBeenCalled();
+    });
+
+    it('should create dynamic agent config', async () => {
+      const dto = { agentKey: 'newAgent', label: 'New Agent' };
+      const payload = { id: 'cfg-1', ...dto };
+      agentConfigService.create.mockResolvedValueOnce(payload as any);
+
+      const result = await controller.createAiAgentConfig(
+        mockAdmin as any,
+        'evaluation_orchestrator',
+        dto as any,
+      );
+
+      expect(result).toEqual(payload);
+      expect(agentConfigService.create).toHaveBeenCalledWith(
+        'pipeline',
+        'evaluation_orchestrator',
+        mockAdmin.id,
+        dto,
+      );
+    });
+
+    it('should return upstream schema fields for agent node', async () => {
+      dynamicFlowCatalogService.getFlowGraph.mockResolvedValueOnce({
+        flows: [
+          {
+            id: 'pipeline',
+            nodes: [
+              { id: 'research_team', label: 'Team Research', promptKeys: ['research.team'] },
+              { id: 'evaluation_team', label: 'Team Evaluation', promptKeys: ['evaluation.team'] },
+            ],
+            edges: [{ from: 'research_team', to: 'evaluation_team' }],
+          },
+        ],
+      } as any);
+      agentSchemaRegistryService.resolveDescriptor.mockResolvedValueOnce({
+        type: 'object',
+        fields: {
+          score: { type: 'number' },
+          findings: { type: 'array', items: { type: 'string' } },
+        },
+      } as any);
+      schemaCompilerService.extractFieldPaths.mockReturnValueOnce(['score', 'findings[]']);
+
+      const result = await controller.getAiAgentUpstreamFields('evaluation_team');
+
+      expect(result).toEqual({
+        items: [
+          {
+            nodeId: 'research_team',
+            label: 'Team Research',
+            fields: ['research_team.findings[]', 'research_team.score'],
+          },
+        ],
+      });
+      expect(agentSchemaRegistryService.resolveDescriptor).toHaveBeenCalledWith('research.team');
+      expect(schemaCompilerService.extractFieldPaths).toHaveBeenCalled();
     });
   });
 });

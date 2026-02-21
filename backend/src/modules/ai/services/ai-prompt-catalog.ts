@@ -160,6 +160,10 @@ export const AI_PROMPT_VARIABLE_DEFINITIONS: Record<string, PromptVariableDefini
     description: "Investor thesis text used for thesis-fit scoring.",
     source: "InvestorMatchingService.buildMatchPrompt()",
   },
+  investorThesisSummary: {
+    description: "Precomputed investor thesis summary used for thesis-fit scoring context.",
+    source: "ThesisService.upsert()/InvestorMatchingService.buildMatchPrompt()",
+  },
   startupSummary: {
     description: "Startup summary content used in matching prompts.",
     source: "InvestorMatchingService.buildMatchPrompt()",
@@ -933,7 +937,10 @@ export const AI_PROMPT_CATALOG: Record<AiPromptKey, PromptCatalogEntry> = {
       "81-100: Excellent fit — deep alignment across sector, stage, and thesis narrative",
     ].join("\n"),
     defaultUserPrompt: [
-      "## Investor Thesis",
+      "## Investor Thesis Summary",
+      "{{investorThesisSummary}}",
+      "",
+      "## Investor Thesis Details",
       "{{investorThesis}}",
       "",
       "## Startup Profile",
@@ -941,7 +948,7 @@ export const AI_PROMPT_CATALOG: Record<AiPromptKey, PromptCatalogEntry> = {
       "Recommendation: {{recommendation}}",
       "Overall Score: {{overallScore}}",
     ].join("\n"),
-    allowedVariables: ["investorThesis", "startupSummary", "recommendation", "overallScore", "startupProfile"],
+    allowedVariables: ["investorThesisSummary", "investorThesis", "startupSummary", "recommendation", "overallScore", "startupProfile"],
     requiredVariables: ["investorThesis", "startupSummary", "recommendation", "overallScore"],
   },
   "clara.intent": {

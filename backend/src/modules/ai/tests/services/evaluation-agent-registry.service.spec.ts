@@ -9,6 +9,8 @@ import { PipelineStateService } from "../../services/pipeline-state.service";
 import type { PhaseTransitionService } from "../../orchestrator/phase-transition.service";
 import type { PipelineFeedbackService } from "../../services/pipeline-feedback.service";
 import type { PipelineAgentTraceService } from "../../services/pipeline-agent-trace.service";
+import type { AgentConfigService } from "../../services/agent-config.service";
+import type { DynamicAgentRunnerService } from "../../services/dynamic-agent-runner.service";
 import { createEvaluationPipelineInput } from "../fixtures/evaluation-pipeline.fixture";
 
 const ALL_KEYS: EvaluationAgentKey[] = [
@@ -68,6 +70,8 @@ function createRegistry(
   pipelineState: PipelineStateService,
   phaseTransition: PhaseTransitionService,
   pipelineFeedback: PipelineFeedbackService,
+  agentConfigService: AgentConfigService,
+  dynamicAgentRunner: DynamicAgentRunnerService,
   pipelineAgentTrace?: PipelineAgentTraceService,
 ): EvaluationAgentRegistryService {
   const constructorArgs = [
@@ -85,6 +89,8 @@ function createRegistry(
     pipelineState,
     phaseTransition,
     pipelineFeedback,
+    agentConfigService,
+    dynamicAgentRunner,
     pipelineAgentTrace,
   ] as unknown as ConstructorParameters<typeof EvaluationAgentRegistryService>;
 
@@ -95,6 +101,8 @@ describe("EvaluationAgentRegistryService", () => {
   let pipelineState: jest.Mocked<PipelineStateService>;
   let phaseTransition: jest.Mocked<PhaseTransitionService>;
   let pipelineFeedback: jest.Mocked<PipelineFeedbackService>;
+  let agentConfigService: jest.Mocked<AgentConfigService>;
+  let dynamicAgentRunner: jest.Mocked<DynamicAgentRunnerService>;
   const pipelineData = createEvaluationPipelineInput();
 
   beforeEach(() => {
@@ -113,6 +121,14 @@ describe("EvaluationAgentRegistryService", () => {
       getContext: jest.fn().mockResolvedValue({ items: [] }),
       markConsumedByScope: jest.fn().mockResolvedValue(0),
     } as unknown as jest.Mocked<PipelineFeedbackService>;
+
+    agentConfigService = {
+      getExecutableByOrchestrator: jest.fn().mockResolvedValue([]),
+    } as unknown as jest.Mocked<AgentConfigService>;
+
+    dynamicAgentRunner = {
+      run: jest.fn(),
+    } as unknown as jest.Mocked<DynamicAgentRunnerService>;
   });
 
   it("marks run as healthy when all agents return structured outputs", async () => {
@@ -123,6 +139,8 @@ describe("EvaluationAgentRegistryService", () => {
       pipelineState as unknown as PipelineStateService,
       phaseTransition as unknown as PhaseTransitionService,
       pipelineFeedback as unknown as PipelineFeedbackService,
+      agentConfigService as unknown as AgentConfigService,
+      dynamicAgentRunner as unknown as DynamicAgentRunnerService,
     );
 
     const result = await service.runAll("startup-1", pipelineData);
@@ -152,6 +170,8 @@ describe("EvaluationAgentRegistryService", () => {
       pipelineState as unknown as PipelineStateService,
       phaseTransition as unknown as PhaseTransitionService,
       pipelineFeedback as unknown as PipelineFeedbackService,
+      agentConfigService as unknown as AgentConfigService,
+      dynamicAgentRunner as unknown as DynamicAgentRunnerService,
     );
 
     const result = await service.runAll("startup-2", pipelineData);
@@ -178,6 +198,8 @@ describe("EvaluationAgentRegistryService", () => {
       pipelineState as unknown as PipelineStateService,
       phaseTransition as unknown as PhaseTransitionService,
       pipelineFeedback as unknown as PipelineFeedbackService,
+      agentConfigService as unknown as AgentConfigService,
+      dynamicAgentRunner as unknown as DynamicAgentRunnerService,
     );
 
     const result = await service.runAll("startup-3", pipelineData);
@@ -200,6 +222,8 @@ describe("EvaluationAgentRegistryService", () => {
       pipelineState as unknown as PipelineStateService,
       phaseTransition as unknown as PhaseTransitionService,
       pipelineFeedback as unknown as PipelineFeedbackService,
+      agentConfigService as unknown as AgentConfigService,
+      dynamicAgentRunner as unknown as DynamicAgentRunnerService,
     );
 
     await service.runAll("startup-4", pipelineData, onAgentStart, onAgentComplete);
@@ -225,6 +249,8 @@ describe("EvaluationAgentRegistryService", () => {
       pipelineState as unknown as PipelineStateService,
       phaseTransition as unknown as PhaseTransitionService,
       pipelineFeedback as unknown as PipelineFeedbackService,
+      agentConfigService as unknown as AgentConfigService,
+      dynamicAgentRunner as unknown as DynamicAgentRunnerService,
     );
 
     const result = await service.runAll("startup-5", pipelineData);
@@ -240,6 +266,8 @@ describe("EvaluationAgentRegistryService", () => {
       pipelineState as unknown as PipelineStateService,
       phaseTransition as unknown as PhaseTransitionService,
       pipelineFeedback as unknown as PipelineFeedbackService,
+      agentConfigService as unknown as AgentConfigService,
+      dynamicAgentRunner as unknown as DynamicAgentRunnerService,
     );
 
     const result = await service.runOne("startup-6", "market", pipelineData);
@@ -301,6 +329,8 @@ describe("EvaluationAgentRegistryService", () => {
       pipelineState as unknown as PipelineStateService,
       phaseTransition as unknown as PhaseTransitionService,
       pipelineFeedback as unknown as PipelineFeedbackService,
+      agentConfigService as unknown as AgentConfigService,
+      dynamicAgentRunner as unknown as DynamicAgentRunnerService,
     );
 
     await service.runOne("startup-7", "team", pipelineData);
@@ -331,6 +361,8 @@ describe("EvaluationAgentRegistryService", () => {
       pipelineState as unknown as PipelineStateService,
       phaseTransition as unknown as PhaseTransitionService,
       pipelineFeedback as unknown as PipelineFeedbackService,
+      agentConfigService as unknown as AgentConfigService,
+      dynamicAgentRunner as unknown as DynamicAgentRunnerService,
     );
 
     const result = await service.runOne("startup-8", "team", pipelineData);
@@ -382,6 +414,8 @@ describe("EvaluationAgentRegistryService", () => {
       pipelineState as unknown as PipelineStateService,
       phaseTransition as unknown as PhaseTransitionService,
       pipelineFeedback as unknown as PipelineFeedbackService,
+      agentConfigService as unknown as AgentConfigService,
+      dynamicAgentRunner as unknown as DynamicAgentRunnerService,
       traceService,
     );
 

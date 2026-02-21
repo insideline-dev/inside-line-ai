@@ -200,6 +200,52 @@ describe("AiPromptRuntimeService", () => {
     expect(result.sectionTitles).toEqual(["Legal"]);
   });
 
+  it("resolves dynamic upstream tokens in previewPrompt", async () => {
+    promptService.resolve.mockResolvedValue({
+      key: "evaluation.team",
+      stage: "seed",
+      systemPrompt: "SYSTEM score={{research_team.score}}",
+      userPrompt:
+        "USER founders={{research_team.founders[].name}} missing={{research_team.unknown}}",
+      source: "db",
+      revisionId: "rev-1",
+    });
+    promptService.renderTemplate.mockImplementation((template: string) => template);
+    pipelineState.getPhaseResult.mockImplementation(async (_startupId: string, phase: string) => {
+      if (phase === PipelinePhase.RESEARCH) {
+        return {
+          team: {
+            score: 91,
+            founders: [{ name: "Ada" }, { name: "Grace" }],
+          },
+        };
+      }
+
+      return null;
+    });
+
+    jest
+      .spyOn(service as never, "resolveVariablesForKey")
+      .mockResolvedValue({
+        stage: "seed",
+        startupId: "ed8f8dcb-4145-4af3-92ce-c8d879ec43db",
+        variables: {
+          contextJson: JSON.stringify({}),
+          contextSections: "",
+        },
+      });
+
+    const result = await service.previewPrompt("evaluation.team", {
+      startupId: "ed8f8dcb-4145-4af3-92ce-c8d879ec43db",
+      stage: "seed",
+    });
+
+    expect(result.prompt.renderedSystemPromptWithDynamic).toBe("SYSTEM score=91");
+    expect(result.prompt.renderedUserPromptWithDynamic).toBe(
+      'USER founders=["Ada","Grace"] missing=[not available]',
+    );
+  });
+
   it("resolveEvaluationVariables prepends Startup Snapshot for evaluation prompts", async () => {
     const pipeline = createEvaluationPipelineInput();
     const startupId = "ed8f8dcb-4145-4af3-92ce-c8d879ec43db";

@@ -44,6 +44,10 @@ import { AiPromptService } from '../ai/services/ai-prompt.service';
 import { AiPromptRuntimeService } from '../ai/services/ai-prompt-runtime.service';
 import { AiModelConfigService } from '../ai/services/ai-model-config.service';
 import { PipelineFlowConfigService } from '../ai/services/pipeline-flow-config.service';
+import { AgentSchemaRegistryService } from '../ai/services/agent-schema-registry.service';
+import { AgentConfigService } from '../ai/services/agent-config.service';
+import { DynamicFlowCatalogService } from '../ai/services/dynamic-flow-catalog.service';
+import { SchemaCompilerService } from '../ai/services/schema-compiler.service';
 import { PhaseTransitionService } from '../ai/orchestrator/phase-transition.service';
 import { AI_RUNTIME_ALLOWED_MODEL_NAMES } from '../ai/services/ai-runtime-config.schema';
 import { QUEUE_NAMES, QueueName } from '../../queue';
@@ -72,6 +76,15 @@ import {
   PreviewAiPromptRequestDto,
   AiPromptPreviewResponseDto,
   AiPromptOutputSchemaResponseDto,
+  CreateAiSchemaRevisionDto,
+  UpdateAiSchemaRevisionDto,
+  AiSchemaRevisionsResponseDto,
+  AiSchemaRevisionResponseDto,
+  CreateAiAgentConfigDto,
+  UpdateAiAgentConfigDto,
+  AiAgentConfigResponseDto,
+  AiAgentConfigListResponseDto,
+  UpstreamNodeFieldsResponseDto,
   PreviewAiPipelineContextRequestDto,
   AiPipelineContextPreviewResponseDto,
   QuickCreateStartupDto,
@@ -112,6 +125,10 @@ export class AdminController {
     private aiPromptService: AiPromptService,
     private aiPromptRuntimeService: AiPromptRuntimeService,
     private aiModelConfigService: AiModelConfigService,
+    private agentSchemaRegistryService: AgentSchemaRegistryService,
+    private agentConfigService: AgentConfigService,
+    private dynamicFlowCatalogService: DynamicFlowCatalogService,
+    private schemaCompilerService: SchemaCompilerService,
     private earlyAccessService: EarlyAccessService,
     private pipelineFlowConfigService: PipelineFlowConfigService,
     private phaseTransitionService: PhaseTransitionService,
@@ -383,7 +400,7 @@ export class AdminController {
   @ApiOperation({ summary: "Get AI flow metadata for visual prompt management" })
   @ApiResponse({ status: 200, type: AiPromptFlowResponseDto })
   async getAiPromptFlow() {
-    return this.aiPromptService.getFlowGraph();
+    return this.dynamicFlowCatalogService.getFlowGraph();
   }
 
   @Get('ai-prompts/:key/revisions')
@@ -398,6 +415,281 @@ export class AdminController {
   @ApiResponse({ status: 200, type: AiModelConfigResponseDto })
   async getAiModelConfig(@Param('key') key: string) {
     return this.buildAiModelConfigResponse(key);
+  }
+
+  @Get('ai-prompts/:key/schema-revisions')
+  @ApiOperation({ summary: "List schema revisions for a prompt key" })
+  @ApiResponse({ status: 200, type: AiSchemaRevisionsResponseDto })
+  async getAiSchemaRevisions(@Param('key') key: string) {
+    return this.agentSchemaRegistryService.listRevisionsByKey(key);
+  }
+
+  @Get('ai/schemas/:promptKey')
+  @ApiOperation({ summary: "Alias: list schema revisions for prompt key" })
+  @ApiResponse({ status: 200, type: AiSchemaRevisionsResponseDto })
+  async getAiSchemaRevisionsAlias(@Param('promptKey') promptKey: string) {
+    return this.agentSchemaRegistryService.listRevisionsByKey(promptKey);
+  }
+
+  @Post('ai-prompts/:key/schema-revisions')
+  @ApiOperation({ summary: "Create schema draft revision" })
+  @ApiResponse({ status: 201, type: AiSchemaRevisionResponseDto })
+  async createAiSchemaRevision(
+    @CurrentUser() admin: User,
+    @Param('key') key: string,
+    @Body() dto: CreateAiSchemaRevisionDto,
+  ) {
+    return this.agentSchemaRegistryService.createDraft(key, admin.id, dto);
+  }
+
+  @Post('ai/schemas/:promptKey')
+  @ApiOperation({ summary: "Alias: create schema draft revision" })
+  @ApiResponse({ status: 201, type: AiSchemaRevisionResponseDto })
+  async createAiSchemaRevisionAlias(
+    @CurrentUser() admin: User,
+    @Param('promptKey') promptKey: string,
+    @Body() dto: CreateAiSchemaRevisionDto,
+  ) {
+    return this.agentSchemaRegistryService.createDraft(promptKey, admin.id, dto);
+  }
+
+  @Patch('ai-prompts/:key/schema-revisions/:revisionId')
+  @ApiOperation({ summary: "Update schema draft revision" })
+  @ApiResponse({ status: 200, type: AiSchemaRevisionResponseDto })
+  async updateAiSchemaRevision(
+    @Param('key') key: string,
+    @Param('revisionId', ParseUUIDPipe) revisionId: string,
+    @Body() dto: UpdateAiSchemaRevisionDto,
+  ) {
+    return this.agentSchemaRegistryService.updateDraft(key, revisionId, dto);
+  }
+
+  @Patch('ai/schemas/:promptKey/:revisionId')
+  @ApiOperation({ summary: "Alias: update schema draft revision" })
+  @ApiResponse({ status: 200, type: AiSchemaRevisionResponseDto })
+  async updateAiSchemaRevisionAlias(
+    @Param('promptKey') promptKey: string,
+    @Param('revisionId', ParseUUIDPipe) revisionId: string,
+    @Body() dto: UpdateAiSchemaRevisionDto,
+  ) {
+    return this.agentSchemaRegistryService.updateDraft(promptKey, revisionId, dto);
+  }
+
+  @Post('ai-prompts/:key/schema-revisions/:revisionId/publish')
+  @ApiOperation({ summary: "Publish schema draft revision" })
+  @ApiResponse({ status: 201, type: AiSchemaRevisionResponseDto })
+  async publishAiSchemaRevision(
+    @CurrentUser() admin: User,
+    @Param('key') key: string,
+    @Param('revisionId', ParseUUIDPipe) revisionId: string,
+  ) {
+    return this.agentSchemaRegistryService.publishRevision(key, revisionId, admin.id);
+  }
+
+  @Post('ai/schemas/:promptKey/:revisionId/publish')
+  @ApiOperation({ summary: "Alias: publish schema draft revision" })
+  @ApiResponse({ status: 201, type: AiSchemaRevisionResponseDto })
+  async publishAiSchemaRevisionAlias(
+    @CurrentUser() admin: User,
+    @Param('promptKey') promptKey: string,
+    @Param('revisionId', ParseUUIDPipe) revisionId: string,
+  ) {
+    return this.agentSchemaRegistryService.publishRevision(promptKey, revisionId, admin.id);
+  }
+
+  @Get('ai/agent-configs')
+  @ApiOperation({ summary: "List all dynamic agent configs" })
+  @ApiResponse({ status: 200, type: AiAgentConfigListResponseDto })
+  async getAiAgentConfigs() {
+    const items = await this.agentConfigService.listAll();
+    return { items };
+  }
+
+  @Get('ai/agents')
+  @ApiOperation({ summary: "Alias: list all dynamic agent configs grouped by orchestrator" })
+  @ApiResponse({ status: 200, type: AiAgentConfigListResponseDto })
+  async getAiAgentsAlias() {
+    const items = await this.agentConfigService.listAll();
+    return { items };
+  }
+
+  @Get('ai/agent-configs/:orchestratorId')
+  @ApiOperation({ summary: "List dynamic agent configs by orchestrator" })
+  @ApiResponse({ status: 200, type: AiAgentConfigListResponseDto })
+  async getAiAgentConfigsByOrchestrator(
+    @Param('orchestratorId') orchestratorId: string,
+  ) {
+    const items = await this.agentConfigService.listByOrchestrator(orchestratorId);
+    return { items };
+  }
+
+  @Get('ai/agents/:orchestratorId')
+  @ApiOperation({ summary: "Alias: list dynamic agent configs by orchestrator" })
+  @ApiResponse({ status: 200, type: AiAgentConfigListResponseDto })
+  async getAiAgentsByOrchestratorAlias(
+    @Param('orchestratorId') orchestratorId: string,
+  ) {
+    const items = await this.agentConfigService.listByOrchestrator(orchestratorId);
+    return { items };
+  }
+
+  @Post('ai/agent-configs/:orchestratorId')
+  @ApiOperation({ summary: "Create dynamic custom agent config" })
+  @ApiResponse({ status: 201, type: AiAgentConfigResponseDto })
+  async createAiAgentConfig(
+    @CurrentUser() admin: User,
+    @Param('orchestratorId') orchestratorId: string,
+    @Body() dto: CreateAiAgentConfigDto,
+  ) {
+    return this.agentConfigService.create('pipeline', orchestratorId, admin.id, dto);
+  }
+
+  @Post('ai/agents/:orchestratorId')
+  @ApiOperation({ summary: "Alias: create dynamic custom agent config" })
+  @ApiResponse({ status: 201, type: AiAgentConfigResponseDto })
+  async createAiAgentAlias(
+    @CurrentUser() admin: User,
+    @Param('orchestratorId') orchestratorId: string,
+    @Body() dto: CreateAiAgentConfigDto,
+  ) {
+    return this.agentConfigService.create('pipeline', orchestratorId, admin.id, dto);
+  }
+
+  @Patch('ai/agent-configs/:orchestratorId/:agentKey')
+  @ApiOperation({ summary: "Update dynamic agent config" })
+  @ApiResponse({ status: 200, type: AiAgentConfigResponseDto })
+  async updateAiAgentConfig(
+    @Param('orchestratorId') orchestratorId: string,
+    @Param('agentKey') agentKey: string,
+    @Body() dto: UpdateAiAgentConfigDto,
+  ) {
+    return this.agentConfigService.update('pipeline', orchestratorId, agentKey, dto);
+  }
+
+  @Patch('ai/agents/:orchestratorId/:agentKey')
+  @ApiOperation({ summary: "Alias: update dynamic agent config" })
+  @ApiResponse({ status: 200, type: AiAgentConfigResponseDto })
+  async updateAiAgentAlias(
+    @Param('orchestratorId') orchestratorId: string,
+    @Param('agentKey') agentKey: string,
+    @Body() dto: UpdateAiAgentConfigDto,
+  ) {
+    return this.agentConfigService.update('pipeline', orchestratorId, agentKey, dto);
+  }
+
+  @Delete('ai/agent-configs/:orchestratorId/:agentKey')
+  @ApiOperation({ summary: "Delete dynamic custom agent config" })
+  async deleteAiAgentConfig(
+    @Param('orchestratorId') orchestratorId: string,
+    @Param('agentKey') agentKey: string,
+  ) {
+    return this.agentConfigService.delete('pipeline', orchestratorId, agentKey);
+  }
+
+  @Delete('ai/agents/:orchestratorId/:agentKey')
+  @ApiOperation({ summary: "Alias: delete dynamic custom agent config" })
+  async deleteAiAgentAlias(
+    @Param('orchestratorId') orchestratorId: string,
+    @Param('agentKey') agentKey: string,
+  ) {
+    return this.agentConfigService.delete('pipeline', orchestratorId, agentKey);
+  }
+
+  @Patch('ai/agent-configs/:orchestratorId/:agentKey/toggle')
+  @ApiOperation({ summary: "Toggle dynamic agent enabled state" })
+  @ApiResponse({ status: 200, type: AiAgentConfigResponseDto })
+  async toggleAiAgentConfig(
+    @Param('orchestratorId') orchestratorId: string,
+    @Param('agentKey') agentKey: string,
+  ) {
+    return this.agentConfigService.toggleEnabled('pipeline', orchestratorId, agentKey);
+  }
+
+  @Patch('ai/agents/:orchestratorId/:agentKey/toggle')
+  @ApiOperation({ summary: "Alias: toggle dynamic agent enabled state" })
+  @ApiResponse({ status: 200, type: AiAgentConfigResponseDto })
+  async toggleAiAgentAlias(
+    @Param('orchestratorId') orchestratorId: string,
+    @Param('agentKey') agentKey: string,
+  ) {
+    return this.agentConfigService.toggleEnabled('pipeline', orchestratorId, agentKey);
+  }
+
+  @Get('ai/agents/:nodeId/upstream-fields')
+  @ApiOperation({ summary: "List upstream schema field paths for a node" })
+  @ApiResponse({ status: 200, type: UpstreamNodeFieldsResponseDto })
+  async getAiAgentUpstreamFields(@Param('nodeId') nodeId: string) {
+    const flowGraph = await this.dynamicFlowCatalogService.getFlowGraph();
+    const pipelineFlow = flowGraph.flows.find((flow) => flow.id === 'pipeline');
+
+    if (!pipelineFlow) {
+      return { items: [] };
+    }
+
+    const nodeById = new Map(pipelineFlow.nodes.map((node) => [node.id, node]));
+    const incomingByTarget = new Map<string, string[]>();
+
+    for (const edge of pipelineFlow.edges) {
+      const current = incomingByTarget.get(edge.to) ?? [];
+      current.push(edge.from);
+      incomingByTarget.set(edge.to, current);
+    }
+
+    const queue = [nodeId];
+    const visited = new Set<string>();
+    const upstream = new Set<string>();
+
+    while (queue.length > 0) {
+      const current = queue.shift();
+      if (!current || visited.has(current)) {
+        continue;
+      }
+
+      visited.add(current);
+      const parents = incomingByTarget.get(current) ?? [];
+      for (const parent of parents) {
+        if (!upstream.has(parent)) {
+          upstream.add(parent);
+          queue.push(parent);
+        }
+      }
+    }
+
+    const items: Array<{ nodeId: string; label: string; fields: string[] }> = [];
+
+    for (const upstreamNodeId of upstream) {
+      const node = nodeById.get(upstreamNodeId);
+      if (!node || !node.promptKeys || node.promptKeys.length === 0) {
+        continue;
+      }
+
+      const fields = new Set<string>();
+      for (const promptKey of node.promptKeys) {
+        try {
+          const descriptor = await this.agentSchemaRegistryService.resolveDescriptor(
+            promptKey,
+          );
+          const paths = this.schemaCompilerService.extractFieldPaths(descriptor);
+          for (const path of paths) {
+            fields.add(`${upstreamNodeId}.${path}`);
+          }
+        } catch {
+          // Skip nodes without resolvable schema revisions
+        }
+      }
+
+      if (fields.size === 0) {
+        continue;
+      }
+
+      items.push({
+        nodeId: upstreamNodeId,
+        label: node.label,
+        fields: Array.from(fields).sort(),
+      });
+    }
+
+    return { items };
   }
 
   @Post('ai-prompts/:key/model-config')

@@ -1,4 +1,4 @@
-import { Injectable, Optional } from "@nestjs/common";
+import { Injectable, Logger, Optional } from "@nestjs/common";
 import { ALL_RESEARCH_AGENTS, PHASE_2_RESEARCH_AGENTS, RESEARCH_AGENTS } from "../agents/research";
 import type {
   ResearchAgentConfig,
@@ -14,6 +14,7 @@ import type { PipelineFeedback } from "../entities/pipeline-feedback.schema";
 import { PipelineStateService } from "./pipeline-state.service";
 import { GeminiResearchService } from "./gemini-research.service";
 import { PipelineFeedbackService } from "./pipeline-feedback.service";
+import { ResearchParametersService } from "./research-parameters.service";
 import { AiPromptService } from "./ai-prompt.service";
 import { RESEARCH_PROMPT_KEY_BY_AGENT } from "./ai-prompt-catalog";
 import { AiDebugLogService } from "./ai-debug-log.service";
@@ -47,11 +48,14 @@ const PHASE_2_KEYS = Object.keys(PHASE_2_RESEARCH_AGENTS) as Array<keyof typeof 
 
 @Injectable()
 export class ResearchService {
+  private readonly logger = new Logger(ResearchService.name);
+
   constructor(
     private pipelineState: PipelineStateService,
     private geminiResearchService: GeminiResearchService,
     private pipelineFeedback: PipelineFeedbackService,
     private promptService: AiPromptService,
+    private researchParametersService: ResearchParametersService,
     @Optional() private aiDebugLog?: AiDebugLogService,
     @Optional() private pipelineAgentTrace?: PipelineAgentTraceService,
   ) {}
@@ -74,7 +78,19 @@ export class ResearchService {
       throw new Error("Research requires extraction and scraping results");
     }
 
-    const pipelineInput: ResearchPipelineInput = { extraction, scraping, enrichment: enrichment ?? undefined };
+    const researchParameters = await this.researchParametersService.generate(
+      extraction,
+      scraping,
+      enrichment ?? undefined,
+    );
+    this.logger.log(`[Research] Generated research parameters for ${extraction.companyName}`);
+
+    const pipelineInput: ResearchPipelineInput = {
+      extraction,
+      scraping,
+      enrichment: enrichment ?? undefined,
+      researchParameters,
+    };
     const pipelineRunId = await this.resolvePipelineRunId(startupId);
     const currentResult = options?.agentKey
       ? await this.pipelineState.getPhaseResult(startupId, PipelinePhase.RESEARCH)
@@ -135,6 +151,7 @@ export class ResearchService {
       }
 
       result.sources = Array.from(dedupeSources.values());
+      result.researchParameters = researchParameters;
       return result;
     }
 
@@ -194,6 +211,7 @@ export class ResearchService {
     );
 
     result.sources = Array.from(dedupeSources.values());
+    result.researchParameters = researchParameters;
 
     return result;
   }

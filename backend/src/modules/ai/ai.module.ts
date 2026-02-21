@@ -61,6 +61,12 @@ import { WebsiteScraperService } from "./services/website-scraper.service";
 import { BraveSearchService } from "./services/brave-search.service";
 import { EnrichmentService } from "./services/enrichment.service";
 import { ClaraEmailContextService } from "./services/clara-email-context.service";
+import { AgentSchemaRegistryService } from "./services/agent-schema-registry.service";
+import { AgentConfigService } from "./services/agent-config.service";
+import { DynamicFlowCatalogService } from "./services/dynamic-flow-catalog.service";
+import { DynamicAgentRunnerService } from "./services/dynamic-agent-runner.service";
+import { PipelineTemplateService } from "./services/pipeline-template.service";
+import { SchemaCompilerService } from "./services/schema-compiler.service";
 
 
 @Global()
@@ -80,6 +86,12 @@ import { ClaraEmailContextService } from "./services/clara-email-context.service
     AiModelConfigService,
     AiPromptService,
     AiPromptRuntimeService,
+    SchemaCompilerService,
+    AgentSchemaRegistryService,
+    AgentConfigService,
+    DynamicFlowCatalogService,
+    DynamicAgentRunnerService,
+    PipelineTemplateService,
     PipelineStateService,
     PipelineFeedbackService,
     PipelineAgentTraceService,
@@ -133,6 +145,12 @@ import { ClaraEmailContextService } from "./services/clara-email-context.service
     AiModelConfigService,
     AiPromptService,
     AiPromptRuntimeService,
+    SchemaCompilerService,
+    AgentSchemaRegistryService,
+    AgentConfigService,
+    DynamicFlowCatalogService,
+    DynamicAgentRunnerService,
+    PipelineTemplateService,
     PipelineStateService,
     PipelineFeedbackService,
     PipelineService,

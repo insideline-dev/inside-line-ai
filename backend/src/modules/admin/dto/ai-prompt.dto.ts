@@ -105,6 +105,8 @@ export const AiPromptSeedResultSchema = z.object({
   insertedGlobal: z.number().int(),
   insertedByStage: z.record(z.string(), z.number().int()),
   skippedExisting: z.number().int(),
+  seededSchemaRevisions: z.number().int(),
+  skippedSchemaRevisions: z.number().int(),
   totalPromptKeys: z.number().int(),
   totalTargetSlots: z.number().int(),
 });

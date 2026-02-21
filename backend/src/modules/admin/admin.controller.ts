@@ -358,6 +358,14 @@ export class AdminController {
     return this.startupService.adminRetryAgent(id, admin.id, dto);
   }
 
+  @Post('startups/:id/cancel-pipeline')
+  async cancelStartupPipeline(
+    @CurrentUser() admin: User,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.startupService.adminCancelPipeline(id, admin.id);
+  }
+
   // ============ SCORING CONFIGURATION ENDPOINTS ============
 
   @Get('scoring/weights')

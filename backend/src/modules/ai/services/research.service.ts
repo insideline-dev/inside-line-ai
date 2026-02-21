@@ -393,7 +393,7 @@ export class ResearchService {
           ? settledResult.reason.message
           : String(settledResult.reason);
       return {
-        output: undefined as unknown as ResearchAgentOutput,
+        output: null as unknown as ResearchAgentOutput,
         sources: [],
         usedFallback: true,
         error: errorMessage,
@@ -495,7 +495,7 @@ export class ResearchService {
 
     if (agentResult.rejected) {
       result.errors.push({ agent: key, error: agentResult.error ?? "Unknown error" });
-      return;
+      if (!agentResult.output) return;
     }
 
     if (key === "team") {

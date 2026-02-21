@@ -33,6 +33,7 @@ const AGENT_LABEL: Record<string, string> = {
   market: "MarketDeepResearch",
   product: "ProductDeepResearch",
   news: "NewsDeepResearch",
+  competitor: "CompetitorDeepResearch",
 };
 
 const AI_AGENT_ROWS = [

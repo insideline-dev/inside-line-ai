@@ -6,8 +6,9 @@ import {
 } from '@nestjs/common';
 import { eq, and, gte, desc, sql } from 'drizzle-orm';
 import { DrizzleService } from '../../database';
-import { QueueService, QUEUE_NAMES } from '../../queue';
-import { startupMatch, NewStartupMatch } from './entities/investor.schema';
+import { startup, StartupStatus } from '../startup/entities/startup.schema';
+import { StartupMatchingPipelineService } from '../ai/services/startup-matching-pipeline.service';
+import { startupMatch } from './entities/investor.schema';
 import { GetMatchesQuery, UpdateMatchStatus } from './dto';
 
 const DEFAULT_SCORING_WEIGHTS = {
@@ -24,7 +25,7 @@ export class MatchService {
 
   constructor(
     private drizzle: DrizzleService,
-    private queue: QueueService,
+    private startupMatchingPipeline: StartupMatchingPipelineService,
   ) {}
 
   async findAll(investorId: string, query: GetMatchesQuery) {
@@ -230,19 +231,43 @@ export class MatchService {
   }
 
   async regenerateMatches(investorId: string) {
-    await this.queue.addJob(
-      QUEUE_NAMES.TASK,
-      {
-        type: 'task',
-        userId: investorId,
-        name: 'regenerate-matches',
-        priority: 2,
-        payload: { investorId },
-      },
-      { priority: 2 },
+    const approvedStartups = await this.drizzle.db
+      .select({ id: startup.id })
+      .from(startup)
+      .where(eq(startup.status, StartupStatus.APPROVED));
+
+    let queued = 0;
+    let failed = 0;
+
+    await Promise.all(
+      approvedStartups.map(async ({ id }) => {
+        try {
+          await this.startupMatchingPipeline.queueStartupMatching({
+            startupId: id,
+            requestedBy: investorId,
+            triggerSource: 'retry',
+            requireApproved: true,
+          });
+          queued += 1;
+        } catch (error) {
+          failed += 1;
+          const message = error instanceof Error ? error.message : String(error);
+          this.logger.warn(
+            `Failed to queue match regeneration for startup ${id}: ${message}`,
+          );
+        }
+      }),
     );
 
-    this.logger.log(`Queued match regeneration for investor ${investorId}`);
+    this.logger.log(
+      `Queued match regeneration for investor ${investorId}: ${queued}/${approvedStartups.length}`,
+    );
+
+    return {
+      totalApprovedStartups: approvedStartups.length,
+      queued,
+      failed,
+    };
   }
 
   async createOrUpdate(

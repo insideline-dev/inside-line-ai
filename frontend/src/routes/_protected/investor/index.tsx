@@ -36,7 +36,8 @@ export const Route = createFileRoute("/_protected/investor/")({
 });
 
 interface MatchedStartup {
-  id: number;
+  id: string;
+  matchId: string;
   name: string;
   description: string;
   stage: string;
@@ -49,6 +50,28 @@ interface MatchedStartup {
   fitRationale: string;
   matchedAt: string;
   status: string;
+}
+
+interface RawMatchedStartup {
+  id?: string;
+  startupId?: string;
+  name?: string;
+  startupName?: string;
+  description?: string;
+  startupDescription?: string;
+  stage?: string;
+  startupStage?: string;
+  industry?: string;
+  startupIndustry?: string;
+  location?: string;
+  startupLocation?: string;
+  overallScore?: number | null;
+  thesisFitScore?: number | null;
+  fitRationale?: string | null;
+  matchReason?: string | null;
+  matchedAt?: string;
+  createdAt?: string;
+  status?: string;
 }
 
 interface PrivateStartup {
@@ -99,6 +122,34 @@ function formatDateSafe(
   return format(date, dateFormat);
 }
 
+function normalizeMatches(rows: RawMatchedStartup[]): MatchedStartup[] {
+  return rows
+    .map((row) => {
+      const startupId = row.startupId || row.id;
+      const matchId = row.id || row.startupId;
+      if (!startupId || !matchId) {
+        return null;
+      }
+
+      return {
+        id: startupId,
+        matchId,
+        name: row.name || row.startupName || "Untitled Startup",
+        description: row.description || row.startupDescription || "",
+        stage: row.stage || row.startupStage || "",
+        industry: row.industry || row.startupIndustry || "",
+        location: row.location || row.startupLocation || "",
+        overallScore: typeof row.overallScore === "number" ? row.overallScore : 0,
+        thesisFitScore:
+          typeof row.thesisFitScore === "number" ? row.thesisFitScore : 0,
+        fitRationale: row.fitRationale || row.matchReason || "",
+        matchedAt: row.matchedAt || row.createdAt || new Date().toISOString(),
+        status: row.status || "new",
+      } satisfies MatchedStartup;
+    })
+    .filter((row): row is MatchedStartup => Boolean(row));
+}
+
 function PrivateStartupCard({
   startup,
   getStatusBadge,
@@ -133,7 +184,13 @@ function PrivateStartupCard({
           <div className="flex-1 min-w-0 space-y-2">
             <div className="flex items-center justify-between gap-2">
               <h3 className="font-medium truncate">{startup.name}</h3>
-              {getStatusBadge(effectiveStatus)}
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="gap-1">
+                  <Lock className="w-3 h-3" />
+                  Private
+                </Badge>
+                {getStatusBadge(effectiveStatus)}
+              </div>
             </div>
             <p className="text-sm text-muted-foreground line-clamp-2">
               {startup.description || "No description"}
@@ -183,7 +240,8 @@ function InvestorDashboard() {
   };
 
   const { data: matchesData, isLoading } = useInvestorControllerGetMatches(matchParams);
-  const matches = extractList<MatchedStartup>(matchesData);
+  const rawMatches = extractList<RawMatchedStartup>(matchesData);
+  const matches = normalizeMatches(rawMatches);
 
   const { data: myStartupsData, isLoading: isLoadingMyStartups } = useStartupControllerFindAll(undefined, {
     query: {
@@ -281,39 +339,26 @@ function InvestorDashboard() {
         </div>
       </div>
 
-      {/* My Private Startups */}
+      {/* Private startups shown inline with the main pipeline view */}
       {isLoadingMyStartups ? (
-        <div className="space-y-4">
-          <div className="flex items-center gap-2">
-            <Lock className="w-4 h-4 text-muted-foreground" />
-            <h2 className="text-lg font-semibold">My Private Analysis</h2>
-          </div>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {[1, 2].map((i) => (
-              <Card key={i} className="animate-pulse">
-                <CardContent className="p-4">
-                  <div className="h-24 bg-muted rounded" />
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {[1, 2].map((i) => (
+            <Card key={i} className="animate-pulse">
+              <CardContent className="p-4">
+                <div className="h-24 bg-muted rounded" />
+              </CardContent>
+            </Card>
+          ))}
         </div>
       ) : (myStartups && myStartups.length > 0) && (
-        <div className="space-y-4">
-          <div className="flex items-center gap-2">
-            <Lock className="w-4 h-4 text-muted-foreground" />
-            <h2 className="text-lg font-semibold">My Private Analysis</h2>
-            <Badge variant="secondary">{myStartups.length}</Badge>
-          </div>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {myStartups.map((startup) => (
-              <PrivateStartupCard
-                key={startup.id}
-                startup={startup}
-                getStatusBadge={getStatusBadge}
-              />
-            ))}
-          </div>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {myStartups.map((startup) => (
+            <PrivateStartupCard
+              key={startup.id}
+              startup={startup}
+              getStatusBadge={getStatusBadge}
+            />
+          ))}
         </div>
       )}
 
@@ -420,7 +465,7 @@ function InvestorDashboard() {
             ) : filterMatchesByStatus(tab).length > 0 ? (
               <div className="grid gap-4">
                 {filterMatchesByStatus(tab).map((match) => (
-                  <Card key={match.id} className="hover-elevate" data-testid={`card-match-${match.id}`}>
+                  <Card key={match.matchId} className="hover-elevate" data-testid={`card-match-${match.matchId}`}>
                     <CardContent className="p-6">
                       <div className="flex flex-col lg:flex-row items-start gap-6">
                         {/* Two Score Display */}
@@ -460,7 +505,7 @@ function InvestorDashboard() {
                           </div>
                         </div>
                         <div className="flex lg:flex-col gap-2">
-                          <Button asChild data-testid={`button-view-memo-${match.id}`}>
+                          <Button asChild data-testid={`button-view-memo-${match.matchId}`}>
                             <Link to="/investor/startup/$id" params={{ id: String(match.id) }}>
                               View Memo
                               <ArrowRight className="w-4 h-4 ml-2" />

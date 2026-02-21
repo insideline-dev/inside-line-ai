@@ -9,12 +9,10 @@ import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Filter, Info, Save } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import type {
   UpdateScoringPreferencesDtoCustomWeights,
-  UpdateScoringPreferencesDtoCustomRationale,
 } from "@/api/generated/model";
 import {
   useInvestorControllerGetScoringDefaults,
@@ -85,7 +83,6 @@ type ScoringPref = {
 
 type SavedCustomStageData = {
   customWeights: Record<string, number>;
-  customRationale: Record<string, string>;
 };
 
 const CUSTOM_STAGE_STORAGE_KEY = "investor-scoring-custom-cache:v1";
@@ -95,8 +92,23 @@ function readSavedCustomCache(): Record<string, SavedCustomStageData> {
   try {
     const raw = window.localStorage.getItem(CUSTOM_STAGE_STORAGE_KEY);
     if (!raw) return {};
-    const parsed = JSON.parse(raw) as Record<string, SavedCustomStageData>;
-    return parsed && typeof parsed === "object" ? parsed : {};
+    const parsed = JSON.parse(raw) as Record<
+      string,
+      SavedCustomStageData | { customWeights?: Record<string, number> }
+    >;
+    if (!parsed || typeof parsed !== "object") return {};
+
+    const normalized: Record<string, SavedCustomStageData> = {};
+    for (const [stage, value] of Object.entries(parsed)) {
+      const weights =
+        value && typeof value === "object" && "customWeights" in value
+          ? value.customWeights
+          : undefined;
+      if (weights && typeof weights === "object") {
+        normalized[stage] = { customWeights: weights };
+      }
+    }
+    return normalized;
   } catch {
     return {};
   }
@@ -118,9 +130,6 @@ function InvestorScoringPage() {
   const [minStartupScore, setMinStartupScore] = useState(0);
   const [thresholdsSaved, setThresholdsSaved] = useState(false);
   const [editingWeights, setEditingWeights] = useState<Record<string, Record<string, number>>>({});
-  const [editingRationale, setEditingRationale] = useState<
-    Record<string, Record<string, string>>
-  >({});
   const [savedCustomByStage, setSavedCustomByStage] = useState<
     Record<string, SavedCustomStageData>
   >(() => readSavedCustomCache());
@@ -155,15 +164,6 @@ function InvestorScoringPage() {
     }
     const defaults = scoringWeights.find((sw) => sw.stage === stage);
     return defaults?.weights ?? null;
-  };
-
-  const getEffectiveRationale = (stage: string): Record<string, string> => {
-    const pref = preferences.find((p) => p.stage === stage);
-    if (pref?.useCustomWeights && pref.customRationale) {
-      return pref.customRationale;
-    }
-    const defaults = scoringWeights.find((sw) => sw.stage === stage);
-    return defaults?.rationale ?? {};
   };
 
   const isCustomized = (stage: string): boolean => {
@@ -210,21 +210,6 @@ function InvestorScoringPage() {
     });
   };
 
-  const getEditingRationaleForStage = (stage: string): Record<string, string> => {
-    if (editingRationale[stage]) return editingRationale[stage];
-    return getEffectiveRationale(stage);
-  };
-
-  const setRationaleForStage = (stage: string, key: string, value: string) => {
-    setEditingRationale((prev) => {
-      const current = prev[stage] ?? getEffectiveRationale(stage);
-      return {
-        ...prev,
-        [stage]: { ...current, [key]: value.slice(0, 2000) },
-      };
-    });
-  };
-
   const getWeightsSum = (weights: Record<string, number>): number =>
     Object.values(weights).reduce((a, b) => a + b, 0);
 
@@ -232,10 +217,9 @@ function InvestorScoringPage() {
     setSavedCustomByStage((prev) => {
       const next = { ...prev };
       for (const pref of preferences) {
-        if (pref.customWeights && pref.customRationale) {
+        if (pref.customWeights) {
           next[pref.stage] = {
             customWeights: pref.customWeights,
-            customRationale: pref.customRationale,
           };
         }
       }
@@ -254,17 +238,12 @@ function InvestorScoringPage() {
     const fullWeights = Object.fromEntries(
       WEIGHT_KEYS.map((k) => [k, weights[k] ?? 0]),
     ) as UpdateScoringPreferencesDtoCustomWeights;
-    const rationale = getEditingRationaleForStage(stage);
-    const fullRationale = Object.fromEntries(
-      WEIGHT_KEYS.map((k) => [k, rationale[k] ?? ""]),
-    ) as UpdateScoringPreferencesDtoCustomRationale;
     updateScoringPreference.mutate(
       {
         stage,
         data: {
           useCustomWeights: true,
           customWeights: fullWeights,
-          customRationale: fullRationale,
         },
       },
       {
@@ -274,7 +253,6 @@ function InvestorScoringPage() {
             ...prev,
             [stage]: {
               customWeights: fullWeights as Record<string, number>,
-              customRationale: fullRationale as Record<string, string>,
             },
           }));
           // Update cache immediately so Scoring Weights + Weight Rationale cards show saved data
@@ -286,7 +264,6 @@ function InvestorScoringPage() {
               stage,
               useCustomWeights: true,
               customWeights: fullWeights as Record<string, number>,
-              customRationale: fullRationale as Record<string, string>,
             };
             if (idx >= 0) arr[idx] = { ...arr[idx], ...updated };
             else arr.push(updated);
@@ -294,10 +271,6 @@ function InvestorScoringPage() {
           });
           await queryClient.refetchQueries({ queryKey });
           setEditingWeights((prev) => ({ ...prev, [stage]: fullWeights as Record<string, number> }));
-          setEditingRationale((prev) => ({
-            ...prev,
-            [stage]: fullRationale as Record<string, string>,
-          }));
         },
       },
     );
@@ -313,10 +286,7 @@ function InvestorScoringPage() {
       const saved = savedCustomByStage[stage] ?? persisted[stage];
       const weights =
         saved?.customWeights ?? pref?.customWeights ?? defaults?.weights;
-      const rationale =
-        saved?.customRationale ?? pref?.customRationale ?? defaults?.rationale;
-
-      if (!weights || !rationale) return;
+      if (!weights) return;
 
       updateScoringPreference.mutate(
         {
@@ -324,7 +294,6 @@ function InvestorScoringPage() {
           data: {
             useCustomWeights: true,
             customWeights: weights as UpdateScoringPreferencesDtoCustomWeights,
-            customRationale: rationale as UpdateScoringPreferencesDtoCustomRationale,
           },
         },
         {
@@ -338,7 +307,6 @@ function InvestorScoringPage() {
     } else {
       // Preserve current custom data when toggled off so it restores when toggled back on.
       const currentWeights = getEditingWeightsForStage(stage);
-      const currentRationale = getEditingRationaleForStage(stage);
       const persisted = readSavedCustomCache();
       const saved = savedCustomByStage[stage] ?? persisted[stage];
       const weightsToSave =
@@ -347,18 +315,11 @@ function InvestorScoringPage() {
               WEIGHT_KEYS.map((k) => [k, currentWeights[k] ?? 0]),
             ) as UpdateScoringPreferencesDtoCustomWeights)
           : (saved?.customWeights ?? pref?.customWeights ?? null) as UpdateScoringPreferencesDtoCustomWeights | null;
-      const rationaleToSave =
-        Object.keys(currentRationale).length > 0
-          ? (Object.fromEntries(
-              WEIGHT_KEYS.map((k) => [k, currentRationale[k] ?? ""]),
-            ) as UpdateScoringPreferencesDtoCustomRationale)
-          : (saved?.customRationale ?? pref?.customRationale ?? null) as UpdateScoringPreferencesDtoCustomRationale | null;
-      if (weightsToSave && rationaleToSave) {
+      if (weightsToSave) {
         setSavedCustomByStage((prev) => ({
           ...prev,
           [stage]: {
             customWeights: weightsToSave as Record<string, number>,
-            customRationale: rationaleToSave as Record<string, string>,
           },
         }));
       }
@@ -368,7 +329,6 @@ function InvestorScoringPage() {
           data: {
             useCustomWeights: false,
             customWeights: weightsToSave,
-            customRationale: rationaleToSave,
           },
         },
         {
@@ -604,9 +564,6 @@ function InvestorScoringPage() {
                             <th className="text-left py-3 px-4 font-medium align-top w-28">
                               Your Weight
                             </th>
-                            <th className="text-left py-3 px-4 font-medium align-top min-w-[200px]">
-                              Rationale
-                            </th>
                           </tr>
                         </thead>
                         <tbody>
@@ -614,8 +571,6 @@ function InvestorScoringPage() {
                             const defaultVal = sw.weights[key] ?? 0;
                             const editingVal =
                               getEditingWeightsForStage(sw.stage)[key] ?? defaultVal;
-                            const rationaleVal =
-                              getEditingRationaleForStage(sw.stage)[key] ?? "";
                             return (
                               <tr key={key} className="border-b last:border-0">
                                 <td className="py-3 px-4 text-sm font-medium align-top">
@@ -645,17 +600,6 @@ function InvestorScoringPage() {
                                     />
                                     <span className="text-sm text-muted-foreground">%</span>
                                   </div>
-                                </td>
-                                <td className="py-3 px-4 align-top">
-                                  <Textarea
-                                    value={rationaleVal}
-                                    onChange={(e) =>
-                                      setRationaleForStage(sw.stage, key, e.target.value)
-                                    }
-                                    placeholder="Why this matters..."
-                                    className="min-h-[60px] resize-y text-sm w-full"
-                                    maxLength={2000}
-                                  />
                                 </td>
                               </tr>
                             );
@@ -715,11 +659,7 @@ function InvestorScoringPage() {
                   </CardHeader>
                   <CardContent className="space-y-4">
                     {WEIGHT_KEYS.map((key) => {
-                      const rationale =
-                        useCustomWeights
-                          ? getEditingRationaleForStage(sw.stage)
-                          : sw.rationale;
-                      const value = rationale[key] ?? "";
+                      const value = sw.rationale[key] ?? "";
                       return (
                         <div key={key} className="space-y-1">
                           <h4 className="font-medium text-sm">{weightLabels[key] || key}</h4>

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { DatabaseModule } from '../../database';
 import { QueueModule } from '../../queue';
 import { AdminModule } from '../admin';
+import { AiModule } from '../ai';
 import { ThesisService } from './thesis.service';
 import { MatchService } from './match.service';
 import { TeamService } from './team.service';
@@ -16,7 +17,7 @@ import {
 } from './investor.controller';
 
 @Module({
-  imports: [DatabaseModule, QueueModule, AdminModule],
+  imports: [DatabaseModule, QueueModule, AdminModule, AiModule],
   controllers: [InvestorController, InvestorTeamPublicController],
   providers: [
     ThesisService,

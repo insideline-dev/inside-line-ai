@@ -18,6 +18,7 @@ import { AiConfigService } from "./ai-config.service";
 import { PipelineFeedbackService } from "./pipeline-feedback.service";
 import { PipelineAgentTraceService } from "./pipeline-agent-trace.service";
 import { PipelineStateService } from "./pipeline-state.service";
+import { StartupMatchingPipelineService } from "./startup-matching-pipeline.service";
 import {
   PhaseStatus,
   PipelinePhase,
@@ -91,6 +92,7 @@ export class PipelineService {
     private notifications: NotificationService,
     private pipelineState: PipelineStateService,
     private aiConfig: AiConfigService,
+    private startupMatching: StartupMatchingPipelineService,
     private pipelineFeedback: PipelineFeedbackService,
     private progressTracker: ProgressTrackerService,
     private phaseTransition: PhaseTransitionService,
@@ -516,6 +518,45 @@ export class PipelineService {
       .where(eq(startup.id, startupId));
   }
 
+  private async getStartupStatus(startupId: string): Promise<StartupStatus | null> {
+    const [record] = await this.drizzle.db
+      .select({ status: startup.status })
+      .from(startup)
+      .where(eq(startup.id, startupId))
+      .limit(1);
+
+    return (record?.status as StartupStatus | undefined) ?? null;
+  }
+
+  private async finalizeStartupAfterPipelineCompletion(
+    startupId: string,
+    requestedBy: string,
+  ): Promise<void> {
+    const currentStatus = await this.getStartupStatus(startupId);
+
+    if (currentStatus === StartupStatus.APPROVED) {
+      try {
+        await this.startupMatching.queueStartupMatching({
+          startupId,
+          requestedBy,
+          triggerSource: "retry",
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.error(
+          `Pipeline completed but deferred matching queue failed for startup ${startupId}: ${message}`,
+        );
+      }
+      return;
+    }
+
+    if (currentStatus === StartupStatus.REJECTED) {
+      return;
+    }
+
+    await this.updateStartupStatus(startupId, StartupStatus.PENDING_REVIEW);
+  }
+
   private async createPipelineRunRecord(state: PipelineState): Promise<void> {
     await this.drizzle.db.insert(pipelineRun).values({
       pipelineRunId: state.pipelineRunId,
@@ -624,7 +665,7 @@ export class PipelineService {
         currentPhase: refreshed.currentPhase,
         error: degradedReason,
       });
-      await this.updateStartupStatus(startupId, StartupStatus.PENDING_REVIEW);
+      await this.finalizeStartupAfterPipelineCompletion(startupId, refreshed.userId);
       if (shouldNotifyTerminal) {
         await this.notifyPipelineLifecycle({
           userId: refreshed.userId,
@@ -651,7 +692,7 @@ export class PipelineService {
       currentPhase: PipelinePhase.SYNTHESIS,
       overallScore: synthesisResult?.overallScore,
     });
-    await this.updateStartupStatus(startupId, StartupStatus.PENDING_REVIEW);
+    await this.finalizeStartupAfterPipelineCompletion(startupId, refreshed.userId);
     if (shouldNotifyTerminal) {
       await this.notifyPipelineLifecycle({
         userId: refreshed.userId,

@@ -102,7 +102,7 @@ export function SummaryCard({
                 <ScoreRing score={startup.overallScore || 0} size="lg" />
                 {startup.percentileRank && (
                   <Badge variant="outline" className="mt-2" data-testid="badge-percentile">
-                    Top {100 - startup.percentileRank}%
+                    Top {Math.round(100 - startup.percentileRank)}%
                   </Badge>
                 )}
               </div>
@@ -213,7 +213,7 @@ export function SummaryCard({
                         }}
                       />
                     </div>
-                    <span className="text-xs font-medium w-8 text-right shrink-0" data-testid={`text-section-score-${sectionId}`}>{sectionScore}</span>
+                    <span className="text-xs font-medium w-8 text-right shrink-0" data-testid={`text-section-score-${sectionId}`}>{Math.round(sectionScore)}</span>
                   </div>
                 );
               })}

@@ -42,7 +42,7 @@ export class WebsiteScraperService {
 
   constructor(@Optional() private config?: ConfigService) {
     this.maxSubpages = this.validatePositiveInt(
-      this.config?.get<number>("SCRAPING_MAX_SUBPAGES", 20) ?? 20, 1, 200,
+      this.config?.get<number>("SCRAPING_MAX_SUBPAGES", 40) ?? 40, 1, 200,
     );
     this.batchSize = this.validatePositiveInt(
       this.config?.get<number>("SCRAPING_BATCH_SIZE", 5) ?? 5, 1, 50,
@@ -78,7 +78,16 @@ export class WebsiteScraperService {
     this.logger.debug(
       `[Scrape] Discovered ${subpageCandidates.length} subpage candidates: ${subpageCandidates.join(", ")}`,
     );
-    const subpages = await this.scrapeSubpages(subpageCandidates);
+    const sitemapUrls = await this.fetchSitemapUrls(homepageUrl);
+    if (sitemapUrls.length > 0) {
+      this.logger.debug(`[Scrape] Found ${sitemapUrls.length} URLs from sitemap.xml`);
+    }
+    const allCandidates = [...new Set([
+      ...subpageCandidates,
+      ...sitemapUrls.map((u) => this.normalizeUrl(u, false)),
+    ])].filter((url) => url !== homepageUrl && url !== homepageUrl + "/")
+      .slice(0, this.maxSubpages);
+    const subpages = await this.scrapeSubpages(allCandidates);
     if (subpages.length > 0) {
       this.logger.debug(
         `[Scrape] Successfully scraped ${subpages.length} subpages: ${subpages.map((page) => page.url).join(", ")}`,
@@ -181,6 +190,8 @@ export class WebsiteScraperService {
         if (parsed.hash || parsed.pathname === "/" || parsed.pathname === "") {
           return false;
         }
+
+        if (this.isExcludedPath(parsed.pathname.toLowerCase())) return false;
 
         return entry.score > 0 || entry.depth <= this.maxPathDepth;
       })
@@ -598,19 +609,65 @@ export class WebsiteScraperService {
 
   private getPriorityScore(pathname: string): number {
     const priorities: Array<{ score: number; pattern: RegExp }> = [
-      { score: 100, pattern: /\/(about|team|leadership|founders|people)/ },
-      { score: 90, pattern: /\/(product|products|platform|solution|solutions|features)/ },
-      { score: 80, pattern: /\/(pricing|plans)/ },
-      { score: 70, pattern: /\/(company|careers|jobs)/ },
-      { score: 60, pattern: /\/(customers|case-studies|testimonials)/ },
-      { score: 50, pattern: /\/(technology|how-it-works)/ },
-      { score: 40, pattern: /\/(blog|news|press)/ },
-      { score: 30, pattern: /\/(investors|funding)/ },
-      { score: 20, pattern: /\/(contact|demo)/ },
+      { score: 100, pattern: /\/(about|team|leadership|founders|people|our-team)\b/ },
+      { score: 95, pattern: /\/(product|products|platform|solution|solutions|features|how-it-works)\b/ },
+      { score: 90, pattern: /\/(pricing|plans)\b/ },
+      { score: 85, pattern: /\/(customers|case-studies|testimonials|success-stories|use-cases)\b/ },
+      { score: 80, pattern: /\/(company|mission|values|story|culture)\b/ },
+      { score: 75, pattern: /\/(integrations|partners|marketplace|ecosystem)\b/ },
+      { score: 70, pattern: /\/(security|compliance|privacy|trust|certifications)\b/ },
+      { score: 65, pattern: /\/(technology|architecture|infrastructure)\b/ },
+      { score: 60, pattern: /\/(research|insights|white-?papers?|reports?)\b/ },
+      { score: 55, pattern: /\/(resources|guides|faq|help|knowledge)\b/ },
+      { score: 50, pattern: /\/(careers|jobs|hiring)\b/ },
+      { score: 45, pattern: /\/(blog|news|press|media|announcements)\b/ },
+      { score: 40, pattern: /\/(investors|funding|ipo)\b/ },
+      { score: 35, pattern: /\/(enterprise|industries|for-[a-z]+)\b/ },
+      { score: 30, pattern: /\/(contact|demo|request|get-started|signup|trial)\b/ },
     ];
 
     const match = priorities.find((priority) => priority.pattern.test(pathname));
     return match?.score ?? 0;
+  }
+
+  private isExcludedPath(pathname: string): boolean {
+    const excludePatterns = [
+      /\/(admin|dev|test|staging|wp-admin|wp-content)\//,
+      /\.(pdf|zip|mp4|json|xml|csv|png|jpg|jpeg|gif|svg|ico)$/,
+      /\/(changelog|releases|download|cdn)\b/,
+      /\/(tag|tags|category|categories|archive|page)\/\d/,
+      /\/\d{4}\/\d{2}\/\d{2}\//,
+    ];
+    return excludePatterns.some((p) => p.test(pathname));
+  }
+
+  private async fetchSitemapUrls(baseUrl: string): Promise<string[]> {
+    const sitemapUrl = new URL("/sitemap.xml", baseUrl).toString();
+    try {
+      const response = await fetch(sitemapUrl, {
+        signal: AbortSignal.timeout(10000),
+        headers: { "User-Agent": this.userAgent },
+      });
+      if (!response.ok) return [];
+      const xml = await response.text();
+      const urls: string[] = [];
+      const locRegex = /<loc>\s*(.*?)\s*<\/loc>/gi;
+      let match: RegExpExecArray | null;
+      while ((match = locRegex.exec(xml)) !== null) {
+        if (match[1]) urls.push(match[1]);
+      }
+      const baseHost = new URL(baseUrl).hostname;
+      return urls.filter((url) => {
+        try {
+          return new URL(url).hostname === baseHost;
+        } catch {
+          return false;
+        }
+      });
+    } catch {
+      this.logger.debug(`[Scrape] No sitemap.xml found at ${sitemapUrl}`);
+      return [];
+    }
   }
 
   private dedupeStrings(items: string[]): string[] {

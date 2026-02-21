@@ -1,4 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { MemoSection, FundingRoundCard } from "@/components/MemoSection";
 import {
   FileText,
@@ -14,7 +15,8 @@ import {
   LogOut,
   Swords,
   Wallet,
-  Search
+  Search,
+  Download
 } from "lucide-react";
 import type { Startup } from "@/types/startup";
 import type { Evaluation } from "@/types/evaluation";
@@ -195,10 +197,32 @@ export function MemoTabContent({
   return (
     <Card data-testid="card-investment-memo">
       <CardHeader className="pb-4">
-        <CardTitle className="text-lg" data-testid="text-memo-title">Investment Memo</CardTitle>
-        <CardDescription data-testid="text-memo-description">
-          Comprehensive analysis across 11 evaluation dimensions
-        </CardDescription>
+        <div className="flex items-start justify-between">
+          <div>
+            <CardTitle className="text-lg" data-testid="text-memo-title">Investment Memo</CardTitle>
+            <CardDescription data-testid="text-memo-description">
+              Comprehensive analysis across 11 evaluation dimensions
+            </CardDescription>
+          </div>
+          <div className="flex gap-2 shrink-0">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.open(`/api/startups/${evaluation.startupId}/memo.pdf`, "_blank")}
+            >
+              <Download className="w-4 h-4 mr-1" />
+              Memo PDF
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.open(`/api/startups/${evaluation.startupId}/report.pdf`, "_blank")}
+            >
+              <Download className="w-4 h-4 mr-1" />
+              Report PDF
+            </Button>
+          </div>
+        </div>
       </CardHeader>
       <CardContent className="space-y-6" data-testid="container-memo-sections">
         <MemoSection

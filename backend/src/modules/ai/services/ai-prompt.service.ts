@@ -445,6 +445,97 @@ export class AiPromptService {
     };
   }
 
+  /**
+   * Force-reseed: archives all existing published revisions for the given keys
+   * (or all keys if none specified), then seeds fresh from the code catalog.
+   */
+  async reseedFromCode(
+    adminId: string,
+    keys?: AiPromptKey[],
+  ) {
+    const targetKeys = keys ?? [...AI_PROMPT_KEYS];
+    const stages = Object.values(StartupStage) as StartupStage[];
+    const stageTargets: Array<StartupStage | null> = [null, ...stages];
+
+    let archived = 0;
+    let inserted = 0;
+
+    try {
+      await this.ensureDefinitionsExist();
+
+      for (const key of targetKeys) {
+        const definition = await this.getOrCreateDefinition(key);
+        const catalogEntry = AI_PROMPT_CATALOG[key];
+
+        for (const stage of stageTargets) {
+          const stageCondition =
+            stage === null
+              ? isNull(aiPromptRevision.stage)
+              : eq(aiPromptRevision.stage, stage);
+
+          // Archive existing published revisions
+          const archivedRows = await this.drizzle.db
+            .update(aiPromptRevision)
+            .set({ status: "archived", updatedAt: new Date() })
+            .where(
+              and(
+                eq(aiPromptRevision.definitionId, definition.id),
+                eq(aiPromptRevision.status, "published"),
+                stageCondition,
+              ),
+            )
+            .returning({ id: aiPromptRevision.id });
+
+          archived += archivedRows.length;
+
+          // Get next version number
+          const [maxRow] = await this.drizzle.db
+            .select({ value: max(aiPromptRevision.version) })
+            .from(aiPromptRevision)
+            .where(
+              and(
+                eq(aiPromptRevision.definitionId, definition.id),
+                stageCondition,
+              ),
+            );
+
+          await this.drizzle.db.insert(aiPromptRevision).values({
+            definitionId: definition.id,
+            stage,
+            status: "published",
+            systemPrompt: catalogEntry.defaultSystemPrompt,
+            userPrompt: catalogEntry.defaultUserPrompt,
+            notes:
+              stage === null
+                ? "Re-seeded from code catalog (global)"
+                : `Re-seeded from code catalog (${stage})`,
+            version: (maxRow?.value ?? 0) + 1,
+            createdBy: adminId,
+            publishedBy: adminId,
+            publishedAt: new Date(),
+          });
+
+          inserted += 1;
+        }
+      }
+    } catch (error) {
+      if (this.isPromptTablesMissingError(error)) {
+        throw new BadRequestException(
+          "AI prompt tables are missing. Run `cd backend && bun run db:push` and try again.",
+        );
+      }
+      throw error;
+    }
+
+    this.cache.clear();
+    return {
+      archived,
+      inserted,
+      keys: targetKeys,
+      stagesPerKey: stageTargets.length,
+    };
+  }
+
   private async ensureDefinitionsExist(): Promise<void> {
     const keys = AI_PROMPT_KEYS as unknown as string[];
     const existing = await this.drizzle.db

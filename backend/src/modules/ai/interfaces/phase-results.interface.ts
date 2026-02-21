@@ -72,7 +72,7 @@ export interface ExtractionResult {
   valuation?: number;
   rawText: string;
   startupContext?: StartupFormContext;
-  source?: "pdf-parse" | "mistral-ocr" | "startup-context";
+  source?: "pdf-parse" | "pptx-parse" | "mistral-ocr" | "startup-context";
   pageCount?: number;
   warnings?: string[];
 }

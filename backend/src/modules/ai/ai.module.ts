@@ -44,6 +44,7 @@ import { PipelineStateService } from "./services/pipeline-state.service";
 import { PipelineFeedbackService } from "./services/pipeline-feedback.service";
 import { PipelineAgentTraceService } from "./services/pipeline-agent-trace.service";
 import { PdfTextExtractorService } from "./services/pdf-text-extractor.service";
+import { PptxTextExtractorService } from "./services/pptx-text-extractor.service";
 import { LinkedinEnrichmentService } from "./services/linkedin-enrichment.service";
 import { InvestorMatchingService } from "./services/investor-matching.service";
 import { LocationNormalizerService } from "./services/location-normalizer.service";
@@ -86,6 +87,7 @@ import { ClaraEmailContextService } from "./services/clara-email-context.service
     GeminiResearchService,
     ExtractionService,
     PdfTextExtractorService,
+    PptxTextExtractorService,
     MistralOcrService,
     FieldExtractorService,
     ScrapingService,

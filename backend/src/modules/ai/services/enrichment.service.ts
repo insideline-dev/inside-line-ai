@@ -1772,7 +1772,7 @@ export class EnrichmentService {
     const gapFillThreshold = 0.3;
     const updates: Record<string, unknown> = {};
     const updatedFields: string[] = [];
-    let foundersAdded = 0;
+    const foundersAdded = 0;
 
     // Apply cascade-resolved data (high confidence, from extraction/email)
     for (const [field, data] of cascadeResolved) {

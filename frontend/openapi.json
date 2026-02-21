@@ -4066,6 +4066,773 @@
         ]
       }
     },
+    "/admin/ai-prompts/{key}/schema-revisions": {
+      "get": {
+        "operationId": "AdminController_getAiSchemaRevisions",
+        "parameters": [
+          {
+            "name": "key",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiSchemaRevisionsResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List schema revisions for a prompt key",
+        "tags": [
+          "Admin"
+        ]
+      },
+      "post": {
+        "operationId": "AdminController_createAiSchemaRevision",
+        "parameters": [
+          {
+            "name": "key",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAiSchemaRevisionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiSchemaRevisionResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Create schema draft revision",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/ai/schemas/{promptKey}": {
+      "get": {
+        "operationId": "AdminController_getAiSchemaRevisionsAlias",
+        "parameters": [
+          {
+            "name": "promptKey",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiSchemaRevisionsResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Alias: list schema revisions for prompt key",
+        "tags": [
+          "Admin"
+        ]
+      },
+      "post": {
+        "operationId": "AdminController_createAiSchemaRevisionAlias",
+        "parameters": [
+          {
+            "name": "promptKey",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAiSchemaRevisionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiSchemaRevisionResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Alias: create schema draft revision",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/ai-prompts/{key}/schema-revisions/{revisionId}": {
+      "patch": {
+        "operationId": "AdminController_updateAiSchemaRevision",
+        "parameters": [
+          {
+            "name": "key",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "revisionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAiSchemaRevisionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiSchemaRevisionResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Update schema draft revision",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/ai/schemas/{promptKey}/{revisionId}": {
+      "patch": {
+        "operationId": "AdminController_updateAiSchemaRevisionAlias",
+        "parameters": [
+          {
+            "name": "promptKey",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "revisionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAiSchemaRevisionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiSchemaRevisionResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Alias: update schema draft revision",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/ai-prompts/{key}/schema-revisions/{revisionId}/publish": {
+      "post": {
+        "operationId": "AdminController_publishAiSchemaRevision",
+        "parameters": [
+          {
+            "name": "key",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "revisionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiSchemaRevisionResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Publish schema draft revision",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/ai/schemas/{promptKey}/{revisionId}/publish": {
+      "post": {
+        "operationId": "AdminController_publishAiSchemaRevisionAlias",
+        "parameters": [
+          {
+            "name": "promptKey",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "revisionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiSchemaRevisionResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Alias: publish schema draft revision",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/ai/agent-configs": {
+      "get": {
+        "operationId": "AdminController_getAiAgentConfigs",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiAgentConfigListResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List all dynamic agent configs",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/ai/agents": {
+      "get": {
+        "operationId": "AdminController_getAiAgentsAlias",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiAgentConfigListResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Alias: list all dynamic agent configs grouped by orchestrator",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/ai/agent-configs/{orchestratorId}": {
+      "get": {
+        "operationId": "AdminController_getAiAgentConfigsByOrchestrator",
+        "parameters": [
+          {
+            "name": "orchestratorId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiAgentConfigListResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List dynamic agent configs by orchestrator",
+        "tags": [
+          "Admin"
+        ]
+      },
+      "post": {
+        "operationId": "AdminController_createAiAgentConfig",
+        "parameters": [
+          {
+            "name": "orchestratorId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAiAgentConfigDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiAgentConfigResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Create dynamic custom agent config",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/ai/agents/{orchestratorId}": {
+      "get": {
+        "operationId": "AdminController_getAiAgentsByOrchestratorAlias",
+        "parameters": [
+          {
+            "name": "orchestratorId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiAgentConfigListResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Alias: list dynamic agent configs by orchestrator",
+        "tags": [
+          "Admin"
+        ]
+      },
+      "post": {
+        "operationId": "AdminController_createAiAgentAlias",
+        "parameters": [
+          {
+            "name": "orchestratorId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAiAgentConfigDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiAgentConfigResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Alias: create dynamic custom agent config",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/ai/agent-configs/{orchestratorId}/{agentKey}": {
+      "patch": {
+        "operationId": "AdminController_updateAiAgentConfig",
+        "parameters": [
+          {
+            "name": "orchestratorId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "agentKey",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAiAgentConfigDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiAgentConfigResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Update dynamic agent config",
+        "tags": [
+          "Admin"
+        ]
+      },
+      "delete": {
+        "operationId": "AdminController_deleteAiAgentConfig",
+        "parameters": [
+          {
+            "name": "orchestratorId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "agentKey",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Delete dynamic custom agent config",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/ai/agents/{orchestratorId}/{agentKey}": {
+      "patch": {
+        "operationId": "AdminController_updateAiAgentAlias",
+        "parameters": [
+          {
+            "name": "orchestratorId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "agentKey",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAiAgentConfigDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiAgentConfigResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Alias: update dynamic agent config",
+        "tags": [
+          "Admin"
+        ]
+      },
+      "delete": {
+        "operationId": "AdminController_deleteAiAgentAlias",
+        "parameters": [
+          {
+            "name": "orchestratorId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "agentKey",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Alias: delete dynamic custom agent config",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/ai/agent-configs/{orchestratorId}/{agentKey}/toggle": {
+      "patch": {
+        "operationId": "AdminController_toggleAiAgentConfig",
+        "parameters": [
+          {
+            "name": "orchestratorId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "agentKey",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiAgentConfigResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Toggle dynamic agent enabled state",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/ai/agents/{orchestratorId}/{agentKey}/toggle": {
+      "patch": {
+        "operationId": "AdminController_toggleAiAgentAlias",
+        "parameters": [
+          {
+            "name": "orchestratorId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "agentKey",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiAgentConfigResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Alias: toggle dynamic agent enabled state",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/ai/agents/{nodeId}/upstream-fields": {
+      "get": {
+        "operationId": "AdminController_getAiAgentUpstreamFields",
+        "parameters": [
+          {
+            "name": "nodeId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpstreamNodeFieldsResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List upstream schema field paths for a node",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
     "/admin/ai-prompts/{key}/model-config/{revisionId}": {
       "patch": {
         "operationId": "AdminController_updateAiModelConfigDraft",
@@ -10209,6 +10976,877 @@
           "allowedModels"
         ]
       },
+      "AiSchemaRevisionsResponseDto__schema0": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "string",
+              "number",
+              "boolean",
+              "array",
+              "object",
+              "enum"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "optional": {
+            "type": "boolean"
+          },
+          "min": {
+            "type": "number"
+          },
+          "max": {
+            "type": "number"
+          },
+          "default": {},
+          "items": {
+            "$ref": "#/components/schemas/AiSchemaRevisionsResponseDto__schema0"
+          },
+          "fields": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/AiSchemaRevisionsResponseDto__schema0"
+            }
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "AiSchemaRevisionsResponseDto": {
+        "type": "object",
+        "properties": {
+          "definition": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "key": {
+                "type": "string",
+                "enum": [
+                  "extraction.fields",
+                  "research.team",
+                  "research.market",
+                  "research.product",
+                  "research.news",
+                  "research.competitor",
+                  "evaluation.team",
+                  "evaluation.market",
+                  "evaluation.product",
+                  "evaluation.traction",
+                  "evaluation.businessModel",
+                  "evaluation.gtm",
+                  "evaluation.financials",
+                  "evaluation.competitiveAdvantage",
+                  "evaluation.legal",
+                  "evaluation.dealTerms",
+                  "evaluation.exitPotential",
+                  "synthesis.final",
+                  "matching.thesis",
+                  "clara.intent",
+                  "clara.response",
+                  "clara.agent"
+                ]
+              },
+              "displayName": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string",
+                "nullable": true
+              },
+              "surface": {
+                "type": "string",
+                "enum": [
+                  "pipeline",
+                  "clara"
+                ]
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+              },
+              "updatedAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+              }
+            },
+            "required": [
+              "id",
+              "key",
+              "displayName",
+              "description",
+              "surface",
+              "createdAt",
+              "updatedAt"
+            ]
+          },
+          "revisions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "definitionId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "stage": {
+                  "type": "string",
+                  "enum": [
+                    "pre_seed",
+                    "seed",
+                    "series_a",
+                    "series_b",
+                    "series_c",
+                    "series_d",
+                    "series_e",
+                    "series_f_plus"
+                  ],
+                  "nullable": true
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "draft",
+                    "published",
+                    "archived"
+                  ]
+                },
+                "schemaJson": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "object"
+                      ]
+                    },
+                    "fields": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "$ref": "#/components/schemas/AiSchemaRevisionsResponseDto__schema0"
+                      }
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "fields"
+                  ]
+                },
+                "notes": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "version": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "createdBy": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                  "nullable": true
+                },
+                "publishedBy": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                  "nullable": true
+                },
+                "publishedAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                  "nullable": true
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                },
+                "updatedAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                }
+              },
+              "required": [
+                "id",
+                "definitionId",
+                "stage",
+                "status",
+                "schemaJson",
+                "notes",
+                "version",
+                "createdBy",
+                "publishedBy",
+                "publishedAt",
+                "createdAt",
+                "updatedAt"
+              ]
+            }
+          }
+        },
+        "required": [
+          "definition",
+          "revisions"
+        ]
+      },
+      "CreateAiSchemaRevisionDto__schema0": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "string",
+              "number",
+              "boolean",
+              "array",
+              "object",
+              "enum"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "optional": {
+            "type": "boolean"
+          },
+          "min": {
+            "type": "number"
+          },
+          "max": {
+            "type": "number"
+          },
+          "default": {},
+          "items": {
+            "$ref": "#/components/schemas/CreateAiSchemaRevisionDto__schema0"
+          },
+          "fields": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/CreateAiSchemaRevisionDto__schema0"
+            }
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "CreateAiSchemaRevisionDto": {
+        "type": "object",
+        "properties": {
+          "schemaJson": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "object"
+                ]
+              },
+              "fields": {
+                "type": "object",
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/CreateAiSchemaRevisionDto__schema0"
+                }
+              }
+            },
+            "required": [
+              "type",
+              "fields"
+            ]
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 4000
+          },
+          "stage": {
+            "type": "string",
+            "enum": [
+              "pre_seed",
+              "seed",
+              "series_a",
+              "series_b",
+              "series_c",
+              "series_d",
+              "series_e",
+              "series_f_plus"
+            ],
+            "nullable": true
+          }
+        },
+        "required": [
+          "schemaJson"
+        ]
+      },
+      "AiSchemaRevisionResponseDto__schema0": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "string",
+              "number",
+              "boolean",
+              "array",
+              "object",
+              "enum"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "optional": {
+            "type": "boolean"
+          },
+          "min": {
+            "type": "number"
+          },
+          "max": {
+            "type": "number"
+          },
+          "default": {},
+          "items": {
+            "$ref": "#/components/schemas/AiSchemaRevisionResponseDto__schema0"
+          },
+          "fields": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/AiSchemaRevisionResponseDto__schema0"
+            }
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "AiSchemaRevisionResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "definitionId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "stage": {
+            "type": "string",
+            "enum": [
+              "pre_seed",
+              "seed",
+              "series_a",
+              "series_b",
+              "series_c",
+              "series_d",
+              "series_e",
+              "series_f_plus"
+            ],
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "published",
+              "archived"
+            ]
+          },
+          "schemaJson": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "object"
+                ]
+              },
+              "fields": {
+                "type": "object",
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/AiSchemaRevisionResponseDto__schema0"
+                }
+              }
+            },
+            "required": [
+              "type",
+              "fields"
+            ]
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "version": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "createdBy": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "nullable": true
+          },
+          "publishedBy": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "nullable": true
+          },
+          "publishedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+          }
+        },
+        "required": [
+          "id",
+          "definitionId",
+          "stage",
+          "status",
+          "schemaJson",
+          "notes",
+          "version",
+          "createdBy",
+          "publishedBy",
+          "publishedAt",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "UpdateAiSchemaRevisionDto__schema0": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "string",
+              "number",
+              "boolean",
+              "array",
+              "object",
+              "enum"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "optional": {
+            "type": "boolean"
+          },
+          "min": {
+            "type": "number"
+          },
+          "max": {
+            "type": "number"
+          },
+          "default": {},
+          "items": {
+            "$ref": "#/components/schemas/UpdateAiSchemaRevisionDto__schema0"
+          },
+          "fields": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/UpdateAiSchemaRevisionDto__schema0"
+            }
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "UpdateAiSchemaRevisionDto": {
+        "type": "object",
+        "properties": {
+          "schemaJson": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "object"
+                ]
+              },
+              "fields": {
+                "type": "object",
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/UpdateAiSchemaRevisionDto__schema0"
+                }
+              }
+            },
+            "required": [
+              "type",
+              "fields"
+            ]
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 4000
+          }
+        }
+      },
+      "AiAgentConfigListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "flowId": {
+                  "type": "string"
+                },
+                "orchestratorNodeId": {
+                  "type": "string"
+                },
+                "agentKey": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "prompt",
+                    "system"
+                  ]
+                },
+                "enabled": {
+                  "type": "boolean"
+                },
+                "promptDefinitionId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                  "nullable": true
+                },
+                "executionPhase": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "dependsOn": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "sortOrder": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "isCustom": {
+                  "type": "boolean"
+                },
+                "createdBy": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                  "nullable": true
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                },
+                "updatedAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                }
+              },
+              "required": [
+                "id",
+                "flowId",
+                "orchestratorNodeId",
+                "agentKey",
+                "label",
+                "description",
+                "kind",
+                "enabled",
+                "promptDefinitionId",
+                "executionPhase",
+                "dependsOn",
+                "sortOrder",
+                "isCustom",
+                "createdBy",
+                "createdAt",
+                "updatedAt"
+              ]
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
+      "CreateAiAgentConfigDto": {
+        "type": "object",
+        "properties": {
+          "agentKey": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 120
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 4000
+          },
+          "executionPhase": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3
+          },
+          "dependsOn": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "sortOrder": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "agentKey",
+          "label"
+        ]
+      },
+      "AiAgentConfigResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "flowId": {
+            "type": "string"
+          },
+          "orchestratorNodeId": {
+            "type": "string"
+          },
+          "agentKey": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "prompt",
+              "system"
+            ]
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "promptDefinitionId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "nullable": true
+          },
+          "executionPhase": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "dependsOn": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "sortOrder": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "isCustom": {
+            "type": "boolean"
+          },
+          "createdBy": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+          }
+        },
+        "required": [
+          "id",
+          "flowId",
+          "orchestratorNodeId",
+          "agentKey",
+          "label",
+          "description",
+          "kind",
+          "enabled",
+          "promptDefinitionId",
+          "executionPhase",
+          "dependsOn",
+          "sortOrder",
+          "isCustom",
+          "createdBy",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "UpdateAiAgentConfigDto": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 4000
+          },
+          "executionPhase": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3
+          },
+          "dependsOn": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "sortOrder": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "UpstreamNodeFieldsResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "nodeId": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "fields": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "nodeId",
+                "label",
+                "fields"
+              ]
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
       "CreateAiModelConfigDraftDto": {
         "type": "object",
         "properties": {
@@ -11069,6 +12707,16 @@
             "minimum": -9007199254740991,
             "maximum": 9007199254740991
           },
+          "seededSchemaRevisions": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "skippedSchemaRevisions": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
           "totalPromptKeys": {
             "type": "integer",
             "minimum": -9007199254740991,
@@ -11085,6 +12733,8 @@
           "insertedGlobal",
           "insertedByStage",
           "skippedExisting",
+          "seededSchemaRevisions",
+          "skippedSchemaRevisions",
           "totalPromptKeys",
           "totalTargetSlots"
         ]

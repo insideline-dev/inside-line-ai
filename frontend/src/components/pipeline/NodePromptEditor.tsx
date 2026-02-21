@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Loader2, ChevronDown, ChevronUp, Clock, CheckCircle2 } from "lucide-react";
@@ -13,6 +13,11 @@ import {
   useAdminControllerPublishAiPromptRevision,
   getAdminControllerGetAiPromptRevisionsQueryKey,
 } from "@/api/generated/admin/admin";
+import {
+  VariablePicker,
+  type VariablePickerOption,
+} from "./prompt-editor/VariablePicker";
+import { SchemaRevisionEditor } from "./prompt-editor/SchemaRevisionEditor";
 
 interface NodePromptEditorProps {
   promptKey: string;
@@ -28,6 +33,7 @@ export function NodePromptEditor({ promptKey, upstreamPaths = [] }: NodePromptEd
   const [systemPrompt, setSystemPrompt] = useState<string | null>(null);
   const [userPrompt, setUserPrompt] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
+  const [variablePickerOpen, setVariablePickerOpen] = useState(false);
 
   const { data, isLoading } = useAdminControllerGetAiPromptRevisions(promptKey);
 
@@ -51,6 +57,32 @@ export function NodePromptEditor({ promptKey, upstreamPaths = [] }: NodePromptEd
   const published = revisions?.revisions?.find((r) => r.status === "published");
   const allowedVars = revisions?.allowedVariables ?? [];
   const variableDefs = revisions?.variableDefinitions ?? {};
+
+  const extractTokens = (value: string | null) => {
+    if (!value) return [];
+    const tokens = Array.from(value.matchAll(/{{\s*([^{}\s]+)\s*}}/g)).map((match) => match[1]);
+    return Array.from(new Set(tokens));
+  };
+
+  const variableOptions = useMemo<VariablePickerOption[]>(() => {
+    const promptOptions = allowedVars.map((variableName) => ({
+      value: variableName,
+      label: `{{${variableName}}}`,
+      group: "Prompt Variables",
+      description: variableDefs[variableName]?.description,
+    }));
+
+    const upstreamOptions = upstreamPaths.map((path) => {
+      const nodeId = path.split(".")[0] ?? "Upstream";
+      return {
+        value: path,
+        label: `{{${path}}}`,
+        group: `Upstream: ${nodeId}`,
+      };
+    });
+
+    return [...promptOptions, ...upstreamOptions];
+  }, [allowedVars, upstreamPaths, variableDefs]);
 
   const createMutation = useAdminControllerCreateAiPromptRevision({
     mutation: { onError: (e) => toast.error((e as Error).message || "Failed to create draft") },
@@ -83,8 +115,19 @@ export function NodePromptEditor({ promptKey, upstreamPaths = [] }: NodePromptEd
     }
   };
 
-  const insertVariable = (varName: string) => {
-    const tag = `{{${varName}}}`;
+  const maybeOpenPickerFromTyping = (
+    nextValue: string,
+    cursorPosition: number | null,
+  ) => {
+    if (cursorPosition === null) return;
+    if (cursorPosition < 2) return;
+    if (nextValue.slice(cursorPosition - 2, cursorPosition) === "{{") {
+      setVariablePickerOpen(true);
+    }
+  };
+
+  const insertVariable = (token: string) => {
+    const tag = `{{${token}}}`;
     const ref = activeField === "system" ? systemRef : userRef;
     const setter = activeField === "system" ? setSystemPrompt : setUserPrompt;
     const current = activeField === "system" ? systemPrompt : userPrompt;
@@ -106,6 +149,8 @@ export function NodePromptEditor({ promptKey, upstreamPaths = [] }: NodePromptEd
   };
 
   const isSaving = createMutation.isPending || publishMutation.isPending;
+  const systemTokens = extractTokens(systemPrompt);
+  const userTokens = extractTokens(userPrompt);
 
   if (isLoading) {
     return (
@@ -144,11 +189,24 @@ export function NodePromptEditor({ promptKey, upstreamPaths = [] }: NodePromptEd
         <Textarea
           ref={systemRef}
           value={systemPrompt ?? ""}
-          onChange={(e) => { setSystemPrompt(e.target.value); setIsDirty(true); }}
+          onChange={(e) => {
+            setSystemPrompt(e.target.value);
+            setIsDirty(true);
+            maybeOpenPickerFromTyping(e.target.value, e.target.selectionStart);
+          }}
           onFocus={() => setActiveField("system")}
           className="min-h-[180px] font-mono text-xs resize-y"
           placeholder="System prompt..."
         />
+        {systemTokens.length > 0 ? (
+          <div className="flex flex-wrap gap-1.5 rounded-md border border-border/60 bg-muted/30 p-2">
+            {systemTokens.map((token) => (
+              <Badge key={`system-${token}`} variant="outline" className="font-mono text-[10px]">
+                {`{{${token}}}`}
+              </Badge>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       {/* User Prompt */}
@@ -159,55 +217,49 @@ export function NodePromptEditor({ promptKey, upstreamPaths = [] }: NodePromptEd
         <Textarea
           ref={userRef}
           value={userPrompt ?? ""}
-          onChange={(e) => { setUserPrompt(e.target.value); setIsDirty(true); }}
+          onChange={(e) => {
+            setUserPrompt(e.target.value);
+            setIsDirty(true);
+            maybeOpenPickerFromTyping(e.target.value, e.target.selectionStart);
+          }}
           onFocus={() => setActiveField("user")}
           className="min-h-[100px] font-mono text-xs resize-y"
           placeholder="User prompt..."
         />
+        {userTokens.length > 0 ? (
+          <div className="flex flex-wrap gap-1.5 rounded-md border border-border/60 bg-muted/30 p-2">
+            {userTokens.map((token) => (
+              <Badge key={`user-${token}`} variant="outline" className="font-mono text-[10px]">
+                {`{{${token}}}`}
+              </Badge>
+            ))}
+          </div>
+        ) : null}
       </div>
 
-      {/* Variables */}
-      {allowedVars.length > 0 && (
+      {/* Variable Picker */}
+      {variableOptions.length > 0 && (
         <div className="space-y-1.5">
-          <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-            Variables — click to insert into focused field
-          </Label>
-          <div className="flex flex-wrap gap-1.5">
-            {allowedVars.map((v) => (
-              <button
-                key={v}
-                type="button"
-                title={variableDefs[v]?.description}
-                onClick={() => insertVariable(v)}
-                className="inline-flex items-center rounded border border-dashed border-border px-2 py-0.5 text-xs font-mono text-primary hover:bg-primary/10 transition-colors"
-              >
-                {`{{${v}}}`}
-              </button>
-            ))}
+          <div className="flex items-center justify-between gap-2">
+            <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              Variables
+            </Label>
+            <VariablePicker
+              open={variablePickerOpen}
+              onOpenChange={setVariablePickerOpen}
+              options={variableOptions}
+              onSelect={insertVariable}
+            />
+          </div>
+          <div className="text-[11px] text-muted-foreground">
+            Type <span className="font-mono">{"{{"}</span> in either prompt to open picker.
           </div>
         </div>
       )}
 
-      {/* Upstream agent fields */}
-      {upstreamPaths.length > 0 && (
-        <div className="space-y-1.5">
-          <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-            From connected agents — click to insert
-          </Label>
-          <div className="flex flex-wrap gap-1.5">
-            {upstreamPaths.map((p) => (
-              <button
-                key={p}
-                type="button"
-                onClick={() => insertVariable(p)}
-                className="inline-flex items-center rounded border border-dashed border-blue-400/60 px-2 py-0.5 text-xs font-mono text-blue-500 hover:bg-blue-500/10 transition-colors"
-              >
-                {`{{${p}}}`}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      <Separator />
+
+      <SchemaRevisionEditor promptKey={promptKey} />
 
       <Separator />
 

@@ -40,6 +40,7 @@ import { IntegrationHealthService } from './integration-health.service';
 import { SystemConfigService } from './system-config.service';
 import { BulkDataService } from './bulk-data.service';
 import { AdminMatchingService } from './admin-matching.service';
+import { AdminInvestorService } from './admin-investor.service';
 import { AiPromptService } from '../ai/services/ai-prompt.service';
 import { AiPromptRuntimeService } from '../ai/services/ai-prompt-runtime.service';
 import { AiModelConfigService } from '../ai/services/ai-model-config.service';
@@ -115,6 +116,7 @@ export class AdminController {
     private earlyAccessService: EarlyAccessService,
     private pipelineFlowConfigService: PipelineFlowConfigService,
     private phaseTransitionService: PhaseTransitionService,
+    private adminInvestorService: AdminInvestorService,
   ) {}
 
   private resolveOutputSchemaForKey(key: string): z.ZodTypeAny | null {
@@ -171,6 +173,18 @@ export class AdminController {
   @Get('stats/investors')
   async getInvestorStats() {
     return this.analyticsService.getInvestorStats();
+  }
+
+  @Get('investors')
+  @ApiOperation({ summary: 'List all investors with profile and thesis summary' })
+  async listInvestors() {
+    return this.adminInvestorService.listInvestors();
+  }
+
+  @Get('investors/:userId')
+  @ApiOperation({ summary: 'Get full investor detail (profile, thesis, matches, scoring)' })
+  async getInvestorDetail(@Param('userId', ParseUUIDPipe) userId: string) {
+    return this.adminInvestorService.getInvestorDetail(userId);
   }
 
   // ============ INTEGRATIONS & CONFIG ENDPOINTS ============

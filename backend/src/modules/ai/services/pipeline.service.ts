@@ -17,6 +17,7 @@ import { EVALUATION_AGENT_KEYS, RESEARCH_AGENT_KEYS } from "../constants/agent-k
 import { AiConfigService } from "./ai-config.service";
 import { PipelineFeedbackService } from "./pipeline-feedback.service";
 import { PipelineAgentTraceService } from "./pipeline-agent-trace.service";
+import { PipelineTemplateService } from "./pipeline-template.service";
 import { PipelineStateService } from "./pipeline-state.service";
 import { StartupMatchingPipelineService } from "./startup-matching-pipeline.service";
 import {
@@ -97,6 +98,7 @@ export class PipelineService {
     private progressTracker: ProgressTrackerService,
     private phaseTransition: PhaseTransitionService,
     private errorRecovery: ErrorRecoveryService,
+    private pipelineTemplateService: PipelineTemplateService,
     private moduleRef: ModuleRef,
     @Optional() private pipelineAgentTrace?: PipelineAgentTraceService,
   ) {}
@@ -558,12 +560,22 @@ export class PipelineService {
   }
 
   private async createPipelineRunRecord(state: PipelineState): Promise<void> {
+    const runtimeSnapshot = await this.pipelineTemplateService.getRuntimeSnapshot(
+      "pipeline",
+    );
+
     await this.drizzle.db.insert(pipelineRun).values({
       pipelineRunId: state.pipelineRunId,
       startupId: state.startupId,
       userId: state.userId,
       status: PipelineStatus.RUNNING,
-      config: toJsonRecord(this.phaseTransition.getConfig(), "pipeline config"),
+      config: toJsonRecord(
+        {
+          phaseConfig: this.phaseTransition.getConfig(),
+          runtimeSnapshot,
+        },
+        "pipeline config",
+      ),
       startedAt: new Date(),
     });
   }

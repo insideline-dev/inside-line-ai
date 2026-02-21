@@ -10,8 +10,8 @@ import {
   aiPromptDefinition,
   aiPromptRevision,
   type AiPromptDefinition,
-  type AiPromptRevision,
 } from "../entities/ai-prompt.schema";
+import { aiAgentSchemaRevision } from "../entities/ai-agent-schema-revision.schema";
 import { StartupStage } from "../../startup/entities/startup.schema";
 import {
   AI_PROMPT_CATALOG,
@@ -22,14 +22,35 @@ import {
   type PromptVariableDefinition,
 } from "./ai-prompt-catalog";
 import { AI_FLOW_DEFINITIONS } from "./ai-flow-catalog";
+import {
+  CompetitorResearchSchema,
+  DealTermsEvaluationSchema,
+  ExitPotentialEvaluationSchema,
+  FinancialsEvaluationSchema,
+  GtmEvaluationSchema,
+  LegalEvaluationSchema,
+  MarketEvaluationSchema,
+  MarketResearchSchema,
+  NewsResearchSchema,
+  ProductEvaluationSchema,
+  ProductResearchSchema,
+  SynthesisSchema,
+  TeamEvaluationSchema,
+  TeamResearchSchema,
+  TractionEvaluationSchema,
+  BusinessModelEvaluationSchema,
+  CompetitiveAdvantageEvaluationSchema,
+} from "../schemas";
+import { SchemaCompilerService } from "./schema-compiler.service";
+import { z } from "zod";
 
 interface ResolvePromptParams {
-  key: AiPromptKey;
+  key: string;
   stage?: string | null;
 }
 
 export interface ResolvedPrompt {
-  key: AiPromptKey;
+  key: string;
   stage: StartupStage | null;
   systemPrompt: string;
   userPrompt: string;
@@ -55,6 +76,7 @@ export class AiPromptService {
   private readonly logger = new Logger(AiPromptService.name);
   private readonly cache = new Map<string, { expiresAt: number; value: ResolvedPrompt }>();
   private readonly cacheTtlMs = 60_000;
+  private readonly schemaCompiler = new SchemaCompilerService();
 
   constructor(private drizzle: DrizzleService) {}
 
@@ -67,7 +89,9 @@ export class AiPromptService {
       return cached.value;
     }
 
-    const fallback = this.toCodePrompt(params.key, normalizedStage);
+    const fallback = isAiPromptKey(params.key)
+      ? this.toCodePrompt(params.key, normalizedStage)
+      : null;
     try {
       const [definition] = await this.drizzle.db
         .select({ id: aiPromptDefinition.id })
@@ -76,8 +100,11 @@ export class AiPromptService {
         .limit(1);
 
       if (!definition) {
-        this.setCache(cacheKey, fallback);
-        return fallback;
+        if (fallback) {
+          this.setCache(cacheKey, fallback);
+          return fallback;
+        }
+        throw new NotFoundException(`Prompt definition not found for key ${params.key}`);
       }
 
       const candidates = await this.drizzle.db
@@ -110,8 +137,13 @@ export class AiPromptService {
       const selected = stageMatch ?? globalMatch;
 
       if (!selected) {
-        this.setCache(cacheKey, fallback);
-        return fallback;
+        if (fallback) {
+          this.setCache(cacheKey, fallback);
+          return fallback;
+        }
+        throw new NotFoundException(
+          `No published prompt revision found for key ${params.key}`,
+        );
       }
 
       const resolved: ResolvedPrompt = {
@@ -126,6 +158,9 @@ export class AiPromptService {
       this.setCache(cacheKey, resolved);
       return resolved;
     } catch (error) {
+      if (!fallback) {
+        throw error;
+      }
       const message = error instanceof Error ? error.message : String(error);
       this.logger.warn(
         `Prompt resolution failed for ${params.key} (${normalizedStage ?? "global"}), using code fallback: ${message}`,
@@ -361,6 +396,8 @@ export class AiPromptService {
     let insertedTotal = 0;
     let insertedGlobal = 0;
     let skippedExisting = 0;
+    let seededSchemaRevisions = 0;
+    let skippedSchemaRevisions = 0;
 
     try {
       await this.ensureDefinitionsExist();
@@ -425,6 +462,78 @@ export class AiPromptService {
           }
         }
       }
+
+      const agentSchemaEntries: Array<{
+        key: AiPromptKey;
+        schema: z.ZodObject<z.ZodRawShape>;
+      }> = [
+        { key: "research.team", schema: TeamResearchSchema },
+        { key: "research.market", schema: MarketResearchSchema },
+        { key: "research.product", schema: ProductResearchSchema },
+        { key: "research.news", schema: NewsResearchSchema },
+        { key: "research.competitor", schema: CompetitorResearchSchema },
+        { key: "evaluation.team", schema: TeamEvaluationSchema },
+        { key: "evaluation.market", schema: MarketEvaluationSchema },
+        { key: "evaluation.product", schema: ProductEvaluationSchema },
+        { key: "evaluation.traction", schema: TractionEvaluationSchema },
+        { key: "evaluation.businessModel", schema: BusinessModelEvaluationSchema },
+        { key: "evaluation.gtm", schema: GtmEvaluationSchema },
+        { key: "evaluation.financials", schema: FinancialsEvaluationSchema },
+        {
+          key: "evaluation.competitiveAdvantage",
+          schema: CompetitiveAdvantageEvaluationSchema,
+        },
+        { key: "evaluation.legal", schema: LegalEvaluationSchema },
+        { key: "evaluation.dealTerms", schema: DealTermsEvaluationSchema },
+        { key: "evaluation.exitPotential", schema: ExitPotentialEvaluationSchema },
+        { key: "synthesis.final", schema: SynthesisSchema },
+      ];
+
+      for (const entry of agentSchemaEntries) {
+        const definition = await this.getOrCreateDefinition(entry.key);
+
+        const [existingPublished] = await this.drizzle.db
+          .select({ id: aiAgentSchemaRevision.id })
+          .from(aiAgentSchemaRevision)
+          .where(
+            and(
+              eq(aiAgentSchemaRevision.definitionId, definition.id),
+              eq(aiAgentSchemaRevision.status, "published"),
+              isNull(aiAgentSchemaRevision.stage),
+            ),
+          )
+          .limit(1);
+
+        if (existingPublished) {
+          skippedSchemaRevisions += 1;
+          continue;
+        }
+
+        const serializedDescriptor = this.schemaCompiler.serialize(entry.schema);
+        const compiledFromDescriptor = this.schemaCompiler.compile(serializedDescriptor);
+        const roundtripDescriptor = this.schemaCompiler.serialize(compiledFromDescriptor);
+        const roundtripValidation = this.schemaCompiler.validate(roundtripDescriptor);
+
+        if (!roundtripValidation.valid) {
+          throw new BadRequestException(
+            `Schema roundtrip validation failed for ${entry.key}: ${roundtripValidation.errors.join(", ")}`,
+          );
+        }
+
+        await this.drizzle.db.insert(aiAgentSchemaRevision).values({
+          definitionId: definition.id,
+          stage: null,
+          status: "published",
+          schemaJson: serializedDescriptor,
+          notes: "Seeded from code defaults (global)",
+          version: 1,
+          createdBy: adminId,
+          publishedBy: adminId,
+          publishedAt: new Date(),
+        });
+
+        seededSchemaRevisions += 1;
+      }
     } catch (error) {
       if (this.isPromptTablesMissingError(error)) {
         throw new BadRequestException(
@@ -440,6 +549,8 @@ export class AiPromptService {
       insertedGlobal,
       insertedByStage,
       skippedExisting,
+      seededSchemaRevisions,
+      skippedSchemaRevisions,
       totalPromptKeys: AI_PROMPT_KEYS.length,
       totalTargetSlots: AI_PROMPT_KEYS.length * stageTargets.length,
     };
@@ -569,7 +680,17 @@ export class AiPromptService {
 
   private async getOrCreateDefinition(key: string): Promise<AiPromptDefinition> {
     if (!isAiPromptKey(key)) {
-      throw new BadRequestException(`Unsupported prompt key: ${key}`);
+      const [customDefinition] = await this.drizzle.db
+        .select()
+        .from(aiPromptDefinition)
+        .where(eq(aiPromptDefinition.key, key))
+        .limit(1);
+
+      if (!customDefinition) {
+        throw new BadRequestException(`Unsupported prompt key: ${key}`);
+      }
+
+      return customDefinition;
     }
 
     const [existing] = await this.drizzle.db
@@ -630,12 +751,12 @@ export class AiPromptService {
     systemPrompt: string,
     userPrompt: string,
   ): void {
-    if (!isAiPromptKey(key)) {
-      throw new BadRequestException(`Unsupported prompt key: ${key}`);
-    }
-
     if (!userPrompt || userPrompt.trim().length === 0) {
       throw new BadRequestException("userPrompt is required");
+    }
+
+    if (!isAiPromptKey(key)) {
+      return;
     }
 
     const catalog = AI_PROMPT_CATALOG[key];
@@ -714,7 +835,7 @@ export class AiPromptService {
       return true;
     }
 
-    return /ai_prompt_definitions|ai_prompt_revisions|relation .* does not exist/i.test(
+    return /ai_prompt_definitions|ai_prompt_revisions|ai_agent_schema_revisions|relation .* does not exist/i.test(
       message,
     );
   }

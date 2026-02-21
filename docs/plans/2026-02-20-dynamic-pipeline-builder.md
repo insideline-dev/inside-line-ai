@@ -4,48 +4,100 @@
 
 **Goal:** Let admins visually configure the AI pipeline — edit agent output schemas, prompts, models, and add/remove agents within orchestrators — via an interactive node-based canvas (N8N-style).
 
-**Architecture:** Extend the existing `ai-flow-catalog.ts` DAG + `aiPromptDefinition` revision tables with a new schema registry and dynamic agent config layer. Frontend gets a ReactFlow canvas replacing the current linear viz. Runtime resolves schemas/prompts/models from DB, falling back to code defaults. Level 2 customization: admins add/remove agents within orchestrators; top-level phase flow stays fixed.
+**Architecture:** Build on the existing `origin/flow` branch which has a partial ReactFlow canvas, `pipeline_flow_configs` table, typed `ai-flow-catalog.ts` with ports, prompt/model revision management, and step-level tracing. Extend with schema registry, dynamic agent config, improved canvas UX (undo/redo, distinct node types, proper handles), visual schema editor, and variable picker.
 
-**Tech Stack:** ReactFlow (frontend), Drizzle ORM (schema registry tables), AI SDK v6 `Output.object()` with runtime Zod, existing NestJS module system.
+**Tech Stack:** @xyflow/react v12.10.1 (already installed), dagre (already installed), Drizzle ORM, AI SDK v6 `Output.object()` with runtime Zod, NestJS.
+
+**Base branch:** `origin/flow`
+
+---
+
+## What Already Exists (from `origin/flow`)
+
+### Backend — DONE, do not rebuild
+| Component | File | Status |
+|-----------|------|--------|
+| Pipeline flow config table | `entities/pipeline-flow-config.schema.ts` | Done |
+| Flow config CRUD service | `services/pipeline-flow-config.service.ts` | Done |
+| Typed DAG with ports | `services/ai-flow-catalog.ts` (`AiFlowPort` with `fromNodeId`/`toNodeIds`) | Done |
+| Prompt revision CRUD | `services/ai-prompt-service.ts` | Done |
+| Model config CRUD | `services/ai-model-config.service.ts` | Done |
+| Prompt runtime + preview | `services/ai-prompt-runtime.service.ts` | Done |
+| Output schema endpoint | `GET /admin/ai-prompts/:key/output-schema` (Zod→JSON Schema) | Done |
+| Context schema endpoint | `GET /admin/ai-prompts/:key/context-schema` | Done |
+| 38 admin endpoints | Flow config, prompts, model config, preview, seed | Done |
+| Step-level tracing | All 7 processors enhanced with `traceKind` + `stepKey` | Done |
+| PhaseTransition + refreshConfig | `orchestrator/phase-transition.service.ts` | Done |
+| Progress tracker | `orchestrator/progress-tracker.service.ts` | Done |
+
+### Frontend — EXISTS but needs major improvements
+| Component | File | Status | Issues |
+|-----------|------|--------|--------|
+| ReactFlow canvas | `components/pipeline/PipelineCanvas.tsx` | Partial | Single node type, no undo, immutable graph |
+| Pipeline node | `components/pipeline/PipelineNode.tsx` | Partial | 2px handles, no visual distinction by type |
+| Config sheet | `components/pipeline/NodeConfigSheet.tsx` | Partial | Timeout/retry editing works, upstream schema view works |
+| Prompt editor | `components/pipeline/NodePromptEditor.tsx` | Working | Variable insertion, revision history, save & publish |
+| Schema tree view | `components/pipeline/SchemaTreeView.tsx` | Working | View-only, recursive tree with copy/pick |
+| Layout (dagre) | `components/pipeline/layout.ts` | Working | LR layout, 60/120 spacing |
+| Flow route | `routes/_protected/admin/flow.tsx` | Partial | Draft/publish UI, config loading broken |
+| Types | `components/pipeline/types.ts` | Done | PhaseConfig, PipelineConfig |
+
+### What's NOT in flow branch (needs building)
+1. Schema registry (DB-backed, versioned output schemas)
+2. Schema compiler (JSON → Zod runtime)
+3. Dynamic agent config (add/remove/disable agents)
+4. Visual schema editor (not just viewer)
+5. Variable picker with `{{node.field}}` insertion
+6. Dynamic prompt variable resolution at runtime
+7. Distinct node types (fixed vs AI vs orchestrator)
+8. Undo/redo on canvas
+9. Better handles and edge interactivity
+10. Pipeline template versioning (snapshot per run)
 
 ---
 
 ## Existing Infrastructure (DO NOT break)
 
-These files/systems are production and must keep working throughout:
-
 | System | Key Files | Contract |
 |--------|-----------|----------|
-| Pipeline execution | `services/pipeline.service.ts`, `orchestrator/` | BullMQ phase processors stay intact |
-| Prompt runtime | `services/ai-prompt-runtime.service.ts`, `ai-prompt-catalog.ts` | Published revisions override code defaults |
-| Model config | `services/ai-model-config.service.ts` | Stage-aware model resolution stays |
-| Evaluation registry | `services/evaluation-agent-registry.service.ts` | `runAll()` / `runOne()` contracts stay |
+| Pipeline execution | `services/pipeline.service.ts`, `orchestrator/` | BullMQ processors stay intact |
+| Prompt runtime | `services/ai-prompt-runtime.service.ts` | Published revisions override code defaults |
+| Model config | `services/ai-model-config.service.ts` | Stage-aware resolution stays |
+| Evaluation registry | `services/evaluation-agent-registry.service.ts` | `runAll()` / `runOne()` stay |
 | Research orchestrator | `services/research.service.ts` | Phase 1/Phase 2 fan-out stays |
-| Flow catalog | `services/ai-flow-catalog.ts` | Read by frontend via `/admin/ai/prompts/flow` |
-| Frontend agents page | `routes/_protected/admin/agents.tsx` | Will be replaced, but keep API contracts |
-| DB tables | `ai_prompt_definitions`, `ai_prompt_revisions`, `ai_model_config_revisions`, `ai_context_config_revisions` | Additive changes only |
+| Flow catalog | `services/ai-flow-catalog.ts` | Typed ports, read by frontend |
+| Flow config | `services/pipeline-flow-config.service.ts` | Draft/publish lifecycle stays |
+| Existing canvas components | `components/pipeline/*` | Will be improved, not deleted |
+| DB tables | `pipeline_flow_configs`, `ai_prompt_definitions`, `ai_prompt_revisions`, `ai_model_config_revisions` | Additive only |
 
 ---
 
 ## Phase 1: Agent Output Schema Registry (Backend)
 
 ### Why first
-Everything downstream (runtime validation, schema editor UI, variable picker) depends on schemas being stored in DB with versioning.
+Everything downstream depends on schemas in DB. The existing `GET /output-schema` endpoint returns Zod→JSON Schema but doesn't support versioned drafts or editing.
 
 ### Task 1.1: Create `aiAgentSchemaRevision` DB entity
 
 **Files:**
 - Create: `backend/src/modules/ai/entities/ai-agent-schema-revision.entity.ts`
+- Modify: `backend/src/modules/ai/entities/index.ts` (add export)
 - Modify: `backend/src/database/schema.ts` (add barrel export)
 
 **Schema:**
 ```typescript
+import { pgTable, uuid, jsonb, integer, text, timestamp, index } from "drizzle-orm/pg-core";
+import { aiPromptDefinition } from "./ai-prompt-definition.schema";
+import { user } from "../../user/entities/user.entity";
+// Reuse existing enums from ai-prompt-revision or pipeline-flow-config
+import { revisionStatusEnum, startupStageEnum } from "./shared-enums";
+
 export const aiAgentSchemaRevision = pgTable("ai_agent_schema_revisions", {
   id: uuid("id").defaultRandom().primaryKey(),
   definitionId: uuid("definition_id").references(() => aiPromptDefinition.id).notNull(),
-  stage: startupStageEnum("stage"),                    // null = all stages
+  stage: startupStageEnum("stage"),
   status: revisionStatusEnum("status").default("draft").notNull(),
-  schemaJson: jsonb("schema_json").notNull(),          // serialized Zod-compatible schema
+  schemaJson: jsonb("schema_json").$type<SchemaDescriptor>().notNull(),
   version: integer("version").default(1).notNull(),
   notes: text("notes"),
   createdBy: uuid("created_by").references(() => user.id),
@@ -53,10 +105,14 @@ export const aiAgentSchemaRevision = pgTable("ai_agent_schema_revisions", {
   publishedAt: timestamp("published_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()).notNull(),
-});
+}, (table) => ({
+  definitionIdx: index("ai_agent_schema_rev_definition_idx").on(table.definitionId),
+  defStageStatusIdx: index("ai_agent_schema_rev_def_stage_status_idx")
+    .on(table.definitionId, table.stage, table.status),
+}));
 ```
 
-**`schemaJson` format** (JSON-serializable Zod descriptor):
+**`SchemaDescriptor` format** — the JSON stored in `schemaJson`:
 ```json
 {
   "type": "object",
@@ -76,82 +132,77 @@ export const aiAgentSchemaRevision = pgTable("ai_agent_schema_revisions", {
         }
       }
     },
-    "recommendation": {
-      "type": "enum",
-      "values": ["strong_pass", "pass", "consider", "decline"]
-    }
+    "recommendation": { "type": "enum", "values": ["strong_pass", "pass", "consider", "decline"] }
   }
 }
 ```
 
 **Steps:**
-1. Create entity file with the table definition above
-2. Add to `backend/src/database/schema.ts` barrel export
+1. Create entity file
+2. Add to barrel exports
 3. Run `cd backend && bun db:generate && bun db:push`
-4. Verify migration generated correctly
-
-**Indexes:**
-```typescript
-// Add to entity file
-export const aiAgentSchemaRevisionDefinitionIdx = index("ai_agent_schema_revision_definition_idx")
-  .on(aiAgentSchemaRevision.definitionId);
-export const aiAgentSchemaRevisionDefStageStatusIdx = index("ai_agent_schema_revision_def_stage_status_idx")
-  .on(aiAgentSchemaRevision.definitionId, aiAgentSchemaRevision.stage, aiAgentSchemaRevision.status);
-```
+4. Verify migration
 
 ---
 
-### Task 1.2: Schema JSON → Zod runtime compiler
+### Task 1.2: Schema JSON ↔ Zod runtime compiler
 
 **Files:**
+- Create: `backend/src/modules/ai/interfaces/schema.interface.ts`
 - Create: `backend/src/modules/ai/services/schema-compiler.service.ts`
-- Create: `backend/src/modules/ai/services/schema-compiler.spec.ts`
+- Create: `backend/src/modules/ai/tests/services/schema-compiler.spec.ts`
 
-**Purpose:** Convert the JSON schema descriptor (from DB) into a runtime Zod schema that `Output.object()` can use.
-
-**Interface:**
+**Types** (in `schema.interface.ts`):
 ```typescript
-@Injectable()
-export class SchemaCompilerService {
-  compile(schemaJson: SchemaDescriptor): z.ZodSchema;
-  serialize(schema: z.ZodSchema): SchemaDescriptor;      // code schema → DB format
-  validate(schemaJson: unknown): { valid: boolean; errors: string[] };
-  extractFieldPaths(schemaJson: SchemaDescriptor): string[];  // for variable picker
-}
-```
+export type SchemaFieldType = "string" | "number" | "boolean" | "array" | "object" | "enum";
 
-**Type definitions:**
-```typescript
-type SchemaFieldType = "string" | "number" | "boolean" | "array" | "object" | "enum";
-
-interface SchemaField {
+export interface SchemaField {
   type: SchemaFieldType;
   description?: string;
   optional?: boolean;
-  min?: number;
-  max?: number;
+  min?: number;          // number: min value
+  max?: number;          // number: max value
   default?: unknown;
-  // array
-  items?: SchemaField;
-  // object
-  fields?: Record<string, SchemaField>;
-  // enum
-  values?: string[];
+  items?: SchemaField;   // array item type
+  fields?: Record<string, SchemaField>;  // object children
+  values?: string[];     // enum values
 }
 
-interface SchemaDescriptor {
+export interface SchemaDescriptor {
   type: "object";
   fields: Record<string, SchemaField>;
 }
 ```
 
-**Steps:**
-1. Define `SchemaDescriptor` types in `backend/src/modules/ai/interfaces/schema.interface.ts`
-2. Write failing tests for: compile simple object, compile nested object, compile array, compile enum, compile with min/max, roundtrip serialize→compile
-3. Implement `compile()` recursively: object→`z.object()`, string→`z.string()`, number→`z.number().min().max()`, array→`z.array()`, enum→`z.enum()`
-4. Implement `serialize()` by introspecting existing Zod schemas (for seeding defaults)
-5. Implement `extractFieldPaths()` — recursive dot-path extraction (e.g. `"founders[].name"`, `"score"`)
-6. Run tests, verify pass
+**Service interface:**
+```typescript
+@Injectable()
+export class SchemaCompilerService {
+  /** JSON descriptor → runtime Zod schema for Output.object() */
+  compile(descriptor: SchemaDescriptor): z.ZodObject<any>;
+
+  /** Existing Zod schema → JSON descriptor for DB storage */
+  serialize(schema: z.ZodObject<any>): SchemaDescriptor;
+
+  /** Validate a descriptor is well-formed */
+  validate(input: unknown): { valid: boolean; errors: string[] };
+
+  /** Extract all dot-paths for variable picker: ["score", "founders[].name", ...] */
+  extractFieldPaths(descriptor: SchemaDescriptor): string[];
+}
+```
+
+**Test cases:**
+1. Compile simple flat object (string, number, boolean)
+2. Compile nested object
+3. Compile array of strings
+4. Compile array of objects
+5. Compile enum field
+6. Compile with min/max constraints
+7. Optional fields
+8. Roundtrip: serialize existing Zod → compile back → validate same data passes
+9. `extractFieldPaths` returns correct dot-paths including `[]` for arrays
+10. `validate` rejects malformed descriptors
 
 ---
 
@@ -159,77 +210,91 @@ interface SchemaDescriptor {
 
 **Files:**
 - Create: `backend/src/modules/ai/services/agent-schema-registry.service.ts`
-- Modify: `backend/src/modules/ai/ai.module.ts` (register provider)
+- Modify: `backend/src/modules/ai/ai.module.ts` (add provider)
+
+**Pattern:** Follow `ai-model-config.service.ts` exactly — draft→published→archived lifecycle.
 
 **Interface:**
 ```typescript
 @Injectable()
 export class AgentSchemaRegistryService {
-  listRevisionsByKey(key: AiPromptKey): Promise<{ definition: ...; revisions: ... }>;
+  listRevisionsByKey(key: AiPromptKey): Promise<{ definition: ...; revisions: SchemaRevision[] }>;
   getPublished(key: AiPromptKey, stage?: StartupStage): Promise<SchemaDescriptor | null>;
-  createDraft(key: AiPromptKey, adminId: string, input: CreateSchemaInput): Promise<Revision>;
-  updateDraft(key: AiPromptKey, revisionId: string, input: UpdateSchemaInput): Promise<Revision>;
-  publishRevision(key: AiPromptKey, revisionId: string, adminId: string): Promise<Revision>;
-  resolveSchema(key: AiPromptKey, stage?: StartupStage): Promise<z.ZodSchema>;
+  createDraft(key: AiPromptKey, adminId: string, input: { schemaJson: SchemaDescriptor; notes?: string; stage?: StartupStage }): Promise<SchemaRevision>;
+  updateDraft(key: AiPromptKey, revisionId: string, input: { schemaJson?: SchemaDescriptor; notes?: string }): Promise<SchemaRevision>;
+  publishRevision(key: AiPromptKey, revisionId: string, adminId: string): Promise<SchemaRevision>;
+
+  /** Resolution: published DB (key+stage) → published DB (key+null) → code default */
+  resolveSchema(key: AiPromptKey, stage?: StartupStage): Promise<z.ZodObject<any>>;
+
+  /** Same as resolveSchema but returns the raw descriptor (for frontend) */
+  resolveDescriptor(key: AiPromptKey, stage?: StartupStage): Promise<SchemaDescriptor>;
 }
 ```
 
-**`resolveSchema` resolution order** (mirrors model config pattern):
-1. Published DB revision matching key + stage → compile → return
-2. Published DB revision matching key + stage=null → compile → return
-3. Fall back to hardcoded Zod schema from agent code
+---
+
+### Task 1.4: Seed existing Zod schemas into DB
+
+**Files:**
+- Modify: `backend/src/modules/ai/services/ai-prompt.service.ts` (extend existing seed logic)
+
+**Purpose:** On `POST /admin/ai-prompts/seed-from-code`, also seed all 17 agent schemas.
 
 **Steps:**
-1. Create service with DrizzleService + SchemaCompilerService injection
-2. Implement CRUD following `ai-model-config.service.ts` pattern (draft→published→archived lifecycle)
-3. Implement `resolveSchema()` with fallback chain
-4. Register in `ai.module.ts` providers
-5. Write tests for resolution priority
+1. Import all agent Zod schemas (5 research + 11 evaluation + 1 synthesis)
+2. Use `SchemaCompilerService.serialize()` on each
+3. Upsert into `aiAgentSchemaRevision` with status="published"
+4. Test roundtrip: original Zod validates test data → serialize → compile → same test data still validates
 
 ---
 
-### Task 1.4: Seed existing agent schemas into DB format
+### Task 1.5: Schema CRUD admin endpoints
 
 **Files:**
-- Create: `backend/src/modules/ai/services/schema-seeder.service.ts`
+- Modify: `backend/src/modules/admin/admin.controller.ts`
+- Create: `backend/src/modules/admin/dto/ai-schema.dto.ts`
 
-**Purpose:** Convert all 17 hardcoded Zod schemas (5 research + 11 evaluation + 1 synthesis) to `SchemaDescriptor` JSON and provide a seed command.
+**Endpoints** (extend existing admin controller):
+```
+GET    /admin/ai-prompts/:key/schema-revisions              → list revisions
+POST   /admin/ai-prompts/:key/schema-revisions              → create draft
+PATCH  /admin/ai-prompts/:key/schema-revisions/:revisionId  → update draft
+POST   /admin/ai-prompts/:key/schema-revisions/:revisionId/publish → publish
+```
 
-**Steps:**
-1. Use `SchemaCompilerService.serialize()` on each agent's Zod schema
-2. Create a `seedSchemas()` method that upserts into `aiAgentSchemaRevision` with status="published"
-3. Wire into the existing `seedAiPrompts` admin endpoint (or create parallel)
-4. Test roundtrip: serialize existing → compile back → validate against same test data
+**After adding:** `cd frontend && bun generate:api`
 
 ---
 
 ## Phase 2: Dynamic Agent Configuration (Backend)
 
 ### Why second
-Before the UI can add/remove agents, the backend needs a dynamic registry that the orchestrators read from.
+Before adding/removing agents in the UI, backend needs a registry the orchestrators read from at runtime.
 
 ### Task 2.1: Create `aiAgentConfig` DB entity
 
 **Files:**
 - Create: `backend/src/modules/ai/entities/ai-agent-config.entity.ts`
+- Modify: `backend/src/modules/ai/entities/index.ts`
 - Modify: `backend/src/database/schema.ts`
 
 **Schema:**
 ```typescript
 export const aiAgentConfig = pgTable("ai_agent_configs", {
   id: uuid("id").defaultRandom().primaryKey(),
-  flowId: varchar("flow_id", { length: 50 }).notNull(),          // "pipeline" | "clara"
-  orchestratorNodeId: varchar("orchestrator_node_id", { length: 120 }).notNull(), // "research_orchestrator" | "evaluation_orchestrator"
+  flowId: varchar("flow_id", { length: 50 }).notNull(),
+  orchestratorNodeId: varchar("orchestrator_node_id", { length: 120 }).notNull(),
   agentKey: varchar("agent_key", { length: 120 }).notNull(),
   label: text("label").notNull(),
   description: text("description"),
-  kind: aiFlowNodeKindEnum("kind").default("prompt").notNull(),   // "prompt" | "system"
+  kind: aiFlowNodeKindEnum("kind").default("prompt").notNull(),
   enabled: boolean("enabled").default(true).notNull(),
   promptDefinitionId: uuid("prompt_definition_id").references(() => aiPromptDefinition.id),
-  executionPhase: integer("execution_phase").default(1).notNull(), // for research: phase 1 or 2
-  dependsOn: jsonb("depends_on").$type<string[]>().default([]),   // agent keys this depends on (within same orchestrator)
+  executionPhase: integer("execution_phase").default(1).notNull(),
+  dependsOn: jsonb("depends_on").$type<string[]>().default([]),
   sortOrder: integer("sort_order").default(0).notNull(),
-  isCustom: boolean("is_custom").default(false).notNull(),        // true = admin-created, false = seeded from code
+  isCustom: boolean("is_custom").default(false).notNull(),
   createdBy: uuid("created_by").references(() => user.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()).notNull(),
@@ -240,502 +305,500 @@ export const aiAgentConfig = pgTable("ai_agent_configs", {
 ```
 
 **Steps:**
-1. Create entity, add to barrel
-2. Generate + push migration
+1. Create entity, add to barrels
+2. `bun db:generate && bun db:push`
 3. Create `AgentConfigService` with: `listByOrchestrator()`, `getEnabled()`, `create()`, `update()`, `toggleEnabled()`, `delete()` (custom only)
-4. Seed existing agents from `ai-flow-catalog.ts` node definitions
+4. Create seed method from `ai-flow-catalog.ts` node definitions
 
 ---
 
-### Task 2.2: Make `EvaluationAgentRegistryService` dynamic
-
-**Files:**
-- Modify: `backend/src/modules/ai/services/evaluation-agent-registry.service.ts`
-- Modify: `backend/src/modules/ai/services/evaluation.service.ts`
-
-**Current:** Hardcoded constructor injection of 11 agents, `this.agents` array is static.
-
-**Target:** Read enabled agents from `AgentConfigService` at runtime. For built-in agents, resolve from NestJS DI. For custom agents, use a generic agent runner that reads prompt + schema + model from DB.
-
-**Steps:**
-1. Add `AgentConfigService` + `AgentSchemaRegistryService` to constructor
-2. Create `resolveAgents()` method:
-   - Query enabled agents for `evaluation_orchestrator`
-   - For each: if `isCustom=false`, look up in DI-injected map by key
-   - If `isCustom=true`, create a `DynamicEvaluationAgent` wrapper that reads prompt/schema/model from DB
-3. Change `runAll()` to call `resolveAgents()` instead of using `this.agents`
-4. **Keep backward compatibility**: if DB has no configs, fall back to the hardcoded list
-5. Test: disable one agent → `runAll()` skips it. Enable custom agent → `runAll()` includes it.
-
----
-
-### Task 2.3: Make `ResearchService` dynamic
-
-**Files:**
-- Modify: `backend/src/modules/ai/services/research.service.ts`
-
-Same pattern as 2.2 but for research agents with Phase 1/Phase 2 grouping.
-
-**Steps:**
-1. Read enabled agents from `AgentConfigService` for `research_orchestrator`
-2. Group by `executionPhase` (1 or 2)
-3. Phase 1 agents run in parallel, Phase 2 agents run after with Phase 1 context
-4. Keep fallback to hardcoded `PHASE_1_KEYS` / `PHASE_2_KEYS` if no DB config
-
----
-
-### Task 2.4: Create `DynamicAgentRunner` service
+### Task 2.2: `DynamicAgentRunner` service
 
 **Files:**
 - Create: `backend/src/modules/ai/services/dynamic-agent-runner.service.ts`
 
-**Purpose:** Generic agent executor for admin-created custom agents. Reads prompt, model, and output schema from DB; calls `generateText()` with `Output.object()`.
+**Purpose:** Generic executor for admin-created custom agents. Reads prompt + model + schema from DB, calls `generateText({ output: Output.object({ schema }) })`.
 
-**Interface:**
 ```typescript
 @Injectable()
 export class DynamicAgentRunnerService {
+  constructor(
+    private promptRuntime: AiPromptRuntimeService,
+    private modelConfig: AiModelConfigService,
+    private schemaRegistry: AgentSchemaRegistryService,
+    private schemaCompiler: SchemaCompilerService,
+    private providers: AiProviderService,
+    private aiConfig: AiConfigService,
+  ) {}
+
   async run(params: {
     agentKey: string;
     promptKey: AiPromptKey;
     pipelineData: EvaluationPipelineInput | ResearchPipelineInput;
     stage?: StartupStage;
-  }): Promise<{ output: unknown; usedFallback: boolean; error?: string }>;
+  }): Promise<{ key: string; output: unknown; usedFallback: boolean; error?: string }>;
 }
 ```
 
-**Steps:**
-1. Resolve prompt from `AiPromptRuntimeService`
-2. Resolve model from `AiModelConfigService`
-3. Resolve schema from `AgentSchemaRegistryService` → compile to Zod
-4. Call `generateText({ output: Output.object({ schema }), ... })`
-5. Handle errors with same retry/fallback pattern as `BaseEvaluationAgent`
+**Implementation mirrors `BaseEvaluationAgent.run()`:**
+1. Resolve prompt → render with variables
+2. Resolve model → get provider
+3. Resolve schema → compile to Zod
+4. `generateText({ output: Output.object({ schema }), ... })`
+5. Retry up to 3 times with exponential backoff
+6. Fallback: return empty schema-validated object
 
 ---
 
-### Task 2.5: Admin CRUD endpoints for agent config
+### Task 2.3: Make `EvaluationAgentRegistryService` dynamic
+
+**Files:**
+- Modify: `backend/src/modules/ai/services/evaluation-agent-registry.service.ts`
+
+**Changes:**
+1. Add `AgentConfigService` to constructor
+2. New `resolveAgents()` method:
+   - Query enabled agents for `evaluation_orchestrator` from `AgentConfigService`
+   - Built-in agents (`isCustom=false`): look up in existing DI map
+   - Custom agents (`isCustom=true`): wrap in `DynamicAgentRunner`
+   - **Fallback**: if no DB configs exist, use hardcoded `this.agents` list
+3. Change `runAll()` to call `resolveAgents()` at start
+4. `runOne()` also checks dynamic registry
+
+---
+
+### Task 2.4: Make `ResearchService` dynamic
+
+**Files:**
+- Modify: `backend/src/modules/ai/services/research.service.ts`
+
+**Same pattern as 2.3:**
+1. Query enabled agents from `AgentConfigService` for `research_orchestrator`
+2. Group by `executionPhase`
+3. Phase 1 parallel, Phase 2 after with Phase 1 context
+4. Fallback to hardcoded keys if no DB config
+
+---
+
+### Task 2.5: Agent config admin endpoints
 
 **Files:**
 - Modify: `backend/src/modules/admin/admin.controller.ts`
-- Modify: `backend/src/modules/admin/admin.module.ts`
-- Create: DTOs for agent config CRUD
+- Create: `backend/src/modules/admin/dto/ai-agent-config.dto.ts`
 
 **Endpoints:**
 ```
-GET    /admin/ai/agents                           → list all agent configs grouped by orchestrator
-GET    /admin/ai/agents/:orchestratorId            → list agents for orchestrator
-POST   /admin/ai/agents/:orchestratorId            → create custom agent
-PATCH  /admin/ai/agents/:orchestratorId/:agentKey  → update (label, description, enabled, sort)
-DELETE /admin/ai/agents/:orchestratorId/:agentKey  → delete (custom only)
-PATCH  /admin/ai/agents/:orchestratorId/:agentKey/toggle → enable/disable
-
-GET    /admin/ai/schemas/:promptKey                → list schema revisions
-POST   /admin/ai/schemas/:promptKey                → create schema draft
-PATCH  /admin/ai/schemas/:promptKey/:revisionId    → update draft
-POST   /admin/ai/schemas/:promptKey/:revisionId/publish → publish
+GET    /admin/ai/agent-configs                                     → list all, grouped by orchestrator
+GET    /admin/ai/agent-configs/:orchestratorId                     → list agents for orchestrator
+POST   /admin/ai/agent-configs/:orchestratorId                     → create custom agent
+PATCH  /admin/ai/agent-configs/:orchestratorId/:agentKey           → update
+DELETE /admin/ai/agent-configs/:orchestratorId/:agentKey           → delete (custom only)
+PATCH  /admin/ai/agent-configs/:orchestratorId/:agentKey/toggle    → enable/disable
 ```
 
-**Steps:**
-1. Create DTOs with `createZodDto`
-2. Add endpoints to admin controller
-3. Register services in admin module
-4. Regenerate frontend API: `cd frontend && bun generate:api`
+**After adding:** `cd frontend && bun generate:api`
 
 ---
 
-## Phase 3: ReactFlow Canvas (Frontend)
-
-### Why third
-Backend is ready. Now build the visual representation.
-
-### Task 3.1: Install ReactFlow
-
-**Steps:**
-```bash
-cd frontend && bun add @xyflow/react
-```
-
----
-
-### Task 3.2: Create canvas data transformer
+### Task 2.6: Dynamic flow catalog overlay
 
 **Files:**
-- Create: `frontend/src/components/pipeline-canvas/use-pipeline-graph.ts`
+- Create: `backend/src/modules/ai/services/dynamic-flow-catalog.service.ts`
+- Modify: `backend/src/modules/admin/admin.controller.ts` (`GET /ai-prompts/flow`)
 
-**Purpose:** Transform `AiPromptFlowResponseDto` (existing API) + agent configs (new API) into ReactFlow nodes/edges.
+**Current:** `GET /ai-prompts/flow` returns static `AI_FLOW_DEFINITIONS`.
 
-**Node types mapping:**
+**New:** `DynamicFlowCatalogService` reads static catalog + overlays DB agent configs:
+- Custom agents → new nodes + edges under their orchestrator
+- Disabled built-in agents → node marked `enabled: false`
+- Returns merged `AiFlowDefinition[]`
+
+---
+
+## Phase 3: Canvas UX Overhaul (Frontend)
+
+### Why third
+Backend ready. Now fix the existing canvas — don't rebuild from scratch, improve what's there.
+
+### Task 3.1: Add distinct node type components
+
+**Files:**
+- Create: `frontend/src/components/pipeline/nodes/FixedDataNode.tsx`
+- Create: `frontend/src/components/pipeline/nodes/AiAgentNode.tsx`
+- Create: `frontend/src/components/pipeline/nodes/OrchestratorNode.tsx`
+- Modify: `frontend/src/components/pipeline/PipelineCanvas.tsx` (register types)
+
+**Replaces** the single `PipelineNode.tsx` with 3 specialized components.
+
+**Classification logic** (in `PipelineCanvas.tsx` when mapping flow nodes):
 ```typescript
-type PipelineNodeType =
-  | "fixedDataNode"      // scraping, extraction, enrichment — view only
-  | "aiAgentNode"        // research/evaluation/synthesis agents — editable
-  | "orchestratorNode"   // research_orchestrator, evaluation_orchestrator — view only
-  | "phaseGateNode";     // stage boundaries — view only
-
-// Each node carries:
-interface PipelineNodeData {
-  nodeType: PipelineNodeType;
-  flowNode: FlowNode;              // from ai-flow-catalog
-  agentConfig?: AgentConfig;       // from new API (null for fixed nodes)
-  isEditable: boolean;
-  isEnabled: boolean;
-  outputSchema?: SchemaDescriptor; // for variable picker
-  inputs: string[];
-  outputs: string[];
+function getNodeType(node: FlowNode): string {
+  if (node.id.includes("orchestrator")) return "orchestrator";
+  if (node.kind === "system") return "fixedData";
+  return "aiAgent"; // kind === "prompt"
 }
 ```
 
-**Steps:**
-1. Hook fetches flow data + agent configs
-2. Maps each `FlowNode` to a ReactFlow `Node` with position auto-layout (dagre)
-3. Maps each edge to a ReactFlow `Edge` with animated data flow label
-4. Returns `{ nodes, edges, onNodesChange, onEdgesChange }`
+**Visual design:**
+- **FixedDataNode**: `border-muted bg-muted/30`, dashed border, Cog icon, read-only badge, shows typed output ports
+- **AiAgentNode**: `border-primary bg-primary/5`, Bot icon, editable badge, model name pill, schema field count badge, enable/disable toggle switch. Click opens config sheet.
+- **OrchestratorNode**: `border-violet-500 bg-violet-50`, Workflow icon, child count badge (`5 agents`), fan-out/fan-in arrows
+
+**Handles for all:** Larger handles (8x8px), styled distinctly per node type, visible on hover:
+```tsx
+<Handle type="target" position={Position.Left} className="!w-2 !h-2 !bg-primary !border-2 !border-background" />
+<Handle type="source" position={Position.Right} className="!w-2 !h-2 !bg-primary !border-2 !border-background" />
+```
 
 ---
 
-### Task 3.3: Create custom node components
+### Task 3.2: Undo/redo support
 
 **Files:**
-- Create: `frontend/src/components/pipeline-canvas/nodes/fixed-data-node.tsx`
-- Create: `frontend/src/components/pipeline-canvas/nodes/ai-agent-node.tsx`
-- Create: `frontend/src/components/pipeline-canvas/nodes/orchestrator-node.tsx`
-- Create: `frontend/src/components/pipeline-canvas/nodes/phase-gate-node.tsx`
+- Create: `frontend/src/components/pipeline/hooks/use-undo-redo.ts`
+- Modify: `frontend/src/components/pipeline/PipelineCanvas.tsx`
 
-**Design:**
-- Fixed data: Gray card, icon, read-only I/O badges
-- AI agent: Blue card, editable badge, click → opens config sheet. Shows prompt key, model name, schema field count. Toggle switch for enable/disable.
-- Orchestrator: Purple hub card, fan-out/fan-in indicator, child agent count badge
-- Phase gate: Small diamond, dependency label
+**Implementation:** History stack for `PhaseConfig[]` changes (the editable state):
+```typescript
+function useUndoRedo<T>(initial: T) {
+  const [past, setPast] = useState<T[]>([]);
+  const [present, setPresent] = useState(initial);
+  const [future, setFuture] = useState<T[]>([]);
 
-**Steps:**
-1. Build each as a React component receiving `NodeProps<PipelineNodeData>`
-2. Use shadcn Card/Badge primitives
-3. AI agent node: click handler opens side sheet
-4. All nodes: show Handle components for edges (top=target, bottom=source)
+  const push = (next: T) => { setPast([...past, present]); setPresent(next); setFuture([]); };
+  const undo = () => { /* pop past, push present to future */ };
+  const redo = () => { /* pop future, push present to past */ };
+  const canUndo = past.length > 0;
+  const canRedo = future.length > 0;
+
+  return { present, push, undo, redo, canUndo, canRedo };
+}
+```
+
+**Keyboard shortcuts:** Register `Ctrl+Z` (undo) and `Ctrl+Shift+Z` (redo) via `useEffect` keydown listener.
+
+**Wire into `flow.tsx`:** Replace `setPipelineConfig` with `history.push()`, pass `undo`/`redo` to canvas toolbar.
 
 ---
 
-### Task 3.4: Create the pipeline canvas page
+### Task 3.3: Fix edge styling and data flow labels
 
 **Files:**
-- Create: `frontend/src/components/pipeline-canvas/pipeline-canvas.tsx`
-- Modify: `frontend/src/routes/_protected/admin/agents.tsx` (integrate canvas as a tab or replacement)
+- Modify: `frontend/src/components/pipeline/PipelineCanvas.tsx`
 
-**Steps:**
-1. `<ReactFlow>` wrapper with custom node types registered
-2. Auto-layout using dagre (install: `bun add dagre @types/dagre`)
-3. Stage grouping: nodes within same stage get a background group node
-4. Minimap + controls panel
-5. Add as new "Canvas" tab alongside existing "Prompts" tab in agents.tsx
-6. Wire up node click → sheet/panel for editing
+**Changes:**
+1. Animated edges for running pipelines (dotted stroke animation)
+2. Edge labels showing data type from `AiFlowPort.type` (e.g., "object", "array")
+3. Colored edges by data type: `text→gray`, `object→blue`, `array→green`, `number→amber`
+4. Selected edge highlight (`stroke-width: 3`)
+5. Edge hover tooltip showing port labels
 
 ---
 
-### Task 3.5: Agent config side panel
+### Task 3.4: Fix flow.tsx config loading
 
 **Files:**
-- Create: `frontend/src/components/pipeline-canvas/panels/agent-config-panel.tsx`
+- Modify: `frontend/src/routes/_protected/admin/flow.tsx`
 
-**Purpose:** When admin clicks an AI agent node, opens a Sheet with tabs:
-- **Prompt** tab: system prompt + user prompt editors (existing revision UI, reuse)
-- **Model** tab: model selector + search mode toggle (existing revision UI, reuse)
-- **Schema** tab: visual schema editor (Phase 4)
-- **Info** tab: inputs, outputs, description, enable/disable toggle
+**Current bug:** `handleLoadConfig` sets `draftId` but doesn't load the phases from the config into state.
 
-**Steps:**
-1. Reuse existing prompt revision components from `agents.tsx`
-2. Wire to existing API endpoints
-3. Schema tab placeholder until Phase 4
-4. Enable/disable toggle calls `PATCH /admin/ai/agents/:orch/:key/toggle`
+**Fix:**
+```typescript
+const handleLoadConfig = (config: PipelineFlowConfig) => {
+  setDraftId(config.id);
+  // Actually load the phase config into state:
+  const loadedPhases = (config.pipelineConfig as PipelineConfig).phases;
+  if (loadedPhases) {
+    history.push(loadedPhases);  // Use undo-redo push
+  }
+};
+```
+
+---
+
+### Task 3.5: Canvas toolbar
+
+**Files:**
+- Create: `frontend/src/components/pipeline/CanvasToolbar.tsx`
+- Modify: `frontend/src/components/pipeline/PipelineCanvas.tsx`
+
+**Toolbar items:**
+- Undo / Redo buttons (with Ctrl+Z/Ctrl+Shift+Z hints)
+- Zoom controls (fit view, zoom in/out)
+- "Unsaved changes" indicator
+- "Save Draft" / "Publish" buttons (moved from flow.tsx header into canvas)
+- Node count / edge count info
 
 ---
 
 ## Phase 4: Visual Schema Editor (Frontend)
 
 ### Why fourth
-The canvas is usable for prompt/model editing. Now add the full schema builder.
+Canvas is usable. Now add schema editing — the existing `SchemaTreeView.tsx` is view-only.
 
 ### Task 4.1: Schema editor component
 
 **Files:**
-- Create: `frontend/src/components/pipeline-canvas/schema-editor/schema-editor.tsx`
-- Create: `frontend/src/components/pipeline-canvas/schema-editor/field-row.tsx`
-- Create: `frontend/src/components/pipeline-canvas/schema-editor/types.ts`
+- Create: `frontend/src/components/pipeline/schema-editor/SchemaEditor.tsx`
+- Create: `frontend/src/components/pipeline/schema-editor/FieldRow.tsx`
+- Create: `frontend/src/components/pipeline/schema-editor/schema-types.ts`
 
-**UI structure:**
+**`schema-types.ts`:** Mirror backend `SchemaDescriptor` / `SchemaField` types.
+
+**`FieldRow.tsx`:** Recursive component:
 ```
-┌─ Schema Editor ─────────────────────────────────┐
-│ [+ Add Field]                                    │
-│                                                  │
-│ ┌─ score ──────────────────────────────────────┐ │
-│ │ Type: [number ▾]  Min: [0]  Max: [100]       │ │
-│ │ Description: [Overall team quality score]      │ │
-│ │ Required: [x]                          [🗑]   │ │
-│ └──────────────────────────────────────────────┘ │
-│                                                  │
-│ ┌─ founders ───────────────────────────────────┐ │
-│ │ Type: [array ▾]  Items: [object ▾]           │ │
-│ │ ┌─ name ────────────────────────────────┐    │ │
-│ │ │ Type: [string ▾]  Required: [x]       │    │ │
-│ │ └──────────────────────────────────────┘    │ │
-│ │ ┌─ role ────────────────────────────────┐    │ │
-│ │ │ Type: [string ▾]  Required: [x]       │    │ │
-│ │ └──────────────────────────────────────┘    │ │
-│ │ [+ Add Field to founders]                    │ │
-│ └──────────────────────────────────────────────┘ │
-│                                                  │
-│ [Save Draft]  [Publish]                          │
+┌─ [field_name] ──────────────────────────────────┐
+│ Type: [string|number|boolean|array|object|enum ▾]│
+│ Description: [..............................]     │
+│ Required: [x]  Min: [0]  Max: [100]        [🗑]  │
+│ ┌─ nested children if object/array ──────────┐   │
+│ │  (recursive FieldRow components)            │   │
+│ │  [+ Add Field]                              │   │
+│ └────────────────────────────────────────────┘   │
 └──────────────────────────────────────────────────┘
 ```
 
-**Steps:**
-1. `types.ts`: mirror `SchemaDescriptor` / `SchemaField` types from backend
-2. `field-row.tsx`: recursive component — renders field config + nested children for object/array types
-3. `schema-editor.tsx`: manages field list state, add/remove/reorder, save/publish buttons
-4. Wire save to `POST /admin/ai/schemas/:key` (create draft) and publish endpoint
-5. Load existing schema from `GET /admin/ai/schemas/:key` (published revision)
+**`SchemaEditor.tsx`:** Manages field list, add/remove/reorder, save/publish:
+- Fetches current schema from `GET /admin/ai-prompts/:key/schema-revisions`
+- Edits in-memory `SchemaDescriptor`
+- "Save Draft" → `POST /admin/ai-prompts/:key/schema-revisions`
+- "Publish" → `POST /admin/ai-prompts/:key/schema-revisions/:id/publish`
+- "Preview JSON" toggle showing raw descriptor
+- Client-side validation before save
 
 ---
 
-### Task 4.2: Schema preview & validation
+### Task 4.2: Integrate schema editor into NodeConfigSheet
 
 **Files:**
-- Modify: `frontend/src/components/pipeline-canvas/schema-editor/schema-editor.tsx`
+- Modify: `frontend/src/components/pipeline/NodeConfigSheet.tsx`
 
-**Features:**
-- "Preview JSON" toggle showing the raw `SchemaDescriptor` JSON
-- Client-side validation (field names unique, required fields have types, no empty objects)
-- Show field count badge on the AI agent node
+**Add "Schema" tab** (alongside existing Queue Config, Input/Output, Prompts tabs):
+- For AI agent nodes (`kind === "prompt"`): render `SchemaEditor` with the node's prompt key
+- For fixed/system nodes: render existing `SchemaTreeView` (read-only)
+- Show field count badge on tab header
 
 ---
 
-## Phase 5: Variable Picker & Dynamic Prompts (Frontend + Backend)
+## Phase 5: Variable Picker & Dynamic Prompts
 
 ### Why fifth
-Schemas are editable. Now let admins reference upstream output fields in prompts.
+Schemas are editable. Now enable `{{node.field}}` references in prompts.
 
-### Task 5.1: Backend endpoint for upstream output fields
+### Task 5.1: Backend upstream fields endpoint
 
 **Files:**
 - Modify: `backend/src/modules/admin/admin.controller.ts`
 
 **Endpoint:**
 ```
-GET /admin/ai/agents/:nodeId/upstream-fields → { nodeId, label, fields: string[] }[]
+GET /admin/ai-prompts/:nodeId/upstream-fields
+→ { nodeId: string; label: string; fields: { path: string; type: string; description?: string }[] }[]
 ```
 
 **Logic:**
-1. Walk edges backward from `nodeId` in the flow catalog
-2. For each upstream node, resolve its output schema (published or code default)
-3. Use `SchemaCompilerService.extractFieldPaths()` to get dot-paths
-4. Return list of `{ nodeId, label, fields }` per upstream node
+1. Walk edges backward from `nodeId` in dynamic flow catalog
+2. For each upstream node with `promptKeys`, resolve output schema via `AgentSchemaRegistryService`
+3. Use `SchemaCompilerService.extractFieldPaths()` for dot-paths
+4. Return grouped by upstream node
 
 ---
 
-### Task 5.2: Variable picker component
+### Task 5.2: Enhanced variable picker in prompt editor
 
 **Files:**
-- Create: `frontend/src/components/pipeline-canvas/prompt-editor/variable-picker.tsx`
+- Create: `frontend/src/components/pipeline/prompt-editor/VariablePicker.tsx`
+- Modify: `frontend/src/components/pipeline/NodePromptEditor.tsx`
 
-**UI:** Dropdown/popover triggered by `{{` typing or button click in prompt textarea. Shows upstream nodes as groups, fields as insertable tokens.
+**Current state:** `NodePromptEditor` already has basic variable buttons that insert `{{variableName}}`. Extend this:
 
+**VariablePicker popover:**
 ```
-┌─ Insert Variable ──────────────────┐
-│ 🔍 Search fields...                │
-│                                    │
-│ ▼ Team Research                    │
-│   {{team_research.score}}          │
-│   {{team_research.founders[].name}}│
-│   {{team_research.feedback}}       │
-│                                    │
-│ ▼ Market Research                  │
-│   {{market_research.tam}}          │
-│   {{market_research.competitors}}  │
-└────────────────────────────────────┘
+┌─ Insert Variable ──────────────────────────┐
+│ 🔍 Search fields...                        │
+│                                             │
+│ ▸ Built-in Variables                        │
+│   {{companyName}} {{sector}} {{website}}    │
+│                                             │
+│ ▸ Team Research (upstream)                  │
+│   {{research_team.score}}                   │
+│   {{research_team.founders[].name}}         │
+│   {{research_team.feedback}}                │
+│                                             │
+│ ▸ Market Research (upstream)                │
+│   {{research_market.tam}}                   │
+│   {{research_market.competitors}}           │
+└─────────────────────────────────────────────┘
 ```
 
 **Steps:**
 1. Fetch upstream fields from new endpoint
-2. Filter by search query
-3. On click/select, insert `{{nodeId.fieldPath}}` at cursor position in textarea
-4. Highlight `{{...}}` tokens in the prompt editor (syntax highlighting)
+2. Merge with existing built-in variables from context schema
+3. Searchable, grouped by source node
+4. Click inserts `{{nodeId.fieldPath}}` at cursor position
+5. Syntax highlight `{{...}}` tokens in textarea (CSS `mark` overlay or similar)
 
 ---
 
-### Task 5.3: Backend prompt variable resolution for dynamic fields
+### Task 5.3: Backend dynamic variable resolution
 
 **Files:**
 - Modify: `backend/src/modules/ai/services/ai-prompt-runtime.service.ts`
 
-**Current:** Variables resolved from hardcoded `resolveVariablesForKey()` methods.
+**Current:** `resolveVariablesForKey()` resolves hardcoded variable names.
 
-**Addition:** After resolving built-in variables, scan prompt text for `{{nodeId.fieldPath}}` patterns. For each match, look up the node's runtime output from `PipelineState.results` and resolve the field path.
+**Addition:** After existing resolution, scan for `{{nodeId.fieldPath}}` tokens and resolve from pipeline state:
 
-**Steps:**
-1. Add `resolveDynamicVariables(promptText, pipelineState)` method
-2. Regex scan for `{{...}}` tokens
-3. For each token: parse `nodeId.fieldPath`, look up in pipeline state results
-4. Replace token with stringified value (or `"[not available]"` if phase hasn't run)
-5. Call after existing variable resolution in `previewPrompt()` and runtime render paths
+```typescript
+private resolveDynamicVariables(
+  promptText: string,
+  pipelineState: PipelineState | null,
+): string {
+  return promptText.replace(/\{\{(\w+)\.([^}]+)\}\}/g, (match, nodeId, fieldPath) => {
+    if (!pipelineState) return `[${nodeId}.${fieldPath}: not available]`;
+    const phaseResult = this.findPhaseResultForNode(nodeId, pipelineState);
+    if (!phaseResult) return `[${nodeId}.${fieldPath}: phase not completed]`;
+    const value = this.resolveFieldPath(phaseResult, fieldPath);
+    return typeof value === "string" ? value : JSON.stringify(value);
+  });
+}
+```
+
+Call in both `previewPrompt()` and the actual runtime render paths.
 
 ---
 
-## Phase 6: Add/Remove Custom Agents (Frontend)
+## Phase 6: Agent CRUD on Canvas (Frontend)
 
-### Why last
-All infrastructure is ready. This is the final user-facing feature.
+### Why sixth
+All infrastructure ready. This is the final UX feature.
 
-### Task 6.1: "Add Agent" dialog on orchestrator nodes
+### Task 6.1: "Add Agent" button on orchestrator nodes
 
 **Files:**
-- Create: `frontend/src/components/pipeline-canvas/dialogs/add-agent-dialog.tsx`
+- Modify: `frontend/src/components/pipeline/nodes/OrchestratorNode.tsx`
+- Create: `frontend/src/components/pipeline/dialogs/AddAgentDialog.tsx`
 
-**UI:** Click "+" on orchestrator node → dialog:
-- Agent key (slug, auto-generated from label)
-- Label
+**UX:** Orchestrator node shows `[+]` button. Click opens dialog:
+- Label (required)
+- Agent key (auto-slugified from label, editable)
 - Description
-- Execution phase (for research: 1 or 2)
-- Dependencies (multi-select of sibling agents, for Phase 2 context)
+- Execution phase (1 or 2, for research orchestrator only)
 
-**On save:** `POST /admin/ai/agents/:orchestratorId` → creates agent config + auto-creates `aiPromptDefinition` + empty schema draft.
+**On save:** `POST /admin/ai/agent-configs/:orchestratorId` → creates agent config + auto-creates `aiPromptDefinition` + empty schema draft. Invalidate flow query → new node appears on canvas.
 
 ---
 
-### Task 6.2: New agent appears on canvas
+### Task 6.2: Enable/disable toggle on agent nodes
 
-**Steps:**
-1. After successful create, invalidate flow + agent config queries
-2. New node appears under orchestrator with "New" badge
-3. Click to open config panel → admin sets prompt, model, schema
-4. Publish all three revisions (prompt, model, schema) to activate
+**Files:**
+- Modify: `frontend/src/components/pipeline/nodes/AiAgentNode.tsx`
+
+**UX:** Toggle switch on AI agent nodes. Calls `PATCH .../toggle` endpoint. Disabled nodes render with `opacity-50` and dashed border. Canvas re-layouts to show disabled nodes as grayed.
 
 ---
 
 ### Task 6.3: Delete custom agent
 
 **Files:**
-- Modify: `frontend/src/components/pipeline-canvas/panels/agent-config-panel.tsx`
+- Modify: `frontend/src/components/pipeline/NodeConfigSheet.tsx`
 
-**Steps:**
-1. "Delete" button only visible for `isCustom=true` agents
-2. Confirmation dialog
-3. `DELETE /admin/ai/agents/:orch/:key` → removes config, node disappears from canvas
-
----
-
-### Task 6.4: Update flow catalog to include dynamic agents
-
-**Files:**
-- Modify: `backend/src/modules/ai/services/ai-flow-catalog.ts` (or create overlay service)
-- Modify: `backend/src/modules/admin/admin.controller.ts` (flow endpoint)
-
-**Current:** `AI_FLOW_DEFINITIONS` is a static array.
-
-**Target:** The `GET /admin/ai/prompts/flow` endpoint merges static definitions with dynamic agent configs from DB. Custom agents appear as additional nodes under their orchestrator, with edges auto-generated.
-
-**Steps:**
-1. Create `DynamicFlowCatalogService` that reads `AI_FLOW_DEFINITIONS` + overlays `aiAgentConfig` entries
-2. For each enabled custom agent, add a node + edges (from orchestrator → agent, agent → downstream)
-3. For disabled built-in agents, mark node as `enabled: false` (grayed out on canvas)
-4. Return merged flow definition from API
+**UX:** "Delete Agent" button in config sheet footer, only for `isCustom === true` agents. Confirmation dialog. Calls `DELETE` endpoint. Invalidate flow query → node removed.
 
 ---
 
 ## Phase 7: Pipeline Template Versioning
 
-### Task 7.1: Create `pipelineTemplate` entity
+### Why last
+This is insurance — pins config per pipeline run so schema changes don't affect in-flight runs.
+
+### Task 7.1: Snapshot config on pipeline start
 
 **Files:**
-- Create: `backend/src/modules/ai/entities/pipeline-template.entity.ts`
-- Modify: `backend/src/database/schema.ts`
+- Modify: `backend/src/modules/ai/services/pipeline.service.ts`
 
-**Schema:**
+**Current:** `pipelineRun.config` exists as JSONB but stores minimal data.
+
+**Change:** On `startPipeline()`, snapshot the full published config:
 ```typescript
-export const pipelineTemplate = pgTable("pipeline_templates", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  flowId: varchar("flow_id", { length: 50 }).notNull(),
-  version: integer("version").notNull(),
-  status: revisionStatusEnum("status").default("draft").notNull(),
-  snapshot: jsonb("snapshot").notNull(),  // full config snapshot: agents, schemas, prompts, models
-  notes: text("notes"),
-  createdBy: uuid("created_by").references(() => user.id),
-  publishedBy: uuid("published_by").references(() => user.id),
-  publishedAt: timestamp("published_at"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().$onUpdateFn(() => new Date()).notNull(),
-});
+const snapshot = {
+  flowConfig: await this.flowConfigService.getEffectiveConfig(),
+  agentConfigs: await this.agentConfigService.listAllEnabled(),
+  schemaRevisions: await this.schemaRegistry.getAllPublished(),
+  promptRevisions: await this.promptService.getAllPublished(),
+  modelConfigs: await this.modelConfigService.getAllPublished(),
+};
+await this.pipelineState.updateConfig(startupId, snapshot);
 ```
 
-**Steps:**
-1. Create entity, migrate
-2. Modify `PipelineService.startPipeline()` to snapshot current published config into `pipelineRun.config`
-3. At runtime, pipeline reads from snapshot — not live DB config
-4. This ensures old runs are reproducible even after config changes
+**Runtime resolution:** Pipeline processors read from snapshot first, fall back to live DB if snapshot field is missing (backward compat with old runs).
 
 ---
 
 ## Execution Order & Dependencies
 
 ```
-Phase 1 (Schema Registry)
-  ├── 1.1 DB entity ──────┐
-  ├── 1.2 Schema compiler ─┤→ 1.3 Registry service → 1.4 Seeder
-  └────────────────────────┘
+Phase 1 (Schema Registry)          ← Backend, no frontend deps
+  1.1 DB entity
+  1.2 Schema compiler + tests
+  1.3 Registry CRUD service
+  1.4 Seed existing schemas
+  1.5 Admin endpoints + generate:api
 
-Phase 2 (Dynamic Agents)      depends on: Phase 1
-  ├── 2.1 DB entity
-  ├── 2.4 Dynamic runner ──→ 2.2 Eval registry dynamic
-  │                        → 2.3 Research service dynamic
-  └── 2.5 Admin endpoints
+Phase 2 (Dynamic Agents)           ← Depends on Phase 1
+  2.1 DB entity
+  2.2 DynamicAgentRunner
+  2.3 Eval registry dynamic
+  2.4 Research service dynamic
+  2.5 Agent config endpoints + generate:api
+  2.6 Dynamic flow catalog overlay
 
-Phase 3 (ReactFlow Canvas)    depends on: Phase 2.5
-  ├── 3.1 Install ReactFlow
-  ├── 3.2 Data transformer
-  ├── 3.3 Node components ──→ 3.4 Canvas page
-  └── 3.5 Agent config panel
+Phase 3 (Canvas UX Overhaul)       ← Depends on Phase 2.5 + 2.6
+  3.1 Distinct node types (FixedData, AiAgent, Orchestrator)
+  3.2 Undo/redo
+  3.3 Edge styling + data flow labels
+  3.4 Fix config loading bug
+  3.5 Canvas toolbar
 
-Phase 4 (Schema Editor)       depends on: Phase 3.5
-  ├── 4.1 Schema editor component
-  └── 4.2 Preview & validation
+Phase 4 (Schema Editor)            ← Depends on Phase 1.5 + Phase 3
+  4.1 Schema editor component
+  4.2 Integrate into NodeConfigSheet
 
-Phase 5 (Variable Picker)     depends on: Phase 4
-  ├── 5.1 Backend upstream fields endpoint
-  ├── 5.2 Variable picker component
-  └── 5.3 Dynamic variable resolution
+Phase 5 (Variable Picker)          ← Depends on Phase 4
+  5.1 Backend upstream fields endpoint
+  5.2 Variable picker component
+  5.3 Backend dynamic variable resolution
 
-Phase 6 (Agent CRUD)          depends on: Phase 3 + Phase 5
-  ├── 6.1 Add agent dialog
-  ├── 6.2 Canvas integration
-  ├── 6.3 Delete custom agent
-  └── 6.4 Dynamic flow catalog
+Phase 6 (Agent CRUD on Canvas)     ← Depends on Phase 2.5 + Phase 3
+  6.1 Add agent dialog
+  6.2 Enable/disable toggle
+  6.3 Delete custom agent
 
-Phase 7 (Template Versioning) depends on: Phase 2
-  └── 7.1 Pipeline template entity + snapshot
+Phase 7 (Template Versioning)      ← Depends on Phase 2, independent of frontend
+  7.1 Snapshot on pipeline start
 ```
 
-**Parallelizable work:**
-- Phase 1 tasks (1.1–1.4) are sequential
-- Phase 2 tasks: 2.1 + 2.4 can parallel, then 2.2 + 2.3 can parallel
-- Phase 3 tasks: 3.1–3.3 can parallel, 3.4 depends on all three
-- Phase 4 and Phase 7 can run in parallel (different concerns)
-- Phase 5 and Phase 6 depend on Phase 4 but are independent of each other
+**Parallelizable:**
+- Phase 1 (backend) and Phase 3.2-3.5 (canvas UX fixes) can start in parallel — canvas fixes don't need schema registry
+- Phase 4 and Phase 6 are independent of each other
+- Phase 7 is independent of all frontend work
 
 ---
 
 ## Testing Strategy
 
 **Backend:**
-- Unit tests for `SchemaCompilerService` (roundtrip, edge cases, invalid schemas)
-- Unit tests for `AgentSchemaRegistryService` (resolution priority)
-- Integration tests for `DynamicAgentRunnerService` (mock AI SDK, verify schema validation)
-- Integration tests for dynamic `EvaluationAgentRegistryService` (enable/disable agents)
-- E2E: full pipeline run with one disabled agent + one custom agent
+- `schema-compiler.spec.ts`: roundtrip, edge cases, invalid schemas, extractFieldPaths
+- `agent-schema-registry.spec.ts`: resolution priority (stage-specific > global > code)
+- `dynamic-agent-runner.spec.ts`: mock AI SDK, verify schema compilation + validation
+- `evaluation-agent-registry.spec.ts`: enable/disable agents, custom agent execution
+- Integration: full pipeline run with 1 disabled + 1 custom agent
 
 **Frontend:**
-- Component tests for schema editor (add field, nested object, delete, validation)
-- Component tests for variable picker (upstream resolution, search, insertion)
-- Visual regression for node components
-- Integration test: create custom agent → appears on canvas → configure → enable
+- Schema editor: add/remove/reorder fields, nested objects, validation
+- Variable picker: upstream field loading, search, insertion at cursor
+- Node types: verify correct classification and rendering
+- Undo/redo: push → undo → redo cycle
 
 ---
 
@@ -743,8 +806,10 @@ Phase 7 (Template Versioning) depends on: Phase 2
 
 | Risk | Mitigation |
 |------|------------|
-| Schema compiler doesn't handle all Zod features | Start with subset (object, string, number, boolean, array, enum). Add union/optional later. Code schemas still work as fallback. |
+| Schema compiler doesn't handle all Zod features | Start with subset (object, string, number, boolean, array, enum). Code schemas still work as fallback. |
 | Dynamic agents break existing pipeline | `resolveAgents()` falls back to hardcoded list if no DB config exists. Feature flag `AI_DYNAMIC_AGENTS_ENABLED`. |
-| ReactFlow performance with many nodes | ~25 nodes max in current pipeline. Not a concern. |
-| Schema migration breaks running pipelines | Template versioning (Phase 7) pins config at pipeline start time. |
-| Custom agent produces invalid output | Same retry/fallback pattern as built-in agents. Schema validation catches bad output. |
+| Canvas performance | ~25 nodes max. Not a concern. |
+| Schema changes break running pipelines | Phase 7 snapshots config at start. Old runs use snapshot. |
+| Custom agent bad output | Same retry/fallback as built-in agents. Schema validation catches it. |
+| Undo/redo complexity | Only tracks `PhaseConfig[]` changes, not full graph state. Simple history stack. |
+| Existing flow branch code conflicts | Build on top of `origin/flow`, never rewrite working components. |

@@ -15,28 +15,34 @@ export interface SectionScores {
 export interface TeamMemberEvaluation {
   name: string;
   role: string;
+  background?: string;
+  strengths?: string[];
+  concerns?: string[];
+  scrapedCandidate?: boolean;
   linkedinUrl?: string;
+  enrichmentStatus?: "success" | "not_configured" | "not_found" | "error";
   linkedinAnalysis?: {
-    currentPosition: string;
-    company: string;
-    yearsExperience: number;
-    education: string[];
-    previousCompanies: string[];
-    skills: string[];
-    relevantExperience: string;
-    strengthsForRole: string[];
-    potentialConcerns: string[];
-    founderFitScore: number;
+    headline: string;
+    summary: string;
+    profilePictureUrl?: string;
+    currentCompany?: { name: string; title: string } | null;
+    experience: Array<{
+      title: string;
+      company: string;
+      duration: string;
+      location?: string;
+      description?: string;
+      startDate?: string;
+      endDate?: string | null;
+    }>;
+    education: Array<{
+      school: string;
+      degree: string;
+      field: string;
+      startDate?: string | null;
+      endDate?: string | null;
+    }>;
   };
-}
-
-export interface TeamComposition {
-  hasBusinessLeader: boolean;
-  hasTechnicalLeader: boolean;
-  hasIndustryExpert: boolean;
-  hasOperationsLeader?: boolean;
-  teamBalance: string;
-  gapsIdentified: string[];
 }
 
 export interface MemoSection {
@@ -97,31 +103,22 @@ export interface Evaluation {
   // Team
   teamData?: Record<string, unknown>;
   teamMemberEvaluations?: TeamMemberEvaluation[];
+  teamComposition?: Record<string, unknown>;
   teamScore?: number;
-  founderMarketFit?: number;
-  executionRiskNotes?: string;
-  teamComposition?: TeamComposition;
 
   // Market
   marketData?: Record<string, unknown>;
   marketScore?: number;
-  tamValidation?: Record<string, unknown>;
-  marketCredibility?: number;
 
   // Product
   productData?: Record<string, unknown>;
   productScore?: number;
   productSummary?: string;
-  extractedScreenshots?: string[];
-  extractedDemoVideos?: string[];
   extractedFeatures?: string[];
-  extractedTechStack?: string[];
 
   // Traction
   tractionData?: Record<string, unknown>;
   tractionScore?: number;
-  momentumScore?: number;
-  tractionCredibility?: number;
 
   // Business model
   businessModelData?: Record<string, unknown>;

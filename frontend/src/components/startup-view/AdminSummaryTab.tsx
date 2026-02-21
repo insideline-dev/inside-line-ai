@@ -97,7 +97,7 @@ export function AdminSummaryTab({
 }: AdminSummaryTabProps) {
   const score = evaluation?.overallScore ?? startup.overallScore ?? 0;
   const percentile =
-    startup.percentileRank != null ? `Top ${100 - startup.percentileRank}%` : "N/A";
+    startup.percentileRank != null ? `Top ${Math.round(100 - startup.percentileRank)}%` : "N/A";
   const strengths = evaluation?.keyStrengths ?? [];
   const risks = evaluation?.keyRisks ?? [];
   const sectionRows = evaluation ? getSectionRows(evaluation, weights) : [];
@@ -219,7 +219,7 @@ export function AdminSummaryTab({
                   <div className="h-2.5 rounded-full bg-muted">
                     <div className={`h-full rounded-full ${scoreBarClass(row.score)}`} style={{ width: `${row.score}%` }} />
                   </div>
-                  <span className="text-right text-xs font-medium">{row.score}</span>
+                  <span className="text-right text-xs font-medium">{Math.round(row.score)}</span>
                 </div>
               ))}
             </CardContent>

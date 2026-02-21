@@ -68,8 +68,20 @@ describe("SynthesisAgent", () => {
         investmentThesis: "Invest with milestone-based conviction.",
         nextSteps: ["Validate channel scalability"],
         confidenceLevel: "Medium",
-        investorMemo: "Investor memo body",
-        founderReport: "Founder report body",
+        investorMemo: {
+          executiveSummary: "Investor memo body",
+          summary: "Test summary",
+          sections: [],
+          recommendation: "Consider",
+          riskLevel: "medium",
+          dealHighlights: ["Strong team"],
+          keyDueDiligenceAreas: ["Validate GTM"],
+        },
+        founderReport: {
+          summary: "Founder report body",
+          sections: [],
+          actionItems: ["Focus on channel scalability"],
+        },
         dataConfidenceNotes: "Data quality is moderate-high.",
       },
     });
@@ -99,7 +111,7 @@ describe("SynthesisAgent", () => {
     expect(call?.prompt).toContain("Company Overview");
     expect(call?.prompt).toContain("Clipaf");
     expect(output.recommendation).toBe("Consider");
-    expect(output.investorMemo).toContain("Investor memo");
+    expect(output.investorMemo.executiveSummary).toContain("Investor memo");
   });
 
   it("runDetailed captures prompt/output trace fields", async () => {
@@ -113,8 +125,20 @@ describe("SynthesisAgent", () => {
         investmentThesis: "Invest with milestone-based conviction.",
         nextSteps: ["Validate channel scalability"],
         confidenceLevel: "Medium",
-        investorMemo: "Investor memo body",
-        founderReport: "Founder report body",
+        investorMemo: {
+          executiveSummary: "Investor memo body",
+          summary: "Test summary",
+          sections: [],
+          recommendation: "Consider",
+          riskLevel: "medium",
+          dealHighlights: ["Strong team"],
+          keyDueDiligenceAreas: ["Validate GTM"],
+        },
+        founderReport: {
+          summary: "Founder report body",
+          sections: [],
+          actionItems: ["Focus on channel scalability"],
+        },
         dataConfidenceNotes: "Data quality is moderate-high.",
       },
     });
@@ -147,8 +171,20 @@ describe("SynthesisAgent", () => {
         investmentThesis: "Invest if milestones are hit with disciplined execution.",
         nextSteps: ["Validate conversion by channel", "Audit retention cohorts"],
         confidenceLevel: "Medium",
-        investorMemo: "Investor memo body",
-        founderReport: "Founder report body",
+        investorMemo: {
+          executiveSummary: "Investor memo body",
+          summary: "Test summary",
+          sections: [],
+          recommendation: "Consider",
+          riskLevel: "medium",
+          dealHighlights: ["Strong team quality"],
+          keyDueDiligenceAreas: ["Validate GTM repeatability"],
+        },
+        founderReport: {
+          summary: "Founder report body",
+          sections: [],
+          actionItems: ["Validate conversion by channel"],
+        },
         dataConfidenceNotes: "Some sections rely on directional signals.",
       },
     });
@@ -182,8 +218,19 @@ describe("SynthesisAgent", () => {
         investmentThesis: "Thesis",
         nextSteps: ["Step"],
         confidenceLevel: "Medium",
-        investorMemo: "Investor memo",
-        founderReport: "Founder report",
+        investorMemo: {
+          executiveSummary: "Investor memo",
+          sections: [],
+          recommendation: "Consider",
+          riskLevel: "medium",
+          dealHighlights: [],
+          keyDueDiligenceAreas: [],
+        },
+        founderReport: {
+          summary: "Founder report",
+          sections: [],
+          actionItems: [],
+        },
         dataConfidenceNotes: "Confidence note",
       },
     });
@@ -213,8 +260,19 @@ describe("SynthesisAgent", () => {
         investmentThesis: "Thesis",
         nextSteps: ["Step"],
         confidenceLevel: "Medium",
-        investorMemo: "Investor memo",
-        founderReport: "Founder report",
+        investorMemo: {
+          executiveSummary: "Investor memo",
+          sections: [],
+          recommendation: "Consider",
+          riskLevel: "medium",
+          dealHighlights: [],
+          keyDueDiligenceAreas: [],
+        },
+        founderReport: {
+          summary: "Founder report",
+          sections: [],
+          actionItems: [],
+        },
         dataConfidenceNotes: "Confidence note",
       },
     });
@@ -245,8 +303,19 @@ describe("SynthesisAgent", () => {
         investmentThesis: "Thesis",
         nextSteps: ["Step"],
         confidenceLevel: "Medium",
-        investorMemo: "Investor memo",
-        founderReport: "Founder report",
+        investorMemo: {
+          executiveSummary: "Investor memo",
+          sections: [],
+          recommendation: "Consider",
+          riskLevel: "medium",
+          dealHighlights: [],
+          keyDueDiligenceAreas: [],
+        },
+        founderReport: {
+          summary: "Founder report",
+          sections: [],
+          actionItems: [],
+        },
         dataConfidenceNotes: "Confidence note",
       },
     });
@@ -321,8 +390,20 @@ describe("SynthesisAgent", () => {
           investmentThesis: "High potential if execution remains disciplined.",
           nextSteps: ["Validate contribution margin trend"],
           confidenceLevel: "Medium",
-          investorMemo: "Investor memo body",
-          founderReport: "Founder report body",
+          investorMemo: {
+            executiveSummary: "Investor memo body",
+            summary: "Test summary",
+            sections: [],
+            recommendation: "Consider",
+            riskLevel: "medium",
+            dealHighlights: ["Efficient channel mix"],
+            keyDueDiligenceAreas: ["Validate contribution margin"],
+          },
+          founderReport: {
+            summary: "Founder report body",
+            sections: [],
+            actionItems: ["Validate contribution margin trend"],
+          },
           dataConfidenceNotes: "Evidence quality is moderate.",
         },
       });

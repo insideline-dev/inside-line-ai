@@ -271,7 +271,7 @@ describe("ScrapingService", () => {
     );
   });
 
-  it("drops non-success auto-discovered members from final team output", async () => {
+  it("keeps website-discovered members without successful linkedin enrichment", async () => {
     mockDb.limit.mockResolvedValueOnce([
       {
         id: "startup-3",
@@ -330,8 +330,10 @@ describe("ScrapingService", () => {
 
     const result = await service.run("startup-3");
 
-    expect(result.teamMembers).toHaveLength(1);
-    expect(result.teamMembers[0]?.name).toBe("Ismael Belkhayat");
+    // Both members are kept: one via successful enrichment, the other via trusted "website" source
+    expect(result.teamMembers).toHaveLength(2);
+    expect(result.teamMembers.map((m) => m.name)).toContain("Ismael Belkhayat");
+    expect(result.teamMembers.map((m) => m.name)).toContain("Cyrille Jacques");
   });
 
   describe("deck-based team discovery", () => {

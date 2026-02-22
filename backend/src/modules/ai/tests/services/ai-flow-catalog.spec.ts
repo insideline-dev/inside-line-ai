@@ -9,6 +9,7 @@ describe("AI flow catalog", () => {
       "stage_3_research",
       "stage_4_evaluation",
       "stage_5_synthesis",
+      "stage_6_matching",
     ]);
   });
 

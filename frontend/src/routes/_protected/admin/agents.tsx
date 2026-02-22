@@ -544,6 +544,7 @@ function AdminAgentsPage() {
   const [notes, setNotes] = useState("");
   const [modelName, setModelName] = useState("");
   const [searchMode, setSearchMode] = useState<"off" | "provider_grounded_search">("off");
+  const [enableLegacyModelEditing, setEnableLegacyModelEditing] = useState(false);
   const [modelStage, setModelStage] = useState<"global" | StageOption>("global");
   const [modelNotes, setModelNotes] = useState("");
   const [activeEditorTab, setActiveEditorTab] = useState("prompts");
@@ -673,11 +674,15 @@ function AdminAgentsPage() {
       enabled: Boolean(currentPromptKey),
     },
   });
-  const outputSchemaQuery = useAdminControllerGetAiPromptOutputSchema(currentPromptKey ?? "", {
-    query: {
-      enabled: Boolean(currentPromptKey),
+  const outputSchemaQuery = useAdminControllerGetAiPromptOutputSchema(
+    currentPromptKey ?? "",
+    undefined,
+    {
+      query: {
+        enabled: Boolean(currentPromptKey),
+      },
     },
-  });
+  );
 
   const revisionsPayload = useMemo(() => {
     const data = extractResponseData<AiPromptRevisionsResponseDto>(revisionsQuery.data);
@@ -1126,6 +1131,13 @@ function AdminAgentsPage() {
             {seedMutation.isPending ? "Seeding..." : "Seed From Code"}
           </Button>
         </div>
+      </div>
+
+      <div className="rounded-md border border-amber-300/70 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        Primary model and search configuration now lives in
+        {" "}
+        <span className="font-semibold">/admin/flow</span>
+        . This page remains available as an advanced fallback editor.
       </div>
 
       <Tabs
@@ -1640,6 +1652,40 @@ function AdminAgentsPage() {
                         </Card>
                       ) : (
                         <>
+                          <Card className="border-amber-200 bg-amber-50">
+                            <CardContent className="pt-6">
+                              <div className="flex flex-wrap items-center justify-between gap-3">
+                                <div className="space-y-1">
+                                  <p className="text-sm font-medium text-amber-900">
+                                    Primary settings moved to /admin/flow
+                                  </p>
+                                  <p className="text-xs text-amber-900/90">
+                                    Use Flow for day-to-day model/search configuration. Enable this
+                                    editor only for fallback or advanced edits.
+                                  </p>
+                                </div>
+                                <Button
+                                  size="sm"
+                                  variant={enableLegacyModelEditing ? "secondary" : "outline"}
+                                  onClick={() =>
+                                    setEnableLegacyModelEditing((current) => !current)
+                                  }
+                                >
+                                  {enableLegacyModelEditing
+                                    ? "Disable Fallback Editing"
+                                    : "Enable Fallback Editing"}
+                                </Button>
+                              </div>
+                            </CardContent>
+                          </Card>
+
+                          <div
+                            className={`space-y-4 transition-opacity ${
+                              enableLegacyModelEditing
+                                ? "opacity-100"
+                                : "pointer-events-none opacity-50"
+                            }`}
+                          >
                           {modelConfigPayload?.resolved ? (
                             <Card className="border-blue-200 bg-blue-50">
                               <CardContent className="pt-6">
@@ -1790,6 +1836,7 @@ function AdminAgentsPage() {
                               </div>
                             </CardContent>
                           </Card>
+                          </div>
                         </>
                       )}
                     </TabsContent>

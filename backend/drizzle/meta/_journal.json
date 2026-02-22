@@ -134,6 +134,13 @@
       "when": 1771698089657,
       "tag": "0018_demonic_gorgon",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1771781227970,
+      "tag": "0019_wealthy_kate_bishop",
+      "breakpoints": true
     }
   ]
 }

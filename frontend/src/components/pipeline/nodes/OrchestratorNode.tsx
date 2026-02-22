@@ -11,14 +11,14 @@ function OrchestratorNodeComponent({ data, selected }: NodeProps<OrchestratorNod
   return (
     <div
       className={cn(
-        "rounded-lg border border-violet-500 bg-violet-50 px-3 py-2 shadow-sm min-w-[230px] max-w-[250px] cursor-pointer transition-all",
-        selected && "ring-2 ring-violet-500 border-violet-600",
+        "rounded-xl border border-violet-500 bg-violet-50 px-4 py-3 shadow-sm min-w-[260px] max-w-[300px] cursor-pointer transition-all",
+        selected && "ring-2 ring-violet-500 border-violet-600 shadow-lg shadow-violet-500/20",
       )}
     >
       <Handle
         type="target"
         position={Position.Left}
-        className="!w-2 !h-2 !bg-violet-500 !border-2 !border-background"
+        className="!w-3.5 !h-3.5 !bg-violet-500 !border-2 !border-background"
       />
       <div className="flex items-center justify-between gap-2 mb-1">
         <div className="flex items-center gap-2 min-w-0">
@@ -35,7 +35,7 @@ function OrchestratorNodeComponent({ data, selected }: NodeProps<OrchestratorNod
       <Handle
         type="source"
         position={Position.Right}
-        className="!w-2 !h-2 !bg-violet-500 !border-2 !border-background"
+        className="!w-3.5 !h-3.5 !bg-violet-500 !border-2 !border-background"
       />
     </div>
   );

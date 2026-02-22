@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,21 +13,24 @@ import {
   ChevronDown,
   ChevronRight,
   DollarSign,
+  FileText,
   Globe,
   Lightbulb,
   Loader2,
+  RefreshCw,
   Save,
   TrendingUp,
   Wallet,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   useInvestorControllerGetThesis,
   useInvestorControllerGetGeographyTaxonomy,
   useInvestorControllerCreateOrUpdateThesis,
   getInvestorControllerGetThesisQueryKey,
 } from "@/api/generated/investor/investor";
+import { customFetch } from "@/api/client";
 import { industryGroups } from "@/data/industries";
 import {
   buildThesisSavePayload,
@@ -213,6 +216,24 @@ function InvestorThesisPage() {
     setExpandedGeographyNodes((prev) => Array.from(new Set([...prev, ...Array.from(ancestors)])));
   }, [formData.geographicFocusNodes, parentNodeMap, taxonomyNodes.length]);
 
+  const { mutate: generateSummary, isPending: isGenerating } = useMutation({
+    mutationFn: () =>
+      customFetch<Record<string, unknown>>("/investor/thesis/generate-summary", {
+        method: "POST",
+      }),
+    onSuccess: () => {
+      toast.success("Thesis summary generated");
+      queryClient.invalidateQueries({ queryKey: getInvestorControllerGetThesisQueryKey() });
+    },
+    onError: (error: Error) => {
+      toast.error("Failed to generate summary", { description: error.message });
+    },
+  });
+
+  const handleGenerateSummary = useCallback(() => {
+    generateSummary();
+  }, [generateSummary]);
+
   const { mutate: saveThesis, isPending: isSaving } = useInvestorControllerCreateOrUpdateThesis({
     mutation: {
       onSuccess: () => {
@@ -373,6 +394,47 @@ function InvestorThesisPage() {
           Save Changes
         </Button>
       </div>
+
+      {thesis && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Thesis Summary
+                </CardTitle>
+                <CardDescription>
+                  {thesis.thesisSummaryGeneratedAt
+                    ? `Last generated ${new Date(thesis.thesisSummaryGeneratedAt as string).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })}`
+                    : "Generate a readable summary of your investment thesis"}
+                </CardDescription>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={handleGenerateSummary}
+                disabled={isGenerating}
+              >
+                {isGenerating ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
+                {thesis.thesisSummary ? "Regenerate" : "Generate Summary"}
+              </Button>
+            </div>
+          </CardHeader>
+          {typeof thesis.thesisSummary === "string" && thesis.thesisSummary && (
+            <CardContent>
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                {thesis.thesisSummary}
+              </p>
+            </CardContent>
+          )}
+        </Card>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>

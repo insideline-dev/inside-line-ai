@@ -112,20 +112,19 @@ function linkNodePorts(
 
 const PIPELINE_STAGES: AiFlowStageDefinition[] = [
   {
-    id: "stage_1",
-    title: "Stage 1: Hybrid Gap Fill",
-    description: "Run AI + Brave Search to fill missing startup profile fields first.",
-    nodeIds: ["gap_fill_hybrid"],
+    id: "stage_1_extraction",
+    title: "Stage 1: Extraction & Scraping",
+    description: "Parse pitch materials and collect website content.",
+    nodeIds: ["extract_fields", "scrape_website"],
   },
   {
-    id: "stage_2",
-    title: "Stage 2: Data Extraction",
-    description:
-      "Parse pitch materials, scrape the website, and enrich LinkedIn team context.",
-    nodeIds: ["extract_fields", "scrape_website", "linkedin_enrichment"],
+    id: "stage_2_enrichment",
+    title: "Stage 2: Enrichment",
+    description: "Fill missing fields and enrich LinkedIn context.",
+    nodeIds: ["gap_fill_hybrid", "linkedin_enrichment"],
   },
   {
-    id: "stage_3",
+    id: "stage_3_research",
     title: "Stage 3: Deep Research",
     description: "Run specialized research agents in parallel.",
     nodeIds: [
@@ -138,9 +137,9 @@ const PIPELINE_STAGES: AiFlowStageDefinition[] = [
     ],
   },
   {
-    id: "stage_4",
+    id: "stage_4_evaluation",
     title: "Stage 4: Evaluation Pipeline",
-    description: "Run scoring agents and produce final synthesis.",
+    description: "Run scoring agents and compile scorecards.",
     nodeIds: [
       "evaluation_orchestrator",
       "evaluation_team",
@@ -154,12 +153,17 @@ const PIPELINE_STAGES: AiFlowStageDefinition[] = [
       "evaluation_legal",
       "evaluation_deal_terms",
       "evaluation_exit_potential",
-      "synthesis_final",
     ],
   },
   {
-    id: "stage_5",
-    title: "Stage 5: Investor Matching",
+    id: "stage_5_synthesis",
+    title: "Stage 5: Synthesis",
+    description: "Generate the final memo and recommendation.",
+    nodeIds: ["synthesis_final"],
+  },
+  {
+    id: "stage_6_matching",
+    title: "Stage 6: Investor Matching",
     description: "Score fit between startup profile and investor thesis.",
     nodeIds: ["matching_thesis"],
   },
@@ -170,11 +174,13 @@ const PIPELINE_NODES: AiFlowNodeDefinition[] = [
     id: "gap_fill_hybrid",
     label: "Hybrid Gap Fill",
     description: "Use AI synthesis + Brave Search evidence to fill missing startup fields.",
-    kind: "system",
+    kind: "prompt",
     promptKeys: [],
     inputs: [
-      { label: "Startup profile", type: "object" },
-      { label: "Existing company metadata", type: "object" },
+      { label: "Extraction result", type: "object", fromNodeId: "extract_fields" },
+      { label: "Scraping context", type: "object", fromNodeId: "scrape_website" },
+      { label: "Startup profile (DB/form)", type: "object" },
+      { label: "Email context", type: "object" },
       { label: "Brave search results", type: "array" },
     ],
     outputs: [
@@ -231,10 +237,9 @@ const PIPELINE_NODES: AiFlowNodeDefinition[] = [
     kind: "system",
     promptKeys: [],
     inputs: [
-      { label: "Gap fill", type: "object" },
-      { label: "Extraction", type: "object" },
-      { label: "Scraping context", type: "object" },
-      { label: "LinkedIn context", type: "object" },
+      { label: "Gap fill", type: "object", fromNodeId: "gap_fill_hybrid" },
+      { label: "Scraping context", type: "object", fromNodeId: "scrape_website" },
+      { label: "LinkedIn context", type: "object", fromNodeId: "linkedin_enrichment" },
     ],
     outputs: [{ label: "Research phase result", type: "object" }],
   },
@@ -444,14 +449,12 @@ const PIPELINE_NODES: AiFlowNodeDefinition[] = [
 ];
 
 const PIPELINE_EDGES: AiFlowEdgeDefinition[] = [
-  { from: "gap_fill_hybrid", to: "extract_fields" },
-  { from: "gap_fill_hybrid", to: "scrape_website" },
-  { from: "gap_fill_hybrid", to: "linkedin_enrichment" },
-  { from: "gap_fill_hybrid", to: "research_orchestrator" },
-  { from: "extract_fields", to: "research_orchestrator" },
-  { from: "scrape_website", to: "research_orchestrator" },
+  { from: "extract_fields", to: "gap_fill_hybrid" },
+  { from: "scrape_website", to: "gap_fill_hybrid" },
   { from: "extract_fields", to: "linkedin_enrichment" },
   { from: "scrape_website", to: "linkedin_enrichment" },
+  { from: "gap_fill_hybrid", to: "research_orchestrator" },
+  { from: "scrape_website", to: "research_orchestrator" },
   { from: "linkedin_enrichment", to: "research_orchestrator" },
   { from: "research_orchestrator", to: "research_team" },
   { from: "research_orchestrator", to: "research_market" },
@@ -538,21 +541,25 @@ const CLARA_EDGES: AiFlowEdgeDefinition[] = [
   { from: "clara_intent", to: "clara_response" },
 ];
 
+export const PIPELINE_DEFINITION: AiFlowDefinition = {
+  id: "pipeline",
+  name: "Startup Evaluation Pipeline",
+  description: "End-to-end flow from ingestion through matching.",
+  stages: PIPELINE_STAGES,
+  nodes: linkNodePorts(PIPELINE_NODES, PIPELINE_EDGES),
+  edges: PIPELINE_EDGES,
+};
+
+const CLARA_DEFINITION: AiFlowDefinition = {
+  id: "clara",
+  name: "Clara Assistant Flow",
+  description: "Intent classification and response generation for inbound threads.",
+  stages: CLARA_STAGES,
+  nodes: linkNodePorts(CLARA_NODES, CLARA_EDGES),
+  edges: CLARA_EDGES,
+};
+
 export const AI_FLOW_DEFINITIONS: AiFlowDefinition[] = [
-  {
-    id: "pipeline",
-    name: "Startup Evaluation Pipeline",
-    description: "End-to-end flow from ingestion through matching.",
-    stages: PIPELINE_STAGES,
-    nodes: linkNodePorts(PIPELINE_NODES, PIPELINE_EDGES),
-    edges: PIPELINE_EDGES,
-  },
-  {
-    id: "clara",
-    name: "Clara Assistant Flow",
-    description: "Intent classification and response generation for inbound threads.",
-    stages: CLARA_STAGES,
-    nodes: linkNodePorts(CLARA_NODES, CLARA_EDGES),
-    edges: CLARA_EDGES,
-  },
+  PIPELINE_DEFINITION,
+  CLARA_DEFINITION,
 ];

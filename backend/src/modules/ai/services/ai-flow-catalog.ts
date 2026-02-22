@@ -444,7 +444,6 @@ const PIPELINE_EDGES: AiFlowEdgeDefinition[] = [
   { from: "extract_fields", to: "linkedin_enrichment" },
   { from: "scrape_website", to: "linkedin_enrichment" },
   { from: "gap_fill_hybrid", to: "research_orchestrator" },
-  { from: "extract_fields", to: "research_orchestrator" },
   { from: "scrape_website", to: "research_orchestrator" },
   { from: "linkedin_enrichment", to: "research_orchestrator" },
   { from: "research_orchestrator", to: "research_team" },

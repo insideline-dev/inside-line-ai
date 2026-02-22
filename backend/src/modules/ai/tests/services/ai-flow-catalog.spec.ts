@@ -25,6 +25,7 @@ describe("AI flow catalog", () => {
     expect(edgePairs).toContain("scrape_website->gap_fill_hybrid");
     expect(edgePairs).not.toContain("gap_fill_hybrid->extract_fields");
     expect(edgePairs).not.toContain("gap_fill_hybrid->scrape_website");
+    expect(edgePairs).not.toContain("extract_fields->research_orchestrator");
   });
 
   it("explicitly wires gap fill inputs for extraction and scraping", () => {

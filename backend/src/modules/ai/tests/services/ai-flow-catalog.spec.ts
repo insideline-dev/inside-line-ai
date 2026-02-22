@@ -16,4 +16,13 @@ describe("AI flow catalog", () => {
     const node = PIPELINE_DEFINITION.nodes.find((n) => n.id === "gap_fill_hybrid");
     expect(node?.kind).toBe("prompt");
   });
+
+  it("routes extraction and scraping into gap fill enrichment", () => {
+    const edgePairs = PIPELINE_DEFINITION.edges.map((edge) => `${edge.from}->${edge.to}`);
+
+    expect(edgePairs).toContain("extract_fields->gap_fill_hybrid");
+    expect(edgePairs).toContain("scrape_website->gap_fill_hybrid");
+    expect(edgePairs).not.toContain("gap_fill_hybrid->extract_fields");
+    expect(edgePairs).not.toContain("gap_fill_hybrid->scrape_website");
+  });
 });

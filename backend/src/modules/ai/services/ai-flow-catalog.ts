@@ -431,14 +431,13 @@ const PIPELINE_NODES: AiFlowNodeDefinition[] = [
 ];
 
 const PIPELINE_EDGES: AiFlowEdgeDefinition[] = [
-  { from: "gap_fill_hybrid", to: "extract_fields" },
-  { from: "gap_fill_hybrid", to: "scrape_website" },
-  { from: "gap_fill_hybrid", to: "linkedin_enrichment" },
+  { from: "extract_fields", to: "gap_fill_hybrid" },
+  { from: "scrape_website", to: "gap_fill_hybrid" },
+  { from: "extract_fields", to: "linkedin_enrichment" },
+  { from: "scrape_website", to: "linkedin_enrichment" },
   { from: "gap_fill_hybrid", to: "research_orchestrator" },
   { from: "extract_fields", to: "research_orchestrator" },
   { from: "scrape_website", to: "research_orchestrator" },
-  { from: "extract_fields", to: "linkedin_enrichment" },
-  { from: "scrape_website", to: "linkedin_enrichment" },
   { from: "linkedin_enrichment", to: "research_orchestrator" },
   { from: "research_orchestrator", to: "research_team" },
   { from: "research_orchestrator", to: "research_market" },

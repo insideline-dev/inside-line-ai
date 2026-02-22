@@ -1,0 +1,137 @@
+import { Injectable, ServiceUnavailableException } from "@nestjs/common";
+import { google } from "@ai-sdk/google";
+import { openai } from "@ai-sdk/openai";
+import { stepCountIs, tool, type ToolSet, type generateText } from "ai";
+import { z } from "zod";
+import type { StartupStage } from "../../startup/entities/startup.schema";
+import type { AiPromptKey } from "./ai-prompt-catalog";
+import { isResearchPromptKey } from "./ai-runtime-config.schema";
+import {
+  AiModelConfigService,
+  type ResolvedModelConfig,
+} from "./ai-model-config.service";
+import { AiProviderService } from "../providers/ai-provider.service";
+import { BraveSearchService } from "./brave-search.service";
+
+type GenerateTextCall = Parameters<typeof generateText>[0];
+
+export interface ModelExecutionResolution {
+  resolvedConfig: ResolvedModelConfig;
+  generateTextOptions: Pick<
+    GenerateTextCall,
+    "model" | "tools" | "toolChoice" | "stopWhen"
+  >;
+  searchEnforcement: {
+    requiresProviderEvidence: boolean;
+    requiresBraveToolCall: boolean;
+  };
+  usage: {
+    getBraveToolCallCount: () => number;
+  };
+}
+
+@Injectable()
+export class AiModelExecutionService {
+  constructor(
+    private modelConfig: AiModelConfigService,
+    private providers: AiProviderService,
+    private braveSearch: BraveSearchService,
+  ) {}
+
+  async resolveForPrompt(params: {
+    key: AiPromptKey;
+    stage?: StartupStage | string | null;
+    revisionId?: string;
+  }): Promise<ModelExecutionResolution> {
+    const resolvedConfig = await this.modelConfig.resolveConfig(params);
+    const model = this.providers.resolveModel(resolvedConfig.modelName) as GenerateTextCall["model"];
+
+    const isResearchKey = isResearchPromptKey(params.key);
+    const requiresProviderEvidence =
+      isResearchKey &&
+      (resolvedConfig.searchMode === "provider_grounded_search" ||
+        resolvedConfig.searchMode === "provider_and_brave_search");
+    const requiresBraveToolCall =
+      isResearchKey &&
+      (resolvedConfig.searchMode === "brave_tool_search" ||
+        resolvedConfig.searchMode === "provider_and_brave_search");
+
+    if (!requiresProviderEvidence && !requiresBraveToolCall) {
+      return {
+        resolvedConfig,
+        generateTextOptions: {
+          model,
+          tools: undefined,
+          toolChoice: undefined,
+          stopWhen: undefined,
+        },
+        searchEnforcement: {
+          requiresProviderEvidence,
+          requiresBraveToolCall,
+        },
+        usage: {
+          getBraveToolCallCount: () => 0,
+        },
+      };
+    }
+
+    if (requiresBraveToolCall && !this.braveSearch.isConfigured()) {
+      throw new ServiceUnavailableException(
+        "Brave Search API key is not configured",
+      );
+    }
+
+    const braveUsage = { calls: 0 };
+
+    const tools: ToolSet = {};
+    if (requiresProviderEvidence) {
+      if (resolvedConfig.provider === "google") {
+        tools.google_search = google.tools.googleSearch({});
+      } else {
+        tools.web_search = openai.tools.webSearch({});
+      }
+    }
+
+    if (requiresBraveToolCall) {
+      tools.brave_search = tool({
+        description:
+          "Search the public web with Brave Search when researching startups.",
+        inputSchema: z.object({
+          query: z.string().min(2),
+          count: z.number().int().min(1).max(10).optional(),
+        }),
+        execute: async ({ query, count }) => {
+          braveUsage.calls += 1;
+          const result = await this.braveSearch.search(query, { count });
+
+          return {
+            query: result.query,
+            results: result.results.map((item) => ({
+              title: item.title,
+              url: item.url,
+              description: item.description,
+              age: item.age,
+            })),
+          };
+        },
+      });
+    }
+
+    return {
+      resolvedConfig,
+      generateTextOptions: {
+        model,
+        tools,
+        toolChoice: "required",
+        stopWhen: stepCountIs(requiresProviderEvidence && requiresBraveToolCall ? 8 : 6),
+      },
+      searchEnforcement: {
+        requiresProviderEvidence,
+        requiresBraveToolCall,
+      },
+      usage: {
+        getBraveToolCallCount: () => braveUsage.calls,
+      },
+    };
+  }
+}

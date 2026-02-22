@@ -408,8 +408,12 @@ export class AiModelConfigService {
       purpose,
       modelName,
       provider,
-      searchMode: supportedSearchModes.includes("provider_grounded_search")
-        ? "provider_grounded_search"
+      searchMode: supportedSearchModes.includes("provider_and_brave_search")
+        ? "provider_and_brave_search"
+        : supportedSearchModes.includes("provider_grounded_search")
+          ? "provider_grounded_search"
+          : supportedSearchModes.includes("brave_tool_search")
+            ? "brave_tool_search"
         : "off",
       supportedSearchModes,
     };
@@ -419,8 +423,17 @@ export class AiModelConfigService {
     key: AiPromptKey,
     provider: string,
   ): AiRuntimeSearchMode[] {
-    if (isResearchPromptKey(key) && provider === "google") {
-      return ["off", "provider_grounded_search"];
+    if (isResearchPromptKey(key)) {
+      if (provider === "google" || provider === "openai") {
+        return [
+          "off",
+          "provider_grounded_search",
+          "brave_tool_search",
+          "provider_and_brave_search",
+        ];
+      }
+
+      return ["off", "brave_tool_search"];
     }
 
     return ["off"];
@@ -439,16 +452,28 @@ export class AiModelConfigService {
       );
     }
 
-    if (config.searchMode === "provider_grounded_search") {
+    const requiresProviderGroundedSearch =
+      config.searchMode === "provider_grounded_search" ||
+      config.searchMode === "provider_and_brave_search";
+
+    if (requiresProviderGroundedSearch) {
       if (!isResearch) {
         throw new BadRequestException(
-          `Grounded search is only allowed for research prompt keys (${key})`,
+          `Provider grounded search is only allowed for research prompt keys (${key})`,
         );
       }
 
-      if (provider !== "google") {
+      if (provider !== "google" && provider !== "openai") {
         throw new BadRequestException(
-          `Grounded search requires a Gemini model for ${key}`,
+          `Grounded search requires a Gemini or OpenAI model for ${key}`,
+        );
+      }
+    }
+
+    if (config.searchMode === "brave_tool_search") {
+      if (!isResearch) {
+        throw new BadRequestException(
+          `Brave tool search is only allowed for research prompt keys (${key})`,
         );
       }
     }

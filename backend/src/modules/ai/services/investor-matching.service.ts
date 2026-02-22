@@ -5,9 +5,11 @@ import { z } from "zod";
 import { DrizzleService } from "../../../database";
 import type { SynthesisResult } from "../interfaces/phase-results.interface";
 import { AiProviderService } from "../providers/ai-provider.service";
+import { ModelPurpose } from "../interfaces/pipeline.interface";
 import { investorThesis, startupMatch } from "../../investor/entities";
 import { AiPromptService } from "./ai-prompt.service";
 import { AiConfigService } from "./ai-config.service";
+import { AiModelExecutionService } from "./ai-model-execution.service";
 import {
   ScoreComputationService,
   type SectionScores,
@@ -22,7 +24,6 @@ const ThesisFitSchema = z.object({
   thesisFitScore: z.number().int().min(0).max(100),
   fitRationale: z.string().min(1),
 });
-const THESIS_ALIGNMENT_MODEL = "gemini-3-flash-preview";
 
 interface StartupMatchInput {
   startupId: string;
@@ -76,6 +77,7 @@ export class InvestorMatchingService {
     private promptService: AiPromptService,
     private aiConfig: AiConfigService,
     private scoreComputation: ScoreComputationService,
+    private modelExecution?: AiModelExecutionService,
   ) {}
 
   async matchStartup(input: StartupMatchInput): Promise<InvestorMatchingOutput> {
@@ -214,13 +216,23 @@ export class InvestorMatchingService {
         key: "matching.thesis",
         stage: input.startup.stage,
       });
+      const execution = this.modelExecution
+        ? await this.modelExecution.resolveForPrompt({
+            key: "matching.thesis",
+            stage: input.startup.stage,
+          })
+        : null;
 
       const { output } = await generateText({
-        model: this.providers.resolveModel(THESIS_ALIGNMENT_MODEL),
+        model:
+          execution?.generateTextOptions.model ??
+          this.providers.resolveModelForPurpose(ModelPurpose.THESIS_ALIGNMENT),
         output: Output.object({ schema: ThesisFitSchema }),
         temperature: this.aiConfig.getMatchingTemperature(),
         maxOutputTokens: this.aiConfig.getMatchingMaxOutputTokens(),
         system: promptConfig.systemPrompt,
+        tools: execution?.generateTextOptions.tools,
+        toolChoice: execution?.generateTextOptions.toolChoice,
         prompt: this.promptService.renderTemplate(promptConfig.userPrompt, {
           investorThesis:
             candidate.thesisNarrative ?? candidate.notes ?? "No thesis provided",

@@ -4,6 +4,13 @@ import { CheckCircle2, AlertTriangle, ChevronRight, Sparkles } from "lucide-reac
 import type { Startup } from "@/types/startup";
 import type { Evaluation } from "@/types/evaluation";
 import type { ScoringWeights } from "@/lib/score-utils";
+import {
+  getDisplayOverallScore,
+  getDisplayPercentileRank,
+  getDisplayRisks,
+  getDisplaySectionScore,
+  getDisplayStrengths,
+} from "@/lib/evaluation-display";
 
 interface AdminSummaryTabProps {
   startup: Startup;
@@ -52,22 +59,22 @@ function scoreBarClass(score: number): string {
 
 function getSectionRows(evaluation: Evaluation, weights?: ScoringWeights | null): SectionScoreRow[] {
   return [
-    { id: "team", label: "Team", score: evaluation.teamScore ?? 0, weight: weights?.team ?? 0 },
-    { id: "market", label: "Market", score: evaluation.marketScore ?? 0, weight: weights?.market ?? 0 },
-    { id: "product", label: "Product", score: evaluation.productScore ?? 0, weight: weights?.product ?? 0 },
-    { id: "traction", label: "Traction", score: evaluation.tractionScore ?? 0, weight: weights?.traction ?? 0 },
-    { id: "businessModel", label: "Business Model", score: evaluation.businessModelScore ?? 0, weight: weights?.businessModel ?? 0 },
-    { id: "gtm", label: "GTM", score: evaluation.gtmScore ?? 0, weight: weights?.gtm ?? 0 },
+    { id: "team", label: "Team", score: getDisplaySectionScore(evaluation, "team") ?? 0, weight: weights?.team ?? 0 },
+    { id: "market", label: "Market", score: getDisplaySectionScore(evaluation, "market") ?? 0, weight: weights?.market ?? 0 },
+    { id: "product", label: "Product", score: getDisplaySectionScore(evaluation, "product") ?? 0, weight: weights?.product ?? 0 },
+    { id: "traction", label: "Traction", score: getDisplaySectionScore(evaluation, "traction") ?? 0, weight: weights?.traction ?? 0 },
+    { id: "businessModel", label: "Business Model", score: getDisplaySectionScore(evaluation, "businessModel") ?? 0, weight: weights?.businessModel ?? 0 },
+    { id: "gtm", label: "GTM", score: getDisplaySectionScore(evaluation, "gtm") ?? 0, weight: weights?.gtm ?? 0 },
     {
       id: "competitiveAdvantage",
       label: "Competitive Advantage",
-      score: evaluation.competitiveAdvantageScore ?? 0,
+      score: getDisplaySectionScore(evaluation, "competitiveAdvantage") ?? 0,
       weight: weights?.competitiveAdvantage ?? 0,
     },
-    { id: "financials", label: "Financials", score: evaluation.financialsScore ?? 0, weight: weights?.financials ?? 0 },
-    { id: "legal", label: "Legal", score: evaluation.legalScore ?? 0, weight: weights?.legal ?? 0 },
-    { id: "dealTerms", label: "Deal Terms", score: evaluation.dealTermsScore ?? 0, weight: weights?.dealTerms ?? 0 },
-    { id: "exitPotential", label: "Exit Potential", score: evaluation.exitPotentialScore ?? 0, weight: weights?.exitPotential ?? 0 },
+    { id: "financials", label: "Financials", score: getDisplaySectionScore(evaluation, "financials") ?? 0, weight: weights?.financials ?? 0 },
+    { id: "legal", label: "Legal", score: getDisplaySectionScore(evaluation, "legal") ?? 0, weight: weights?.legal ?? 0 },
+    { id: "dealTerms", label: "Deal Terms", score: getDisplaySectionScore(evaluation, "dealTerms") ?? 0, weight: weights?.dealTerms ?? 0 },
+    { id: "exitPotential", label: "Exit Potential", score: getDisplaySectionScore(evaluation, "exitPotential") ?? 0, weight: weights?.exitPotential ?? 0 },
   ];
 }
 
@@ -95,11 +102,12 @@ export function AdminSummaryTab({
   evaluation,
   weights,
 }: AdminSummaryTabProps) {
-  const score = evaluation?.overallScore ?? startup.overallScore ?? 0;
+  const score = getDisplayOverallScore(evaluation, startup.overallScore);
+  const percentileRank = getDisplayPercentileRank(evaluation, startup.percentileRank);
   const percentile =
-    startup.percentileRank != null ? `Top ${Math.round(100 - startup.percentileRank)}%` : "N/A";
-  const strengths = evaluation?.keyStrengths ?? [];
-  const risks = evaluation?.keyRisks ?? [];
+    percentileRank != null ? `Top ${Math.round(100 - percentileRank)}%` : "N/A";
+  const strengths = getDisplayStrengths(evaluation);
+  const risks = getDisplayRisks(evaluation);
   const sectionRows = evaluation ? getSectionRows(evaluation, weights) : [];
   const executiveSummary =
     evaluation?.executiveSummary ||

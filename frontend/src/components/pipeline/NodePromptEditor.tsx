@@ -8,11 +8,22 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   useAdminControllerGetAiPromptRevisions,
   useAdminControllerCreateAiPromptRevision,
   useAdminControllerPublishAiPromptRevision,
   getAdminControllerGetAiPromptRevisionsQueryKey,
 } from "@/api/generated/admin/admin";
+import {
+  CreateAiPromptRevisionDtoStage,
+  type CreateAiPromptRevisionDtoStage as PromptStage,
+} from "@/api/generated/model";
 import {
   VariablePicker,
   type VariablePickerOption,
@@ -25,6 +36,20 @@ interface NodePromptEditorProps {
 }
 
 export function NodePromptEditor({ promptKey, upstreamPaths = [] }: NodePromptEditorProps) {
+  const GLOBAL_STAGE = "global" as const;
+  const STAGE_OPTIONS = [
+    GLOBAL_STAGE,
+    ...Object.values(CreateAiPromptRevisionDtoStage),
+  ] as const;
+
+  const stageLabel = (stage: PromptStage | null) => {
+    if (!stage) return "Global";
+    return stage
+      .split("_")
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
+  };
+
   const queryClient = useQueryClient();
   const systemRef = useRef<HTMLTextAreaElement>(null);
   const userRef = useRef<HTMLTextAreaElement>(null);
@@ -34,27 +59,71 @@ export function NodePromptEditor({ promptKey, upstreamPaths = [] }: NodePromptEd
   const [userPrompt, setUserPrompt] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
   const [variablePickerOpen, setVariablePickerOpen] = useState(false);
+  const [selectedStage, setSelectedStage] = useState<PromptStage | null>(null);
+  const [showAllStages, setShowAllStages] = useState(false);
 
   const { data, isLoading } = useAdminControllerGetAiPromptRevisions(promptKey);
 
-  useEffect(() => {
-    if (!data || systemPrompt !== null) return;
-    const d = (data as unknown as { data: typeof revisions }).data ?? data as unknown as typeof revisions;
-    const published = d?.revisions?.find((r) => r.status === "published");
-    setSystemPrompt(published?.systemPrompt ?? "");
-    setUserPrompt(published?.userPrompt ?? "");
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data]);
-
   const revisions = (data as unknown as {
-    revisions: Array<{ id: string; status: string; systemPrompt: string; userPrompt: string; version: number; notes?: string; createdAt: string; publishedAt?: string }>;
+    revisions: Array<{ id: string; status: string; stage: PromptStage | null; systemPrompt: string; userPrompt: string; version: number; notes?: string; createdAt: string; publishedAt?: string }>;
     definition: { key: string; displayName: string; description: string };
     allowedVariables: string[];
     requiredVariables: string[];
     variableDefinitions: Record<string, { description: string; source: string }>;
   }) ?? null;
 
-  const published = revisions?.revisions?.find((r) => r.status === "published");
+  const resolvePublishedForStage = (
+    revisionList: Array<{ status: string; stage: PromptStage | null; systemPrompt: string; userPrompt: string; version: number }> | undefined,
+    stage: PromptStage | null,
+  ) => {
+    if (!revisionList) return null;
+
+    const stageSpecific =
+      stage === null
+        ? null
+        : revisionList.find(
+            (revision) => revision.status === "published" && revision.stage === stage,
+          );
+    const globalPublished = revisionList.find(
+      (revision) => revision.status === "published" && revision.stage === null,
+    );
+
+    return stageSpecific ?? globalPublished ?? null;
+  };
+
+  const publishedForStage = useMemo(() => {
+    return resolvePublishedForStage(revisions?.revisions, selectedStage);
+  }, [revisions?.revisions, selectedStage]);
+
+  const stageScopedRevisions = useMemo(() => {
+    if (!revisions?.revisions) return [];
+
+    if (selectedStage === null) {
+      return revisions.revisions.filter((revision) => revision.stage === null);
+    }
+
+    return revisions.revisions.filter(
+      (revision) => revision.stage === selectedStage || revision.stage === null,
+    );
+  }, [revisions?.revisions, selectedStage]);
+
+  const visibleRevisions = showAllStages
+    ? (revisions?.revisions ?? [])
+    : stageScopedRevisions;
+
+  useEffect(() => {
+    setSystemPrompt(null);
+    setUserPrompt(null);
+    setIsDirty(false);
+    setSelectedStage(null);
+    setShowAllStages(false);
+  }, [promptKey]);
+
+  useEffect(() => {
+    if (!data || systemPrompt !== null) return;
+    setSystemPrompt(publishedForStage?.systemPrompt ?? "");
+    setUserPrompt(publishedForStage?.userPrompt ?? "");
+  }, [data, publishedForStage, systemPrompt]);
   const allowedVars = revisions?.allowedVariables ?? [];
   const variableDefs = revisions?.variableDefinitions ?? {};
 
@@ -72,13 +141,28 @@ export function NodePromptEditor({ promptKey, upstreamPaths = [] }: NodePromptEd
       description: variableDefs[variableName]?.description,
     }));
 
-    const upstreamOptions = upstreamPaths.map((path) => {
+    const upstreamOptions = upstreamPaths.flatMap((path) => {
       const nodeId = path.split(".")[0] ?? "Upstream";
-      return {
+      const isWholeObject = !path.includes(".");
+      const baseOption: VariablePickerOption = {
         value: path,
         label: `{{${path}}}`,
         group: `Upstream: ${nodeId}`,
+        description: isWholeObject
+          ? "Whole object (compact JSON)"
+          : undefined,
       };
+
+      const prettyOption: VariablePickerOption = {
+        value: `${path}|pretty`,
+        label: `{{${path}|pretty}}`,
+        group: `Upstream: ${nodeId}`,
+        description: isWholeObject
+          ? "Whole object (pretty JSON)"
+          : "Pretty JSON",
+      };
+
+      return [baseOption, prettyOption];
     });
 
     return [...promptOptions, ...upstreamOptions];
@@ -106,7 +190,7 @@ export function NodePromptEditor({ promptKey, upstreamPaths = [] }: NodePromptEd
     try {
       const draft = await createMutation.mutateAsync({
         key: promptKey,
-        data: { systemPrompt, userPrompt },
+        data: { systemPrompt, userPrompt, stage: selectedStage },
       });
       const draftData = (draft as unknown as { data: { id: string } }).data ?? (draft as unknown as { id: string });
       await publishMutation.mutateAsync({ key: promptKey, revisionId: draftData.id });
@@ -165,20 +249,51 @@ export function NodePromptEditor({ promptKey, upstreamPaths = [] }: NodePromptEd
       {/* Source badge */}
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <span>Source:</span>
-        {published ? (
+        {publishedForStage ? (
           <Badge variant="secondary" className="text-xs">
-            database · v{published.version}
+            database · v{publishedForStage.version}
           </Badge>
         ) : (
           <Badge variant="outline" className="text-xs text-amber-600 border-amber-400">
             code fallback
           </Badge>
         )}
+        <Badge variant="outline" className="text-xs">
+          stage: {stageLabel(selectedStage)}
+        </Badge>
         {isDirty && (
           <Badge variant="outline" className="text-xs text-amber-600 border-amber-400">
             unsaved changes
           </Badge>
         )}
+      </div>
+
+      <div className="space-y-1.5">
+        <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+          Prompt Stage
+        </Label>
+        <Select
+          value={selectedStage ?? GLOBAL_STAGE}
+          onValueChange={(value) => {
+            const nextStage = value === GLOBAL_STAGE ? null : (value as PromptStage);
+            setSelectedStage(nextStage);
+            const nextPublished = resolvePublishedForStage(revisions?.revisions, nextStage);
+            setSystemPrompt(nextPublished?.systemPrompt ?? "");
+            setUserPrompt(nextPublished?.userPrompt ?? "");
+            setIsDirty(false);
+          }}
+        >
+          <SelectTrigger className="h-8 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {STAGE_OPTIONS.map((stageOption) => (
+              <SelectItem key={stageOption} value={stageOption} className="text-xs">
+                {stageOption === GLOBAL_STAGE ? "Global" : stageLabel(stageOption)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {/* System Prompt */}
@@ -271,8 +386,8 @@ export function NodePromptEditor({ promptKey, upstreamPaths = [] }: NodePromptEd
             size="sm"
             className="h-8 text-xs"
             onClick={() => {
-              setSystemPrompt(published?.systemPrompt ?? "");
-              setUserPrompt(published?.userPrompt ?? "");
+              setSystemPrompt(publishedForStage?.systemPrompt ?? "");
+              setUserPrompt(publishedForStage?.userPrompt ?? "");
               setIsDirty(false);
             }}
           >
@@ -303,13 +418,28 @@ export function NodePromptEditor({ promptKey, upstreamPaths = [] }: NodePromptEd
             onClick={() => setShowHistory((h) => !h)}
           >
             <Clock className="h-3.5 w-3.5" />
-            Revision history ({revisions.revisions.length})
+            Revision history ({visibleRevisions.length})
             {showHistory ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
           </button>
 
           {showHistory && (
-            <div className="space-y-1.5 max-h-[200px] overflow-y-auto pr-1">
-              {revisions.revisions.map((rev) => (
+            <>
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] text-muted-foreground">
+                  Viewing {showAllStages ? "all stages" : `${stageLabel(selectedStage)} + Global fallback`}
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-[11px]"
+                  onClick={() => setShowAllStages((value) => !value)}
+                >
+                  {showAllStages ? "Show stage scope" : "Show all stages"}
+                </Button>
+              </div>
+              <div className="space-y-1.5 max-h-[260px] overflow-y-auto pr-1">
+              {visibleRevisions.map((rev) => (
                 <div
                   key={rev.id}
                   className="flex items-center justify-between rounded border p-2 text-xs gap-2"
@@ -322,26 +452,28 @@ export function NodePromptEditor({ promptKey, upstreamPaths = [] }: NodePromptEd
                       {rev.status}
                     </Badge>
                     <span className="font-mono text-muted-foreground">v{rev.version}</span>
+                    <Badge variant="outline" className="text-[10px] shrink-0">
+                      {stageLabel(rev.stage)}
+                    </Badge>
                     <span className="text-muted-foreground truncate">
                       {new Date(rev.createdAt).toLocaleDateString()}
                     </span>
                   </div>
-                  {rev.status === "archived" && (
-                    <button
-                      type="button"
-                      className="text-xs text-primary hover:underline shrink-0"
-                      onClick={() => {
-                        setSystemPrompt(rev.systemPrompt);
-                        setUserPrompt(rev.userPrompt);
-                        setIsDirty(true);
-                      }}
-                    >
-                      Restore
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    className="text-xs text-primary hover:underline shrink-0"
+                    onClick={() => {
+                      setSystemPrompt(rev.systemPrompt);
+                      setUserPrompt(rev.userPrompt);
+                      setIsDirty(true);
+                    }}
+                  >
+                    Load
+                  </button>
                 </div>
               ))}
-            </div>
+              </div>
+            </>
           )}
         </div>
       )}

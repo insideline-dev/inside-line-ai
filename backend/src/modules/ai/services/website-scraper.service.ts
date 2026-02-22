@@ -73,19 +73,22 @@ export class WebsiteScraperService {
     return clamped;
   }
 
-  private async fetchHtmlViaCrawl4ai(urls: string[]): Promise<Map<string, string>> {
-    const htmlMap = new Map<string, string>();
-    if (!this.crawl4ai?.isConfigured()) return htmlMap;
+  private async fetchHtmlViaCrawl4ai(urls: string[]): Promise<Map<string, { html: string; markdown: string }>> {
+    const resultMap = new Map<string, { html: string; markdown: string }>();
+    if (!this.crawl4ai?.isConfigured()) return resultMap;
 
     const results = await this.crawl4ai.crawl(urls);
     for (const result of results) {
-      if (result.success && result.html) {
-        htmlMap.set(result.url, result.html);
+      if (result.success && (result.cleanedHtml || result.html)) {
+        resultMap.set(result.url, {
+          html: result.cleanedHtml || result.html,
+          markdown: result.markdown || "",
+        });
       } else if (!result.success) {
         this.logger.debug(`[Crawl4AI] Failed for ${result.url}: ${result.errorMessage}`);
       }
     }
-    return htmlMap;
+    return resultMap;
   }
 
   async deepScrape(url: string): Promise<WebsiteScrapedData> {
@@ -93,11 +96,11 @@ export class WebsiteScraperService {
     this.logger.log(`[Scrape] Starting deep scrape for ${homepageUrl}`);
 
     let homepage: ScrapedPage;
-    const crawl4aiHtml = await this.fetchHtmlViaCrawl4ai([homepageUrl]);
-    const homepageHtml = crawl4aiHtml.get(homepageUrl);
+    const crawl4aiResults = await this.fetchHtmlViaCrawl4ai([homepageUrl]);
+    const homepageCrawl = crawl4aiResults.get(homepageUrl);
 
-    if (homepageHtml) {
-      homepage = this.parseHtml(homepageUrl, homepageHtml);
+    if (homepageCrawl) {
+      homepage = this.parseHtml(homepageUrl, homepageCrawl.html, homepageCrawl.markdown);
       this.logger.log("[Scrape] Homepage scraped via Crawl4AI");
     } else {
       homepage = await this.fetchAndParsePage(homepageUrl);
@@ -244,13 +247,13 @@ export class WebsiteScraperService {
     let fetchCount = 0;
 
     // Try Crawl4AI for all URLs first
-    const crawl4aiHtml = await this.fetchHtmlViaCrawl4ai(urls);
+    const crawl4aiResults = await this.fetchHtmlViaCrawl4ai(urls);
     const fallbackUrls: string[] = [];
 
     for (const url of urls) {
-      const html = crawl4aiHtml.get(url);
-      if (html) {
-        pages.push(this.parseHtml(url, html));
+      const crawlResult = crawl4aiResults.get(url);
+      if (crawlResult) {
+        pages.push(this.parseHtml(url, crawlResult.html, crawlResult.markdown));
         crawl4aiCount++;
       } else {
         fallbackUrls.push(url);
@@ -293,7 +296,7 @@ export class WebsiteScraperService {
     return pages;
   }
 
-  private parseHtml(pageUrl: string, html: string): ScrapedPage {
+  private parseHtml(pageUrl: string, html: string, markdown?: string): ScrapedPage {
     const $ = cheerio.load(html);
 
     const title =
@@ -321,9 +324,16 @@ export class WebsiteScraperService {
       .filter((entry): entry is { url: string; text: string } => Boolean(entry))
       .slice(0, this.maxLinksPerPage);
 
-    const bodyTextRoot = $("body").clone();
-    bodyTextRoot.find("script, style, noscript, template").remove();
-    const content = bodyTextRoot.text().replace(/\s+/g, " ").trim();
+    // Prefer Crawl4AI markdown for content (better for JS-rendered pages),
+    // fall back to extracting text from HTML body
+    let content: string;
+    if (markdown) {
+      content = markdown.trim();
+    } else {
+      const bodyTextRoot = $("body").clone();
+      bodyTextRoot.find("script, style, noscript, template").remove();
+      content = bodyTextRoot.text().replace(/\s+/g, " ").trim();
+    }
 
     const page: ScrapedPage = {
       url: this.normalizeUrl(pageUrl, pageUrl.endsWith("/")),

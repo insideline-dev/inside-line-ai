@@ -15,7 +15,7 @@ import {
   BadRequestException,
   ParseUUIDPipe,
 } from '@nestjs/common';
-import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import { z } from 'zod';
@@ -79,8 +79,9 @@ import {
   AiPromptOutputSchemaResponseDto,
   CreateAiSchemaRevisionDto,
   UpdateAiSchemaRevisionDto,
-  AiSchemaRevisionsResponseDto,
-  AiSchemaRevisionResponseDto,
+   AiSchemaRevisionsResponseDto,
+   AiSchemaRevisionResponseDto,
+   AiResolvedSchemaResponseDto,
   CreateAiAgentConfigDto,
   UpdateAiAgentConfigDto,
   AiAgentConfigResponseDto,
@@ -453,6 +454,38 @@ export class AdminController {
     return this.agentSchemaRegistryService.listRevisionsByKey(promptKey);
   }
 
+  @Get('ai-prompts/:key/schema-resolved')
+  @ApiOperation({ summary: "Resolve runtime schema descriptor for prompt key" })
+  @ApiQuery({
+    name: 'stage',
+    required: false,
+    type: String,
+    description: 'Optional startup stage override',
+  })
+  @ApiResponse({ status: 200, type: AiResolvedSchemaResponseDto })
+  async getAiSchemaResolved(
+    @Param('key') key: string,
+    @Query('stage') stage?: string,
+  ) {
+    return this.agentSchemaRegistryService.resolveDescriptorWithSource(key, stage);
+  }
+
+  @Get('ai-resolved-schemas/:promptKey')
+  @ApiOperation({ summary: "Resolve runtime schema descriptor for prompt key" })
+  @ApiQuery({
+    name: 'stage',
+    required: false,
+    type: String,
+    description: 'Optional startup stage override',
+  })
+  @ApiResponse({ status: 200, type: AiResolvedSchemaResponseDto })
+  async getAiSchemaResolvedAlias(
+    @Param('promptKey') promptKey: string,
+    @Query('stage') stage?: string,
+  ) {
+    return this.agentSchemaRegistryService.resolveDescriptorWithSource(promptKey, stage);
+  }
+
   @Post('ai-prompts/:key/schema-revisions')
   @ApiOperation({ summary: "Create schema draft revision" })
   @ApiResponse({ status: 201, type: AiSchemaRevisionResponseDto })
@@ -681,24 +714,30 @@ export class AdminController {
 
     for (const upstreamNodeId of upstream) {
       const node = nodeById.get(upstreamNodeId);
-      if (!node || !node.promptKeys || node.promptKeys.length === 0) {
+      if (!node) {
         continue;
       }
 
       const fields = new Set<string>();
-      for (const promptKey of node.promptKeys) {
-        try {
-          const descriptor = await this.agentSchemaRegistryService.resolveDescriptor(
-            promptKey,
-          );
-          const paths = this.schemaCompilerService.extractFieldPaths(descriptor);
-          for (const path of paths) {
-            fields.add(`${upstreamNodeId}.${path}`);
+
+      if (node.promptKeys && node.promptKeys.length > 0) {
+        for (const promptKey of node.promptKeys) {
+          try {
+            const descriptor = await this.agentSchemaRegistryService.resolveDescriptor(
+              promptKey,
+            );
+            const paths = this.schemaCompilerService.extractFieldPaths(descriptor);
+            for (const path of paths) {
+              fields.add(`${upstreamNodeId}.${path}`);
+            }
+          } catch {
+            // Keep root node token fallback
           }
-        } catch {
-          // Skip nodes without resolvable schema revisions
         }
       }
+
+      // Always include full object token for direct JSON insertion.
+      fields.add(upstreamNodeId);
 
       if (fields.size === 0) {
         continue;
@@ -762,17 +801,33 @@ export class AdminController {
 
   @Get('ai-prompts/:key/output-schema')
   @ApiOperation({ summary: "Get output JSON schema for a prompt key" })
+  @ApiQuery({
+    name: 'stage',
+    required: false,
+    type: String,
+    description: 'Optional startup stage override',
+  })
   @ApiResponse({ status: 200, type: AiPromptOutputSchemaResponseDto })
-  async getAiPromptOutputSchema(@Param('key') key: string) {
-    const zodSchema = this.resolveOutputSchemaForKey(key);
-    if (!zodSchema) {
-      throw new BadRequestException(`No output schema found for key: ${key}`);
-    }
+  async getAiPromptOutputSchema(
+    @Param('key') key: string,
+    @Query('stage') stage?: string,
+  ) {
+    const resolved = await this.agentSchemaRegistryService.resolveDescriptorWithSource(
+      key,
+      stage,
+    );
+    const zodSchema = this.schemaCompilerService.compile(resolved.schemaJson);
 
     return {
       key,
+      stage: resolved.stage,
+      source: resolved.source,
+      schemaJson: resolved.schemaJson,
       jsonSchema: z.toJSONSchema(zodSchema),
-      note: 'Schema defined in code. Editable schema config coming in a future update.',
+      note:
+        resolved.source === 'published'
+          ? 'Schema resolved from published revision.'
+          : 'Schema resolved from code fallback (no published revision for this stage).',
     };
   }
 

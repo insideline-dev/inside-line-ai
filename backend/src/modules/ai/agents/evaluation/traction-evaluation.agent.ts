@@ -8,6 +8,7 @@ import type {
 import { TractionEvaluationSchema, type TractionEvaluation } from "../../schemas";
 import { AiConfigService } from "../../services/ai-config.service";
 import { AiPromptService } from "../../services/ai-prompt.service";
+import { AiModelExecutionService } from "../../services/ai-model-execution.service";
 import { AiProviderService } from "../../providers/ai-provider.service";
 import { BaseEvaluationAgent } from "./base-evaluation.agent";
 import { baseEvaluation } from "./evaluation-utils";
@@ -19,8 +20,13 @@ export class TractionEvaluationAgent extends BaseEvaluationAgent<TractionEvaluat
   protected readonly systemPrompt =
     "You are a startup investment analyst evaluating traction, growth signals, and KPI credibility.";
 
-  constructor(providers: AiProviderService, aiConfig: AiConfigService, promptService: AiPromptService) {
-    super(providers, aiConfig, promptService);
+  constructor(
+    providers: AiProviderService,
+    aiConfig: AiConfigService,
+    promptService: AiPromptService,
+    modelExecution?: AiModelExecutionService,
+  ) {
+    super(providers, aiConfig, promptService, modelExecution);
   }
 
   async run(

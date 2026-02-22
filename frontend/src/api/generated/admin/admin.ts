@@ -28,6 +28,9 @@ import type {
   AdminControllerBulkExportStartupsParams,
   AdminControllerExportStartupsParams,
   AdminControllerExportUsersParams,
+  AdminControllerGetAiPromptOutputSchemaParams,
+  AdminControllerGetAiSchemaResolvedAliasParams,
+  AdminControllerGetAiSchemaResolvedParams,
   AdminControllerGetAllStartupsParams,
   AdminControllerGetPendingStartupsParams,
   AdminControllerGetStartupStatsParams,
@@ -45,6 +48,7 @@ import type {
   AiPromptRevisionResponseDto,
   AiPromptRevisionsResponseDto,
   AiPromptSeedResultDto,
+  AiResolvedSchemaResponseDto,
   AiSchemaRevisionResponseDto,
   AiSchemaRevisionsResponseDto,
   CreateAiAgentConfigDto,
@@ -4009,6 +4013,256 @@ export const useAdminControllerCreateAiSchemaRevisionAlias = <TError = ErrorType
       return useMutation(getAdminControllerCreateAiSchemaRevisionAliasMutationOptions(options), queryClient);
     }
     /**
+ * @summary Resolve runtime schema descriptor for prompt key
+ */
+export type adminControllerGetAiSchemaResolvedResponse200 = {
+  data: AiResolvedSchemaResponseDto
+  status: 200
+}
+    
+export type adminControllerGetAiSchemaResolvedResponseSuccess = (adminControllerGetAiSchemaResolvedResponse200) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerGetAiSchemaResolvedResponse = (adminControllerGetAiSchemaResolvedResponseSuccess)
+
+export const getAdminControllerGetAiSchemaResolvedUrl = (key: string,
+    params?: AdminControllerGetAiSchemaResolvedParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/admin/ai-prompts/${key}/schema-resolved?${stringifiedParams}` : `/admin/ai-prompts/${key}/schema-resolved`
+}
+
+export const adminControllerGetAiSchemaResolved = async (key: string,
+    params?: AdminControllerGetAiSchemaResolvedParams, options?: RequestInit): Promise<adminControllerGetAiSchemaResolvedResponse> => {
+  
+  return customFetch<adminControllerGetAiSchemaResolvedResponse>(getAdminControllerGetAiSchemaResolvedUrl(key,params),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getAdminControllerGetAiSchemaResolvedQueryKey = (key: string,
+    params?: AdminControllerGetAiSchemaResolvedParams,) => {
+    return [
+    `/admin/ai-prompts/${key}/schema-resolved`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+    
+export const getAdminControllerGetAiSchemaResolvedQueryOptions = <TData = Awaited<ReturnType<typeof adminControllerGetAiSchemaResolved>>, TError = ErrorType<unknown>>(key: string,
+    params?: AdminControllerGetAiSchemaResolvedParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiSchemaResolved>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAdminControllerGetAiSchemaResolvedQueryKey(key,params);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof adminControllerGetAiSchemaResolved>>> = ({ signal }) => adminControllerGetAiSchemaResolved(key,params, { signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(key), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiSchemaResolved>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type AdminControllerGetAiSchemaResolvedQueryResult = NonNullable<Awaited<ReturnType<typeof adminControllerGetAiSchemaResolved>>>
+export type AdminControllerGetAiSchemaResolvedQueryError = ErrorType<unknown>
+
+
+export function useAdminControllerGetAiSchemaResolved<TData = Awaited<ReturnType<typeof adminControllerGetAiSchemaResolved>>, TError = ErrorType<unknown>>(
+ key: string,
+    params: undefined |  AdminControllerGetAiSchemaResolvedParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiSchemaResolved>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof adminControllerGetAiSchemaResolved>>,
+          TError,
+          Awaited<ReturnType<typeof adminControllerGetAiSchemaResolved>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAdminControllerGetAiSchemaResolved<TData = Awaited<ReturnType<typeof adminControllerGetAiSchemaResolved>>, TError = ErrorType<unknown>>(
+ key: string,
+    params?: AdminControllerGetAiSchemaResolvedParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiSchemaResolved>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof adminControllerGetAiSchemaResolved>>,
+          TError,
+          Awaited<ReturnType<typeof adminControllerGetAiSchemaResolved>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAdminControllerGetAiSchemaResolved<TData = Awaited<ReturnType<typeof adminControllerGetAiSchemaResolved>>, TError = ErrorType<unknown>>(
+ key: string,
+    params?: AdminControllerGetAiSchemaResolvedParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiSchemaResolved>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Resolve runtime schema descriptor for prompt key
+ */
+
+export function useAdminControllerGetAiSchemaResolved<TData = Awaited<ReturnType<typeof adminControllerGetAiSchemaResolved>>, TError = ErrorType<unknown>>(
+ key: string,
+    params?: AdminControllerGetAiSchemaResolvedParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiSchemaResolved>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getAdminControllerGetAiSchemaResolvedQueryOptions(key,params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+/**
+ * @summary Resolve runtime schema descriptor for prompt key
+ */
+export type adminControllerGetAiSchemaResolvedAliasResponse200 = {
+  data: AiResolvedSchemaResponseDto
+  status: 200
+}
+    
+export type adminControllerGetAiSchemaResolvedAliasResponseSuccess = (adminControllerGetAiSchemaResolvedAliasResponse200) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerGetAiSchemaResolvedAliasResponse = (adminControllerGetAiSchemaResolvedAliasResponseSuccess)
+
+export const getAdminControllerGetAiSchemaResolvedAliasUrl = (promptKey: string,
+    params?: AdminControllerGetAiSchemaResolvedAliasParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/admin/ai-resolved-schemas/${promptKey}?${stringifiedParams}` : `/admin/ai-resolved-schemas/${promptKey}`
+}
+
+export const adminControllerGetAiSchemaResolvedAlias = async (promptKey: string,
+    params?: AdminControllerGetAiSchemaResolvedAliasParams, options?: RequestInit): Promise<adminControllerGetAiSchemaResolvedAliasResponse> => {
+  
+  return customFetch<adminControllerGetAiSchemaResolvedAliasResponse>(getAdminControllerGetAiSchemaResolvedAliasUrl(promptKey,params),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getAdminControllerGetAiSchemaResolvedAliasQueryKey = (promptKey: string,
+    params?: AdminControllerGetAiSchemaResolvedAliasParams,) => {
+    return [
+    `/admin/ai-resolved-schemas/${promptKey}`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+    
+export const getAdminControllerGetAiSchemaResolvedAliasQueryOptions = <TData = Awaited<ReturnType<typeof adminControllerGetAiSchemaResolvedAlias>>, TError = ErrorType<unknown>>(promptKey: string,
+    params?: AdminControllerGetAiSchemaResolvedAliasParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiSchemaResolvedAlias>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAdminControllerGetAiSchemaResolvedAliasQueryKey(promptKey,params);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof adminControllerGetAiSchemaResolvedAlias>>> = ({ signal }) => adminControllerGetAiSchemaResolvedAlias(promptKey,params, { signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(promptKey), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiSchemaResolvedAlias>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type AdminControllerGetAiSchemaResolvedAliasQueryResult = NonNullable<Awaited<ReturnType<typeof adminControllerGetAiSchemaResolvedAlias>>>
+export type AdminControllerGetAiSchemaResolvedAliasQueryError = ErrorType<unknown>
+
+
+export function useAdminControllerGetAiSchemaResolvedAlias<TData = Awaited<ReturnType<typeof adminControllerGetAiSchemaResolvedAlias>>, TError = ErrorType<unknown>>(
+ promptKey: string,
+    params: undefined |  AdminControllerGetAiSchemaResolvedAliasParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiSchemaResolvedAlias>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof adminControllerGetAiSchemaResolvedAlias>>,
+          TError,
+          Awaited<ReturnType<typeof adminControllerGetAiSchemaResolvedAlias>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAdminControllerGetAiSchemaResolvedAlias<TData = Awaited<ReturnType<typeof adminControllerGetAiSchemaResolvedAlias>>, TError = ErrorType<unknown>>(
+ promptKey: string,
+    params?: AdminControllerGetAiSchemaResolvedAliasParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiSchemaResolvedAlias>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof adminControllerGetAiSchemaResolvedAlias>>,
+          TError,
+          Awaited<ReturnType<typeof adminControllerGetAiSchemaResolvedAlias>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAdminControllerGetAiSchemaResolvedAlias<TData = Awaited<ReturnType<typeof adminControllerGetAiSchemaResolvedAlias>>, TError = ErrorType<unknown>>(
+ promptKey: string,
+    params?: AdminControllerGetAiSchemaResolvedAliasParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiSchemaResolvedAlias>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Resolve runtime schema descriptor for prompt key
+ */
+
+export function useAdminControllerGetAiSchemaResolvedAlias<TData = Awaited<ReturnType<typeof adminControllerGetAiSchemaResolvedAlias>>, TError = ErrorType<unknown>>(
+ promptKey: string,
+    params?: AdminControllerGetAiSchemaResolvedAliasParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiSchemaResolvedAlias>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getAdminControllerGetAiSchemaResolvedAliasQueryOptions(promptKey,params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+/**
  * @summary Update schema draft revision
  */
 export type adminControllerUpdateAiSchemaRevisionResponse200 = {
@@ -5828,17 +6082,26 @@ export type adminControllerGetAiPromptOutputSchemaResponseSuccess = (adminContro
 
 export type adminControllerGetAiPromptOutputSchemaResponse = (adminControllerGetAiPromptOutputSchemaResponseSuccess)
 
-export const getAdminControllerGetAiPromptOutputSchemaUrl = (key: string,) => {
+export const getAdminControllerGetAiPromptOutputSchemaUrl = (key: string,
+    params?: AdminControllerGetAiPromptOutputSchemaParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
+    
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
 
-  
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/admin/ai-prompts/${key}/output-schema`
+  return stringifiedParams.length > 0 ? `/admin/ai-prompts/${key}/output-schema?${stringifiedParams}` : `/admin/ai-prompts/${key}/output-schema`
 }
 
-export const adminControllerGetAiPromptOutputSchema = async (key: string, options?: RequestInit): Promise<adminControllerGetAiPromptOutputSchemaResponse> => {
+export const adminControllerGetAiPromptOutputSchema = async (key: string,
+    params?: AdminControllerGetAiPromptOutputSchemaParams, options?: RequestInit): Promise<adminControllerGetAiPromptOutputSchemaResponse> => {
   
-  return customFetch<adminControllerGetAiPromptOutputSchemaResponse>(getAdminControllerGetAiPromptOutputSchemaUrl(key),
+  return customFetch<adminControllerGetAiPromptOutputSchemaResponse>(getAdminControllerGetAiPromptOutputSchemaUrl(key,params),
   {      
     ...options,
     method: 'GET'
@@ -5851,23 +6114,25 @@ export const adminControllerGetAiPromptOutputSchema = async (key: string, option
 
 
 
-export const getAdminControllerGetAiPromptOutputSchemaQueryKey = (key: string,) => {
+export const getAdminControllerGetAiPromptOutputSchemaQueryKey = (key: string,
+    params?: AdminControllerGetAiPromptOutputSchemaParams,) => {
     return [
-    `/admin/ai-prompts/${key}/output-schema`
+    `/admin/ai-prompts/${key}/output-schema`, ...(params ? [params] : [])
     ] as const;
     }
 
     
-export const getAdminControllerGetAiPromptOutputSchemaQueryOptions = <TData = Awaited<ReturnType<typeof adminControllerGetAiPromptOutputSchema>>, TError = ErrorType<unknown>>(key: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiPromptOutputSchema>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+export const getAdminControllerGetAiPromptOutputSchemaQueryOptions = <TData = Awaited<ReturnType<typeof adminControllerGetAiPromptOutputSchema>>, TError = ErrorType<unknown>>(key: string,
+    params?: AdminControllerGetAiPromptOutputSchemaParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiPromptOutputSchema>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getAdminControllerGetAiPromptOutputSchemaQueryKey(key);
+  const queryKey =  queryOptions?.queryKey ?? getAdminControllerGetAiPromptOutputSchemaQueryKey(key,params);
 
   
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof adminControllerGetAiPromptOutputSchema>>> = ({ signal }) => adminControllerGetAiPromptOutputSchema(key, { signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof adminControllerGetAiPromptOutputSchema>>> = ({ signal }) => adminControllerGetAiPromptOutputSchema(key,params, { signal, ...requestOptions });
 
       
 
@@ -5881,7 +6146,8 @@ export type AdminControllerGetAiPromptOutputSchemaQueryError = ErrorType<unknown
 
 
 export function useAdminControllerGetAiPromptOutputSchema<TData = Awaited<ReturnType<typeof adminControllerGetAiPromptOutputSchema>>, TError = ErrorType<unknown>>(
- key: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiPromptOutputSchema>>, TError, TData>> & Pick<
+ key: string,
+    params: undefined |  AdminControllerGetAiPromptOutputSchemaParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiPromptOutputSchema>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof adminControllerGetAiPromptOutputSchema>>,
           TError,
@@ -5891,7 +6157,8 @@ export function useAdminControllerGetAiPromptOutputSchema<TData = Awaited<Return
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function useAdminControllerGetAiPromptOutputSchema<TData = Awaited<ReturnType<typeof adminControllerGetAiPromptOutputSchema>>, TError = ErrorType<unknown>>(
- key: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiPromptOutputSchema>>, TError, TData>> & Pick<
+ key: string,
+    params?: AdminControllerGetAiPromptOutputSchemaParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiPromptOutputSchema>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof adminControllerGetAiPromptOutputSchema>>,
           TError,
@@ -5901,7 +6168,8 @@ export function useAdminControllerGetAiPromptOutputSchema<TData = Awaited<Return
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function useAdminControllerGetAiPromptOutputSchema<TData = Awaited<ReturnType<typeof adminControllerGetAiPromptOutputSchema>>, TError = ErrorType<unknown>>(
- key: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiPromptOutputSchema>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ key: string,
+    params?: AdminControllerGetAiPromptOutputSchemaParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiPromptOutputSchema>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 /**
@@ -5909,11 +6177,12 @@ export function useAdminControllerGetAiPromptOutputSchema<TData = Awaited<Return
  */
 
 export function useAdminControllerGetAiPromptOutputSchema<TData = Awaited<ReturnType<typeof adminControllerGetAiPromptOutputSchema>>, TError = ErrorType<unknown>>(
- key: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiPromptOutputSchema>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ key: string,
+    params?: AdminControllerGetAiPromptOutputSchemaParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiPromptOutputSchema>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient 
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getAdminControllerGetAiPromptOutputSchemaQueryOptions(key,options)
+  const queryOptions = getAdminControllerGetAiPromptOutputSchemaQueryOptions(key,params,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

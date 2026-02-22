@@ -194,4 +194,41 @@ describe("SchemaCompilerService", () => {
     expect(result.valid).toBe(false);
     expect(result.errors.length).toBeGreaterThan(0);
   });
+
+  it("applies field descriptions to compiled zod schema", () => {
+    const schema = service.compile({
+      type: "object",
+      fields: {
+        summary: { type: "string", description: "High-level founder summary" },
+        team: {
+          type: "object",
+          description: "Team details",
+          fields: {
+            years: { type: "number", description: "Total years of experience" },
+          },
+        },
+      },
+    });
+
+    expect(schema.shape.summary.description).toBe("High-level founder summary");
+    expect((schema.shape.team as z.ZodTypeAny).description).toBe("Team details");
+
+    const teamSchema = (schema.shape.team as z.ZodObject<z.ZodRawShape>).shape;
+    expect((teamSchema.years as z.ZodTypeAny).description).toBe(
+      "Total years of experience",
+    );
+  });
+
+  it("serializes zod descriptions back into descriptor", () => {
+    const source = z.object({
+      score: z.number().describe("Confidence score"),
+      tags: z.array(z.string().describe("Tag value")).describe("List of tags"),
+    });
+
+    const descriptor = service.serialize(source);
+
+    expect(descriptor.fields.score.description).toBe("Confidence score");
+    expect(descriptor.fields.tags.description).toBe("List of tags");
+    expect(descriptor.fields.tags.items?.description).toBe("Tag value");
+  });
 });

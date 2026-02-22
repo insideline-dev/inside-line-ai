@@ -48,6 +48,13 @@ export interface UpdateSchemaDraftInput {
   notes?: string;
 }
 
+export interface ResolvedSchemaDescriptor {
+  promptKey: string;
+  stage: StartupStage | null;
+  source: "published" | "code";
+  schemaJson: SchemaDescriptor;
+}
+
 const CODE_SCHEMA_BY_PROMPT_KEY: Partial<Record<AiPromptKey, z.ZodObject<z.ZodRawShape>>> = {
   "extraction.fields": ExtractionSchema,
   "research.team": TeamResearchSchema,
@@ -277,6 +284,35 @@ export class AgentSchemaRegistryService {
     throw new NotFoundException(
       `No published schema revision found for custom prompt key ${key}`,
     );
+  }
+
+  async resolveDescriptorWithSource(
+    key: AiPromptKey | string,
+    stage?: StartupStage | string | null,
+  ): Promise<ResolvedSchemaDescriptor> {
+    const normalizedStage = this.normalizeStage(stage);
+
+    const definition = await this.getDefinitionByKey(String(key));
+    if (definition) {
+      const published = await this.findPublishedDescriptor(definition.id, normalizedStage);
+      if (published) {
+        this.assertDescriptor(published);
+        return {
+          promptKey: String(key),
+          stage: normalizedStage,
+          source: "published",
+          schemaJson: published,
+        };
+      }
+    }
+
+    const descriptor = await this.resolveDescriptor(key, normalizedStage);
+    return {
+      promptKey: String(key),
+      stage: normalizedStage,
+      source: "code",
+      schemaJson: descriptor,
+    };
   }
 
   private async findPublishedDescriptor(

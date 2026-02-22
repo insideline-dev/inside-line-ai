@@ -19,6 +19,17 @@ export interface AiFlowNodeDefinition {
   promptKeys: AiPromptKey[];
   inputs: AiFlowPort[];
   outputs: AiFlowPort[];
+  enabled?: boolean;
+  runtimeModel?: {
+    modelName: string;
+    provider: string;
+    searchMode:
+      | "off"
+      | "provider_grounded_search"
+      | "brave_tool_search"
+      | "provider_and_brave_search";
+    source: "default" | "published" | "revision_override";
+  };
 }
 
 export interface AiFlowStageDefinition {

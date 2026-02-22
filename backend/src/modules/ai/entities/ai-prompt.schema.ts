@@ -28,6 +28,8 @@ export const aiPromptStatusEnum = pgEnum("ai_prompt_status", [
 export const aiPromptSearchModeEnum = pgEnum("ai_prompt_search_mode", [
   "off",
   "provider_grounded_search",
+  "brave_tool_search",
+  "provider_and_brave_search",
 ]);
 
 export const aiPromptDefinition = pgTable(

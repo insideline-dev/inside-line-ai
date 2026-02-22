@@ -6,9 +6,16 @@
  * OpenAPI spec version: 2.0
  */
 import type { AiPromptOutputSchemaResponseDtoKey } from './aiPromptOutputSchemaResponseDtoKey';
+import type { AiPromptOutputSchemaResponseDtoSchemaJson } from './aiPromptOutputSchemaResponseDtoSchemaJson';
+import type { AiPromptOutputSchemaResponseDtoSource } from './aiPromptOutputSchemaResponseDtoSource';
+import type { AiPromptOutputSchemaResponseDtoStage } from './aiPromptOutputSchemaResponseDtoStage';
 
 export interface AiPromptOutputSchemaResponseDto {
   key: AiPromptOutputSchemaResponseDtoKey;
+  /** @nullable */
+  stage: AiPromptOutputSchemaResponseDtoStage;
+  source: AiPromptOutputSchemaResponseDtoSource;
+  schemaJson: AiPromptOutputSchemaResponseDtoSchemaJson;
   jsonSchema: unknown;
   note: string;
 }

@@ -25,4 +25,19 @@ describe("AI flow catalog", () => {
     expect(edgePairs).not.toContain("gap_fill_hybrid->extract_fields");
     expect(edgePairs).not.toContain("gap_fill_hybrid->scrape_website");
   });
+
+  it("explicitly wires gap fill inputs for extraction and scraping", () => {
+    const node = PIPELINE_DEFINITION.nodes.find((n) => n.id === "gap_fill_hybrid");
+    expect(node).toBeDefined();
+    if (!node) return;
+
+    const labelsByFrom = new Map(
+      node.inputs
+        .filter((input) => input.fromNodeId)
+        .map((input) => [input.fromNodeId, input.label]),
+    );
+
+    expect(labelsByFrom.get("extract_fields")).toBe("Extraction result");
+    expect(labelsByFrom.get("scrape_website")).toBe("Scraping context");
+  });
 });

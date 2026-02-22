@@ -160,8 +160,10 @@ const PIPELINE_NODES: AiFlowNodeDefinition[] = [
     kind: "prompt",
     promptKeys: [],
     inputs: [
-      { label: "Startup profile", type: "object" },
-      { label: "Existing company metadata", type: "object" },
+      { label: "Extraction result", type: "object", fromNodeId: "extract_fields" },
+      { label: "Scraping context", type: "object", fromNodeId: "scrape_website" },
+      { label: "Startup profile (DB/form)", type: "object" },
+      { label: "Email context", type: "object" },
       { label: "Brave search results", type: "array" },
     ],
     outputs: [

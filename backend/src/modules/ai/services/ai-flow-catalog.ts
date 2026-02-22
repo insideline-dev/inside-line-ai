@@ -226,10 +226,9 @@ const PIPELINE_NODES: AiFlowNodeDefinition[] = [
     kind: "system",
     promptKeys: [],
     inputs: [
-      { label: "Gap fill", type: "object" },
-      { label: "Extraction", type: "object" },
-      { label: "Scraping context", type: "object" },
-      { label: "LinkedIn context", type: "object" },
+      { label: "Gap fill", type: "object", fromNodeId: "gap_fill_hybrid" },
+      { label: "Scraping context", type: "object", fromNodeId: "scrape_website" },
+      { label: "LinkedIn context", type: "object", fromNodeId: "linkedin_enrichment" },
     ],
     outputs: [{ label: "Research phase result", type: "object" }],
   },

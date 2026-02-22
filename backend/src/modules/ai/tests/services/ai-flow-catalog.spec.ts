@@ -42,4 +42,21 @@ describe("AI flow catalog", () => {
     expect(labelsByFrom.get("extract_fields")).toBe("Extraction result");
     expect(labelsByFrom.get("scrape_website")).toBe("Scraping context");
   });
+
+  it("explicitly wires research orchestrator inputs without extraction", () => {
+    const node = PIPELINE_DEFINITION.nodes.find((n) => n.id === "research_orchestrator");
+    expect(node).toBeDefined();
+    if (!node) return;
+
+    const labelsByFrom = new Map(
+      node.inputs
+        .filter((input) => input.fromNodeId)
+        .map((input) => [input.fromNodeId, input.label]),
+    );
+
+    expect(labelsByFrom.get("gap_fill_hybrid")).toBe("Gap fill");
+    expect(labelsByFrom.get("scrape_website")).toBe("Scraping context");
+    expect(labelsByFrom.get("linkedin_enrichment")).toBe("LinkedIn context");
+    expect(labelsByFrom.has("extract_fields")).toBe(false);
+  });
 });

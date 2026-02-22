@@ -148,7 +148,13 @@ const PIPELINE_STAGES: AiFlowStageDefinition[] = [
     id: "stage_5_synthesis",
     title: "Stage 5: Synthesis",
     description: "Generate the final memo and recommendation.",
-    nodeIds: ["synthesis_final", "matching_thesis"],
+    nodeIds: ["synthesis_final"],
+  },
+  {
+    id: "stage_6_matching",
+    title: "Stage 6: Investor Matching",
+    description: "Score fit between startup profile and investor thesis.",
+    nodeIds: ["matching_thesis"],
   },
 ];
 

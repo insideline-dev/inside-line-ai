@@ -93,14 +93,19 @@ export class SchemaCompilerService {
       schema = schema.optional();
     }
 
+    if (field.description) {
+      schema = schema.describe(field.description);
+    }
+
     return schema;
   }
 
   private serializeField(inputSchema: z.ZodTypeAny): SchemaField {
-    const { schema, optional, defaultValue } = this.unwrapSchema(inputSchema);
+    const { schema, optional, defaultValue, description } =
+      this.unwrapSchema(inputSchema);
 
     if (schema instanceof z.ZodString) {
-      return this.withMeta({ type: "string" }, optional, defaultValue);
+      return this.withMeta({ type: "string" }, optional, defaultValue, description);
     }
 
     if (schema instanceof z.ZodNumber) {
@@ -116,11 +121,12 @@ export class SchemaCompilerService {
         },
         optional,
         defaultValue,
+        description,
       );
     }
 
     if (schema instanceof z.ZodBoolean) {
-      return this.withMeta({ type: "boolean" }, optional, defaultValue);
+      return this.withMeta({ type: "boolean" }, optional, defaultValue, description);
     }
 
     if (schema instanceof z.ZodEnum) {
@@ -131,6 +137,7 @@ export class SchemaCompilerService {
         },
         optional,
         defaultValue,
+        description,
       );
     }
 
@@ -142,6 +149,7 @@ export class SchemaCompilerService {
         },
         optional,
         defaultValue,
+        description,
       );
     }
 
@@ -158,16 +166,18 @@ export class SchemaCompilerService {
         },
         optional,
         defaultValue,
+        description,
       );
     }
 
-    return this.withMeta({ type: "string" }, optional, defaultValue);
+    return this.withMeta({ type: "string" }, optional, defaultValue, description);
   }
 
   private withMeta(
     field: SchemaField,
     optional: boolean,
     defaultValue: unknown,
+    description?: string,
   ): SchemaField {
     if (optional) {
       field.optional = true;
@@ -177,6 +187,10 @@ export class SchemaCompilerService {
       field.default = defaultValue;
     }
 
+    if (description) {
+      field.description = description;
+    }
+
     return field;
   }
 
@@ -184,27 +198,49 @@ export class SchemaCompilerService {
     schema: z.ZodTypeAny;
     optional: boolean;
     defaultValue: unknown;
+    description?: string;
   } {
     let schema: unknown = inputSchema;
     let optional = false;
     let defaultValue: unknown = undefined;
+    let description: string | undefined;
+
+    description = this.getSchemaDescription(schema);
 
     while (schema instanceof z.ZodOptional || schema instanceof z.ZodDefault) {
       if (schema instanceof z.ZodOptional) {
         optional = true;
         schema = schema.unwrap();
+        description = description ?? this.getSchemaDescription(schema);
         continue;
       }
 
       defaultValue = this.getDefaultValue(schema);
       schema = this.getInnerDefaultSchema(schema);
+      description = description ?? this.getSchemaDescription(schema);
     }
 
     return {
       schema: schema as z.ZodTypeAny,
       optional,
       defaultValue,
+      description,
     };
+  }
+
+  private getSchemaDescription(schema: unknown): string | undefined {
+    const direct = (schema as { description?: unknown })?.description;
+    if (typeof direct === "string" && direct.length > 0) {
+      return direct;
+    }
+
+    const defDescription = (schema as { _def?: { description?: unknown } })?._def
+      ?.description;
+    if (typeof defDescription === "string" && defDescription.length > 0) {
+      return defDescription;
+    }
+
+    return undefined;
   }
 
   private getDefaultValue(schema: unknown): unknown {

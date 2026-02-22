@@ -1,16 +1,24 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScoreRing } from "@/components/analysis/ScoreRing";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2 } from "lucide-react";
+import { CheckCircle, Loader2 } from "lucide-react";
 import {
   useStartupControllerFindOne,
   useStartupControllerFindApprovedById,
   useStartupControllerGetEvaluation,
+  useStartupControllerApprove,
+  getStartupControllerFindAllQueryKey,
+  getStartupControllerFindOneQueryKey,
 } from "@/api/generated/startup/startup";
-import { useInvestorControllerGetEffectiveWeights } from "@/api/generated/investor/investor";
-import { useInvestorControllerGetMatchDetails } from "@/api/generated/investor/investor";
+import {
+  useInvestorControllerGetEffectiveWeights,
+  useInvestorControllerGetMatchDetails,
+  getInvestorControllerGetMatchesQueryKey,
+} from "@/api/generated/investor/investor";
+import { useToast } from "@/hooks/use-toast";
 import {
   StartupHeader,
   SummaryCard,
@@ -20,6 +28,7 @@ import {
   ProductTabContent,
   InsightsTabContent,
 } from "@/components/startup-view";
+import { getDisplayOverallScore } from "@/lib/evaluation-display";
 
 export const Route = createFileRoute("/_protected/investor/startup/$id")({
   component: InvestorStartupDetailPage,
@@ -40,6 +49,24 @@ function unwrapApiResponse<T>(payload: unknown): T {
 
 function InvestorStartupDetailPage() {
   const { id } = Route.useParams();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const { mutate: approveStartup, isPending: isApproving } = useStartupControllerApprove({
+    mutation: {
+      onSuccess: () => {
+        toast.success("Startup approved successfully");
+        queryClient.invalidateQueries({ queryKey: getStartupControllerFindOneQueryKey(id) });
+        queryClient.invalidateQueries({ queryKey: getStartupControllerFindAllQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getInvestorControllerGetMatchesQueryKey() });
+      },
+      onError: (error) => {
+        toast.error("Failed to approve startup", {
+          description: (error as Error).message,
+        });
+      },
+    },
+  });
 
   const {
     data: ownStartupRes,
@@ -76,9 +103,17 @@ function InvestorStartupDetailPage() {
   const weights = weightsRes
     ? unwrapApiResponse<Record<string, unknown>>(weightsRes)
     : undefined;
+  const evaluationFromStartup =
+    startup && typeof startup === "object" && "evaluation" in startup
+      ? ((startup as { evaluation?: Record<string, unknown> }).evaluation ?? undefined)
+      : undefined;
   const evaluation = evalRes
     ? unwrapApiResponse<Record<string, unknown>>(evalRes)
-    : undefined;
+    : evaluationFromStartup;
+  const overallScore = getDisplayOverallScore(
+    (evaluation as any) ?? null,
+    typeof startup?.overallScore === "number" ? startup.overallScore : null,
+  );
   const match = matchRes
     ? unwrapApiResponse<Record<string, unknown>>(matchRes)
     : undefined;
@@ -107,9 +142,25 @@ function InvestorStartupDetailPage() {
         backLink="/investor"
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            {evaluation?.overallScore ? (
-              <ScoreRing score={evaluation.overallScore as number} size="lg" label="Overall Score" showLabel />
+            {overallScore > 0 ? (
+              <ScoreRing score={overallScore} size="lg" label="Overall Score" showLabel />
             ) : null}
+            {startup.status === "pending_review" && (
+              <Button
+                variant="outline"
+                className="gap-2 text-chart-2 border-chart-2/40 hover:bg-chart-2/10 hover:text-chart-2"
+                onClick={() => approveStartup({ id, data: {} })}
+                disabled={isApproving}
+                data-testid="button-approve-startup"
+              >
+                {isApproving ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <CheckCircle className="w-4 h-4" />
+                )}
+                Approve Analysis
+              </Button>
+            )}
           </div>
         }
       />
@@ -153,16 +204,24 @@ function InvestorStartupDetailPage() {
         </TabsList>
 
         <TabsContent value="memo">
-          <MemoTabContent startup={startup as any} evaluation={evaluation as any} weights={weights as any} />
+          {evaluation ? (
+            <MemoTabContent startup={startup as any} evaluation={evaluation as any} weights={weights as any} />
+          ) : (
+            <Card className="border-dashed">
+              <CardContent className="p-12 text-center text-muted-foreground">
+                Evaluation details are not available yet.
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="product">
-          <ProductTabContent startup={startup as any} evaluation={evaluation as any} />
+          <ProductTabContent startup={startup as any} evaluation={(evaluation as any) ?? null} />
         </TabsContent>
 
         <TabsContent value="team">
           <TeamTabContent
-            evaluation={evaluation as any}
+            evaluation={(evaluation as any) ?? null}
             teamMembers={(startup.teamMembers || []) as any}
             companyName={startup.name as string}
           />
@@ -170,13 +229,13 @@ function InvestorStartupDetailPage() {
 
         <TabsContent value="competitors">
           <CompetitorsTabContent
-            evaluation={evaluation as any}
+            evaluation={(evaluation as any) ?? null}
             companyName={startup.name as string}
           />
         </TabsContent>
 
         <TabsContent value="insights">
-          <InsightsTabContent evaluation={evaluation as any} />
+          <InsightsTabContent evaluation={(evaluation as any) ?? null} />
         </TabsContent>
       </Tabs>
     </div>

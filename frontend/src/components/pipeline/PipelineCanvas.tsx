@@ -11,6 +11,7 @@ import {
   type NodeMouseHandler,
   type Connection,
   MarkerType,
+  ConnectionLineType,
   Panel,
   type ReactFlowInstance,
 } from "@xyflow/react";
@@ -121,6 +122,7 @@ function CanvasInner(props: PipelineCanvasProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [reactFlow, setReactFlow] = useState<ReactFlowInstance | null>(null);
+  const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
 
   useEffect(() => {
     setNodes(initialNodes);
@@ -134,13 +136,74 @@ function CanvasInner(props: PipelineCanvasProps) {
           {
             ...connection,
             animated: true,
-            style: { strokeWidth: 1.75 },
-            markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14 },
+            interactionWidth: 30,
+            style: { strokeWidth: 3, stroke: "#0f172a" },
+            labelStyle: { fill: "#0f172a", fontSize: 10, fontWeight: 600 },
+            markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16, color: "#0f172a" },
           },
           currentEdges,
         ),
       ),
     [setEdges],
+  );
+
+  const onReconnect = useCallback(
+    (oldEdge: Edge, newConnection: Connection) => {
+      const sourceNode = props.flow.nodes.find((node) => node.id === newConnection.source);
+      const sourceType = sourceNode?.outputs?.[0]?.type;
+      const edgeColor = edgeColorFromType(sourceType);
+
+      setEdges((currentEdges) =>
+        currentEdges.map((edge) =>
+          edge.id === oldEdge.id
+            ? {
+                ...edge,
+                source: newConnection.source ?? edge.source,
+                target: newConnection.target ?? edge.target,
+                sourceHandle: newConnection.sourceHandle ?? edge.sourceHandle,
+                targetHandle: newConnection.targetHandle ?? edge.targetHandle,
+                style: { ...edge.style, stroke: edgeColor, strokeWidth: 3 },
+                labelStyle: { ...edge.labelStyle, fill: edgeColor, fontSize: 10, fontWeight: 600 },
+                markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16, color: edgeColor },
+              }
+            : edge,
+        ),
+      );
+    },
+    [props.flow.nodes, setEdges],
+  );
+
+  const renderedEdges = useMemo(
+    () =>
+      edges.map((edge) => {
+        const isActive = edge.selected || edge.id === hoveredEdgeId;
+        const activeColor = "#0f172a";
+        const baseColor = (edge.style?.stroke as string | undefined) ?? "#64748b";
+
+        return {
+          ...edge,
+          interactionWidth: 30,
+          style: {
+            ...edge.style,
+            stroke: isActive ? activeColor : baseColor,
+            strokeWidth: isActive ? 4.5 : 3,
+            opacity: isActive ? 1 : 0.95,
+          },
+          labelStyle: {
+            ...edge.labelStyle,
+            fill: isActive ? activeColor : ((edge.labelStyle?.fill as string | undefined) ?? baseColor),
+            fontSize: isActive ? 11 : 10,
+            fontWeight: isActive ? 700 : 600,
+          },
+          markerEnd: {
+            type: MarkerType.ArrowClosed,
+            width: isActive ? 18 : 16,
+            height: isActive ? 18 : 16,
+            color: isActive ? activeColor : baseColor,
+          },
+        };
+      }),
+    [edges, hoveredEdgeId],
   );
 
   const [selectedNode, setSelectedNode] =
@@ -197,12 +260,20 @@ function CanvasInner(props: PipelineCanvasProps) {
     <div className="h-full w-full">
       <ReactFlow
         nodes={nodes}
-        edges={edges}
+        edges={renderedEdges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
+        onReconnect={onReconnect}
         onNodeClick={onNodeClick}
+        onEdgeMouseEnter={(_event, edge) => setHoveredEdgeId(edge.id)}
+        onEdgeMouseLeave={() => setHoveredEdgeId(null)}
         onConnect={onConnect}
         nodeTypes={nodeTypes}
+        edgesReconnectable
+        elevateEdgesOnSelect
+        reconnectRadius={18}
+        connectionLineStyle={{ stroke: "#0f172a", strokeWidth: 3.5, opacity: 0.9 }}
+        connectionLineType={ConnectionLineType.SmoothStep}
         fitView
         fitViewOptions={{ padding: 0.2 }}
         minZoom={0.3}

@@ -9,7 +9,12 @@ const PromptSurfaceSchema = z.enum(["pipeline", "clara"]);
 const PromptStatusSchema = z.enum(["draft", "published", "archived"]);
 const ModelConfigStatusSchema = z.enum(["draft", "published", "archived"]);
 const FlowNodeKindSchema = z.enum(["prompt", "system"]);
-const PromptSearchModeSchema = z.enum(["off", "provider_grounded_search"]);
+const PromptSearchModeSchema = z.enum([
+  "off",
+  "provider_grounded_search",
+  "brave_tool_search",
+  "provider_and_brave_search",
+]);
 const ModelConfigSourceSchema = z.enum(["default", "published", "revision_override"]);
 const FlowPortTypeSchema = z.enum(["text", "object", "array", "number"]);
 const ContextFieldTypeSchema = z.enum([
@@ -20,6 +25,44 @@ const ContextFieldTypeSchema = z.enum([
   "object",
   "unknown",
 ]);
+
+const OutputSchemaFieldTypeSchema = z.enum([
+  "string",
+  "number",
+  "boolean",
+  "array",
+  "object",
+  "enum",
+]);
+
+const OutputSchemaFieldSchema: z.ZodType<{
+  type: "string" | "number" | "boolean" | "array" | "object" | "enum";
+  description?: string;
+  optional?: boolean;
+  min?: number;
+  max?: number;
+  default?: unknown;
+  items?: unknown;
+  fields?: Record<string, unknown>;
+  values?: string[];
+}> = z.lazy(() =>
+  z.object({
+    type: OutputSchemaFieldTypeSchema,
+    description: z.string().optional(),
+    optional: z.boolean().optional(),
+    min: z.number().optional(),
+    max: z.number().optional(),
+    default: z.unknown().optional(),
+    items: OutputSchemaFieldSchema.optional(),
+    fields: z.record(z.string(), OutputSchemaFieldSchema).optional(),
+    values: z.array(z.string()).optional(),
+  }),
+);
+
+const OutputSchemaDescriptorSchema = z.object({
+  type: z.literal("object"),
+  fields: z.record(z.string(), OutputSchemaFieldSchema),
+});
 
 export const CreateAiPromptRevisionSchema = z.object({
   stage: z.nativeEnum(StartupStage).nullable().optional(),
@@ -166,6 +209,9 @@ export const AiModelConfigResponseSchema = z.object({
 
 export const AiPromptOutputSchemaResponseSchema = z.object({
   key: PromptKeySchema,
+  stage: z.nativeEnum(StartupStage).nullable(),
+  source: z.enum(["published", "code"]),
+  schemaJson: OutputSchemaDescriptorSchema,
   jsonSchema: z.unknown(),
   note: z.string(),
 });
@@ -182,6 +228,15 @@ const AiFlowNodeSchema = z.object({
   label: z.string(),
   description: z.string(),
   kind: FlowNodeKindSchema,
+  enabled: z.boolean().optional(),
+  runtimeModel: z
+    .object({
+      modelName: z.string(),
+      provider: z.string(),
+      searchMode: PromptSearchModeSchema,
+      source: ModelConfigSourceSchema,
+    })
+    .optional(),
   promptKeys: z.array(PromptKeySchema),
   inputs: z.array(AiFlowPortSchema),
   outputs: z.array(AiFlowPortSchema),

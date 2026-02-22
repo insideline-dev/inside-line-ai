@@ -16,7 +16,12 @@ export const AiContextConfigSchema = z.object({
 
 export const AiModelConfigSchema = z.object({
   modelName: z.enum(AI_RUNTIME_ALLOWED_MODEL_NAMES),
-  searchMode: z.enum(["off", "provider_grounded_search"]),
+  searchMode: z.enum([
+    "off",
+    "provider_grounded_search",
+    "brave_tool_search",
+    "provider_and_brave_search",
+  ]),
 });
 
 export type AiContextConfig = z.infer<typeof AiContextConfigSchema>;

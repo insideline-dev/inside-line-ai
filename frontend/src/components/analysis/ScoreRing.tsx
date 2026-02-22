@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { roundUpScore } from "@/lib/round-score";
 
 interface ScoreRingProps {
   score: number;
@@ -61,7 +62,7 @@ export function ScoreRing({ score, size = "md", showLabel = true, label, classNa
           />
         </svg>
         <div className="absolute inset-0 flex items-center justify-center">
-          <span className={cn("font-semibold", textSize)}>{Math.round(normalizedScore)}</span>
+          <span className={cn("font-semibold", textSize)}>{roundUpScore(normalizedScore)}</span>
         </div>
       </div>
       {showLabel && label && (

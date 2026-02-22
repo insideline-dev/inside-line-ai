@@ -44,6 +44,7 @@ import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
 import {
   useStartupControllerFindOne,
+  useStartupControllerGetDataRoom,
   useStartupControllerAdminDelete,
   getStartupControllerFindOneQueryKey,
 } from "@/api/generated/startup/startup";
@@ -69,6 +70,15 @@ import type { Evaluation } from "@/types/evaluation";
 
 interface StartupDetail extends Startup {
   evaluation?: Evaluation;
+}
+
+interface DataRoomDocument {
+  id: string;
+  category?: string | null;
+  uploadedAt?: string | null;
+  assetUrl?: string | null;
+  assetKey?: string | null;
+  assetMimeType?: string | null;
 }
 
 interface StageScoringWeight {
@@ -140,6 +150,17 @@ function AdminReviewPage() {
     ? unwrapApiResponse<StartupDetail>(startupResponse)
     : undefined;
   const evaluation = startup?.evaluation as Evaluation | undefined;
+  const { data: dataRoomResponse } = useStartupControllerGetDataRoom(id, {
+    query: {
+      enabled: Boolean(id),
+    },
+  });
+  const rawDataRoomDocuments = dataRoomResponse
+    ? unwrapApiResponse<unknown>(dataRoomResponse)
+    : [];
+  const dataRoomDocuments = Array.isArray(rawDataRoomDocuments)
+    ? (rawDataRoomDocuments as DataRoomDocument[])
+    : [];
 
   const { data: scoringDefaults } = useAdminControllerGetAllScoringWeights();
   const stageScoringWeights = scoringDefaults
@@ -560,7 +581,11 @@ function AdminReviewPage() {
               </TabsContent>
 
               <TabsContent value="sources" className="mt-6">
-                <SourcesTabContent startup={startup} evaluation={evaluation} />
+                <SourcesTabContent
+                  startup={startup}
+                  evaluation={evaluation}
+                  dataRoomDocuments={dataRoomDocuments}
+                />
               </TabsContent>
 
               <TabsContent value="edit" className="mt-6">

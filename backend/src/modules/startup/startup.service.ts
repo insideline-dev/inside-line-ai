@@ -296,7 +296,7 @@ export class StartupService {
         throw new NotFoundException(`Startup with ID ${id} not found`);
       }
 
-      return this.withEvaluation(db, found, false);
+      return this.withEvaluation(db, found, true);
     });
   }
 

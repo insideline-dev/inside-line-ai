@@ -11,6 +11,14 @@ import {
 } from "lucide-react";
 import type { Startup } from "@/types/startup";
 import type { Evaluation } from "@/types/evaluation";
+import { roundUpScore } from "@/lib/round-score";
+import {
+  getDisplayOverallScore,
+  getDisplayPercentileRank,
+  getDisplayRisks,
+  getDisplaySectionScore,
+  getDisplayStrengths,
+} from "@/lib/evaluation-display";
 
 interface InvestorMemo {
   dealHighlights?: string[];
@@ -75,6 +83,10 @@ export function SummaryCard({
   weights,
 }: SummaryCardProps) {
   const [animateBars, setAnimateBars] = useState(false);
+  const overallScore = getDisplayOverallScore(evaluation, startup.overallScore);
+  const percentileRank = getDisplayPercentileRank(evaluation, startup.percentileRank);
+  const strengths = getDisplayStrengths(evaluation);
+  const risks = getDisplayRisks(evaluation);
 
   useEffect(() => {
     setAnimateBars(false);
@@ -99,10 +111,10 @@ export function SummaryCard({
           <div className="flex flex-col md:flex-row gap-6">
             {showScores && (
               <div className="flex flex-col items-center text-center" data-testid="container-score">
-                <ScoreRing score={startup.overallScore || 0} size="lg" />
-                {startup.percentileRank && (
+                <ScoreRing score={overallScore} size="lg" />
+                {percentileRank != null && (
                   <Badge variant="outline" className="mt-2" data-testid="badge-percentile">
-                    Top {Math.round(100 - startup.percentileRank)}%
+                    Top {Math.round(100 - percentileRank)}%
                   </Badge>
                 )}
               </div>
@@ -145,7 +157,7 @@ export function SummaryCard({
             </CardHeader>
             <CardContent>
               <ul className="space-y-2 text-sm" data-testid="list-strengths">
-                {(evaluation.keyStrengths as string[] || []).map((strength, i) => (
+                {strengths.map((strength, i) => (
                   <li key={i} className="flex items-start gap-2" data-testid={`item-strength-${i}`}>
                     <ChevronRight className="w-4 h-4 text-chart-2 mt-0.5 shrink-0" />
                     <span>{strength}</span>
@@ -163,7 +175,7 @@ export function SummaryCard({
             </CardHeader>
             <CardContent>
               <ul className="space-y-2 text-sm" data-testid="list-risks">
-                {(evaluation.keyRisks as string[] || []).map((risk, i) => (
+                {risks.map((risk, i) => (
                   <li key={i} className="flex items-start gap-2" data-testid={`item-risk-${i}`}>
                     <ChevronRight className="w-4 h-4 text-chart-4 mt-0.5 shrink-0" />
                     <span>{risk}</span>
@@ -186,17 +198,17 @@ export function SummaryCard({
           <CardContent>
             <div className="space-y-3">
               {[
-                { name: "Team", score: evaluation.teamScore, weight: `${weights?.team ?? 0}%` },
-                { name: "Market", score: evaluation.marketScore, weight: `${weights?.market ?? 0}%` },
-                { name: "Product", score: evaluation.productScore, weight: `${weights?.product ?? 0}%` },
-                { name: "Traction", score: evaluation.tractionScore, weight: `${weights?.traction ?? 0}%` },
-                { name: "Business Model", score: evaluation.businessModelScore, weight: `${weights?.businessModel ?? 0}%` },
-                { name: "Go-to-Market", score: evaluation.gtmScore, weight: `${weights?.gtm ?? 0}%` },
-                { name: "Competitive Advantage", score: evaluation.competitiveAdvantageScore, weight: `${weights?.competitiveAdvantage ?? 0}%` },
-                { name: "Financials", score: evaluation.financialsScore, weight: `${weights?.financials ?? 0}%` },
-                { name: "Legal", score: evaluation.legalScore, weight: `${weights?.legal ?? 0}%` },
-                { name: "Deal Terms", score: evaluation.dealTermsScore, weight: `${weights?.dealTerms ?? 0}%` },
-                { name: "Exit Potential", score: evaluation.exitPotentialScore, weight: `${weights?.exitPotential ?? 0}%` },
+                { name: "Team", score: getDisplaySectionScore(evaluation, "team"), weight: `${weights?.team ?? 0}%` },
+                { name: "Market", score: getDisplaySectionScore(evaluation, "market"), weight: `${weights?.market ?? 0}%` },
+                { name: "Product", score: getDisplaySectionScore(evaluation, "product"), weight: `${weights?.product ?? 0}%` },
+                { name: "Traction", score: getDisplaySectionScore(evaluation, "traction"), weight: `${weights?.traction ?? 0}%` },
+                { name: "Business Model", score: getDisplaySectionScore(evaluation, "businessModel"), weight: `${weights?.businessModel ?? 0}%` },
+                { name: "Go-to-Market", score: getDisplaySectionScore(evaluation, "gtm"), weight: `${weights?.gtm ?? 0}%` },
+                { name: "Competitive Advantage", score: getDisplaySectionScore(evaluation, "competitiveAdvantage"), weight: `${weights?.competitiveAdvantage ?? 0}%` },
+                { name: "Financials", score: getDisplaySectionScore(evaluation, "financials"), weight: `${weights?.financials ?? 0}%` },
+                { name: "Legal", score: getDisplaySectionScore(evaluation, "legal"), weight: `${weights?.legal ?? 0}%` },
+                { name: "Deal Terms", score: getDisplaySectionScore(evaluation, "dealTerms"), weight: `${weights?.dealTerms ?? 0}%` },
+                { name: "Exit Potential", score: getDisplaySectionScore(evaluation, "exitPotential"), weight: `${weights?.exitPotential ?? 0}%` },
               ].map((section, index) => {
                 const sectionId = section.name.toLowerCase().replace(/\s+/g, '-');
                 const sectionScore = Math.max(0, Math.min(100, Number(section.score || 0)));
@@ -213,7 +225,7 @@ export function SummaryCard({
                         }}
                       />
                     </div>
-                    <span className="text-xs font-medium w-8 text-right shrink-0" data-testid={`text-section-score-${sectionId}`}>{Math.round(sectionScore)}</span>
+                    <span className="text-xs font-medium w-8 text-right shrink-0" data-testid={`text-section-score-${sectionId}`}>{roundUpScore(sectionScore)}</span>
                   </div>
                 );
               })}

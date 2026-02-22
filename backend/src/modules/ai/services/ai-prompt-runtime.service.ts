@@ -1044,9 +1044,21 @@ export class AiPromptRuntimeService {
     const modelName = this.aiConfig.getModelForPurpose(purpose);
     const provider = this.resolveProviderForModel(modelName);
 
-    const supportedSearchModes: Array<"off" | "provider_grounded_search"> =
-      purpose === ModelPurpose.RESEARCH && provider === "google"
-        ? ["off", "provider_grounded_search"]
+    const supportedSearchModes: Array<
+      | "off"
+      | "provider_grounded_search"
+      | "brave_tool_search"
+      | "provider_and_brave_search"
+    > =
+      purpose === ModelPurpose.RESEARCH && (provider === "google" || provider === "openai")
+        ? [
+            "off",
+            "provider_grounded_search",
+            "brave_tool_search",
+            "provider_and_brave_search",
+          ]
+        : purpose === ModelPurpose.RESEARCH
+          ? ["off", "brave_tool_search"]
         : ["off"];
 
     return {
@@ -1054,8 +1066,12 @@ export class AiPromptRuntimeService {
       modelName,
       provider,
       searchMode:
-        supportedSearchModes.includes("provider_grounded_search")
-          ? "provider_grounded_search"
+        supportedSearchModes.includes("provider_and_brave_search")
+          ? "provider_and_brave_search"
+          : supportedSearchModes.includes("provider_grounded_search")
+            ? "provider_grounded_search"
+            : supportedSearchModes.includes("brave_tool_search")
+              ? "brave_tool_search"
           : "off",
       supportedSearchModes,
     };
@@ -1457,7 +1473,7 @@ export class AiPromptRuntimeService {
     }
 
     const tokens = Array.from(
-      template.matchAll(/{{\s*([a-zA-Z0-9_-]+\.[^{}\s]+)\s*}}/g),
+      template.matchAll(/{{\s*([a-zA-Z0-9_-]+(?:\.[^{}|\s]+)?(?:\|[a-zA-Z0-9_-]+)?)\s*}}/g),
     ).map((match) => match[1]).filter((value): value is string => Boolean(value));
 
     if (tokens.length === 0) {
@@ -1469,16 +1485,19 @@ export class AiPromptRuntimeService {
     const phaseCache = new Map<PipelinePhase, unknown | null>();
 
     for (const token of uniqueTokens) {
-      const [nodeId, ...fieldPathParts] = token.split(".");
-      const fieldPath = fieldPathParts.join(".");
-      if (!nodeId || !fieldPath) {
+      const [rawToken, filter] = token.split("|");
+      const [nodeId, ...fieldPathParts] = (rawToken ?? "").split(".");
+      if (!nodeId) {
         continue;
       }
+
+      const fieldPath = fieldPathParts.length > 0 ? fieldPathParts.join(".") : null;
 
       const value = await this.resolveDynamicTokenValue(
         startupId,
         nodeId,
         fieldPath,
+        filter,
         phaseCache,
       );
       tokenValues.set(token, value);
@@ -1496,7 +1515,8 @@ export class AiPromptRuntimeService {
   private async resolveDynamicTokenValue(
     startupId: string,
     nodeId: string,
-    fieldPath: string,
+    fieldPath: string | null,
+    filter: string | undefined,
     phaseCache: Map<PipelinePhase, unknown | null>,
   ): Promise<string> {
     const resolved = await this.resolveNodeOutput(startupId, nodeId, phaseCache);
@@ -1504,14 +1524,19 @@ export class AiPromptRuntimeService {
       return "[not available]";
     }
 
-    const normalizedPath = fieldPath.replace(/\[\]/g, "");
-    const value = this.deepGet(resolved, normalizedPath.split("."));
+    const value = fieldPath
+      ? this.deepGet(resolved, fieldPath.replace(/\[\]/g, "").split("."))
+      : resolved;
     if (value === undefined) {
       return "[not available]";
     }
 
     if (typeof value === "string") {
       return value;
+    }
+
+    if (filter === "pretty") {
+      return JSON.stringify(value, null, 2);
     }
 
     return JSON.stringify(value);

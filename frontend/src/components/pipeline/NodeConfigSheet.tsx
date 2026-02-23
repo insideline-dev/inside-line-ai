@@ -111,13 +111,13 @@ export function NodeConfigSheet({
   ] as const;
   type ModelStage = (typeof MODEL_STAGES)[number];
   const [activePromptKey, setActivePromptKey] = useState<string | null>(null);
-  const [modelName, setModelName] = useState<string>("");
+  const [modelName, setModelName] = useState<string>("gemini-3.0-flash-preview");
   const [modelSearchMode, setModelSearchMode] = useState<
     | "off"
     | "provider_grounded_search"
     | "brave_tool_search"
     | "provider_and_brave_search"
-  >("off");
+  >("provider_grounded_search");
   const [modelNotes, setModelNotes] = useState("");
   const [modelStage, setModelStage] = useState<typeof GLOBAL_STAGE | ModelStage>(
     GLOBAL_STAGE,

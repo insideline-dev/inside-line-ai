@@ -38,6 +38,7 @@ import {
   type StartupEvaluation,
 } from "../analysis/entities/analysis.schema";
 import { deriveStartupGeography } from "../geography";
+import { sanitizeNarrativeText } from "../ai/services/narrative-sanitizer";
 
 function escapeIlike(input: string): string {
   return input.replace(/[%_\\]/g, (ch) => `\\${ch}`).slice(0, 200);
@@ -1236,28 +1237,27 @@ export class StartupService {
 
     const record = { ...(section as Record<string, unknown>) };
     const existingNarrative = this.pickNarrative(record);
-    const normalizedExisting = existingNarrative?.trim() ?? "";
+    const normalizedExisting = existingNarrative
+      ? sanitizeNarrativeText(existingNarrative).trim()
+      : "";
     if (this.isDetailedNarrative(normalizedExisting)) {
       record.narrativeSummary = normalizedExisting;
       record.memoNarrative = normalizedExisting;
+      if (typeof record.feedback === "string") {
+        record.feedback = sanitizeNarrativeText(record.feedback);
+      }
       return record;
     }
 
-    const feedback = this.readString(record.feedback);
-    const score = this.readNumber(record.score);
-    const confidence = this.readNumber(record.confidence);
+    const feedback = sanitizeNarrativeText(this.readString(record.feedback) ?? "");
     const keyFindings = this.readStringArray(record.keyFindings).slice(0, 4);
     const risks = this.readStringArray(record.risks).slice(0, 3);
     const dataGaps = this.readStringArray(record.dataGaps).slice(0, 3);
 
-    const confidencePercent =
-      confidence !== null ? Math.round(confidence * 100) : null;
     const paragraphOneParts = [
-      score !== null
-        ? `This section is currently scored at ${Math.round(score)}/100${confidencePercent !== null ? ` with ${confidencePercent}% confidence` : ""}.`
-        : "This section currently has directional signal but limited confidence due to sparse evidence.",
       feedback ||
-        "The current assessment should be treated as provisional pending additional primary-source diligence.",
+        "This section currently has directional signal but limited evidence depth in this run.",
+      "The current assessment should be treated as provisional pending additional primary-source diligence.",
     ].filter((part) => part.length > 0);
     const paragraphOne = paragraphOneParts.join(" ").trim();
 
@@ -1299,10 +1299,11 @@ export class StartupService {
       .join("\n\n");
 
     if (narrative.length > 0) {
-      record.narrativeSummary = narrative;
-      record.memoNarrative = narrative;
+      const sanitizedNarrative = sanitizeNarrativeText(narrative);
+      record.narrativeSummary = sanitizedNarrative;
+      record.memoNarrative = sanitizedNarrative;
       if (!this.isDetailedNarrative(feedback ?? "")) {
-        record.feedback = narrative;
+        record.feedback = sanitizedNarrative;
       }
     }
 
@@ -1333,10 +1334,6 @@ export class StartupService {
     }
     const trimmed = value.trim();
     return trimmed.length > 0 ? trimmed : null;
-  }
-
-  private readNumber(value: unknown): number | null {
-    return typeof value === "number" && Number.isFinite(value) ? value : null;
   }
 
   private readStringArray(value: unknown): string[] {

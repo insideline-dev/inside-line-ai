@@ -1,5 +1,6 @@
 import PDFDocument from 'pdfkit';
 import type { PdfContext } from './pdf.types';
+import { sanitizeNarrativeText } from '../../ai/services/narrative-sanitizer';
 import {
   BRAND_COLOR,
   BRAND_COLOR_DARK,
@@ -141,9 +142,11 @@ export function generateMemoDocument(ctx: PdfContext): PDFKit.PDFDocument {
 
   // Executive Summary
   const executiveSummary =
-    evaluation?.executiveSummary ??
-    (investorMemo?.summary as string | undefined) ??
-    startup.description;
+    sanitizeNarrativeText(
+      evaluation?.executiveSummary ??
+        (investorMemo?.summary as string | undefined) ??
+        startup.description,
+    );
   addMemoSection(
     doc,
     'Executive Summary',
@@ -515,17 +518,25 @@ function addMemoSection(
   doc.y = sectionStartY + 30;
 
   if (content) {
-    doc
-      .fontSize(10)
-      .font('Helvetica')
-      .fillColor(TEXT_PRIMARY)
-      .text(content, MARGIN, doc.y, { align: 'justify', lineGap: 2, width: CONTENT_WIDTH });
-    doc.moveDown(0.5);
+    const sanitizedContent = sanitizeNarrativeText(content);
+    if (sanitizedContent.length > 0) {
+      doc
+        .fontSize(10)
+        .font('Helvetica')
+        .fillColor(TEXT_PRIMARY)
+        .text(sanitizedContent, MARGIN, doc.y, {
+          align: 'justify',
+          lineGap: 2,
+          width: CONTENT_WIDTH,
+        });
+      doc.moveDown(0.5);
+    }
   }
 
   if (additionalContent && additionalContent.length > 0) {
     for (const item of additionalContent) {
-      if (item.text) {
+      const sanitizedItemText = sanitizeNarrativeText(item.text);
+      if (sanitizedItemText.length > 0) {
         doc
           .fontSize(10)
           .font('Helvetica-Bold')
@@ -535,7 +546,7 @@ function addMemoSection(
           .fontSize(10)
           .font('Helvetica')
           .fillColor(TEXT_PRIMARY)
-          .text(item.text, MARGIN, doc.y, {
+          .text(sanitizedItemText, MARGIN, doc.y, {
             align: 'justify',
             lineGap: 2,
             width: CONTENT_WIDTH,

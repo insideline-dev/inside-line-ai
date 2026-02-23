@@ -509,6 +509,14 @@ export class GeminiResearchService {
     }
 
     if (enforcement.requiresBraveToolCall && input.braveToolCallCount <= 0) {
+      // Gemini provider-grounded search can return grounded sources without invoking
+      // the custom Brave tool callback. Avoid rejecting valid grounded outputs in that case.
+      if (enforcement.requiresProviderEvidence && input.sourceCount > 0) {
+        this.logger.warn(
+          "Allowing grounded research result without explicit Brave tool callback because provider evidence was present",
+        );
+        return null;
+      }
       return "Brave search tool usage is required but the tool was not called";
     }
 

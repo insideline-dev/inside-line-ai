@@ -93,6 +93,22 @@ describe("CompetitorResearchSchema", () => {
     expect(parsed.threatLevel).toBeUndefined();
   });
 
+  it("coerces object pricing to a string", () => {
+    const parsed = CompetitorDetailSchema.parse({
+      name: "PricingCo",
+      description: "Returns structured pricing payload",
+      productOverview: "Platform",
+      pricing: {
+        model: "transaction_fee",
+        range: "$10-$50",
+      },
+    });
+
+    expect(typeof parsed.pricing).toBe("string");
+    expect(parsed.pricing).toContain("transaction_fee");
+    expect(parsed.pricing).toContain("$10-$50");
+  });
+
   it("treats null optional values as undefined", () => {
     const parsed = CompetitorDetailSchema.parse({
       name: "NullCo",

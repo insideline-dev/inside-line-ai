@@ -284,6 +284,26 @@ export class UnipileService {
       }
       const rawError = await response.text();
       const parsedError = this.parseUnipileError(rawError);
+      if (this.isAuthError(response.status, parsedError)) {
+        this.emitTrace(options, {
+          operation: "unipile.fetch_profile",
+          status: "failed",
+          inputJson: {
+            profileUrl,
+            identifier,
+          },
+          outputText: rawError,
+          outputJson: parsedError,
+          error: `LinkedIn integration authorization failed (Unipile ${response.status})`,
+          meta: {
+            status: response.status,
+            authError: true,
+          },
+        });
+        throw new ServiceUnavailableException(
+          `LinkedIn integration authorization failed (Unipile ${response.status})`,
+        );
+      }
       if (this.isRecipientUnreachableError(response.status, parsedError)) {
         this.emitTrace(options, {
           operation: "unipile.fetch_profile",
@@ -709,6 +729,24 @@ export class UnipileService {
 
     if (!response.ok) {
       const error = await response.text();
+      const parsedError = this.parseUnipileError(error);
+      if (this.isAuthError(response.status, parsedError)) {
+        this.emitTrace(options, {
+          operation,
+          status: "failed",
+          inputJson: body,
+          outputText: error,
+          outputJson: parsedError,
+          error: `LinkedIn integration authorization failed (Unipile ${response.status})`,
+          meta: {
+            status: response.status,
+            authError: true,
+          },
+        });
+        throw new ServiceUnavailableException(
+          `LinkedIn integration authorization failed (Unipile ${response.status})`,
+        );
+      }
       this.emitTrace(options, {
         operation,
         status: "failed",
@@ -785,6 +823,22 @@ export class UnipileService {
       normalized.includes('recipient cannot be reached') ||
       normalized.includes('profile is not locked') ||
       normalized.includes('locked')
+    );
+  }
+
+  private isAuthError(statusCode: number, error: ParsedUnipileError): boolean {
+    const status = typeof error.status === 'number' ? error.status : statusCode;
+    if (status === 401 || status === 403) {
+      return true;
+    }
+
+    const normalized = `${error.type ?? ''} ${error.title ?? ''} ${error.detail ?? ''} ${error.raw}`.toLowerCase();
+    return (
+      normalized.includes('unauthorized') ||
+      normalized.includes('forbidden') ||
+      normalized.includes('expired_credentials') ||
+      normalized.includes('expired credentials') ||
+      normalized.includes('invalid api key')
     );
   }
 

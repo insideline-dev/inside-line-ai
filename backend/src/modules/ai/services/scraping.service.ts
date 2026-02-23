@@ -326,19 +326,33 @@ export class ScrapingService {
     const submittedNames = new Set(
       submittedTeamMembers.map((member) => member.name.trim().toLowerCase()),
     );
-    const trustedSources = new Set<string>(["submitted", "deck", "website", "enrichment"]);
+    const trustedSources = new Set<string>(["submitted", "deck", "enrichment"]);
+    const isTrustedUnverifiedSeed = (member: EnrichedTeamMember): boolean => {
+      if (!member.teamMemberSource) {
+        return false;
+      }
+      if (trustedSources.has(member.teamMemberSource)) {
+        return true;
+      }
+      if (member.teamMemberSource === "website") {
+        const hasRole = typeof member.role === "string" && member.role.trim().length > 0;
+        const hasLinkedinProfile = Boolean(member.linkedinProfile);
+        return hasRole || hasLinkedinProfile;
+      }
+      return false;
+    };
     const droppedUnverifiedTeamMembers = enrichedTeam.filter((member) => {
       const isSubmittedMember = submittedNames.has(member.name.trim().toLowerCase());
       if (isSubmittedMember) return false;
       if (member.enrichmentStatus === "success") return false;
-      if (member.teamMemberSource && trustedSources.has(member.teamMemberSource)) return false;
+      if (isTrustedUnverifiedSeed(member)) return false;
       return true;
     });
     const verifiedTeamMembers = enrichedTeam.filter((member) => {
       const isSubmittedMember = submittedNames.has(member.name.trim().toLowerCase());
       if (isSubmittedMember) return true;
       if (member.enrichmentStatus === "success") return true;
-      if (member.teamMemberSource && trustedSources.has(member.teamMemberSource)) return true;
+      if (isTrustedUnverifiedSeed(member)) return true;
       return false;
     });
     const linkedinStatuses = enrichedTeam.reduce<Record<string, number>>((acc, member) => {

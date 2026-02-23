@@ -150,6 +150,12 @@ export class LinkedinEnrichmentService {
         this.logger.debug(
           `[LinkedInDiscovery] query=${query} company=${normalizedCompany} failed: ${message}`,
         );
+        if (this.isIntegrationUnavailableError(message)) {
+          this.logger.warn(
+            `[LinkedInDiscovery] LinkedIn integration unavailable; skipping company leadership discovery for ${normalizedCompany}`,
+          );
+          break;
+        }
         continue;
       }
 
@@ -232,6 +238,34 @@ export class LinkedinEnrichmentService {
           continue;
         }
 
+        const rejectedMessage =
+          result.reason instanceof Error
+            ? result.reason.message
+            : String(result.reason);
+        if (this.isIntegrationUnavailableError(rejectedMessage)) {
+          enriched.push({
+            name: member.name,
+            role: member.role,
+            linkedinUrl: member.linkedinUrl,
+            enrichmentStatus: 'not_configured',
+            matchConfidence: 0,
+            confidenceReason: 'LinkedIn integration authorization failed or is unavailable',
+          });
+          this.emitTrace(options, {
+            operation: "linkedin.enrich_member",
+            status: "failed",
+            inputJson: {
+              member,
+              startupContext,
+            },
+            error: rejectedMessage,
+            meta: {
+              integrationUnavailable: true,
+            },
+          });
+          continue;
+        }
+
         enriched.push({
           name: member.name,
           role: member.role,
@@ -247,10 +281,7 @@ export class LinkedinEnrichmentService {
             member,
             startupContext,
           },
-          error:
-            result.reason instanceof Error
-              ? result.reason.message
-              : String(result.reason),
+          error: rejectedMessage,
         });
       }
     }
@@ -266,9 +297,28 @@ export class LinkedinEnrichmentService {
   ): Promise<EnrichedTeamMember> {
     const attemptedUrls: string[] = [];
     const rejectedCandidates: RejectedCandidateDecision[] = [];
-    let candidateUrls: string[] = member.linkedinUrl
-      ? [member.linkedinUrl]
-      : await this.getSearchCandidateUrls(member, startupContext, [], options);
+    let candidateUrls: string[];
+    try {
+      candidateUrls = member.linkedinUrl
+        ? [member.linkedinUrl]
+        : await this.getSearchCandidateUrls(member, startupContext, [], options);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (this.isRateLimitError(message)) {
+        throw error;
+      }
+      if (this.isIntegrationUnavailableError(message)) {
+        return {
+          name: member.name,
+          role: member.role,
+          linkedinUrl: member.linkedinUrl,
+          enrichmentStatus: 'not_configured',
+          matchConfidence: 0,
+          confidenceReason: 'LinkedIn integration authorization failed or is unavailable',
+        };
+      }
+      throw error;
+    }
     let usedSearchFallback = !member.linkedinUrl;
     let sawRecoverableFetchError = false;
     let lastAttemptedUrl: string | undefined;
@@ -331,6 +381,16 @@ export class LinkedinEnrichmentService {
         const message = error instanceof Error ? error.message : String(error);
         if (this.isRateLimitError(message)) {
           throw error;
+        }
+        if (this.isIntegrationUnavailableError(message)) {
+          return {
+            name: member.name,
+            role: member.role,
+            linkedinUrl,
+            enrichmentStatus: 'not_configured',
+            matchConfidence: 0,
+            confidenceReason: 'LinkedIn integration authorization failed or is unavailable',
+          };
         }
 
         if (!this.isRecoverableFetchError(message)) {
@@ -501,6 +561,18 @@ export class LinkedinEnrichmentService {
 
   private isRateLimitError(message: string): boolean {
     return /\b429\b/.test(message);
+  }
+
+  private isIntegrationUnavailableError(message: string): boolean {
+    const normalized = message.toLowerCase();
+    return (
+      normalized.includes('linkedin integration not configured') ||
+      normalized.includes('linkedin integration authorization failed') ||
+      normalized.includes('unipile api error 401') ||
+      normalized.includes('unipile api error 403') ||
+      normalized.includes('unauthorized') ||
+      normalized.includes('forbidden')
+    );
   }
 
   private mapProfile(

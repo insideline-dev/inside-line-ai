@@ -18,6 +18,27 @@ const optionalString = z.preprocess(
   z.string().optional(),
 );
 
+const optionalLooseString = z.preprocess((value) => {
+  if (value == null) {
+    return undefined;
+  }
+  if (typeof value === "string") {
+    return value;
+  }
+  if (
+    typeof value === "number" ||
+    typeof value === "boolean" ||
+    typeof value === "bigint"
+  ) {
+    return String(value);
+  }
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}, z.string().optional());
+
 const optionalThreatLevel = z.preprocess(
   nullToUndefined,
   z.enum(["high", "medium", "low"]).optional(),
@@ -54,7 +75,7 @@ export const CompetitorDetailSchema = z.object({
   employeeCount: optionalNonNegativeNumber,
   productOverview: requiredStringFromNull("Product overview unavailable"),
   keyFeatures: stringArray,
-  pricing: optionalString,
+  pricing: optionalLooseString,
   targetMarket: optionalString,
   differentiators: stringArray,
   weaknesses: stringArray,

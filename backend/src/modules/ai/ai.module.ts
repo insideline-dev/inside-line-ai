@@ -57,6 +57,7 @@ import { ScrapingService } from "./services/scraping.service";
 import { SynthesisAgent } from "./agents/synthesis";
 import { SynthesisService } from "./services/synthesis.service";
 import { StartupMatchingPipelineService } from "./services/startup-matching-pipeline.service";
+import { Crawl4aiService } from "./services/crawl4ai.service";
 import { WebsiteScraperService } from "./services/website-scraper.service";
 import { BraveSearchService } from "./services/brave-search.service";
 import { EnrichmentService } from "./services/enrichment.service";
@@ -65,6 +66,7 @@ import { AgentSchemaRegistryService } from "./services/agent-schema-registry.ser
 import { AgentConfigService } from "./services/agent-config.service";
 import { DynamicFlowCatalogService } from "./services/dynamic-flow-catalog.service";
 import { DynamicAgentRunnerService } from "./services/dynamic-agent-runner.service";
+import { AiModelExecutionService } from "./services/ai-model-execution.service";
 import { PipelineTemplateService } from "./services/pipeline-template.service";
 import { SchemaCompilerService } from "./services/schema-compiler.service";
 
@@ -91,6 +93,7 @@ import { SchemaCompilerService } from "./services/schema-compiler.service";
     AgentConfigService,
     DynamicFlowCatalogService,
     DynamicAgentRunnerService,
+    AiModelExecutionService,
     PipelineTemplateService,
     PipelineStateService,
     PipelineFeedbackService,
@@ -103,6 +106,7 @@ import { SchemaCompilerService } from "./services/schema-compiler.service";
     MistralOcrService,
     FieldExtractorService,
     ScrapingService,
+    Crawl4aiService,
     WebsiteScraperService,
     LinkedinEnrichmentService,
     BraveSearchService,
@@ -150,6 +154,7 @@ import { SchemaCompilerService } from "./services/schema-compiler.service";
     AgentConfigService,
     DynamicFlowCatalogService,
     DynamicAgentRunnerService,
+    AiModelExecutionService,
     PipelineTemplateService,
     PipelineStateService,
     PipelineFeedbackService,

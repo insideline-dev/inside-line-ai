@@ -28,29 +28,12 @@ import {
 } from "lucide-react";
 import type { AiPromptFlowResponseDtoFlowsItem } from "@/api/generated/model";
 import { useUndoRedo } from "@/components/pipeline/hooks/use-undo-redo";
+import { DEFAULT_PIPELINE_CONFIG } from "./-flow.defaults";
 
 export const Route = createFileRoute("/_protected/admin/flow")({
   component: AdminFlowPage,
 });
 
-// Default pipeline config matching backend DEFAULT_PIPELINE_CONFIG
-const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
-  maxPipelineTimeoutMs: 45 * 60 * 1000,
-  minimumEvaluationAgents: 8,
-  defaultRetryPolicy: {
-    maxRetries: 3,
-    backoff: "exponential",
-    initialDelayMs: 1000,
-  },
-  phases: [
-    { phase: "enrichment", dependsOn: [], canRunParallelWith: [], timeoutMs: 5 * 60 * 1000, maxRetries: 2, required: false, queue: "ai-enrichment" },
-    { phase: "extraction", dependsOn: ["enrichment"], canRunParallelWith: [], timeoutMs: 8 * 60 * 1000, maxRetries: 2, required: false, queue: "ai-extraction" },
-    { phase: "scraping", dependsOn: ["enrichment"], canRunParallelWith: [], timeoutMs: 10 * 60 * 1000, maxRetries: 2, required: false, queue: "ai-scraping" },
-    { phase: "research", dependsOn: ["extraction", "scraping"], canRunParallelWith: [], timeoutMs: 10 * 60 * 1000, maxRetries: 2, required: false, queue: "ai-research" },
-    { phase: "evaluation", dependsOn: ["research"], canRunParallelWith: [], timeoutMs: 12 * 60 * 1000, maxRetries: 2, required: true, queue: "ai-evaluation" },
-    { phase: "synthesis", dependsOn: ["evaluation"], canRunParallelWith: [], timeoutMs: 8 * 60 * 1000, maxRetries: 2, required: true, queue: "ai-synthesis" },
-  ],
-};
 
 function extractResponseData<T>(payload: unknown): T {
   if (payload && typeof payload === "object" && "data" in payload) {

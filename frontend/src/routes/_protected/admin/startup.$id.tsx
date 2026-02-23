@@ -31,6 +31,7 @@ import {
   ChevronDown,
   FileText,
   BarChart2,
+  StopCircle,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -43,6 +44,7 @@ import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
 import {
   useStartupControllerFindOne,
+  useStartupControllerGetDataRoom,
   useStartupControllerAdminDelete,
   getStartupControllerFindOneQueryKey,
 } from "@/api/generated/startup/startup";
@@ -53,6 +55,7 @@ import {
   useAdminControllerRejectStartup,
   useAdminControllerGetAllScoringWeights,
   useAdminControllerMatchStartupInvestors,
+  useAdminControllerCancelStartupPipeline,
   getAdminControllerGetStatsQueryKey,
   getAdminControllerGetAllStartupsQueryKey,
 } from "@/api/generated/admin/admin";
@@ -67,6 +70,15 @@ import type { Evaluation } from "@/types/evaluation";
 
 interface StartupDetail extends Startup {
   evaluation?: Evaluation;
+}
+
+interface DataRoomDocument {
+  id: string;
+  category?: string | null;
+  uploadedAt?: string | null;
+  assetUrl?: string | null;
+  assetKey?: string | null;
+  assetMimeType?: string | null;
 }
 
 interface StageScoringWeight {
@@ -138,6 +150,17 @@ function AdminReviewPage() {
     ? unwrapApiResponse<StartupDetail>(startupResponse)
     : undefined;
   const evaluation = startup?.evaluation as Evaluation | undefined;
+  const { data: dataRoomResponse } = useStartupControllerGetDataRoom(id, {
+    query: {
+      enabled: Boolean(id),
+    },
+  });
+  const rawDataRoomDocuments = dataRoomResponse
+    ? unwrapApiResponse<unknown>(dataRoomResponse)
+    : [];
+  const dataRoomDocuments = Array.isArray(rawDataRoomDocuments)
+    ? (rawDataRoomDocuments as DataRoomDocument[])
+    : [];
 
   const { data: scoringDefaults } = useAdminControllerGetAllScoringWeights();
   const stageScoringWeights = scoringDefaults
@@ -272,6 +295,21 @@ function AdminReviewPage() {
       },
       onError: (error: Error) => {
         toast.error("Failed to match investors", { description: error.message });
+      },
+    },
+  });
+
+  const cancelPipelineMutation = useAdminControllerCancelStartupPipeline({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getStartupControllerFindOneQueryKey(id) });
+        queryClient.invalidateQueries({ queryKey: getAdminControllerGetAllStartupsQueryKey() });
+        toast.success("Pipeline cancelled", {
+          description: "The AI pipeline has been stopped.",
+        });
+      },
+      onError: (error: Error) => {
+        toast.error("Failed to cancel pipeline", { description: error.message });
       },
     },
   });
@@ -434,6 +472,21 @@ function AdminReviewPage() {
               )}
               Re-evaluate
             </Button>
+            {startup?.status === "analyzing" && (
+              <Button
+                variant="destructive"
+                size="default"
+                onClick={() => {
+                  if (window.confirm("Cancel the running pipeline? This will stop all queued jobs.")) {
+                    cancelPipelineMutation.mutate({ id });
+                  }
+                }}
+                disabled={cancelPipelineMutation.isPending}
+              >
+                <StopCircle className="w-4 h-4 mr-2" />
+                {cancelPipelineMutation.isPending ? "Cancelling…" : "Cancel Pipeline"}
+              </Button>
+            )}
           </div>
         }
       />
@@ -469,6 +522,15 @@ function AdminReviewPage() {
               onRetryAgent={handleLiveAgentRetry}
               trackedRetry={trackedRetry}
               onClearTrackedRetry={() => setTrackedRetry(null)}
+              onCancelPipeline={
+                startup.status === "analyzing"
+                  ? () => {
+                      if (window.confirm("Cancel the running pipeline? This will stop all queued jobs.")) {
+                        cancelPipelineMutation.mutate({ id });
+                      }
+                    }
+                  : undefined
+              }
             />
           </TabsContent>
 
@@ -519,7 +581,11 @@ function AdminReviewPage() {
               </TabsContent>
 
               <TabsContent value="sources" className="mt-6">
-                <SourcesTabContent startup={startup} evaluation={evaluation} />
+                <SourcesTabContent
+                  startup={startup}
+                  evaluation={evaluation}
+                  dataRoomDocuments={dataRoomDocuments}
+                />
               </TabsContent>
 
               <TabsContent value="edit" className="mt-6">

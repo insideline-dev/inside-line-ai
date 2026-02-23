@@ -3130,6 +3130,45 @@
         ]
       }
     },
+    "/admin/investors": {
+      "get": {
+        "operationId": "AdminController_listInvestors",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "List all investors with profile and thesis summary",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/investors/{userId}": {
+      "get": {
+        "operationId": "AdminController_getInvestorDetail",
+        "parameters": [
+          {
+            "name": "userId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get full investor detail (profile, thesis, matches, scoring)",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
     "/admin/integrations/health": {
       "get": {
         "operationId": "AdminController_getIntegrationHealth",
@@ -3800,6 +3839,29 @@
         ]
       }
     },
+    "/admin/startups/{id}/cancel-pipeline": {
+      "post": {
+        "operationId": "AdminController_cancelStartupPipeline",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
     "/admin/scoring/weights": {
       "get": {
         "operationId": "AdminController_getAllScoringWeights",
@@ -4201,6 +4263,86 @@
           }
         },
         "summary": "Alias: create schema draft revision",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/ai-prompts/{key}/schema-resolved": {
+      "get": {
+        "operationId": "AdminController_getAiSchemaResolved",
+        "parameters": [
+          {
+            "name": "key",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "stage",
+            "required": false,
+            "in": "query",
+            "description": "Optional startup stage override",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiResolvedSchemaResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Resolve runtime schema descriptor for prompt key",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/ai-resolved-schemas/{promptKey}": {
+      "get": {
+        "operationId": "AdminController_getAiSchemaResolvedAlias",
+        "parameters": [
+          {
+            "name": "promptKey",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "stage",
+            "required": false,
+            "in": "query",
+            "description": "Optional startup stage override",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiResolvedSchemaResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Resolve runtime schema descriptor for prompt key",
         "tags": [
           "Admin"
         ]
@@ -4962,6 +5104,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "stage",
+            "required": false,
+            "in": "query",
+            "description": "Optional startup stage override",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -5191,6 +5342,21 @@
           }
         },
         "summary": "Seed prompt defaults for global and stage-specific variants",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/ai-prompts/reseed-from-code": {
+      "post": {
+        "operationId": "AdminController_reseedAiPrompts",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Force re-seed evaluation prompts: archives existing and seeds fresh from code catalog",
         "tags": [
           "Admin"
         ]
@@ -5718,6 +5884,20 @@
         "parameters": [],
         "responses": {
           "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Investor"
+        ]
+      }
+    },
+    "/investor/thesis/generate-summary": {
+      "post": {
+        "operationId": "InvestorController_generateThesisSummary",
+        "parameters": [],
+        "responses": {
+          "201": {
             "description": ""
           }
         },
@@ -10077,6 +10257,10 @@
                 "evaluation.exitPotential",
                 "synthesis.final",
                 "matching.thesis",
+                "pipeline.orchestrator",
+                "extraction.linkedin",
+                "research.orchestrator",
+                "matching.investorThesis",
                 "clara.intent",
                 "clara.response",
                 "clara.agent"
@@ -10313,6 +10497,41 @@
                           "system"
                         ]
                       },
+                      "enabled": {
+                        "type": "boolean"
+                      },
+                      "runtimeModel": {
+                        "type": "object",
+                        "properties": {
+                          "modelName": {
+                            "type": "string"
+                          },
+                          "provider": {
+                            "type": "string"
+                          },
+                          "searchMode": {
+                            "type": "string",
+                            "enum": [
+                              "off",
+                              "provider_grounded_search"
+                            ]
+                          },
+                          "source": {
+                            "type": "string",
+                            "enum": [
+                              "default",
+                              "published",
+                              "revision_override"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "modelName",
+                          "provider",
+                          "searchMode",
+                          "source"
+                        ]
+                      },
                       "promptKeys": {
                         "type": "array",
                         "items": {
@@ -10337,6 +10556,10 @@
                             "evaluation.exitPotential",
                             "synthesis.final",
                             "matching.thesis",
+                            "pipeline.orchestrator",
+                            "extraction.linkedin",
+                            "research.orchestrator",
+                            "matching.investorThesis",
                             "clara.intent",
                             "clara.response",
                             "clara.agent"
@@ -10491,6 +10714,10 @@
                   "evaluation.exitPotential",
                   "synthesis.final",
                   "matching.thesis",
+                  "pipeline.orchestrator",
+                  "extraction.linkedin",
+                  "research.orchestrator",
+                  "matching.investorThesis",
                   "clara.intent",
                   "clara.response",
                   "clara.agent"
@@ -11056,6 +11283,10 @@
                   "evaluation.exitPotential",
                   "synthesis.final",
                   "matching.thesis",
+                  "pipeline.orchestrator",
+                  "extraction.linkedin",
+                  "research.orchestrator",
+                  "matching.investorThesis",
                   "clara.intent",
                   "clara.response",
                   "clara.agent"
@@ -11212,6 +11443,110 @@
         "required": [
           "definition",
           "revisions"
+        ]
+      },
+      "AiResolvedSchemaResponseDto__schema0": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "string",
+              "number",
+              "boolean",
+              "array",
+              "object",
+              "enum"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "optional": {
+            "type": "boolean"
+          },
+          "min": {
+            "type": "number"
+          },
+          "max": {
+            "type": "number"
+          },
+          "default": {},
+          "items": {
+            "$ref": "#/components/schemas/AiResolvedSchemaResponseDto__schema0"
+          },
+          "fields": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/AiResolvedSchemaResponseDto__schema0"
+            }
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "AiResolvedSchemaResponseDto": {
+        "type": "object",
+        "properties": {
+          "promptKey": {
+            "type": "string",
+            "minLength": 1
+          },
+          "stage": {
+            "type": "string",
+            "enum": [
+              "pre_seed",
+              "seed",
+              "series_a",
+              "series_b",
+              "series_c",
+              "series_d",
+              "series_e",
+              "series_f_plus"
+            ],
+            "nullable": true
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "published",
+              "code"
+            ]
+          },
+          "schemaJson": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "object"
+                ]
+              },
+              "fields": {
+                "type": "object",
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/AiResolvedSchemaResponseDto__schema0"
+                }
+              }
+            },
+            "required": [
+              "type",
+              "fields"
+            ]
+          }
+        },
+        "required": [
+          "promptKey",
+          "stage",
+          "source",
+          "schemaJson"
         ]
       },
       "CreateAiSchemaRevisionDto__schema0": {
@@ -11911,6 +12246,53 @@
           }
         }
       },
+      "AiPromptOutputSchemaResponseDto__schema0": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "string",
+              "number",
+              "boolean",
+              "array",
+              "object",
+              "enum"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "optional": {
+            "type": "boolean"
+          },
+          "min": {
+            "type": "number"
+          },
+          "max": {
+            "type": "number"
+          },
+          "default": {},
+          "items": {
+            "$ref": "#/components/schemas/AiPromptOutputSchemaResponseDto__schema0"
+          },
+          "fields": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/AiPromptOutputSchemaResponseDto__schema0"
+            }
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
       "AiPromptOutputSchemaResponseDto": {
         "type": "object",
         "properties": {
@@ -11936,9 +12318,55 @@
               "evaluation.exitPotential",
               "synthesis.final",
               "matching.thesis",
+              "pipeline.orchestrator",
+              "extraction.linkedin",
+              "research.orchestrator",
+              "matching.investorThesis",
               "clara.intent",
               "clara.response",
               "clara.agent"
+            ]
+          },
+          "stage": {
+            "type": "string",
+            "enum": [
+              "pre_seed",
+              "seed",
+              "series_a",
+              "series_b",
+              "series_c",
+              "series_d",
+              "series_e",
+              "series_f_plus"
+            ],
+            "nullable": true
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "published",
+              "code"
+            ]
+          },
+          "schemaJson": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "object"
+                ]
+              },
+              "fields": {
+                "type": "object",
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/AiPromptOutputSchemaResponseDto__schema0"
+                }
+              }
+            },
+            "required": [
+              "type",
+              "fields"
             ]
           },
           "jsonSchema": {},
@@ -11948,6 +12376,9 @@
         },
         "required": [
           "key",
+          "stage",
+          "source",
+          "schemaJson",
           "jsonSchema",
           "note"
         ]
@@ -11977,6 +12408,10 @@
               "evaluation.exitPotential",
               "synthesis.final",
               "matching.thesis",
+              "pipeline.orchestrator",
+              "extraction.linkedin",
+              "research.orchestrator",
+              "matching.investorThesis",
               "clara.intent",
               "clara.response",
               "clara.agent"
@@ -12172,6 +12607,10 @@
               "evaluation.exitPotential",
               "synthesis.final",
               "matching.thesis",
+              "pipeline.orchestrator",
+              "extraction.linkedin",
+              "research.orchestrator",
+              "matching.investorThesis",
               "clara.intent",
               "clara.response",
               "clara.agent"
@@ -12428,6 +12867,10 @@
                     "evaluation.exitPotential",
                     "synthesis.final",
                     "matching.thesis",
+                    "pipeline.orchestrator",
+                    "extraction.linkedin",
+                    "research.orchestrator",
+                    "matching.investorThesis",
                     "clara.intent",
                     "clara.response",
                     "clara.agent"

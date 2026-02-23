@@ -11,15 +11,15 @@ function AiAgentNodeComponent({ data, selected }: NodeProps<AiAgentNodeType>) {
   return (
     <div
       className={cn(
-        "rounded-lg border border-primary/40 bg-primary/5 px-3 py-2 shadow-sm min-w-[230px] max-w-[250px] cursor-pointer transition-all",
+        "rounded-xl border border-primary/50 bg-primary/5 px-4 py-3 shadow-sm min-w-[260px] max-w-[300px] cursor-pointer transition-all",
         data.enabled === false && "opacity-50 border-dashed",
-        selected && "ring-2 ring-primary border-primary",
+        selected && "ring-2 ring-primary border-primary shadow-lg shadow-primary/25",
       )}
     >
       <Handle
         type="target"
         position={Position.Left}
-        className="!w-2 !h-2 !bg-primary !border-2 !border-background"
+        className="!w-3.5 !h-3.5 !bg-primary !border-2 !border-background"
       />
       <div className="flex items-center justify-between gap-2 mb-1">
         <div className="flex items-center gap-2 min-w-0">
@@ -47,7 +47,7 @@ function AiAgentNodeComponent({ data, selected }: NodeProps<AiAgentNodeType>) {
       <Handle
         type="source"
         position={Position.Right}
-        className="!w-2 !h-2 !bg-primary !border-2 !border-background"
+        className="!w-3.5 !h-3.5 !bg-primary !border-2 !border-background"
       />
     </div>
   );

@@ -1,0 +1,67 @@
+import type { PipelineConfig } from "@/components/pipeline/types";
+
+export const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
+  maxPipelineTimeoutMs: 45 * 60 * 1000,
+  minimumEvaluationAgents: 8,
+  defaultRetryPolicy: {
+    maxRetries: 3,
+    backoff: "exponential",
+    initialDelayMs: 1000,
+  },
+  phases: [
+    {
+      phase: "extraction",
+      dependsOn: [],
+      canRunParallelWith: [],
+      timeoutMs: 8 * 60 * 1000,
+      maxRetries: 2,
+      required: false,
+      queue: "ai-extraction",
+    },
+    {
+      phase: "enrichment",
+      dependsOn: ["extraction"],
+      canRunParallelWith: ["scraping"],
+      timeoutMs: 5 * 60 * 1000,
+      maxRetries: 2,
+      required: false,
+      queue: "ai-enrichment",
+    },
+    {
+      phase: "scraping",
+      dependsOn: ["extraction"],
+      canRunParallelWith: ["enrichment"],
+      timeoutMs: 10 * 60 * 1000,
+      maxRetries: 2,
+      required: false,
+      queue: "ai-scraping",
+    },
+    {
+      phase: "research",
+      dependsOn: ["enrichment", "scraping"],
+      canRunParallelWith: [],
+      timeoutMs: 10 * 60 * 1000,
+      maxRetries: 2,
+      required: false,
+      queue: "ai-research",
+    },
+    {
+      phase: "evaluation",
+      dependsOn: ["research"],
+      canRunParallelWith: [],
+      timeoutMs: 12 * 60 * 1000,
+      maxRetries: 2,
+      required: true,
+      queue: "ai-evaluation",
+    },
+    {
+      phase: "synthesis",
+      dependsOn: ["evaluation"],
+      canRunParallelWith: [],
+      timeoutMs: 8 * 60 * 1000,
+      maxRetries: 2,
+      required: true,
+      queue: "ai-synthesis",
+    },
+  ],
+};

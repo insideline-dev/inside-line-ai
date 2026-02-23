@@ -128,6 +128,11 @@ export const envSchema = z.object({
   SCRAPING_MEMORY_CACHE_MAX_ENTRIES: z.coerce.number().default(5000),
   SCRAPING_CACHE_REDIS_RECOVERY_INTERVAL_MS: z.coerce.number().default(30000),
 
+  // Crawl4AI (headless browser scraping)
+  CRAWL4AI_URL: z.string().optional(),
+  CRAWL4AI_USERNAME: z.string().optional(),
+  CRAWL4AI_PASSWORD: z.string().optional(),
+
   // AI Providers
   OPENAI_API_KEY: z.string().optional(),
   GOOGLE_API_KEY: z.string().optional(), // Backward-compatible alias

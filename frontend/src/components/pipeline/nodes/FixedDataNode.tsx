@@ -11,14 +11,14 @@ function FixedDataNodeComponent({ data, selected }: NodeProps<FixedDataNodeType>
   return (
     <div
       className={cn(
-        "rounded-lg border border-dashed border-muted-foreground/40 bg-muted/30 px-3 py-2 shadow-sm min-w-[220px] max-w-[240px] cursor-pointer transition-all",
-        selected && "ring-2 ring-primary border-primary",
+        "rounded-xl border border-dashed border-muted-foreground/40 bg-muted/30 px-4 py-3 shadow-sm min-w-[250px] max-w-[290px] cursor-pointer transition-all",
+        selected && "ring-2 ring-primary border-primary shadow-lg shadow-primary/20",
       )}
     >
       <Handle
         type="target"
         position={Position.Left}
-        className="!w-2 !h-2 !bg-slate-500 !border-2 !border-background"
+        className="!w-3.5 !h-3.5 !bg-slate-500 !border-2 !border-background"
       />
       <div className="flex items-center justify-between gap-2 mb-1">
         <div className="flex items-center gap-2 min-w-0">
@@ -33,7 +33,7 @@ function FixedDataNodeComponent({ data, selected }: NodeProps<FixedDataNodeType>
       <Handle
         type="source"
         position={Position.Right}
-        className="!w-2 !h-2 !bg-slate-500 !border-2 !border-background"
+        className="!w-3.5 !h-3.5 !bg-slate-500 !border-2 !border-background"
       />
     </div>
   );

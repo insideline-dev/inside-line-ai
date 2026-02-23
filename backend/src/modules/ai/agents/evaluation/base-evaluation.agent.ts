@@ -16,6 +16,7 @@ import { AiConfigService } from "../../services/ai-config.service";
 import { AiPromptService } from "../../services/ai-prompt.service";
 import { EVALUATION_PROMPT_KEY_BY_AGENT } from "../../services/ai-prompt-catalog";
 import { buildEvaluationCommonBaseline } from "../../services/evaluation-prompt-baseline";
+import { AiModelExecutionService } from "../../services/ai-model-execution.service";
 
 const NARRATIVE_MIN_LENGTH = 420;
 
@@ -43,6 +44,7 @@ export abstract class BaseEvaluationAgent<TOutput>
     protected providers: AiProviderService,
     protected aiConfig: AiConfigService,
     protected promptService: AiPromptService,
+    protected modelExecution?: AiModelExecutionService,
   ) {}
 
   abstract buildContext(pipelineData: EvaluationPipelineInput): Record<string, unknown>;
@@ -74,6 +76,12 @@ export abstract class BaseEvaluationAgent<TOutput>
       key: EVALUATION_PROMPT_KEY_BY_AGENT[this.key],
       stage: pipelineData.extraction.stage,
     });
+    const execution = this.modelExecution
+      ? await this.modelExecution.resolveForPrompt({
+          key: EVALUATION_PROMPT_KEY_BY_AGENT[this.key],
+          stage: pipelineData.extraction.stage,
+        })
+      : null;
     const contextSections = this.formatContext(promptContext);
     const renderedPrompt = this.promptService.renderTemplate(
       promptConfig.userPrompt,
@@ -136,12 +144,16 @@ export abstract class BaseEvaluationAgent<TOutput>
       try {
         const response = await this.withTimeout(
           generateText({
-            model: this.providers.resolveModelForPurpose(ModelPurpose.EVALUATION),
+            model:
+              execution?.generateTextOptions.model ??
+              this.providers.resolveModelForPurpose(ModelPurpose.EVALUATION),
             output: Output.object({ schema: this.schema }),
             system: composedSystemPrompt,
             prompt: renderedPrompt,
             temperature: this.aiConfig.getEvaluationTemperature(),
             maxOutputTokens: this.aiConfig.getEvaluationMaxOutputTokens(),
+            tools: execution?.generateTextOptions.tools,
+            toolChoice: execution?.generateTextOptions.toolChoice,
           }),
           attemptTimeoutMs,
           `${this.key} evaluation timed out`,
@@ -181,6 +193,11 @@ export abstract class BaseEvaluationAgent<TOutput>
             systemPrompt: composedSystemPrompt,
             renderedPrompt,
             timeoutMs: attemptTimeoutMs,
+            model:
+              execution?.generateTextOptions.model ??
+              this.providers.resolveModelForPurpose(ModelPurpose.EVALUATION),
+            tools: execution?.generateTextOptions.tools,
+            toolChoice: execution?.generateTextOptions.toolChoice,
           });
           if (recovered.success) {
             const normalizedOutput = this.normalizeNarrativeFields(
@@ -425,6 +442,9 @@ export abstract class BaseEvaluationAgent<TOutput>
     systemPrompt: string;
     renderedPrompt: string;
     timeoutMs: number;
+    model: Parameters<typeof generateText>[0]["model"];
+    tools?: Parameters<typeof generateText>[0]["tools"];
+    toolChoice?: Parameters<typeof generateText>[0]["toolChoice"];
   }): Promise<
     | { success: true; output: TOutput; outputText: string }
     | { success: false; error: string; outputText?: string }
@@ -432,11 +452,13 @@ export abstract class BaseEvaluationAgent<TOutput>
     try {
       const response = await this.withTimeout(
         generateText({
-          model: this.providers.resolveModelForPurpose(ModelPurpose.EVALUATION),
+          model: input.model,
           system: input.systemPrompt,
           prompt: input.renderedPrompt,
           temperature: this.aiConfig.getEvaluationTemperature(),
           maxOutputTokens: this.aiConfig.getEvaluationMaxOutputTokens(),
+          tools: input.tools,
+          toolChoice: input.toolChoice,
         }),
         input.timeoutMs,
         `${this.key} evaluation timed out`,

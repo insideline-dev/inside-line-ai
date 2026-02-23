@@ -51,6 +51,8 @@ describe("GeminiResearchService", () => {
       getModelForPurpose: jest.fn(() => "gemini-3.0-flash"),
       getResearchTemperature: jest.fn(() => 0.2),
       getResearchTimeoutMs: jest.fn(() => 30000),
+      getResearchMaxAttempts: jest.fn(() => 1),
+      getResearchAgentHardTimeoutMs: jest.fn(() => 30000),
     } as unknown as jest.Mocked<AiConfigService>;
 
     service = new GeminiResearchServiceClass(
@@ -89,6 +91,10 @@ describe("GeminiResearchService", () => {
 
     const result = await service.research({
       agent: "market",
+      tools: {
+        google_search: googleSearchMock(),
+      },
+      toolChoice: "required",
       prompt: "market prompt",
       systemPrompt: "market system",
       schema: MarketSchema,
@@ -232,6 +238,42 @@ describe("GeminiResearchService", () => {
     });
 
     expect(aiConfig.getModelForPurpose).toHaveBeenCalled();
+  });
+
+  it("hard-fails to fallback when both provider and brave search evidence are required but missing", async () => {
+    generateTextMock.mockResolvedValueOnce({
+      output: {
+        marketReports: ["Report"],
+        competitors: [],
+        marketTrends: ["Trend"],
+        marketSize: {},
+        sources: [],
+      },
+      sources: [],
+      providerMetadata: {},
+    });
+
+    const result = await service.research({
+      agent: "market",
+      prompt: "market prompt",
+      systemPrompt: "market system",
+      schema: MarketSchema,
+      searchEnforcement: {
+        requiresProviderEvidence: true,
+        requiresBraveToolCall: true,
+      },
+      getBraveToolCallCount: () => 0,
+      fallback: () => ({
+        marketReports: [],
+        competitors: [],
+        marketTrends: [],
+        marketSize: {},
+        sources: ["https://fallback.example.com"],
+      }),
+    });
+
+    expect(result.usedFallback).toBe(true);
+    expect(result.error).toContain("Provider search evidence is required");
   });
 
   it("fallback sources default to empty array when undefined", async () => {

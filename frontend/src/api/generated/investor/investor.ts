@@ -402,6 +402,81 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getInvestorControllerDeleteThesisMutationOptions(options), queryClient);
     }
+    export type investorControllerGenerateThesisSummaryResponse201 = {
+  data: void
+  status: 201
+}
+    
+export type investorControllerGenerateThesisSummaryResponseSuccess = (investorControllerGenerateThesisSummaryResponse201) & {
+  headers: Headers;
+};
+;
+
+export type investorControllerGenerateThesisSummaryResponse = (investorControllerGenerateThesisSummaryResponseSuccess)
+
+export const getInvestorControllerGenerateThesisSummaryUrl = () => {
+
+
+  
+
+  return `/investor/thesis/generate-summary`
+}
+
+export const investorControllerGenerateThesisSummary = async ( options?: RequestInit): Promise<investorControllerGenerateThesisSummaryResponse> => {
+  
+  return customFetch<investorControllerGenerateThesisSummaryResponse>(getInvestorControllerGenerateThesisSummaryUrl(),
+  {      
+    ...options,
+    method: 'POST'
+    
+    
+  }
+);}
+
+
+
+
+export const getInvestorControllerGenerateThesisSummaryMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof investorControllerGenerateThesisSummary>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof investorControllerGenerateThesisSummary>>, TError,void, TContext> => {
+
+const mutationKey = ['investorControllerGenerateThesisSummary'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof investorControllerGenerateThesisSummary>>, void> = () => {
+          
+
+          return  investorControllerGenerateThesisSummary(requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type InvestorControllerGenerateThesisSummaryMutationResult = NonNullable<Awaited<ReturnType<typeof investorControllerGenerateThesisSummary>>>
+    
+    export type InvestorControllerGenerateThesisSummaryMutationError = ErrorType<unknown>
+
+    export const useInvestorControllerGenerateThesisSummary = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof investorControllerGenerateThesisSummary>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof investorControllerGenerateThesisSummary>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getInvestorControllerGenerateThesisSummaryMutationOptions(options), queryClient);
+    }
     export type investorControllerGetMatchesResponse200 = {
   data: void
   status: 200

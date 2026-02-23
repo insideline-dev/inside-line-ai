@@ -19,9 +19,10 @@ import { AiPromptService } from "./ai-prompt.service";
 import { RESEARCH_PROMPT_KEY_BY_AGENT } from "./ai-prompt-catalog";
 import { AiDebugLogService } from "./ai-debug-log.service";
 import { PipelineAgentTraceService } from "./pipeline-agent-trace.service";
-import { DEFAULT_MODEL_BY_PURPOSE } from "../ai.config";
 import { buildResearchPromptVariables } from "./research-prompt-variables";
 import { AgentConfigService } from "./agent-config.service";
+import { AiModelExecutionService } from "./ai-model-execution.service";
+import { AiConfigService } from "./ai-config.service";
 
 type ResearchAgentOutput =
   | NonNullable<ResearchResult["team"]>
@@ -57,7 +58,9 @@ export class ResearchService {
     private pipelineFeedback: PipelineFeedbackService,
     private promptService: AiPromptService,
     private researchParametersService: ResearchParametersService,
-    private agentConfigService: AgentConfigService,
+    @Optional() private agentConfigService?: AgentConfigService,
+    @Optional() private aiConfig?: AiConfigService,
+    @Optional() private modelExecution?: AiModelExecutionService,
     @Optional() private aiDebugLog?: AiDebugLogService,
     @Optional() private pipelineAgentTrace?: PipelineAgentTraceService,
   ) {}
@@ -104,9 +107,6 @@ export class ResearchService {
 
     const dedupeSources = new Map<string, SourceEntry>();
     const { phase1Keys, phase2Keys } = await this.resolveResearchKeys();
-    const researchModel =
-      process.env.AI_MODEL_RESEARCH ??
-      DEFAULT_MODEL_BY_PURPOSE[ModelPurpose.RESEARCH];
     for (const source of result.sources) {
       const sourceKey = this.getSourceKey(source);
       if (!dedupeSources.has(sourceKey)) {
@@ -180,7 +180,6 @@ export class ResearchService {
           result,
           dedupeSources,
           onAgentComplete: options?.onAgentComplete,
-          model: researchModel,
         });
       }),
     );
@@ -208,7 +207,6 @@ export class ResearchService {
           result,
           dedupeSources,
           onAgentComplete: options?.onAgentComplete,
-          model: researchModel,
         });
       }),
     );
@@ -281,6 +279,9 @@ export class ResearchService {
         usedFallback: true,
         error: errorMessage,
         rejected: true,
+        modelName:
+          this.aiConfig?.getModelForPurpose(ModelPurpose.RESEARCH) ??
+          "unknown",
         attempt: 1,
         retryCount: 0,
       };
@@ -301,6 +302,12 @@ export class ResearchService {
       key: RESEARCH_PROMPT_KEY_BY_AGENT[key],
       stage: pipelineInput.extraction.stage,
     });
+    const execution = this.modelExecution
+      ? await this.modelExecution.resolveForPrompt({
+          key: RESEARCH_PROMPT_KEY_BY_AGENT[key],
+          stage: pipelineInput.extraction.stage,
+        })
+      : null;
 
     const context = agent.contextBuilder(pipelineInput);
     const feedbackContext = await this.loadFeedbackContext(startupId, key);
@@ -323,6 +330,13 @@ export class ResearchService {
     try {
       const result = await this.geminiResearchService.research({
         agent: key,
+        modelName: execution?.resolvedConfig.modelName,
+        model: execution?.generateTextOptions.model,
+        tools: execution?.generateTextOptions.tools,
+        toolChoice: execution?.generateTextOptions.toolChoice,
+        stopWhen: execution?.generateTextOptions.stopWhen,
+        searchEnforcement: execution?.searchEnforcement,
+        getBraveToolCallCount: execution?.usage.getBraveToolCallCount,
         prompt,
         systemPrompt: [
           promptConfig.systemPrompt || agent.systemPrompt,
@@ -354,7 +368,13 @@ export class ResearchService {
         retryCount: result.retryCount,
       });
 
-      return { ...result, rejected: false, inputPrompt: prompt, outputText };
+      return {
+        ...result,
+        rejected: false,
+        modelName: execution?.resolvedConfig.modelName,
+        inputPrompt: prompt,
+        outputText,
+      };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const fallbackOutput = agent.fallback(pipelineInput);
@@ -378,6 +398,7 @@ export class ResearchService {
         usedFallback: true,
         error: message,
         rejected: false,
+        modelName: execution?.resolvedConfig.modelName,
         attempt: 1,
         retryCount: 0,
         inputPrompt: prompt,
@@ -396,7 +417,7 @@ export class ResearchService {
           ? settledResult.reason.message
           : String(settledResult.reason);
       return {
-        output: undefined as unknown as ResearchAgentOutput,
+        output: null as unknown as ResearchAgentOutput,
         sources: [],
         usedFallback: true,
         error: errorMessage,
@@ -436,7 +457,6 @@ export class ResearchService {
       attempt?: number;
       retryCount?: number;
     }) => void;
-    model: string;
   }): Promise<void> {
     const {
       startupId,
@@ -445,7 +465,6 @@ export class ResearchService {
       result,
       dedupeSources,
       onAgentComplete,
-      model,
     } = input;
 
     onAgentComplete?.({
@@ -475,7 +494,9 @@ export class ResearchService {
       agentKey: key,
       usedFallback: agentResult.usedFallback,
       error: agentResult.error,
-      model,
+      model:
+        agentResult.modelName ??
+        this.aiConfig?.getModelForPurpose(ModelPurpose.RESEARCH) ?? "unknown",
       output: agentResult.output,
     });
 
@@ -498,7 +519,7 @@ export class ResearchService {
 
     if (agentResult.rejected) {
       result.errors.push({ agent: key, error: agentResult.error ?? "Unknown error" });
-      return;
+      if (!agentResult.output) return;
     }
 
     if (key === "team") {
@@ -709,6 +730,13 @@ export class ResearchService {
     phase1Keys: Array<keyof typeof RESEARCH_AGENTS>;
     phase2Keys: Array<keyof typeof PHASE_2_RESEARCH_AGENTS>;
   }> {
+    if (!this.agentConfigService) {
+      return {
+        phase1Keys: [...PHASE_1_KEYS],
+        phase2Keys: [...PHASE_2_KEYS],
+      };
+    }
+
     const configs = await this.agentConfigService.getEnabled(
       "research_orchestrator",
       "pipeline",
@@ -760,6 +788,7 @@ interface AgentRunResult {
   usedFallback: boolean;
   error?: string;
   rejected: boolean;
+  modelName?: string;
   attempt?: number;
   retryCount?: number;
   inputPrompt?: string;

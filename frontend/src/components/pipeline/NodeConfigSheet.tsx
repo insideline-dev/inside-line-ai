@@ -49,15 +49,11 @@ export function NodeConfigSheet({
   onPhaseConfigChange,
 }: NodeConfigSheetProps) {
   const [activePromptKey, setActivePromptKey] = useState<string | null>(null);
-
-  if (!node) return null;
-
-  const isSystem = node.kind === "system";
-  const selectedKey = activePromptKey ?? node.promptKeys[0] ?? null;
+  const nodeId = node?.id ?? "";
 
   const { data: upstreamData, isLoading: isUpstreamLoading } =
-    useAdminControllerGetAiAgentUpstreamFields(node.id, {
-      query: { enabled: open && !!node.id },
+    useAdminControllerGetAiAgentUpstreamFields(nodeId, {
+      query: { enabled: open && nodeId.length > 0 },
     });
 
   const upstreamItems = useMemo(() => {
@@ -76,6 +72,11 @@ export function NodeConfigSheet({
     () => Array.from(new Set(upstreamItems.flatMap((item) => item.fields))).sort(),
     [upstreamItems],
   );
+
+  if (!node) return null;
+
+  const isSystem = node.kind === "system";
+  const selectedKey = activePromptKey ?? node.promptKeys[0] ?? null;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>

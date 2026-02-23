@@ -1,5 +1,21 @@
 import { Injectable } from "@nestjs/common";
 
+interface OfficeParserAstNode {
+  type?: string;
+  text?: string;
+}
+
+interface OfficeParserAst {
+  content: OfficeParserAstNode[];
+  toText(): string;
+}
+
+interface OfficeParserModule {
+  OfficeParser: {
+    parseOffice(input: Buffer): Promise<OfficeParserAst>;
+  };
+}
+
 export interface PptxTextResult {
   text: string;
   pageCount: number;
@@ -15,7 +31,10 @@ export class PptxTextExtractorService {
       throw new Error("Invalid PPTX buffer: file is empty");
     }
 
-    const { OfficeParser } = await import("officeparser");
+    const officeParserModuleName: string = "officeparser";
+    const { OfficeParser } = (await import(
+      officeParserModuleName
+    )) as OfficeParserModule;
     const ast = await OfficeParser.parseOffice(buffer);
 
     const slideNodes = ast.content.filter((node) => node.type === "slide");

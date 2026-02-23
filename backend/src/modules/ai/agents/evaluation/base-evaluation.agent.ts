@@ -17,6 +17,7 @@ import { AiPromptService } from "../../services/ai-prompt.service";
 import { EVALUATION_PROMPT_KEY_BY_AGENT } from "../../services/ai-prompt-catalog";
 import { buildEvaluationCommonBaseline } from "../../services/evaluation-prompt-baseline";
 import { AiModelExecutionService } from "../../services/ai-model-execution.service";
+import { sanitizeNarrativeText } from "../../services/narrative-sanitizer";
 
 const NARRATIVE_MIN_LENGTH = 420;
 
@@ -124,6 +125,7 @@ export abstract class BaseEvaluationAgent<TOutput>
       "- Prioritize valid structured JSON object output over prose length.",
       "- Keep `feedback` concise and evidence-based; include explicit data gaps.",
       "- `narrativeSummary` and `memoNarrative` are optional and may be short.",
+      "- Never include score/confidence phrasing in narrative text (for example `88/100` or `85% confidence`).",
     ].join("\n");
 
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
@@ -644,12 +646,16 @@ export abstract class BaseEvaluationAgent<TOutput>
       return output;
     }
 
-    const narrativeCandidate = this.pickExistingNarrative(output);
+    const narrativeCandidate = this.sanitizeNarrative(this.pickExistingNarrative(output));
+    const generatedNarrative = this.sanitizeNarrative(
+      this.buildNarrativeFromStructuredSignals(output),
+    );
     const narrative = this.hasDetailedNarrative(narrativeCandidate)
       ? narrativeCandidate
-      : this.buildNarrativeFromStructuredSignals(output);
-    const feedback = this.hasDetailedNarrative(output.feedback)
-      ? output.feedback
+      : generatedNarrative;
+    const sanitizedFeedback = this.sanitizeNarrative(output.feedback);
+    const feedback = this.hasDetailedNarrative(sanitizedFeedback)
+      ? sanitizedFeedback
       : narrative;
 
     return {
@@ -658,6 +664,13 @@ export abstract class BaseEvaluationAgent<TOutput>
       narrativeSummary: narrative,
       memoNarrative: narrative,
     };
+  }
+
+  private sanitizeNarrative(value: string | null | undefined): string {
+    if (typeof value !== "string") {
+      return "";
+    }
+    return sanitizeNarrativeText(value);
   }
 
   private hasDetailedNarrative(value: string | null | undefined): value is string {
@@ -705,14 +718,13 @@ export abstract class BaseEvaluationAgent<TOutput>
     const findings = this.cleanStringArray(value.keyFindings).slice(0, 4);
     const risks = this.cleanStringArray(value.risks).slice(0, 3);
     const dataGaps = this.cleanStringArray(value.dataGaps).slice(0, 3);
-    const confidencePercent = Math.round(value.confidence * 100);
     const intro = this.normalizeWhitespace(value.feedback);
 
     const paragraphOne = [
-      `This section is currently scored at ${Math.round(value.score)}/100 with ${confidencePercent}% confidence.`,
       intro.length > 0
         ? intro
         : "The current assessment is directionally useful but should be interpreted with caution.",
+      "This narrative should be treated as provisional until evidence depth is strengthened through independent diligence.",
     ]
       .join(" ")
       .trim();

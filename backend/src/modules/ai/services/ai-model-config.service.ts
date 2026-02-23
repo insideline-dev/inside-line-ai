@@ -397,7 +397,9 @@ export class AiModelConfigService {
     stage: StartupStage | null,
     purpose: ModelPurpose,
   ): ResolvedModelConfig {
-    const modelName = this.aiConfig.getModelForPurpose(purpose);
+    const modelName = isResearchPromptKey(key)
+      ? "gemini-3.0-flash-preview"
+      : this.aiConfig.getModelForPurpose(purpose);
     const provider = resolveProviderForModelName(modelName);
     const supportedSearchModes = this.getSupportedSearchModes(key, provider);
 
@@ -408,13 +410,11 @@ export class AiModelConfigService {
       purpose,
       modelName,
       provider,
-      searchMode: supportedSearchModes.includes("provider_and_brave_search")
-        ? "provider_and_brave_search"
-        : supportedSearchModes.includes("provider_grounded_search")
-          ? "provider_grounded_search"
-          : supportedSearchModes.includes("brave_tool_search")
-            ? "brave_tool_search"
-        : "off",
+      searchMode: supportedSearchModes.includes("provider_grounded_search")
+        ? "provider_grounded_search"
+        : supportedSearchModes.includes("brave_tool_search")
+          ? "brave_tool_search"
+          : "off",
       supportedSearchModes,
     };
   }

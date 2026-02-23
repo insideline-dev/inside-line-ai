@@ -1,5 +1,6 @@
 import PDFDocument from 'pdfkit';
 import type { PdfContext } from './pdf.types';
+import { sanitizeNarrativeText } from '../../ai/services/narrative-sanitizer';
 import {
   BRAND_COLOR,
   TEXT_PRIMARY,
@@ -232,11 +233,16 @@ function renderSummaryTab(
   // Deal Snapshot
   const dealSnapshot = (investorMemo?.snapshot ?? investorMemo?.dealSnapshot) as string | undefined;
   if (dealSnapshot) {
-    ensureSpace(doc, 680, userEmail);
-    addSubsectionHeader(doc, 'Deal Snapshot');
-    doc.fontSize(9).font('Helvetica').fillColor(TEXT_PRIMARY)
-      .text(dealSnapshot, MARGIN + 5, doc.y, { width: CONTENT_WIDTH - 10, align: 'justify' });
-    doc.moveDown(0.8);
+    const sanitizedDealSnapshot = sanitizeNarrativeText(dealSnapshot);
+    if (sanitizedDealSnapshot.length > 0) {
+      ensureSpace(doc, 680, userEmail);
+      addSubsectionHeader(doc, 'Deal Snapshot');
+      doc.fontSize(9).font('Helvetica').fillColor(TEXT_PRIMARY).text(sanitizedDealSnapshot, MARGIN + 5, doc.y, {
+        width: CONTENT_WIDTH - 10,
+        align: 'justify',
+      });
+      doc.moveDown(0.8);
+    }
   }
 
   // Thesis Alignment
@@ -251,11 +257,21 @@ function renderSummaryTab(
     doc.y += 32;
 
     if (typeof thesisAlignment === 'string') {
-      doc.fontSize(9).font('Helvetica').fillColor(TEXT_PRIMARY)
-        .text(thesisAlignment, MARGIN + 5, doc.y, { width: CONTENT_WIDTH - 10 });
+      const sanitizedAlignment = sanitizeNarrativeText(thesisAlignment);
+      if (sanitizedAlignment.length > 0) {
+        doc.fontSize(9).font('Helvetica').fillColor(TEXT_PRIMARY).text(sanitizedAlignment, MARGIN + 5, doc.y, {
+          width: CONTENT_WIDTH - 10,
+        });
+      }
     } else if ((thesisAlignment as Record<string, unknown>).summary) {
-      doc.fontSize(9).font('Helvetica').fillColor(TEXT_PRIMARY)
-        .text((thesisAlignment as Record<string, unknown>).summary as string, MARGIN + 5, doc.y, { width: CONTENT_WIDTH - 10 });
+      const summaryText = sanitizeNarrativeText(
+        (thesisAlignment as Record<string, unknown>).summary as string,
+      );
+      if (summaryText.length > 0) {
+        doc.fontSize(9).font('Helvetica').fillColor(TEXT_PRIMARY).text(summaryText, MARGIN + 5, doc.y, {
+          width: CONTENT_WIDTH - 10,
+        });
+      }
     }
 
     const alignmentFactors = (thesisAlignment as Record<string, unknown>)?.alignmentFactors as unknown[] | undefined;

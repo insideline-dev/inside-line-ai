@@ -1041,7 +1041,9 @@ export class AiPromptRuntimeService {
 
   private resolveModelPreview(key: AiPromptKey) {
     const purpose = this.resolveModelPurpose(key);
-    const modelName = this.aiConfig.getModelForPurpose(purpose);
+    const modelName = key.startsWith("research.")
+      ? "gemini-3.0-flash-preview"
+      : this.aiConfig.getModelForPurpose(purpose);
     const provider = this.resolveProviderForModel(modelName);
 
     const supportedSearchModes: Array<
@@ -1066,12 +1068,10 @@ export class AiPromptRuntimeService {
       modelName,
       provider,
       searchMode:
-        supportedSearchModes.includes("provider_and_brave_search")
-          ? "provider_and_brave_search"
-          : supportedSearchModes.includes("provider_grounded_search")
-            ? "provider_grounded_search"
-            : supportedSearchModes.includes("brave_tool_search")
-              ? "brave_tool_search"
+        supportedSearchModes.includes("provider_grounded_search")
+          ? "provider_grounded_search"
+          : supportedSearchModes.includes("brave_tool_search")
+            ? "brave_tool_search"
           : "off",
       supportedSearchModes,
     };

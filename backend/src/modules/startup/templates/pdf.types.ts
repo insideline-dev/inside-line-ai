@@ -1,5 +1,6 @@
 import type { Startup } from '../entities/startup.schema';
 import type { StartupEvaluation } from '../../analysis/entities/analysis.schema';
+import { sanitizeNarrativeText } from '../../ai/services/narrative-sanitizer';
 
 /**
  * Data passed from PdfService to all PDF templates.
@@ -57,8 +58,11 @@ export function getSummaryFromData(data: unknown): string | null {
   if (!data || typeof data !== 'object') return null;
   const d = data as Record<string, unknown>;
 
-  if (typeof d.narrativeSummary === 'string' && d.narrativeSummary.length > 50) {
-    return d.narrativeSummary;
+  if (typeof d.narrativeSummary === 'string') {
+    const narrativeSummary = sanitizeNarrativeText(d.narrativeSummary);
+    if (narrativeSummary.length > 50) {
+      return narrativeSummary;
+    }
   }
 
   const summaryFields = [
@@ -73,8 +77,11 @@ export function getSummaryFromData(data: unknown): string | null {
     'detailedAnalysis',
   ];
   for (const field of summaryFields) {
-    if (typeof d[field] === 'string' && (d[field] as string).length > 50) {
-      return d[field] as string;
+    if (typeof d[field] === 'string') {
+      const fieldSummary = sanitizeNarrativeText(d[field] as string);
+      if (fieldSummary.length > 50) {
+        return fieldSummary;
+      }
     }
   }
 
@@ -84,15 +91,20 @@ export function getSummaryFromData(data: unknown): string | null {
     if (typeof v === 'object' && v !== null) {
       const sub = v as Record<string, unknown>;
       if (typeof sub.assessment === 'string') {
-        summaryParts.push(sub.assessment as string);
+        summaryParts.push(sanitizeNarrativeText(sub.assessment as string));
       } else if (typeof sub.summary === 'string') {
-        summaryParts.push(sub.summary as string);
+        summaryParts.push(sanitizeNarrativeText(sub.summary as string));
       }
     }
   }
 
   if (summaryParts.length > 0) {
-    return summaryParts.slice(0, 2).join('\n\n');
+    const summary = summaryParts
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0)
+      .slice(0, 2)
+      .join('\n\n');
+    return summary.length > 0 ? summary : null;
   }
 
   return null;

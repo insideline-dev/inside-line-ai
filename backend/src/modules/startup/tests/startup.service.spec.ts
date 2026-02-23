@@ -311,6 +311,9 @@ describe("StartupService", () => {
         .filter((value) => value.length > 0);
       expect(paragraphs.length).toBeGreaterThanOrEqual(4);
       expect((narrativeSummary ?? "").length).toBeGreaterThan(420);
+      expect(narrativeSummary ?? "").not.toMatch(
+        /\b\d{1,3}\s*\/\s*100\b[\s\S]*\bconfidence\b/i,
+      );
     });
 
     it("should not include evaluation data before approval for founders", async () => {
@@ -319,7 +322,9 @@ describe("StartupService", () => {
         status: StartupStatus.PENDING_REVIEW,
       };
 
-      mockDb.limit.mockResolvedValueOnce([reviewingStartup]);
+      mockDb.limit
+        .mockResolvedValueOnce([reviewingStartup])
+        .mockResolvedValueOnce([]);
 
       const result = await service.findOne(mockStartupId, mockUserId);
 

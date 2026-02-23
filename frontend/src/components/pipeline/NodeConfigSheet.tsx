@@ -126,7 +126,7 @@ export function NodeConfigSheet({
 
   const { data: upstreamData, isLoading: isUpstreamLoading } =
     useAdminControllerGetAiAgentUpstreamFields(nodeId, {
-      query: { enabled: open && Boolean(nodeId) },
+      query: { enabled: open && nodeId.length > 0 },
     });
 
   const upstreamItems = useMemo(() => {
@@ -386,7 +386,6 @@ export function NodeConfigSheet({
   };
 
   if (!node) return null;
-
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="sm:max-w-[600px] overflow-y-auto">

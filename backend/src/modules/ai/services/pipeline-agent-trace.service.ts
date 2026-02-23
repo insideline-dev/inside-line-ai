@@ -89,6 +89,10 @@ export class PipelineAgentTraceService {
       input.rawProviderError,
     );
     const meta = this.normalizeMeta(input.meta);
+    const startedAt = input.startedAt ?? new Date();
+    const completedAt =
+      input.completedAt ??
+      (input.status === "running" ? null : new Date());
 
     await this.drizzle.db.insert(pipelineAgentRun).values({
       startupId: input.startupId,
@@ -109,8 +113,8 @@ export class PipelineAgentTraceService {
       outputJson,
       meta,
       error: input.error,
-      startedAt: input.startedAt ?? new Date(),
-      completedAt: input.completedAt ?? new Date(),
+      startedAt,
+      completedAt,
     });
   }
 

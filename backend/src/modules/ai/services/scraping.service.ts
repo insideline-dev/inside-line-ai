@@ -32,6 +32,7 @@ interface TeamMemberInput {
   name: string;
   role?: string;
   linkedinUrl?: string;
+  teamMemberSource?: "submitted" | "website" | "linkedin" | "deck" | "enrichment";
 }
 
 interface TeamBioInput {
@@ -121,10 +122,13 @@ export class ScrapingService {
     const effectiveWebsite = enrichment?.website?.value ?? record.website;
 
     const scrapeErrors: ScrapeError[] = [];
-    const submittedTeamMembers = this.mapTeamMembers(record.teamMembers ?? []);
+    const submittedTeamMembers = this.mapTeamMembers(record.teamMembers ?? []).map((m) => ({
+      ...m,
+      teamMemberSource: "submitted" as const,
+    }));
     const extractionFounderMembers = this.mapFounderNames(
       extraction?.founderNames ?? [],
-    );
+    ).map((m) => ({ ...m, teamMemberSource: "deck" as const }));
     this.logger.debug(
       `[Scraping] Loaded startup context | website=${effectiveWebsite ?? "none"} | submittedTeamMembers=${submittedTeamMembers.length} | extractionFounders=${extractionFounderMembers.length}`,
     );
@@ -174,6 +178,7 @@ export class ScrapingService {
           name: founder.name,
           role: founder.role,
           linkedinUrl: founder.linkedinUrl,
+          teamMemberSource: "enrichment" as const,
         }));
 
     progress?.onStepStart(SCRAPING_STEP_TEAM_DISCOVERY, {
@@ -188,20 +193,22 @@ export class ScrapingService {
     try {
       discoveredWebsiteLeaders = this.extractLeadershipCandidates(
         website?.teamBios ?? [],
-      );
+      ).map((m) => ({ ...m, teamMemberSource: "website" as const }));
       discoveredWebsiteLinkedinMembers = this.extractLinkedinCandidatesFromWebsiteLinks(
         website?.links ?? [],
-      );
-      discoveredLinkedinLeaders = await this.discoverCompanyLinkedinLeadership(
-        record.name,
-        [
-          ...submittedTeamMembers,
-          ...discoveredWebsiteLeaders,
-          ...discoveredWebsiteLinkedinMembers,
-        ],
-        effectiveWebsite ?? undefined,
-        progress,
-      );
+      ).map((m) => ({ ...m, teamMemberSource: "website" as const }));
+      discoveredLinkedinLeaders = (
+        await this.discoverCompanyLinkedinLeadership(
+          record.name,
+          [
+            ...submittedTeamMembers,
+            ...discoveredWebsiteLeaders,
+            ...discoveredWebsiteLinkedinMembers,
+          ],
+          effectiveWebsite ?? undefined,
+          progress,
+        )
+      ).map((m) => ({ ...m, teamMemberSource: "linkedin" as const }));
     } catch (error) {
       const message = this.asMessage(error);
       progress?.onStepFailed(SCRAPING_STEP_TEAM_DISCOVERY, message, {
@@ -319,19 +326,20 @@ export class ScrapingService {
     const submittedNames = new Set(
       submittedTeamMembers.map((member) => member.name.trim().toLowerCase()),
     );
+    const trustedSources = new Set<string>(["submitted", "deck", "website", "enrichment"]);
     const droppedUnverifiedTeamMembers = enrichedTeam.filter((member) => {
       const isSubmittedMember = submittedNames.has(member.name.trim().toLowerCase());
-      if (isSubmittedMember) {
-        return false;
-      }
-      return member.enrichmentStatus !== "success";
+      if (isSubmittedMember) return false;
+      if (member.enrichmentStatus === "success") return false;
+      if (member.teamMemberSource && trustedSources.has(member.teamMemberSource)) return false;
+      return true;
     });
     const verifiedTeamMembers = enrichedTeam.filter((member) => {
       const isSubmittedMember = submittedNames.has(member.name.trim().toLowerCase());
-      if (isSubmittedMember) {
-        return true;
-      }
-      return member.enrichmentStatus === "success";
+      if (isSubmittedMember) return true;
+      if (member.enrichmentStatus === "success") return true;
+      if (member.teamMemberSource && trustedSources.has(member.teamMemberSource)) return true;
+      return false;
     });
     const linkedinStatuses = enrichedTeam.reduce<Record<string, number>>((acc, member) => {
       const key = member.enrichmentStatus ?? "unknown";
@@ -570,6 +578,7 @@ export class ScrapingService {
         ...member,
         role: existing.role || member.role,
         linkedinUrl: existing.linkedinUrl || member.linkedinUrl,
+        teamMemberSource: existing.teamMemberSource ?? member.teamMemberSource,
       });
     };
 
@@ -913,6 +922,7 @@ export class ScrapingService {
             name: cached.name || member.name,
             role: cached.role ?? member.role,
             linkedinUrl: cached.linkedinUrl ?? member.linkedinUrl,
+            teamMemberSource: member.teamMemberSource ?? cached.teamMemberSource,
           });
           this.logger.debug(`[Scraping] LinkedIn cache hit for ${member.linkedinUrl}`);
           continue;
@@ -970,6 +980,7 @@ export class ScrapingService {
           name: member.name,
           role: member.role,
           linkedinUrl: member.linkedinUrl,
+          teamMemberSource: member.teamMemberSource,
           enrichmentStatus: "error",
           matchConfidence: 0,
           confidenceReason: `LinkedIn profile resolution request failed: ${message}`,
@@ -1024,6 +1035,7 @@ export class ScrapingService {
         confidenceReason: enriched?.confidenceReason,
         linkedinProfile: enriched?.linkedinProfile,
         enrichedAt: enriched?.enrichedAt,
+        teamMemberSource: original.teamMemberSource,
       });
     }
 
@@ -1196,6 +1208,7 @@ Return each person with their full name, their role/title, and optionally their 
           name: m.name.trim(),
           role: m.role?.trim() || undefined,
           linkedinUrl: m.linkedinUrl?.trim() || undefined,
+          teamMemberSource: "deck" as const,
         }));
 
       this.logger.log(`[Scraping] Deck team discovery found ${result.length} members`);

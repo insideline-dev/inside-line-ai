@@ -123,7 +123,7 @@ export function MemoSection({
           )}
           {score !== null && score !== undefined && (
             <Badge variant="outline" className={`${getScoreColor(score)} py-0 h-5`}>
-              Score: {score}/100
+              Score: {Math.round(score)}/100
             </Badge>
           )}
           {trend && (

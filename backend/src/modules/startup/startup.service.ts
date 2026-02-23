@@ -296,7 +296,7 @@ export class StartupService {
         throw new NotFoundException(`Startup with ID ${id} not found`);
       }
 
-      return this.withEvaluation(db, found, false);
+      return this.withEvaluation(db, found, true);
     });
   }
 
@@ -690,6 +690,34 @@ export class StartupService {
       accepted: true,
       feedbackAccepted: Boolean(feedback),
       mode,
+    };
+  }
+
+  async adminCancelPipeline(id: string, adminId: string) {
+    const [found] = await this.drizzle.db
+      .select()
+      .from(startup)
+      .where(eq(startup.id, id))
+      .limit(1);
+
+    if (!found) {
+      throw new NotFoundException(`Startup with ID ${id} not found`);
+    }
+
+    if (!this.aiConfig.isPipelineEnabled()) {
+      throw new BadRequestException("AI pipeline is disabled");
+    }
+
+    const result = await this.aiPipeline.cancelPipeline(id);
+
+    this.logger.log(
+      `Admin ${adminId} cancelled pipeline for startup ${id}, removed ${result.removedJobs} jobs`,
+    );
+
+    return {
+      startupId: id,
+      cancelled: true,
+      removedJobs: result.removedJobs,
     };
   }
 

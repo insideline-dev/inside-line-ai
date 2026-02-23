@@ -80,7 +80,17 @@ export const AiSchemaRevisionsResponseSchema = z.object({
   revisions: z.array(AiSchemaRevisionSchema),
 });
 
+const ResolvedSchemaSourceSchema = z.enum(["published", "code"]);
+
+export const AiResolvedSchemaResponseSchema = z.object({
+  promptKey: z.string().min(1),
+  stage: z.nativeEnum(StartupStage).nullable(),
+  source: ResolvedSchemaSourceSchema,
+  schemaJson: SchemaDescriptorSchema,
+});
+
 export class CreateAiSchemaRevisionDto extends createZodDto(CreateAiSchemaRevisionSchema) {}
 export class UpdateAiSchemaRevisionDto extends createZodDto(UpdateAiSchemaRevisionSchema) {}
 export class AiSchemaRevisionResponseDto extends createZodDto(AiSchemaRevisionSchema) {}
 export class AiSchemaRevisionsResponseDto extends createZodDto(AiSchemaRevisionsResponseSchema) {}
+export class AiResolvedSchemaResponseDto extends createZodDto(AiResolvedSchemaResponseSchema) {}

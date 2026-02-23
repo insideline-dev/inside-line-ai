@@ -18,9 +18,8 @@ import {
   type SectionScores,
 } from "./score-computation.service";
 import { SynthesisAgent } from "../agents/synthesis";
-import type {
-  SynthesisAgentOutput,
-} from "../agents/synthesis";
+import type { SynthesisAgentOutput } from "../agents/synthesis";
+import type { InvestorMemo, FounderReport } from "../schemas/synthesis.schema";
 import type { EvaluationFallbackReason } from "../interfaces/agent.interface";
 import { MemoGeneratorService } from "./memo-generator.service";
 import { AiConfigService } from "./ai-config.service";
@@ -479,8 +478,8 @@ export class SynthesisService {
       const strengths = this.toStringArray(existing.keyStrengths);
       const risks = this.toStringArray(existing.keyRisks);
       const recommendations = this.toStringArray(existing.recommendations);
-      const investorMemo = this.toStringValue(existing.investorMemo);
-      const founderReport = this.toStringValue(existing.founderReport);
+      const investorMemo = this.toObjectValue<InvestorMemo>(existing.investorMemo);
+      const founderReport = this.toObjectValue<FounderReport>(existing.founderReport);
 
       const hasReusableNarrative =
         executiveSummary.length > 0 ||
@@ -540,10 +539,8 @@ export class SynthesisService {
       .filter((item) => item.length > 0);
   }
 
-  private toStringValue(value: unknown): string | null {
-    return typeof value === "string" && value.trim().length > 0
-      ? value.trim()
-      : null;
+  private toObjectValue<T extends object>(value: unknown): T | null {
+    return value !== null && typeof value === "object" ? (value as T) : null;
   }
 
   private async performPostSynthesisOps(

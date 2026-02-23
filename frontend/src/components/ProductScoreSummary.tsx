@@ -69,7 +69,7 @@ export function ProductScoreSummary({
                 productScore >= 80 ? "text-green-600" :
                 productScore >= 60 ? "text-amber-600" :
                 "text-red-600"
-              }`} data-testid="text-product-score">{productScore}</span>
+              }`} data-testid="text-product-score">{Math.round(productScore)}</span>
               <span className="text-lg text-muted-foreground">/100</span>
             </div>
           </div>
@@ -138,7 +138,7 @@ export function ProductScoreSummary({
                 style={{ width: `${normalizedMoatStrength}%` }}
               />
             </div>
-            <span className="text-sm font-medium">{normalizedMoatStrength}/100</span>
+            <span className="text-sm font-medium">{Math.round(normalizedMoatStrength)}/100</span>
           </div>
         </CardContent>
       </Card>

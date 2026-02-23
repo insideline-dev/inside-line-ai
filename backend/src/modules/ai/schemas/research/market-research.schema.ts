@@ -20,7 +20,7 @@ const optionalString = z.preprocess(
 
 const requiredStringFromNull = (fallback: string) =>
   z.preprocess(
-    (value) => (value === null ? fallback : value),
+    (value) => (value == null ? fallback : value),
     z.string().min(1),
   );
 

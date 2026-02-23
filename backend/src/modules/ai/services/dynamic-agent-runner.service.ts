@@ -8,13 +8,13 @@ import type { StartupStage } from "../../startup/entities/startup.schema";
 import type { AiPromptKey } from "./ai-prompt-catalog";
 import { isAiPromptKey } from "./ai-prompt-catalog";
 import { AiPromptService } from "./ai-prompt.service";
-import { AiModelConfigService } from "./ai-model-config.service";
 import { AgentSchemaRegistryService } from "./agent-schema-registry.service";
 import { SchemaCompilerService } from "./schema-compiler.service";
 import { AiProviderService } from "../providers/ai-provider.service";
 import { AiConfigService } from "./ai-config.service";
 import type { SchemaDescriptor, SchemaField } from "../interfaces/schema.interface";
 import { ModelPurpose } from "../interfaces/pipeline.interface";
+import { AiModelExecutionService } from "./ai-model-execution.service";
 
 @Injectable()
 export class DynamicAgentRunnerService {
@@ -22,10 +22,10 @@ export class DynamicAgentRunnerService {
 
   constructor(
     private promptService: AiPromptService,
-    private modelConfig: AiModelConfigService,
     private schemaRegistry: AgentSchemaRegistryService,
     private schemaCompiler: SchemaCompilerService,
     private providers: AiProviderService,
+    private modelExecution: AiModelExecutionService,
     private aiConfig: AiConfigService,
   ) {}
 
@@ -45,12 +45,12 @@ export class DynamicAgentRunnerService {
       params.stage,
     );
     const schema = this.schemaCompiler.compile(descriptor);
-    if (isAiPromptKey(params.promptKey)) {
-      await this.modelConfig.resolveConfig({
-        key: params.promptKey,
-        stage: params.stage,
-      });
-    }
+    const executionOptions = isAiPromptKey(params.promptKey)
+      ? await this.modelExecution.resolveForPrompt({
+          key: params.promptKey,
+          stage: params.stage,
+        })
+      : null;
     const renderedPrompt = this.promptService.renderTemplate(promptConfig.userPrompt, {
       contextJson: JSON.stringify(params.pipelineData),
     });
@@ -59,12 +59,16 @@ export class DynamicAgentRunnerService {
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       try {
         const response = await generateText({
-          model: this.providers.resolveModelForPurpose(ModelPurpose.EVALUATION),
+          model:
+            executionOptions?.generateTextOptions.model ??
+            this.providers.resolveModelForPurpose(ModelPurpose.EVALUATION),
           output: Output.object({ schema }),
           system: promptConfig.systemPrompt,
           prompt: renderedPrompt,
           temperature: this.aiConfig.getEvaluationTemperature(),
           maxOutputTokens: this.aiConfig.getEvaluationMaxOutputTokens(),
+          tools: executionOptions?.generateTextOptions.tools,
+          toolChoice: executionOptions?.generateTextOptions.toolChoice,
         });
 
         return {

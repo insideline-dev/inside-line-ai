@@ -148,10 +148,19 @@ describe("SynthesisService", () => {
           "Unable to generate investment thesis due to synthesis failure.",
         nextSteps: ["Manual review required"],
         confidenceLevel: "Low",
-        investorMemo:
-          "Synthesis generation failed. Please review evaluation data manually.",
-        founderReport:
-          "We were unable to generate an automated report. Our team will follow up.",
+        investorMemo: {
+          executiveSummary: "Synthesis generation failed. Please review evaluation data manually.",
+          sections: [],
+          recommendation: "Decline",
+          riskLevel: "high",
+          dealHighlights: [],
+          keyDueDiligenceAreas: ["Manual review required"],
+        },
+        founderReport: {
+          summary: "We were unable to generate an automated report. Our team will follow up.",
+          sections: [],
+          actionItems: ["Await manual review from the investment team"],
+        },
         dataConfidenceNotes:
           "Synthesis failed — all scores require manual verification.",
       },

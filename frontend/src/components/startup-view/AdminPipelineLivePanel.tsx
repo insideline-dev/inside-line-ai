@@ -8,8 +8,10 @@ import {
   Loader2,
   RefreshCw,
   RotateCcw,
+  StopCircle,
   XCircle,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -37,6 +39,7 @@ interface AdminPipelineLivePanelProps {
     requestedAt: string;
   } | null;
   onClearTrackedRetry?: () => void;
+  onCancelPipeline?: () => void;
 }
 
 type FlattenedAgent = {
@@ -46,6 +49,33 @@ type FlattenedAgent = {
 };
 
 type SignalTone = "neutral" | "success" | "info" | "warning" | "danger";
+
+type ActivityItemKind = "agent" | "event" | "ai_trace" | "step_trace";
+
+type ActivityFilter = "all" | "issues" | "agents" | "traces" | "events";
+
+type ActivityItem = {
+  id: string;
+  kind: ActivityItemKind;
+  name: string;
+  phase: string;
+  status: string;
+  tone: SignalTone;
+  timestamp: string | undefined;
+  error?: string;
+  hasIssue: boolean;
+  agent?: FlattenedAgent;
+  event?: PipelineAgentEvent;
+  trace?: PipelineAgentTrace;
+};
+
+const ACTIVITY_FILTERS: { value: ActivityFilter; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "issues", label: "Issues" },
+  { value: "agents", label: "Agents" },
+  { value: "traces", label: "Traces" },
+  { value: "events", label: "Events" },
+];
 
 const PHASE_LABELS: Record<string, string> = {
   extraction: "Extraction",
@@ -244,17 +274,6 @@ function runHealthText(tone: SignalTone): string {
   return "Idle";
 }
 
-function previewText(value: string | null | undefined, limit = 160): string {
-  if (!value || value.trim().length === 0) {
-    return "Not captured";
-  }
-  const compact = value.replace(/\s+/g, " ").trim();
-  if (compact.length <= limit) {
-    return compact;
-  }
-  return `${compact.slice(0, limit)}...`;
-}
-
 function normalizeAgentError(value: string | undefined): string | undefined {
   if (!value) {
     return value;
@@ -360,22 +379,6 @@ function toPrettyMeta(trace: PipelineAgentTrace | null): string {
 
 function isPhaseStepTrace(trace: PipelineAgentTrace): boolean {
   return trace.traceKind === "phase_step";
-}
-
-function readTraceOperation(trace: PipelineAgentTrace): string | undefined {
-  const operation = trace.meta?.operation;
-  return typeof operation === "string" && operation.trim().length > 0
-    ? operation
-    : undefined;
-}
-
-function formatCaptureStatus(
-  status: PipelineAgentTrace["captureStatus"] | undefined,
-): string {
-  if (status === "captured") return "Captured";
-  if (status === "provider_error_only") return "Provider Error Only";
-  if (status === "missing") return "Missing";
-  return "Unknown";
 }
 
 function phaseSortKey(phase: string): number {
@@ -547,6 +550,7 @@ export function AdminPipelineLivePanel({
   onRetryAgent,
   trackedRetry,
   onClearTrackedRetry,
+  onCancelPipeline,
 }: AdminPipelineLivePanelProps) {
   const [selectedTrace, setSelectedTrace] = useState<PipelineAgentTrace | null>(null);
   const [retryingAgentKey, setRetryingAgentKey] = useState<string | null>(null);
@@ -671,6 +675,98 @@ export function AdminPipelineLivePanel({
     () => agentTraceTimeline.filter((trace) => isPhaseStepTrace(trace)),
     [agentTraceTimeline],
   );
+
+  const [activityFilter, setActivityFilter] = useState<ActivityFilter>("all");
+
+  const activityItems = useMemo<ActivityItem[]>(() => {
+    const items: ActivityItem[] = [];
+
+    for (const agent of flattenedAgents) {
+      const tone = toneForAgent(agent.data);
+      items.push({
+        id: `agent:${agent.phase}:${agent.key}`,
+        kind: "agent",
+        name: formatLabel(agent.key),
+        phase: agent.phase,
+        status: agent.data.status,
+        tone,
+        timestamp: agent.data.lastEventAt,
+        error: normalizeAgentError(agent.data.error),
+        hasIssue: isHardFailedAgent(agent.data) || isFallbackAgent(agent.data),
+        agent,
+      });
+    }
+
+    for (const event of eventTimeline) {
+      const tone = toneForEvent(event.event);
+      items.push({
+        id: `event:${event.id}`,
+        kind: "event",
+        name: formatLabel(event.agentKey),
+        phase: String(event.phase),
+        status: event.event,
+        tone,
+        timestamp: event.timestamp,
+        error: normalizeAgentError(event.error),
+        hasIssue: event.event === "failed" || event.event === "fallback",
+        event,
+      });
+    }
+
+    for (const trace of aiAgentTraceTimeline) {
+      items.push({
+        id: `ai_trace:${trace.id}`,
+        kind: "ai_trace",
+        name: formatLabel(trace.agentKey),
+        phase: String(trace.phase),
+        status: trace.status,
+        tone: trace.status === "failed" ? "danger" : trace.status === "fallback" ? "warning" : trace.status === "running" ? "info" : "success",
+        timestamp: trace.startedAt ?? trace.completedAt ?? undefined,
+        error: normalizeTraceError(trace),
+        hasIssue: trace.status === "failed" || trace.status === "fallback",
+        trace,
+      });
+    }
+
+    for (const trace of stepTraceTimeline) {
+      items.push({
+        id: `step_trace:${trace.id}`,
+        kind: "step_trace",
+        name: formatLabel(trace.stepKey || trace.agentKey),
+        phase: String(trace.phase),
+        status: trace.status,
+        tone: trace.status === "failed" ? "danger" : trace.status === "fallback" ? "warning" : trace.status === "running" ? "info" : "success",
+        timestamp: trace.startedAt ?? trace.completedAt ?? undefined,
+        error: normalizeTraceError(trace),
+        hasIssue: trace.status === "failed" || trace.status === "fallback",
+        trace,
+      });
+    }
+
+    items.sort((a, b) => {
+      const tsA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+      const tsB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+      return tsB - tsA;
+    });
+
+    return items;
+  }, [flattenedAgents, eventTimeline, aiAgentTraceTimeline, stepTraceTimeline]);
+
+  const filteredActivityItems = useMemo(() => {
+    if (activityFilter === "all") return activityItems;
+    if (activityFilter === "issues") return activityItems.filter((item) => item.hasIssue);
+    if (activityFilter === "agents") return activityItems.filter((item) => item.kind === "agent");
+    if (activityFilter === "traces") return activityItems.filter((item) => item.kind === "ai_trace" || item.kind === "step_trace");
+    return activityItems.filter((item) => item.kind === "event");
+  }, [activityItems, activityFilter]);
+
+  const activityFilterCounts = useMemo(() => ({
+    all: activityItems.length,
+    issues: activityItems.filter((item) => item.hasIssue).length,
+    agents: activityItems.filter((item) => item.kind === "agent").length,
+    traces: activityItems.filter((item) => item.kind === "ai_trace" || item.kind === "step_trace").length,
+    events: activityItems.filter((item) => item.kind === "event").length,
+  }), [activityItems]);
 
   const runningAgentsCount = flattenedAgents.filter(
     (agent) => agent.data.status === "running",
@@ -810,6 +906,17 @@ export function AdminPipelineLivePanel({
             <Badge variant="outline">Snapshot</Badge>
           )}
           {isFetching && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+          {isLive && onCancelPipeline && (
+            <Button
+              variant="destructive"
+              size="sm"
+              className="ml-auto"
+              onClick={onCancelPipeline}
+            >
+              <StopCircle className="h-4 w-4 mr-1" />
+              Stop Pipeline
+            </Button>
+          )}
         </CardTitle>
       </CardHeader>
 
@@ -1004,60 +1111,142 @@ export function AdminPipelineLivePanel({
           phases={progress?.phases}
         />
 
-        <div className="grid gap-4 xl:grid-cols-2">
-          <div className="space-y-2">
-            <h3 className="text-sm font-semibold">Agent Status</h3>
-            <ScrollArea className="h-[280px] rounded-lg border">
-              <div className="space-y-2 p-3">
-                {flattenedAgents.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No agent activity yet.</p>
-                ) : (
-                  flattenedAgents.map((agent) => {
-                    const isTrackedAgent =
-                      trackedRetry?.phase === agent.phase &&
-                      trackedRetry.agentKey === agent.key;
-                    return (
-                      <div
-                        key={`${agent.phase}:${agent.key}`}
-                        className={`rounded-md border p-2.5 ${SURFACE_TONE_CLASS[toneForAgent(agent.data)]} ${
-                          isTrackedAgent ? "ring-1 ring-primary/50" : ""
-                        }`}
-                      >
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="flex items-center gap-2 text-sm font-medium">
-                          {statusIcon(agent.data.status)}
-                          {formatLabel(agent.key)}
-                        </p>
-                        <Badge variant="outline" className={statusClass(agent.data.status)}>
-                          {agent.data.status}
-                        </Badge>
-                      </div>
-                      <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted-foreground">
-                        <span>Phase: {formatLabel(agent.phase)}</span>
-                        <span>Attempt: {agent.data.attempts ?? 1}</span>
-                        <span>Retries: {agent.data.retryCount ?? 0}</span>
-                        <span>Fallback: {isFallbackAgent(agent.data) ? "yes" : "no"}</span>
-                      </div>
-                      {isFallbackAgent(agent.data) && (
-                        <div className="mt-1 text-xs text-amber-700 dark:text-amber-300">
-                          Reason: {formatFallbackReason(agent.data.fallbackReason) ?? "Unknown"}
-                        </div>
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold">Activity</h3>
+            <div className="flex gap-1">
+              {ACTIVITY_FILTERS.map((filter) => {
+                const count = activityFilterCounts[filter.value];
+                return (
+                  <button
+                    key={filter.value}
+                    type="button"
+                    className={cn(
+                      "rounded-md border px-2 py-0.5 text-xs font-medium transition-colors",
+                      activityFilter === filter.value
+                        ? "border-primary/40 bg-primary/10 text-primary"
+                        : "border-transparent text-muted-foreground hover:bg-muted",
+                    )}
+                    onClick={() => setActivityFilter(filter.value)}
+                  >
+                    {filter.label}
+                    {count > 0 && (
+                      <span className="ml-1 tabular-nums text-muted-foreground">
+                        {count}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <ScrollArea className="h-[480px] rounded-lg border">
+            <div className="space-y-1 p-2">
+              {filteredActivityItems.length === 0 ? (
+                <p className="py-6 text-center text-sm text-muted-foreground">
+                  No activity to show.
+                </p>
+              ) : (
+                filteredActivityItems.map((item) => {
+                  const isAgent = item.kind === "agent" && item.agent;
+                  const isTrace = item.kind === "ai_trace" || item.kind === "step_trace";
+                  const isEvent = item.kind === "event" && item.event;
+                  const isTrackedAgent = isAgent &&
+                    trackedRetry?.phase === item.agent?.phase &&
+                    trackedRetry?.agentKey === item.agent?.key;
+                  const canRetry = isAgent &&
+                    onRetryAgent &&
+                    item.agent &&
+                    (item.agent.phase === "research" || item.agent.phase === "evaluation") &&
+                    (item.agent.data.status === "failed" || isFallbackAgent(item.agent.data));
+
+                  return (
+                    <div
+                      key={item.id}
+                      className={cn(
+                        "rounded-md border px-2.5 py-2",
+                        SURFACE_TONE_CLASS[item.tone],
+                        isTrace && "cursor-pointer",
+                        isTrackedAgent && "ring-1 ring-primary/50",
                       )}
-                      {onRetryAgent &&
-                        (agent.phase === "research" || agent.phase === "evaluation") &&
-                        (agent.data.status === "failed" || isFallbackAgent(agent.data)) && (
-                          <div className="mt-2">
+                      onClick={isTrace && item.trace ? () => setSelectedTrace(item.trace!) : undefined}
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className="flex min-w-0 flex-1 items-center gap-2">
+                          {isEvent ? eventIcon(item.event!.event) : statusIcon(item.status)}
+                          <span className="truncate text-sm font-medium">{item.name}</span>
+                          <Badge variant="outline" className="shrink-0 border-border bg-muted/50 text-[10px] text-muted-foreground">
+                            {formatLabel(item.phase)}
+                          </Badge>
+                          {item.kind !== "agent" && (
+                            <Badge variant="outline" className="shrink-0 border-border bg-muted/50 text-[10px] text-muted-foreground">
+                              {item.kind === "event" ? "event" : item.kind === "ai_trace" ? "trace" : "step"}
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2">
+                          {isTrace && (
+                            <button
+                              type="button"
+                              className="text-xs text-muted-foreground hover:text-foreground"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (item.trace) setSelectedTrace(item.trace);
+                              }}
+                            >
+                              <Eye className="inline h-3.5 w-3.5 mr-0.5" />
+                              Trace
+                            </button>
+                          )}
+                          <Badge variant="outline" className={cn("text-[10px]", isEvent ? EVENT_BADGE_CLASS[item.event!.event] : statusClass(item.status))}>
+                            {isEvent ? eventVerb(item.event!.event) : item.status}
+                          </Badge>
+                          <span className="text-xs tabular-nums text-muted-foreground">
+                            {formatTime(item.timestamp)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {item.error && (
+                        <p className={cn(
+                          "mt-1 truncate text-xs",
+                          item.tone === "warning" ? "text-amber-700 dark:text-amber-300" : "text-destructive",
+                        )}>
+                          {item.error}
+                        </p>
+                      )}
+
+                      {isAgent && item.agent && (
+                        <div className="mt-1 flex flex-wrap items-center gap-2">
+                          {isFallbackAgent(item.agent.data) && (
+                            <span className="text-xs text-amber-700 dark:text-amber-300">
+                              Fallback: {formatFallbackReason(item.agent.data.fallbackReason) ?? "Unknown"}
+                            </span>
+                          )}
+                          {(item.agent.data.retryCount ?? 0) > 0 && (
+                            <Badge variant="outline" className="bg-amber-500/10 text-amber-700 border-amber-500/30 text-[10px] dark:text-amber-300">
+                              retried {item.agent.data.retryCount}
+                            </Badge>
+                          )}
+                          {isTrackedAgent && (
+                            <Badge variant="outline" className="bg-sky-500/10 text-sky-700 border-sky-500/30 text-[10px] dark:text-sky-300">
+                              targeted retry
+                            </Badge>
+                          )}
+                          {canRetry && item.agent && (
                             <Button
                               type="button"
                               variant="outline"
                               size="sm"
-                              className="h-7 gap-1.5 text-xs"
-                              disabled={retryingAgentKey === `${agent.phase}:${agent.key}`}
-                              onClick={async () => {
+                              className="ml-auto h-6 gap-1 px-2 text-[10px]"
+                              disabled={retryingAgentKey === `${item.agent.phase}:${item.agent.key}`}
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                const agent = item.agent!;
                                 const actionKey = `${agent.phase}:${agent.key}`;
                                 setRetryingAgentKey(actionKey);
                                 try {
-                                  await onRetryAgent(
+                                  await onRetryAgent!(
                                     agent.phase as "research" | "evaluation",
                                     agent.key,
                                   );
@@ -1068,283 +1257,22 @@ export function AdminPipelineLivePanel({
                                 }
                               }}
                             >
-                              {retryingAgentKey === `${agent.phase}:${agent.key}` ? (
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              {retryingAgentKey === `${item.agent.phase}:${item.agent.key}` ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
                               ) : (
-                                <RotateCcw className="h-3.5 w-3.5" />
+                                <RotateCcw className="h-3 w-3" />
                               )}
-                              Retry agent
+                              Retry
                             </Button>
-                          </div>
-                        )}
-                      {(isFallbackAgent(agent.data) ||
-                        (agent.data.retryCount ?? 0) > 0 ||
-                        agent.data.lastEvent) && (
-                        <div className="mt-1.5 flex flex-wrap gap-1.5">
-                          {(agent.data.retryCount ?? 0) > 0 && (
-                            <Badge
-                              variant="outline"
-                              className="bg-amber-500/10 text-amber-700 border-amber-500/30 dark:text-amber-300"
-                            >
-                              retried {agent.data.retryCount}
-                            </Badge>
-                          )}
-                          {isFallbackAgent(agent.data) && (
-                            <Badge
-                              variant="outline"
-                              className="bg-amber-500/10 text-amber-700 border-amber-500/30 dark:text-amber-300"
-                            >
-                              fallback
-                            </Badge>
-                          )}
-                          {agent.data.lastEvent && (
-                            <Badge
-                              variant="outline"
-                              className={EVENT_BADGE_CLASS[agent.data.lastEvent]}
-                            >
-                              {eventVerb(agent.data.lastEvent)}
-                            </Badge>
-                          )}
-                          {isTrackedAgent && (
-                            <Badge
-                              variant="outline"
-                              className="bg-sky-500/10 text-sky-700 border-sky-500/30 dark:text-sky-300"
-                            >
-                              targeted retry
-                            </Badge>
                           )}
                         </div>
-                      )}
-                      {agent.data.error && (
-                        <p
-                          className={`mt-1 text-xs ${
-                            isFallbackAgent(agent.data)
-                              ? "text-amber-700 dark:text-amber-300"
-                              : "text-destructive"
-                          }`}
-                        >
-                          {normalizeAgentError(agent.data.error)}
-                        </p>
-                      )}
-                      {agent.data.rawProviderError && isFallbackAgent(agent.data) && (
-                        <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
-                          Provider: {previewText(agent.data.rawProviderError, 220)}
-                        </p>
-                      )}
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </ScrollArea>
-          </div>
-
-          <div className="space-y-2">
-            <h3 className="text-sm font-semibold">Event Timeline</h3>
-            <ScrollArea className="h-[280px] rounded-lg border">
-              <div className="space-y-2 p-3">
-                {eventTimeline.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    Waiting for lifecycle events.
-                  </p>
-                ) : (
-                  eventTimeline.map((event) => (
-                    <div
-                      key={event.id}
-                      className={`rounded-md border border-l-4 p-2.5 ${SURFACE_TONE_CLASS[toneForEvent(event.event)]}`}
-                    >
-                      <div className="flex items-center gap-2 text-sm">
-                        {eventIcon(event.event)}
-                        <span className="font-medium">{formatLabel(event.agentKey)}</span>
-                        <Badge variant="outline" className={EVENT_BADGE_CLASS[event.event]}>
-                          {eventVerb(event.event)}
-                        </Badge>
-                      </div>
-                      <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted-foreground">
-                        <span>Phase: {formatLabel(String(event.phase))}</span>
-                        <span>At: {formatTime(event.timestamp)}</span>
-                        {typeof event.attempt === "number" && <span>Attempt: {event.attempt}</span>}
-                        {typeof event.retryCount === "number" && (
-                          <span>Retries: {event.retryCount}</span>
-                        )}
-                        {event.fallbackReason && (
-                          <span>
-                            Reason: {formatFallbackReason(event.fallbackReason)}
-                          </span>
-                        )}
-                      </div>
-                      {event.error && (
-                        <p
-                          className={`mt-1 text-xs ${
-                            event.event === "fallback"
-                              ? "text-amber-700 dark:text-amber-300"
-                              : "text-destructive"
-                          }`}
-                        >
-                          {normalizeAgentError(event.error)}
-                        </p>
-                      )}
-                      {event.rawProviderError && event.event === "fallback" && (
-                        <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
-                          Provider: {previewText(event.rawProviderError, 220)}
-                        </p>
                       )}
                     </div>
-                  ))
-                )}
-              </div>
-            </ScrollArea>
-          </div>
-        </div>
-
-        <div className="grid gap-3 lg:grid-cols-2">
-          <div className="space-y-2">
-            <h3 className="text-sm font-semibold">AI Agent Traces</h3>
-            <ScrollArea className="h-[280px] rounded-lg border">
-              <div className="space-y-2 p-3">
-                {aiAgentTraceTimeline.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No AI-agent traces captured yet for this run.
-                  </p>
-                ) : (
-                  aiAgentTraceTimeline.map((trace) => (
-                    <div
-                      key={trace.id}
-                      className={`rounded-md border p-2.5 ${SURFACE_TONE_CLASS[
-                        trace.status === "failed"
-                          ? "danger"
-                          : trace.status === "fallback"
-                            ? "warning"
-                            : trace.status === "running"
-                              ? "info"
-                              : "success"
-                      ]} cursor-pointer`}
-                      onClick={() => setSelectedTrace(trace)}
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-sm font-medium">
-                          {formatLabel(trace.agentKey)} · {formatLabel(String(trace.phase))}
-                        </p>
-                        <Badge variant="outline" className={statusClass(trace.status)}>
-                          {trace.status}
-                        </Badge>
-                      </div>
-                      <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted-foreground">
-                        <span>Attempt: {trace.attempt ?? 1}</span>
-                        <span>Retries: {trace.retryCount ?? 0}</span>
-                        <span>Capture: {formatCaptureStatus(trace.captureStatus)}</span>
-                        <span>Started: {formatTime(trace.startedAt)}</span>
-                      </div>
-                      {trace.error && (
-                        <p
-                          className={`mt-1 text-xs ${
-                            trace.status === "fallback"
-                              ? "text-amber-700 dark:text-amber-300"
-                              : "text-destructive"
-                          }`}
-                        >
-                          {normalizeTraceError(trace)}
-                        </p>
-                      )}
-                      {trace.rawProviderError && trace.status === "fallback" && (
-                        <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
-                          Provider: {previewText(trace.rawProviderError, 220)}
-                        </p>
-                      )}
-                      <div className="mt-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="justify-start gap-2 text-xs"
-                          onClick={() => setSelectedTrace(trace)}
-                        >
-                          <Eye className="h-3.5 w-3.5" />
-                          View Trace
-                        </Button>
-                      </div>
-                      <p className="mt-2 text-xs text-muted-foreground">
-                        Input: {previewText(toPrettyInput(trace))}
-                      </p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Output: {previewText(toPrettyOutput(trace))}
-                      </p>
-                    </div>
-                  ))
-                )}
-              </div>
-            </ScrollArea>
-          </div>
-
-          <div className="space-y-2">
-            <h3 className="text-sm font-semibold">Step Traces</h3>
-            <ScrollArea className="h-[280px] rounded-lg border">
-              <div className="space-y-2 p-3">
-                {stepTraceTimeline.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No step-level traces captured yet for this run.
-                  </p>
-                ) : (
-                  stepTraceTimeline.map((trace) => {
-                    const operation = readTraceOperation(trace);
-                    return (
-                      <div
-                        key={trace.id}
-                        className={`rounded-md border p-2.5 ${SURFACE_TONE_CLASS[
-                          trace.status === "failed"
-                            ? "danger"
-                            : trace.status === "fallback"
-                              ? "warning"
-                              : trace.status === "running"
-                                ? "info"
-                                : "success"
-                        ]} cursor-pointer`}
-                        onClick={() => setSelectedTrace(trace)}
-                      >
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <p className="text-sm font-medium">
-                            {formatLabel(trace.stepKey || trace.agentKey)} · {formatLabel(String(trace.phase))}
-                          </p>
-                          <Badge variant="outline" className={statusClass(trace.status)}>
-                            {trace.status}
-                          </Badge>
-                        </div>
-                        <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted-foreground">
-                          <span>Kind: Step</span>
-                          {operation && <span>Operation: {operation}</span>}
-                          <span>Capture: {formatCaptureStatus(trace.captureStatus)}</span>
-                          <span>Started: {formatTime(trace.startedAt)}</span>
-                        </div>
-                        {trace.error && (
-                          <p className="mt-1 text-xs text-destructive">
-                            {normalizeTraceError(trace)}
-                          </p>
-                        )}
-                        <div className="mt-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="justify-start gap-2 text-xs"
-                            onClick={() => setSelectedTrace(trace)}
-                          >
-                            <Eye className="h-3.5 w-3.5" />
-                            View Trace
-                          </Button>
-                        </div>
-                        <p className="mt-2 text-xs text-muted-foreground">
-                          Input: {previewText(toPrettyInput(trace))}
-                        </p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          Output: {previewText(toPrettyOutput(trace))}
-                        </p>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </ScrollArea>
-          </div>
+                  );
+                })
+              )}
+            </div>
+          </ScrollArea>
         </div>
 
         <div className="flex items-center gap-2 text-xs text-muted-foreground">

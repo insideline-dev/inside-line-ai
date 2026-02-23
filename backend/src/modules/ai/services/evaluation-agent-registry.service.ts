@@ -230,6 +230,17 @@ export class EvaluationAgentRegistryService {
     );
     await Promise.allSettled(traceWrites);
 
+    for (const agent of this.agents) {
+      if (!outputs.has(agent.key)) {
+        this.logger.error(
+          `Evaluation agent "${agent.key}" produced no output for startup ${startupId} — generating fallback`,
+        );
+        outputs.set(agent.key, agent.fallback(pipelineData));
+        failedKeys.push(agent.key);
+        errors.push({ agent: agent.key, error: "Agent produced no output; fallback generated post-hoc" });
+      }
+    }
+
     const completedAgents = resolvedAgents.length - failedKeys.length;
     const minimumRequired = this.phaseTransition.getConfig().minimumEvaluationAgents;
     const fallbackAgents = fallbackKeys.length;

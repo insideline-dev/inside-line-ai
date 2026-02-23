@@ -80,13 +80,16 @@ const enrichmentOutputSchema = z.object({
     source: z.string(),
     confidence: z.number(),
   })).default([]),
-  socialProfiles: z.object({
-    crunchbaseUrl: z.string().optional(),
-    angelListUrl: z.string().optional(),
-    twitterUrl: z.string().optional(),
-    linkedinCompanyUrl: z.string().optional(),
-    githubUrl: z.string().optional(),
-  }).default({}),
+  socialProfiles: z.preprocess(
+    (value) => (Array.isArray(value) ? {} : value ?? {}),
+    z.object({
+      crunchbaseUrl: z.string().optional(),
+      angelListUrl: z.string().optional(),
+      twitterUrl: z.string().optional(),
+      linkedinCompanyUrl: z.string().optional(),
+      githubUrl: z.string().optional(),
+    }),
+  ).default({}),
   productSignals: z.object({
     pricing: z.string().optional(),
     customers: z.array(z.string()).optional(),

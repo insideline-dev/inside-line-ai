@@ -22,6 +22,7 @@ import { AgentConfigService } from '../../ai/services/agent-config.service';
 import { DynamicFlowCatalogService } from '../../ai/services/dynamic-flow-catalog.service';
 import { SchemaCompilerService } from '../../ai/services/schema-compiler.service';
 import { EarlyAccessService } from '../../early-access';
+import { AdminInvestorService } from '../admin-investor.service';
 import { UserRole } from '../../../auth/entities/auth.schema';
 import { StartupStatus } from '../../startup/entities/startup.schema';
 import { PipelinePhase } from '../../ai/interfaces/pipeline.interface';
@@ -188,6 +189,7 @@ describe('AdminController', () => {
           provide: AgentSchemaRegistryService,
           useValue: {
             listRevisionsByKey: jest.fn(),
+            resolveDescriptorWithSource: jest.fn(),
             createDraft: jest.fn(),
             updateDraft: jest.fn(),
             publishRevision: jest.fn(),
@@ -241,6 +243,13 @@ describe('AdminController', () => {
             listInvites: jest.fn(),
             revokeInvite: jest.fn(),
             listWaitlist: jest.fn(),
+          },
+        },
+        {
+          provide: AdminInvestorService,
+          useValue: {
+            getMonitorList: jest.fn(),
+            getMonitorDetail: jest.fn(),
           },
         },
       ],
@@ -865,6 +874,30 @@ describe('AdminController', () => {
       expect(agentSchemaRegistryService.listRevisionsByKey).toHaveBeenCalledWith('evaluation.legal');
     });
 
+    it('should resolve runtime schema for prompt key with stage', async () => {
+      const payload = {
+        promptKey: 'evaluation.legal',
+        stage: 'seed',
+        source: 'code',
+        schemaJson: {
+          type: 'object',
+          fields: {
+            riskSummary: { type: 'string' },
+          },
+        },
+      };
+
+      agentSchemaRegistryService.resolveDescriptorWithSource.mockResolvedValueOnce(payload as any);
+
+      const result = await controller.getAiSchemaResolvedAlias('evaluation.legal', 'seed' as any);
+
+      expect(result).toEqual(payload);
+      expect(agentSchemaRegistryService.resolveDescriptorWithSource).toHaveBeenCalledWith(
+        'evaluation.legal',
+        'seed',
+      );
+    });
+
     it('should create schema revision draft', async () => {
       const dto = {
         schemaJson: {
@@ -990,7 +1023,7 @@ describe('AdminController', () => {
           {
             nodeId: 'research_team',
             label: 'Team Research',
-            fields: ['research_team.findings[]', 'research_team.score'],
+            fields: ['research_team', 'research_team.findings[]', 'research_team.score'],
           },
         ],
       });

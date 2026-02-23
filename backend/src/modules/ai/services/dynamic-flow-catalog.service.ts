@@ -6,15 +6,21 @@ import type {
 } from "./ai-flow-catalog";
 import { AI_FLOW_DEFINITIONS } from "./ai-flow-catalog";
 import { AgentConfigService } from "./agent-config.service";
+import { AiModelConfigService } from "./ai-model-config.service";
+import { isAiPromptKey } from "./ai-prompt-catalog";
 
 @Injectable()
 export class DynamicFlowCatalogService {
-  constructor(private agentConfigService: AgentConfigService) {}
+  constructor(
+    private agentConfigService: AgentConfigService,
+    private modelConfigService: AiModelConfigService,
+  ) {}
 
   async getFlowGraph(): Promise<{ flows: AiFlowDefinition[] }> {
     const configs = await this.agentConfigService.listAll();
 
-    const flows = AI_FLOW_DEFINITIONS.map((flow) => {
+    const flows = await Promise.all(
+      AI_FLOW_DEFINITIONS.map(async (flow) => {
       if (flow.id !== "pipeline") {
         return flow;
       }
@@ -63,14 +69,46 @@ export class DynamicFlowCatalogService {
         } as AiFlowEdgeDefinition);
       }
 
+      const nodesWithModel = await Promise.all(
+        nodes.map((node) => this.withNodeRuntimeModel(node)),
+      );
+
       return {
         ...flow,
-        nodes,
+        nodes: nodesWithModel,
         edges,
       };
-    });
+      }),
+    );
 
     return { flows };
+  }
+
+  private async withNodeRuntimeModel(
+    node: AiFlowNodeDefinition,
+  ): Promise<AiFlowNodeDefinition> {
+    const firstPromptKey = node.promptKeys[0];
+    if (!firstPromptKey || !isAiPromptKey(firstPromptKey)) {
+      return node;
+    }
+
+    try {
+      const resolved = await this.modelConfigService.resolveConfig({
+        key: firstPromptKey,
+      });
+
+      return {
+        ...node,
+        runtimeModel: {
+          modelName: resolved.modelName,
+          provider: resolved.provider,
+          searchMode: resolved.searchMode,
+          source: resolved.source,
+        },
+      };
+    } catch {
+      return node;
+    }
   }
 
   private matchesAgentNode(nodeId: string, config: { orchestratorNodeId: string; agentKey: string }): boolean {

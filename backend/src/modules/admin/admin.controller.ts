@@ -15,7 +15,7 @@ import {
   BadRequestException,
   ParseUUIDPipe,
 } from '@nestjs/common';
-import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import { z } from 'zod';
@@ -40,6 +40,7 @@ import { IntegrationHealthService } from './integration-health.service';
 import { SystemConfigService } from './system-config.service';
 import { BulkDataService } from './bulk-data.service';
 import { AdminMatchingService } from './admin-matching.service';
+import { AdminInvestorService } from './admin-investor.service';
 import { AiPromptService } from '../ai/services/ai-prompt.service';
 import { AiPromptRuntimeService } from '../ai/services/ai-prompt-runtime.service';
 import { AiModelConfigService } from '../ai/services/ai-model-config.service';
@@ -78,8 +79,9 @@ import {
   AiPromptOutputSchemaResponseDto,
   CreateAiSchemaRevisionDto,
   UpdateAiSchemaRevisionDto,
-  AiSchemaRevisionsResponseDto,
-  AiSchemaRevisionResponseDto,
+   AiSchemaRevisionsResponseDto,
+   AiSchemaRevisionResponseDto,
+   AiResolvedSchemaResponseDto,
   CreateAiAgentConfigDto,
   UpdateAiAgentConfigDto,
   AiAgentConfigResponseDto,
@@ -132,6 +134,7 @@ export class AdminController {
     private earlyAccessService: EarlyAccessService,
     private pipelineFlowConfigService: PipelineFlowConfigService,
     private phaseTransitionService: PhaseTransitionService,
+    private adminInvestorService: AdminInvestorService,
   ) {}
 
   private resolveOutputSchemaForKey(key: string): z.ZodTypeAny | null {
@@ -188,6 +191,18 @@ export class AdminController {
   @Get('stats/investors')
   async getInvestorStats() {
     return this.analyticsService.getInvestorStats();
+  }
+
+  @Get('investors')
+  @ApiOperation({ summary: 'List all investors with profile and thesis summary' })
+  async listInvestors() {
+    return this.adminInvestorService.listInvestors();
+  }
+
+  @Get('investors/:userId')
+  @ApiOperation({ summary: 'Get full investor detail (profile, thesis, matches, scoring)' })
+  async getInvestorDetail(@Param('userId', ParseUUIDPipe) userId: string) {
+    return this.adminInvestorService.getInvestorDetail(userId);
   }
 
   // ============ INTEGRATIONS & CONFIG ENDPOINTS ============
@@ -361,6 +376,14 @@ export class AdminController {
     return this.startupService.adminRetryAgent(id, admin.id, dto);
   }
 
+  @Post('startups/:id/cancel-pipeline')
+  async cancelStartupPipeline(
+    @CurrentUser() admin: User,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.startupService.adminCancelPipeline(id, admin.id);
+  }
+
   // ============ SCORING CONFIGURATION ENDPOINTS ============
 
   @Get('scoring/weights')
@@ -429,6 +452,38 @@ export class AdminController {
   @ApiResponse({ status: 200, type: AiSchemaRevisionsResponseDto })
   async getAiSchemaRevisionsAlias(@Param('promptKey') promptKey: string) {
     return this.agentSchemaRegistryService.listRevisionsByKey(promptKey);
+  }
+
+  @Get('ai-prompts/:key/schema-resolved')
+  @ApiOperation({ summary: "Resolve runtime schema descriptor for prompt key" })
+  @ApiQuery({
+    name: 'stage',
+    required: false,
+    type: String,
+    description: 'Optional startup stage override',
+  })
+  @ApiResponse({ status: 200, type: AiResolvedSchemaResponseDto })
+  async getAiSchemaResolved(
+    @Param('key') key: string,
+    @Query('stage') stage?: string,
+  ) {
+    return this.agentSchemaRegistryService.resolveDescriptorWithSource(key, stage);
+  }
+
+  @Get('ai-resolved-schemas/:promptKey')
+  @ApiOperation({ summary: "Resolve runtime schema descriptor for prompt key" })
+  @ApiQuery({
+    name: 'stage',
+    required: false,
+    type: String,
+    description: 'Optional startup stage override',
+  })
+  @ApiResponse({ status: 200, type: AiResolvedSchemaResponseDto })
+  async getAiSchemaResolvedAlias(
+    @Param('promptKey') promptKey: string,
+    @Query('stage') stage?: string,
+  ) {
+    return this.agentSchemaRegistryService.resolveDescriptorWithSource(promptKey, stage);
   }
 
   @Post('ai-prompts/:key/schema-revisions')
@@ -659,24 +714,30 @@ export class AdminController {
 
     for (const upstreamNodeId of upstream) {
       const node = nodeById.get(upstreamNodeId);
-      if (!node || !node.promptKeys || node.promptKeys.length === 0) {
+      if (!node) {
         continue;
       }
 
       const fields = new Set<string>();
-      for (const promptKey of node.promptKeys) {
-        try {
-          const descriptor = await this.agentSchemaRegistryService.resolveDescriptor(
-            promptKey,
-          );
-          const paths = this.schemaCompilerService.extractFieldPaths(descriptor);
-          for (const path of paths) {
-            fields.add(`${upstreamNodeId}.${path}`);
+
+      if (node.promptKeys && node.promptKeys.length > 0) {
+        for (const promptKey of node.promptKeys) {
+          try {
+            const descriptor = await this.agentSchemaRegistryService.resolveDescriptor(
+              promptKey,
+            );
+            const paths = this.schemaCompilerService.extractFieldPaths(descriptor);
+            for (const path of paths) {
+              fields.add(`${upstreamNodeId}.${path}`);
+            }
+          } catch {
+            // Keep root node token fallback
           }
-        } catch {
-          // Skip nodes without resolvable schema revisions
         }
       }
+
+      // Always include full object token for direct JSON insertion.
+      fields.add(upstreamNodeId);
 
       if (fields.size === 0) {
         continue;
@@ -740,17 +801,33 @@ export class AdminController {
 
   @Get('ai-prompts/:key/output-schema')
   @ApiOperation({ summary: "Get output JSON schema for a prompt key" })
+  @ApiQuery({
+    name: 'stage',
+    required: false,
+    type: String,
+    description: 'Optional startup stage override',
+  })
   @ApiResponse({ status: 200, type: AiPromptOutputSchemaResponseDto })
-  async getAiPromptOutputSchema(@Param('key') key: string) {
-    const zodSchema = this.resolveOutputSchemaForKey(key);
-    if (!zodSchema) {
-      throw new BadRequestException(`No output schema found for key: ${key}`);
-    }
+  async getAiPromptOutputSchema(
+    @Param('key') key: string,
+    @Query('stage') stage?: string,
+  ) {
+    const resolved = await this.agentSchemaRegistryService.resolveDescriptorWithSource(
+      key,
+      stage,
+    );
+    const zodSchema = this.schemaCompilerService.compile(resolved.schemaJson);
 
     return {
       key,
+      stage: resolved.stage,
+      source: resolved.source,
+      schemaJson: resolved.schemaJson,
       jsonSchema: z.toJSONSchema(zodSchema),
-      note: 'Schema defined in code. Editable schema config coming in a future update.',
+      note:
+        resolved.source === 'published'
+          ? 'Schema resolved from published revision.'
+          : 'Schema resolved from code fallback (no published revision for this stage).',
     };
   }
 

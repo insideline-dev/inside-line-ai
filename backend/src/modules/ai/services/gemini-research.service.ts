@@ -1,5 +1,4 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { google } from "@ai-sdk/google";
 import { generateText, Output } from "ai";
 import { z } from "zod";
 import { INTERNAL_PIPELINE_SOURCE } from "../agents/evaluation/evaluation-utils";
@@ -11,6 +10,16 @@ import { AiConfigService } from "./ai-config.service";
 
 interface ResearchRequest<TOutput extends { sources: string[] }> {
   agent: ResearchAgentKey;
+  modelName?: string;
+  model?: GenerateTextModel;
+  tools?: GenerateTextTools;
+  toolChoice?: GenerateTextToolChoice;
+  stopWhen?: GenerateTextStopWhen;
+  searchEnforcement?: {
+    requiresProviderEvidence: boolean;
+    requiresBraveToolCall: boolean;
+  };
+  getBraveToolCallCount?: () => number;
   prompt: string;
   systemPrompt: string;
   schema: z.ZodSchema<TOutput>;
@@ -34,6 +43,9 @@ interface SourceCarrier {
 }
 
 type GenerateTextModel = Parameters<typeof generateText>[0]["model"];
+type GenerateTextTools = Parameters<typeof generateText>[0]["tools"];
+type GenerateTextToolChoice = Parameters<typeof generateText>[0]["toolChoice"];
+type GenerateTextStopWhen = Parameters<typeof generateText>[0]["stopWhen"];
 
 @Injectable()
 export class GeminiResearchService {
@@ -48,11 +60,13 @@ export class GeminiResearchService {
     request: ResearchRequest<TOutput>,
   ): Promise<ResearchResponse<TOutput>> {
     const fallback = request.fallback();
-    const modelName = this.aiConfig.getModelForPurpose(ModelPurpose.RESEARCH);
-    const model = this.providers.resolveModelForPurpose(
-      ModelPurpose.RESEARCH,
-    ) as GenerateTextModel;
-    const canUseGoogleSearchTool = this.isGeminiModel(modelName);
+    const modelName =
+      request.modelName ?? this.aiConfig.getModelForPurpose(ModelPurpose.RESEARCH);
+    const model =
+      request.model ??
+      (this.providers.resolveModelForPurpose(
+        ModelPurpose.RESEARCH,
+      ) as GenerateTextModel);
     const maxAttempts = this.getResearchMaxAttempts();
     const hardTimeoutMs = this.getResearchAgentHardTimeoutMs();
     const startedAt = Date.now();
@@ -74,10 +88,57 @@ export class GeminiResearchService {
         prompt: request.prompt,
         systemPrompt: request.systemPrompt,
         schema: request.schema,
-        canUseGoogleSearchTool,
+        tools: request.tools,
+        toolChoice: request.toolChoice,
+        stopWhen: request.stopWhen,
         timeoutMs: attemptTimeoutMs,
       });
       if (structured.success) {
+        const enforcementError = this.validateSearchEnforcement({
+          sourceCount: structured.sources.length,
+          searchEnforcement: request.searchEnforcement,
+          braveToolCallCount: request.getBraveToolCallCount?.() ?? 0,
+        });
+        if (enforcementError) {
+          lastError = enforcementError;
+          if (attempt < maxAttempts) {
+            const delayMs = Math.min(
+              this.getRetryDelayMs(attempt),
+              Math.max(0, this.getRemainingBudgetMs(startedAt, hardTimeoutMs) - 50),
+            );
+            if (delayMs <= 0) {
+              lastError = `Research agent ${request.agent} exceeded hard timeout`;
+              break;
+            }
+            this.logger.warn(
+              `Research agent ${request.agent} attempt ${attempt}/${maxAttempts} missing required search evidence, retrying in ${delayMs}ms: ${enforcementError}`,
+            );
+            await this.sleep(delayMs);
+            continue;
+          }
+
+          const fallbackSources = Array.isArray(fallback.sources)
+            ? fallback.sources
+            : [];
+          return {
+            output: {
+              ...fallback,
+              sources: this.mergeSourceUrls(
+                fallbackSources,
+                this.extractSourceUrls(structured.sources),
+              ),
+            },
+            sources:
+              structured.sources.length > 0
+                ? structured.sources
+                : this.toInternalSource(request.agent),
+            usedFallback: true,
+            error: enforcementError,
+            outputText: structured.outputText,
+            attempt,
+            retryCount: Math.max(0, attempt - 1),
+          };
+        } else {
         return {
           output: {
             ...structured.data,
@@ -92,6 +153,7 @@ export class GeminiResearchService {
           attempt,
           retryCount: Math.max(0, attempt - 1),
         };
+        }
       }
 
       const text = await this.tryTextAttempt({
@@ -100,10 +162,57 @@ export class GeminiResearchService {
         prompt: request.prompt,
         systemPrompt: request.systemPrompt,
         schema: request.schema,
-        canUseGoogleSearchTool,
+        tools: request.tools,
+        toolChoice: request.toolChoice,
+        stopWhen: request.stopWhen,
         timeoutMs: attemptTimeoutMs,
       });
       if (text.success) {
+        const enforcementError = this.validateSearchEnforcement({
+          sourceCount: text.sources.length,
+          searchEnforcement: request.searchEnforcement,
+          braveToolCallCount: request.getBraveToolCallCount?.() ?? 0,
+        });
+        if (enforcementError) {
+          lastError = enforcementError;
+          if (attempt < maxAttempts) {
+            const delayMs = Math.min(
+              this.getRetryDelayMs(attempt),
+              Math.max(0, this.getRemainingBudgetMs(startedAt, hardTimeoutMs) - 50),
+            );
+            if (delayMs <= 0) {
+              lastError = `Research agent ${request.agent} exceeded hard timeout`;
+              break;
+            }
+            this.logger.warn(
+              `Research agent ${request.agent} attempt ${attempt}/${maxAttempts} missing required search evidence, retrying in ${delayMs}ms: ${enforcementError}`,
+            );
+            await this.sleep(delayMs);
+            continue;
+          }
+
+          const fallbackSources = Array.isArray(fallback.sources)
+            ? fallback.sources
+            : [];
+          return {
+            output: {
+              ...fallback,
+              sources: this.mergeSourceUrls(
+                fallbackSources,
+                this.extractSourceUrls(text.sources),
+              ),
+            },
+            sources:
+              text.sources.length > 0
+                ? text.sources
+                : this.toInternalSource(request.agent),
+            usedFallback: true,
+            error: enforcementError,
+            outputText: text.outputText,
+            attempt,
+            retryCount: Math.max(0, attempt - 1),
+          };
+        } else {
         return {
           output: {
             ...text.data,
@@ -115,6 +224,7 @@ export class GeminiResearchService {
           attempt,
           retryCount: Math.max(0, attempt - 1),
         };
+        }
       }
 
       const errorMessage = this.joinErrorMessages(structured.error, text.error);
@@ -178,7 +288,9 @@ export class GeminiResearchService {
     prompt: string;
     systemPrompt: string;
     schema: z.ZodSchema<TOutput>;
-    canUseGoogleSearchTool: boolean;
+    tools?: GenerateTextTools;
+    toolChoice?: GenerateTextToolChoice;
+    stopWhen?: GenerateTextStopWhen;
     timeoutMs: number;
   }): Promise<
     | {
@@ -203,11 +315,9 @@ export class GeminiResearchService {
           system: input.systemPrompt,
           prompt: input.prompt,
           output: Output.object({ schema: input.schema }),
-          tools: input.canUseGoogleSearchTool
-            ? {
-                google_search: google.tools.googleSearch({}),
-              }
-            : undefined,
+          tools: input.tools,
+          toolChoice: input.toolChoice,
+          stopWhen: input.stopWhen,
           temperature: this.aiConfig.getResearchTemperature(),
         }),
         input.timeoutMs,
@@ -272,7 +382,9 @@ export class GeminiResearchService {
     prompt: string;
     systemPrompt: string;
     schema: z.ZodSchema<TOutput>;
-    canUseGoogleSearchTool: boolean;
+    tools?: GenerateTextTools;
+    toolChoice?: GenerateTextToolChoice;
+    stopWhen?: GenerateTextStopWhen;
     timeoutMs: number;
   }): Promise<
     | {
@@ -296,11 +408,9 @@ export class GeminiResearchService {
           model: input.model,
           system: input.systemPrompt,
           prompt: input.prompt,
-          tools: input.canUseGoogleSearchTool
-            ? {
-                google_search: google.tools.googleSearch({}),
-              }
-            : undefined,
+          tools: input.tools,
+          toolChoice: input.toolChoice,
+          stopWhen: input.stopWhen,
           temperature: this.aiConfig.getResearchTemperature(),
         }),
         input.timeoutMs,
@@ -379,6 +489,30 @@ export class GeminiResearchService {
       normalized.includes("no object generated") ||
       normalized.includes("empty response")
     );
+  }
+
+  private validateSearchEnforcement(input: {
+    sourceCount: number;
+    searchEnforcement?: {
+      requiresProviderEvidence: boolean;
+      requiresBraveToolCall: boolean;
+    };
+    braveToolCallCount: number;
+  }): string | null {
+    const enforcement = input.searchEnforcement;
+    if (!enforcement) {
+      return null;
+    }
+
+    if (enforcement.requiresProviderEvidence && input.sourceCount === 0) {
+      return "Provider search evidence is required but no grounded sources were returned";
+    }
+
+    if (enforcement.requiresBraveToolCall && input.braveToolCallCount <= 0) {
+      return "Brave search tool usage is required but the tool was not called";
+    }
+
+    return null;
   }
 
   private async sleep(ms: number): Promise<void> {
@@ -673,10 +807,6 @@ export class GeminiResearchService {
       return first;
     }
     return `${first}; ${second}`;
-  }
-
-  private isGeminiModel(modelName: string): boolean {
-    return modelName.toLowerCase().startsWith("gemini");
   }
 
   private getAttemptTimeoutMs(remainingBudgetMs: number): number {

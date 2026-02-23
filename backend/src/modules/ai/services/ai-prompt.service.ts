@@ -77,6 +77,13 @@ export class AiPromptService {
   private readonly cache = new Map<string, { expiresAt: number; value: ResolvedPrompt }>();
   private readonly cacheTtlMs = 60_000;
   private readonly schemaCompiler = new SchemaCompilerService();
+  private readonly narrativePurityGuardrail = [
+    "## Internal Narrative Guardrail",
+    "For all narrative prose fields (feedback, narrativeSummary, memoNarrative, investorMemo sections, founderReport sections):",
+    "- Do NOT mention numeric scores, confidence levels, percentages, or any X/100 notation.",
+    "- Keep prose qualitative and insight-driven.",
+    "- Put quantitative values only in dedicated structured numeric fields.",
+  ].join("\n");
 
   constructor(private drizzle: DrizzleService) {}
 
@@ -101,8 +108,9 @@ export class AiPromptService {
 
       if (!definition) {
         if (fallback) {
-          this.setCache(cacheKey, fallback);
-          return fallback;
+          const guardedFallback = this.injectNarrativeGuardrails(fallback);
+          this.setCache(cacheKey, guardedFallback);
+          return guardedFallback;
         }
         throw new NotFoundException(`Prompt definition not found for key ${params.key}`);
       }
@@ -138,8 +146,9 @@ export class AiPromptService {
 
       if (!selected) {
         if (fallback) {
-          this.setCache(cacheKey, fallback);
-          return fallback;
+          const guardedFallback = this.injectNarrativeGuardrails(fallback);
+          this.setCache(cacheKey, guardedFallback);
+          return guardedFallback;
         }
         throw new NotFoundException(
           `No published prompt revision found for key ${params.key}`,
@@ -155,8 +164,9 @@ export class AiPromptService {
         revisionId: selected.id,
       };
 
-      this.setCache(cacheKey, resolved);
-      return resolved;
+      const guardedResolved = this.injectNarrativeGuardrails(resolved);
+      this.setCache(cacheKey, guardedResolved);
+      return guardedResolved;
     } catch (error) {
       if (!fallback) {
         throw error;
@@ -165,8 +175,9 @@ export class AiPromptService {
       this.logger.warn(
         `Prompt resolution failed for ${params.key} (${normalizedStage ?? "global"}), using code fallback: ${message}`,
       );
-      this.setCache(cacheKey, fallback);
-      return fallback;
+      const guardedFallback = this.injectNarrativeGuardrails(fallback);
+      this.setCache(cacheKey, guardedFallback);
+      return guardedFallback;
     }
   }
 
@@ -818,6 +829,29 @@ export class AiPromptService {
         this.cache.delete(cacheKey);
       }
     }
+  }
+
+  private injectNarrativeGuardrails(prompt: ResolvedPrompt): ResolvedPrompt {
+    if (!this.shouldInjectNarrativeGuardrail(prompt.key)) {
+      return prompt;
+    }
+
+    if (prompt.systemPrompt.includes("Internal Narrative Guardrail")) {
+      return prompt;
+    }
+
+    return {
+      ...prompt,
+      systemPrompt: `${prompt.systemPrompt}\n\n${this.narrativePurityGuardrail}`,
+    };
+  }
+
+  private shouldInjectNarrativeGuardrail(key: string): boolean {
+    if (!isAiPromptKey(key)) {
+      return false;
+    }
+
+    return AI_PROMPT_CATALOG[key].surface === "pipeline";
   }
 
   private setCache(cacheKey: string, value: ResolvedPrompt): void {

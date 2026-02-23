@@ -79,6 +79,15 @@ describe("AiPromptRuntimeService", () => {
       (template: string) => template,
     );
 
+    const supportedPipelineKeys = AI_PROMPT_KEYS.filter(
+      (key) =>
+        (key.startsWith("research.") || key.startsWith("evaluation.")) &&
+        !key.endsWith(".orchestrator"),
+    );
+    jest
+      .spyOn(service as never, "getPipelinePromptKeys")
+      .mockReturnValue(supportedPipelineKeys as never);
+
     jest
       .spyOn(service as any, "resolveVariablesForKey")
       .mockImplementation(async (key: string, input: { startupId: string }) => {
@@ -110,9 +119,7 @@ describe("AiPromptRuntimeService", () => {
       stage: "seed",
     });
 
-    const expectedCount = AI_PROMPT_KEYS.filter(
-      (key) => key.startsWith("research.") || key.startsWith("evaluation."),
-    ).length;
+    const expectedCount = supportedPipelineKeys.length;
     expect(result.agents).toHaveLength(expectedCount);
 
     const researchTeam = result.agents.find(
@@ -206,7 +213,7 @@ describe("AiPromptRuntimeService", () => {
       stage: "seed",
       systemPrompt: "SYSTEM score={{research_team.score}}",
       userPrompt:
-        "USER founders={{research_team.founders[].name}} missing={{research_team.unknown}}",
+        "USER full={{research_team}} pretty={{research_team|pretty}} founders={{research_team.founders[].name}} missing={{research_team.unknown}}",
       source: "db",
       revisionId: "rev-1",
     });
@@ -242,7 +249,7 @@ describe("AiPromptRuntimeService", () => {
 
     expect(result.prompt.renderedSystemPromptWithDynamic).toBe("SYSTEM score=91");
     expect(result.prompt.renderedUserPromptWithDynamic).toBe(
-      'USER founders=["Ada","Grace"] missing=[not available]',
+      'USER full={"score":91,"founders":[{"name":"Ada"},{"name":"Grace"}]} pretty={\n  "score": 91,\n  "founders": [\n    {\n      "name": "Ada"\n    },\n    {\n      "name": "Grace"\n    }\n  ]\n} founders=["Ada","Grace"] missing=[not available]',
     );
   });
 

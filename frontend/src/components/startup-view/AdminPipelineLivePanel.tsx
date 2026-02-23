@@ -105,6 +105,7 @@ const STEP_LABELS: Record<string, string> = {
 };
 
 const STATUS_BADGE_CLASS: Record<string, string> = {
+  started: "bg-sky-500/10 text-sky-700 border-sky-500/30 dark:text-sky-300",
   completed: "bg-emerald-500/10 text-emerald-700 border-emerald-500/30 dark:text-emerald-300",
   running: "bg-sky-500/10 text-sky-700 border-sky-500/30 dark:text-sky-300",
   waiting: "bg-amber-500/10 text-amber-700 border-amber-500/30 dark:text-amber-300",
@@ -153,7 +154,7 @@ function formatLabel(value: string): string {
   }
   return value
     .replace(/([a-z])([A-Z])/g, "$1 $2")
-    .replace(/[_-]+/g, " ")
+    .replace(/[._-]+/g, " ")
     .replace(/\s+/g, " ")
     .trim()
     .replace(/^\w/, (char) => char.toUpperCase());
@@ -254,6 +255,9 @@ function statusIcon(status: string) {
   if (status === "completed") {
     return <CheckCircle2 className="h-4 w-4 text-emerald-500" />;
   }
+  if (status === "started") {
+    return <Activity className="h-4 w-4 text-sky-500" />;
+  }
   if (status === "running") {
     return <Loader2 className="h-4 w-4 animate-spin text-sky-500" />;
   }
@@ -294,6 +298,14 @@ function normalizeTraceError(trace: PipelineAgentTrace): string | undefined {
     return undefined;
   }
   const normalized = trace.error.toLowerCase();
+  if (
+    normalized.includes("unipile") &&
+    (/\b401\b/.test(normalized) ||
+      /\b403\b/.test(normalized) ||
+      normalized.includes("authorization failed"))
+  ) {
+    return "LinkedIn enrichment integration auth failed (Unipile 401/403). Check Unipile credentials/account access.";
+  }
   const hasCapturedOutput =
     (typeof trace.outputText === "string" && trace.outputText.trim().length > 0) ||
     trace.outputJson !== undefined;
@@ -379,6 +391,27 @@ function toPrettyMeta(trace: PipelineAgentTrace | null): string {
 
 function isPhaseStepTrace(trace: PipelineAgentTrace): boolean {
   return trace.traceKind === "phase_step";
+}
+
+function traceOperationLabel(trace: PipelineAgentTrace): string | undefined {
+  const operation = trace.meta?.operation;
+  if (typeof operation !== "string" || operation.trim().length === 0) {
+    return undefined;
+  }
+  return formatLabel(operation);
+}
+
+function traceDisplayStatus(
+  trace: PipelineAgentTrace,
+  isLive: boolean,
+): string {
+  if (trace.status !== "running") {
+    return trace.status;
+  }
+  if (!isLive) {
+    return "started";
+  }
+  return trace.completedAt ? "started" : "running";
 }
 
 function phaseSortKey(phase: string): number {
@@ -1151,6 +1184,12 @@ export function AdminPipelineLivePanel({
                   const isAgent = item.kind === "agent" && item.agent;
                   const isTrace = item.kind === "ai_trace" || item.kind === "step_trace";
                   const isEvent = item.kind === "event" && item.event;
+                  const displayStatus = isTrace && item.trace
+                    ? traceDisplayStatus(item.trace, isLive)
+                    : item.status;
+                  const traceOperation = isTrace && item.trace
+                    ? traceOperationLabel(item.trace)
+                    : undefined;
                   const isTrackedAgent = isAgent &&
                     trackedRetry?.phase === item.agent?.phase &&
                     trackedRetry?.agentKey === item.agent?.key;
@@ -1173,7 +1212,7 @@ export function AdminPipelineLivePanel({
                     >
                       <div className="flex items-center gap-2">
                         <div className="flex min-w-0 flex-1 items-center gap-2">
-                          {isEvent ? eventIcon(item.event!.event) : statusIcon(item.status)}
+                          {isEvent ? eventIcon(item.event!.event) : statusIcon(displayStatus)}
                           <span className="truncate text-sm font-medium">{item.name}</span>
                           <Badge variant="outline" className="shrink-0 border-border bg-muted/50 text-[10px] text-muted-foreground">
                             {formatLabel(item.phase)}
@@ -1181,6 +1220,11 @@ export function AdminPipelineLivePanel({
                           {item.kind !== "agent" && (
                             <Badge variant="outline" className="shrink-0 border-border bg-muted/50 text-[10px] text-muted-foreground">
                               {item.kind === "event" ? "event" : item.kind === "ai_trace" ? "trace" : "step"}
+                            </Badge>
+                          )}
+                          {traceOperation && (
+                            <Badge variant="outline" className="shrink-0 border-border bg-muted/50 text-[10px] text-muted-foreground">
+                              {traceOperation}
                             </Badge>
                           )}
                         </div>
@@ -1198,8 +1242,8 @@ export function AdminPipelineLivePanel({
                               Trace
                             </button>
                           )}
-                          <Badge variant="outline" className={cn("text-[10px]", isEvent ? EVENT_BADGE_CLASS[item.event!.event] : statusClass(item.status))}>
-                            {isEvent ? eventVerb(item.event!.event) : item.status}
+                          <Badge variant="outline" className={cn("text-[10px]", isEvent ? EVENT_BADGE_CLASS[item.event!.event] : statusClass(displayStatus))}>
+                            {isEvent ? eventVerb(item.event!.event) : displayStatus}
                           </Badge>
                           <span className="text-xs tabular-nums text-muted-foreground">
                             {formatTime(item.timestamp)}

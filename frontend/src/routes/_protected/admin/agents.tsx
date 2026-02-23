@@ -542,8 +542,10 @@ function AdminAgentsPage() {
   const [systemPrompt, setSystemPrompt] = useState("");
   const [userPrompt, setUserPrompt] = useState("");
   const [notes, setNotes] = useState("");
-  const [modelName, setModelName] = useState("");
-  const [searchMode, setSearchMode] = useState<"off" | "provider_grounded_search">("off");
+  const [modelName, setModelName] = useState("gemini-3.0-flash-preview");
+  const [searchMode, setSearchMode] = useState<"off" | "provider_grounded_search">(
+    "provider_grounded_search",
+  );
   const [enableLegacyModelEditing, setEnableLegacyModelEditing] = useState(false);
   const [modelStage, setModelStage] = useState<"global" | StageOption>("global");
   const [modelNotes, setModelNotes] = useState("");

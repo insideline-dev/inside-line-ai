@@ -1,8 +1,10 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { eq, desc } from "drizzle-orm";
 import { DrizzleService } from "../../../database";
 import { pipelineFlowConfig } from "../entities/pipeline-flow-config.schema";
@@ -11,10 +13,17 @@ import {
   PipelineConfig,
   validatePipelineConfig,
 } from "../orchestrator/pipeline.config";
+import { PipelineGraphCompilerService } from "./pipeline-graph-compiler.service";
 
 @Injectable()
 export class PipelineFlowConfigService {
-  constructor(private drizzle: DrizzleService) {}
+  private readonly logger = new Logger(PipelineFlowConfigService.name);
+
+  constructor(
+    private drizzle: DrizzleService,
+    private graphCompiler: PipelineGraphCompilerService,
+    private configService: ConfigService,
+  ) {}
 
   async listAll() {
     const rows = await this.drizzle.db
@@ -96,7 +105,14 @@ export class PipelineFlowConfigService {
 
     // Validate pipeline config shape
     try {
-      validatePipelineConfig(existing.pipelineConfig as unknown as PipelineConfig);
+      const baseConfig = existing.pipelineConfig as unknown as PipelineConfig;
+      validatePipelineConfig(baseConfig);
+      if (this.isEdgeDrivenEnabled()) {
+        const flowDefinition = this.graphCompiler.parseFlowDefinition(
+          existing.flowDefinition,
+        );
+        this.graphCompiler.compilePipelineConfig(flowDefinition, baseConfig);
+      }
     } catch (err) {
       throw new BadRequestException(
         `Invalid pipeline config: ${(err as Error).message}`,
@@ -148,9 +164,33 @@ export class PipelineFlowConfigService {
     try {
       const config = published.pipelineConfig as unknown as PipelineConfig;
       validatePipelineConfig(config);
-      return config;
+
+      if (!this.isEdgeDrivenEnabled()) {
+        return config;
+      }
+
+      try {
+        const flowDefinition = this.graphCompiler.parseFlowDefinition(
+          published.flowDefinition,
+        );
+        return this.graphCompiler.compilePipelineConfig(flowDefinition, config);
+      } catch (err) {
+        this.logger.warn(
+          `Invalid published flowDefinition, falling back to stored pipelineConfig: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+        return config;
+      }
     } catch {
       return DEFAULT_PIPELINE_CONFIG;
     }
+  }
+
+  private isEdgeDrivenEnabled(): boolean {
+    return this.configService.get<boolean>(
+      "AI_PIPELINE_EDGE_DRIVEN_ENABLED",
+      false,
+    );
   }
 }

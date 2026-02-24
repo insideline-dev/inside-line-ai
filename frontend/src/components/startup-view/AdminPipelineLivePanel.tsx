@@ -20,6 +20,7 @@ import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useStartupRealtimeProgress } from "@/lib/startup/useStartupRealtimeProgress";
 import { PhaseDataInspector } from "./PhaseDataInspector";
+import { ScrapeLogTable } from "./ScrapeLogTable";
 import {
   PIPELINE_PHASE_ORDER,
   type PipelineAgentEvent,
@@ -1224,6 +1225,20 @@ export function AdminPipelineLivePanel({
                   )}
                 </div>
                 <DataFlowBadges phase={entry.phase} agents={entry.data.agents} />
+                {entry.phase === "scraping" && entry.data.status === "completed" && (() => {
+                  const website = (progress?.phaseResults?.scraping as Record<string, unknown>)?.website as
+                    | { url: string; title: string; fullText?: string; subpages?: Array<{ url: string; title: string; content: string }> }
+                    | undefined;
+                  if (!website?.subpages?.length) return null;
+                  return (
+                    <ScrapeLogTable
+                      websiteUrl={website.url}
+                      homepageTitle={website.title}
+                      fullText={website.fullText ?? ""}
+                      subpages={website.subpages}
+                    />
+                  );
+                })()}
                 {(entry.failedAgentCount > 0 ||
                   entry.fallbackAgentCount > 0 ||
                   entry.retriedAgentCount > 0 ||

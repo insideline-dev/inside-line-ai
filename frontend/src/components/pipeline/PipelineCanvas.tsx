@@ -3,10 +3,11 @@ import {
   ReactFlow,
   Background,
   useNodesState,
-  useEdgesState,
   addEdge,
+  applyEdgeChanges,
   type Node,
   type Edge,
+  type EdgeChange,
   type NodeTypes,
   type NodeMouseHandler,
   type Connection,
@@ -28,6 +29,11 @@ import { AiAgentNode } from "./nodes/AiAgentNode";
 import { OrchestratorNode } from "./nodes/OrchestratorNode";
 import type { PipelineCanvasNodeData } from "./nodes/types";
 import { CanvasToolbar } from "./CanvasToolbar";
+import {
+  isExecutablePipelineEdgeConnection,
+  type FlowEdgeDefinition,
+  toFlowEdgeDefinitions,
+} from "./flow-edges";
 
 const nodeTypes: NodeTypes = {
   fixedData: FixedDataNode,
@@ -111,6 +117,7 @@ interface PipelineCanvasProps {
   onPublish?: () => void;
   saveDisabled?: boolean;
   publishDisabled?: boolean;
+  onFlowEdgesChange?: (edges: FlowEdgeDefinition[]) => void;
 }
 
 function CanvasInner(props: PipelineCanvasProps) {
@@ -120,41 +127,92 @@ function CanvasInner(props: PipelineCanvasProps) {
   );
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+  const [edges, setEdges] = useState<Edge[]>(initialEdges);
   const [reactFlow, setReactFlow] = useState<ReactFlowInstance | null>(null);
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
+  const isEditablePipelineFlow =
+    props.flow.id === "pipeline" && Boolean(props.onFlowEdgesChange);
+
+  const emitFlowEdges = useCallback(
+    (nextEdges: Edge[]) => {
+      if (!isEditablePipelineFlow || !props.onFlowEdgesChange) {
+        return;
+      }
+      props.onFlowEdgesChange(toFlowEdgeDefinitions(nextEdges));
+    },
+    [isEditablePipelineFlow, props.onFlowEdgesChange],
+  );
 
   useEffect(() => {
     setNodes(initialNodes);
     setEdges(initialEdges);
   }, [initialNodes, initialEdges, setNodes, setEdges]);
 
+  const onEdgesChange = useCallback(
+    (changes: EdgeChange<Edge>[]) => {
+      setEdges((currentEdges) => {
+        const nextEdges = applyEdgeChanges(changes, currentEdges);
+        const hasStructuralChanges = changes.some(
+          (change) => change.type !== "select",
+        );
+        if (hasStructuralChanges) {
+          emitFlowEdges(nextEdges);
+        }
+        return nextEdges;
+      });
+    },
+    [emitFlowEdges],
+  );
+
   const onConnect = useCallback(
-    (connection: Connection) =>
-      setEdges((currentEdges) =>
-        addEdge(
+    (connection: Connection) => {
+      if (
+        !isEditablePipelineFlow ||
+        !isExecutablePipelineEdgeConnection(connection.source, connection.target)
+      ) {
+        return;
+      }
+      setEdges((currentEdges) => {
+        const nextEdges = addEdge(
           {
             ...connection,
             animated: true,
             interactionWidth: 30,
             style: { strokeWidth: 3, stroke: "#0f172a" },
             labelStyle: { fill: "#0f172a", fontSize: 10, fontWeight: 600 },
-            markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16, color: "#0f172a" },
+            markerEnd: {
+              type: MarkerType.ArrowClosed,
+              width: 16,
+              height: 16,
+              color: "#0f172a",
+            },
           },
           currentEdges,
-        ),
-      ),
-    [setEdges],
+        );
+        emitFlowEdges(nextEdges);
+        return nextEdges;
+      });
+    },
+    [emitFlowEdges, isEditablePipelineFlow],
   );
 
   const onReconnect = useCallback(
     (oldEdge: Edge, newConnection: Connection) => {
+      if (
+        !isEditablePipelineFlow ||
+        !isExecutablePipelineEdgeConnection(
+          newConnection.source ?? oldEdge.source,
+          newConnection.target ?? oldEdge.target,
+        )
+      ) {
+        return;
+      }
       const sourceNode = props.flow.nodes.find((node) => node.id === newConnection.source);
       const sourceType = sourceNode?.outputs?.[0]?.type;
       const edgeColor = edgeColorFromType(sourceType);
 
-      setEdges((currentEdges) =>
-        currentEdges.map((edge) =>
+      setEdges((currentEdges) => {
+        const nextEdges = currentEdges.map((edge) =>
           edge.id === oldEdge.id
             ? {
                 ...edge,
@@ -167,10 +225,12 @@ function CanvasInner(props: PipelineCanvasProps) {
                 markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16, color: edgeColor },
               }
             : edge,
-        ),
-      );
+        );
+        emitFlowEdges(nextEdges);
+        return nextEdges;
+      });
     },
-    [props.flow.nodes, setEdges],
+    [emitFlowEdges, isEditablePipelineFlow, props.flow.nodes, setEdges],
   );
 
   const renderedEdges = useMemo(
@@ -263,13 +323,14 @@ function CanvasInner(props: PipelineCanvasProps) {
         edges={renderedEdges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
-        onReconnect={onReconnect}
+        onReconnect={isEditablePipelineFlow ? onReconnect : undefined}
         onNodeClick={onNodeClick}
         onEdgeMouseEnter={(_event, edge) => setHoveredEdgeId(edge.id)}
         onEdgeMouseLeave={() => setHoveredEdgeId(null)}
-        onConnect={onConnect}
+        onConnect={isEditablePipelineFlow ? onConnect : undefined}
         nodeTypes={nodeTypes}
-        edgesReconnectable
+        nodesConnectable={isEditablePipelineFlow}
+        edgesReconnectable={isEditablePipelineFlow}
         elevateEdgesOnSelect
         reconnectRadius={18}
         connectionLineStyle={{ stroke: "#0f172a", strokeWidth: 3.5, opacity: 0.9 }}
@@ -292,7 +353,7 @@ function CanvasInner(props: PipelineCanvasProps) {
             onZoomOut={() => reactFlow?.zoomOut()}
             onFitView={() => reactFlow?.fitView({ padding: 0.2 })}
             nodeCount={props.flow.nodes.length}
-            edgeCount={props.flow.edges.length}
+            edgeCount={edges.length}
             isDirty={Boolean(props.isDirty)}
             onSaveDraft={props.onSaveDraft ?? (() => undefined)}
             onPublish={props.onPublish ?? (() => undefined)}

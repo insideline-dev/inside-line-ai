@@ -121,6 +121,37 @@ export class AiConfigService {
     return this.config.get<number>("AI_SYNTHESIS_MAX_OUTPUT_TOKENS", 16000);
   }
 
+  getSynthesisTimeoutMs(): number {
+    return this.getSynthesisAttemptTimeoutMs();
+  }
+
+  getSynthesisAttemptTimeoutMs(): number {
+    const explicit = this.config.get<number>("AI_SYNTHESIS_ATTEMPT_TIMEOUT_MS");
+    if (typeof explicit === "number" && Number.isFinite(explicit)) {
+      return this.toPositiveInt(explicit, 90_000);
+    }
+
+    const legacy = this.config.get<number>("AI_SYNTHESIS_TIMEOUT_MS", 90_000);
+    return this.toPositiveInt(legacy, 90_000);
+  }
+
+  getSynthesisMaxAttempts(): number {
+    const explicit = this.config.get<number>("AI_SYNTHESIS_MAX_ATTEMPTS", 2);
+    return this.toPositiveInt(explicit, 2);
+  }
+
+  getSynthesisAgentHardTimeoutMs(): number {
+    const explicit = this.config.get<number>("AI_SYNTHESIS_AGENT_HARD_TIMEOUT_MS");
+    if (typeof explicit === "number" && Number.isFinite(explicit)) {
+      return this.toPositiveInt(explicit, 210_000);
+    }
+
+    const computed =
+      this.getSynthesisAttemptTimeoutMs() * this.getSynthesisMaxAttempts() +
+      30_000;
+    return this.toPositiveInt(computed, 210_000);
+  }
+
   getModelForPurpose(purpose: ModelPurpose): string {
     switch (purpose) {
       case ModelPurpose.EXTRACTION:

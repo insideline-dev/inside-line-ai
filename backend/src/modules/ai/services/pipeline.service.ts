@@ -353,13 +353,20 @@ export class PipelineService {
 
     this.errorRecovery.clearPhaseTimeout(startupId, phase);
     await this.pipelineState.resetRetryCount(startupId, phase);
-    await this.progressTracker.updatePhaseProgress({
-      startupId,
-      userId: state.userId,
-      pipelineRunId: state.pipelineRunId,
-      phase,
-      status: PhaseStatus.COMPLETED,
-    });
+    try {
+      await this.progressTracker.updatePhaseProgress({
+        startupId,
+        userId: state.userId,
+        pipelineRunId: state.pipelineRunId,
+        phase,
+        status: PhaseStatus.COMPLETED,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `[Pipeline] Failed to persist completed progress for ${phase}; continuing transitions | Startup: ${startupId} | Run: ${state.pipelineRunId} | Error: ${message}`,
+      );
+    }
     await this.consumePhaseFeedbackSafely(startupId, phase);
 
     if (phase === PipelinePhase.EVALUATION) {

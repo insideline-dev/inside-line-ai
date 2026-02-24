@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import type { AiPromptFlowResponseDtoFlowsItem } from "@/api/generated/model";
 import { useUndoRedo } from "@/components/pipeline/hooks/use-undo-redo";
+import type { FlowEdgeDefinition } from "@/components/pipeline/flow-edges";
 import { DEFAULT_PIPELINE_CONFIG } from "./-flow.defaults";
 
 export const Route = createFileRoute("/_protected/admin/flow")({
@@ -42,11 +43,36 @@ function extractResponseData<T>(payload: unknown): T {
   return payload as T;
 }
 
+function normalizeFlowEdges(value: unknown): FlowEdgeDefinition[] | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+  const edges: FlowEdgeDefinition[] = [];
+  for (const edge of value) {
+    if (!edge || typeof edge !== "object" || Array.isArray(edge)) {
+      return null;
+    }
+    const edgeRecord = edge as Record<string, unknown>;
+    if (typeof edgeRecord.from !== "string" || typeof edgeRecord.to !== "string") {
+      return null;
+    }
+    edges.push({
+      from: edgeRecord.from,
+      to: edgeRecord.to,
+      ...(typeof edgeRecord.label === "string" ? { label: edgeRecord.label } : {}),
+    });
+  }
+  return edges;
+}
+
 function AdminFlowPage() {
   const queryClient = useQueryClient();
   const [selectedFlowId, setSelectedFlowId] = useState<string>("pipeline");
   const [draftId, setDraftId] = useState<string | null>(null);
   const history = useUndoRedo<PhaseConfig[]>(DEFAULT_PIPELINE_CONFIG.phases);
+  const [draftEdgesByFlowId, setDraftEdgesByFlowId] = useState<
+    Record<string, FlowEdgeDefinition[]>
+  >({});
   const [isDirty, setIsDirty] = useState(false);
 
   const { data: flowData, isLoading: flowLoading } =
@@ -59,8 +85,8 @@ function AdminFlowPage() {
     mutation: {
       onSuccess: (data) => {
         const result = extractResponseData<{ id: string }>(data);
-      setDraftId(result.id);
-      setIsDirty(false);
+        setDraftId(result.id);
+        setIsDirty(false);
         toast.success("Draft saved");
         queryClient.invalidateQueries({
           queryKey: getAdminControllerListPipelineFlowConfigsQueryKey(),
@@ -102,7 +128,18 @@ function AdminFlowPage() {
   const selectedFlow = flows?.find((f) => f.id === selectedFlowId);
 
   const configs = extractResponseData<{
-    data: Array<{ id: string; name: string; status: string; version: number; updatedAt: string }>;
+    data: Array<{
+      id: string;
+      name: string;
+      status: string;
+      version: number;
+      updatedAt: string;
+      pipelineConfig?: PipelineConfig;
+      flowDefinition?: {
+        flowId?: string;
+        edges?: unknown;
+      };
+    }>;
   }>(configsData);
 
   const handlePipelineConfigChange = useCallback(
@@ -115,12 +152,14 @@ function AdminFlowPage() {
 
   const handleSaveDraft = () => {
     if (!selectedFlow) return;
+    const selectedEdges =
+      draftEdgesByFlowId[selectedFlow.id] ?? (selectedFlow.edges as FlowEdgeDefinition[]);
     const payload = {
       name: `Pipeline Config ${new Date().toLocaleDateString()}`,
       flowDefinition: {
         flowId: selectedFlow.id,
         nodes: selectedFlow.nodes.map((n) => n.id),
-        edges: selectedFlow.edges,
+        edges: selectedEdges,
       } as Record<string, unknown>,
       pipelineConfig: {
         ...DEFAULT_PIPELINE_CONFIG,
@@ -145,15 +184,14 @@ function AdminFlowPage() {
 
   const handleReset = () => {
     history.replace(DEFAULT_PIPELINE_CONFIG.phases);
+    setDraftEdgesByFlowId({});
     setDraftId(null);
     setIsDirty(false);
     toast.info("Reset to defaults");
   };
 
   const handleLoadConfig = (configId: string) => {
-    const config = configs?.data?.find((c: { id: string }) => c.id === configId) as
-      | ({ pipelineConfig?: PipelineConfig } & { id: string; name: string })
-      | undefined;
+    const config = configs?.data?.find((c) => c.id === configId);
     if (!config) return;
 
     setDraftId(config.id);
@@ -162,9 +200,33 @@ function AdminFlowPage() {
     if (loadedPhases) {
       history.push(loadedPhases as PhaseConfig[]);
     }
+    const loadedFlowId =
+      config.flowDefinition?.flowId && typeof config.flowDefinition.flowId === "string"
+        ? config.flowDefinition.flowId
+        : null;
+    const loadedEdges = normalizeFlowEdges(config.flowDefinition?.edges);
+    if (loadedFlowId && loadedEdges) {
+      setDraftEdgesByFlowId((current) => ({
+        ...current,
+        [loadedFlowId]: loadedEdges,
+      }));
+      setSelectedFlowId(loadedFlowId);
+    }
+    setIsDirty(false);
 
     toast.info(`Loaded: ${config.name}`);
   };
+
+  const handleFlowEdgesChange = useCallback(
+    (flowId: string, edges: FlowEdgeDefinition[]) => {
+      setDraftEdgesByFlowId((current) => ({
+        ...current,
+        [flowId]: edges,
+      }));
+      setIsDirty(true);
+    },
+    [],
+  );
 
   const isSaving = createDraftMutation.isPending || updateDraftMutation.isPending;
 
@@ -232,30 +294,44 @@ function AdminFlowPage() {
           ))}
         </TabsList>
 
-        {flows?.map((f) => (
-          <TabsContent key={f.id} value={f.id} className="flex-1 min-h-0 mt-0">
-            <div className="h-full rounded-lg border bg-background">
-              <PipelineCanvas
-                flow={f}
-                pipelineConfig={
-                  f.id === "pipeline" ? history.present : undefined
+        {flows?.map((f) => {
+          const flowWithDraftEdges =
+            draftEdgesByFlowId[f.id] !== undefined
+              ? {
+                  ...f,
+                  edges: draftEdgesByFlowId[f.id],
                 }
-                onPipelineConfigChange={
-                  f.id === "pipeline" ? handlePipelineConfigChange : undefined
-                }
-                canUndo={history.canUndo}
-                canRedo={history.canRedo}
-                onUndo={history.undo}
-                onRedo={history.redo}
-                isDirty={isDirty}
-                onSaveDraft={handleSaveDraft}
-                onPublish={handlePublish}
-                saveDisabled={isSaving}
-                publishDisabled={!draftId || publishMutation.isPending}
-              />
-            </div>
-          </TabsContent>
-        ))}
+              : f;
+          return (
+            <TabsContent key={f.id} value={f.id} className="flex-1 min-h-0 mt-0">
+              <div className="h-full rounded-lg border bg-background">
+                <PipelineCanvas
+                  flow={flowWithDraftEdges}
+                  pipelineConfig={
+                    f.id === "pipeline" ? history.present : undefined
+                  }
+                  onPipelineConfigChange={
+                    f.id === "pipeline" ? handlePipelineConfigChange : undefined
+                  }
+                  canUndo={history.canUndo}
+                  canRedo={history.canRedo}
+                  onUndo={history.undo}
+                  onRedo={history.redo}
+                  isDirty={isDirty}
+                  onSaveDraft={handleSaveDraft}
+                  onPublish={handlePublish}
+                  saveDisabled={isSaving}
+                  publishDisabled={!draftId || publishMutation.isPending}
+                  onFlowEdgesChange={
+                    f.id === "pipeline"
+                      ? (edges) => handleFlowEdgesChange(f.id, edges)
+                      : undefined
+                  }
+                />
+              </div>
+            </TabsContent>
+          );
+        })}
       </Tabs>
     </div>
   );

@@ -5,8 +5,50 @@ type LooseObject = Record<string, unknown>;
 const nullToUndefined = (value: unknown): unknown =>
   value === null ? undefined : value;
 
+const normalizeHttpUrl = (value: unknown): string | undefined => {
+  if (value == null) {
+    return undefined;
+  }
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  let candidate = value.trim();
+  if (!candidate || candidate.toLowerCase() === "unknown") {
+    return undefined;
+  }
+
+  candidate = candidate
+    .replace(/^["'<(\[]+/, "")
+    .replace(/["'>)\]]+$/, "")
+    .replace(/&amp;/gi, "&");
+
+  if (!candidate) {
+    return undefined;
+  }
+
+  if (/^www\./i.test(candidate)) {
+    candidate = `https://${candidate}`;
+  } else if (
+    !/^[a-z][a-z0-9+.-]*:\/\//i.test(candidate) &&
+    /^[\w.-]+\.[a-z]{2,}(?:[/?#]|$)/i.test(candidate)
+  ) {
+    candidate = `https://${candidate}`;
+  }
+
+  try {
+    const parsed = new URL(candidate);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return undefined;
+    }
+    return parsed.toString();
+  } catch {
+    return undefined;
+  }
+};
+
 const optionalUrl = z.preprocess(
-  nullToUndefined,
+  normalizeHttpUrl,
   z.string().url().optional(),
 );
 
@@ -63,7 +105,9 @@ const stringArray = z.preprocess(
 const urlArray = z.preprocess(
   (value) =>
     Array.isArray(value)
-      ? value.filter((item): item is string => typeof item === "string")
+      ? value
+          .map((item) => normalizeHttpUrl(item))
+          .filter((item): item is string => Boolean(item))
       : [],
   z.array(z.string().url()),
 ).default([]);

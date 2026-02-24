@@ -145,18 +145,20 @@ export abstract class BaseEvaluationAgent<TOutput>
       });
       try {
         const response = await this.withTimeout(
-          generateText({
-            model:
-              execution?.generateTextOptions.model ??
-              this.providers.resolveModelForPurpose(ModelPurpose.EVALUATION),
-            output: Output.object({ schema: this.schema }),
-            system: composedSystemPrompt,
-            prompt: renderedPrompt,
-            temperature: this.aiConfig.getEvaluationTemperature(),
-            maxOutputTokens: this.aiConfig.getEvaluationMaxOutputTokens(),
-            tools: execution?.generateTextOptions.tools,
-            toolChoice: execution?.generateTextOptions.toolChoice,
-          }),
+          (abortSignal) =>
+            generateText({
+              model:
+                execution?.generateTextOptions.model ??
+                this.providers.resolveModelForPurpose(ModelPurpose.EVALUATION),
+              output: Output.object({ schema: this.schema }),
+              system: composedSystemPrompt,
+              prompt: renderedPrompt,
+              temperature: this.aiConfig.getEvaluationTemperature(),
+              maxOutputTokens: this.aiConfig.getEvaluationMaxOutputTokens(),
+              tools: execution?.generateTextOptions.tools,
+              toolChoice: execution?.generateTextOptions.toolChoice,
+              abortSignal,
+            }),
           attemptTimeoutMs,
           `${this.key} evaluation timed out`,
         );
@@ -453,15 +455,17 @@ export abstract class BaseEvaluationAgent<TOutput>
   > {
     try {
       const response = await this.withTimeout(
-        generateText({
-          model: input.model,
-          system: input.systemPrompt,
-          prompt: input.renderedPrompt,
-          temperature: this.aiConfig.getEvaluationTemperature(),
-          maxOutputTokens: this.aiConfig.getEvaluationMaxOutputTokens(),
-          tools: input.tools,
-          toolChoice: input.toolChoice,
-        }),
+        (abortSignal) =>
+          generateText({
+            model: input.model,
+            system: input.systemPrompt,
+            prompt: input.renderedPrompt,
+            temperature: this.aiConfig.getEvaluationTemperature(),
+            maxOutputTokens: this.aiConfig.getEvaluationMaxOutputTokens(),
+            tools: input.tools,
+            toolChoice: input.toolChoice,
+            abortSignal,
+          }),
         input.timeoutMs,
         `${this.key} evaluation timed out`,
       );
@@ -941,24 +945,53 @@ export abstract class BaseEvaluationAgent<TOutput>
   }
 
   private async withTimeout<T>(
-    promise: Promise<T>,
+    operation: (abortSignal: AbortSignal | undefined) => Promise<T>,
     timeoutMs: number,
     message: string,
   ): Promise<T> {
     if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
-      return promise;
+      return operation(undefined);
     }
 
     return await new Promise<T>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error(message)), timeoutMs);
-      Promise.resolve(promise)
+      const controller =
+        typeof AbortController === "undefined" ? undefined : new AbortController();
+      let settled = false;
+      const complete = (fn: () => void) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        fn();
+      };
+      const timer = setTimeout(() => {
+        try {
+          controller?.abort(new Error(message));
+        } catch {
+          controller?.abort();
+        }
+        complete(() => reject(new Error(message)));
+      }, timeoutMs);
+      Promise.resolve(operation(controller?.signal))
         .then((result) => {
-          clearTimeout(timer);
-          resolve(result);
+          complete(() => resolve(result));
         })
         .catch((error) => {
-          clearTimeout(timer);
-          reject(error);
+          complete(() => {
+            if (controller?.signal.aborted) {
+              const reason = controller.signal.reason;
+              const timeoutError =
+                reason instanceof Error
+                  ? reason
+                  : new Error(
+                      typeof reason === "string" && reason.trim().length > 0
+                        ? reason
+                        : message,
+                    );
+              reject(timeoutError);
+              return;
+            }
+            reject(error);
+          });
         });
     });
   }

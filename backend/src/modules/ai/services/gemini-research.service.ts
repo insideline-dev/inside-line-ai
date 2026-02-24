@@ -388,16 +388,18 @@ export class GeminiResearchService {
   > {
     try {
       const response = await this.withTimeout(
-        generateText({
-          model: input.model,
-          system: input.systemPrompt,
-          prompt: input.prompt,
-          output: Output.object({ schema: input.schema }),
-          tools: input.tools,
-          toolChoice: input.toolChoice,
-          stopWhen: input.stopWhen,
-          temperature: this.aiConfig.getResearchTemperature(),
-        }),
+        (abortSignal) =>
+          generateText({
+            model: input.model,
+            system: input.systemPrompt,
+            prompt: input.prompt,
+            output: Output.object({ schema: input.schema }),
+            tools: input.tools,
+            toolChoice: input.toolChoice,
+            stopWhen: input.stopWhen,
+            temperature: this.aiConfig.getResearchTemperature(),
+            abortSignal,
+          }),
         input.timeoutMs,
         `Research agent ${input.agent} timed out`,
       );
@@ -494,15 +496,17 @@ export class GeminiResearchService {
   > {
     try {
       const response = await this.withTimeout(
-        generateText({
-          model: input.model,
-          system: input.systemPrompt,
-          prompt: input.prompt,
-          tools: input.tools,
-          toolChoice: input.toolChoice,
-          stopWhen: input.stopWhen,
-          temperature: this.aiConfig.getResearchTemperature(),
-        }),
+        (abortSignal) =>
+          generateText({
+            model: input.model,
+            system: input.systemPrompt,
+            prompt: input.prompt,
+            tools: input.tools,
+            toolChoice: input.toolChoice,
+            stopWhen: input.stopWhen,
+            temperature: this.aiConfig.getResearchTemperature(),
+            abortSignal,
+          }),
         input.timeoutMs,
         `Research agent ${input.agent} timed out`,
       );
@@ -1135,24 +1139,53 @@ export class GeminiResearchService {
   }
 
   private async withTimeout<T>(
-    promise: Promise<T>,
+    operation: (abortSignal: AbortSignal | undefined) => Promise<T>,
     timeoutMs: number,
     message: string,
   ): Promise<T> {
     if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
-      return promise;
+      return operation(undefined);
     }
 
     return await new Promise<T>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error(message)), timeoutMs);
-      Promise.resolve(promise)
+      const controller =
+        typeof AbortController === "undefined" ? undefined : new AbortController();
+      let settled = false;
+      const complete = (fn: () => void) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        fn();
+      };
+      const timer = setTimeout(() => {
+        try {
+          controller?.abort(new Error(message));
+        } catch {
+          controller?.abort();
+        }
+        complete(() => reject(new Error(message)));
+      }, timeoutMs);
+      Promise.resolve(operation(controller?.signal))
         .then((result) => {
-          clearTimeout(timer);
-          resolve(result);
+          complete(() => resolve(result));
         })
         .catch((error) => {
-          clearTimeout(timer);
-          reject(error);
+          complete(() => {
+            if (controller?.signal.aborted) {
+              const reason = controller.signal.reason;
+              const timeoutError =
+                reason instanceof Error
+                  ? reason
+                  : new Error(
+                      typeof reason === "string" && reason.trim().length > 0
+                        ? reason
+                        : message,
+                    );
+              reject(timeoutError);
+              return;
+            }
+            reject(error);
+          });
         });
     });
   }

@@ -31,7 +31,7 @@ import {
   MarketResearchSchema,
   ProductResearchSchema,
   NewsResearchSchema,
-  CompetitorResearchSchema,
+  CompetitorResearchObjectSchema,
   SynthesisSchema,
 } from "../schemas";
 import { AiConfigService } from "./ai-config.service";
@@ -61,7 +61,7 @@ const CODE_SCHEMA_BY_PROMPT_KEY: Partial<Record<AiPromptKey, z.ZodObject<z.ZodRa
   "research.market": MarketResearchSchema,
   "research.product": ProductResearchSchema,
   "research.news": NewsResearchSchema,
-  "research.competitor": CompetitorResearchSchema,
+  "research.competitor": CompetitorResearchObjectSchema,
   "evaluation.team": TeamEvaluationSchema,
   "evaluation.market": MarketEvaluationSchema,
   "evaluation.product": ProductEvaluationSchema,

@@ -59,6 +59,8 @@ export class LinkedinEnrichmentService {
   private readonly logger = new Logger(LinkedinEnrichmentService.name);
   private readonly batchSize: number;
   private readonly maxCompanyLeadershipCandidates: number;
+  private readonly companyLeadershipDiscoveryTarget: number;
+  private readonly maxLeadershipDiscoveryQueries: number;
   private readonly maxProfileCandidates = 3;
   private readonly historicalFounderMinNameConfidence = 85;
   private readonly aiVerifierEnabled: boolean;
@@ -80,13 +82,14 @@ export class LinkedinEnrichmentService {
     'co-founder',
     'ceo',
     'cto',
-    'coo',
     'cfo',
+    'coo',
     'cpo',
-    'vp',
-    'head',
-    'director',
+    'president',
+    'chairman',
   ] as const;
+  private readonly executiveLeadershipPattern =
+    /\b(founder|co[\s-]?founder|chairman|chief|ceo|cto|coo|cfo|cmo|cpo|president)\b/i;
 
   constructor(
     private unipileService: UnipileService,
@@ -96,6 +99,15 @@ export class LinkedinEnrichmentService {
     this.batchSize = this.config?.get<number>('LINKEDIN_BATCH_SIZE', 10) ?? 10;
     this.maxCompanyLeadershipCandidates =
       this.config?.get<number>('LINKEDIN_COMPANY_DISCOVERY_MAX', 6) ?? 6;
+    const configuredTarget =
+      this.config?.get<number>('LINKEDIN_COMPANY_DISCOVERY_TARGET', 3) ?? 3;
+    this.companyLeadershipDiscoveryTarget = Math.max(
+      1,
+      Math.min(configuredTarget, this.maxCompanyLeadershipCandidates),
+    );
+    this.maxLeadershipDiscoveryQueries =
+      this.config?.get<number>('LINKEDIN_COMPANY_DISCOVERY_MAX_QUERIES', 3) ??
+      3;
     this.aiVerifierEnabled =
       this.config?.get<boolean>('LINKEDIN_AI_VERIFIER_ENABLED', true) ?? true;
     this.aiVerifierMinConfidence =
@@ -125,8 +137,12 @@ export class LinkedinEnrichmentService {
     );
 
     const candidates = new Map<string, TeamMemberInput>();
+    const discoveryQueries = this.companyLeadershipQueries.slice(
+      0,
+      Math.max(1, this.maxLeadershipDiscoveryQueries),
+    );
     const traceOptions = options?.onTrace ? { onTrace: options.onTrace } : undefined;
-    for (const query of this.companyLeadershipQueries) {
+    for (const query of discoveryQueries) {
       let matches: LinkedInProfile[] = [];
       this.emitTrace(options, {
         operation: "unipile.search_profiles_in_company",
@@ -173,6 +189,12 @@ export class LinkedinEnrichmentService {
         this.logger.debug(
           `[LinkedInDiscovery] query=${query} company=${normalizedCompany} failed: ${message}`,
         );
+        if (this.isRateLimitError(message)) {
+          this.logger.warn(
+            `[LinkedInDiscovery] rate limited by Unipile; stopping leadership discovery for ${normalizedCompany}`,
+          );
+          break;
+        }
         if (this.isIntegrationUnavailableError(message)) {
           this.logger.warn(
             `[LinkedInDiscovery] LinkedIn integration unavailable; skipping company leadership discovery for ${normalizedCompany}`,
@@ -197,6 +219,13 @@ export class LinkedinEnrichmentService {
         if (!candidates.has(dedupeKey)) {
           candidates.set(dedupeKey, member);
         }
+      }
+
+      if (candidates.size >= this.companyLeadershipDiscoveryTarget) {
+        this.logger.debug(
+          `[LinkedInDiscovery] company=${normalizedCompany} reached discovery target (${this.companyLeadershipDiscoveryTarget}), stopping additional queries`,
+        );
+        break;
       }
     }
 
@@ -235,19 +264,39 @@ export class LinkedinEnrichmentService {
     }
 
     const enriched: EnrichedTeamMember[] = [];
+    let rateLimited = false;
+    let rateLimitReason = "LinkedIn provider rate-limited this request (429)";
 
     for (let index = 0; index < members.length; index += this.batchSize) {
       const batch = members.slice(index, index + this.batchSize);
-      const settled = await Promise.allSettled(
-        batch.map((member) =>
-          this.enrichMember(userId, member, startupContext, options),
-        ),
-      );
+      for (const member of batch) {
+        if (rateLimited) {
+          enriched.push(
+            this.buildRateLimitedMember(member, rateLimitReason),
+          );
+          this.emitTrace(options, {
+            operation: "linkedin.enrich_member",
+            status: "failed",
+            inputJson: {
+              member,
+              startupContext,
+            },
+            error: rateLimitReason,
+            meta: {
+              rateLimited: true,
+              skipped: true,
+            },
+          });
+          continue;
+        }
 
-      for (let batchIndex = 0; batchIndex < settled.length; batchIndex += 1) {
-        const result = settled[batchIndex];
-        const member = batch[batchIndex];
-        if (result.status === 'fulfilled') {
+        try {
+          const result = await this.enrichMember(
+            userId,
+            member,
+            startupContext,
+            options,
+          );
           this.emitTrace(options, {
             operation: "linkedin.enrich_member",
             status: "completed",
@@ -255,24 +304,71 @@ export class LinkedinEnrichmentService {
               member,
               startupContext,
             },
-            outputJson: result.value,
+            outputJson: result,
           });
-          enriched.push(result.value);
+          enriched.push(result);
           continue;
-        }
+        } catch (error) {
+          const rejectedMessage =
+            error instanceof Error
+              ? error.message
+              : String(error);
+          if (this.isRateLimitError(rejectedMessage)) {
+            rateLimited = true;
+            rateLimitReason = this.formatRateLimitReason(rejectedMessage);
+            enriched.push(
+              this.buildRateLimitedMember(member, rateLimitReason),
+            );
+            this.emitTrace(options, {
+              operation: "linkedin.enrich_member",
+              status: "failed",
+              inputJson: {
+                member,
+                startupContext,
+              },
+              error: rejectedMessage,
+              meta: {
+                rateLimited: true,
+                shortCircuit: true,
+              },
+            });
+            this.logger.warn(
+              `[LinkedInEnrichment] Rate limited by Unipile; short-circuiting remaining members in this run`,
+            );
+            continue;
+          }
 
-        const rejectedMessage =
-          result.reason instanceof Error
-            ? result.reason.message
-            : String(result.reason);
-        if (this.isIntegrationUnavailableError(rejectedMessage)) {
+          if (this.isIntegrationUnavailableError(rejectedMessage)) {
+            enriched.push({
+              name: member.name,
+              role: member.role,
+              linkedinUrl: member.linkedinUrl,
+              enrichmentStatus: 'not_configured',
+              matchConfidence: 0,
+              confidenceReason: 'LinkedIn integration authorization failed or is unavailable',
+            });
+            this.emitTrace(options, {
+              operation: "linkedin.enrich_member",
+              status: "failed",
+              inputJson: {
+                member,
+                startupContext,
+              },
+              error: rejectedMessage,
+              meta: {
+                integrationUnavailable: true,
+              },
+            });
+            continue;
+          }
+
           enriched.push({
             name: member.name,
             role: member.role,
             linkedinUrl: member.linkedinUrl,
-            enrichmentStatus: 'not_configured',
+            enrichmentStatus: 'error',
             matchConfidence: 0,
-            confidenceReason: 'LinkedIn integration authorization failed or is unavailable',
+            confidenceReason: 'LinkedIn profile resolution failed with an unexpected error',
           });
           this.emitTrace(options, {
             operation: "linkedin.enrich_member",
@@ -282,30 +378,8 @@ export class LinkedinEnrichmentService {
               startupContext,
             },
             error: rejectedMessage,
-            meta: {
-              integrationUnavailable: true,
-            },
           });
-          continue;
         }
-
-        enriched.push({
-          name: member.name,
-          role: member.role,
-          linkedinUrl: member.linkedinUrl,
-          enrichmentStatus: 'error',
-          matchConfidence: 0,
-          confidenceReason: 'LinkedIn profile resolution failed with an unexpected error',
-        });
-        this.emitTrace(options, {
-          operation: "linkedin.enrich_member",
-          status: "failed",
-          inputJson: {
-            member,
-            startupContext,
-          },
-          error: rejectedMessage,
-        });
       }
     }
 
@@ -650,7 +724,35 @@ export class LinkedinEnrichmentService {
   }
 
   private isRateLimitError(message: string): boolean {
-    return /\b429\b/.test(message);
+    const normalized = message.toLowerCase();
+    return (
+      /\b429\b/.test(normalized) ||
+      normalized.includes("too many requests") ||
+      normalized.includes("too_many_requests") ||
+      normalized.includes("rate limit")
+    );
+  }
+
+  private buildRateLimitedMember(
+    member: TeamMemberInput,
+    reason: string,
+  ): EnrichedTeamMember {
+    return {
+      name: member.name,
+      role: member.role,
+      linkedinUrl: member.linkedinUrl,
+      enrichmentStatus: "error",
+      matchConfidence: 0,
+      confidenceReason: reason,
+    };
+  }
+
+  private formatRateLimitReason(message: string): string {
+    if (!message || message.trim().length === 0) {
+      return "LinkedIn provider rate-limited this request (429)";
+    }
+
+    return `LinkedIn provider rate-limited this request (429): ${message}`;
   }
 
   private isIntegrationUnavailableError(message: string): boolean {
@@ -774,12 +876,12 @@ export class LinkedinEnrichmentService {
     companyName: string,
     headline: string,
   ): boolean {
-    const leadershipPattern =
-      /\b(founder|co[\s-]?founder|chief|ceo|cto|coo|cfo|cmo|cpo|president|vice president|vp|head|director|managing director|general manager|partner)\b/i;
     const currentRoleTexts = this.getCurrentRoleTexts(profile, companyName);
     const hasLeadershipSignal =
-      leadershipPattern.test(headline) ||
-      currentRoleTexts.some((text) => leadershipPattern.test(text));
+      this.executiveLeadershipPattern.test(headline) ||
+      currentRoleTexts.some((text) =>
+        this.executiveLeadershipPattern.test(text),
+      );
     if (!hasLeadershipSignal) {
       return false;
     }

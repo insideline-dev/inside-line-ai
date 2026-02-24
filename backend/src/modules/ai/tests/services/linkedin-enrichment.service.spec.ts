@@ -274,6 +274,38 @@ describe("LinkedinEnrichmentService", () => {
     expect(unipile.searchProfiles).not.toHaveBeenCalled();
   });
 
+  it("short-circuits remaining member requests after a rate-limit error", async () => {
+    unipile.getProfile.mockRejectedValueOnce(
+      new Error(
+        'Unipile API error: {"status":429,"type":"errors/too_many_requests","title":"Too many requests"}',
+      ),
+    );
+
+    const result = await service.enrichTeamMembers(
+      "user-1",
+      [
+        {
+          name: "Alex Founder",
+          role: "CEO",
+          linkedinUrl: "https://linkedin.com/in/alex-founder",
+        },
+        {
+          name: "Sam Builder",
+          role: "CTO",
+          linkedinUrl: "https://linkedin.com/in/sam-builder",
+        },
+      ],
+      { companyName: "Inside Line" },
+    );
+
+    expect(unipile.getProfile).toHaveBeenCalledTimes(1);
+    expect(result).toHaveLength(2);
+    expect(result[0]?.enrichmentStatus).toBe("error");
+    expect(result[0]?.confidenceReason).toContain("rate-limited");
+    expect(result[1]?.enrichmentStatus).toBe("error");
+    expect(result[1]?.confidenceReason).toContain("rate-limited");
+  });
+
   it("retries via search when a provided linkedin URL is unreachable", async () => {
     unipile.getProfile
       .mockRejectedValueOnce(
@@ -583,13 +615,13 @@ describe("LinkedinEnrichmentService", () => {
     ]);
   });
 
-  it("accepts profiles with current target-company experience even when currentCompany is null", async () => {
+  it("accepts C-level profiles with current target-company experience even when currentCompany is null", async () => {
     unipile.searchProfilesInCompany.mockResolvedValue([
       {
         id: "curr-exp-1",
         firstName: "Dana",
         lastName: "Lead",
-        headline: "Head of Product",
+        headline: "CTO",
         location: "SF",
         profileUrl: "https://linkedin.com/in/dana-lead",
         profileImageUrl: null,
@@ -598,7 +630,7 @@ describe("LinkedinEnrichmentService", () => {
         experience: [
           {
             company: "Airbnb",
-            title: "Head of Product",
+            title: "CTO",
             startDate: "2023",
             endDate: null,
             current: true,
@@ -617,9 +649,42 @@ describe("LinkedinEnrichmentService", () => {
     expect(discovered).toEqual([
       {
         name: "Dana Lead",
-        role: "Head of Product",
+        role: "CTO",
         linkedinUrl: "https://linkedin.com/in/dana-lead",
       },
     ]);
+  });
+
+  it("stops company leadership discovery after a rate-limit response", async () => {
+    unipile.searchProfilesInCompany
+      .mockRejectedValueOnce(
+        new Error(
+          'Unipile API error: {"status":429,"type":"errors/too_many_requests","title":"Too many requests"}',
+        ),
+      )
+      .mockResolvedValueOnce([
+        {
+          id: "should-not-run",
+          firstName: "Never",
+          lastName: "Called",
+          headline: "CEO",
+          location: "SF",
+          profileUrl: "https://linkedin.com/in/never-called",
+          profileImageUrl: null,
+          summary: null,
+          currentCompany: { name: "Airbnb", title: "CEO" },
+          experience: [],
+          education: [],
+        },
+      ]);
+
+    const discovered = await service.discoverCompanyLeadershipMembers(
+      "Airbnb",
+      [],
+      "https://airbnb.com",
+    );
+
+    expect(discovered).toEqual([]);
+    expect(unipile.searchProfilesInCompany).toHaveBeenCalledTimes(1);
   });
 });

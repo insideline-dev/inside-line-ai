@@ -77,6 +77,9 @@ export class ScrapingService {
   private readonly logger = new Logger(ScrapingService.name);
   private readonly debugLogEnabled: boolean;
   private readonly debugLogPath: string;
+  private readonly executiveLeadershipPattern =
+    /\b(founder|co[\s-]?founder|chairman|chief|ceo|cto|coo|cfo|cmo|cpo|president)\b/i;
+  private readonly minLeadershipSeedCountForDiscoverySkip = 2;
 
   constructor(
     private drizzle: DrizzleService,
@@ -198,18 +201,28 @@ export class ScrapingService {
       discoveredWebsiteLinkedinMembers = this.extractLinkedinCandidatesFromWebsiteLinks(
         website?.links ?? [],
       ).map((m) => ({ ...m, teamMemberSource: "website" as const }));
-      discoveredLinkedinLeaders = (
-        await this.discoverCompanyLinkedinLeadership(
-          record.name,
-          [
-            ...submittedTeamMembers,
-            ...discoveredWebsiteLeaders,
-            ...discoveredWebsiteLinkedinMembers,
-          ],
-          effectiveWebsite ?? undefined,
-          progress,
-        )
-      ).map((m) => ({ ...m, teamMemberSource: "linkedin" as const }));
+      const discoverySeedMembers = [
+        ...submittedTeamMembers,
+        ...extractionFounderMembers,
+        ...enrichmentFounderMembers,
+        ...discoveredWebsiteLeaders,
+        ...discoveredWebsiteLinkedinMembers,
+      ];
+      const leadershipSeedCount = this.countLeadershipSeeds(discoverySeedMembers);
+      if (leadershipSeedCount >= this.minLeadershipSeedCountForDiscoverySkip) {
+        this.logger.log(
+          `[Scraping] Skipping LinkedIn company leadership discovery for ${record.name}: already have ${leadershipSeedCount} founder/executive seed members`,
+        );
+      } else {
+        discoveredLinkedinLeaders = (
+          await this.discoverCompanyLinkedinLeadership(
+            record.name,
+            discoverySeedMembers,
+            effectiveWebsite ?? undefined,
+            progress,
+          )
+        ).map((m) => ({ ...m, teamMemberSource: "linkedin" as const }));
+      }
     } catch (error) {
       const message = this.asMessage(error);
       progress?.onStepFailed(SCRAPING_STEP_TEAM_DISCOVERY, message, {
@@ -590,9 +603,6 @@ export class ScrapingService {
   }
 
   private extractLeadershipCandidates(teamBios: TeamBioInput[]): TeamMemberInput[] {
-    const leadershipRolePattern =
-      /\b(founder|co[\s-]?founder|chief|ceo|cto|coo|cfo|cmo|cpo|president|vice president|vp|head|director|managing director|general manager|partner)\b/i;
-
     const results: TeamMemberInput[] = [];
     for (const bio of teamBios) {
       const name = bio.name?.trim();
@@ -600,7 +610,7 @@ export class ScrapingService {
       if (!name || name.length < 3) {
         continue;
       }
-      if (!role || !leadershipRolePattern.test(role)) {
+      if (!role || !this.executiveLeadershipPattern.test(role)) {
         continue;
       }
 
@@ -715,7 +725,7 @@ export class ScrapingService {
     if (normalizedText.length > 0) {
       const sanitized = normalizedText
         .replace(
-          /\b(founder|co[\s-]?founder|chief|ceo|cto|coo|cfo|cmo|cpo|president|vice president|vp|head|director|managing director|general manager|partner)\b.*$/i,
+          /\b(founder|co[\s-]?founder|chairman|chief [a-z ]+ officer|ceo|cto|coo|cfo|cmo|cpo|president)\b.*$/i,
           "",
         )
         .replace(/[|@•,:;]+/g, " ")
@@ -761,7 +771,7 @@ export class ScrapingService {
     const match = linkText
       .replace(/\s+/g, " ")
       .match(
-        /\b(founder|co[\s-]?founder|chief [a-z ]+ officer|ceo|cto|coo|cfo|cmo|cpo|president|vice president|vp|head|director|managing director|general manager|partner)\b/i,
+        /\b(founder|co[\s-]?founder|chairman|chief [a-z ]+ officer|ceo|cto|coo|cfo|cmo|cpo|president)\b/i,
       );
     if (!match?.[0]) {
       return undefined;
@@ -787,6 +797,22 @@ export class ScrapingService {
       .toLowerCase()
       .replace(/[^a-z0-9]/g, "")
       .trim();
+  }
+
+  private countLeadershipSeeds(members: TeamMemberInput[]): number {
+    const uniqueLeaders = new Set<string>();
+    for (const member of members) {
+      const name = member.name?.trim();
+      const role = member.role?.trim();
+      if (!name || !role) {
+        continue;
+      }
+      if (!this.executiveLeadershipPattern.test(role)) {
+        continue;
+      }
+      uniqueLeaders.add(name.toLowerCase());
+    }
+    return uniqueLeaders.size;
   }
 
   private async discoverCompanyLinkedinLeadership(

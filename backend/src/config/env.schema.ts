@@ -141,6 +141,7 @@ export const envSchema = z.object({
   BRAVE_SEARCH_API_KEY: z.string().optional(),
   AI_PIPELINE_ENABLED: z.coerce.boolean().default(true),
   AI_PROMPT_RUNTIME_CONFIG_ENABLED: z.coerce.boolean().default(false),
+  AI_PIPELINE_EDGE_DRIVEN_ENABLED: z.coerce.boolean().default(false),
   AI_PIPELINE_TTL_SECONDS: z.coerce.number().default(86400),
   AI_MODEL_EXTRACTION: z.string().default("gemini-3-flash-preview"),
   AI_MODEL_RESEARCH: z.string().default("gemini-3-flash-preview"),

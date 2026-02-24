@@ -23,7 +23,7 @@ import {
 } from "./ai-prompt-catalog";
 import { AI_FLOW_DEFINITIONS } from "./ai-flow-catalog";
 import {
-  CompetitorResearchSchema,
+  CompetitorResearchObjectSchema,
   DealTermsEvaluationSchema,
   ExitPotentialEvaluationSchema,
   FinancialsEvaluationSchema,
@@ -482,7 +482,7 @@ export class AiPromptService {
         { key: "research.market", schema: MarketResearchSchema },
         { key: "research.product", schema: ProductResearchSchema },
         { key: "research.news", schema: NewsResearchSchema },
-        { key: "research.competitor", schema: CompetitorResearchSchema },
+        { key: "research.competitor", schema: CompetitorResearchObjectSchema },
         { key: "evaluation.team", schema: TeamEvaluationSchema },
         { key: "evaluation.market", schema: MarketEvaluationSchema },
         { key: "evaluation.product", schema: ProductEvaluationSchema },

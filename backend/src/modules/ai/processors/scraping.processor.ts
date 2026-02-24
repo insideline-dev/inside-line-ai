@@ -231,6 +231,7 @@ export class ScrapingProcessor
             inputPrompt,
             outputJson,
             outputText,
+            meta,
             attempt,
             retryCount,
           }) => {
@@ -254,6 +255,8 @@ export class ScrapingProcessor
                 attempt: resolvedAttempt,
                 retryCount: resolvedRetryCount,
                 lifecycleEvent: isFailed ? "failed" : "completed",
+                dataSummary:
+                  meta && Object.keys(meta).length > 0 ? meta : undefined,
               })
               .catch((progressError) => {
                 this.logger.warn(
@@ -276,6 +279,7 @@ export class ScrapingProcessor
                 inputPrompt,
                 outputJson,
                 outputText,
+                meta,
                 attempt: resolvedAttempt,
                 retryCount: resolvedRetryCount,
               })

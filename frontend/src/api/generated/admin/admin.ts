@@ -28,6 +28,7 @@ import type {
   AdminControllerBulkExportStartupsParams,
   AdminControllerExportStartupsParams,
   AdminControllerExportUsersParams,
+  AdminControllerGetAiModelConfigParams,
   AdminControllerGetAiPromptOutputSchemaParams,
   AdminControllerGetAiSchemaResolvedAliasParams,
   AdminControllerGetAiSchemaResolvedParams,
@@ -3448,17 +3449,26 @@ export type adminControllerGetAiModelConfigResponseSuccess = (adminControllerGet
 
 export type adminControllerGetAiModelConfigResponse = (adminControllerGetAiModelConfigResponseSuccess)
 
-export const getAdminControllerGetAiModelConfigUrl = (key: string,) => {
+export const getAdminControllerGetAiModelConfigUrl = (key: string,
+    params?: AdminControllerGetAiModelConfigParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
+    
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
 
-  
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/admin/ai-prompts/${key}/model-config`
+  return stringifiedParams.length > 0 ? `/admin/ai-prompts/${key}/model-config?${stringifiedParams}` : `/admin/ai-prompts/${key}/model-config`
 }
 
-export const adminControllerGetAiModelConfig = async (key: string, options?: RequestInit): Promise<adminControllerGetAiModelConfigResponse> => {
+export const adminControllerGetAiModelConfig = async (key: string,
+    params?: AdminControllerGetAiModelConfigParams, options?: RequestInit): Promise<adminControllerGetAiModelConfigResponse> => {
   
-  return customFetch<adminControllerGetAiModelConfigResponse>(getAdminControllerGetAiModelConfigUrl(key),
+  return customFetch<adminControllerGetAiModelConfigResponse>(getAdminControllerGetAiModelConfigUrl(key,params),
   {      
     ...options,
     method: 'GET'
@@ -3471,23 +3481,25 @@ export const adminControllerGetAiModelConfig = async (key: string, options?: Req
 
 
 
-export const getAdminControllerGetAiModelConfigQueryKey = (key: string,) => {
+export const getAdminControllerGetAiModelConfigQueryKey = (key: string,
+    params?: AdminControllerGetAiModelConfigParams,) => {
     return [
-    `/admin/ai-prompts/${key}/model-config`
+    `/admin/ai-prompts/${key}/model-config`, ...(params ? [params] : [])
     ] as const;
     }
 
     
-export const getAdminControllerGetAiModelConfigQueryOptions = <TData = Awaited<ReturnType<typeof adminControllerGetAiModelConfig>>, TError = ErrorType<unknown>>(key: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiModelConfig>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+export const getAdminControllerGetAiModelConfigQueryOptions = <TData = Awaited<ReturnType<typeof adminControllerGetAiModelConfig>>, TError = ErrorType<unknown>>(key: string,
+    params?: AdminControllerGetAiModelConfigParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiModelConfig>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getAdminControllerGetAiModelConfigQueryKey(key);
+  const queryKey =  queryOptions?.queryKey ?? getAdminControllerGetAiModelConfigQueryKey(key,params);
 
   
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof adminControllerGetAiModelConfig>>> = ({ signal }) => adminControllerGetAiModelConfig(key, { signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof adminControllerGetAiModelConfig>>> = ({ signal }) => adminControllerGetAiModelConfig(key,params, { signal, ...requestOptions });
 
       
 
@@ -3501,7 +3513,8 @@ export type AdminControllerGetAiModelConfigQueryError = ErrorType<unknown>
 
 
 export function useAdminControllerGetAiModelConfig<TData = Awaited<ReturnType<typeof adminControllerGetAiModelConfig>>, TError = ErrorType<unknown>>(
- key: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiModelConfig>>, TError, TData>> & Pick<
+ key: string,
+    params: undefined |  AdminControllerGetAiModelConfigParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiModelConfig>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof adminControllerGetAiModelConfig>>,
           TError,
@@ -3511,7 +3524,8 @@ export function useAdminControllerGetAiModelConfig<TData = Awaited<ReturnType<ty
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function useAdminControllerGetAiModelConfig<TData = Awaited<ReturnType<typeof adminControllerGetAiModelConfig>>, TError = ErrorType<unknown>>(
- key: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiModelConfig>>, TError, TData>> & Pick<
+ key: string,
+    params?: AdminControllerGetAiModelConfigParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiModelConfig>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof adminControllerGetAiModelConfig>>,
           TError,
@@ -3521,7 +3535,8 @@ export function useAdminControllerGetAiModelConfig<TData = Awaited<ReturnType<ty
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function useAdminControllerGetAiModelConfig<TData = Awaited<ReturnType<typeof adminControllerGetAiModelConfig>>, TError = ErrorType<unknown>>(
- key: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiModelConfig>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ key: string,
+    params?: AdminControllerGetAiModelConfigParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiModelConfig>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 /**
@@ -3529,11 +3544,12 @@ export function useAdminControllerGetAiModelConfig<TData = Awaited<ReturnType<ty
  */
 
 export function useAdminControllerGetAiModelConfig<TData = Awaited<ReturnType<typeof adminControllerGetAiModelConfig>>, TError = ErrorType<unknown>>(
- key: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiModelConfig>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ key: string,
+    params?: AdminControllerGetAiModelConfigParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetAiModelConfig>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient 
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getAdminControllerGetAiModelConfigQueryOptions(key,options)
+  const queryOptions = getAdminControllerGetAiModelConfigQueryOptions(key,params,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

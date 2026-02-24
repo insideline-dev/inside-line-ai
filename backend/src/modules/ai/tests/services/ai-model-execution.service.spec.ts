@@ -140,7 +140,7 @@ describe("AiModelExecutionService", () => {
       revisionId: null,
       stage: "seed",
       purpose: "research",
-      modelName: "gemini-3.0-flash-preview",
+      modelName: "gemini-3-flash-preview",
       provider: "google",
       searchMode: "off",
       supportedSearchModes: [

@@ -1,6 +1,7 @@
 import { Injectable, Logger, Optional } from "@nestjs/common";
 import { ALL_RESEARCH_AGENTS, PHASE_2_RESEARCH_AGENTS, RESEARCH_AGENTS } from "../agents/research";
 import type {
+  PipelineFallbackReason,
   ResearchAgentConfig,
   ResearchAgentKey,
   ResearchPipelineInput,
@@ -39,6 +40,8 @@ export interface ResearchRunOptions {
     output?: ResearchAgentOutput;
     usedFallback: boolean;
     error?: string;
+    fallbackReason?: PipelineFallbackReason;
+    rawProviderError?: string;
     rejected: boolean;
     attempt?: number;
     retryCount?: number;
@@ -131,6 +134,8 @@ export class ResearchService {
         output: agentResult.output,
         usedFallback: agentResult.usedFallback,
         error: agentResult.error,
+        fallbackReason: agentResult.fallbackReason,
+        rawProviderError: agentResult.rawProviderError,
         rejected: agentResult.rejected,
         attempt: agentResult.attempt,
         retryCount: agentResult.retryCount,
@@ -262,6 +267,7 @@ export class ResearchService {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       const fallbackOutput = agent.fallback(pipelineInput);
+      const fallbackReason: PipelineFallbackReason = "UNHANDLED_AGENT_EXCEPTION";
       await this.recordAgentTraceSafely({
         startupId,
         pipelineRunId,
@@ -270,6 +276,8 @@ export class ResearchService {
         status: "fallback",
         usedFallback: true,
         error: errorMessage,
+        fallbackReason,
+        rawProviderError: errorMessage,
         outputJson: fallbackOutput,
         outputText: this.toOutputText(fallbackOutput),
       });
@@ -278,6 +286,8 @@ export class ResearchService {
         sources: [],
         usedFallback: true,
         error: errorMessage,
+        fallbackReason,
+        rawProviderError: errorMessage,
         rejected: true,
         modelName:
           this.aiConfig?.getModelForPurpose(ModelPurpose.RESEARCH) ??
@@ -308,6 +318,25 @@ export class ResearchService {
           stage: pipelineInput.extraction.stage,
         })
       : null;
+    const runtimeTraceMeta = execution
+      ? {
+          modelConfig: {
+            promptKey: RESEARCH_PROMPT_KEY_BY_AGENT[key],
+            modelName: execution.resolvedConfig.modelName,
+            provider: execution.resolvedConfig.provider,
+            searchMode: execution.resolvedConfig.searchMode,
+            source: execution.resolvedConfig.source,
+            revisionId: execution.resolvedConfig.revisionId,
+            stage: execution.resolvedConfig.stage,
+          },
+          searchEnforcement: {
+            requiresProviderEvidence:
+              execution.searchEnforcement.requiresProviderEvidence,
+            requiresBraveToolCall:
+              execution.searchEnforcement.requiresBraveToolCall,
+          },
+        }
+      : undefined;
 
     const context = agent.contextBuilder(pipelineInput);
     const feedbackContext = await this.loadFeedbackContext(startupId, key);
@@ -353,6 +382,7 @@ export class ResearchService {
         fallback: () => agent.fallback(pipelineInput),
       });
       const outputText = result.outputText ?? this.toOutputText(result.output);
+      const traceMeta = this.mergeTraceMeta(result.meta, runtimeTraceMeta);
       await this.recordAgentTraceSafely({
         startupId,
         pipelineRunId,
@@ -364,12 +394,16 @@ export class ResearchService {
         outputJson: result.output,
         outputText,
         error: result.error,
+        fallbackReason: result.fallbackReason,
+        rawProviderError: result.rawProviderError,
+        meta: traceMeta,
         attempt: result.attempt,
         retryCount: result.retryCount,
       });
 
       return {
         ...result,
+        meta: traceMeta,
         rejected: false,
         modelName: execution?.resolvedConfig.modelName,
         inputPrompt: prompt,
@@ -378,6 +412,7 @@ export class ResearchService {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const fallbackOutput = agent.fallback(pipelineInput);
+      const fallbackReason: PipelineFallbackReason = "UNHANDLED_AGENT_EXCEPTION";
       await this.recordAgentTraceSafely({
         startupId,
         pipelineRunId,
@@ -389,6 +424,9 @@ export class ResearchService {
         outputJson: fallbackOutput,
         outputText: this.toOutputText(fallbackOutput),
         error: message,
+        fallbackReason,
+        rawProviderError: message,
+        meta: runtimeTraceMeta,
         attempt: 1,
         retryCount: 0,
       });
@@ -397,7 +435,10 @@ export class ResearchService {
         sources: [],
         usedFallback: true,
         error: message,
+        fallbackReason,
+        rawProviderError: message,
         rejected: false,
+        meta: runtimeTraceMeta,
         modelName: execution?.resolvedConfig.modelName,
         attempt: 1,
         retryCount: 0,
@@ -421,6 +462,8 @@ export class ResearchService {
         sources: [],
         usedFallback: true,
         error: errorMessage,
+        fallbackReason: "UNHANDLED_AGENT_EXCEPTION",
+        rawProviderError: errorMessage,
         rejected: true,
         attempt: 1,
         retryCount: 0,
@@ -453,6 +496,8 @@ export class ResearchService {
       output?: ResearchAgentOutput;
       usedFallback: boolean;
       error?: string;
+      fallbackReason?: PipelineFallbackReason;
+      rawProviderError?: string;
       rejected: boolean;
       attempt?: number;
       retryCount?: number;
@@ -472,6 +517,8 @@ export class ResearchService {
       output: agentResult.output,
       usedFallback: agentResult.usedFallback,
       error: agentResult.error,
+      fallbackReason: agentResult.fallbackReason,
+      rawProviderError: agentResult.rawProviderError,
       rejected: agentResult.rejected,
       attempt: agentResult.attempt,
       retryCount: agentResult.retryCount,
@@ -672,6 +719,9 @@ export class ResearchService {
     error?: string;
     attempt?: number;
     retryCount?: number;
+    fallbackReason?: PipelineFallbackReason;
+    rawProviderError?: string;
+    meta?: Record<string, unknown>;
   }): Promise<void> {
     if (!input.pipelineRunId) {
       return;
@@ -691,7 +741,10 @@ export class ResearchService {
         inputPrompt: input.inputPrompt,
         outputText: input.outputText,
         outputJson: input.outputJson,
+        meta: input.meta,
         error: input.error,
+        fallbackReason: input.fallbackReason,
+        rawProviderError: input.rawProviderError,
         attempt: input.attempt,
         retryCount: input.retryCount,
       });
@@ -724,6 +777,38 @@ export class ResearchService {
     } catch {
       return String(value);
     }
+  }
+
+  private mergeTraceMeta(
+    resultMeta: Record<string, unknown> | undefined,
+    runtimeMeta: Record<string, unknown> | undefined,
+  ): Record<string, unknown> | undefined {
+    if (!resultMeta && !runtimeMeta) {
+      return undefined;
+    }
+
+    const merged: Record<string, unknown> = {
+      ...(runtimeMeta ?? {}),
+      ...(resultMeta ?? {}),
+    };
+
+    const runtimeSearch = runtimeMeta?.searchEnforcement;
+    const resultSearch = resultMeta?.searchEnforcement;
+    if (
+      runtimeSearch &&
+      typeof runtimeSearch === "object" &&
+      !Array.isArray(runtimeSearch) &&
+      resultSearch &&
+      typeof resultSearch === "object" &&
+      !Array.isArray(resultSearch)
+    ) {
+      merged.searchEnforcement = {
+        ...(runtimeSearch as Record<string, unknown>),
+        ...(resultSearch as Record<string, unknown>),
+      };
+    }
+
+    return merged;
   }
 
   private async resolveResearchKeys(): Promise<{
@@ -787,7 +872,10 @@ interface AgentRunResult {
   sources: SourceEntry[];
   usedFallback: boolean;
   error?: string;
+  fallbackReason?: PipelineFallbackReason;
+  rawProviderError?: string;
   rejected: boolean;
+  meta?: Record<string, unknown>;
   modelName?: string;
   attempt?: number;
   retryCount?: number;

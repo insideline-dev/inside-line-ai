@@ -186,6 +186,8 @@ export class ExtractionService {
     let source: ExtractionResult["source"] = "startup-context";
     let extractedText = "";
     let pageCount = 0;
+    let ocrAttempted = false;
+    let ocrFailureMessage: string | undefined;
     const isPptx = this.isDeckPptx(record);
     const extractionMethod = isPptx ? "pptx-parse" : "pdf-parse";
 
@@ -227,33 +229,39 @@ export class ExtractionService {
           this.logger.warn(
             `[Extraction] pptx-parse detected ${pptxResult.sparsePageCount}/${pptxResult.pageCount} sparse slides; routing to OCR`,
           );
-          progress?.onStepFailed(
-            "text_extraction",
-            "PPTX has sparse slides; OCR required for full coverage",
-            {
-              outputJson: {
-                hasContent: pptxResult.hasContent,
-                hasSparsePages: pptxResult.hasSparsePages,
-                sparsePageCount: pptxResult.sparsePageCount,
-                pageCount: pptxResult.pageCount,
-              },
+          progress?.onStepComplete("text_extraction", {
+            summary: {
+              method: "pptx-parse",
+              slides: pptxResult.pageCount,
+              fallbackRequired: true,
+              reason: "sparse_slides",
             },
-          );
+            outputJson: {
+              method: "pptx-parse",
+              hasContent: pptxResult.hasContent,
+              hasSparsePages: pptxResult.hasSparsePages,
+              sparsePageCount: pptxResult.sparsePageCount,
+              pageCount: pptxResult.pageCount,
+            },
+          });
         } else {
           warnings.push("PPTX text extraction returned sparse content; switching to OCR");
           this.logger.warn(
             `[Extraction] pptx-parse returned no usable text; switching to OCR`,
           );
-          progress?.onStepFailed(
-            "text_extraction",
-            "PPTX parse returned no extractable text",
-            {
-              outputJson: {
-                hasContent: pptxResult.hasContent,
-                textLength: pptxResult.text.length,
-              },
+          progress?.onStepComplete("text_extraction", {
+            summary: {
+              method: "pptx-parse",
+              slides: pptxResult.pageCount,
+              fallbackRequired: true,
+              reason: "no_extractable_text",
             },
-          );
+            outputJson: {
+              method: "pptx-parse",
+              hasContent: pptxResult.hasContent,
+              textLength: pptxResult.text.length,
+            },
+          });
         }
       } else {
         this.logger.log(`[Extraction] Running pdf-parse text extraction for startup ${startupId}`);
@@ -287,41 +295,52 @@ export class ExtractionService {
           this.logger.warn(
             `[Extraction] pdf-parse detected ${pdfResult.sparsePageCount}/${pdfResult.pageCount} sparse pages; routing to OCR`,
           );
-          progress?.onStepFailed(
-            "text_extraction",
-            "PDF has sparse pages; OCR required for full coverage",
-            {
-              outputJson: {
-                hasContent: pdfResult.hasContent,
-                hasSparsePages: pdfResult.hasSparsePages,
-                sparsePageCount: pdfResult.sparsePageCount,
-                pageCount: pdfResult.pageCount,
-              },
+          progress?.onStepComplete("text_extraction", {
+            summary: {
+              method: "pdf-parse",
+              pages: pdfResult.pageCount,
+              fallbackRequired: true,
+              reason: "sparse_pages",
             },
-          );
+            outputJson: {
+              method: "pdf-parse",
+              hasContent: pdfResult.hasContent,
+              hasSparsePages: pdfResult.hasSparsePages,
+              sparsePageCount: pdfResult.sparsePageCount,
+              pageCount: pdfResult.pageCount,
+            },
+          });
         } else {
           warnings.push("PDF appears scanned/image-only; switching to OCR");
           this.logger.warn(
             `[Extraction] pdf-parse returned no text | pages=${pdfResult.pageCount}; switching to OCR`,
           );
-          progress?.onStepFailed(
-            "text_extraction",
-            "PDF parse returned no extractable text",
-            {
-              outputJson: {
-                pageCount: pdfResult.pageCount,
-                hasContent: pdfResult.hasContent,
-                textLength: pdfResult.text.length,
-              },
+          progress?.onStepComplete("text_extraction", {
+            summary: {
+              method: "pdf-parse",
+              pages: pdfResult.pageCount,
+              fallbackRequired: true,
+              reason: "no_extractable_text",
             },
-          );
+            outputJson: {
+              method: "pdf-parse",
+              pageCount: pdfResult.pageCount,
+              hasContent: pdfResult.hasContent,
+              textLength: pdfResult.text.length,
+            },
+          });
         }
       }
     } catch (error) {
       const message = this.asMessage(error);
       warnings.push(`${extractionMethod} failed: ${message}`);
       this.logger.warn(`[Extraction] ${extractionMethod} failed: ${message}`);
-      progress?.onStepFailed("text_extraction", message, {
+      progress?.onStepComplete("text_extraction", {
+        summary: {
+          method: extractionMethod,
+          fallbackRequired: true,
+          reason: "parse_error",
+        },
         outputJson: {
           error: message,
         },
@@ -329,6 +348,7 @@ export class ExtractionService {
     }
 
     if (!extractedText && deckUrl) {
+      ocrAttempted = true;
       progress?.onStepStart("ocr_fallback", {
         inputJson: {
           method: "mistral-ocr",
@@ -357,6 +377,7 @@ export class ExtractionService {
         });
       } catch (error) {
         const message = this.asMessage(error);
+        ocrFailureMessage = message;
         warnings.push(`Mistral OCR failed: ${message}`);
         this.logger.warn(`[Extraction] OCR failed: ${message}`);
         progress?.onStepFailed("ocr_fallback", message, {
@@ -368,6 +389,18 @@ export class ExtractionService {
     }
 
     if (!extractedText) {
+      if (deckBuffer) {
+        const errorMessage = ocrAttempted
+          ? ocrFailureMessage
+            ? `No extractable deck text; OCR fallback failed: ${ocrFailureMessage}`
+            : "No extractable deck text after OCR fallback"
+          : "No extractable deck text and OCR fallback could not be started";
+        this.logger.error(
+          `[Extraction] ${errorMessage} | startup=${startupId}`,
+        );
+        throw new Error(errorMessage);
+      }
+
       extractedText = fallbackText;
       source = "startup-context";
       warnings.push("No extractable deck text found; using startup form data only");

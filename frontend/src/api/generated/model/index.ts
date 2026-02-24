@@ -13,6 +13,7 @@ export * from './adminControllerExportStartupsParams';
 export * from './adminControllerExportStartupsStatus';
 export * from './adminControllerExportUsersParams';
 export * from './adminControllerExportUsersRole';
+export * from './adminControllerGetAiModelConfigParams';
 export * from './adminControllerGetAiPromptOutputSchemaParams';
 export * from './adminControllerGetAiSchemaResolvedAliasParams';
 export * from './adminControllerGetAiSchemaResolvedParams';

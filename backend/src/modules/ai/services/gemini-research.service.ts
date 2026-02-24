@@ -2,7 +2,10 @@ import { Injectable, Logger } from "@nestjs/common";
 import { generateText, Output } from "ai";
 import { z } from "zod";
 import { INTERNAL_PIPELINE_SOURCE } from "../agents/evaluation/evaluation-utils";
-import type { ResearchAgentKey } from "../interfaces/agent.interface";
+import type {
+  PipelineFallbackReason,
+  ResearchAgentKey,
+} from "../interfaces/agent.interface";
 import type { SourceEntry } from "../interfaces/phase-results.interface";
 import { ModelPurpose } from "../interfaces/pipeline.interface";
 import { AiProviderService } from "../providers/ai-provider.service";
@@ -31,7 +34,10 @@ interface ResearchResponse<TOutput extends { sources: string[] }> {
   sources: SourceEntry[];
   usedFallback: boolean;
   error?: string;
+  fallbackReason?: PipelineFallbackReason;
+  rawProviderError?: string;
   outputText?: string;
+  meta?: Record<string, unknown>;
   attempt: number;
   retryCount: number;
 }
@@ -40,6 +46,17 @@ interface SourceCarrier {
   sources?: Array<{ title?: string; url?: string }>;
   providerMetadata?: unknown;
   experimental_providerMetadata?: unknown;
+}
+
+interface SourceSanitizationSummary {
+  droppedCount: number;
+  droppedHosts: string[];
+}
+
+interface ExtractedSources {
+  entries: SourceEntry[];
+  evidenceCount: number;
+  sanitization: SourceSanitizationSummary;
 }
 
 type GenerateTextModel = Parameters<typeof generateText>[0]["model"];
@@ -94,13 +111,13 @@ export class GeminiResearchService {
         timeoutMs: attemptTimeoutMs,
       });
       if (structured.success) {
-        const enforcementError = this.validateSearchEnforcement({
-          sourceCount: structured.sources.length,
+        const enforcement = this.resolveSearchEnforcementStatus({
+          sourceCount: structured.sourceEvidenceCount,
           searchEnforcement: request.searchEnforcement,
           braveToolCallCount: request.getBraveToolCallCount?.() ?? 0,
         });
-        if (enforcementError) {
-          lastError = enforcementError;
+        if (enforcement.error) {
+          lastError = enforcement.error;
           if (attempt < maxAttempts) {
             const delayMs = Math.min(
               this.getRetryDelayMs(attempt),
@@ -111,48 +128,62 @@ export class GeminiResearchService {
               break;
             }
             this.logger.warn(
-              `Research agent ${request.agent} attempt ${attempt}/${maxAttempts} missing required search evidence, retrying in ${delayMs}ms: ${enforcementError}`,
+              `Research agent ${request.agent} attempt ${attempt}/${maxAttempts} missing required search evidence, retrying in ${delayMs}ms: ${enforcement.error}`,
             );
             await this.sleep(delayMs);
             continue;
           }
 
-          const fallbackSources = Array.isArray(fallback.sources)
-            ? fallback.sources
-            : [];
+          const mergedSourceUrls = this.mergeSourceUrls(
+            structured.data.sources,
+            structured.sourceUrls,
+          );
           return {
             output: {
-              ...fallback,
-              sources: this.mergeSourceUrls(
-                fallbackSources,
-                this.extractSourceUrls(structured.sources),
-              ),
+              ...structured.data,
+              sources: mergedSourceUrls.urls,
             },
-            sources:
-              structured.sources.length > 0
-                ? structured.sources
-                : this.toInternalSource(request.agent),
-            usedFallback: true,
-            error: enforcementError,
+            sources: structured.sources,
+            usedFallback: false,
             outputText: structured.outputText,
+            meta: this.withSourceSanitizationMeta(
+              {
+                searchEnforcement: {
+                  missingProviderEvidence: enforcement.missingProviderEvidence,
+                  missingBraveToolCall: enforcement.missingBraveToolCall,
+                },
+              },
+              this.combineSourceSanitization(
+                structured.sourceSanitization,
+                mergedSourceUrls.sanitization,
+              ),
+            ),
             attempt,
             retryCount: Math.max(0, attempt - 1),
           };
         } else {
-        return {
-          output: {
-            ...structured.data,
-            sources: this.mergeSourceUrls(
-              structured.data.sources,
-              structured.sourceUrls,
+          const mergedSourceUrls = this.mergeSourceUrls(
+            structured.data.sources,
+            structured.sourceUrls,
+          );
+          return {
+            output: {
+              ...structured.data,
+              sources: mergedSourceUrls.urls,
+            },
+            sources: structured.sources,
+            usedFallback: false,
+            outputText: structured.outputText,
+            meta: this.withSourceSanitizationMeta(
+              undefined,
+              this.combineSourceSanitization(
+                structured.sourceSanitization,
+                mergedSourceUrls.sanitization,
+              ),
             ),
-          },
-          sources: structured.sources,
-          usedFallback: false,
-          outputText: structured.outputText,
-          attempt,
-          retryCount: Math.max(0, attempt - 1),
-        };
+            attempt,
+            retryCount: Math.max(0, attempt - 1),
+          };
         }
       }
 
@@ -168,13 +199,13 @@ export class GeminiResearchService {
         timeoutMs: attemptTimeoutMs,
       });
       if (text.success) {
-        const enforcementError = this.validateSearchEnforcement({
-          sourceCount: text.sources.length,
+        const enforcement = this.resolveSearchEnforcementStatus({
+          sourceCount: text.sourceEvidenceCount,
           searchEnforcement: request.searchEnforcement,
           braveToolCallCount: request.getBraveToolCallCount?.() ?? 0,
         });
-        if (enforcementError) {
-          lastError = enforcementError;
+        if (enforcement.error) {
+          lastError = enforcement.error;
           if (attempt < maxAttempts) {
             const delayMs = Math.min(
               this.getRetryDelayMs(attempt),
@@ -185,45 +216,62 @@ export class GeminiResearchService {
               break;
             }
             this.logger.warn(
-              `Research agent ${request.agent} attempt ${attempt}/${maxAttempts} missing required search evidence, retrying in ${delayMs}ms: ${enforcementError}`,
+              `Research agent ${request.agent} attempt ${attempt}/${maxAttempts} missing required search evidence, retrying in ${delayMs}ms: ${enforcement.error}`,
             );
             await this.sleep(delayMs);
             continue;
           }
 
-          const fallbackSources = Array.isArray(fallback.sources)
-            ? fallback.sources
-            : [];
+          const mergedSourceUrls = this.mergeSourceUrls(
+            text.data.sources,
+            text.sourceUrls,
+          );
           return {
             output: {
-              ...fallback,
-              sources: this.mergeSourceUrls(
-                fallbackSources,
-                this.extractSourceUrls(text.sources),
-              ),
+              ...text.data,
+              sources: mergedSourceUrls.urls,
             },
-            sources:
-              text.sources.length > 0
-                ? text.sources
-                : this.toInternalSource(request.agent),
-            usedFallback: true,
-            error: enforcementError,
+            sources: text.sources,
+            usedFallback: false,
             outputText: text.outputText,
+            meta: this.withSourceSanitizationMeta(
+              {
+                searchEnforcement: {
+                  missingProviderEvidence: enforcement.missingProviderEvidence,
+                  missingBraveToolCall: enforcement.missingBraveToolCall,
+                },
+              },
+              this.combineSourceSanitization(
+                text.sourceSanitization,
+                mergedSourceUrls.sanitization,
+              ),
+            ),
             attempt,
             retryCount: Math.max(0, attempt - 1),
           };
         } else {
-        return {
-          output: {
-            ...text.data,
-            sources: this.mergeSourceUrls(text.data.sources, text.sourceUrls),
-          },
-          sources: text.sources,
-          usedFallback: false,
-          outputText: text.outputText,
-          attempt,
-          retryCount: Math.max(0, attempt - 1),
-        };
+          const mergedSourceUrls = this.mergeSourceUrls(
+            text.data.sources,
+            text.sourceUrls,
+          );
+          return {
+            output: {
+              ...text.data,
+              sources: mergedSourceUrls.urls,
+            },
+            sources: text.sources,
+            usedFallback: false,
+            outputText: text.outputText,
+            meta: this.withSourceSanitizationMeta(
+              undefined,
+              this.combineSourceSanitization(
+                text.sourceSanitization,
+                mergedSourceUrls.sanitization,
+              ),
+            ),
+            attempt,
+            retryCount: Math.max(0, attempt - 1),
+          };
         }
       }
 
@@ -255,28 +303,56 @@ export class GeminiResearchService {
         this.extractSourceUrls(text.sources),
       );
       const fallbackSources = Array.isArray(fallback.sources) ? fallback.sources : [];
+      const mergedFallbackSourceUrls = this.mergeSourceUrls(
+        fallbackSources,
+        sourceUrls.urls,
+      );
+      const fallbackReason = this.classifyFallbackReason(errorMessage);
       this.logger.warn(
         `Research agent ${request.agent} failed (model: ${modelName}, prompt size: ${promptSize}), using fallback: ${errorMessage}`,
       );
       return {
         output: {
           ...fallback,
-          sources: this.mergeSourceUrls(fallbackSources, sourceUrls),
+          sources: mergedFallbackSourceUrls.urls,
         },
         sources: mergedSources.length > 0 ? mergedSources : this.toInternalSource(request.agent),
         usedFallback: true,
         error: errorMessage,
+        fallbackReason,
+        rawProviderError: this.resolveRawProviderError(errorMessage, fallbackReason),
         outputText: text.outputText ?? structured.outputText,
+        meta: this.withSourceSanitizationMeta(
+          undefined,
+          this.combineSourceSanitization(
+            sourceUrls.sanitization,
+            mergedFallbackSourceUrls.sanitization,
+          ),
+        ),
         attempt,
         retryCount: Math.max(0, attempt - 1),
       };
     }
 
+    const finalFallbackReason = this.classifyFallbackReason(lastError);
+    const sanitizedFallbackSources = this.mergeSourceUrls(
+      Array.isArray(fallback.sources) ? fallback.sources : [],
+      [],
+    );
     return {
-      output: fallback,
+      output: {
+        ...fallback,
+        sources: sanitizedFallbackSources.urls,
+      },
       sources: this.toInternalSource(request.agent),
       usedFallback: true,
       error: lastError,
+      fallbackReason: finalFallbackReason,
+      rawProviderError: this.resolveRawProviderError(lastError, finalFallbackReason),
+      meta: this.withSourceSanitizationMeta(
+        undefined,
+        sanitizedFallbackSources.sanitization,
+      ),
       attempt: maxAttempts,
       retryCount: Math.max(0, maxAttempts - 1),
     };
@@ -298,6 +374,8 @@ export class GeminiResearchService {
         data: TOutput;
         sources: SourceEntry[];
         sourceUrls: string[];
+        sourceEvidenceCount: number;
+        sourceSanitization: SourceSanitizationSummary;
         outputText: string;
       }
     | {
@@ -331,12 +409,17 @@ export class GeminiResearchService {
           input.schema,
         );
         if (textFallback.success) {
-          const sources = this.extractSources(response as SourceCarrier, input.agent);
+          const extractedSources = this.extractSources(
+            response as SourceCarrier,
+            input.agent,
+          );
           return {
             success: true,
             data: textFallback.data,
-            sources,
-            sourceUrls: this.extractSourceUrls(sources),
+            sources: extractedSources.entries,
+            sourceUrls: this.extractSourceUrls(extractedSources.entries),
+            sourceEvidenceCount: extractedSources.evidenceCount,
+            sourceSanitization: extractedSources.sanitization,
             outputText: this.resolveRawOutputText(response, textFallback.data),
           };
         }
@@ -349,17 +432,22 @@ export class GeminiResearchService {
           success: false,
           error,
           retryable: true,
-          sources: this.extractSources(response as SourceCarrier, input.agent),
+          sources: this.extractSources(response as SourceCarrier, input.agent).entries,
           outputText: this.resolveRawOutputText(response, response.output),
         };
       }
 
-      const sources = this.extractSources(response as SourceCarrier, input.agent);
+      const extractedSources = this.extractSources(
+        response as SourceCarrier,
+        input.agent,
+      );
       return {
         success: true,
         data: parsed.data,
-        sources,
-        sourceUrls: this.extractSourceUrls(sources),
+        sources: extractedSources.entries,
+        sourceUrls: this.extractSourceUrls(extractedSources.entries),
+        sourceEvidenceCount: extractedSources.evidenceCount,
+        sourceSanitization: extractedSources.sanitization,
         outputText: this.resolveRawOutputText(response, parsed.data),
       };
     } catch (error) {
@@ -392,6 +480,8 @@ export class GeminiResearchService {
         data: TOutput;
         sources: SourceEntry[];
         sourceUrls: string[];
+        sourceEvidenceCount: number;
+        sourceSanitization: SourceSanitizationSummary;
         outputText: string;
       }
     | {
@@ -425,17 +515,19 @@ export class GeminiResearchService {
           success: false,
           error: parsed.error,
           retryable: this.isRetryableParseError(parsed.error),
-          sources: this.extractSources(responseRecord, input.agent),
+          sources: this.extractSources(responseRecord, input.agent).entries,
           outputText,
         };
       }
 
-      const sources = this.extractSources(responseRecord, input.agent);
+      const extractedSources = this.extractSources(responseRecord, input.agent);
       return {
         success: true,
         data: parsed.data,
-        sources,
-        sourceUrls: this.extractSourceUrls(sources),
+        sources: extractedSources.entries,
+        sourceUrls: this.extractSourceUrls(extractedSources.entries),
+        sourceEvidenceCount: extractedSources.evidenceCount,
+        sourceSanitization: extractedSources.sanitization,
         outputText,
       };
     } catch (error) {
@@ -491,36 +583,118 @@ export class GeminiResearchService {
     );
   }
 
-  private validateSearchEnforcement(input: {
+  private resolveSearchEnforcementStatus(input: {
     sourceCount: number;
     searchEnforcement?: {
       requiresProviderEvidence: boolean;
       requiresBraveToolCall: boolean;
     };
     braveToolCallCount: number;
-  }): string | null {
+  }): {
+    error: string | null;
+    missingProviderEvidence: boolean;
+    missingBraveToolCall: boolean;
+  } {
     const enforcement = input.searchEnforcement;
     if (!enforcement) {
-      return null;
+      return {
+        error: null,
+        missingProviderEvidence: false,
+        missingBraveToolCall: false,
+      };
     }
 
-    if (enforcement.requiresProviderEvidence && input.sourceCount === 0) {
-      return "Provider search evidence is required but no grounded sources were returned";
+    const missingProviderEvidence =
+      enforcement.requiresProviderEvidence && input.sourceCount === 0;
+    const missingBraveToolCall =
+      enforcement.requiresBraveToolCall && input.braveToolCallCount <= 0;
+
+    if (missingProviderEvidence) {
+      return {
+        error: "Provider search evidence is required but no grounded sources were returned",
+        missingProviderEvidence,
+        missingBraveToolCall,
+      };
     }
 
-    if (enforcement.requiresBraveToolCall && input.braveToolCallCount <= 0) {
+    if (missingBraveToolCall) {
       // Gemini provider-grounded search can return grounded sources without invoking
       // the custom Brave tool callback. Avoid rejecting valid grounded outputs in that case.
       if (enforcement.requiresProviderEvidence && input.sourceCount > 0) {
         this.logger.warn(
           "Allowing grounded research result without explicit Brave tool callback because provider evidence was present",
         );
-        return null;
+        return {
+          error: null,
+          missingProviderEvidence,
+          missingBraveToolCall: false,
+        };
       }
-      return "Brave search tool usage is required but the tool was not called";
+      return {
+        error: "Brave search tool usage is required but the tool was not called",
+        missingProviderEvidence,
+        missingBraveToolCall,
+      };
     }
 
-    return null;
+    return {
+      error: null,
+      missingProviderEvidence,
+      missingBraveToolCall,
+    };
+  }
+
+  private classifyFallbackReason(message: string): PipelineFallbackReason {
+    const normalized = message.toLowerCase();
+    if (
+      normalized.includes("provider search evidence is required") &&
+      normalized.includes("no grounded sources were returned")
+    ) {
+      return "MISSING_PROVIDER_EVIDENCE";
+    }
+    if (
+      normalized.includes("brave search tool usage is required") &&
+      normalized.includes("tool was not called")
+    ) {
+      return "MISSING_BRAVE_TOOL_CALL";
+    }
+    if (normalized.includes("timed out") || normalized.includes("timeout")) {
+      return "TIMEOUT";
+    }
+    if (
+      normalized.includes("schema validation failed") ||
+      normalized.includes("parseable json payload") ||
+      normalized.includes("no output generated") ||
+      normalized.includes("no object generated") ||
+      normalized.includes("empty response")
+    ) {
+      return "SCHEMA_OUTPUT_INVALID";
+    }
+    if (
+      normalized.includes("rate limit") ||
+      normalized.includes("429") ||
+      normalized.includes("provider") ||
+      normalized.includes("model")
+    ) {
+      return "MODEL_OR_PROVIDER_ERROR";
+    }
+    return "UNHANDLED_AGENT_EXCEPTION";
+  }
+
+  private resolveRawProviderError(
+    message: string,
+    fallbackReason: PipelineFallbackReason,
+  ): string | undefined {
+    if (
+      fallbackReason === "MISSING_PROVIDER_EVIDENCE" ||
+      fallbackReason === "MISSING_BRAVE_TOOL_CALL"
+    ) {
+      return undefined;
+    }
+    if (message.trim().length === 0) {
+      return undefined;
+    }
+    return message.slice(0, 2_000);
   }
 
   private async sleep(ms: number): Promise<void> {
@@ -664,8 +838,30 @@ export class GeminiResearchService {
   private mergeSourceUrls(
     existing: string[],
     extracted: string[],
-  ): string[] {
-    return [...new Set([...existing, ...extracted])];
+  ): { urls: string[]; sanitization: SourceSanitizationSummary } {
+    const dedupe = new Set<string>();
+    const droppedHosts = new Set<string>();
+    let droppedCount = 0;
+
+    for (const candidate of [...existing, ...extracted]) {
+      const sanitized = this.sanitizeSourceUrl(candidate);
+      if (!sanitized.url) {
+        droppedCount += 1;
+        if (sanitized.droppedHost) {
+          droppedHosts.add(sanitized.droppedHost);
+        }
+        continue;
+      }
+      dedupe.add(sanitized.url);
+    }
+
+    return {
+      urls: Array.from(dedupe),
+      sanitization: {
+        droppedCount,
+        droppedHosts: Array.from(droppedHosts),
+      },
+    };
   }
 
   private formatSchemaIssues(error: z.ZodError): string {
@@ -693,22 +889,40 @@ export class GeminiResearchService {
   private extractSources(
     response: SourceCarrier,
     agent: ResearchAgentKey,
-  ): SourceEntry[] {
+  ): ExtractedSources {
     const dedupe = new Map<string, SourceEntry>();
+    const droppedHosts = new Set<string>();
+    let droppedCount = 0;
+    let evidenceCount = 0;
+    const config = this.aiConfig as Partial<AiConfigService>;
+    const sanitizeEnabled =
+      typeof config.isSourceSanitizationEnabled === "function"
+        ? config.isSourceSanitizationEnabled()
+        : true;
 
     const addSource = (url: string | undefined, name: string) => {
       if (!url) {
         return;
       }
 
-      const key = url;
+      evidenceCount += 1;
+      const sanitized = sanitizeEnabled ? this.sanitizeSourceUrl(url) : { url };
+      if (!sanitized.url) {
+        droppedCount += 1;
+        if (sanitized.droppedHost) {
+          droppedHosts.add(sanitized.droppedHost);
+        }
+        return;
+      }
+
+      const key = sanitized.url;
       if (dedupe.has(key)) {
         return;
       }
 
       dedupe.set(key, {
         name,
-        url,
+        url: sanitized.url,
         type: "search",
         agent,
         timestamp: new Date().toISOString(),
@@ -735,13 +949,73 @@ export class GeminiResearchService {
       }
     }
 
-    return Array.from(dedupe.values());
+    return {
+      entries: Array.from(dedupe.values()),
+      evidenceCount,
+      sanitization: {
+        droppedCount,
+        droppedHosts: Array.from(droppedHosts),
+      },
+    };
   }
 
   private extractSourceUrls(sources: SourceEntry[]): string[] {
     return sources
       .map((entry) => entry.url)
       .filter((url): url is string => Boolean(url));
+  }
+
+  private withSourceSanitizationMeta(
+    meta: Record<string, unknown> | undefined,
+    summary: SourceSanitizationSummary | undefined,
+  ): Record<string, unknown> | undefined {
+    if (!summary || summary.droppedCount <= 0) {
+      return meta;
+    }
+
+    return {
+      ...(meta ?? {}),
+      sourceSanitization: {
+        droppedCount: summary.droppedCount,
+        droppedHosts: summary.droppedHosts,
+      },
+    };
+  }
+
+  private combineSourceSanitization(
+    first: SourceSanitizationSummary | undefined,
+    second: SourceSanitizationSummary | undefined,
+  ): SourceSanitizationSummary | undefined {
+    if (!first && !second) {
+      return undefined;
+    }
+
+    return {
+      droppedCount: (first?.droppedCount ?? 0) + (second?.droppedCount ?? 0),
+      droppedHosts: Array.from(
+        new Set([...(first?.droppedHosts ?? []), ...(second?.droppedHosts ?? [])]),
+      ),
+    };
+  }
+
+  private sanitizeSourceUrl(
+    value: string,
+  ): { url?: string; droppedHost?: string } {
+    const normalized = value.trim();
+    if (normalized.length === 0) {
+      return {};
+    }
+
+    try {
+      const parsed = new URL(normalized);
+      const host = parsed.hostname.toLowerCase();
+      if (host === "vertexaisearch.cloud.google.com") {
+        return { droppedHost: host };
+      }
+      return { url: normalized };
+    } catch {
+      return { url: normalized };
+    }
   }
 
   private mergeSourceEntries(

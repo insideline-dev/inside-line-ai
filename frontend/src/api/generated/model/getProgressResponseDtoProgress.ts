@@ -65,7 +65,7 @@ export type GetProgressResponseDtoProgress = {
   phaseRetryCount?: number;
   agentAttemptId?: string;
   usedFallback?: boolean;
-  fallbackReason?: 'EMPTY_STRUCTURED_OUTPUT' | 'TIMEOUT' | 'SCHEMA_OUTPUT_INVALID' | 'MODEL_OR_PROVIDER_ERROR' | 'UNHANDLED_AGENT_EXCEPTION';
+  fallbackReason?: 'EMPTY_STRUCTURED_OUTPUT' | 'TIMEOUT' | 'SCHEMA_OUTPUT_INVALID' | 'MODEL_OR_PROVIDER_ERROR' | 'UNHANDLED_AGENT_EXCEPTION' | 'MISSING_PROVIDER_EVIDENCE' | 'MISSING_BRAVE_TOOL_CALL';
   rawProviderError?: string;
   lastEvent?: 'started' | 'retrying' | 'completed' | 'failed' | 'fallback';
   lastEventAt?: string;
@@ -96,7 +96,7 @@ export type GetProgressResponseDtoProgress = {
   phaseRetryCount?: number;
   agentAttemptId?: string;
   error?: string;
-  fallbackReason?: 'EMPTY_STRUCTURED_OUTPUT' | 'TIMEOUT' | 'SCHEMA_OUTPUT_INVALID' | 'MODEL_OR_PROVIDER_ERROR' | 'UNHANDLED_AGENT_EXCEPTION';
+  fallbackReason?: 'EMPTY_STRUCTURED_OUTPUT' | 'TIMEOUT' | 'SCHEMA_OUTPUT_INVALID' | 'MODEL_OR_PROVIDER_ERROR' | 'UNHANDLED_AGENT_EXCEPTION' | 'MISSING_PROVIDER_EVIDENCE' | 'MISSING_BRAVE_TOOL_CALL';
   rawProviderError?: string;
 })[];
   agentTraces?: ({
@@ -129,7 +129,7 @@ export type GetProgressResponseDtoProgress = {
   meta?: { [key: string]: unknown };
   /** @nullable */
   error?: string | null;
-  fallbackReason?: 'EMPTY_STRUCTURED_OUTPUT' | 'TIMEOUT' | 'SCHEMA_OUTPUT_INVALID' | 'MODEL_OR_PROVIDER_ERROR' | 'UNHANDLED_AGENT_EXCEPTION';
+  fallbackReason?: 'EMPTY_STRUCTURED_OUTPUT' | 'TIMEOUT' | 'SCHEMA_OUTPUT_INVALID' | 'MODEL_OR_PROVIDER_ERROR' | 'UNHANDLED_AGENT_EXCEPTION' | 'MISSING_PROVIDER_EVIDENCE' | 'MISSING_BRAVE_TOOL_CALL';
   rawProviderError?: string;
   captureStatus?: 'captured' | 'missing' | 'provider_error_only';
   startedAt?: string;

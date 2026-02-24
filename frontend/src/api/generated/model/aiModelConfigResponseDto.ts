@@ -12,4 +12,5 @@ export interface AiModelConfigResponseDto {
   resolved: AiModelConfigResponseDtoResolved;
   revisions: AiModelConfigResponseDtoRevisionsItem[];
   allowedModels: string[];
+  runtimeConfigEnabled: boolean;
 }

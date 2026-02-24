@@ -164,6 +164,9 @@ export class StartupService {
     "ocr_fallback",
     "field_extraction",
     "gap_analysis",
+    "resolve_extraction",
+    "resolve_website",
+    "resolve_email",
     "web_search",
     "ai_synthesis",
     "db_writes",
@@ -1402,7 +1405,9 @@ export class StartupService {
       | "TIMEOUT"
       | "SCHEMA_OUTPUT_INVALID"
       | "MODEL_OR_PROVIDER_ERROR"
-      | "UNHANDLED_AGENT_EXCEPTION";
+      | "UNHANDLED_AGENT_EXCEPTION"
+      | "MISSING_PROVIDER_EVIDENCE"
+      | "MISSING_BRAVE_TOOL_CALL";
     rawProviderError?: string;
     outputJson: unknown;
   } {
@@ -1433,7 +1438,9 @@ export class StartupService {
       metaRecord.fallbackReason === "TIMEOUT" ||
       metaRecord.fallbackReason === "SCHEMA_OUTPUT_INVALID" ||
       metaRecord.fallbackReason === "MODEL_OR_PROVIDER_ERROR" ||
-      metaRecord.fallbackReason === "UNHANDLED_AGENT_EXCEPTION"
+      metaRecord.fallbackReason === "UNHANDLED_AGENT_EXCEPTION" ||
+      metaRecord.fallbackReason === "MISSING_PROVIDER_EVIDENCE" ||
+      metaRecord.fallbackReason === "MISSING_BRAVE_TOOL_CALL"
         ? metaRecord.fallbackReason
         : undefined;
     const rawProviderError =
@@ -1695,7 +1702,9 @@ export class StartupService {
         | "TIMEOUT"
         | "SCHEMA_OUTPUT_INVALID"
         | "MODEL_OR_PROVIDER_ERROR"
-        | "UNHANDLED_AGENT_EXCEPTION";
+        | "UNHANDLED_AGENT_EXCEPTION"
+        | "MISSING_PROVIDER_EVIDENCE"
+        | "MISSING_BRAVE_TOOL_CALL";
       rawProviderError?: string;
       captureStatus?: "captured" | "missing" | "provider_error_only";
       startedAt?: string;

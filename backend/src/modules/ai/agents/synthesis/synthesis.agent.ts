@@ -278,30 +278,7 @@ export class SynthesisAgent {
     const concerns = this.cleanStringArray(output.concerns).slice(0, 4);
     const nextSteps = this.cleanStringArray(output.nextSteps).slice(0, 4);
     const confidenceNotes = this.normalizeWhitespace(output.dataConfidenceNotes);
-
-    const scoredDimensions = Object.entries(input.evaluation)
-      .filter(([key]) => key !== "summary")
-      .map(([key, value]) => {
-        const dimension = value as { score?: number; confidence?: number };
-        return {
-          key,
-          score:
-            typeof dimension.score === "number" ? Math.round(dimension.score) : 0,
-          confidence:
-            typeof dimension.confidence === "number"
-              ? Math.round(dimension.confidence * 100)
-              : 0,
-        };
-      });
-
-    const topDimensions = [...scoredDimensions]
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 3)
-      .map((dimension) => this.formatDimensionLabel(dimension.key));
-    const weakDimensions = [...scoredDimensions]
-      .sort((a, b) => a.score - b.score)
-      .slice(0, 3)
-      .map((dimension) => this.formatDimensionLabel(dimension.key));
+    const consistencyWarning = this.detectStageScaleMismatch(input, output);
 
     const degraded = input.evaluation.summary?.degraded === true;
     const failedKeys = (input.evaluation.summary?.failedKeys ?? []).map((key) =>
@@ -309,7 +286,7 @@ export class SynthesisAgent {
     );
 
     const paragraphOne = [
-      `${input.extraction.companyName} currently carries a ${output.recommendation} recommendation based on the available diligence evidence.`,
+      `${input.extraction.companyName} is presented here as a ${this.normalizeWhitespace(input.extraction.stage || "undisclosed-stage")} opportunity in ${this.normalizeWhitespace(input.extraction.industry || "its stated market")}.`,
       existingSummary.length > 0
         ? this.asSentence(existingSummary)
         : this.asSentence(output.investmentThesis),
@@ -319,11 +296,9 @@ export class SynthesisAgent {
 
     const paragraphTwo = [
       strengths.length > 0
-        ? `The strongest validated signals in this run are ${this.joinList(strengths)}.`
-        : "Strength signals are present but not yet fully validated across independent sources.",
-      topDimensions.length > 0
-        ? `Highest-signal dimensions are ${this.joinList(topDimensions)}, which indicates where current conviction is strongest.`
-        : "Dimension-level scoring was incomplete, so ranking confidence by area remains limited.",
+        ? `The core upside case in this package is supported by ${this.joinList(strengths)}.`
+        : "Positive signals are present but not yet validated deeply enough for high-conviction underwriting.",
+      "The operating thesis should be treated as conditional on execution quality, local market expansion discipline, and evidence-backed retention economics.",
     ]
       .join(" ")
       .trim();
@@ -332,9 +307,8 @@ export class SynthesisAgent {
       concerns.length > 0
         ? `Primary concerns include ${this.joinList(concerns)}.`
         : "No material concerns were explicitly surfaced, but residual execution risk remains.",
-      weakDimensions.length > 0
-        ? `Most constrained dimensions are ${this.joinList(weakDimensions)}, which currently limit upside confidence.`
-        : "Weak-dimension scoring could not be established from the available result set.",
+      consistencyWarning ??
+        "The diligence package appears directionally coherent, but key assumptions still require source-level verification before final IC confidence.",
       degraded
         ? failedKeys.length > 0
           ? `This run completed in degraded mode with fallback outputs for ${this.joinList(failedKeys)}, so those sections require direct analyst verification.`
@@ -349,8 +323,8 @@ export class SynthesisAgent {
         ? `Priority diligence actions are ${this.joinList(nextSteps)}.`
         : "Priority diligence should focus on validation of demand durability, unit economics, and execution milestones.",
       confidenceNotes.length > 0
-        ? `Data confidence notes: ${this.asSentence(confidenceNotes)}`
-        : "Data confidence is moderate and should be tightened with independent source checks before IC finalization.",
+        ? `Evidence-quality note: ${this.asSentence(confidenceNotes)}`
+        : "Evidence quality is mixed and should be tightened with independent source checks before IC finalization.",
     ]
       .join(" ")
       .trim();
@@ -373,6 +347,53 @@ export class SynthesisAgent {
       paragraphFour,
       paragraphFive,
     ].join("\n\n");
+  }
+
+  private detectStageScaleMismatch(
+    input: SynthesisAgentInput,
+    output: SynthesisAgentOutput,
+  ): string | null {
+    const stage = this.normalizeWhitespace(input.extraction.stage || "").toLowerCase();
+    const isEarlyStage = /(pre[-\s]?seed|seed)/i.test(stage);
+    if (!isEarlyStage) {
+      return null;
+    }
+
+    const evidenceCorpus = [
+      this.normalizeWhitespace(output.executiveSummary),
+      ...this.cleanStringArray(output.concerns),
+      this.normalizeWhitespace(output.dataConfidenceNotes),
+      ...Object.entries(input.evaluation)
+        .filter(([key]) => key !== "summary")
+        .map(([, value]) => {
+          const dimension = value as {
+            narrativeSummary?: string;
+            memoNarrative?: string;
+            feedback?: string;
+          };
+          return this.normalizeWhitespace(
+            dimension.narrativeSummary ||
+              dimension.memoNarrative ||
+              dimension.feedback ||
+              "",
+          );
+        }),
+    ]
+      .join(" ")
+      .toLowerCase();
+
+    const hasScaleSignals =
+      /\b(quarterly revenue|annual revenue|maus?|monthly active users?|public company|fortune 500|global scale|multibillion|billion)\b/i.test(
+        evidenceCorpus,
+      );
+    const hasInconsistencySignals =
+      /\b(discrepanc|inconsisten|mismatch|reconcile)\b/i.test(evidenceCorpus);
+
+    if (!hasScaleSignals && !hasInconsistencySignals) {
+      return null;
+    }
+
+    return "The diligence package appears internally inconsistent: the deal framing suggests an early-stage raise while parts of the evidence imply mature-scale operations. Treat underwriting conclusions as provisional until entity scope, stage, and operating metrics are reconciled.";
   }
 
   private sanitizeNarrativeOutput(output: SynthesisAgentOutput): SynthesisAgentOutput {

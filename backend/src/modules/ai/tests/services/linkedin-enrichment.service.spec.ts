@@ -152,6 +152,113 @@ describe("LinkedinEnrichmentService", () => {
     expect(result[0]?.confidenceReason).toContain("Current company does not match target company");
   });
 
+  it("accepts historical founder/executive profiles when name match is strong", async () => {
+    unipile.getProfile.mockResolvedValueOnce({
+      id: "travis-1",
+      firstName: "Travis",
+      lastName: "Kalanick",
+      headline: "Founder at CloudKitchens",
+      location: "Los Angeles",
+      profileUrl: "https://linkedin.com/in/traviskalanick",
+      profileImageUrl: null,
+      summary: "Founded Uber and led it through global expansion.",
+      currentCompany: { name: "CloudKitchens", title: "Founder" },
+      experience: [
+        {
+          company: "CloudKitchens",
+          title: "Founder",
+          startDate: "2018",
+          endDate: null,
+          current: true,
+        },
+        {
+          company: "Uber",
+          title: "Founder & CEO",
+          startDate: "2009",
+          endDate: "2017",
+          current: false,
+        },
+      ],
+      education: [],
+    });
+
+    const result = await service.enrichTeamMembers(
+      "user-1",
+      [
+        {
+          name: "Travis Kalanick",
+          role: "CEO",
+          linkedinUrl: "https://linkedin.com/in/traviskalanick",
+        },
+      ],
+      { companyName: "Uber" },
+    );
+
+    expect(result[0]?.enrichmentStatus).toBe("success");
+    expect(result[0]?.matchConfidence).toBeGreaterThanOrEqual(70);
+    expect(result[0]?.confidenceReason).toContain(
+      "historical founder/executive association",
+    );
+  });
+
+  it("rejects operational profiles for leadership requests at target company", async () => {
+    unipile.searchProfiles.mockResolvedValueOnce([
+      {
+        id: "uber-driver-1",
+        firstName: "John",
+        lastName: "Smith",
+        headline: "Uber Driver",
+        location: "San Francisco",
+        profileUrl: "https://linkedin.com/in/john-smith-uber-driver",
+        profileImageUrl: null,
+        summary: null,
+        currentCompany: { name: "Uber", title: "Driver Partner" },
+        experience: [
+          {
+            company: "Uber",
+            title: "Driver Partner",
+            startDate: "2024",
+            endDate: null,
+            current: true,
+          },
+        ],
+        education: [],
+      },
+    ]);
+    unipile.getProfile.mockResolvedValueOnce({
+      id: "uber-driver-1",
+      firstName: "John",
+      lastName: "Smith",
+      headline: "Uber Driver",
+      location: "San Francisco",
+      profileUrl: "https://linkedin.com/in/john-smith-uber-driver",
+      profileImageUrl: null,
+      summary: null,
+      currentCompany: { name: "Uber", title: "Driver Partner" },
+      experience: [
+        {
+          company: "Uber",
+          title: "Driver Partner",
+          startDate: "2024",
+          endDate: null,
+          current: true,
+        },
+      ],
+      education: [],
+    });
+
+    const result = await service.enrichTeamMembers(
+      "user-1",
+      [{ name: "John Smith", role: "Founder" }],
+      { companyName: "Uber" },
+    );
+
+    expect(result[0]?.enrichmentStatus).toBe("not_found");
+    expect(result[0]?.confidenceReason).toContain(
+      "operational/non-executive",
+    );
+  });
+
   it("continues when one member enrichment fails", async () => {
     unipile.getProfile.mockRejectedValueOnce(new Error("upstream error"));
 

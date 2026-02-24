@@ -28,7 +28,7 @@ describe("AiModelConfigService defaults", () => {
       }
     ).buildDefaultResolvedConfig("research.market", null, ModelPurpose.RESEARCH);
 
-    expect(resolved.modelName).toBe("gemini-3.0-flash-preview");
+    expect(resolved.modelName).toBe("gemini-3-flash-preview");
     expect(resolved.searchMode).toBe("provider_grounded_search");
   });
 });

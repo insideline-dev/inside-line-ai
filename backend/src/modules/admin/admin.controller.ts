@@ -44,6 +44,7 @@ import { AdminInvestorService } from './admin-investor.service';
 import { AiPromptService } from '../ai/services/ai-prompt.service';
 import { AiPromptRuntimeService } from '../ai/services/ai-prompt-runtime.service';
 import { AiModelConfigService } from '../ai/services/ai-model-config.service';
+import { AiConfigService } from '../ai/services/ai-config.service';
 import { PipelineFlowConfigService } from '../ai/services/pipeline-flow-config.service';
 import { AgentSchemaRegistryService } from '../ai/services/agent-schema-registry.service';
 import { AgentConfigService } from '../ai/services/agent-config.service';
@@ -127,6 +128,7 @@ export class AdminController {
     private aiPromptService: AiPromptService,
     private aiPromptRuntimeService: AiPromptRuntimeService,
     private aiModelConfigService: AiModelConfigService,
+    private aiConfigService: AiConfigService,
     private agentSchemaRegistryService: AgentSchemaRegistryService,
     private agentConfigService: AgentConfigService,
     private dynamicFlowCatalogService: DynamicFlowCatalogService,
@@ -163,16 +165,18 @@ export class AdminController {
     return schemaMap[key] ?? null;
   }
 
-  private async buildAiModelConfigResponse(key: string) {
+  private async buildAiModelConfigResponse(key: string, stage?: string) {
     const { definition, revisions } = await this.aiModelConfigService.listRevisionsByKey(key);
     const resolved = await this.aiModelConfigService.resolveConfig({
       key: definition.key as Parameters<AiModelConfigService['resolveConfig']>[0]['key'],
+      stage,
     });
 
     return {
       resolved,
       revisions,
       allowedModels: [...AI_RUNTIME_ALLOWED_MODEL_NAMES],
+      runtimeConfigEnabled: this.aiConfigService.isPromptRuntimeConfigEnabled(),
     };
   }
 
@@ -435,9 +439,18 @@ export class AdminController {
 
   @Get('ai-prompts/:key/model-config')
   @ApiOperation({ summary: "Get resolved model config, revisions history, and allowed models" })
+  @ApiQuery({
+    name: 'stage',
+    required: false,
+    type: String,
+    description: 'Optional startup stage override for resolved runtime model config',
+  })
   @ApiResponse({ status: 200, type: AiModelConfigResponseDto })
-  async getAiModelConfig(@Param('key') key: string) {
-    return this.buildAiModelConfigResponse(key);
+  async getAiModelConfig(
+    @Param('key') key: string,
+    @Query('stage') stage?: string,
+  ) {
+    return this.buildAiModelConfigResponse(key, stage);
   }
 
   @Get('ai-prompts/:key/schema-revisions')

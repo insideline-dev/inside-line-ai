@@ -110,7 +110,7 @@ describe("StartupService", () => {
       getModelForPurpose: jest.fn((purpose: ModelPurpose) =>
         purpose === ModelPurpose.SYNTHESIS
           ? "gpt-5.2"
-          : "gemini-3.0-flash-preview",
+          : "gemini-3-flash-preview",
       ),
     } as unknown as jest.Mocked<AiConfigService>;
 
@@ -265,7 +265,7 @@ describe("StartupService", () => {
           (source) =>
             source.agent === "TeamAgent" &&
             source.type === "api" &&
-            source.model === "gemini-3.0-flash-preview",
+            source.model === "gemini-3-flash-preview",
         ),
       ).toBe(true);
     });

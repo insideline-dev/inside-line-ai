@@ -13,6 +13,7 @@ import type { BraveSearchService } from "../../services/brave-search.service";
 import type { AiProviderService } from "../../providers/ai-provider.service";
 import type { AiConfigService } from "../../services/ai-config.service";
 import type { ClaraEmailContextService } from "../../services/clara-email-context.service";
+import type { AiModelConfigService } from "../../services/ai-model-config.service";
 
 // ---- helpers ----
 
@@ -98,8 +99,20 @@ function buildService(opts: {
   } as unknown as jest.Mocked<BraveSearchService>;
 
   const aiProvider = {
-    resolveModelForPurpose: jest.fn().mockReturnValue({ provider: "gemini" }),
+    resolveModel: jest.fn().mockReturnValue({ provider: "gemini" }),
   } as unknown as jest.Mocked<AiProviderService>;
+
+  const modelConfig = {
+    resolveConfig: jest.fn().mockResolvedValue({
+      modelName: opts.enrichmentModel ?? "gemini-3-flash-preview",
+      provider: "gemini",
+      searchMode: "provider",
+      source: "global_default",
+      revisionId: null,
+      stage: null,
+      supportedSearchModes: ["provider", "brave", "provider+brave"],
+    }),
+  } as unknown as jest.Mocked<AiModelConfigService>;
 
   const aiConfig = {
     getEnrichmentCorrectionThreshold: jest.fn().mockReturnValue(correctionThreshold),
@@ -123,11 +136,12 @@ function buildService(opts: {
     pipelineState as unknown as PipelineStateService,
     braveSearch as unknown as BraveSearchService,
     aiProvider as unknown as AiProviderService,
+    modelConfig as unknown as AiModelConfigService,
     aiConfig as unknown as AiConfigService,
     claraEmailContext as unknown as ClaraEmailContextService,
   );
 
-  return { service, drizzle, pipelineState, braveSearch, aiConfig, claraEmailContext };
+  return { service, drizzle, pipelineState, braveSearch, aiConfig, modelConfig, claraEmailContext };
 }
 
 // ---- tests ----
@@ -155,8 +169,24 @@ describe("EnrichmentService", () => {
         drizzle as unknown as DrizzleService,
         { getPhaseResult: jest.fn().mockResolvedValue(null) } as unknown as PipelineStateService,
         { isConfigured: jest.fn().mockReturnValue(false) } as unknown as BraveSearchService,
-        { resolveModelForPurpose: jest.fn() } as unknown as AiProviderService,
-        { getEnrichmentCorrectionThreshold: jest.fn().mockReturnValue(0.85) } as unknown as AiConfigService,
+        { resolveModel: jest.fn() } as unknown as AiProviderService,
+        {
+          resolveConfig: jest.fn().mockResolvedValue({
+            modelName: "gemini-3-flash-preview",
+            provider: "gemini",
+            searchMode: "provider",
+            source: "global_default",
+            revisionId: null,
+            stage: null,
+            supportedSearchModes: ["provider", "brave", "provider+brave"],
+          }),
+        } as unknown as AiModelConfigService,
+        {
+          getEnrichmentCorrectionThreshold: jest.fn().mockReturnValue(0.85),
+          getEnrichmentTemperature: jest.fn().mockReturnValue(0.1),
+          getEnrichmentTimeoutMs: jest.fn().mockReturnValue(60_000),
+        } as unknown as AiConfigService,
+        { getEmailContext: jest.fn().mockResolvedValue(null) } as unknown as ClaraEmailContextService,
       );
 
       await expect(service.run("missing-id")).rejects.toThrow("not found");
@@ -315,8 +345,9 @@ describe("EnrichmentService", () => {
       });
 
       expect(result.discoveredFounders.length).toBeGreaterThan(0);
-      expect(result.pitchDeckUrls.length).toBeGreaterThan(0);
+      expect(result.pitchDeckUrls).toHaveLength(0);
       expect(result.socialProfiles.crunchbaseUrl).toContain("crunchbase.com");
+      expect(result.sources.some((source) => source.url.includes("slideshare.net"))).toBe(false);
       expect(result.sources.length).toBeGreaterThan(0);
       expect(completion?.usedFallback).toBe(false);
       expect(completion?.attempt).toBe(1);

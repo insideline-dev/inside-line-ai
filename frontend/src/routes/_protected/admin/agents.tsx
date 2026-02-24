@@ -542,10 +542,13 @@ function AdminAgentsPage() {
   const [systemPrompt, setSystemPrompt] = useState("");
   const [userPrompt, setUserPrompt] = useState("");
   const [notes, setNotes] = useState("");
-  const [modelName, setModelName] = useState("gemini-3.0-flash-preview");
-  const [searchMode, setSearchMode] = useState<"off" | "provider_grounded_search">(
-    "provider_grounded_search",
-  );
+  const [modelName, setModelName] = useState("gemini-3-flash-preview");
+  const [searchMode, setSearchMode] = useState<
+    | "off"
+    | "provider_grounded_search"
+    | "brave_tool_search"
+    | "provider_and_brave_search"
+  >("provider_grounded_search");
   const [enableLegacyModelEditing, setEnableLegacyModelEditing] = useState(false);
   const [modelStage, setModelStage] = useState<"global" | StageOption>("global");
   const [modelNotes, setModelNotes] = useState("");
@@ -671,11 +674,15 @@ function AdminAgentsPage() {
       enabled: Boolean(currentPromptKey),
     },
   });
-  const modelConfigQuery = useAdminControllerGetAiModelConfig(currentPromptKey ?? "", {
-    query: {
-      enabled: Boolean(currentPromptKey),
+  const modelConfigQuery = useAdminControllerGetAiModelConfig(
+    currentPromptKey ?? "",
+    undefined,
+    {
+      query: {
+        enabled: Boolean(currentPromptKey),
+      },
     },
-  });
+  );
   const outputSchemaQuery = useAdminControllerGetAiPromptOutputSchema(
     currentPromptKey ?? "",
     undefined,

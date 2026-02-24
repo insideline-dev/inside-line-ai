@@ -1,9 +1,20 @@
+import type { ReactNode } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { CheckCircle2, Link2, Trash2, Users, XCircle } from "lucide-react";
+import {
+  CheckCircle2,
+  ExternalLink,
+  FileText,
+  Globe,
+  Link2,
+  Play,
+  Trash2,
+  Users,
+  XCircle,
+} from "lucide-react";
 import type { Startup } from "@/types/startup";
 import type { Evaluation } from "@/types/evaluation";
 
@@ -150,20 +161,69 @@ export function AdminReviewSidebar({
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Links & Docs</CardTitle>
         </CardHeader>
-        <CardContent>
-          {startup.website ? (
-            <a
-              href={startup.website}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 text-sm text-primary hover:underline"
-            >
-              <Link2 className="h-4 w-4" />
-              Website
-            </a>
-          ) : (
-            <p className="text-sm text-muted-foreground">No links available.</p>
-          )}
+        <CardContent className="space-y-2">
+          {(() => {
+            const links: { icon: ReactNode; label: string; href: string }[] = [];
+
+            if (startup.website) {
+              links.push({
+                icon: <Globe className="h-4 w-4 shrink-0" />,
+                label: "Website",
+                href: startup.website,
+              });
+            }
+
+            if (startup.pitchDeckUrl) {
+              links.push({
+                icon: <FileText className="h-4 w-4 shrink-0" />,
+                label: "Pitch Deck",
+                href: startup.pitchDeckUrl,
+              });
+            }
+
+            if (startup.demoUrl) {
+              links.push({
+                icon: <ExternalLink className="h-4 w-4 shrink-0" />,
+                label: "Demo",
+                href: startup.demoUrl,
+              });
+            }
+
+            if (startup.demoVideoUrl) {
+              links.push({
+                icon: <Play className="h-4 w-4 shrink-0" />,
+                label: "Demo Video",
+                href: startup.demoVideoUrl,
+              });
+            }
+
+            if (startup.files?.length) {
+              for (const file of startup.files) {
+                links.push({
+                  icon: <Link2 className="h-4 w-4 shrink-0" />,
+                  label: file.name || "Document",
+                  href: file.path,
+                });
+              }
+            }
+
+            if (links.length === 0) {
+              return <p className="text-sm text-muted-foreground">No links available.</p>;
+            }
+
+            return links.map((link) => (
+              <a
+                key={link.href}
+                href={link.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 text-sm text-primary hover:underline"
+              >
+                {link.icon}
+                <span className="truncate">{link.label}</span>
+              </a>
+            ));
+          })()}
         </CardContent>
       </Card>
     </div>

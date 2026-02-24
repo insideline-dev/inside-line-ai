@@ -333,11 +333,22 @@ export interface EnrichmentResult {
   dbFieldsUpdated: string[];
   dataProvenance?: {
     fromExtraction: string[];
+    fromWebsite?: string[];
     fromEmail: string[];
     fromWebSearch: string[];
     fromAiSynthesis: string[];
   };
   webSearchSkipped?: boolean;
+  skipReason?: string;
+  runtimeModel?: {
+    promptKey: string;
+    modelName: string;
+    provider: string;
+    searchMode: string;
+    source: string;
+    revisionId: string | null;
+    stage: string | null;
+  };
 }
 
 export interface ClaraEmailContext {

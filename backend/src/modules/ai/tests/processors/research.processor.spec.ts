@@ -221,6 +221,15 @@ describe("ResearchProcessor", () => {
             usedFallback: boolean;
             error?: string;
             rejected: boolean;
+            fallbackReason?:
+              | "EMPTY_STRUCTURED_OUTPUT"
+              | "TIMEOUT"
+              | "SCHEMA_OUTPUT_INVALID"
+              | "MODEL_OR_PROVIDER_ERROR"
+              | "UNHANDLED_AGENT_EXCEPTION"
+              | "MISSING_PROVIDER_EVIDENCE"
+              | "MISSING_BRAVE_TOOL_CALL";
+            rawProviderError?: string;
           }) => void;
         };
         callbacks.onAgentComplete?.({
@@ -229,6 +238,8 @@ describe("ResearchProcessor", () => {
           usedFallback: true,
           error: "Schema validation failed",
           rejected: false,
+          fallbackReason: "SCHEMA_OUTPUT_INVALID",
+          rawProviderError: "provider returned malformed JSON",
         });
         return {
           team: null,
@@ -261,6 +272,8 @@ describe("ResearchProcessor", () => {
         status: "completed",
         usedFallback: true,
         lifecycleEvent: "fallback",
+        fallbackReason: "SCHEMA_OUTPUT_INVALID",
+        rawProviderError: "provider returned malformed JSON",
       }),
     );
   });

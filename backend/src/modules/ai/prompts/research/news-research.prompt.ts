@@ -50,7 +50,16 @@ Also provide:
 - Do NOT wrap output in markdown or code fences.
 - Do NOT include prose before or after the JSON object.
 - Required string fields must never be null (use "Unknown" when unavailable).
-- Use [] for missing arrays and {} for missing objects.`;
+- Use [] for missing arrays and {} for missing objects.
+- Use this exact top-level JSON shape and key names:
+{
+  "articles": [{"title": "", "source": "", "date": "", "summary": "", "url": "", "category": "funding|product|partnership|growth|general", "articleSentiment": "positive|negative|neutral"}],
+  "pressReleases": [],
+  "sentiment": "positive|neutral|negative",
+  "recentEvents": [],
+  "sentimentOverview": {"positive": 0, "negative": 0, "neutral": 0},
+  "sources": []
+}`;
 
 export const NEWS_RESEARCH_HUMAN_PROMPT = `Search news and public mentions for:
 

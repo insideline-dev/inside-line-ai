@@ -19,6 +19,7 @@ import {
 import {
   AiModelConfigSchema,
   isResearchPromptKey,
+  normalizeRuntimeModelName,
   resolveModelPurposeForPromptKey,
   resolveProviderForModelName,
   type AiModelConfig,
@@ -398,7 +399,7 @@ export class AiModelConfigService {
     purpose: ModelPurpose,
   ): ResolvedModelConfig {
     const modelName = isResearchPromptKey(key)
-      ? "gemini-3.0-flash-preview"
+      ? "gemini-3-flash-preview"
       : this.aiConfig.getModelForPurpose(purpose);
     const provider = resolveProviderForModelName(modelName);
     const supportedSearchModes = this.getSupportedSearchModes(key, provider);
@@ -480,7 +481,20 @@ export class AiModelConfigService {
   }
 
   private parseModelConfig(input: unknown): AiModelConfig {
-    const parsed = AiModelConfigSchema.safeParse(input);
+    const asRecord =
+      input && typeof input === "object" && !Array.isArray(input)
+        ? (input as Record<string, unknown>)
+        : null;
+    const normalizedInput = asRecord
+      ? {
+          ...asRecord,
+          modelName:
+            typeof asRecord.modelName === "string"
+              ? normalizeRuntimeModelName(asRecord.modelName)
+              : asRecord.modelName,
+        }
+      : input;
+    const parsed = AiModelConfigSchema.safeParse(normalizedInput);
 
     if (!parsed.success) {
       throw new BadRequestException(

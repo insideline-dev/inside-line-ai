@@ -936,6 +936,34 @@
         ]
       }
     },
+    "/startups/evaluation/{id}": {
+      "get": {
+        "operationId": "StartupController_getEvaluationById",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "tags": [
+          "Startups"
+        ]
+      }
+    },
     "/startups/{id}": {
       "get": {
         "operationId": "StartupController_findOne",
@@ -4066,6 +4094,15 @@
             "name": "key",
             "required": true,
             "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "stage",
+            "required": false,
+            "in": "query",
+            "description": "Optional startup stage override for resolved runtime model config",
             "schema": {
               "type": "string"
             }
@@ -8485,7 +8522,9 @@
                               "TIMEOUT",
                               "SCHEMA_OUTPUT_INVALID",
                               "MODEL_OR_PROVIDER_ERROR",
-                              "UNHANDLED_AGENT_EXCEPTION"
+                              "UNHANDLED_AGENT_EXCEPTION",
+                              "MISSING_PROVIDER_EVIDENCE",
+                              "MISSING_BRAVE_TOOL_CALL"
                             ]
                           },
                           "rawProviderError": {
@@ -8580,7 +8619,9 @@
                         "TIMEOUT",
                         "SCHEMA_OUTPUT_INVALID",
                         "MODEL_OR_PROVIDER_ERROR",
-                        "UNHANDLED_AGENT_EXCEPTION"
+                        "UNHANDLED_AGENT_EXCEPTION",
+                        "MISSING_PROVIDER_EVIDENCE",
+                        "MISSING_BRAVE_TOOL_CALL"
                       ]
                     },
                     "rawProviderError": {
@@ -8674,7 +8715,9 @@
                         "TIMEOUT",
                         "SCHEMA_OUTPUT_INVALID",
                         "MODEL_OR_PROVIDER_ERROR",
-                        "UNHANDLED_AGENT_EXCEPTION"
+                        "UNHANDLED_AGENT_EXCEPTION",
+                        "MISSING_PROVIDER_EVIDENCE",
+                        "MISSING_BRAVE_TOOL_CALL"
                       ]
                     },
                     "rawProviderError": {
@@ -10513,7 +10556,9 @@
                             "type": "string",
                             "enum": [
                               "off",
-                              "provider_grounded_search"
+                              "provider_grounded_search",
+                              "brave_tool_search",
+                              "provider_and_brave_search"
                             ]
                           },
                           "source": {
@@ -11069,7 +11114,9 @@
                 "type": "string",
                 "enum": [
                   "off",
-                  "provider_grounded_search"
+                  "provider_grounded_search",
+                  "brave_tool_search",
+                  "provider_and_brave_search"
                 ]
               },
               "supportedSearchModes": {
@@ -11078,7 +11125,9 @@
                   "type": "string",
                   "enum": [
                     "off",
-                    "provider_grounded_search"
+                    "provider_grounded_search",
+                    "brave_tool_search",
+                    "provider_and_brave_search"
                   ]
                 }
               }
@@ -11133,7 +11182,9 @@
                   "type": "string",
                   "enum": [
                     "off",
-                    "provider_grounded_search"
+                    "provider_grounded_search",
+                    "brave_tool_search",
+                    "provider_and_brave_search"
                   ]
                 },
                 "notes": {
@@ -11195,12 +11246,16 @@
             "items": {
               "type": "string"
             }
+          },
+          "runtimeConfigEnabled": {
+            "type": "boolean"
           }
         },
         "required": [
           "resolved",
           "revisions",
-          "allowedModels"
+          "allowedModels",
+          "runtimeConfigEnabled"
         ]
       },
       "AiSchemaRevisionsResponseDto__schema0": {
@@ -12196,7 +12251,9 @@
             "type": "string",
             "enum": [
               "off",
-              "provider_grounded_search"
+              "provider_grounded_search",
+              "brave_tool_search",
+              "provider_and_brave_search"
             ]
           },
           "stage": {
@@ -12237,7 +12294,9 @@
             "type": "string",
             "enum": [
               "off",
-              "provider_grounded_search"
+              "provider_grounded_search",
+              "brave_tool_search",
+              "provider_and_brave_search"
             ]
           },
           "notes": {
@@ -12699,7 +12758,9 @@
                 "type": "string",
                 "enum": [
                   "off",
-                  "provider_grounded_search"
+                  "provider_grounded_search",
+                  "brave_tool_search",
+                  "provider_and_brave_search"
                 ]
               },
               "supportedSearchModes": {
@@ -12708,7 +12769,9 @@
                   "type": "string",
                   "enum": [
                     "off",
-                    "provider_grounded_search"
+                    "provider_grounded_search",
+                    "brave_tool_search",
+                    "provider_and_brave_search"
                   ]
                 }
               }

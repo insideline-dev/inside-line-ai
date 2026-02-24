@@ -205,6 +205,7 @@ export const AiModelConfigResponseSchema = z.object({
   resolved: ResolvedModelConfigSchema,
   revisions: z.array(AiModelConfigRevisionSchema),
   allowedModels: z.array(z.string()),
+  runtimeConfigEnabled: z.boolean(),
 });
 
 export const AiPromptOutputSchemaResponseSchema = z.object({

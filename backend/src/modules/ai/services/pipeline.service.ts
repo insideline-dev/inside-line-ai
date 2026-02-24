@@ -10,7 +10,7 @@ import { startup, StartupStatus } from "../../startup/entities";
 import { pipelineRun } from "../entities";
 import type {
   EvaluationAgentKey,
-  EvaluationFallbackReason,
+  PipelineFallbackReason,
   ResearchAgentKey,
 } from "../interfaces/agent.interface";
 import { EVALUATION_AGENT_KEYS, RESEARCH_AGENT_KEYS } from "../constants/agent-keys";
@@ -20,9 +20,11 @@ import { PipelineAgentTraceService } from "./pipeline-agent-trace.service";
 import { PipelineTemplateService } from "./pipeline-template.service";
 import { PipelineStateService } from "./pipeline-state.service";
 import { StartupMatchingPipelineService } from "./startup-matching-pipeline.service";
+import { EnrichmentService } from "./enrichment.service";
 import {
   PhaseStatus,
   PipelinePhase,
+  type PhaseResultMap,
   PipelineState,
   PipelineStatus,
 } from "../interfaces/pipeline.interface";
@@ -99,6 +101,7 @@ export class PipelineService {
     private phaseTransition: PhaseTransitionService,
     private errorRecovery: ErrorRecoveryService,
     private pipelineTemplateService: PipelineTemplateService,
+    private enrichmentService: EnrichmentService,
     private moduleRef: ModuleRef,
     @Optional() private pipelineAgentTrace?: PipelineAgentTraceService,
   ) {}
@@ -454,7 +457,7 @@ export class PipelineService {
     agentAttemptId?: string;
     phaseRetryCount?: number;
     usedFallback?: boolean;
-    fallbackReason?: EvaluationFallbackReason;
+    fallbackReason?: PipelineFallbackReason;
     rawProviderError?: string;
     lifecycleEvent?: "started" | "retrying" | "completed" | "failed" | "fallback";
     dataSummary?: Record<string, unknown>;
@@ -462,8 +465,102 @@ export class PipelineService {
     await this.progressTracker.updateAgentProgress(params);
   }
 
+  async onPhaseSkipped<P extends PipelinePhase>(params: {
+    startupId: string;
+    pipelineRunId: string;
+    userId: string;
+    phase: P;
+    reason: string;
+    result?: PhaseResultMap[P];
+    retryCount?: number;
+  }): Promise<boolean> {
+    const {
+      startupId,
+      pipelineRunId,
+      userId,
+      phase,
+      reason,
+      result,
+      retryCount = 0,
+    } = params;
+    const state = await this.pipelineState.get(startupId);
+    if (!state) {
+      return false;
+    }
+    if (
+      state.pipelineRunId !== pipelineRunId ||
+      state.status !== PipelineStatus.RUNNING
+    ) {
+      return false;
+    }
+
+    const phaseStatus = state.phases[phase]?.status;
+    if (
+      phaseStatus === PhaseStatus.COMPLETED ||
+      phaseStatus === PhaseStatus.FAILED
+    ) {
+      return false;
+    }
+
+    this.errorRecovery.clearPhaseTimeout(startupId, phase);
+    if (result !== undefined) {
+      await this.pipelineState.setPhaseResult(startupId, phase, result);
+    }
+    await this.pipelineState.updatePhase(startupId, phase, PhaseStatus.SKIPPED);
+    await this.pipelineState.resetRetryCount(startupId, phase);
+    await this.progressTracker.updatePhaseProgress({
+      startupId,
+      userId,
+      pipelineRunId,
+      phase,
+      status: PhaseStatus.SKIPPED,
+      retryCount,
+    });
+    await this.consumePhaseFeedbackSafely(startupId, phase);
+    this.logger.log(
+      `[Pipeline] Skipping ${phase} phase for ${startupId}: ${reason}`,
+    );
+    await this.applyTransitions(startupId);
+    return true;
+  }
+
   private async queuePhase(params: QueuePhaseParams): Promise<void> {
     const { startupId, pipelineRunId, userId, phase, delayMs = 0, retryCount = 0, waitingError, metadata } = params;
+    if (phase === PipelinePhase.ENRICHMENT) {
+      if (!this.aiConfig.isEnrichmentEnabled()) {
+        const skippedResult = this.enrichmentService.buildSkippedResult(
+          "Enrichment temporarily disabled by configuration",
+        );
+        await this.onPhaseSkipped({
+          startupId,
+          pipelineRunId,
+          userId,
+          phase,
+          reason: "Enrichment temporarily disabled by configuration",
+          result: skippedResult,
+          retryCount,
+        });
+        return;
+      }
+
+      const enrichmentNeed = await this.enrichmentService.assessNeed(startupId);
+      if (!enrichmentNeed.shouldRun) {
+        const skippedResult = this.enrichmentService.buildSkippedResult(
+          enrichmentNeed.reason,
+        );
+        await this.onPhaseSkipped({
+          startupId,
+          pipelineRunId,
+          userId,
+          phase,
+          reason: enrichmentNeed.reason,
+          result: skippedResult,
+          retryCount,
+        });
+        return;
+      }
+    }
+
     const phaseConfig = this.phaseTransition.getPhaseConfig(phase);
     await this.pipelineState.updatePhase(
       startupId,

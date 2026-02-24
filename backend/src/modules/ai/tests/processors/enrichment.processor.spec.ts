@@ -14,6 +14,7 @@ import type { EnrichmentService } from "../../services/enrichment.service";
 import type { NotificationGateway } from "../../../../notification/notification.gateway";
 import type { AiEnrichmentJobData } from "../../../../queue/interfaces";
 import { ENRICHMENT_AGENT_KEY } from "../../services/enrichment.service";
+import type { AiConfigService } from "../../services/ai-config.service";
 
 function createEmptyEnrichmentResult() {
   return {
@@ -36,6 +37,7 @@ describe("EnrichmentProcessor", () => {
   let processor: EnrichmentProcessor;
   let config: jest.Mocked<ConfigService>;
   let enrichmentService: jest.Mocked<EnrichmentService>;
+  let aiConfig: jest.Mocked<AiConfigService>;
   let pipelineState: jest.Mocked<PipelineStateService>;
   let pipelineService: jest.Mocked<PipelineService>;
   let notificationGateway: jest.Mocked<NotificationGateway>;
@@ -71,7 +73,25 @@ describe("EnrichmentProcessor", () => {
           return createEmptyEnrichmentResult();
         },
       ),
+      buildSkippedResult: jest
+        .fn()
+        .mockImplementation((reason: string) => ({
+          ...createEmptyEnrichmentResult(),
+          webSearchSkipped: true,
+          skipReason: reason,
+          dataProvenance: {
+            fromExtraction: [],
+            fromWebsite: [],
+            fromEmail: [],
+            fromWebSearch: [],
+            fromAiSynthesis: [],
+          },
+        })),
     } as unknown as jest.Mocked<EnrichmentService>;
+
+    aiConfig = {
+      isEnrichmentEnabled: jest.fn().mockReturnValue(true),
+    } as unknown as jest.Mocked<AiConfigService>;
 
     pipelineState = {
       get: jest.fn().mockResolvedValue({
@@ -146,6 +166,7 @@ describe("EnrichmentProcessor", () => {
       onPhaseCompleted: jest.fn().mockResolvedValue(undefined),
       onPhaseFailed: jest.fn().mockResolvedValue(undefined),
       onAgentProgress: jest.fn().mockResolvedValue(undefined),
+      onPhaseSkipped: jest.fn().mockResolvedValue(true),
     } as unknown as jest.Mocked<PipelineService>;
 
     notificationGateway = {
@@ -158,6 +179,7 @@ describe("EnrichmentProcessor", () => {
 
     processor = new EnrichmentProcessor(
       config as unknown as ConfigService,
+      aiConfig as unknown as AiConfigService,
       enrichmentService as unknown as EnrichmentService,
       pipelineState as unknown as PipelineStateService,
       pipelineService as unknown as PipelineService,
@@ -219,6 +241,42 @@ describe("EnrichmentProcessor", () => {
         rawProviderError: "Unterminated fractional number in JSON at position 3689",
         attempt: 2,
         retryCount: 1,
+      }),
+    );
+    expect(result.type).toBe("ai_enrichment");
+  });
+
+  it("hard-skips enrichment jobs when enrichment is disabled", async () => {
+    aiConfig.isEnrichmentEnabled.mockReturnValueOnce(false);
+    const job = {
+      id: "job-2",
+      data: {
+        type: "ai_enrichment",
+        startupId: "startup-1",
+        pipelineRunId: "run-1",
+        userId: "user-1",
+      } satisfies AiEnrichmentJobData,
+    } as unknown as Job<AiEnrichmentJobData>;
+
+    const result = await (
+      processor as unknown as {
+        process: (input: Job<AiEnrichmentJobData>) => Promise<{ type: string; data: unknown }>;
+      }
+    ).process(job);
+
+    expect(enrichmentService.run).not.toHaveBeenCalled();
+    expect(pipelineService.onPhaseSkipped).toHaveBeenCalledWith(
+      expect.objectContaining({
+        startupId: "startup-1",
+        pipelineRunId: "run-1",
+        phase: PipelinePhase.ENRICHMENT,
+      }),
+    );
+    expect(notificationGateway.sendJobStatus).toHaveBeenCalledWith(
+      "user-1",
+      expect.objectContaining({
+        jobType: "ai_enrichment",
+        status: "completed",
       }),
     );
     expect(result.type).toBe("ai_enrichment");

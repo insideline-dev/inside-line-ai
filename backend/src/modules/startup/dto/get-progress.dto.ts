@@ -20,6 +20,8 @@ export const ProgressAgentSchema = z.object({
       "SCHEMA_OUTPUT_INVALID",
       "MODEL_OR_PROVIDER_ERROR",
       "UNHANDLED_AGENT_EXCEPTION",
+      "MISSING_PROVIDER_EVIDENCE",
+      "MISSING_BRAVE_TOOL_CALL",
     ])
     .optional(),
   rawProviderError: z.string().optional(),
@@ -59,6 +61,8 @@ export const ProgressAgentEventSchema = z.object({
       "SCHEMA_OUTPUT_INVALID",
       "MODEL_OR_PROVIDER_ERROR",
       "UNHANDLED_AGENT_EXCEPTION",
+      "MISSING_PROVIDER_EVIDENCE",
+      "MISSING_BRAVE_TOOL_CALL",
     ])
     .optional(),
   rawProviderError: z.string().optional(),
@@ -89,6 +93,8 @@ export const ProgressAgentTraceSchema = z.object({
       "SCHEMA_OUTPUT_INVALID",
       "MODEL_OR_PROVIDER_ERROR",
       "UNHANDLED_AGENT_EXCEPTION",
+      "MISSING_PROVIDER_EVIDENCE",
+      "MISSING_BRAVE_TOOL_CALL",
     ])
     .optional(),
   rawProviderError: z.string().optional(),

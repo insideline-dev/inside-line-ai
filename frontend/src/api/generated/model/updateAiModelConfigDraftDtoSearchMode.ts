@@ -12,4 +12,6 @@ export type UpdateAiModelConfigDraftDtoSearchMode = typeof UpdateAiModelConfigDr
 export const UpdateAiModelConfigDraftDtoSearchMode = {
   off: 'off',
   provider_grounded_search: 'provider_grounded_search',
+  brave_tool_search: 'brave_tool_search',
+  provider_and_brave_search: 'provider_and_brave_search',
 } as const;

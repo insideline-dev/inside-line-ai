@@ -134,7 +134,21 @@ Notes: [Any discrepancies]
 - Do NOT wrap output in markdown or code fences.
 - Do NOT include prose before or after the JSON object.
 - Required string fields must never be null (use "Unknown" when unavailable).
-- Use [] for missing arrays and {} for missing objects.`;
+- Use [] for missing arrays and {} for missing objects.
+- Use this exact top-level JSON shape and key names:
+{
+  "productPages": [],
+  "features": [],
+  "techStack": [],
+  "integrations": [],
+  "customerReviews": {"summary": "", "sentiment": "positive|neutral|negative"},
+  "reviews": [{"source": "", "rating": "", "summary": "", "url": ""}],
+  "strengths": [],
+  "weaknesses": [],
+  "competitivePosition": "",
+  "marketDynamics": {"entryBarriers": "", "substitutes": [], "buyerPower": "", "supplierPower": ""},
+  "sources": []
+}`;
 
 export const PRODUCT_RESEARCH_HUMAN_PROMPT = `Conduct deep product intelligence research for:
 

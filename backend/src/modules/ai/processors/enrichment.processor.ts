@@ -147,7 +147,7 @@ export class EnrichmentProcessor
     const onStepProgress: PhaseProgressCallback = {
       onStepStart: (stepKey, trace) => {
         recordStepTrace(stepKey, "running", trace);
-        this.pipelineService
+        void this.pipelineService
           .onAgentProgress({
             startupId,
             userId,
@@ -170,7 +170,7 @@ export class EnrichmentProcessor
       },
       onStepComplete: (stepKey, payload) => {
         recordStepTrace(stepKey, "completed", payload);
-        this.pipelineService
+        void this.pipelineService
           .onAgentProgress({
             startupId,
             userId,
@@ -197,7 +197,7 @@ export class EnrichmentProcessor
           ...trace,
           error,
         });
-        this.pipelineService
+        void this.pipelineService
           .onAgentProgress({
             startupId,
             userId,
@@ -235,7 +235,7 @@ export class EnrichmentProcessor
         this.enrichmentService.run(startupId, {
           onStepProgress,
           onAgentStart: (agentKey) => {
-            this.pipelineService
+            void this.pipelineService
               .onAgentProgress({
                 startupId,
                 userId,
@@ -277,7 +277,7 @@ export class EnrichmentProcessor
                 : "completed";
             const resolvedAgentKey = agentKey || ENRICHMENT_AGENT_KEY;
 
-            this.pipelineService
+            void this.pipelineService
               .onAgentProgress({
                 startupId,
                 userId,
@@ -304,7 +304,7 @@ export class EnrichmentProcessor
                 );
               });
 
-            this.pipelineAgentTrace
+            void this.pipelineAgentTrace
               .recordRun({
                 startupId,
                 pipelineRunId,

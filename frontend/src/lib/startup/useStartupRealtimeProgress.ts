@@ -387,8 +387,12 @@ export function useStartupRealtimeProgress(
           return recomputeProgress(next);
         }),
       );
-      queryClient.invalidateQueries({ queryKey });
-      if (id) queryClient.invalidateQueries({ queryKey: getStartupControllerFindOneQueryKey(id) });
+      void queryClient.invalidateQueries({ queryKey, refetchType: "none" });
+      if (id) {
+        void queryClient.invalidateQueries({
+          queryKey: getStartupControllerFindOneQueryKey(id),
+        });
+      }
     },
     onPipelineFailed: (data: PipelineStatusEvent) => {
       if (!queryKey) return;
@@ -408,8 +412,12 @@ export function useStartupRealtimeProgress(
           return recomputeProgress(next);
         }),
       );
-      queryClient.invalidateQueries({ queryKey });
-      if (id) queryClient.invalidateQueries({ queryKey: getStartupControllerFindOneQueryKey(id) });
+      void queryClient.invalidateQueries({ queryKey, refetchType: "none" });
+      if (id) {
+        void queryClient.invalidateQueries({
+          queryKey: getStartupControllerFindOneQueryKey(id),
+        });
+      }
     },
     onPipelineCancelled: (data: PipelineStatusEvent) => {
       if (!queryKey) return;
@@ -429,8 +437,12 @@ export function useStartupRealtimeProgress(
           return recomputeProgress(next);
         }),
       );
-      queryClient.invalidateQueries({ queryKey });
-      if (id) queryClient.invalidateQueries({ queryKey: getStartupControllerFindOneQueryKey(id) });
+      void queryClient.invalidateQueries({ queryKey, refetchType: "none" });
+      if (id) {
+        void queryClient.invalidateQueries({
+          queryKey: getStartupControllerFindOneQueryKey(id),
+        });
+      }
     },
     onPhaseUpdate: (data: PhaseEvent) => {
       if (!queryKey) return;

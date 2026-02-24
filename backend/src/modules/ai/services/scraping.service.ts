@@ -295,7 +295,7 @@ export class ScrapingService {
       inputJson: {
         requestedTeamMembers: teamMembers,
         companyName: record.name,
-        websiteUrl: record.website,
+        websiteUrl: effectiveWebsite,
       },
     });
     let linkedinEnrichmentResult: LinkedinEnrichmentRunResult;
@@ -304,7 +304,7 @@ export class ScrapingService {
         record.userId,
         teamMembers,
         record.name,
-        record.website,
+        effectiveWebsite,
         scrapeErrors,
         progress,
       );
@@ -1097,7 +1097,66 @@ export class ScrapingService {
     }
 
     const finalTeam: EnrichedTeamMember[] = [];
-    let liveIndex = 0;
+    const remainingLive = [...liveEnriched];
+    const consumedLive = new Set<EnrichedTeamMember>();
+    const liveByLinkedinUrl = new Map<string, EnrichedTeamMember[]>();
+    const liveByName = new Map<string, EnrichedTeamMember[]>();
+
+    const normalizeMemberName = (value: string | undefined): string =>
+      value
+        ? value
+            .toLowerCase()
+            .replace(/\s+/g, " ")
+            .trim()
+        : "";
+
+    const pushBucket = (
+      bucket: Map<string, EnrichedTeamMember[]>,
+      key: string | undefined,
+      member: EnrichedTeamMember,
+    ) => {
+      if (!key) return;
+      const list = bucket.get(key) ?? [];
+      list.push(member);
+      bucket.set(key, list);
+    };
+
+    const removeFromRemaining = (member: EnrichedTeamMember) => {
+      consumedLive.add(member);
+      const idx = remainingLive.indexOf(member);
+      if (idx >= 0) {
+        remainingLive.splice(idx, 1);
+      }
+    };
+
+    const shiftBucket = (
+      bucket: Map<string, EnrichedTeamMember[]>,
+      key: string | undefined,
+    ): EnrichedTeamMember | undefined => {
+      if (!key) return undefined;
+      const list = bucket.get(key);
+      if (!list || list.length === 0) return undefined;
+      let next = list.shift();
+      while (next && consumedLive.has(next)) {
+        next = list.shift();
+      }
+      if (list.length === 0) {
+        bucket.delete(key);
+      }
+      if (next) {
+        removeFromRemaining(next);
+      }
+      return next;
+    };
+
+    for (const enriched of liveEnriched) {
+      const normalizedLinkedin = enriched.linkedinUrl
+        ? (this.normalizeLinkedinProfileUrl(enriched.linkedinUrl) ??
+          enriched.linkedinUrl.trim())
+        : undefined;
+      pushBucket(liveByLinkedinUrl, normalizedLinkedin, enriched);
+      pushBucket(liveByName, normalizeMemberName(enriched.name), enriched);
+    }
 
     for (const original of members) {
       if (original.linkedinUrl) {
@@ -1108,8 +1167,20 @@ export class ScrapingService {
         }
       }
 
-      const enriched = liveEnriched[liveIndex];
-      liveIndex += 1;
+      const normalizedOriginalLinkedin = original.linkedinUrl
+        ? (this.normalizeLinkedinProfileUrl(original.linkedinUrl) ??
+          original.linkedinUrl.trim())
+        : undefined;
+      let enriched = shiftBucket(liveByLinkedinUrl, normalizedOriginalLinkedin);
+      if (!enriched) {
+        enriched = shiftBucket(liveByName, normalizeMemberName(original.name));
+      }
+      if (!enriched && remainingLive.length > 0) {
+        enriched = remainingLive.shift();
+        if (enriched) {
+          consumedLive.add(enriched);
+        }
+      }
 
       finalTeam.push({
         name: original.name,

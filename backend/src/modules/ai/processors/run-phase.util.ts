@@ -160,6 +160,42 @@ export async function runPipelinePhase<P extends PipelinePhase>(
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    const latestState = await options.pipelineState.get(startupId);
+    if (!latestState) {
+      logger.warn(
+        `[${options.phase}] SKIPPED — failure handling ignored because pipeline state is missing | Startup: ${startupId} | Error: ${message}`,
+      );
+      return {
+        startupId,
+        pipelineRunId,
+        userId,
+        result: null,
+      };
+    }
+
+    const latestRetryCount = latestState.retryCounts[options.phase] ?? 0;
+    const latestPhaseStatus = latestState.phases[options.phase].status;
+    const staleFailure =
+      latestState.pipelineRunId !== pipelineRunId ||
+      latestState.status !== PipelineStatus.RUNNING ||
+      jobRetryCount < latestRetryCount ||
+      latestPhaseStatus === PhaseStatus.WAITING ||
+      latestPhaseStatus === PhaseStatus.FAILED ||
+      latestPhaseStatus === PhaseStatus.COMPLETED ||
+      latestPhaseStatus === PhaseStatus.SKIPPED;
+
+    if (staleFailure) {
+      logger.warn(
+        `[${options.phase}] SKIPPED — stale failure ignored | Startup: ${startupId} | Error: ${message} | Job retry: ${jobRetryCount} | Current retry: ${latestRetryCount} | Phase status: ${latestPhaseStatus} | State run: ${latestState.pipelineRunId} | State status: ${latestState.status}`,
+      );
+      return {
+        startupId,
+        pipelineRunId,
+        userId,
+        result: (latestState.results[options.phase] as PhaseResultMap[P] | undefined) ?? null,
+      };
+    }
+
     await options.pipelineState.updatePhase(
       startupId,
       options.phase,
@@ -185,6 +221,9 @@ function readJobRetryCount(
   const retryCount = (job.data as { metadata?: { retryCount?: unknown } }).metadata?.retryCount;
   if (typeof retryCount === "number" && Number.isFinite(retryCount) && retryCount >= 0) {
     return Math.floor(retryCount);
+  }
+  if (typeof job.attemptsMade === "number" && Number.isFinite(job.attemptsMade) && job.attemptsMade >= 0) {
+    return Math.floor(job.attemptsMade);
   }
   return 0;
 }

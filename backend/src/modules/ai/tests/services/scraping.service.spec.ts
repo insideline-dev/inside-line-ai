@@ -113,6 +113,37 @@ describe("ScrapingService", () => {
     expect(result.scrapeErrors).toHaveLength(0);
   });
 
+  it("skips company-level LinkedIn discovery when leadership seeds are already sufficient", async () => {
+    mockDb.limit.mockResolvedValueOnce([
+      {
+        id: "startup-leadership-seeded",
+        userId: "user-123",
+        website: "https://inside-line.test",
+        name: "Inside Line",
+        industry: "SaaS",
+        stage: "seed",
+        description: "AI startup screening",
+        teamMembers: [
+          {
+            name: "Alex Founder",
+            role: "CEO",
+            linkedinUrl: "https://linkedin.com/in/alex-founder",
+          },
+          {
+            name: "Sam Builder",
+            role: "CTO",
+            linkedinUrl: "https://linkedin.com/in/sam-builder",
+          },
+        ],
+      },
+    ]);
+
+    await service.run("startup-leadership-seeded");
+
+    expect(linkedin.discoverCompanyLeadershipMembers).not.toHaveBeenCalled();
+    expect(linkedin.enrichTeamMembers).toHaveBeenCalled();
+  });
+
   it("emits website and linkedin enrichment sub-agent callbacks", async () => {
     const started: string[] = [];
     const completed: Array<{

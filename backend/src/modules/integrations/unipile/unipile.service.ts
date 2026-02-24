@@ -52,6 +52,7 @@ interface UnipileTraceOptions {
 export class UnipileService {
   private readonly logger = new Logger(UnipileService.name);
   private readonly config: UnipileConfig | null;
+  private readonly companyIdCache = new Map<string, string>();
 
   constructor(
     private configService: ConfigService,
@@ -193,7 +194,7 @@ export class UnipileService {
     companyWebsite?: string,
     options?: UnipileTraceOptions,
   ): Promise<LinkedInProfile[]> {
-    const companyId = await this.resolveBestCompanyId(
+    const companyId = await this.resolveBestCompanyIdWithCache(
       companyName,
       companyWebsite,
       options,
@@ -656,6 +657,28 @@ export class UnipileService {
       .sort((a, b) => b.score - a.score);
 
     return ranked[0]?.id ?? null;
+  }
+
+  private async resolveBestCompanyIdWithCache(
+    companyName: string,
+    companyWebsite?: string,
+    options?: UnipileTraceOptions,
+  ): Promise<string | null> {
+    const cacheKey = `${companyName.trim().toLowerCase()}|${this.extractWebsiteToken(companyWebsite) ?? ""}`;
+    const cached = this.companyIdCache.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    const resolved = await this.resolveBestCompanyId(
+      companyName,
+      companyWebsite,
+      options,
+    );
+    if (resolved) {
+      this.companyIdCache.set(cacheKey, resolved);
+    }
+    return resolved;
   }
 
   private normalizeCompanyToken(value: string): string {

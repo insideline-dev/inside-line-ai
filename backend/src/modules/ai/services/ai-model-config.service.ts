@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import { and, desc, eq, isNull, max, or } from "drizzle-orm";
@@ -59,6 +60,8 @@ export interface ResolvedModelConfig {
 
 @Injectable()
 export class AiModelConfigService {
+  private readonly logger = new Logger(AiModelConfigService.name);
+
   constructor(
     private drizzle: DrizzleService,
     private aiConfig: AiConfigService,
@@ -297,23 +300,31 @@ export class AiModelConfigService {
         provider,
       );
 
-      return {
-        source: "revision_override",
-        revisionId: override.id,
-        stage: normalizedStage,
-        purpose,
-        modelName,
-        provider,
-        searchMode: override.searchMode,
-        supportedSearchModes,
-      };
+      return this.logResolvedConfig(
+        params,
+        normalizedStage,
+        {
+          source: "revision_override",
+          revisionId: override.id,
+          stage: normalizedStage,
+          purpose,
+          modelName,
+          provider,
+          searchMode: override.searchMode,
+          supportedSearchModes,
+        },
+      );
     }
 
     if (!this.aiConfig.isPromptRuntimeConfigEnabled()) {
-      return this.buildDefaultResolvedConfig(
-        params.key,
+      return this.logResolvedConfig(
+        params,
         normalizedStage,
-        purpose,
+        this.buildDefaultResolvedConfig(
+          params.key,
+          normalizedStage,
+          purpose,
+        ),
       );
     }
 
@@ -324,10 +335,14 @@ export class AiModelConfigService {
       .limit(1);
 
     if (!definition) {
-      return this.buildDefaultResolvedConfig(
-        params.key,
+      return this.logResolvedConfig(
+        params,
         normalizedStage,
-        purpose,
+        this.buildDefaultResolvedConfig(
+          params.key,
+          normalizedStage,
+          purpose,
+        ),
       );
     }
 
@@ -366,10 +381,14 @@ export class AiModelConfigService {
     const selected = stageMatch ?? globalMatch;
 
     if (!selected) {
-      return this.buildDefaultResolvedConfig(
-        params.key,
+      return this.logResolvedConfig(
+        params,
         normalizedStage,
-        purpose,
+        this.buildDefaultResolvedConfig(
+          params.key,
+          normalizedStage,
+          purpose,
+        ),
       );
     }
 
@@ -381,16 +400,20 @@ export class AiModelConfigService {
 
     const provider = resolveProviderForModelName(modelConfig.modelName);
 
-    return {
-      source: "published",
-      revisionId: selected.id,
-      stage: normalizedStage,
-      purpose,
-      modelName: modelConfig.modelName,
-      provider,
-      searchMode: modelConfig.searchMode,
-      supportedSearchModes: this.getSupportedSearchModes(params.key, provider),
-    };
+    return this.logResolvedConfig(
+      params,
+      normalizedStage,
+      {
+        source: "published",
+        revisionId: selected.id,
+        stage: normalizedStage,
+        purpose,
+        modelName: modelConfig.modelName,
+        provider,
+        searchMode: modelConfig.searchMode,
+        supportedSearchModes: this.getSupportedSearchModes(params.key, provider),
+      },
+    );
   }
 
   private buildDefaultResolvedConfig(
@@ -438,6 +461,21 @@ export class AiModelConfigService {
     }
 
     return ["off"];
+  }
+
+  private logResolvedConfig(
+    params: {
+      key: AiPromptKey;
+      stage?: StartupStage | string | null;
+      revisionId?: string;
+    },
+    normalizedStage: StartupStage | null,
+    resolved: ResolvedModelConfig,
+  ): ResolvedModelConfig {
+    this.logger.debug(
+      `[ModelConfig] Resolved | key=${params.key} | requestedStage=${params.stage ?? "global"} | normalizedStage=${normalizedStage ?? "global"} | runtimeEnabled=${this.aiConfig.isPromptRuntimeConfigEnabled()} | source=${resolved.source} | revisionId=${resolved.revisionId ?? "none"} | model=${resolved.modelName} | provider=${resolved.provider} | searchMode=${resolved.searchMode}`,
+    );
+    return resolved;
   }
 
   private validateModelConfigForKey(

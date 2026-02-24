@@ -180,6 +180,7 @@ export class ResearchService {
         const agentResult = this.unwrapSettled(key, settledResult);
         await this.handleAgentResult({
           startupId,
+          pipelineRunId,
           key,
           agentResult,
           result,
@@ -207,6 +208,7 @@ export class ResearchService {
         const agentResult = this.unwrapSettled(key, settledResult);
         await this.handleAgentResult({
           startupId,
+          pipelineRunId,
           key,
           agentResult,
           result,
@@ -487,6 +489,7 @@ export class ResearchService {
 
   private async handleAgentResult(input: {
     startupId: string;
+    pipelineRunId?: string;
     key: ResearchAgentKey;
     agentResult: AgentRunResult;
     result: ResearchResult;
@@ -505,6 +508,7 @@ export class ResearchService {
   }): Promise<void> {
     const {
       startupId,
+      pipelineRunId,
       key,
       agentResult,
       result,
@@ -528,6 +532,7 @@ export class ResearchService {
     if (agentResult.rejected) {
       await this.aiDebugLog?.logAgentFailure({
         startupId,
+        pipelineRunId,
         phase: PipelinePhase.RESEARCH,
         agentKey: key,
         error: agentResult.error ?? "Unknown error",
@@ -537,6 +542,7 @@ export class ResearchService {
 
     await this.aiDebugLog?.logAgentResult({
       startupId,
+      pipelineRunId,
       phase: PipelinePhase.RESEARCH,
       agentKey: key,
       usedFallback: agentResult.usedFallback,
@@ -544,6 +550,8 @@ export class ResearchService {
       model:
         agentResult.modelName ??
         this.aiConfig?.getModelForPurpose(ModelPurpose.RESEARCH) ?? "unknown",
+      attempt: agentResult.attempt,
+      retryCount: agentResult.retryCount,
       output: agentResult.output,
     });
 

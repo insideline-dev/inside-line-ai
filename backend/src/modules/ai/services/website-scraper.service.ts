@@ -139,8 +139,9 @@ export class WebsiteScraperService {
       pages.flatMap((page) => page.testimonials),
     );
     const headings = pages.flatMap((page) => page.headings);
-    const links = this.dedupeLinks(
-      pages.flatMap((page) => page.links).slice(0, this.maxLinksPerPage),
+    const links = this.dedupeLinks(pages.flatMap((page) => page.links)).slice(
+      0,
+      this.maxLinksPerPage,
     );
     const fullText = pages
       .map((page) => page.content.trim())
@@ -715,7 +716,15 @@ export class WebsiteScraperService {
       const locRegex = /<loc>\s*(.*?)\s*<\/loc>/gi;
       let match: RegExpExecArray | null;
       while ((match = locRegex.exec(xml)) !== null) {
-        if (match[1]) urls.push(match[1]);
+        if (!match[1]) continue;
+        const normalizedLoc = match[1]
+          .trim()
+          .replace(/^<!\[CDATA\[/i, "")
+          .replace(/\]\]>$/i, "")
+          .replace(/&amp;/gi, "&");
+        if (normalizedLoc) {
+          urls.push(normalizedLoc);
+        }
       }
       const baseHost = new URL(baseUrl).hostname;
       return urls.filter((url) => {

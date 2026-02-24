@@ -70,6 +70,7 @@ export interface InvestorMatchingOutput {
 @Injectable()
 export class InvestorMatchingService {
   private readonly logger = new Logger(InvestorMatchingService.name);
+  private readonly candidateEvaluationConcurrency = 8;
 
   constructor(
     private drizzle: DrizzleService,
@@ -115,8 +116,10 @@ export class InvestorMatchingService {
       usedFallback: boolean;
     };
 
-    const aligned = await Promise.all(
-      firstFilterPassed.map(async (candidate) => {
+    const aligned = await this.mapWithConcurrency(
+      firstFilterPassed,
+      this.candidateEvaluationConcurrency,
+      async (candidate) => {
         const fit = await this.alignThesis(candidate, input);
         const weightedStartupScore = await this.computeInvestorWeightedScore(
           input,
@@ -154,7 +157,7 @@ export class InvestorMatchingService {
           isMatch,
           usedFallback: fit.usedFallback,
         } satisfies EvaluatedCandidate;
-      }),
+      },
     );
 
     return {
@@ -347,6 +350,38 @@ export class InvestorMatchingService {
       thesisFitScore,
       fitRationale,
     });
+  }
+
+  private async mapWithConcurrency<TInput, TOutput>(
+    items: TInput[],
+    concurrency: number,
+    mapper: (item: TInput, index: number) => Promise<TOutput>,
+  ): Promise<TOutput[]> {
+    if (items.length === 0) {
+      return [];
+    }
+
+    const limit = Math.max(1, Math.floor(concurrency));
+    const results = new Array<TOutput>(items.length);
+    let cursor = 0;
+
+    const worker = async () => {
+      while (true) {
+        const index = cursor;
+        cursor += 1;
+        if (index >= items.length) {
+          return;
+        }
+        results[index] = await mapper(items[index]!, index);
+      }
+    };
+
+    const workers = Array.from(
+      { length: Math.min(limit, items.length) },
+      () => worker(),
+    );
+    await Promise.all(workers);
+    return results;
   }
 
 }

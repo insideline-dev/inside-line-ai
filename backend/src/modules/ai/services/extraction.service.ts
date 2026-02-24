@@ -66,14 +66,21 @@ export class ExtractionService {
     const warnings: string[] = [];
     const startupContext = this.mapStartupContext(record);
     const fallbackText = this.buildSummary(record, startupContext);
+    const startupContextCoverage = this.summarizeStartupContext(startupContext);
     this.logger.debug(
       `[Extraction] Startup context loaded | pitchDeckPath=${Boolean(record.pitchDeckPath)} | pitchDeckUrl=${Boolean(record.pitchDeckUrl)} | teamMembers=${record.teamMembers?.length ?? 0} | files=${record.files?.length ?? 0}`,
+    );
+    this.logger.debug(
+      `[Extraction] Startup context coverage | present=${startupContextCoverage.presentCount}/${startupContextCoverage.totalCount} | missing=${startupContextCoverage.missingCount} | missingKeys=${startupContextCoverage.missingKeys.length > 0 ? startupContextCoverage.missingKeys.join(",") : "none"}`,
     );
 
     if (!record.pitchDeckPath && !record.pitchDeckUrl) {
       warnings.push("No pitch deck found; using startup form data only");
       this.logger.warn(
         `[Extraction] No deck source found for startup ${startupId}; using startup context fallback`,
+      );
+      this.logger.warn(
+        `[Extraction] Startup-context fallback detail | startup=${startupId} | fallbackSummaryChars=${fallbackText.length} | missingStartupContextKeys=${startupContextCoverage.missingKeys.length > 0 ? startupContextCoverage.missingKeys.join(",") : "none"}`,
       );
       const fallbackResult = this.buildResult(
         record,
@@ -711,5 +718,39 @@ export class ExtractionService {
         return true;
       })
       .map(([key]) => key);
+  }
+
+  private summarizeStartupContext(startupContext: StartupFormContext): {
+    totalCount: number;
+    presentCount: number;
+    missingCount: number;
+    missingKeys: string[];
+  } {
+    const entries = Object.entries(startupContext);
+    const missingKeys = entries
+      .filter(([, value]) => !this.hasContextValue(value))
+      .map(([key]) => key);
+    const totalCount = entries.length;
+    const missingCount = missingKeys.length;
+
+    return {
+      totalCount,
+      presentCount: totalCount - missingCount,
+      missingCount,
+      missingKeys,
+    };
+  }
+
+  private hasContextValue(value: unknown): boolean {
+    if (value === null || value === undefined) {
+      return false;
+    }
+    if (typeof value === "string") {
+      return value.trim().length > 0;
+    }
+    if (Array.isArray(value)) {
+      return value.length > 0;
+    }
+    return true;
   }
 }

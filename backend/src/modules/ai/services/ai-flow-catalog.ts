@@ -175,7 +175,7 @@ const PIPELINE_NODES: AiFlowNodeDefinition[] = [
     label: "Hybrid Gap Fill",
     description: "Use AI synthesis + Brave Search evidence to fill missing startup fields.",
     kind: "prompt",
-    promptKeys: [],
+    promptKeys: ["enrichment.gapFill"],
     inputs: [
       { label: "Extraction result", type: "object", fromNodeId: "extract_fields" },
       { label: "Scraping context", type: "object", fromNodeId: "scrape_website" },

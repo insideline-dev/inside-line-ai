@@ -63,6 +63,7 @@ type ActivityItem = {
   tone: SignalTone;
   timestamp: string | undefined;
   error?: string;
+  runtimeSummary?: string;
   hasIssue: boolean;
   agent?: FlattenedAgent;
   event?: PipelineAgentEvent;
@@ -99,6 +100,9 @@ const STEP_LABELS: Record<string, string> = {
   linkedin_enrichment_step: "LinkedIn Enrichment",
   linkedin_enrichment: "LinkedIn Enrichment",
   gap_analysis: "Gap Analysis",
+  resolve_extraction: "Resolve Extraction",
+  resolve_website: "Resolve Website",
+  resolve_email: "Resolve Email",
   web_search: "Web Search",
   ai_synthesis: "AI Synthesis",
   db_writes: "DB Writes",
@@ -129,6 +133,24 @@ const PROGRESS_TONE_CLASS: Record<SignalTone, string> = {
   warning: "[&>div]:bg-amber-500",
   danger: "[&>div]:bg-destructive",
 };
+
+const PHASE_STEP_AGENT_KEYS = new Set([
+  "pdf_fetch",
+  "text_extraction",
+  "ocr_fallback",
+  "field_extraction",
+  "gap_analysis",
+  "resolve_extraction",
+  "resolve_website",
+  "resolve_email",
+  "web_search",
+  "ai_synthesis",
+  "db_writes",
+  "cache_check",
+  "website_scrape",
+  "team_discovery",
+  "linkedin_enrichment_step",
+]);
 
 const EVENT_BADGE_CLASS: Record<PipelineAgentEventType, string> = {
   started: "bg-sky-500/10 text-sky-700 border-sky-500/30 dark:text-sky-300",
@@ -320,6 +342,58 @@ function normalizeTraceError(trace: PipelineAgentTrace): string | undefined {
   return normalizeAgentError(trace.error);
 }
 
+function readTraceWarning(trace: PipelineAgentTrace): string | undefined {
+  if (!trace.meta || typeof trace.meta !== "object" || Array.isArray(trace.meta)) {
+    return undefined;
+  }
+
+  const searchEnforcement = (trace.meta as Record<string, unknown>).searchEnforcement;
+  if (
+    !searchEnforcement ||
+    typeof searchEnforcement !== "object" ||
+    Array.isArray(searchEnforcement)
+  ) {
+    return undefined;
+  }
+
+  const enforcementRecord = searchEnforcement as Record<string, unknown>;
+  const missingProviderEvidence = enforcementRecord.missingProviderEvidence === true;
+  const missingBraveToolCall = enforcementRecord.missingBraveToolCall === true;
+
+  if (!missingProviderEvidence && !missingBraveToolCall) {
+    return undefined;
+  }
+  if (missingProviderEvidence && missingBraveToolCall) {
+    return "Grounded provider evidence and Brave tool call were both missing; output was accepted with warning.";
+  }
+  if (missingProviderEvidence) {
+    return "Grounded provider evidence was missing; output was accepted with warning.";
+  }
+  return "Brave tool call evidence was missing; output was accepted with warning.";
+}
+
+function readTraceRuntimeSummary(trace: PipelineAgentTrace): string | undefined {
+  if (!trace.meta || typeof trace.meta !== "object" || Array.isArray(trace.meta)) {
+    return undefined;
+  }
+
+  const modelConfig = (trace.meta as Record<string, unknown>).modelConfig;
+  if (!modelConfig || typeof modelConfig !== "object" || Array.isArray(modelConfig)) {
+    return undefined;
+  }
+
+  const config = modelConfig as Record<string, unknown>;
+  const modelName = typeof config.modelName === "string" ? config.modelName : undefined;
+  const searchMode = typeof config.searchMode === "string" ? config.searchMode : undefined;
+  const source = typeof config.source === "string" ? config.source : undefined;
+
+  if (!modelName || !searchMode || !source) {
+    return undefined;
+  }
+
+  return `${modelName} · ${searchMode} · ${source}`;
+}
+
 function formatFallbackReason(
   reason: string | undefined,
 ): string | undefined {
@@ -331,6 +405,15 @@ function formatFallbackReason(
     .split("_")
     .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
     .join(" ");
+}
+
+function formatFallbackReasonWithLegacyLabel(
+  reason: string | undefined,
+): string {
+  return (
+    formatFallbackReason(reason) ??
+    "Legacy trace (no fallback reason recorded)"
+  );
 }
 
 function toPrettyJson(value: unknown): string {
@@ -508,10 +591,17 @@ function buildDataFlowBadges(
     const teamSummary = summaries.team_discovery;
     const linkedinSummary =
       summaries.linkedin_enrichment_step ?? summaries.linkedin_enrichment;
+    const linkedinStatuses = asSummaryRecord(linkedinSummary?.enrichmentStatuses);
 
     const pages = readSummaryNumber(scrapeSummary, "pages");
     const teamTotal = readSummaryNumber(teamSummary, "total");
-    const linkedinEnriched = readSummaryNumber(linkedinSummary, "liveEnriched");
+    const linkedinEnriched =
+      readSummaryNumber(linkedinSummary, "verifiedTeamMembers") ??
+      readSummaryNumber(linkedinSummary, "verified") ??
+      readSummaryNumber(linkedinSummary, "successfulMatches") ??
+      readSummaryNumber(linkedinStatuses, "success") ??
+      readSummaryNumber(linkedinSummary, "enrichedTeamMembers") ??
+      readSummaryNumber(linkedinSummary, "liveEnriched");
 
     return [
       typeof pages === "number" ? `${pages} pages scraped` : null,
@@ -605,21 +695,24 @@ export function AdminPipelineLivePanel({
           status: "pending",
           progress: 0,
         };
-        const agents = Object.values(data.agents ?? {});
-        const retryingAgentCount = agents.filter(
+        const agentEntries = Object.entries(data.agents ?? {});
+        const visibleAgents = agentEntries
+          .filter(([agentKey]) => !PHASE_STEP_AGENT_KEYS.has(agentKey))
+          .map(([, agent]) => agent);
+        const retryingAgentCount = visibleAgents.filter(
           (agent) =>
             data.status === "running" &&
             progress?.pipelineStatus === "running" &&
             agent.status === "running" &&
             (agent.retryCount ?? 0) > 0,
         ).length;
-        const retriedAgentCount = agents.filter(
+        const retriedAgentCount = visibleAgents.filter(
           (agent) => (agent.retryCount ?? 0) > 0,
         ).length;
-        const fallbackAgentCount = agents.filter(
+        const fallbackAgentCount = visibleAgents.filter(
           (agent) => isFallbackAgent(agent),
         ).length;
-        const failedAgentCount = agents.filter(
+        const failedAgentCount = visibleAgents.filter(
           (agent) => isHardFailedAgent(agent),
         ).length;
         return {
@@ -627,7 +720,7 @@ export function AdminPipelineLivePanel({
           data,
           percent: calculatePhaseProgress(data),
           tone: toneForPhase(data),
-          agentCount: agents.length,
+          agentCount: visibleAgents.length,
           retryingAgentCount,
           retriedAgentCount,
           fallbackAgentCount,
@@ -747,31 +840,49 @@ export function AdminPipelineLivePanel({
     }
 
     for (const trace of aiAgentTraceTimeline) {
+      const warning = readTraceWarning(trace);
+      const runtimeSummary = readTraceRuntimeSummary(trace);
       items.push({
         id: `ai_trace:${trace.id}`,
         kind: "ai_trace",
         name: formatLabel(trace.agentKey),
         phase: String(trace.phase),
         status: trace.status,
-        tone: trace.status === "failed" ? "danger" : trace.status === "fallback" ? "warning" : trace.status === "running" ? "info" : "success",
+        tone: trace.status === "failed"
+          ? "danger"
+          : trace.status === "fallback" || warning
+            ? "warning"
+            : trace.status === "running"
+              ? "info"
+              : "success",
         timestamp: trace.startedAt ?? trace.completedAt ?? undefined,
-        error: normalizeTraceError(trace),
-        hasIssue: trace.status === "failed" || trace.status === "fallback",
+        error: normalizeTraceError(trace) ?? warning,
+        runtimeSummary,
+        hasIssue: trace.status === "failed" || trace.status === "fallback" || Boolean(warning),
         trace,
       });
     }
 
     for (const trace of stepTraceTimeline) {
+      const warning = readTraceWarning(trace);
+      const runtimeSummary = readTraceRuntimeSummary(trace);
       items.push({
         id: `step_trace:${trace.id}`,
         kind: "step_trace",
         name: formatLabel(trace.stepKey || trace.agentKey),
         phase: String(trace.phase),
         status: trace.status,
-        tone: trace.status === "failed" ? "danger" : trace.status === "fallback" ? "warning" : trace.status === "running" ? "info" : "success",
+        tone: trace.status === "failed"
+          ? "danger"
+          : trace.status === "fallback" || warning
+            ? "warning"
+            : trace.status === "running"
+              ? "info"
+              : "success",
         timestamp: trace.startedAt ?? trace.completedAt ?? undefined,
-        error: normalizeTraceError(trace),
-        hasIssue: trace.status === "failed" || trace.status === "fallback",
+        error: normalizeTraceError(trace) ?? warning,
+        runtimeSummary,
+        hasIssue: trace.status === "failed" || trace.status === "fallback" || Boolean(warning),
         trace,
       });
     }
@@ -908,6 +1019,10 @@ export function AdminPipelineLivePanel({
           ? `Completed${trackedRetryEvent ? ` • ${eventVerb(trackedRetryEvent.event)} at ${formatTime(trackedRetryEvent.timestamp)}` : ""}. Synthesis will refresh downstream outputs.`
           : `Failed${trackedRetryEvent ? ` • ${eventVerb(trackedRetryEvent.event)} at ${formatTime(trackedRetryEvent.timestamp)}` : ""}. Check timeline details.`
     : "";
+  const selectedTraceWarning = selectedTrace ? readTraceWarning(selectedTrace) : undefined;
+  const selectedTraceRuntimeSummary = selectedTrace
+    ? readTraceRuntimeSummary(selectedTrace)
+    : undefined;
 
   if (!progress && !isLoading) {
     return (
@@ -1227,6 +1342,11 @@ export function AdminPipelineLivePanel({
                               {traceOperation}
                             </Badge>
                           )}
+                          {item.runtimeSummary && (
+                            <Badge variant="outline" className="shrink-0 border-border bg-muted/50 text-[10px] text-muted-foreground">
+                              {item.runtimeSummary}
+                            </Badge>
+                          )}
                         </div>
                         <div className="flex shrink-0 items-center gap-2">
                           {isTrace && (
@@ -1264,7 +1384,10 @@ export function AdminPipelineLivePanel({
                         <div className="mt-1 flex flex-wrap items-center gap-2">
                           {isFallbackAgent(item.agent.data) && (
                             <span className="text-xs text-amber-700 dark:text-amber-300">
-                              Fallback: {formatFallbackReason(item.agent.data.fallbackReason) ?? "Unknown"}
+                              Fallback:{" "}
+                              {formatFallbackReasonWithLegacyLabel(
+                                item.agent.data.fallbackReason,
+                              )}
                             </span>
                           )}
                           {(item.agent.data.retryCount ?? 0) > 0 && (
@@ -1351,13 +1474,25 @@ export function AdminPipelineLivePanel({
             {selectedTrace?.status === "fallback" && (
               <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
                 Fallback reason:{" "}
-                {formatFallbackReason(selectedTrace.fallbackReason) ?? "Unknown"}
+                {formatFallbackReasonWithLegacyLabel(
+                  selectedTrace.fallbackReason,
+                )}
                 {selectedTrace.rawProviderError ? (
                   <>
                     {" "}
                     | Raw provider error: {selectedTrace.rawProviderError}
                   </>
                 ) : null}
+              </div>
+            )}
+            {selectedTraceWarning && selectedTrace?.status !== "fallback" && (
+              <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+                Warning: {selectedTraceWarning}
+              </div>
+            )}
+            {selectedTraceRuntimeSummary && (
+              <div className="rounded-md border border-sky-500/30 bg-sky-500/5 px-3 py-2 text-xs text-sky-700 dark:text-sky-300">
+                Runtime model config: {selectedTraceRuntimeSummary}
               </div>
             )}
             <div className="grid gap-3 md:grid-cols-2">

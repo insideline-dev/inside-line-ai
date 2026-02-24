@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useQueries } from "@tanstack/react-query";
+import { useQueries, useQueryClient } from "@tanstack/react-query";
 import {
   Sheet,
   SheetContent,
@@ -26,6 +26,8 @@ import { Bot, Cog, ArrowRight } from "lucide-react";
 import type { AiPromptFlowResponseDtoFlowsItemNodesItem } from "@/api/generated/model";
 import {
   adminControllerGetAiPromptOutputSchema,
+  getAdminControllerGetAiModelConfigQueryKey,
+  getAdminControllerGetAiPromptFlowQueryKey,
   useAdminControllerCreateAiModelConfigDraft,
   useAdminControllerGetAiAgentUpstreamFields,
   useAdminControllerGetAiModelConfig,
@@ -98,6 +100,8 @@ export function NodeConfigSheet({
   phaseConfig,
   onPhaseConfigChange,
 }: NodeConfigSheetProps) {
+  const normalizeModelName = (value: string): string =>
+    value === "gemini-3.0-flash-preview" ? "gemini-3-flash-preview" : value;
   const GLOBAL_STAGE = "global" as const;
   const MODEL_STAGES = [
     "pre_seed",
@@ -111,7 +115,8 @@ export function NodeConfigSheet({
   ] as const;
   type ModelStage = (typeof MODEL_STAGES)[number];
   const [activePromptKey, setActivePromptKey] = useState<string | null>(null);
-  const [modelName, setModelName] = useState<string>("gemini-3.0-flash-preview");
+  const queryClient = useQueryClient();
+  const [modelName, setModelName] = useState<string>("gemini-3-flash-preview");
   const [modelSearchMode, setModelSearchMode] = useState<
     | "off"
     | "provider_grounded_search"
@@ -122,6 +127,7 @@ export function NodeConfigSheet({
   const [modelStage, setModelStage] = useState<typeof GLOBAL_STAGE | ModelStage>(
     GLOBAL_STAGE,
   );
+  const [modelFormDirty, setModelFormDirty] = useState(false);
   const nodeId = node?.id ?? "";
 
   const { data: upstreamData, isLoading: isUpstreamLoading } =
@@ -201,9 +207,12 @@ export function NodeConfigSheet({
 
   const isSystem = node?.kind === "system";
   const selectedKey = activePromptKey ?? node?.promptKeys[0] ?? null;
+  const modelConfigStageQuery =
+    modelStage === GLOBAL_STAGE ? undefined : { stage: modelStage };
 
   const { data: modelConfigData } = useAdminControllerGetAiModelConfig(
     selectedKey ?? "",
+    modelConfigStageQuery,
     {
       query: {
         enabled: open && Boolean(selectedKey),
@@ -217,6 +226,7 @@ export function NodeConfigSheet({
           data?: {
             resolved?: {
               source: string;
+              revisionId?: string | null;
               modelName: string;
               provider: string;
               stage?: string | null;
@@ -245,9 +255,11 @@ export function NodeConfigSheet({
               notes: string | null;
             }>;
             allowedModels?: string[];
+            runtimeConfigEnabled?: boolean;
           };
           resolved?: {
             source: string;
+            revisionId?: string | null;
             modelName: string;
             provider: string;
             stage?: string | null;
@@ -276,6 +288,7 @@ export function NodeConfigSheet({
             notes: string | null;
           }>;
           allowedModels?: string[];
+          runtimeConfigEnabled?: boolean;
         }
       | undefined;
 
@@ -283,6 +296,8 @@ export function NodeConfigSheet({
       resolved: payload?.data?.resolved ?? payload?.resolved,
       revisions: payload?.data?.revisions ?? payload?.revisions ?? [],
       allowedModels: payload?.data?.allowedModels ?? payload?.allowedModels ?? [],
+      runtimeConfigEnabled:
+        payload?.data?.runtimeConfigEnabled ?? payload?.runtimeConfigEnabled ?? false,
     };
   }, [modelConfigData]);
 
@@ -304,17 +319,58 @@ export function NodeConfigSheet({
   const publishModelConfigMutation = useAdminControllerPublishAiModelConfigDraft();
 
   useEffect(() => {
-    const resolved = modelConfigPayload.resolved;
-    if (!resolved) return;
-    setModelName(resolved.modelName);
-    setModelSearchMode(resolved.searchMode);
-    setModelNotes("");
-    if (resolved.stage) {
-      setModelStage(resolved.stage as ModelStage);
-    } else {
-      setModelStage(GLOBAL_STAGE);
+    if (!node || node.promptKeys.length === 0) {
+      setActivePromptKey(null);
+      return;
     }
-  }, [GLOBAL_STAGE, modelConfigPayload.resolved, selectedKey]);
+    setActivePromptKey((current) =>
+      current && node.promptKeys.includes(current as never)
+        ? current
+        : node.promptKeys[0] ?? null,
+    );
+    setModelStage(GLOBAL_STAGE);
+    setModelNotes("");
+    setModelFormDirty(false);
+  }, [GLOBAL_STAGE, node?.id, node?.promptKeys]);
+
+  useEffect(() => {
+    if (modelFormDirty) {
+      return;
+    }
+
+    const draftSeed = activeModelDraft
+      ? {
+          modelName: activeModelDraft.modelName,
+          searchMode: activeModelDraft.searchMode,
+          notes: activeModelDraft.notes ?? "",
+        }
+      : null;
+    const resolvedSeed = modelConfigPayload.resolved
+      ? {
+          modelName: modelConfigPayload.resolved.modelName,
+          searchMode: modelConfigPayload.resolved.searchMode,
+          notes: "",
+        }
+      : null;
+    const seed = draftSeed ?? resolvedSeed;
+    if (!seed) {
+      return;
+    }
+
+    setModelName(normalizeModelName(seed.modelName));
+    setModelSearchMode(seed.searchMode);
+    setModelNotes(seed.notes);
+  }, [activeModelDraft, modelConfigPayload.resolved, modelFormDirty]);
+
+  const effectiveModelRevision = useMemo(
+    () =>
+      modelConfigPayload.resolved?.revisionId
+        ? modelConfigPayload.revisions.find(
+            (revision) => revision.id === modelConfigPayload.resolved?.revisionId,
+          ) ?? null
+        : null,
+    [modelConfigPayload.resolved?.revisionId, modelConfigPayload.revisions],
+  );
 
   const stageLabel = (stage: string | null) => {
     if (!stage) return "Global";
@@ -325,14 +381,27 @@ export function NodeConfigSheet({
   };
 
   const isResearchNode = selectedKey?.startsWith("research.") ?? false;
+  const selectedModelProvider = modelName.startsWith("gemini")
+    ? "google"
+    : modelName.startsWith("gpt") || modelName.startsWith("o")
+      ? "openai"
+      : "unknown";
   const supportsProviderSearch =
-    modelConfigPayload.resolved?.supportedSearchModes.includes(
-      "provider_grounded_search",
-    ) ?? false;
-  const supportsBraveSearch =
-    modelConfigPayload.resolved?.supportedSearchModes.includes(
-      "brave_tool_search",
-    ) ?? false;
+    isResearchNode &&
+    (selectedModelProvider === "google" || selectedModelProvider === "openai");
+  const supportsBraveSearch = isResearchNode;
+
+  const refreshModelConfigState = async () => {
+    if (!selectedKey) return;
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: getAdminControllerGetAiModelConfigQueryKey(selectedKey),
+      }),
+      queryClient.invalidateQueries({
+        queryKey: getAdminControllerGetAiPromptFlowQueryKey(),
+      }),
+    ]);
+  };
 
   const saveModelConfig = async () => {
     if (!selectedKey || !modelName) {
@@ -360,6 +429,8 @@ export function NodeConfigSheet({
           notes: modelNotes || undefined,
         },
       });
+      setModelFormDirty(false);
+      await refreshModelConfigState();
       return;
     }
 
@@ -372,6 +443,8 @@ export function NodeConfigSheet({
         notes: modelNotes || undefined,
       },
     });
+    setModelFormDirty(false);
+    await refreshModelConfigState();
   };
 
   const publishModelConfig = async () => {
@@ -383,6 +456,8 @@ export function NodeConfigSheet({
       key: selectedKey,
       revisionId: activeModelDraft.id,
     });
+    setModelFormDirty(false);
+    await refreshModelConfigState();
   };
 
   if (!node) return null;
@@ -653,14 +728,52 @@ export function NodeConfigSheet({
                             </Badge>
                           ) : null}
                         </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          <Badge
+                            variant={
+                              modelConfigPayload.runtimeConfigEnabled
+                                ? "secondary"
+                                : "destructive"
+                            }
+                            className="text-[10px]"
+                          >
+                            {modelConfigPayload.runtimeConfigEnabled
+                              ? "runtime enabled"
+                              : "runtime disabled"}
+                          </Badge>
+                          {modelConfigPayload.resolved ? (
+                            <Badge variant="outline" className="text-[10px]">
+                              effective {modelConfigPayload.resolved.source}
+                              {effectiveModelRevision
+                                ? ` • ${stageLabel(effectiveModelRevision.stage)}`
+                                : ""}
+                            </Badge>
+                          ) : null}
+                          {activeModelDraft ? (
+                            <Badge variant="outline" className="text-[10px] border-amber-500/40 text-amber-700">
+                              draft pending publish
+                            </Badge>
+                          ) : null}
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">
+                          Runtime uses published model config only. Draft changes apply
+                          after you publish.
+                        </p>
+                        {!modelConfigPayload.runtimeConfigEnabled ? (
+                          <p className="rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-[11px] text-amber-700">
+                            `AI_PROMPT_RUNTIME_CONFIG_ENABLED` is off, so runtime still
+                            follows default model settings.
+                          </p>
+                        ) : null}
 
                         <div className="space-y-1.5">
                           <Label className="text-xs">Stage Scope</Label>
                           <Select
                             value={modelStage}
-                            onValueChange={(value) =>
-                              setModelStage(value as typeof GLOBAL_STAGE | ModelStage)
-                            }
+                            onValueChange={(value) => {
+                              setModelStage(value as typeof GLOBAL_STAGE | ModelStage);
+                              setModelFormDirty(false);
+                            }}
                           >
                             <SelectTrigger className="h-8 text-xs">
                               <SelectValue />
@@ -680,18 +793,24 @@ export function NodeConfigSheet({
 
                         <div className="space-y-1.5">
                           <Label className="text-xs">Model</Label>
-                          <Select value={modelName} onValueChange={setModelName}>
+                          <Select
+                            value={modelName}
+                            onValueChange={(value) => {
+                              setModelName(value);
+                              setModelFormDirty(true);
+                            }}
+                          >
                             <SelectTrigger className="h-8 text-xs">
                               <SelectValue placeholder="Select model" />
                             </SelectTrigger>
                             <SelectContent>
                               {(modelConfigPayload.allowedModels.length > 0
                                 ? modelConfigPayload.allowedModels
-                                : ["gpt-5.2", "gemini-3.0-flash-preview"]
+                                : ["gpt-5.2", "gemini-3-flash-preview"]
                               ).map((model) => (
                                 <SelectItem key={model} value={model} className="text-xs">
-                                  {model === "gemini-3.0-flash-preview"
-                                    ? "gemini-3-flash"
+                                  {model === "gemini-3-flash-preview"
+                                    ? "gemini-3-flash-preview"
                                     : model}
                                 </SelectItem>
                               ))}
@@ -705,13 +824,16 @@ export function NodeConfigSheet({
                             <Select
                               value={modelSearchMode}
                               onValueChange={(value) =>
-                                setModelSearchMode(
-                                  value as
-                                    | "off"
-                                    | "provider_grounded_search"
-                                    | "brave_tool_search"
-                                    | "provider_and_brave_search",
-                                )
+                                {
+                                  setModelSearchMode(
+                                    value as
+                                      | "off"
+                                      | "provider_grounded_search"
+                                      | "brave_tool_search"
+                                      | "provider_and_brave_search",
+                                  );
+                                  setModelFormDirty(true);
+                                }
                               }
                               disabled={
                                 !supportsProviderSearch &&
@@ -725,21 +847,27 @@ export function NodeConfigSheet({
                                 <SelectItem value="off" className="text-xs">
                                   Off
                                 </SelectItem>
-                                <SelectItem
-                                  value="provider_grounded_search"
-                                  className="text-xs"
-                                >
-                                  Provider Search (Required)
-                                </SelectItem>
-                                <SelectItem value="brave_tool_search" className="text-xs">
-                                  Brave Tool Search (Required)
-                                </SelectItem>
-                                <SelectItem
-                                  value="provider_and_brave_search"
-                                  className="text-xs"
-                                >
-                                  Provider + Brave (Required Both)
-                                </SelectItem>
+                                {supportsProviderSearch ? (
+                                  <SelectItem
+                                    value="provider_grounded_search"
+                                    className="text-xs"
+                                  >
+                                    Provider Search (Required)
+                                  </SelectItem>
+                                ) : null}
+                                {supportsBraveSearch ? (
+                                  <SelectItem value="brave_tool_search" className="text-xs">
+                                    Brave Tool Search (Required)
+                                  </SelectItem>
+                                ) : null}
+                                {supportsProviderSearch && supportsBraveSearch ? (
+                                  <SelectItem
+                                    value="provider_and_brave_search"
+                                    className="text-xs"
+                                  >
+                                    Provider + Brave (Required Both)
+                                  </SelectItem>
+                                ) : null}
                               </SelectContent>
                             </Select>
                             <p className="text-[11px] text-muted-foreground">
@@ -757,7 +885,10 @@ export function NodeConfigSheet({
                           <Label className="text-xs">Notes (optional)</Label>
                           <Textarea
                             value={modelNotes}
-                            onChange={(event) => setModelNotes(event.target.value)}
+                            onChange={(event) => {
+                              setModelNotes(event.target.value);
+                              setModelFormDirty(true);
+                            }}
                             className="min-h-16 text-xs"
                             placeholder="Why this model config?"
                           />

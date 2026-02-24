@@ -91,6 +91,10 @@ describe("ScrapingProcessor", () => {
           status: "completed",
           outputText: "LinkedIn enrichment completed",
           outputJson: { requestedTeamMembers: 1, verifiedTeamMembers: 1 },
+          meta: {
+            phase: "linkedin_enrichment",
+            associationTypes: { current: 1, historical: 0, unknown: 0 },
+          },
           attempt: 1,
           retryCount: 0,
         });
@@ -250,6 +254,9 @@ describe("ScrapingProcessor", () => {
         phase: PipelinePhase.SCRAPING,
         agentKey: SCRAPING_AGENT_LINKEDIN_KEY,
         status: "completed",
+        meta: expect.objectContaining({
+          phase: "linkedin_enrichment",
+        }),
       }),
     );
     expect(result.type).toBe("ai_scraping");

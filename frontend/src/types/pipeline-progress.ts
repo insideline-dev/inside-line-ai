@@ -14,7 +14,9 @@ export type PipelineFallbackReason =
   | "TIMEOUT"
   | "SCHEMA_OUTPUT_INVALID"
   | "MODEL_OR_PROVIDER_ERROR"
-  | "UNHANDLED_AGENT_EXCEPTION";
+  | "UNHANDLED_AGENT_EXCEPTION"
+  | "MISSING_PROVIDER_EVIDENCE"
+  | "MISSING_BRAVE_TOOL_CALL";
 
 export type PipelineAgentEventType =
   | "started"

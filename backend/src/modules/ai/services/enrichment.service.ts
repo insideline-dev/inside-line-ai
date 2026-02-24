@@ -10,8 +10,9 @@ import type {
   ClaraEmailContext,
   EnrichmentResult,
   ExtractionResult,
+  ScrapingResult,
 } from "../interfaces/phase-results.interface";
-import { ModelPurpose, PipelinePhase } from "../interfaces/pipeline.interface";
+import { PipelinePhase } from "../interfaces/pipeline.interface";
 import type { PhaseProgressCallback } from "../interfaces/progress-callback.interface";
 import {
   ENRICHMENT_GAP_ANALYSIS_SYSTEM_PROMPT,
@@ -22,8 +23,10 @@ import { AiProviderService } from "../providers/ai-provider.service";
 import { PipelineStateService } from "./pipeline-state.service";
 import { BraveSearchService, type BraveSearchResponse } from "./brave-search.service";
 import { ClaraEmailContextService } from "./clara-email-context.service";
+import { AiModelConfigService } from "./ai-model-config.service";
 
 export const ENRICHMENT_AGENT_KEY = "gap_fill_hybrid";
+export const ENRICHMENT_PROMPT_KEY = "enrichment.gapFill";
 
 type EnrichmentWithoutDbWrites = Omit<EnrichmentResult, "dbFieldsUpdated">;
 
@@ -152,6 +155,7 @@ interface EnrichmentSynthesisResult {
   usedTextFallback: boolean;
   attempt: number;
   retryCount: number;
+  modelConfig?: EnrichmentRuntimeModelMeta;
   error?: string;
   fallbackReason?: EvaluationFallbackReason;
   rawProviderError?: string;
@@ -162,6 +166,23 @@ interface SearchRunResult {
   responses: BraveSearchResponse[];
   totalResults: number;
   queriesRun: number;
+}
+
+interface EnrichmentRuntimeModelMeta {
+  promptKey: string;
+  modelName: string;
+  provider: string;
+  searchMode: string;
+  source: string;
+  revisionId: string | null;
+  stage: string | null;
+}
+
+export interface EnrichmentNeedAssessment {
+  shouldRun: boolean;
+  missingFields: string[];
+  suspiciousFields: string[];
+  reason: string;
 }
 
 interface GroundingSourceCarrier {
@@ -186,6 +207,7 @@ export interface EnrichmentRunOptions {
     retryCount?: number;
     fallbackReason?: EvaluationFallbackReason;
     rawProviderError?: string;
+    meta?: Record<string, unknown>;
   }) => void;
 }
 
@@ -198,9 +220,45 @@ export class EnrichmentService {
     private pipelineState: PipelineStateService,
     private braveSearch: BraveSearchService,
     private aiProvider: AiProviderService,
+    private modelConfig: AiModelConfigService,
     private aiConfig: AiConfigService,
     private claraEmailContext: ClaraEmailContextService,
   ) {}
+
+  async assessNeed(startupId: string): Promise<EnrichmentNeedAssessment> {
+    const record = await this.loadStartupRecord(startupId);
+    const extraction = await this.pipelineState.getPhaseResult(
+      startupId,
+      PipelinePhase.EXTRACTION,
+    ) as ExtractionResult | null;
+
+    const missingFields = this.identifyMissingFields(record);
+    const suspiciousFields = this.identifySuspiciousFields(record, extraction);
+    const shouldRun = missingFields.length > 0 || suspiciousFields.length > 0;
+
+    return {
+      shouldRun,
+      missingFields,
+      suspiciousFields,
+      reason: shouldRun
+        ? `Missing fields (${missingFields.length}) or suspicious fields (${suspiciousFields.length}) require enrichment`
+        : "No missing or suspicious fields after internal checks",
+    };
+  }
+
+  buildSkippedResult(reason: string): EnrichmentResult {
+    const result = this.buildEmptyResult();
+    result.webSearchSkipped = true;
+    result.skipReason = reason;
+    result.dataProvenance = {
+      fromExtraction: [],
+      fromWebsite: [],
+      fromEmail: [],
+      fromWebSearch: [],
+      fromAiSynthesis: [],
+    };
+    return result;
+  }
 
   async run(
     startupId: string,
@@ -211,20 +269,16 @@ export class EnrichmentService {
     let renderedPrompt: string | undefined;
 
     try {
-      const [record] = await this.drizzle.db
-        .select()
-        .from(startup)
-        .where(eq(startup.id, startupId))
-        .limit(1);
-
-      if (!record) {
-        throw new Error(`Startup ${startupId} not found`);
-      }
+      const record = await this.loadStartupRecord(startupId);
 
       const extraction = await this.pipelineState.getPhaseResult(
         startupId,
         PipelinePhase.EXTRACTION,
       ) as ExtractionResult | null;
+      const scraping = await this.pipelineState.getPhaseResult(
+        startupId,
+        PipelinePhase.SCRAPING,
+      ) as ScrapingResult | null;
 
       // Step 1: Gap analysis
       options?.onStepProgress?.onStepStart("gap_analysis", {
@@ -253,6 +307,7 @@ export class EnrichmentService {
       const gaps = new Set(missingFields);
       const dataProvenance: NonNullable<EnrichmentResult["dataProvenance"]> = {
         fromExtraction: [],
+        fromWebsite: [],
         fromEmail: [],
         fromWebSearch: [],
         fromAiSynthesis: [],
@@ -269,7 +324,18 @@ export class EnrichmentService {
         outputJson: { resolved: dataProvenance.fromExtraction, remainingGaps: Array.from(gaps) },
       });
 
-      // Step 3: Resolve from email context
+      // Step 3: Resolve from company website context (if available from scraping phase)
+      options?.onStepProgress?.onStepStart("resolve_website", {
+        inputJson: { gapsBefore: Array.from(gaps), hasScrapingContext: scraping !== null },
+      });
+      const websiteResolved = this.resolveFromWebsiteContext(scraping, gaps);
+      dataProvenance.fromWebsite = Array.from(websiteResolved.keys());
+      options?.onStepProgress?.onStepComplete("resolve_website", {
+        summary: { resolved: dataProvenance.fromWebsite },
+        outputJson: { resolved: dataProvenance.fromWebsite, remainingGaps: Array.from(gaps) },
+      });
+
+      // Step 4: Resolve from email context
       options?.onStepProgress?.onStepStart("resolve_email", {
         inputJson: { gapsBefore: Array.from(gaps) },
       });
@@ -287,7 +353,11 @@ export class EnrichmentService {
       });
 
       // Merge all cascade-resolved fields
-      const cascadeResolved = new Map([...extractionResolved, ...emailResolved]);
+      const cascadeResolved = new Map([
+        ...extractionResolved,
+        ...websiteResolved,
+        ...emailResolved,
+      ]);
 
       // Early termination check
       let webSearchSkipped = false;
@@ -307,7 +377,7 @@ export class EnrichmentService {
 
         synthesis = {
           prompt: "",
-          output: this.buildEmptyResult(),
+          output: this.buildSkippedResult("No remaining gaps after internal source resolution"),
           usedFallback: false,
           usedTextFallback: false,
           attempt: 0,
@@ -362,6 +432,9 @@ export class EnrichmentService {
       const enrichmentResult = synthesis.output;
       enrichmentResult.dataProvenance = dataProvenance;
       enrichmentResult.webSearchSkipped = webSearchSkipped;
+      if (synthesis.modelConfig) {
+        enrichmentResult.runtimeModel = synthesis.modelConfig;
+      }
 
       // Step 6: DB writes
       options?.onStepProgress?.onStepStart("db_writes", {
@@ -397,6 +470,9 @@ export class EnrichmentService {
         retryCount: synthesis.retryCount,
         fallbackReason: synthesis.fallbackReason,
         rawProviderError: synthesis.rawProviderError,
+        meta: synthesis.modelConfig
+          ? { modelConfig: synthesis.modelConfig }
+          : undefined,
       });
 
       return enrichmentResult;
@@ -505,13 +581,151 @@ export class EnrichmentService {
   }
 
   private resolveFromEmailContext(
-    _emailContext: ClaraEmailContext | null,
-    _gaps: Set<string>,
+    emailContext: ClaraEmailContext | null,
+    gaps: Set<string>,
   ): Map<string, { value: string | number; source: string; confidence: number }> {
-    // Email context is primarily passed to the AI prompt for synthesis.
-    // Direct field resolution from emails is limited — emails contain unstructured text.
-    // The main value is giving the AI richer context for its synthesis step.
-    return new Map();
+    const resolved = new Map<string, { value: string | number; source: string; confidence: number }>();
+    if (!emailContext) {
+      return resolved;
+    }
+
+    const investorEmails = new Set(
+      emailContext.conversations
+        .map((conv) => conv.investorEmail?.trim().toLowerCase())
+        .filter((value): value is string => Boolean(value)),
+    );
+
+    const corpusParts: string[] = [emailContext.summary];
+    for (const conversation of emailContext.conversations) {
+      for (const message of conversation.messages) {
+        if (message.subject) corpusParts.push(message.subject);
+        if (message.bodyText) corpusParts.push(message.bodyText);
+      }
+    }
+    const corpus = corpusParts.join("\n");
+
+    if (gaps.has("website")) {
+      const website = this.extractFirstUrlFromText(corpus);
+      if (website) {
+        resolved.set("website", {
+          value: website,
+          source: "email context",
+          confidence: 0.7,
+        });
+        gaps.delete("website");
+      }
+    }
+
+    if (gaps.has("contactEmail")) {
+      const contactEmail = this.extractEmailsFromText(corpus).find((email) => {
+        const normalized = email.toLowerCase();
+        return !investorEmails.has(normalized) && !normalized.startsWith("noreply@");
+      });
+      if (contactEmail) {
+        resolved.set("contactEmail", {
+          value: contactEmail,
+          source: "email context",
+          confidence: 0.78,
+        });
+        gaps.delete("contactEmail");
+      }
+    }
+
+    if (gaps.has("contactName")) {
+      const contactEmail = resolved.get("contactEmail")?.value;
+      if (typeof contactEmail === "string") {
+        const inferred = this.inferContactNameFromEmail(contactEmail);
+        if (inferred) {
+          resolved.set("contactName", {
+            value: inferred,
+            source: "email context",
+            confidence: 0.62,
+          });
+          gaps.delete("contactName");
+        }
+      }
+    }
+
+    if (gaps.has("stage")) {
+      const stageCandidate = this.extractStageFromText(corpus);
+      if (stageCandidate) {
+        resolved.set("stage", {
+          value: stageCandidate,
+          source: "email context",
+          confidence: 0.62,
+        });
+        gaps.delete("stage");
+      }
+    }
+
+    return resolved;
+  }
+
+  private resolveFromWebsiteContext(
+    scraping: ScrapingResult | null,
+    gaps: Set<string>,
+  ): Map<string, { value: string | number; source: string; confidence: number }> {
+    const resolved = new Map<string, { value: string | number; source: string; confidence: number }>();
+    const website = scraping?.website;
+    const websiteUrl = website?.url?.trim() || scraping?.websiteUrl?.trim();
+
+    if (gaps.has("website") && websiteUrl) {
+      resolved.set("website", {
+        value: websiteUrl,
+        source: "company website",
+        confidence: 0.9,
+      });
+      gaps.delete("website");
+    }
+
+    if (website) {
+      const websiteDescription = website.description?.trim();
+      if (gaps.has("description") && websiteDescription) {
+        resolved.set("description", {
+          value: websiteDescription,
+          source: "company website",
+          confidence: 0.76,
+        });
+        gaps.delete("description");
+      }
+
+      if (gaps.has("productDescription") && websiteDescription) {
+        resolved.set("productDescription", {
+          value: websiteDescription,
+          source: "company website",
+          confidence: 0.72,
+        });
+        gaps.delete("productDescription");
+      }
+
+      if (gaps.has("teamMembers") && Array.isArray(website.teamBios) && website.teamBios.length > 0) {
+        const names = website.teamBios
+          .map((member) => member.name?.trim())
+          .filter((name): name is string => Boolean(name));
+        if (names.length > 0) {
+          resolved.set("teamMembers", {
+            value: names.join(", "),
+            source: "company website",
+            confidence: 0.8,
+          });
+          gaps.delete("teamMembers");
+        }
+      }
+
+      if (gaps.has("contactEmail")) {
+        const email = this.extractEmailsFromText(this.collectScrapedWebsiteText(website))[0];
+        if (email) {
+          resolved.set("contactEmail", {
+            value: email,
+            source: "company website",
+            confidence: 0.7,
+          });
+          gaps.delete("contactEmail");
+        }
+      }
+    }
+
+    return resolved;
   }
 
   private mapStageToEnum(value: string): string | null {
@@ -530,6 +744,82 @@ export class EnrichmentService {
       "series_f+": StartupStage.SERIES_F_PLUS,
     };
     return mapping[normalized] ?? null;
+  }
+
+  private async resolveRuntimeModelConfig(
+    stage?: string | null,
+  ): Promise<EnrichmentRuntimeModelMeta> {
+    const resolved = await this.modelConfig.resolveConfig({
+      key: ENRICHMENT_PROMPT_KEY,
+      stage: stage ?? null,
+    });
+    return {
+      promptKey: ENRICHMENT_PROMPT_KEY,
+      modelName: resolved.modelName,
+      provider: resolved.provider,
+      searchMode: resolved.searchMode,
+      source: resolved.source,
+      revisionId: resolved.revisionId,
+      stage: resolved.stage,
+    };
+  }
+
+  private extractFirstUrlFromText(text: string): string | null {
+    const match = text.match(/https?:\/\/[^\s)]+/i);
+    return match?.[0]?.trim() ?? null;
+  }
+
+  private extractEmailsFromText(text: string): string[] {
+    const matches = text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) ?? [];
+    const dedupe = new Set(matches.map((email) => email.trim().toLowerCase()));
+    return Array.from(dedupe.values());
+  }
+
+  private inferContactNameFromEmail(email: string): string | null {
+    const local = email.split("@")[0]?.trim();
+    if (!local) {
+      return null;
+    }
+    const parts = local
+      .split(/[._-]+/)
+      .map((part) => part.trim())
+      .filter((part) => part.length > 1 && !/\d/.test(part));
+    if (parts.length < 2) {
+      return null;
+    }
+    return parts
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
+  }
+
+  private extractStageFromText(text: string): string | null {
+    const lowered = text.toLowerCase();
+    const candidates = [
+      "pre-seed",
+      "pre seed",
+      "seed",
+      "series a",
+      "series b",
+      "series c",
+      "series d",
+      "series e",
+      "series f",
+      "series f+",
+    ];
+    for (const candidate of candidates) {
+      if (lowered.includes(candidate)) {
+        return candidate;
+      }
+    }
+    return null;
+  }
+
+  private collectScrapedWebsiteText(website: NonNullable<ScrapingResult["website"]>): string {
+    const segments = [website.description, website.fullText];
+    for (const subpage of website.subpages ?? []) {
+      segments.push(subpage.content);
+    }
+    return segments.filter((segment): segment is string => Boolean(segment)).join("\n");
   }
 
   private async runSearches(
@@ -576,7 +866,7 @@ export class EnrichmentService {
 
     for (const result of settled) {
       if (result.status === "fulfilled") {
-        results.push(result.value);
+        results.push(this.filterSearchResponse(result.value));
       } else {
         const reason = result.reason instanceof Error ? result.reason.message : String(result.reason);
         this.logger.warn(`[Enrichment] Brave search failed: ${reason}`);
@@ -612,6 +902,24 @@ export class EnrichmentService {
     }
 
     return sections.join("\n");
+  }
+
+  private filterSearchResponse(response: BraveSearchResponse): BraveSearchResponse {
+    return {
+      ...response,
+      results: response.results.filter((result) => !this.isBlockedEnrichmentDomain(result.url)),
+    };
+  }
+
+  private isBlockedEnrichmentDomain(url: string): boolean {
+    const normalized = this.normalizeSourceUrl(url);
+    if (!normalized) {
+      return true;
+    }
+    return (
+      this.urlMatchesDomain(normalized, "slideshare.net") ||
+      this.urlMatchesDomain(normalized, "docsend.com")
+    );
   }
 
   private async synthesize(
@@ -687,10 +995,9 @@ export class EnrichmentService {
       .replace("{{suspiciousFields}}", suspiciousFields.join("\n") || "None")
       .replace("{{searchResults}}", searchResults.formattedResults);
 
-    const modelName = this.aiConfig.getModelForPurpose(ModelPurpose.ENRICHMENT);
-    const provider = this.aiProvider.resolveModelForPurpose(
-      ModelPurpose.ENRICHMENT,
-    );
+    const runtimeModel = await this.resolveRuntimeModelConfig(record.stage);
+    const modelName = runtimeModel.modelName;
+    const provider = this.aiProvider.resolveModel(modelName);
     const canUseGoogleSearchTool = this.isGeminiModel(modelName);
     const maxAttempts = this.getEnrichmentMaxAttempts();
     let lastError = "Unknown enrichment synthesis error";
@@ -729,6 +1036,7 @@ export class EnrichmentService {
             usedTextFallback: false,
             attempt,
             retryCount: Math.max(0, attempt - 1),
+            modelConfig: runtimeModel,
           };
         }
       }
@@ -759,6 +1067,7 @@ export class EnrichmentService {
             usedTextFallback: true,
             attempt,
             retryCount: Math.max(0, attempt - 1),
+            modelConfig: runtimeModel,
           };
         }
       }
@@ -797,6 +1106,7 @@ export class EnrichmentService {
       usedTextFallback: false,
       attempt: maxAttempts,
       retryCount: Math.max(0, maxAttempts - 1),
+      modelConfig: runtimeModel,
       fallbackReason: lastFallbackReason,
       rawProviderError: this.sanitizeRawProviderError(lastError),
       error: this.fallbackMessage(lastFallbackReason),
@@ -1239,6 +1549,9 @@ export class EnrichmentService {
         if (!normalizedUrl) {
           continue;
         }
+        if (this.isBlockedEnrichmentDomain(normalizedUrl)) {
+          continue;
+        }
 
         sourceMap.set(normalizedUrl, {
           url: normalizedUrl,
@@ -1260,20 +1573,6 @@ export class EnrichmentService {
         }
         if (!socialProfiles.githubUrl && this.urlMatchesDomain(normalizedUrl, "github.com")) {
           socialProfiles.githubUrl = normalizedUrl;
-        }
-
-        if (
-          this.urlMatchesDomain(normalizedUrl, "docsend.com") ||
-          this.urlMatchesDomain(normalizedUrl, "slideshare.net")
-        ) {
-          if (!pitchDeckMap.has(normalizedUrl)) {
-            const tier = this.classifySourceTier(normalizedUrl, officialWebsite);
-            pitchDeckMap.set(normalizedUrl, {
-              url: normalizedUrl,
-              source: normalizedUrl,
-              confidence: tier === "tier1" ? 0.85 : tier === "tier2" ? 0.72 : 0.58,
-            });
-          }
         }
 
         const founder = this.extractFounderFromSearchResult(
@@ -1853,7 +2152,18 @@ export class EnrichmentService {
           );
           continue;
         }
-        updates[fieldDef.dbColumn] = correction.newValue;
+        if (fieldDef.dbColumn === "stage") {
+          const mapped = this.mapStageToEnum(correction.newValue);
+          if (!mapped) {
+            this.logger.warn(
+              `[Enrichment] Skipping correction for Stage: invalid stage value "${correction.newValue}"`,
+            );
+            continue;
+          }
+          updates[fieldDef.dbColumn] = mapped;
+        } else {
+          updates[fieldDef.dbColumn] = correction.newValue;
+        }
         updatedFields.push(
           `${fieldDef.label} (corrected: "${correction.oldValue}" → "${correction.newValue}", confidence=${correction.confidence.toFixed(2)})`,
         );
@@ -2312,7 +2622,11 @@ export class EnrichmentService {
   ): Array<{ url: string; title: string; type: string }> {
     const dedupe = new Map<string, { url: string; title: string; type: string }>();
     for (const source of [...aiSources, ...groundedSources]) {
-      if (!source.url || dedupe.has(source.url)) {
+      if (
+        !source.url ||
+        this.isBlockedEnrichmentDomain(source.url) ||
+        dedupe.has(source.url)
+      ) {
         continue;
       }
       dedupe.set(source.url, source);
@@ -2351,7 +2665,20 @@ export class EnrichmentService {
           clearTimeout(timer);
           reject(error);
         });
-    });
+      });
+  }
+
+  private async loadStartupRecord(startupId: string): Promise<StartupRecord> {
+    const [record] = await this.drizzle.db
+      .select()
+      .from(startup)
+      .where(eq(startup.id, startupId))
+      .limit(1);
+
+    if (!record) {
+      throw new Error(`Startup ${startupId} not found`);
+    }
+    return record;
   }
 
   private buildEmptyResult(): EnrichmentResult {

@@ -53,6 +53,7 @@ export interface ScrapingAgentCompletionPayload {
   inputPrompt?: string;
   outputText?: string;
   outputJson?: unknown;
+  meta?: Record<string, unknown>;
   error?: string;
   attempt?: number;
   retryCount?: number;
@@ -301,11 +302,11 @@ export class ScrapingService {
           error: message,
         },
       });
-      onAgentComplete?.({
-        agentKey: SCRAPING_AGENT_LINKEDIN_KEY,
-        status: "failed",
-        error: message,
-        outputText: `LinkedIn enrichment failed for ${record.name}: ${message}`,
+    onAgentComplete?.({
+      agentKey: SCRAPING_AGENT_LINKEDIN_KEY,
+      status: "failed",
+      error: message,
+      outputText: `LinkedIn enrichment failed for ${record.name}: ${message}`,
         outputJson: {
           companyName: record.name,
           requestedTeamMembers: teamMembers.length,
@@ -315,6 +316,13 @@ export class ScrapingService {
           discoveredWebsiteLeaders: discoveredWebsiteLeaders.length,
           discoveredWebsiteLinkedinMembers: discoveredWebsiteLinkedinMembers.length,
           discoveredLinkedinLeaders: discoveredLinkedinLeaders.length,
+        },
+        meta: {
+          phase: "linkedin_enrichment",
+          companyName: record.name,
+          requestedTeamMembers: teamMembers.length,
+          submittedTeamMembers: submittedTeamMembers.length,
+          startupWebsite: record.website ?? null,
         },
         attempt: 1,
         retryCount: 0,
@@ -363,12 +371,30 @@ export class ScrapingService {
     const linkedinErrors = scrapeErrors
       .filter((error) => error.type === "linkedin")
       .map((error) => `${error.target}: ${error.error}`);
+    const linkedinAssociationSummary = enrichedTeam.reduce<Record<string, number>>(
+      (acc, member) => {
+        const reason = (member.confidenceReason ?? "").toLowerCase();
+        if (reason.includes("historical founder/executive association")) {
+          acc.historical = (acc.historical ?? 0) + 1;
+          return acc;
+        }
+        if (reason.includes("currently employed at")) {
+          acc.current = (acc.current ?? 0) + 1;
+          return acc;
+        }
+        acc.unknown = (acc.unknown ?? 0) + 1;
+        return acc;
+      },
+      { current: 0, historical: 0, unknown: 0 },
+    );
     progress?.onStepComplete(SCRAPING_STEP_LINKEDIN_ENRICHMENT, {
       summary: {
         requested: teamMembers.length,
         cacheHits: linkedinEnrichmentResult.cacheHits,
         liveRequested: linkedinEnrichmentResult.liveRequested,
         liveEnriched: linkedinEnrichmentResult.liveEnriched,
+        successfulMatches: linkedinStatuses.success ?? 0,
+        enrichmentStatuses: linkedinStatuses,
         verified: verifiedTeamMembers.length,
         dropped: droppedUnverifiedTeamMembers.length,
         errors: linkedinErrors.length,
@@ -381,6 +407,9 @@ export class ScrapingService {
         enrichmentStatuses: linkedinStatuses,
         scrapeErrors,
         errors: linkedinErrors,
+      },
+      meta: {
+        associationTypes: linkedinAssociationSummary,
       },
     });
 
@@ -408,6 +437,22 @@ export class ScrapingService {
       },
       attempt: 1,
       retryCount: 0,
+      meta: {
+        phase: "linkedin_enrichment",
+        companyName: record.name,
+        requestedTeamMembers: teamMembers.length,
+        enrichedTeamMembers: enrichedTeam.length,
+        successfulMatches: linkedinStatuses.success ?? 0,
+        cacheHits: linkedinEnrichmentResult.cacheHits,
+        liveRequested: linkedinEnrichmentResult.liveRequested,
+        liveEnriched: linkedinEnrichmentResult.liveEnriched,
+        verified: verifiedTeamMembers.length,
+        verifiedTeamMembers: verifiedTeamMembers.length,
+        droppedUnverifiedTeamMembers: droppedUnverifiedTeamMembers.length,
+        enrichmentStatuses: linkedinStatuses,
+        associationTypes: linkedinAssociationSummary,
+        errors: linkedinErrors,
+      },
     });
 
     const result: ScrapingResult = {

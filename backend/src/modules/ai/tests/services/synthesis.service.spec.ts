@@ -36,9 +36,20 @@ describe("SynthesisService", () => {
         set: jest.fn().mockReturnValue({ where: updateWhere }),
       }),
     };
+    const defaultSelectLimit = jest.fn().mockResolvedValue([]);
+    const defaultSelectWhere = jest.fn().mockReturnValue({
+      limit: defaultSelectLimit,
+    });
+    const defaultSelectFrom = jest.fn().mockReturnValue({
+      where: defaultSelectWhere,
+    });
+    const defaultSelect = jest.fn().mockReturnValue({
+      from: defaultSelectFrom,
+    });
 
     drizzle = {
       db: {
+        select: defaultSelect,
         transaction: jest.fn().mockImplementation(
           async (cb: (txDb: typeof tx) => Promise<void>) => {
             await cb(tx);
@@ -208,5 +219,106 @@ describe("SynthesisService", () => {
     await expect(service.run("startup-1")).rejects.toThrow(
       "Synthesis requires extraction, research, and evaluation results",
     );
+  });
+
+  it("sanitizes preserved previous narrative when fallback reuses stored output", async () => {
+    synthesisAgent.runDetailed.mockResolvedValueOnce({
+      output: {
+        overallScore: 0,
+        recommendation: "Decline",
+        executiveSummary: "Synthesis failed — manual review required.",
+        strengths: [],
+        concerns: ["Automated synthesis could not be completed"],
+        investmentThesis:
+          "Unable to generate investment thesis due to synthesis failure.",
+        nextSteps: ["Manual review required"],
+        confidenceLevel: "Low",
+        investorMemo: {
+          executiveSummary: "Synthesis generation failed.",
+          sections: [],
+          recommendation: "Decline",
+          riskLevel: "high",
+          dealHighlights: [],
+          keyDueDiligenceAreas: ["Manual review required"],
+        },
+        founderReport: {
+          summary: "Automated founder report unavailable.",
+          sections: [],
+          actionItems: ["Await manual review"],
+        },
+        dataConfidenceNotes: "Fallback mode.",
+      },
+      inputPrompt: "Synthesis prompt",
+      outputText: "fallback output",
+      outputJson: { overallScore: 0 },
+      usedFallback: true,
+      error: "Model returned empty structured output; fallback result generated.",
+      fallbackReason: "EMPTY_STRUCTURED_OUTPUT",
+      rawProviderError: "No object generated",
+      attempt: 1,
+      retryCount: 0,
+    });
+
+    (drizzle.db as unknown as {
+      select: () => {
+        from: () => { where: () => { limit: () => Promise<unknown[]> } };
+      };
+    }).select = jest.fn().mockReturnValue({
+      from: jest.fn().mockReturnValue({
+        where: jest.fn().mockReturnValue({
+          limit: jest.fn().mockResolvedValue([
+            {
+              executiveSummary:
+                "Uber is currently rated 85/100 with a Pass recommendation and medium confidence. Highest-scoring dimensions are Traction and Team.",
+              keyStrengths: ["Team quality (91/100, 84% confidence)"],
+              keyRisks: ["Lowest-scoring dimensions are Legal and Deal Terms."],
+              recommendations: ["Validate data reconciliation (70/100, medium confidence)"],
+              investorMemo: {
+                executiveSummary:
+                  "This section is currently scored at 88/100 with 85% confidence. Investor memo body.",
+                summary:
+                  "Highest-scoring dimensions are Team and Product. Lowest-scoring dimensions are GTM.",
+                sections: [
+                  {
+                    title: "Overview",
+                    content:
+                      "This section is currently scored at 88/100 with 85% confidence. Narrative body.",
+                  },
+                ],
+                recommendation: "Consider",
+                riskLevel: "medium",
+                dealHighlights: ["Team (91/100, 84% confidence)"],
+                keyDueDiligenceAreas: ["Resolve mismatch with medium confidence"],
+              },
+              founderReport: {
+                summary:
+                  "This section is currently scored at 88/100 with 85% confidence. Founder report body.",
+                sections: [
+                  {
+                    title: "Plan",
+                    content:
+                      "Lowest-scoring dimensions are GTM and Legal. Improve accordingly.",
+                  },
+                ],
+                actionItems: ["Strengthen GTM with medium confidence"],
+              },
+              dataConfidenceNotes:
+                "Highest-scoring dimensions are Team and Product. Lowest-scoring dimensions are Legal.",
+            },
+          ]),
+        }),
+      }),
+    });
+
+    const result = await service.run("startup-1");
+
+    expect(result.executiveSummary).not.toContain("/100");
+    expect(result.executiveSummary.toLowerCase()).not.toContain("highest-scoring");
+    expect(result.strengths.join(" ")).not.toContain("/100");
+    expect(result.concerns.join(" ").toLowerCase()).not.toContain("lowest-scoring");
+    expect(result.investorMemo.executiveSummary).not.toContain("/100");
+    expect(result.investorMemo.summary ?? "").not.toContain("Highest-scoring");
+    expect(result.founderReport.summary).not.toContain("/100");
+    expect(result.dataConfidenceNotes.toLowerCase()).not.toContain("highest-scoring");
   });
 });

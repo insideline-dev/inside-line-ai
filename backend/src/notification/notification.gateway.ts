@@ -46,7 +46,9 @@ interface PipelineEventPayloads {
         | "TIMEOUT"
         | "SCHEMA_OUTPUT_INVALID"
         | "MODEL_OR_PROVIDER_ERROR"
-        | "UNHANDLED_AGENT_EXCEPTION";
+        | "UNHANDLED_AGENT_EXCEPTION"
+        | "MISSING_PROVIDER_EVIDENCE"
+        | "MISSING_BRAVE_TOOL_CALL";
       rawProviderError?: string;
       lastEvent?: string;
       lastEventAt?: string;
@@ -74,7 +76,9 @@ interface PipelineEventPayloads {
         | "TIMEOUT"
         | "SCHEMA_OUTPUT_INVALID"
         | "MODEL_OR_PROVIDER_ERROR"
-        | "UNHANDLED_AGENT_EXCEPTION";
+        | "UNHANDLED_AGENT_EXCEPTION"
+        | "MISSING_PROVIDER_EVIDENCE"
+        | "MISSING_BRAVE_TOOL_CALL";
       rawProviderError?: string;
       lastEvent?: string;
       lastEventAt?: string;

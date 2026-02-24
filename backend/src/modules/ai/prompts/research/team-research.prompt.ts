@@ -60,7 +60,29 @@ For each team member provide:
 - Do NOT wrap output in markdown or code fences.
 - Do NOT include prose before or after the JSON object.
 - Required string fields must never be null (use "Unknown" when unavailable).
-- Use [] for missing arrays and {} for missing objects.`;
+- Use [] for missing arrays and {} for missing objects.
+- Use this exact top-level JSON shape and key names:
+{
+  "linkedinProfiles": [{
+    "name": "",
+    "title": "",
+    "company": "",
+    "experience": [],
+    "url": "",
+    "patents": [{"title": "", "year": "", "url": ""}],
+    "previousExits": [{"company": "", "type": "", "year": "", "value": ""}],
+    "notableAchievements": [],
+    "educationHighlights": [],
+    "confidenceScore": 0,
+    "sources": []
+  }],
+  "previousCompanies": [],
+  "education": [],
+  "achievements": [],
+  "onlinePresence": {"github": "", "twitter": "", "personalSites": []},
+  "teamSummary": {"overallExperience": "", "strengthAreas": [], "gaps": [], "redFlags": []},
+  "sources": []
+}`;
 
 export const TEAM_RESEARCH_HUMAN_PROMPT = `Deep research on team members:
 

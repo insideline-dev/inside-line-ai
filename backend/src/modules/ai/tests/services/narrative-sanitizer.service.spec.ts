@@ -23,5 +23,24 @@ describe("sanitizeNarrativeText", () => {
     expect(output).not.toContain("/100");
     expect(output.toLowerCase()).not.toContain("% confidence");
   });
-});
 
+  it("removes standalone score sentences and confidence qualifiers", () => {
+    const input =
+      "Uber is currently rated 85/100 with a Pass recommendation and medium confidence. The package shows strong upside but requires diligence.";
+
+    const output = sanitizeNarrativeText(input);
+
+    expect(output).toBe("The package shows strong upside but requires diligence.");
+    expect(output).not.toContain("/100");
+    expect(output.toLowerCase()).not.toContain("medium confidence");
+  });
+
+  it("removes highest/lowest-scoring dimension boilerplate", () => {
+    const input =
+      "Highest-scoring dimensions are Traction, Team, and Market. Lowest-scoring dimensions are Legal and Deal Terms.";
+
+    const output = sanitizeNarrativeText(input);
+
+    expect(output).toBe("");
+  });
+});

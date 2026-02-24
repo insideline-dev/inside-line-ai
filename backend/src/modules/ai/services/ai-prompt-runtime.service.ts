@@ -174,6 +174,37 @@ const RUNTIME_SCHEMA_BY_KEY: Record<AiPromptKey, PromptRuntimeSchema> = {
     ],
     notes: ["Context uses startup intake fields plus extracted pitch deck text when available."],
   },
+  "enrichment.gapFill": {
+    requiredPhases: [PipelinePhase.EXTRACTION],
+    fields: [
+      { path: "companyName", label: "Company Name", type: "string", sourceVariable: "companyName" },
+      { path: "tagline", label: "Tagline", type: "string", sourceVariable: "tagline" },
+      { path: "description", label: "Description", type: "string", sourceVariable: "description" },
+      { path: "industry", label: "Industry", type: "string", sourceVariable: "industry" },
+      { path: "stage", label: "Stage", type: "string", sourceVariable: "stage" },
+      { path: "website", label: "Website", type: "string", sourceVariable: "website" },
+      { path: "location", label: "Location", type: "string", sourceVariable: "location" },
+      { path: "foundingDate", label: "Founding Date", type: "string", sourceVariable: "foundingDate" },
+      { path: "teamSize", label: "Team Size", type: "number", sourceVariable: "teamSize" },
+      { path: "fundingTarget", label: "Funding Target", type: "number", sourceVariable: "fundingTarget" },
+      { path: "sectorIndustry", label: "Sector Industry", type: "string", sourceVariable: "sectorIndustry" },
+      { path: "productDescription", label: "Product Description", type: "string", sourceVariable: "productDescription" },
+      { path: "contactName", label: "Contact Name", type: "string", sourceVariable: "contactName" },
+      { path: "contactEmail", label: "Contact Email", type: "string", sourceVariable: "contactEmail" },
+      { path: "teamMembers", label: "Team Members", type: "array", sourceVariable: "teamMembers" },
+      { path: "extractionData", label: "Extraction Data", type: "object", sourceVariable: "extractionData" },
+      { path: "formContext", label: "Form Context", type: "object", sourceVariable: "formContext" },
+      { path: "emailContext", label: "Email Context", type: "object", sourceVariable: "emailContext" },
+      { path: "resolvedFromInternal", label: "Resolved From Internal", type: "object", sourceVariable: "resolvedFromInternal" },
+      { path: "remainingGaps", label: "Remaining Gaps", type: "array", sourceVariable: "remainingGaps" },
+      { path: "suspiciousFields", label: "Suspicious Fields", type: "array", sourceVariable: "suspiciousFields" },
+      { path: "searchResults", label: "Search Results", type: "object", sourceVariable: "searchResults" },
+    ],
+    notes: [
+      "Gap fill should prioritize internal sources before external web evidence.",
+      "Search results should only be used for unresolved gaps after internal resolution.",
+    ],
+  },
   "research.team": {
     requiredPhases: [PipelinePhase.EXTRACTION, PipelinePhase.SCRAPING],
     fields: [
@@ -1042,7 +1073,7 @@ export class AiPromptRuntimeService {
   private resolveModelPreview(key: AiPromptKey) {
     const purpose = this.resolveModelPurpose(key);
     const modelName = key.startsWith("research.")
-      ? "gemini-3.0-flash-preview"
+      ? "gemini-3-flash-preview"
       : this.aiConfig.getModelForPurpose(purpose);
     const provider = this.resolveProviderForModel(modelName);
 
@@ -1078,6 +1109,10 @@ export class AiPromptRuntimeService {
   }
 
   private resolveModelPurpose(key: AiPromptKey): ModelPurpose {
+    if (key === "enrichment.gapFill") {
+      return ModelPurpose.ENRICHMENT;
+    }
+
     if (key === "extraction.fields") {
       return ModelPurpose.EXTRACTION;
     }

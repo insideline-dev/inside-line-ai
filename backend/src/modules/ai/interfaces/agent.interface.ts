@@ -77,6 +77,11 @@ export type EvaluationFallbackReason =
   | "MODEL_OR_PROVIDER_ERROR"
   | "UNHANDLED_AGENT_EXCEPTION";
 
+export type PipelineFallbackReason =
+  | EvaluationFallbackReason
+  | "MISSING_PROVIDER_EVIDENCE"
+  | "MISSING_BRAVE_TOOL_CALL";
+
 export interface EvaluationAgentLifecycleEvent {
   agent: EvaluationAgentKey;
   event: EvaluationAgentLifecycleEventType;

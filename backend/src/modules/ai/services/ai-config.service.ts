@@ -240,6 +240,14 @@ export class AiConfigService {
     return Number(this.config.get("AI_ENRICHMENT_TEMPERATURE", "0.1"));
   }
 
+  isEnrichmentEnabled(): boolean {
+    return this.config.get<boolean>("AI_ENRICHMENT_ENABLED", false);
+  }
+
+  isSourceSanitizationEnabled(): boolean {
+    return this.config.get<boolean>("AI_SOURCE_SANITIZATION_ENABLED", true);
+  }
+
   getEnrichmentTimeoutMs(): number {
     return this.config.get<number>(
       "AI_ENRICHMENT_TIMEOUT_MS",

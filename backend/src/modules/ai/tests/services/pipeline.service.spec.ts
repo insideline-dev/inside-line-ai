@@ -16,6 +16,8 @@ import { PhaseTransitionService } from "../../orchestrator/phase-transition.serv
 import { ErrorRecoveryService } from "../../orchestrator/error-recovery.service";
 import { PipelineFeedbackService } from "../../services/pipeline-feedback.service";
 import { StartupMatchingPipelineService } from "../../services/startup-matching-pipeline.service";
+import { PipelineTemplateService } from "../../services/pipeline-template.service";
+import { EnrichmentService } from "../../services/enrichment.service";
 import { ModuleRef } from "@nestjs/core";
 import { NotificationService } from "../../../../notification/notification.service";
 
@@ -112,6 +114,8 @@ describe("PipelineService", () => {
   let errorRecovery: jest.Mocked<ErrorRecoveryService>;
   let pipelineFeedback: jest.Mocked<PipelineFeedbackService>;
   let startupMatching: jest.Mocked<StartupMatchingPipelineService>;
+  let pipelineTemplateService: jest.Mocked<PipelineTemplateService>;
+  let enrichmentService: jest.Mocked<EnrichmentService>;
   let moduleRef: jest.Mocked<ModuleRef>;
   let notifications: jest.Mocked<NotificationService>;
 
@@ -206,6 +210,7 @@ describe("PipelineService", () => {
       init: jest.fn().mockResolvedValue(createState()),
       updatePhase: jest.fn().mockResolvedValue(undefined),
       setStatus: jest.fn().mockResolvedValue(undefined),
+      setPhaseResult: jest.fn().mockResolvedValue(undefined),
       clearPhaseResult: jest.fn().mockResolvedValue(undefined),
       resetRetryCount: jest.fn().mockResolvedValue(undefined),
       resetPhase: jest.fn().mockResolvedValue(undefined),
@@ -218,6 +223,7 @@ describe("PipelineService", () => {
 
     aiConfig = {
       isPipelineEnabled: jest.fn().mockReturnValue(true),
+      isEnrichmentEnabled: jest.fn().mockReturnValue(true),
     } as unknown as jest.Mocked<AiConfigService>;
 
     progressTracker = {
@@ -273,6 +279,31 @@ describe("PipelineService", () => {
       }),
     } as unknown as jest.Mocked<StartupMatchingPipelineService>;
 
+    pipelineTemplateService = {
+      getRuntimeSnapshot: jest.fn().mockResolvedValue(null),
+    } as unknown as jest.Mocked<PipelineTemplateService>;
+
+    enrichmentService = {
+      assessNeed: jest.fn().mockResolvedValue({
+        shouldRun: true,
+        missing: [],
+        suspicious: [],
+      }),
+      buildSkippedResult: jest.fn().mockReturnValue({
+        reviews: [],
+        sources: [],
+        features: [],
+        strengths: [],
+        techStack: [],
+        weaknesses: [],
+        integrations: [],
+        productPages: [],
+        customerReviews: { summary: "", sentiment: "neutral" },
+        webSearchSkipped: true,
+        dataProvenance: { fromWebsite: [] },
+      }),
+    } as unknown as jest.Mocked<EnrichmentService>;
+
     moduleRef = {
       get: jest.fn().mockReturnValue(null),
     } as unknown as jest.Mocked<ModuleRef>;
@@ -292,6 +323,8 @@ describe("PipelineService", () => {
       progressTracker,
       phaseTransition,
       errorRecovery,
+      pipelineTemplateService,
+      enrichmentService,
       moduleRef,
     );
   });
@@ -370,6 +403,61 @@ describe("PipelineService", () => {
         startupId: "startup-1",
       }),
       expect.any(Object),
+    );
+  });
+
+  it("skips enrichment phase entirely when enrichment is disabled", async () => {
+    aiConfig.isEnrichmentEnabled.mockReturnValueOnce(false);
+    stateService.get.mockResolvedValueOnce(createState());
+
+    await (service as any).queuePhase({
+      startupId: "startup-1",
+      pipelineRunId: "run-1",
+      userId: "user-1",
+      phase: PipelinePhase.ENRICHMENT,
+    });
+
+    expect(enrichmentService.assessNeed).not.toHaveBeenCalled();
+    expect(enrichmentService.buildSkippedResult).toHaveBeenCalledWith(
+      "Enrichment temporarily disabled by configuration",
+    );
+    expect(stateService.setPhaseResult).toHaveBeenCalledWith(
+      "startup-1",
+      PipelinePhase.ENRICHMENT,
+      expect.any(Object),
+    );
+    expect(stateService.updatePhase).toHaveBeenCalledWith(
+      "startup-1",
+      PipelinePhase.ENRICHMENT,
+      PhaseStatus.SKIPPED,
+    );
+    expect(progressTracker.updatePhaseProgress).toHaveBeenCalledWith(
+      expect.objectContaining({
+        phase: PipelinePhase.ENRICHMENT,
+        status: PhaseStatus.SKIPPED,
+      }),
+    );
+    expect(queue.addJob).not.toHaveBeenCalled();
+  });
+
+  it("ignores stale phase skip requests from older pipeline runs", async () => {
+    stateService.get.mockResolvedValueOnce(
+      createState({ pipelineRunId: "run-current" }),
+    );
+
+    const applied = await service.onPhaseSkipped({
+      startupId: "startup-1",
+      pipelineRunId: "run-old",
+      userId: "user-1",
+      phase: PipelinePhase.ENRICHMENT,
+      reason: "stale skip",
+    });
+
+    expect(applied).toBe(false);
+    expect(stateService.updatePhase).not.toHaveBeenCalledWith(
+      "startup-1",
+      PipelinePhase.ENRICHMENT,
+      PhaseStatus.SKIPPED,
     );
   });
 

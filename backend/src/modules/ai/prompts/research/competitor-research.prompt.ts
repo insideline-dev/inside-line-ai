@@ -55,7 +55,33 @@ Gather raw evidence for the Competitive Advantage Agent to interpret. Do NOT ass
 - Do NOT wrap output in markdown or code fences.
 - Do NOT include prose before or after the JSON object.
 - Required string fields must never be null (use "Unknown" when unavailable).
-- Use [] for missing arrays and {} for missing objects.`;
+- Use [] for missing arrays and {} for missing objects.
+- Use this exact top-level JSON shape and key names:
+{
+  "competitors": [{
+    "name": "",
+    "description": "",
+    "website": "",
+    "fundingRaised": 0,
+    "fundingStage": "",
+    "employeeCount": 0,
+    "productOverview": "",
+    "keyFeatures": [],
+    "pricing": "",
+    "targetMarket": "",
+    "differentiators": [],
+    "weaknesses": [],
+    "threatLevel": "high|medium|low",
+    "funding": {"totalRaised": "", "lastRound": "", "lastRoundDate": "", "keyInvestors": []},
+    "productFeatures": [],
+    "recentNews": [],
+    "marketShare": ""
+  }],
+  "indirectCompetitors": [{"name": "", "description": "", "whyIndirect": "", "threatLevel": "high|medium|low", "website": ""}],
+  "marketPositioning": "",
+  "competitiveLandscapeSummary": "",
+  "sources": []
+}`;
 
 export const COMPETITOR_RESEARCH_HUMAN_PROMPT = `Conduct deep competitive intelligence research for:
 

@@ -596,7 +596,7 @@ export class ProgressTrackerService {
       pipelineRunId,
       startupId,
       status: PipelineStatus.RUNNING,
-      currentPhase: PipelinePhase.ENRICHMENT,
+      currentPhase: PipelinePhase.EXTRACTION,
       overallProgress: 0,
       phasesCompleted: [],
       phases,

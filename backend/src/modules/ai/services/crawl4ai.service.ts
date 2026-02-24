@@ -105,11 +105,34 @@ export class Crawl4aiService {
       }));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      if (this.isTimeoutLikeError(message) && urls.length > 1) {
+        const midpoint = Math.ceil(urls.length / 2);
+        const left = urls.slice(0, midpoint);
+        const right = urls.slice(midpoint);
+        this.logger.warn(
+          `[Crawl4AI] Batch timed out for ${urls.length} URLs; retrying as ${left.length}+${right.length}`,
+        );
+        const [leftResults, rightResults] = await Promise.all([
+          this.crawlBatch(left),
+          this.crawlBatch(right),
+        ]);
+        return [...leftResults, ...rightResults];
+      }
       this.logger.warn(`[Crawl4AI] Request failed: ${message}`);
       return urls.map((url) => this.failedResult(url, message));
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  private isTimeoutLikeError(message: string): boolean {
+    const normalized = message.toLowerCase();
+    return (
+      normalized.includes("aborted") ||
+      normalized.includes("aborterror") ||
+      normalized.includes("timeout") ||
+      normalized.includes("timed out")
+    );
   }
 
   private failedResult(url: string, errorMessage: string): Crawl4aiResult {

@@ -109,7 +109,6 @@ export class ScrapingCacheService implements OnModuleDestroy {
 
   private async setCache(key: string, data: unknown, ttlSeconds: number): Promise<void> {
     if (ttlSeconds <= 0) {
-      await this.redisClient.del(key);
       return;
     }
     await this.redisClient.set(key, JSON.stringify(data), ttlSeconds);

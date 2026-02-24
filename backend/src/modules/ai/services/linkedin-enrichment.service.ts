@@ -77,6 +77,29 @@ export class LinkedinEnrichmentService {
     'iii',
     'iv',
   ]);
+  private readonly companyTokenStopWords = new Set([
+    "inc",
+    "llc",
+    "ltd",
+    "limited",
+    "corp",
+    "corporation",
+    "co",
+    "company",
+    "group",
+    "holdings",
+    "ventures",
+    "capital",
+    "technologies",
+    "technology",
+    "tech",
+    "systems",
+    "solutions",
+    "labs",
+    "lab",
+    "global",
+    "international",
+  ]);
   private readonly companyLeadershipQueries = [
     'founder',
     'co-founder',
@@ -964,12 +987,24 @@ export class LinkedinEnrichmentService {
       return true;
     }
 
-    const targetTokens = target.split(" ").filter((token) => token.length >= 3);
+    const targetTokens = target
+      .split(" ")
+      .filter(
+        (token) =>
+          token.length >= 3 && !this.companyTokenStopWords.has(token),
+      );
     if (targetTokens.length === 0) {
       return false;
     }
 
-    return targetTokens.some((token) => candidate.includes(token));
+    const matchedTokens = targetTokens.filter((token) => candidate.includes(token));
+    if (matchedTokens.length >= 2) {
+      return true;
+    }
+    if (matchedTokens.length === 1 && targetTokens.length === 1) {
+      return matchedTokens[0]!.length >= 6;
+    }
+    return false;
   }
 
   private normalizeCompanyText(value: string | null | undefined): string {
@@ -1006,10 +1041,13 @@ export class LinkedinEnrichmentService {
 
     const companyName = startupContext?.companyName?.trim();
     if (!companyName) {
+      const accepted = nameConfidence >= this.historicalFounderMinNameConfidence;
       return {
-        accepted: true,
-        confidence: Math.max(70, nameConfidence),
-        reason: "Name matched; company context was not provided",
+        accepted,
+        confidence: nameConfidence,
+        reason: accepted
+          ? "Name matched strongly, but company context was not provided"
+          : "Name matched, but company context was not provided so profile association could not be verified",
         associationType: "none",
         adjudicatedBy: "deterministic",
       };
@@ -1153,13 +1191,8 @@ export class LinkedinEnrichmentService {
         output: Output.object({ schema: LinkedInIdentityVerifierSchema }),
       });
 
-      const parsed = LinkedInIdentityVerifierSchema.safeParse(response.output);
-      if (!parsed.success) {
-        return null;
-      }
-
       return {
-        ...parsed.data,
+        ...response.output,
         associationType: this.deriveAssociationType(
           profile,
           startupContext?.companyName,

@@ -59,6 +59,8 @@ export class AiDebugLogService {
     usedFallback: boolean;
     error?: string;
     model?: string;
+    attempt?: number;
+    retryCount?: number;
     output: unknown;
   }): Promise<void> {
     await this.write({

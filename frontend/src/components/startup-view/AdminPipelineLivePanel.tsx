@@ -118,6 +118,9 @@ const STATUS_BADGE_CLASS: Record<string, string> = {
   pending: "bg-muted text-muted-foreground border-border",
 };
 
+const RETRIED_BADGE_CLASS =
+  "bg-slate-500/10 text-slate-700 border-slate-500/30 dark:text-slate-300";
+
 const SURFACE_TONE_CLASS: Record<SignalTone, string> = {
   neutral: "",
   success: "border-emerald-500/30 bg-emerald-500/5",
@@ -246,7 +249,7 @@ function isHardFailedAgent(agent: PipelineAgentProgress): boolean {
 
 function toneForAgent(agent: PipelineAgentProgress): SignalTone {
   if (isHardFailedAgent(agent)) return "danger";
-  if (isFallbackAgent(agent) || (agent.retryCount ?? 0) > 0) return "warning";
+  if (isFallbackAgent(agent)) return "warning";
   if (agent.status === "running") return "info";
   if (agent.status === "completed") return "success";
   return "neutral";
@@ -254,18 +257,17 @@ function toneForAgent(agent: PipelineAgentProgress): SignalTone {
 
 function toneForPhase(phase: PipelinePhaseProgress): SignalTone {
   const agentValues = Object.values(phase.agents ?? {});
+  const hasRetrySignals =
+    (phase.retryCount ?? 0) > 0 ||
+    agentValues.some((agent) => (agent.retryCount ?? 0) > 0);
+  const hasFallbackSignals = agentValues.some((agent) => isFallbackAgent(agent));
   if (
     phase.status === "failed" ||
     agentValues.some((agent) => isHardFailedAgent(agent))
   ) {
     return "danger";
   }
-  if (
-    (phase.retryCount ?? 0) > 0 ||
-    agentValues.some(
-      (agent) => isFallbackAgent(agent) || (agent.retryCount ?? 0) > 0,
-    )
-  ) {
+  if (hasFallbackSignals || (phase.status === "running" && hasRetrySignals)) {
     return "warning";
   }
   if (phase.status === "running") return "info";
@@ -370,6 +372,14 @@ function readTraceWarning(trace: PipelineAgentTrace): string | undefined {
     return "Grounded provider evidence was missing; output was accepted with warning.";
   }
   return "Brave tool call evidence was missing; output was accepted with warning.";
+}
+
+function isAdvisoryTraceWarning(
+  trace: PipelineAgentTrace,
+  warning: string | undefined,
+  normalizedError?: string,
+): boolean {
+  return Boolean(warning) && !normalizedError && trace.status === "completed";
 }
 
 function readTraceRuntimeSummary(trace: PipelineAgentTrace): string | undefined {
@@ -841,6 +851,12 @@ export function AdminPipelineLivePanel({
 
     for (const trace of aiAgentTraceTimeline) {
       const warning = readTraceWarning(trace);
+      const normalizedTraceError = normalizeTraceError(trace);
+      const advisoryWarning = isAdvisoryTraceWarning(
+        trace,
+        warning,
+        normalizedTraceError,
+      );
       const runtimeSummary = readTraceRuntimeSummary(trace);
       items.push({
         id: `ai_trace:${trace.id}`,
@@ -850,21 +866,30 @@ export function AdminPipelineLivePanel({
         status: trace.status,
         tone: trace.status === "failed"
           ? "danger"
-          : trace.status === "fallback" || warning
+          : trace.status === "fallback" || (warning && !advisoryWarning)
             ? "warning"
-            : trace.status === "running"
-              ? "info"
-              : "success",
+          : trace.status === "running"
+            ? "info"
+            : "success",
         timestamp: trace.startedAt ?? trace.completedAt ?? undefined,
-        error: normalizeTraceError(trace) ?? warning,
+        error: normalizedTraceError ?? (advisoryWarning ? undefined : warning),
         runtimeSummary,
-        hasIssue: trace.status === "failed" || trace.status === "fallback" || Boolean(warning),
+        hasIssue:
+          trace.status === "failed" ||
+          trace.status === "fallback" ||
+          (Boolean(warning) && !advisoryWarning),
         trace,
       });
     }
 
     for (const trace of stepTraceTimeline) {
       const warning = readTraceWarning(trace);
+      const normalizedTraceError = normalizeTraceError(trace);
+      const advisoryWarning = isAdvisoryTraceWarning(
+        trace,
+        warning,
+        normalizedTraceError,
+      );
       const runtimeSummary = readTraceRuntimeSummary(trace);
       items.push({
         id: `step_trace:${trace.id}`,
@@ -874,15 +899,18 @@ export function AdminPipelineLivePanel({
         status: trace.status,
         tone: trace.status === "failed"
           ? "danger"
-          : trace.status === "fallback" || warning
+          : trace.status === "fallback" || (warning && !advisoryWarning)
             ? "warning"
-            : trace.status === "running"
-              ? "info"
-              : "success",
+          : trace.status === "running"
+            ? "info"
+            : "success",
         timestamp: trace.startedAt ?? trace.completedAt ?? undefined,
-        error: normalizeTraceError(trace) ?? warning,
+        error: normalizedTraceError ?? (advisoryWarning ? undefined : warning),
         runtimeSummary,
-        hasIssue: trace.status === "failed" || trace.status === "fallback" || Boolean(warning),
+        hasIssue:
+          trace.status === "failed" ||
+          trace.status === "fallback" ||
+          (Boolean(warning) && !advisoryWarning),
         trace,
       });
     }
@@ -919,9 +947,6 @@ export function AdminPipelineLivePanel({
   const fallbackCount = flattenedAgents.filter(
     (agent) => isFallbackAgent(agent.data),
   ).length;
-  const retriedAgentsCount = flattenedAgents.filter(
-    (agent) => (agent.data.retryCount ?? 0) > 0,
-  ).length;
   const activeRetriesCount = flattenedAgents.filter(
     (agent) => (agent.data.retryCount ?? 0) > 0 && agent.data.status === "running",
   ).length;
@@ -955,7 +980,7 @@ export function AdminPipelineLivePanel({
       ? "danger"
       : isLive && (activeFailedAgentsCount > 0 || activePhaseErrorCount > 0)
         ? "danger"
-      : problematicAgentsCount > 0 || fallbackCount > 0 || retriedAgentsCount > 0
+      : problematicAgentsCount > 0 || fallbackCount > 0 || (isLive && activeRetriesCount > 0)
         ? "warning"
         : isCompletedSnapshot
           ? "success"
@@ -1231,7 +1256,7 @@ export function AdminPipelineLivePanel({
                     {entry.retriedAgentCount > 0 && (
                       <Badge
                         variant="outline"
-                        className="bg-amber-500/10 text-amber-700 border-amber-500/30 dark:text-amber-300"
+                        className={RETRIED_BADGE_CLASS}
                       >
                         retried {entry.retriedAgentCount}
                       </Badge>
@@ -1374,7 +1399,11 @@ export function AdminPipelineLivePanel({
                       {item.error && (
                         <p className={cn(
                           "mt-1 truncate text-xs",
-                          item.tone === "warning" ? "text-amber-700 dark:text-amber-300" : "text-destructive",
+                          item.tone === "danger"
+                            ? "text-destructive"
+                            : item.tone === "warning"
+                              ? "text-amber-700 dark:text-amber-300"
+                              : "text-muted-foreground",
                         )}>
                           {item.error}
                         </p>
@@ -1391,7 +1420,7 @@ export function AdminPipelineLivePanel({
                             </span>
                           )}
                           {(item.agent.data.retryCount ?? 0) > 0 && (
-                            <Badge variant="outline" className="bg-amber-500/10 text-amber-700 border-amber-500/30 text-[10px] dark:text-amber-300">
+                            <Badge variant="outline" className={cn(RETRIED_BADGE_CLASS, "text-[10px]")}>
                               retried {item.agent.data.retryCount}
                             </Badge>
                           )}

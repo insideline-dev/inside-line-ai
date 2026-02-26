@@ -1,2 +1,0 @@
-ALTER TABLE "waitlist_entries" ADD COLUMN "consent_to_share_info" boolean DEFAULT false NOT NULL;--> statement-breakpoint
-ALTER TABLE "waitlist_entries" ADD COLUMN "consent_to_early_access" boolean DEFAULT false NOT NULL;

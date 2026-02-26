@@ -4,6 +4,7 @@ import { DrizzleService } from "../../../../database";
 import { QueueService } from "../../../../queue";
 import { AiConfigService } from "../../services/ai-config.service";
 import { PipelineStateService } from "../../services/pipeline-state.service";
+import { PipelineStateSnapshotService } from "../../services/pipeline-state-snapshot.service";
 import { PipelineService } from "../../services/pipeline.service";
 import {
   PhaseStatus,
@@ -108,6 +109,7 @@ describe("PipelineService", () => {
   let drizzle: jest.Mocked<DrizzleService>;
   let queue: jest.Mocked<QueueService>;
   let stateService: jest.Mocked<PipelineStateService>;
+  let pipelineStateSnapshots: jest.Mocked<PipelineStateSnapshotService>;
   let aiConfig: jest.Mocked<AiConfigService>;
   let progressTracker: jest.Mocked<ProgressTrackerService>;
   let phaseTransition: jest.Mocked<PhaseTransitionService>;
@@ -226,6 +228,11 @@ describe("PipelineService", () => {
       isEnrichmentEnabled: jest.fn().mockReturnValue(true),
     } as unknown as jest.Mocked<AiConfigService>;
 
+    pipelineStateSnapshots = {
+      getLatestReusableSnapshot: jest.fn().mockResolvedValue(null),
+      saveCompletedSnapshot: jest.fn().mockResolvedValue(undefined),
+    } as unknown as jest.Mocked<PipelineStateSnapshotService>;
+
     progressTracker = {
       initProgress: jest.fn().mockResolvedValue(undefined),
       updatePhaseProgress: jest.fn().mockResolvedValue(undefined),
@@ -317,6 +324,7 @@ describe("PipelineService", () => {
       queue,
       notifications,
       stateService,
+      pipelineStateSnapshots,
       aiConfig,
       startupMatching,
       pipelineFeedback,
@@ -438,6 +446,76 @@ describe("PipelineService", () => {
       }),
     );
     expect(queue.addJob).not.toHaveBeenCalled();
+  });
+
+  it("does not queue scraping twice when enrichment is skipped during transitions", async () => {
+    aiConfig.isEnrichmentEnabled.mockReturnValue(false);
+
+    const beforeSkip = createState(
+      {},
+      {
+        [PipelinePhase.EXTRACTION]: PhaseStatus.COMPLETED,
+        [PipelinePhase.ENRICHMENT]: PhaseStatus.PENDING,
+        [PipelinePhase.SCRAPING]: PhaseStatus.PENDING,
+      },
+    );
+    const afterSkip = createState(
+      {},
+      {
+        [PipelinePhase.EXTRACTION]: PhaseStatus.COMPLETED,
+        [PipelinePhase.ENRICHMENT]: PhaseStatus.SKIPPED,
+        [PipelinePhase.SCRAPING]: PhaseStatus.PENDING,
+      },
+    );
+    const scrapingAlreadyWaiting = createState(
+      {},
+      {
+        [PipelinePhase.EXTRACTION]: PhaseStatus.COMPLETED,
+        [PipelinePhase.ENRICHMENT]: PhaseStatus.SKIPPED,
+        [PipelinePhase.SCRAPING]: PhaseStatus.WAITING,
+      },
+    );
+
+    stateService.get
+      .mockResolvedValueOnce(beforeSkip) // applyTransitions outer refresh
+      .mockResolvedValueOnce(beforeSkip) // queuePhase(enrichment) preflight
+      .mockResolvedValueOnce(beforeSkip) // onPhaseSkipped state check
+      .mockResolvedValueOnce(afterSkip) // applyTransitions recursive refresh
+      .mockResolvedValueOnce(afterSkip) // queuePhase(scraping) from recursive applyTransitions
+      .mockResolvedValueOnce(scrapingAlreadyWaiting); // duplicate queue attempt from outer loop
+
+    phaseTransition.decideNextPhases
+      .mockReturnValueOnce({
+        queue: [PipelinePhase.ENRICHMENT, PipelinePhase.SCRAPING],
+        blockedByRequiredFailure: false,
+        pipelineComplete: false,
+        degraded: false,
+      })
+      .mockReturnValueOnce({
+        queue: [PipelinePhase.SCRAPING],
+        blockedByRequiredFailure: false,
+        pipelineComplete: false,
+        degraded: false,
+      });
+
+    await (service as any).applyTransitions("startup-1");
+
+    expect(queue.addJob).toHaveBeenCalledTimes(1);
+    expect(queue.addJob).toHaveBeenCalledWith(
+      "ai-scraping",
+      expect.objectContaining({
+        type: "ai_scraping",
+        startupId: "startup-1",
+      }),
+      expect.any(Object),
+    );
+
+    const scrapingWaitingCalls = stateService.updatePhase.mock.calls.filter(
+      (call) =>
+        call[1] === PipelinePhase.SCRAPING &&
+        call[2] === PhaseStatus.WAITING,
+    );
+    expect(scrapingWaitingCalls).toHaveLength(1);
   });
 
   it("ignores stale phase skip requests from older pipeline runs", async () => {

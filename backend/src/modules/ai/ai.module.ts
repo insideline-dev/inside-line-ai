@@ -41,6 +41,7 @@ import { GeminiResearchService } from "./services/gemini-research.service";
 import { MistralOcrService } from "./services/mistral-ocr.service";
 import { PipelineService } from "./services/pipeline.service";
 import { PipelineStateService } from "./services/pipeline-state.service";
+import { PipelineStateSnapshotService } from "./services/pipeline-state-snapshot.service";
 import { PipelineFeedbackService } from "./services/pipeline-feedback.service";
 import { PipelineAgentTraceService } from "./services/pipeline-agent-trace.service";
 import { PdfTextExtractorService } from "./services/pdf-text-extractor.service";
@@ -98,6 +99,7 @@ import { OpenAiDeepResearchService } from "./services/openai-deep-research.servi
     PipelineTemplateService,
     EvaluationInputResolverService,
     PipelineStateService,
+    PipelineStateSnapshotService,
     PipelineFeedbackService,
     PipelineAgentTraceService,
     PipelineService,
@@ -162,6 +164,7 @@ import { OpenAiDeepResearchService } from "./services/openai-deep-research.servi
     EvaluationInputResolverService,
     OpenAiDeepResearchService,
     PipelineStateService,
+    PipelineStateSnapshotService,
     PipelineFeedbackService,
     PipelineService,
     InvestorMatchingService,

@@ -42,6 +42,40 @@ function formatCompactCurrency(value?: number | null): string {
   return `$${value}`;
 }
 
+function getPublicStorageOrigin(pitchDeckUrl?: string): string | null {
+  if (!pitchDeckUrl) return null;
+  try {
+    const url = new URL(pitchDeckUrl);
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeUploadedFileHref(startup: Startup, rawPath?: string): string {
+  const path = rawPath?.trim();
+  if (!path) return "";
+
+  const publicOrigin = getPublicStorageOrigin(startup.pitchDeckUrl);
+  const adminStoragePathMatch = path.match(
+    /(?:https?:\/\/[^/]+)?\/admin\/startup\/([^/]+\/.+)$/i,
+  );
+  if (adminStoragePathMatch && publicOrigin) {
+    return `${publicOrigin}/${adminStoragePathMatch[1]}`;
+  }
+
+  const looksAbsolute = /^https?:\/\//i.test(path);
+  if (looksAbsolute) {
+    return path;
+  }
+
+  if (publicOrigin && /^[^/]+\/(?:transcripts|documents|images|files)\//i.test(path)) {
+    return `${publicOrigin}/${path.replace(/^\/+/, "")}`;
+  }
+
+  return path;
+}
+
 function StatRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between text-sm">
@@ -199,10 +233,12 @@ export function AdminReviewSidebar({
 
             if (startup.files?.length) {
               for (const file of startup.files) {
+                const href = normalizeUploadedFileHref(startup, file.path);
+                if (!href) continue;
                 links.push({
                   icon: <Link2 className="h-4 w-4 shrink-0" />,
                   label: file.name || "Document",
-                  href: file.path,
+                  href,
                 });
               }
             }

@@ -33,10 +33,13 @@ interface Education {
   endDate?: string;
 }
 
+export type TeamMemberSource = "submitted" | "scraped" | "evaluation" | "enriched";
+
 interface TeamMember {
   name: string;
   role: string;
   discovered?: boolean;
+  source?: TeamMemberSource;
   linkedinUrl?: string;
   headline?: string;
   summary?: string;
@@ -100,6 +103,11 @@ export function TeamProfileCard({
                     {member.discovered && (
                       <Badge variant="secondary" className="h-5 px-2 text-[10px] uppercase tracking-wide">
                         Discovered
+                      </Badge>
+                    )}
+                    {member.source && member.source !== "submitted" && (
+                      <Badge variant="outline" className="h-5 px-2 text-[10px] uppercase tracking-wide text-muted-foreground">
+                        {member.source}
                       </Badge>
                     )}
                   </div>

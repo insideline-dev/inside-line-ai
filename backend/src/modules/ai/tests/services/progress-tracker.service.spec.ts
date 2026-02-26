@@ -59,13 +59,7 @@ describe("ProgressTrackerService", () => {
       startupId: "startup-1",
       userId: "user-1",
       pipelineRunId: "run-1",
-      phases: [
-        PipelinePhase.EXTRACTION,
-        PipelinePhase.SCRAPING,
-        PipelinePhase.RESEARCH,
-        PipelinePhase.EVALUATION,
-        PipelinePhase.SYNTHESIS,
-      ],
+      phases: Object.values(PipelinePhase),
     });
 
     expect(progress.status).toBe(PipelineStatus.RUNNING);

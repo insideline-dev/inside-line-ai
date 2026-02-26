@@ -10,11 +10,13 @@ import { TeamGrid } from "@/components/TeamProfile";
 import { TeamCompositionSummary } from "@/components/TeamCompositionSummary";
 import { Users } from "lucide-react";
 import type { Evaluation } from "@/types/evaluation";
+import type { TeamMemberSource } from "@/components/TeamProfile";
 
 interface TeamMember {
   name: string;
   role: string;
   discovered?: boolean;
+  source?: TeamMemberSource;
   linkedinUrl?: string;
   headline?: string;
   summary?: string;
@@ -248,179 +250,209 @@ function normalizeEducationItems(
   }));
 }
 
+/** Safely access teamData fields without `as any` on every line. */
+function getTeamDataField<T>(teamData: Record<string, unknown> | undefined, ...keys: string[]): T | undefined {
+  if (!teamData) return undefined;
+  for (const key of keys) {
+    if (teamData[key] !== undefined) return teamData[key] as T;
+  }
+  return undefined;
+}
+
+type RawMember = Record<string, unknown> & { name?: string; role?: string };
+
 function buildTeamMembers(
   evaluation: Evaluation | null,
   submittedMembers: TeamMember[],
   companyName?: string,
 ): TeamMember[] {
-  const teamData = evaluation?.teamData as any;
-  const teamEvals = (evaluation?.teamMemberEvaluations as any[]) || [];
-  const extractedFounders = teamData?.enrichedMembers || teamData?.founders || [];
-  const teamEvalMembers =
-    teamData?.teamMembers || teamData?.members || teamData?.teamEvaluation?.members || [];
-  const researchTeamMembers =
-    (evaluation as any)?.comprehensiveResearchData?.extractedData?.teamMembers ||
-    [];
+  const teamData = (evaluation?.teamData ?? {}) as Record<string, unknown>;
+  const teamEvals = (evaluation?.teamMemberEvaluations ?? []) as unknown as Array<Record<string, unknown>>;
+
+  const extractedFounders = (getTeamDataField<RawMember[]>(teamData, "enrichedMembers", "founders") ?? []) as RawMember[];
+  const teamEvalMembers = (getTeamDataField<RawMember[]>(teamData, "teamMembers", "members") ??
+    ((teamData.teamEvaluation as Record<string, unknown> | undefined)?.members as RawMember[] | undefined) ?? []) as RawMember[];
+
+  // Fix: actually populate research members from evaluation teamData
+  const researchTeamMembers = teamEvalMembers;
+
   const submittedKeys = new Set(
-    (submittedMembers || []).map((member) => normalizeKey(member.name)).filter(Boolean),
+    (submittedMembers ?? []).map((m) => normalizeKey(m.name)).filter(Boolean),
   );
-  const restrictToSubmitted = submittedKeys.size > 0;
-  const shouldInclude = (name?: string, candidate?: Record<string, unknown>) => {
-    const key = normalizeKey(name);
-    if (!key) return false;
-    if (!restrictToSubmitted) return true;
-    if (submittedKeys.has(key)) return true;
-    return candidate?.scrapedCandidate === true;
-  };
 
-  const memberMap = new Map<string, any>();
+  // Allow ALL named members through - don't restrict to submitted-only
+  const shouldInclude = (name?: string) => Boolean(normalizeKey(name));
 
-  for (const evalMember of teamEvals) {
-    if (!shouldInclude(evalMember.name, evalMember)) continue;
-    const key = normalizeKey(evalMember.name);
-    if (key) memberMap.set(key, { ...evalMember, source: "evaluation" });
-  }
+  const memberMap = new Map<string, Record<string, unknown> & { source: TeamMemberSource }>();
 
-  for (const researchMember of researchTeamMembers) {
-    if (!shouldInclude(researchMember.name)) continue;
-    const key = normalizeKey(researchMember.name);
-    if (key) {
-      const existing = memberMap.get(key);
-      memberMap.set(key, {
-        ...researchMember,
-        ...existing,
-        bio: researchMember.bio || existing?.bio,
-        imageUrl: researchMember.imageUrl || existing?.imageUrl,
-        source: existing?.source || "research",
-      });
-    }
-  }
-
-  for (const member of submittedMembers || []) {
-    const key = normalizeKey(member.name);
-    if (key) {
-      const existing = memberMap.get(key);
-      memberMap.set(key, { ...existing, ...member, source: "submitted" });
-    }
-  }
-
+  // Layer 1 (lowest priority): extracted founders
   for (const founder of extractedFounders) {
-    if (!shouldInclude(founder.name)) continue;
-    const key = normalizeKey(founder.name);
+    if (!shouldInclude(founder.name as string | undefined)) continue;
+    const key = normalizeKey(founder.name as string | undefined);
+    if (key) {
+      memberMap.set(key, {
+        ...founder,
+        role: (founder.role as string) || "Founder",
+        source: "scraped",
+      });
+    }
+  }
+
+  // Layer 2: evaluation agent results
+  for (const evalMember of teamEvals) {
+    if (!shouldInclude(evalMember.name as string | undefined)) continue;
+    const key = normalizeKey(evalMember.name as string | undefined);
+    if (key) {
+      const existing = memberMap.get(key);
+      memberMap.set(key, { ...existing, ...evalMember, source: "evaluation" });
+    }
+  }
+
+  // Layer 3: research / teamData members
+  for (const researchMember of researchTeamMembers) {
+    if (!shouldInclude(researchMember.name as string | undefined)) continue;
+    const key = normalizeKey(researchMember.name as string | undefined);
     if (key) {
       const existing = memberMap.get(key);
       memberMap.set(key, {
         ...existing,
-        ...founder,
-        role: founder.role || existing?.role || "Founder",
-        source: "extracted",
+        ...researchMember,
+        bio: (researchMember.bio as string) || (existing?.bio as string) || "",
+        imageUrl: (researchMember.imageUrl as string) || (existing?.imageUrl as string) || "",
+        source: existing?.source ?? "evaluation",
       });
     }
+  }
+
+  // Layer 4 (highest priority): enriched / LinkedIn data already on teamEvals
+  // (handled during final merge below via linkedinAnalysis)
+
+  // Layer 5 (top): submitted members always win
+  for (const member of submittedMembers ?? []) {
+    const key = normalizeKey(member.name);
+    if (!key) continue;
+    const existing = memberMap.get(key);
+    memberMap.set(key, { ...existing, ...member, source: "submitted" });
   }
 
   const merged = Array.from(memberMap.values());
   if (merged.length === 0) {
-    return submittedMembers || [];
+    return (submittedMembers ?? []).map((m) => ({ ...m, source: "submitted" as const }));
   }
 
-  return merged.map((member: any) => {
-    const memberKey = normalizeKey(member.name);
+  return merged.map((member) => {
+    const memberKey = normalizeKey(member.name as string | undefined);
     const isSubmittedMember = submittedKeys.has(memberKey);
-    const memberEval = teamEvals.find(
-      (e: any) => normalizeKey(e.name) === memberKey,
+    const hasEnrichment = teamEvals.some(
+      (e) => normalizeKey(e.name as string | undefined) === memberKey && e.enrichmentStatus === "success",
     );
+    const memberEval = teamEvals.find(
+      (e) => normalizeKey(e.name as string | undefined) === memberKey,
+    ) as Record<string, unknown> | undefined;
     const founderData = extractedFounders.find(
-      (f: any) => normalizeKey(f.name) === memberKey,
+      (f) => normalizeKey(f.name as string | undefined) === memberKey,
     );
     const teamEvalData = teamEvalMembers.find(
-      (f: any) => normalizeKey(f.name) === memberKey,
+      (f) => normalizeKey(f.name as string | undefined) === memberKey,
     );
 
-    const linkedinData =
-      memberEval?.linkedinAnalysis || memberEval?.linkedinData || memberEval || {};
+    const linkedinAnalysis = (memberEval?.linkedinAnalysis ?? {}) as Record<string, unknown>;
+    const linkedinData = (memberEval?.linkedinData ?? linkedinAnalysis) as Record<string, unknown>;
+    // Merge linkedin sources: prefer linkedinAnalysis, fall back to linkedinData, then memberEval
+    const li = { ...memberEval, ...linkedinData, ...linkedinAnalysis } as Record<string, unknown>;
+
+    // Determine display source: enriched if LinkedIn data exists, otherwise track origin
+    const resolvedSource: TeamMemberSource = isSubmittedMember
+      ? (hasEnrichment ? "enriched" : "submitted")
+      : member.source;
 
     return {
-      name: member.name || "Unknown",
-      role: memberEval?.role || member.role || founderData?.role || "Team Member",
+      name: (member.name as string) || "Unknown",
+      role: (memberEval?.role as string) || (member.role as string) || (founderData?.role as string) || "Team Member",
       discovered: !isSubmittedMember && Boolean(memberEval?.scrapedCandidate),
+      source: resolvedSource,
       linkedinUrl:
-        memberEval?.linkedinUrl || member.linkedinUrl || founderData?.linkedinUrl,
+        (memberEval?.linkedinUrl as string) || (member.linkedinUrl as string) || (founderData?.linkedinUrl as string),
       headline:
-        linkedinData.headline ||
-        linkedinData.currentPosition ||
-        founderData?.currentPosition ||
-        member.headline ||
+        (li.headline as string) ||
+        (li.currentPosition as string) ||
+        (founderData?.currentPosition as string) ||
+        (member.headline as string) ||
         "",
       summary:
-        linkedinData.summary ||
-        member.bio ||
-        memberEval?.bio ||
-        founderData?.background ||
-        memberEval?.linkedinAnalysis?.background ||
+        (li.summary as string) ||
+        (member.bio as string) ||
+        (memberEval?.bio as string) ||
+        (founderData?.background as string) ||
+        (linkedinAnalysis.background as string) ||
         "",
       profilePictureUrl:
-        linkedinData.profilePictureUrl ||
-        linkedinData.profileImageUrl ||
-        linkedinData.avatarUrl ||
-        linkedinData.picture ||
-        member.imageUrl ||
-        memberEval?.imageUrl ||
-        founderData?.profilePictureUrl ||
+        (li.profilePictureUrl as string) ||
+        (li.profileImageUrl as string) ||
+        (li.avatarUrl as string) ||
+        (li.picture as string) ||
+        (member.imageUrl as string) ||
+        (memberEval?.imageUrl as string) ||
+        (founderData?.profilePictureUrl as string) ||
         "",
-      location: linkedinData.location || founderData?.location || "",
-      experience:
-        linkedinData.experienceDetails && linkedinData.experienceDetails.length > 0
-          ? normalizeExperienceItems(linkedinData.experienceDetails)
-          : linkedinData.positions && linkedinData.positions.length > 0
-          ? normalizeExperienceItems(linkedinData.positions)
-          : linkedinData.experience && linkedinData.experience.length > 0
-          ? normalizeExperienceItems(linkedinData.experience)
-          : linkedinData.currentCompany?.name || linkedinData.currentCompany?.title
-          ? [
-              {
-                title: linkedinData.currentCompany?.title || member.role || "Current role",
-                company: linkedinData.currentCompany?.name || "",
-                isCurrent: true,
-              },
-            ]
-          : member.role
-          ? [
-              {
-                title: member.role,
-                company: companyName || "Current Company",
-                isCurrent: true,
-              },
-            ]
-          : memberEval?.previousCompanies &&
-            memberEval.previousCompanies.length > 0
-          ? memberEval.previousCompanies.map((c: string) => ({
-              title: "Role",
-              company: c,
-            }))
-          : founderData?.previousCompanies &&
-            founderData.previousCompanies.length > 0
-          ? founderData.previousCompanies.map((c: string) => ({
-              title: "Role",
-              company: c,
-            }))
-          : [],
+      location: (li.location as string) || (founderData?.location as string) || "",
+      experience: resolveExperience(li, member, memberEval, founderData, companyName),
       education:
         normalizeEducationItems(
-          linkedinData.educationDetails ||
-            linkedinData.education ||
-            memberEval?.education ||
-            founderData?.education,
+          (li.educationDetails ?? li.education ?? memberEval?.education ?? founderData?.education) as
+            | Array<Record<string, unknown>>
+            | undefined,
         ),
-      skills: linkedinData.skills || founderData?.skills || [],
+      skills: (li.skills as string[]) || (founderData?.skills as string[]) || [],
       fmfScore:
-        teamEvalData?.fmfScore ||
-        memberEval?.fmfScore ||
-        founderData?.founderMarketFit ||
-        memberEval?.linkedinAnalysis?.founderFitScore,
-      relevantExperience: teamEvalData?.relevantExperience || "",
-      background: teamEvalData?.background || "",
+        (teamEvalData?.fmfScore as number | undefined) ||
+        (memberEval?.fmfScore as number | undefined) ||
+        (founderData?.founderMarketFit as number | undefined) ||
+        (linkedinAnalysis.founderFitScore as number | undefined),
+      relevantExperience: (teamEvalData?.relevantExperience as string) || "",
+      background: (teamEvalData?.background as string) || "",
     };
   });
+}
+
+function resolveExperience(
+  li: Record<string, unknown>,
+  member: Record<string, unknown>,
+  memberEval: Record<string, unknown> | undefined,
+  founderData: RawMember | undefined,
+  companyName?: string,
+): TeamMember["experience"] {
+  const expDetails = li.experienceDetails as Array<Record<string, unknown>> | undefined;
+  const positions = li.positions as Array<Record<string, unknown>> | undefined;
+  const experience = li.experience as Array<Record<string, unknown>> | undefined;
+  const currentCompany = li.currentCompany as { name?: string; title?: string } | null | undefined;
+
+  if (expDetails?.length) return normalizeExperienceItems(expDetails);
+  if (positions?.length) return normalizeExperienceItems(positions);
+  if (experience?.length) return normalizeExperienceItems(experience);
+  if (currentCompany?.name || currentCompany?.title) {
+    return [{
+      title: currentCompany.title || (member.role as string) || "Current role",
+      company: currentCompany.name || "",
+      isCurrent: true,
+    }];
+  }
+  if (member.role) {
+    return [{
+      title: member.role as string,
+      company: companyName || "Current Company",
+      isCurrent: true,
+    }];
+  }
+  const evalPrevious = memberEval?.previousCompanies as string[] | undefined;
+  if (evalPrevious?.length) {
+    return evalPrevious.map((c) => ({ title: "Role", company: c }));
+  }
+  const founderPrevious = founderData?.previousCompanies as string[] | undefined;
+  if (founderPrevious?.length) {
+    return founderPrevious.map((c) => ({ title: "Role", company: c }));
+  }
+  return [];
 }
 
 export function TeamTabContent({

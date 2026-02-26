@@ -12,6 +12,8 @@ import type { PipelineStateService } from "../../services/pipeline-state.service
 import type { BraveSearchService } from "../../services/brave-search.service";
 import type { AiProviderService } from "../../providers/ai-provider.service";
 import type { AiConfigService } from "../../services/ai-config.service";
+import type { ClaraEmailContextService } from "../../services/clara-email-context.service";
+import type { AiModelConfigService } from "../../services/ai-model-config.service";
 
 // ---- helpers ----
 
@@ -97,8 +99,20 @@ function buildService(opts: {
   } as unknown as jest.Mocked<BraveSearchService>;
 
   const aiProvider = {
-    resolveModelForPurpose: jest.fn().mockReturnValue({ provider: "gemini" }),
+    resolveModel: jest.fn().mockReturnValue({ provider: "gemini" }),
   } as unknown as jest.Mocked<AiProviderService>;
+
+  const modelConfig = {
+    resolveConfig: jest.fn().mockResolvedValue({
+      modelName: opts.enrichmentModel ?? "gemini-3-flash-preview",
+      provider: "gemini",
+      searchMode: "provider",
+      source: "global_default",
+      revisionId: null,
+      stage: null,
+      supportedSearchModes: ["provider", "brave", "provider+brave"],
+    }),
+  } as unknown as jest.Mocked<AiModelConfigService>;
 
   const aiConfig = {
     getEnrichmentCorrectionThreshold: jest.fn().mockReturnValue(correctionThreshold),
@@ -113,15 +127,21 @@ function buildService(opts: {
     generateTextMock.mockResolvedValue({ text: opts.aiText });
   }
 
+  const claraEmailContext = {
+    getEmailContext: jest.fn().mockResolvedValue(null),
+  } as unknown as jest.Mocked<ClaraEmailContextService>;
+
   const service = new EnrichmentService(
     drizzle as unknown as DrizzleService,
     pipelineState as unknown as PipelineStateService,
     braveSearch as unknown as BraveSearchService,
     aiProvider as unknown as AiProviderService,
+    modelConfig as unknown as AiModelConfigService,
     aiConfig as unknown as AiConfigService,
+    claraEmailContext as unknown as ClaraEmailContextService,
   );
 
-  return { service, drizzle, pipelineState, braveSearch, aiConfig };
+  return { service, drizzle, pipelineState, braveSearch, aiConfig, modelConfig, claraEmailContext };
 }
 
 // ---- tests ----
@@ -149,8 +169,24 @@ describe("EnrichmentService", () => {
         drizzle as unknown as DrizzleService,
         { getPhaseResult: jest.fn().mockResolvedValue(null) } as unknown as PipelineStateService,
         { isConfigured: jest.fn().mockReturnValue(false) } as unknown as BraveSearchService,
-        { resolveModelForPurpose: jest.fn() } as unknown as AiProviderService,
-        { getEnrichmentCorrectionThreshold: jest.fn().mockReturnValue(0.85) } as unknown as AiConfigService,
+        { resolveModel: jest.fn() } as unknown as AiProviderService,
+        {
+          resolveConfig: jest.fn().mockResolvedValue({
+            modelName: "gemini-3-flash-preview",
+            provider: "gemini",
+            searchMode: "provider",
+            source: "global_default",
+            revisionId: null,
+            stage: null,
+            supportedSearchModes: ["provider", "brave", "provider+brave"],
+          }),
+        } as unknown as AiModelConfigService,
+        {
+          getEnrichmentCorrectionThreshold: jest.fn().mockReturnValue(0.85),
+          getEnrichmentTemperature: jest.fn().mockReturnValue(0.1),
+          getEnrichmentTimeoutMs: jest.fn().mockReturnValue(60_000),
+        } as unknown as AiConfigService,
+        { getEmailContext: jest.fn().mockResolvedValue(null) } as unknown as ClaraEmailContextService,
       );
 
       await expect(service.run("missing-id")).rejects.toThrow("not found");
@@ -309,8 +345,9 @@ describe("EnrichmentService", () => {
       });
 
       expect(result.discoveredFounders.length).toBeGreaterThan(0);
-      expect(result.pitchDeckUrls.length).toBeGreaterThan(0);
+      expect(result.pitchDeckUrls).toHaveLength(0);
       expect(result.socialProfiles.crunchbaseUrl).toContain("crunchbase.com");
+      expect(result.sources.some((source) => source.url.includes("slideshare.net"))).toBe(false);
       expect(result.sources.length).toBeGreaterThan(0);
       expect(completion?.usedFallback).toBe(false);
       expect(completion?.attempt).toBe(1);
@@ -320,7 +357,7 @@ describe("EnrichmentService", () => {
 
   describe("identifyMissingFields — gap detection", () => {
     it("detects all missing fields when record is empty", async () => {
-      const aiJson = makeEnrichmentJson({ fieldsStillMissing: ["website", "description", "tagline", "industry", "location", "teamMembers"] });
+      const aiJson = makeEnrichmentJson({ fieldsStillMissing: ["website", "description", "tagline", "industry", "location"] });
       generateTextMock.mockResolvedValue({ text: aiJson });
 
       const { service } = buildService({ record: makeStartupRecord() });
@@ -328,7 +365,7 @@ describe("EnrichmentService", () => {
 
       // The prompt is built with the missing fields — we verify indirectly that
       // the result carries fieldsStillMissing passed back from AI
-      expect(result.fieldsStillMissing).toContain("teamMembers");
+      expect(result.fieldsStillMissing).toContain("website");
     });
 
     it("does NOT list fields that are already populated", async () => {
@@ -338,6 +375,11 @@ describe("EnrichmentService", () => {
         tagline: "Make it",
         industry: "SaaS",
         location: "NYC",
+        contactName: "Alice",
+        contactEmail: "alice@acme.com",
+        sectorIndustry: "Software",
+        sectorIndustryGroup: "Technology",
+        productDescription: "A cool product",
         teamMembers: [{ name: "Alice", role: "CEO" }],
       });
 
@@ -521,50 +563,11 @@ describe("EnrichmentService", () => {
     });
   });
 
-  describe("applyDbWrites — discovered founders merge", () => {
-    it("merges new founders into teamMembers when confidence >= 0.5", async () => {
+  describe("applyDbWrites — discovered founders", () => {
+    it("does not write discovered founders into teamMembers (handled by linkedin_enrichment)", async () => {
       const aiJson = makeEnrichmentJson({
         discoveredFounders: [
           { name: "Bob Builder", role: "CTO", confidence: 0.8 },
-        ],
-      });
-      generateTextMock.mockResolvedValue({ text: aiJson });
-
-      const { service, drizzle } = buildService({
-        record: makeStartupRecord({
-          teamMembers: [{ name: "Alice", role: "CEO" }],
-        }),
-      });
-      const result = await service.run(STARTUP_ID);
-
-      expect(drizzle.db.update).toHaveBeenCalled();
-      expect(result.dbFieldsUpdated.some((f) => f.includes("teamMembers"))).toBe(true);
-      expect(result.dbFieldsUpdated.some((f) => f.includes("+1"))).toBe(true);
-    });
-
-    it("does NOT merge founders with confidence < 0.5", async () => {
-      const aiJson = makeEnrichmentJson({
-        discoveredFounders: [
-          { name: "Ghost Person", role: "Unknown", confidence: 0.3 },
-        ],
-      });
-      generateTextMock.mockResolvedValue({ text: aiJson });
-
-      const { service, drizzle } = buildService({
-        record: makeStartupRecord({
-          teamMembers: [{ name: "Alice", role: "CEO" }],
-        }),
-      });
-      const result = await service.run(STARTUP_ID);
-
-      expect(drizzle.db.update).not.toHaveBeenCalled();
-      expect(result.dbFieldsUpdated).toHaveLength(0);
-    });
-
-    it("does NOT add duplicate founders that already exist in teamMembers", async () => {
-      const aiJson = makeEnrichmentJson({
-        discoveredFounders: [
-          { name: "Alice", role: "CEO", confidence: 0.9 },
         ],
       });
       generateTextMock.mockResolvedValue({ text: aiJson });
@@ -600,6 +603,22 @@ describe("EnrichmentService", () => {
       await service.run(STARTUP_ID);
 
       expect(braveSearch.search).toHaveBeenCalled();
+    });
+
+    it("does not run LinkedIn-specific founder search queries in gap-fill stage", async () => {
+      const aiJson = makeEnrichmentJson();
+      generateTextMock.mockResolvedValue({ text: aiJson });
+
+      const { service, braveSearch } = buildService({ braveConfigured: true });
+      await service.run(STARTUP_ID);
+
+      const queries = braveSearch.search.mock.calls.map(
+        (call) => String(call[0]).toLowerCase(),
+      );
+      expect(queries.some((query) => query.includes("site:linkedin.com"))).toBe(
+        false,
+      );
+      expect(queries.some((query) => query.includes(" linkedin "))).toBe(false);
     });
   });
 

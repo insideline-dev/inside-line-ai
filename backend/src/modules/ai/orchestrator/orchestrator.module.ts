@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { DatabaseModule } from "../../../database";
 import { NotificationModule } from "../../../notification/notification.module";
+import { PipelineFlowConfigService } from "../services/pipeline-flow-config.service";
 import { ErrorRecoveryService } from "./error-recovery.service";
 import { PhaseTransitionService } from "./phase-transition.service";
 import { ProgressTrackerService } from "./progress-tracker.service";
@@ -11,11 +12,13 @@ import { ProgressTrackerService } from "./progress-tracker.service";
     ProgressTrackerService,
     PhaseTransitionService,
     ErrorRecoveryService,
+    PipelineFlowConfigService,
   ],
   exports: [
     ProgressTrackerService,
     PhaseTransitionService,
     ErrorRecoveryService,
+    PipelineFlowConfigService,
   ],
 })
 export class OrchestratorModule {}

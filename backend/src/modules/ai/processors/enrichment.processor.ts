@@ -25,6 +25,7 @@ import {
   EnrichmentService,
 } from "../services/enrichment.service";
 import { PipelineAgentTraceService } from "../services/pipeline-agent-trace.service";
+import { AiConfigService } from "../services/ai-config.service";
 import { runPipelinePhase } from "./run-phase.util";
 
 @Injectable()
@@ -36,6 +37,7 @@ export class EnrichmentProcessor
 
   constructor(
     config: ConfigService,
+    private aiConfig: AiConfigService,
     private enrichmentService: EnrichmentService,
     private pipelineState: PipelineStateService,
     private pipelineService: PipelineService,
@@ -74,6 +76,35 @@ export class EnrichmentProcessor
 
     if (job.data.type !== "ai_enrichment") {
       throw new Error("Invalid job type for enrichment processor");
+    }
+
+    if (!this.aiConfig.isEnrichmentEnabled()) {
+      const reason = "Enrichment temporarily disabled by configuration";
+      const skippedResult = this.enrichmentService.buildSkippedResult(reason);
+      const phaseSkipped = await this.pipelineService.onPhaseSkipped({
+        startupId,
+        pipelineRunId,
+        userId,
+        phase: PipelinePhase.ENRICHMENT,
+        reason,
+        result: skippedResult,
+      });
+      if (phaseSkipped) {
+        this.notificationGateway.sendJobStatus(userId, {
+          jobId: String(job.id),
+          jobType: "ai_enrichment",
+          status: "completed",
+          startupId,
+          pipelineRunId,
+          result: skippedResult,
+        });
+      }
+      return {
+        type: "ai_enrichment",
+        startupId,
+        pipelineRunId,
+        data: skippedResult,
+      };
     }
 
     const recordStepTrace = (
@@ -116,7 +147,7 @@ export class EnrichmentProcessor
     const onStepProgress: PhaseProgressCallback = {
       onStepStart: (stepKey, trace) => {
         recordStepTrace(stepKey, "running", trace);
-        this.pipelineService
+        void this.pipelineService
           .onAgentProgress({
             startupId,
             userId,
@@ -139,7 +170,7 @@ export class EnrichmentProcessor
       },
       onStepComplete: (stepKey, payload) => {
         recordStepTrace(stepKey, "completed", payload);
-        this.pipelineService
+        void this.pipelineService
           .onAgentProgress({
             startupId,
             userId,
@@ -166,7 +197,7 @@ export class EnrichmentProcessor
           ...trace,
           error,
         });
-        this.pipelineService
+        void this.pipelineService
           .onAgentProgress({
             startupId,
             userId,
@@ -204,7 +235,7 @@ export class EnrichmentProcessor
         this.enrichmentService.run(startupId, {
           onStepProgress,
           onAgentStart: (agentKey) => {
-            this.pipelineService
+            void this.pipelineService
               .onAgentProgress({
                 startupId,
                 userId,
@@ -235,6 +266,7 @@ export class EnrichmentProcessor
             retryCount,
             fallbackReason,
             rawProviderError,
+            meta,
           }) => {
             const isFailed = Boolean(error) && !usedFallback;
             const status = isFailed ? "failed" : "completed";
@@ -245,7 +277,7 @@ export class EnrichmentProcessor
                 : "completed";
             const resolvedAgentKey = agentKey || ENRICHMENT_AGENT_KEY;
 
-            this.pipelineService
+            void this.pipelineService
               .onAgentProgress({
                 startupId,
                 userId,
@@ -272,7 +304,7 @@ export class EnrichmentProcessor
                 );
               });
 
-            this.pipelineAgentTrace
+            void this.pipelineAgentTrace
               .recordRun({
                 startupId,
                 pipelineRunId,
@@ -288,6 +320,12 @@ export class EnrichmentProcessor
                 retryCount,
                 fallbackReason,
                 rawProviderError,
+                meta: {
+                  usedFallback,
+                  attempt,
+                  retryCount,
+                  ...(meta ?? {}),
+                },
               })
               .catch((traceError) => {
                 this.logger.warn(

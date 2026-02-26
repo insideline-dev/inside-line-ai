@@ -1,3 +1,4 @@
+import type { ResearchParameters } from "./research-parameters.interface";
 import type {
   BusinessModelEvaluation,
   CompetitiveAdvantageEvaluation,
@@ -16,6 +17,7 @@ import type {
   TeamResearch,
   TractionEvaluation,
 } from "../schemas";
+import type { InvestorMemo, FounderReport } from "../schemas/synthesis.schema";
 
 export interface StartupFileReference {
   path: string;
@@ -71,7 +73,7 @@ export interface ExtractionResult {
   valuation?: number;
   rawText: string;
   startupContext?: StartupFormContext;
-  source?: "pdf-parse" | "mistral-ocr" | "startup-context";
+  source?: "pdf-parse" | "pptx-parse" | "mistral-ocr" | "startup-context";
   pageCount?: number;
   warnings?: string[];
 }
@@ -151,6 +153,7 @@ export interface EnrichedTeamMember {
       description?: string;
     }>;
   };
+  teamMemberSource?: "submitted" | "website" | "linkedin" | "deck" | "enrichment";
   enrichmentStatus: "success" | "not_configured" | "not_found" | "error";
   enrichedAt?: string;
 }
@@ -186,6 +189,7 @@ export interface ResearchResult {
   competitor: CompetitorResearch | null;
   sources: SourceEntry[];
   errors: Array<{ agent: "team" | "market" | "product" | "news" | "competitor"; error: string }>;
+  researchParameters?: ResearchParameters;
 }
 
 export interface EvaluationSummary {
@@ -309,6 +313,12 @@ export interface EnrichmentResult {
   website?: EnrichmentConfidenceField<string>;
   foundingDate?: EnrichmentConfidenceField<string>;
   headquarters?: EnrichmentConfidenceField<string>;
+  fundingTarget?: EnrichmentConfidenceField<number>;
+  contactName?: EnrichmentConfidenceField<string>;
+  contactEmail?: EnrichmentConfidenceField<string>;
+  sectorIndustry?: EnrichmentConfidenceField<string>;
+  sectorIndustryGroup?: EnrichmentConfidenceField<string>;
+  productDescription?: EnrichmentConfidenceField<string>;
   discoveredFounders: EnrichmentDiscoveredFounder[];
   fundingHistory: EnrichmentFundingEntry[];
   pitchDeckUrls: EnrichmentPitchDeckUrl[];
@@ -321,6 +331,37 @@ export interface EnrichmentResult {
   correctionDetails: EnrichmentCorrectionDetail[];
   sources: Array<{ url: string; title: string; type: string }>;
   dbFieldsUpdated: string[];
+  dataProvenance?: {
+    fromExtraction: string[];
+    fromWebsite?: string[];
+    fromEmail: string[];
+    fromWebSearch: string[];
+    fromAiSynthesis: string[];
+  };
+  webSearchSkipped?: boolean;
+  skipReason?: string;
+  runtimeModel?: {
+    promptKey: string;
+    modelName: string;
+    provider: string;
+    searchMode: string;
+    source: string;
+    revisionId: string | null;
+    stage: string | null;
+  };
+}
+
+export interface ClaraEmailContext {
+  conversations: Array<{
+    investorEmail: string;
+    investorName: string | null;
+    messages: Array<{
+      subject: string | null;
+      bodyText: string | null;
+      direction: string;
+    }>;
+  }>;
+  summary: string;
 }
 
 export interface SynthesisResult {
@@ -332,6 +373,7 @@ export interface SynthesisResult {
   investmentThesis: string;
   nextSteps: string[];
   confidenceLevel: "High" | "Medium" | "Low";
+  percentileRank?: number;
   sectionScores: {
     team: number;
     market: number;
@@ -345,8 +387,8 @@ export interface SynthesisResult {
     dealTerms: number;
     exitPotential: number;
   };
-  investorMemo: string;
-  founderReport: string;
+  investorMemo: InvestorMemo;
+  founderReport: FounderReport;
   dataConfidenceNotes: string;
   investorMemoUrl?: string;
   founderReportUrl?: string;

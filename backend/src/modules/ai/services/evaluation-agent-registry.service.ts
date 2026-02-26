@@ -31,12 +31,15 @@ import {
   TeamEvaluationAgent,
   TractionEvaluationAgent,
 } from "../agents/evaluation";
+import { AgentConfigService } from "./agent-config.service";
+import { DynamicAgentRunnerService } from "./dynamic-agent-runner.service";
 
 @Injectable()
 export class EvaluationAgentRegistryService {
   private readonly logger = new Logger(EvaluationAgentRegistryService.name);
 
   private readonly agents: Array<EvaluationAgent<unknown>>;
+  private readonly builtInAgentsByKey: Record<string, EvaluationAgent<unknown>>;
 
   constructor(
     private team: TeamEvaluationAgent,
@@ -53,6 +56,8 @@ export class EvaluationAgentRegistryService {
     private pipelineState: PipelineStateService,
     private phaseTransition: PhaseTransitionService,
     private pipelineFeedback: PipelineFeedbackService,
+    private agentConfigService: AgentConfigService,
+    private dynamicAgentRunner: DynamicAgentRunnerService,
     @Optional() private pipelineAgentTrace?: PipelineAgentTraceService,
   ) {
     this.agents = [
@@ -68,6 +73,9 @@ export class EvaluationAgentRegistryService {
       this.dealTerms,
       this.exitPotential,
     ];
+    this.builtInAgentsByKey = Object.fromEntries(
+      this.agents.map((agent) => [agent.key, agent]),
+    );
   }
 
   async runAll(
@@ -77,6 +85,7 @@ export class EvaluationAgentRegistryService {
     onAgentComplete?: (payload: EvaluationAgentCompletion) => void,
     onAgentLifecycle?: (payload: EvaluationAgentLifecycleEvent) => void,
   ): Promise<EvaluationResult> {
+    const resolvedAgents = await this.resolveAgents();
     const pipelineRunId = (await this.pipelineState.get(startupId))?.pipelineRunId;
     const traceWrites: Promise<void>[] = [];
     const outputs = new Map<EvaluationAgentKey, unknown>();
@@ -86,7 +95,7 @@ export class EvaluationAgentRegistryService {
     const warnings: Array<{ agent: string; message: string }> = [];
     const fallbackReasonCounts: Partial<Record<EvaluationFallbackReason, number>> = {};
     await Promise.all(
-      this.agents.map(async (agent) => {
+      resolvedAgents.map(async (agent) => {
         const startedAt = new Date();
         this.emitAgentStart(onAgentStart, agent.key);
 
@@ -221,7 +230,18 @@ export class EvaluationAgentRegistryService {
     );
     await Promise.allSettled(traceWrites);
 
-    const completedAgents = this.agents.length - failedKeys.length;
+    for (const agent of this.agents) {
+      if (!outputs.has(agent.key)) {
+        this.logger.error(
+          `Evaluation agent "${agent.key}" produced no output for startup ${startupId} — generating fallback`,
+        );
+        outputs.set(agent.key, agent.fallback(pipelineData));
+        failedKeys.push(agent.key);
+        errors.push({ agent: agent.key, error: "Agent produced no output; fallback generated post-hoc" });
+      }
+    }
+
+    const completedAgents = resolvedAgents.length - failedKeys.length;
     const minimumRequired = this.phaseTransition.getConfig().minimumEvaluationAgents;
     const fallbackAgents = fallbackKeys.length;
     const summary: EvaluationSummary = {
@@ -239,8 +259,8 @@ export class EvaluationAgentRegistryService {
 
     if (summary.degraded) {
       this.logger.warn(
-        `Evaluation completed in degraded mode for startup ${startupId}: ${completedAgents}/${this.agents.length} completed, ${fallbackAgents} fallback`,
-      );
+          `Evaluation completed in degraded mode for startup ${startupId}: ${completedAgents}/${resolvedAgents.length} completed, ${fallbackAgents} fallback`,
+        );
     }
 
     return {
@@ -266,9 +286,10 @@ export class EvaluationAgentRegistryService {
     onAgentStart?: (agent: EvaluationAgentKey) => void,
     onAgentLifecycle?: (payload: EvaluationAgentLifecycleEvent) => void,
   ): Promise<EvaluationAgentCompletion> {
+    const resolvedAgents = await this.resolveAgents();
     const pipelineRunId = (await this.pipelineState.get(startupId))?.pipelineRunId;
     const traceWrites: Promise<void>[] = [];
-    const agent = this.agents.find((candidate) => candidate.key === key);
+    const agent = resolvedAgents.find((candidate) => candidate.key === key);
     if (!agent) {
       throw new Error(`Unsupported evaluation agent "${key}"`);
     }
@@ -370,6 +391,49 @@ export class EvaluationAgentRegistryService {
         rawProviderError: message,
       };
     }
+  }
+
+  private async resolveAgents(): Promise<Array<EvaluationAgent<unknown>>> {
+    const configs = await this.agentConfigService.getExecutableByOrchestrator(
+      "evaluation_orchestrator",
+      "pipeline",
+    );
+
+    if (configs.length === 0) {
+      return this.agents;
+    }
+
+    const resolved: Array<EvaluationAgent<unknown>> = [];
+
+    for (const entry of configs) {
+      const { config, promptKey } = entry;
+
+      if (!config.isCustom) {
+        const builtIn = this.builtInAgentsByKey[config.agentKey];
+        if (builtIn) {
+          resolved.push(builtIn);
+        }
+        continue;
+      }
+
+      if (!promptKey) {
+        continue;
+      }
+
+      resolved.push({
+        key: config.agentKey as EvaluationAgentKey,
+        run: async (pipelineData) =>
+          this.dynamicAgentRunner.run({
+            agentKey: config.agentKey,
+            promptKey,
+            pipelineData,
+            stage: pipelineData.extraction.stage as never,
+          }) as unknown as ReturnType<EvaluationAgent<unknown>["run"]>,
+        fallback: () => ({}),
+      });
+    }
+
+    return resolved.length > 0 ? resolved : this.agents;
   }
 
   private persistAgentTrace(

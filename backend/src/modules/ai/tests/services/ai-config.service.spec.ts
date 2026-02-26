@@ -64,6 +64,22 @@ describe("AiConfigService", () => {
     expect(service.isPipelineEnabled()).toBe(true);
   });
 
+  it("disables enrichment by default while feature is paused", () => {
+    config.get.mockImplementation(
+      (_: string, fallback?: unknown) => fallback as boolean,
+    );
+
+    expect(service.isEnrichmentEnabled()).toBe(false);
+  });
+
+  it("enables source sanitization by default", () => {
+    config.get.mockImplementation(
+      (_: string, fallback?: unknown) => fallback as boolean,
+    );
+
+    expect(service.isSourceSanitizationEnabled()).toBe(true);
+  });
+
   it("returns timeout and retry defaults", () => {
     config.get.mockImplementation(
       (_: string, fallback?: unknown) => fallback as number,

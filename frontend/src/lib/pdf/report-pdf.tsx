@@ -443,7 +443,6 @@ export function AnalysisReportPDF({ startup, evaluation, weights, watermarkEmail
     ]),
     memberRisks,
     risks,
-    evaluation.executionRiskNotes,
   );
 
   const hasBusinessLeader =

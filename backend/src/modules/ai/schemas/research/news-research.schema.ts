@@ -5,7 +5,7 @@ const nullToUndefined = (value: unknown): unknown =>
 
 const requiredStringFromNull = (fallback: string) =>
   z.preprocess(
-    (value) => (value === null ? fallback : value),
+    (value) => (value == null ? fallback : value),
     z.string().min(1),
   );
 
@@ -36,6 +36,8 @@ export const NewsArticleSchema = z.object({
   date: requiredStringFromNull("Unknown date"),
   summary: requiredStringFromNull("Summary unavailable"),
   url: optionalUrl,
+  category: z.preprocess(nullToUndefined, z.enum(["funding", "product", "partnership", "growth", "general"]).optional()),
+  articleSentiment: z.preprocess(nullToUndefined, z.enum(["positive", "negative", "neutral"]).optional()),
 });
 
 export const NewsResearchSchema = z.object({
@@ -46,6 +48,11 @@ export const NewsResearchSchema = z.object({
   pressReleases: stringArray,
   sentiment: z.enum(["positive", "neutral", "negative"]).default("neutral"),
   recentEvents: stringArray,
+  sentimentOverview: z.object({
+    positive: z.number().default(0),
+    negative: z.number().default(0),
+    neutral: z.number().default(0),
+  }).optional(),
   sources: urlArray,
 });
 

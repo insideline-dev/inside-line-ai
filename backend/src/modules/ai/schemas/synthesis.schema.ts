@@ -1,5 +1,28 @@
 import { z } from "zod";
 
+const MemoSectionSchema = z.object({
+  title: z.string(),
+  content: z.string(),
+  highlights: z.array(z.string()).optional(),
+  concerns: z.array(z.string()).optional(),
+});
+
+const InvestorMemoSchema = z.object({
+  executiveSummary: z.string(),
+  summary: z.string().optional(),
+  sections: z.array(MemoSectionSchema).default([]),
+  recommendation: z.string(),
+  riskLevel: z.enum(["low", "medium", "high"]),
+  dealHighlights: z.array(z.string()).default([]),
+  keyDueDiligenceAreas: z.array(z.string()).default([]),
+});
+
+const FounderReportSchema = z.object({
+  summary: z.string(),
+  sections: z.array(MemoSectionSchema).default([]),
+  actionItems: z.array(z.string()).default([]),
+});
+
 export const SynthesisSchema = z.object({
   overallScore: z.number().min(0).max(100),
   recommendation: z.enum(["Pass", "Consider", "Decline"]),
@@ -9,9 +32,12 @@ export const SynthesisSchema = z.object({
   investmentThesis: z.string().min(1),
   nextSteps: z.array(z.string()),
   confidenceLevel: z.enum(["High", "Medium", "Low"]),
-  investorMemo: z.string().min(1),
-  founderReport: z.string().min(1),
+  percentileRank: z.number().min(0).max(100).optional(),
+  investorMemo: InvestorMemoSchema,
+  founderReport: FounderReportSchema,
   dataConfidenceNotes: z.string().min(1),
 });
 
 export type Synthesis = z.infer<typeof SynthesisSchema>;
+export type InvestorMemo = z.infer<typeof InvestorMemoSchema>;
+export type FounderReport = z.infer<typeof FounderReportSchema>;

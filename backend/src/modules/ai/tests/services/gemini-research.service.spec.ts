@@ -51,6 +51,8 @@ describe("GeminiResearchService", () => {
       getModelForPurpose: jest.fn(() => "gemini-3.0-flash"),
       getResearchTemperature: jest.fn(() => 0.2),
       getResearchTimeoutMs: jest.fn(() => 30000),
+      getResearchMaxAttempts: jest.fn(() => 1),
+      getResearchAgentHardTimeoutMs: jest.fn(() => 30000),
     } as unknown as jest.Mocked<AiConfigService>;
 
     service = new GeminiResearchServiceClass(
@@ -89,6 +91,10 @@ describe("GeminiResearchService", () => {
 
     const result = await service.research({
       agent: "market",
+      tools: {
+        google_search: googleSearchMock(),
+      },
+      toolChoice: "required",
       prompt: "market prompt",
       systemPrompt: "market system",
       schema: MarketSchema,
@@ -125,6 +131,72 @@ describe("GeminiResearchService", () => {
     expect(providers.resolveModelForPurpose).toHaveBeenCalled();
   });
 
+  it("filters provider redirect URLs from output sources and records sanitization metadata", async () => {
+    generateTextMock.mockResolvedValueOnce({
+      text: [
+        "```json",
+        JSON.stringify({
+          marketReports: ["Gartner 2026"],
+          competitors: [],
+          marketTrends: ["Vertical AI"],
+          marketSize: { tam: 1_000_000_000 },
+          sources: [
+            "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQ-test",
+            "https://example.com/report",
+          ],
+        }),
+        "```",
+      ].join("\n"),
+      sources: [
+        {
+          title: "Redirect source",
+          url: "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQ-another",
+        },
+      ],
+      providerMetadata: {
+        google: {
+          groundingMetadata: {
+            groundingChunks: [
+              { web: { uri: "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQ-third", title: "Redirect" } },
+              { web: { uri: "https://trusted.example.com/data", title: "Trusted source" } },
+            ],
+          },
+        },
+      },
+    });
+
+    const result = await service.research({
+      agent: "market",
+      prompt: "market prompt",
+      systemPrompt: "market system",
+      schema: MarketSchema,
+      fallback: () => ({
+        marketReports: [],
+        competitors: [],
+        marketTrends: [],
+        marketSize: {},
+        sources: [],
+      }),
+    });
+
+    expect(result.usedFallback).toBe(false);
+    expect(result.output.sources).toEqual([
+      "https://example.com/report",
+      "https://trusted.example.com/data",
+    ]);
+    expect(result.output.sources.some((url) => url.includes("vertexaisearch.cloud.google.com"))).toBe(false);
+    expect(result.meta).toEqual(
+      expect.objectContaining({
+        sourceSanitization: expect.objectContaining({
+          droppedCount: 3,
+          droppedHosts: expect.arrayContaining([
+            "vertexaisearch.cloud.google.com",
+          ]),
+        }),
+      }),
+    );
+  });
+
   it("returns fallback with merged sources when grounded text cannot be parsed as schema JSON", async () => {
     generateTextMock.mockResolvedValue({
       text: "This response did not return strict JSON.",
@@ -148,6 +220,8 @@ describe("GeminiResearchService", () => {
 
     expect(result.usedFallback).toBe(true);
     expect(result.error).toContain("parseable JSON payload");
+    expect(result.fallbackReason).toBe("SCHEMA_OUTPUT_INVALID");
+    expect(result.rawProviderError).toContain("parseable JSON payload");
     expect(result.output.sources).toEqual([
       "https://fallback.example.com",
       "https://search-b.example.com",
@@ -181,6 +255,8 @@ describe("GeminiResearchService", () => {
 
     expect(result.usedFallback).toBe(true);
     expect(result.error).toBe("provider timeout");
+    expect(result.fallbackReason).toBe("TIMEOUT");
+    expect(result.rawProviderError).toBe("provider timeout");
     expect(result.output.achievements).toEqual(["fallback"]);
     expect(result.sources[0]).toEqual(
       expect.objectContaining({
@@ -232,6 +308,50 @@ describe("GeminiResearchService", () => {
     });
 
     expect(aiConfig.getModelForPurpose).toHaveBeenCalled();
+  });
+
+  it("keeps schema-valid output and marks warning when both provider and brave search evidence are missing", async () => {
+    generateTextMock.mockResolvedValueOnce({
+      output: {
+        marketReports: ["Report"],
+        competitors: [],
+        marketTrends: ["Trend"],
+        marketSize: {},
+        sources: [],
+      },
+      sources: [],
+      providerMetadata: {},
+    });
+
+    const result = await service.research({
+      agent: "market",
+      prompt: "market prompt",
+      systemPrompt: "market system",
+      schema: MarketSchema,
+      searchEnforcement: {
+        requiresProviderEvidence: true,
+        requiresBraveToolCall: true,
+      },
+      getBraveToolCallCount: () => 0,
+      fallback: () => ({
+        marketReports: [],
+        competitors: [],
+        marketTrends: [],
+        marketSize: {},
+        sources: ["https://fallback.example.com"],
+      }),
+    });
+
+    expect(result.usedFallback).toBe(false);
+    expect(result.error).toBeUndefined();
+    expect(result.output.marketReports).toEqual(["Report"]);
+    expect(result.output.sources).toEqual([]);
+    expect(result.meta).toEqual({
+      searchEnforcement: {
+        missingProviderEvidence: true,
+        missingBraveToolCall: true,
+      },
+    });
   });
 
   it("fallback sources default to empty array when undefined", async () => {

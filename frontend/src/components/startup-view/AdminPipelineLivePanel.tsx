@@ -5,12 +5,13 @@ import {
   CheckCircle2,
   Clock3,
   Eye,
-  FileText,
   Loader2,
   RefreshCw,
   RotateCcw,
+  StopCircle,
   XCircle,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,6 +19,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useStartupRealtimeProgress } from "@/lib/startup/useStartupRealtimeProgress";
+import { PhaseDataInspector } from "./PhaseDataInspector";
 import {
   PIPELINE_PHASE_ORDER,
   type PipelineAgentEvent,
@@ -37,6 +39,7 @@ interface AdminPipelineLivePanelProps {
     requestedAt: string;
   } | null;
   onClearTrackedRetry?: () => void;
+  onCancelPipeline?: () => void;
 }
 
 type FlattenedAgent = {
@@ -47,6 +50,34 @@ type FlattenedAgent = {
 
 type SignalTone = "neutral" | "success" | "info" | "warning" | "danger";
 
+type ActivityItemKind = "agent" | "event" | "ai_trace" | "step_trace";
+
+type ActivityFilter = "all" | "issues" | "agents" | "traces" | "events";
+
+type ActivityItem = {
+  id: string;
+  kind: ActivityItemKind;
+  name: string;
+  phase: string;
+  status: string;
+  tone: SignalTone;
+  timestamp: string | undefined;
+  error?: string;
+  runtimeSummary?: string;
+  hasIssue: boolean;
+  agent?: FlattenedAgent;
+  event?: PipelineAgentEvent;
+  trace?: PipelineAgentTrace;
+};
+
+const ACTIVITY_FILTERS: { value: ActivityFilter; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "issues", label: "Issues" },
+  { value: "agents", label: "Agents" },
+  { value: "traces", label: "Traces" },
+  { value: "events", label: "Events" },
+];
+
 const PHASE_LABELS: Record<string, string> = {
   extraction: "Extraction",
   enrichment: "Gap Fill",
@@ -56,7 +87,9 @@ const PHASE_LABELS: Record<string, string> = {
   synthesis: "Synthesis",
 };
 
-const SUBSTEP_LABELS: Record<string, string> = {
+const STEP_LABELS: Record<string, string> = {
+  extract_fields: "Document Parsing",
+  scrape_website: "Website Scraping",
   pdf_fetch: "PDF Fetch",
   text_extraction: "Text Extraction",
   ocr_fallback: "OCR Fallback",
@@ -64,14 +97,19 @@ const SUBSTEP_LABELS: Record<string, string> = {
   cache_check: "Cache Check",
   website_scrape: "Website Scrape",
   team_discovery: "Team Discovery",
+  linkedin_enrichment_step: "LinkedIn Enrichment",
   linkedin_enrichment: "LinkedIn Enrichment",
   gap_analysis: "Gap Analysis",
+  resolve_extraction: "Resolve Extraction",
+  resolve_website: "Resolve Website",
+  resolve_email: "Resolve Email",
   web_search: "Web Search",
   ai_synthesis: "AI Synthesis",
   db_writes: "DB Writes",
 };
 
 const STATUS_BADGE_CLASS: Record<string, string> = {
+  started: "bg-sky-500/10 text-sky-700 border-sky-500/30 dark:text-sky-300",
   completed: "bg-emerald-500/10 text-emerald-700 border-emerald-500/30 dark:text-emerald-300",
   running: "bg-sky-500/10 text-sky-700 border-sky-500/30 dark:text-sky-300",
   waiting: "bg-amber-500/10 text-amber-700 border-amber-500/30 dark:text-amber-300",
@@ -79,6 +117,9 @@ const STATUS_BADGE_CLASS: Record<string, string> = {
   skipped: "bg-muted text-muted-foreground border-border",
   pending: "bg-muted text-muted-foreground border-border",
 };
+
+const RETRIED_BADGE_CLASS =
+  "bg-slate-500/10 text-slate-700 border-slate-500/30 dark:text-slate-300";
 
 const SURFACE_TONE_CLASS: Record<SignalTone, string> = {
   neutral: "",
@@ -96,6 +137,24 @@ const PROGRESS_TONE_CLASS: Record<SignalTone, string> = {
   danger: "[&>div]:bg-destructive",
 };
 
+const PHASE_STEP_AGENT_KEYS = new Set([
+  "pdf_fetch",
+  "text_extraction",
+  "ocr_fallback",
+  "field_extraction",
+  "gap_analysis",
+  "resolve_extraction",
+  "resolve_website",
+  "resolve_email",
+  "web_search",
+  "ai_synthesis",
+  "db_writes",
+  "cache_check",
+  "website_scrape",
+  "team_discovery",
+  "linkedin_enrichment_step",
+]);
+
 const EVENT_BADGE_CLASS: Record<PipelineAgentEventType, string> = {
   started: "bg-sky-500/10 text-sky-700 border-sky-500/30 dark:text-sky-300",
   retrying: "bg-amber-500/10 text-amber-700 border-amber-500/30 dark:text-amber-300",
@@ -112,15 +171,15 @@ function normalizePercent(value: number | undefined): number {
 }
 
 function formatLabel(value: string): string {
-  if (SUBSTEP_LABELS[value]) {
-    return SUBSTEP_LABELS[value];
+  if (STEP_LABELS[value]) {
+    return STEP_LABELS[value];
   }
   if (PHASE_LABELS[value]) {
     return PHASE_LABELS[value];
   }
   return value
     .replace(/([a-z])([A-Z])/g, "$1 $2")
-    .replace(/[_-]+/g, " ")
+    .replace(/[._-]+/g, " ")
     .replace(/\s+/g, " ")
     .trim()
     .replace(/^\w/, (char) => char.toUpperCase());
@@ -190,7 +249,7 @@ function isHardFailedAgent(agent: PipelineAgentProgress): boolean {
 
 function toneForAgent(agent: PipelineAgentProgress): SignalTone {
   if (isHardFailedAgent(agent)) return "danger";
-  if (isFallbackAgent(agent) || (agent.retryCount ?? 0) > 0) return "warning";
+  if (isFallbackAgent(agent)) return "warning";
   if (agent.status === "running") return "info";
   if (agent.status === "completed") return "success";
   return "neutral";
@@ -198,18 +257,17 @@ function toneForAgent(agent: PipelineAgentProgress): SignalTone {
 
 function toneForPhase(phase: PipelinePhaseProgress): SignalTone {
   const agentValues = Object.values(phase.agents ?? {});
+  const hasRetrySignals =
+    (phase.retryCount ?? 0) > 0 ||
+    agentValues.some((agent) => (agent.retryCount ?? 0) > 0);
+  const hasFallbackSignals = agentValues.some((agent) => isFallbackAgent(agent));
   if (
     phase.status === "failed" ||
     agentValues.some((agent) => isHardFailedAgent(agent))
   ) {
     return "danger";
   }
-  if (
-    (phase.retryCount ?? 0) > 0 ||
-    agentValues.some(
-      (agent) => isFallbackAgent(agent) || (agent.retryCount ?? 0) > 0,
-    )
-  ) {
+  if (hasFallbackSignals || (phase.status === "running" && hasRetrySignals)) {
     return "warning";
   }
   if (phase.status === "running") return "info";
@@ -220,6 +278,9 @@ function toneForPhase(phase: PipelinePhaseProgress): SignalTone {
 function statusIcon(status: string) {
   if (status === "completed") {
     return <CheckCircle2 className="h-4 w-4 text-emerald-500" />;
+  }
+  if (status === "started") {
+    return <Activity className="h-4 w-4 text-sky-500" />;
   }
   if (status === "running") {
     return <Loader2 className="h-4 w-4 animate-spin text-sky-500" />;
@@ -239,17 +300,6 @@ function runHealthText(tone: SignalTone): string {
   if (tone === "info") return "Active";
   if (tone === "success") return "Healthy";
   return "Idle";
-}
-
-function previewText(value: string | null | undefined, limit = 160): string {
-  if (!value || value.trim().length === 0) {
-    return "Not captured";
-  }
-  const compact = value.replace(/\s+/g, " ").trim();
-  if (compact.length <= limit) {
-    return compact;
-  }
-  return `${compact.slice(0, limit)}...`;
 }
 
 function normalizeAgentError(value: string | undefined): string | undefined {
@@ -272,6 +322,14 @@ function normalizeTraceError(trace: PipelineAgentTrace): string | undefined {
     return undefined;
   }
   const normalized = trace.error.toLowerCase();
+  if (
+    normalized.includes("unipile") &&
+    (/\b401\b/.test(normalized) ||
+      /\b403\b/.test(normalized) ||
+      normalized.includes("authorization failed"))
+  ) {
+    return "LinkedIn enrichment integration auth failed (Unipile 401/403). Check Unipile credentials/account access.";
+  }
   const hasCapturedOutput =
     (typeof trace.outputText === "string" && trace.outputText.trim().length > 0) ||
     trace.outputJson !== undefined;
@@ -286,6 +344,66 @@ function normalizeTraceError(trace: PipelineAgentTrace): string | undefined {
   return normalizeAgentError(trace.error);
 }
 
+function readTraceWarning(trace: PipelineAgentTrace): string | undefined {
+  if (!trace.meta || typeof trace.meta !== "object" || Array.isArray(trace.meta)) {
+    return undefined;
+  }
+
+  const searchEnforcement = (trace.meta as Record<string, unknown>).searchEnforcement;
+  if (
+    !searchEnforcement ||
+    typeof searchEnforcement !== "object" ||
+    Array.isArray(searchEnforcement)
+  ) {
+    return undefined;
+  }
+
+  const enforcementRecord = searchEnforcement as Record<string, unknown>;
+  const missingProviderEvidence = enforcementRecord.missingProviderEvidence === true;
+  const missingBraveToolCall = enforcementRecord.missingBraveToolCall === true;
+
+  if (!missingProviderEvidence && !missingBraveToolCall) {
+    return undefined;
+  }
+  if (missingProviderEvidence && missingBraveToolCall) {
+    return "Grounded provider evidence and Brave tool call were both missing; output was accepted with warning.";
+  }
+  if (missingProviderEvidence) {
+    return "Grounded provider evidence was missing; output was accepted with warning.";
+  }
+  return "Brave tool call evidence was missing; output was accepted with warning.";
+}
+
+function isAdvisoryTraceWarning(
+  trace: PipelineAgentTrace,
+  warning: string | undefined,
+  normalizedError?: string,
+): boolean {
+  return Boolean(warning) && !normalizedError && trace.status === "completed";
+}
+
+function readTraceRuntimeSummary(trace: PipelineAgentTrace): string | undefined {
+  if (!trace.meta || typeof trace.meta !== "object" || Array.isArray(trace.meta)) {
+    return undefined;
+  }
+
+  const modelConfig = (trace.meta as Record<string, unknown>).modelConfig;
+  if (!modelConfig || typeof modelConfig !== "object" || Array.isArray(modelConfig)) {
+    return undefined;
+  }
+
+  const config = modelConfig as Record<string, unknown>;
+  const modelName = typeof config.modelName === "string" ? config.modelName : undefined;
+  const searchMode = typeof config.searchMode === "string" ? config.searchMode : undefined;
+  const source = typeof config.source === "string" ? config.source : undefined;
+
+  if (!modelName || !searchMode || !source) {
+    return undefined;
+  }
+
+  return `${modelName} · ${searchMode} · ${source}`;
+}
+
 function formatFallbackReason(
   reason: string | undefined,
 ): string | undefined {
@@ -297,6 +415,15 @@ function formatFallbackReason(
     .split("_")
     .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
     .join(" ");
+}
+
+function formatFallbackReasonWithLegacyLabel(
+  reason: string | undefined,
+): string {
+  return (
+    formatFallbackReason(reason) ??
+    "Legacy trace (no fallback reason recorded)"
+  );
 }
 
 function toPrettyJson(value: unknown): string {
@@ -359,20 +486,25 @@ function isPhaseStepTrace(trace: PipelineAgentTrace): boolean {
   return trace.traceKind === "phase_step";
 }
 
-function readTraceOperation(trace: PipelineAgentTrace): string | undefined {
+function traceOperationLabel(trace: PipelineAgentTrace): string | undefined {
   const operation = trace.meta?.operation;
-  return typeof operation === "string" && operation.trim().length > 0
-    ? operation
-    : undefined;
+  if (typeof operation !== "string" || operation.trim().length === 0) {
+    return undefined;
+  }
+  return formatLabel(operation);
 }
 
-function formatCaptureStatus(
-  status: PipelineAgentTrace["captureStatus"] | undefined,
+function traceDisplayStatus(
+  trace: PipelineAgentTrace,
+  isLive: boolean,
 ): string {
-  if (status === "captured") return "Captured";
-  if (status === "provider_error_only") return "Provider Error Only";
-  if (status === "missing") return "Missing";
-  return "Unknown";
+  if (trace.status !== "running") {
+    return trace.status;
+  }
+  if (!isLive) {
+    return "started";
+  }
+  return trace.completedAt ? "started" : "running";
 }
 
 function phaseSortKey(phase: string): number {
@@ -467,11 +599,19 @@ function buildDataFlowBadges(
   if (phase === "scraping") {
     const scrapeSummary = summaries.website_scrape;
     const teamSummary = summaries.team_discovery;
-    const linkedinSummary = summaries.linkedin_enrichment;
+    const linkedinSummary =
+      summaries.linkedin_enrichment_step ?? summaries.linkedin_enrichment;
+    const linkedinStatuses = asSummaryRecord(linkedinSummary?.enrichmentStatuses);
 
     const pages = readSummaryNumber(scrapeSummary, "pages");
     const teamTotal = readSummaryNumber(teamSummary, "total");
-    const linkedinEnriched = readSummaryNumber(linkedinSummary, "liveEnriched");
+    const linkedinEnriched =
+      readSummaryNumber(linkedinSummary, "verifiedTeamMembers") ??
+      readSummaryNumber(linkedinSummary, "verified") ??
+      readSummaryNumber(linkedinSummary, "successfulMatches") ??
+      readSummaryNumber(linkedinStatuses, "success") ??
+      readSummaryNumber(linkedinSummary, "enrichedTeamMembers") ??
+      readSummaryNumber(linkedinSummary, "liveEnriched");
 
     return [
       typeof pages === "number" ? `${pages} pages scraped` : null,
@@ -543,6 +683,7 @@ export function AdminPipelineLivePanel({
   onRetryAgent,
   trackedRetry,
   onClearTrackedRetry,
+  onCancelPipeline,
 }: AdminPipelineLivePanelProps) {
   const [selectedTrace, setSelectedTrace] = useState<PipelineAgentTrace | null>(null);
   const [retryingAgentKey, setRetryingAgentKey] = useState<string | null>(null);
@@ -564,21 +705,24 @@ export function AdminPipelineLivePanel({
           status: "pending",
           progress: 0,
         };
-        const agents = Object.values(data.agents ?? {});
-        const retryingAgentCount = agents.filter(
+        const agentEntries = Object.entries(data.agents ?? {});
+        const visibleAgents = agentEntries
+          .filter(([agentKey]) => !PHASE_STEP_AGENT_KEYS.has(agentKey))
+          .map(([, agent]) => agent);
+        const retryingAgentCount = visibleAgents.filter(
           (agent) =>
             data.status === "running" &&
             progress?.pipelineStatus === "running" &&
             agent.status === "running" &&
             (agent.retryCount ?? 0) > 0,
         ).length;
-        const retriedAgentCount = agents.filter(
+        const retriedAgentCount = visibleAgents.filter(
           (agent) => (agent.retryCount ?? 0) > 0,
         ).length;
-        const fallbackAgentCount = agents.filter(
+        const fallbackAgentCount = visibleAgents.filter(
           (agent) => isFallbackAgent(agent),
         ).length;
-        const failedAgentCount = agents.filter(
+        const failedAgentCount = visibleAgents.filter(
           (agent) => isHardFailedAgent(agent),
         ).length;
         return {
@@ -586,7 +730,7 @@ export function AdminPipelineLivePanel({
           data,
           percent: calculatePhaseProgress(data),
           tone: toneForPhase(data),
-          agentCount: agents.length,
+          agentCount: visibleAgents.length,
           retryingAgentCount,
           retriedAgentCount,
           fallbackAgentCount,
@@ -668,15 +812,140 @@ export function AdminPipelineLivePanel({
     [agentTraceTimeline],
   );
 
+  const [activityFilter, setActivityFilter] = useState<ActivityFilter>("all");
+
+  const activityItems = useMemo<ActivityItem[]>(() => {
+    const items: ActivityItem[] = [];
+
+    for (const agent of flattenedAgents) {
+      const tone = toneForAgent(agent.data);
+      items.push({
+        id: `agent:${agent.phase}:${agent.key}`,
+        kind: "agent",
+        name: formatLabel(agent.key),
+        phase: agent.phase,
+        status: agent.data.status,
+        tone,
+        timestamp: agent.data.lastEventAt,
+        error: normalizeAgentError(agent.data.error),
+        hasIssue: isHardFailedAgent(agent.data) || isFallbackAgent(agent.data),
+        agent,
+      });
+    }
+
+    for (const event of eventTimeline) {
+      const tone = toneForEvent(event.event);
+      items.push({
+        id: `event:${event.id}`,
+        kind: "event",
+        name: formatLabel(event.agentKey),
+        phase: String(event.phase),
+        status: event.event,
+        tone,
+        timestamp: event.timestamp,
+        error: normalizeAgentError(event.error),
+        hasIssue: event.event === "failed" || event.event === "fallback",
+        event,
+      });
+    }
+
+    for (const trace of aiAgentTraceTimeline) {
+      const warning = readTraceWarning(trace);
+      const normalizedTraceError = normalizeTraceError(trace);
+      const advisoryWarning = isAdvisoryTraceWarning(
+        trace,
+        warning,
+        normalizedTraceError,
+      );
+      const runtimeSummary = readTraceRuntimeSummary(trace);
+      items.push({
+        id: `ai_trace:${trace.id}`,
+        kind: "ai_trace",
+        name: formatLabel(trace.agentKey),
+        phase: String(trace.phase),
+        status: trace.status,
+        tone: trace.status === "failed"
+          ? "danger"
+          : trace.status === "fallback" || (warning && !advisoryWarning)
+            ? "warning"
+          : trace.status === "running"
+            ? "info"
+            : "success",
+        timestamp: trace.startedAt ?? trace.completedAt ?? undefined,
+        error: normalizedTraceError ?? (advisoryWarning ? undefined : warning),
+        runtimeSummary,
+        hasIssue:
+          trace.status === "failed" ||
+          trace.status === "fallback" ||
+          (Boolean(warning) && !advisoryWarning),
+        trace,
+      });
+    }
+
+    for (const trace of stepTraceTimeline) {
+      const warning = readTraceWarning(trace);
+      const normalizedTraceError = normalizeTraceError(trace);
+      const advisoryWarning = isAdvisoryTraceWarning(
+        trace,
+        warning,
+        normalizedTraceError,
+      );
+      const runtimeSummary = readTraceRuntimeSummary(trace);
+      items.push({
+        id: `step_trace:${trace.id}`,
+        kind: "step_trace",
+        name: formatLabel(trace.stepKey || trace.agentKey),
+        phase: String(trace.phase),
+        status: trace.status,
+        tone: trace.status === "failed"
+          ? "danger"
+          : trace.status === "fallback" || (warning && !advisoryWarning)
+            ? "warning"
+          : trace.status === "running"
+            ? "info"
+            : "success",
+        timestamp: trace.startedAt ?? trace.completedAt ?? undefined,
+        error: normalizedTraceError ?? (advisoryWarning ? undefined : warning),
+        runtimeSummary,
+        hasIssue:
+          trace.status === "failed" ||
+          trace.status === "fallback" ||
+          (Boolean(warning) && !advisoryWarning),
+        trace,
+      });
+    }
+
+    items.sort((a, b) => {
+      const tsA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+      const tsB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+      return tsB - tsA;
+    });
+
+    return items;
+  }, [flattenedAgents, eventTimeline, aiAgentTraceTimeline, stepTraceTimeline]);
+
+  const filteredActivityItems = useMemo(() => {
+    if (activityFilter === "all") return activityItems;
+    if (activityFilter === "issues") return activityItems.filter((item) => item.hasIssue);
+    if (activityFilter === "agents") return activityItems.filter((item) => item.kind === "agent");
+    if (activityFilter === "traces") return activityItems.filter((item) => item.kind === "ai_trace" || item.kind === "step_trace");
+    return activityItems.filter((item) => item.kind === "event");
+  }, [activityItems, activityFilter]);
+
+  const activityFilterCounts = useMemo(() => ({
+    all: activityItems.length,
+    issues: activityItems.filter((item) => item.hasIssue).length,
+    agents: activityItems.filter((item) => item.kind === "agent").length,
+    traces: activityItems.filter((item) => item.kind === "ai_trace" || item.kind === "step_trace").length,
+    events: activityItems.filter((item) => item.kind === "event").length,
+  }), [activityItems]);
+
   const runningAgentsCount = flattenedAgents.filter(
     (agent) => agent.data.status === "running",
   ).length;
   const isLive = startupStatus === "analyzing" && progress?.pipelineStatus === "running";
   const fallbackCount = flattenedAgents.filter(
     (agent) => isFallbackAgent(agent.data),
-  ).length;
-  const retriedAgentsCount = flattenedAgents.filter(
-    (agent) => (agent.data.retryCount ?? 0) > 0,
   ).length;
   const activeRetriesCount = flattenedAgents.filter(
     (agent) => (agent.data.retryCount ?? 0) > 0 && agent.data.status === "running",
@@ -711,7 +980,7 @@ export function AdminPipelineLivePanel({
       ? "danger"
       : isLive && (activeFailedAgentsCount > 0 || activePhaseErrorCount > 0)
         ? "danger"
-      : problematicAgentsCount > 0 || fallbackCount > 0 || retriedAgentsCount > 0
+      : problematicAgentsCount > 0 || fallbackCount > 0 || (isLive && activeRetriesCount > 0)
         ? "warning"
         : isCompletedSnapshot
           ? "success"
@@ -775,6 +1044,10 @@ export function AdminPipelineLivePanel({
           ? `Completed${trackedRetryEvent ? ` • ${eventVerb(trackedRetryEvent.event)} at ${formatTime(trackedRetryEvent.timestamp)}` : ""}. Synthesis will refresh downstream outputs.`
           : `Failed${trackedRetryEvent ? ` • ${eventVerb(trackedRetryEvent.event)} at ${formatTime(trackedRetryEvent.timestamp)}` : ""}. Check timeline details.`
     : "";
+  const selectedTraceWarning = selectedTrace ? readTraceWarning(selectedTrace) : undefined;
+  const selectedTraceRuntimeSummary = selectedTrace
+    ? readTraceRuntimeSummary(selectedTrace)
+    : undefined;
 
   if (!progress && !isLoading) {
     return (
@@ -806,6 +1079,17 @@ export function AdminPipelineLivePanel({
             <Badge variant="outline">Snapshot</Badge>
           )}
           {isFetching && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+          {isLive && onCancelPipeline && (
+            <Button
+              variant="destructive"
+              size="sm"
+              className="ml-auto"
+              onClick={onCancelPipeline}
+            >
+              <StopCircle className="h-4 w-4 mr-1" />
+              Stop Pipeline
+            </Button>
+          )}
         </CardTitle>
       </CardHeader>
 
@@ -972,7 +1256,7 @@ export function AdminPipelineLivePanel({
                     {entry.retriedAgentCount > 0 && (
                       <Badge
                         variant="outline"
-                        className="bg-amber-500/10 text-amber-700 border-amber-500/30 dark:text-amber-300"
+                        className={RETRIED_BADGE_CLASS}
                       >
                         retried {entry.retriedAgentCount}
                       </Badge>
@@ -995,60 +1279,170 @@ export function AdminPipelineLivePanel({
           </div>
         </div>
 
-        <div className="grid gap-4 xl:grid-cols-2">
-          <div className="space-y-2">
-            <h3 className="text-sm font-semibold">Agent Status</h3>
-            <ScrollArea className="h-[280px] rounded-lg border">
-              <div className="space-y-2 p-3">
-                {flattenedAgents.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No agent activity yet.</p>
-                ) : (
-                  flattenedAgents.map((agent) => {
-                    const isTrackedAgent =
-                      trackedRetry?.phase === agent.phase &&
-                      trackedRetry.agentKey === agent.key;
-                    return (
-                      <div
-                        key={`${agent.phase}:${agent.key}`}
-                        className={`rounded-md border p-2.5 ${SURFACE_TONE_CLASS[toneForAgent(agent.data)]} ${
-                          isTrackedAgent ? "ring-1 ring-primary/50" : ""
-                        }`}
-                      >
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="flex items-center gap-2 text-sm font-medium">
-                          {statusIcon(agent.data.status)}
-                          {formatLabel(agent.key)}
-                        </p>
-                        <Badge variant="outline" className={statusClass(agent.data.status)}>
-                          {agent.data.status}
-                        </Badge>
-                      </div>
-                      <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted-foreground">
-                        <span>Phase: {formatLabel(agent.phase)}</span>
-                        <span>Attempt: {agent.data.attempts ?? 1}</span>
-                        <span>Retries: {agent.data.retryCount ?? 0}</span>
-                        <span>Fallback: {isFallbackAgent(agent.data) ? "yes" : "no"}</span>
-                      </div>
-                      {isFallbackAgent(agent.data) && (
-                        <div className="mt-1 text-xs text-amber-700 dark:text-amber-300">
-                          Reason: {formatFallbackReason(agent.data.fallbackReason) ?? "Unknown"}
-                        </div>
+        <PhaseDataInspector
+          phaseResults={progress?.phaseResults}
+          phases={progress?.phases}
+        />
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold">Activity</h3>
+            <div className="flex gap-1">
+              {ACTIVITY_FILTERS.map((filter) => {
+                const count = activityFilterCounts[filter.value];
+                return (
+                  <button
+                    key={filter.value}
+                    type="button"
+                    className={cn(
+                      "rounded-md border px-2 py-0.5 text-xs font-medium transition-colors",
+                      activityFilter === filter.value
+                        ? "border-primary/40 bg-primary/10 text-primary"
+                        : "border-transparent text-muted-foreground hover:bg-muted",
+                    )}
+                    onClick={() => setActivityFilter(filter.value)}
+                  >
+                    {filter.label}
+                    {count > 0 && (
+                      <span className="ml-1 tabular-nums text-muted-foreground">
+                        {count}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <ScrollArea className="h-[480px] rounded-lg border">
+            <div className="space-y-1 p-2">
+              {filteredActivityItems.length === 0 ? (
+                <p className="py-6 text-center text-sm text-muted-foreground">
+                  No activity to show.
+                </p>
+              ) : (
+                filteredActivityItems.map((item) => {
+                  const isAgent = item.kind === "agent" && item.agent;
+                  const isTrace = item.kind === "ai_trace" || item.kind === "step_trace";
+                  const isEvent = item.kind === "event" && item.event;
+                  const displayStatus = isTrace && item.trace
+                    ? traceDisplayStatus(item.trace, isLive)
+                    : item.status;
+                  const traceOperation = isTrace && item.trace
+                    ? traceOperationLabel(item.trace)
+                    : undefined;
+                  const isTrackedAgent = isAgent &&
+                    trackedRetry?.phase === item.agent?.phase &&
+                    trackedRetry?.agentKey === item.agent?.key;
+                  const canRetry = isAgent &&
+                    onRetryAgent &&
+                    item.agent &&
+                    (item.agent.phase === "research" || item.agent.phase === "evaluation") &&
+                    (item.agent.data.status === "failed" || isFallbackAgent(item.agent.data));
+
+                  return (
+                    <div
+                      key={item.id}
+                      className={cn(
+                        "rounded-md border px-2.5 py-2",
+                        SURFACE_TONE_CLASS[item.tone],
+                        isTrace && "cursor-pointer",
+                        isTrackedAgent && "ring-1 ring-primary/50",
                       )}
-                      {onRetryAgent &&
-                        (agent.phase === "research" || agent.phase === "evaluation") &&
-                        (agent.data.status === "failed" || isFallbackAgent(agent.data)) && (
-                          <div className="mt-2">
+                      onClick={isTrace && item.trace ? () => setSelectedTrace(item.trace!) : undefined}
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className="flex min-w-0 flex-1 items-center gap-2">
+                          {isEvent ? eventIcon(item.event!.event) : statusIcon(displayStatus)}
+                          <span className="truncate text-sm font-medium">{item.name}</span>
+                          <Badge variant="outline" className="shrink-0 border-border bg-muted/50 text-[10px] text-muted-foreground">
+                            {formatLabel(item.phase)}
+                          </Badge>
+                          {item.kind !== "agent" && (
+                            <Badge variant="outline" className="shrink-0 border-border bg-muted/50 text-[10px] text-muted-foreground">
+                              {item.kind === "event" ? "event" : item.kind === "ai_trace" ? "trace" : "step"}
+                            </Badge>
+                          )}
+                          {traceOperation && (
+                            <Badge variant="outline" className="shrink-0 border-border bg-muted/50 text-[10px] text-muted-foreground">
+                              {traceOperation}
+                            </Badge>
+                          )}
+                          {item.runtimeSummary && (
+                            <Badge variant="outline" className="shrink-0 border-border bg-muted/50 text-[10px] text-muted-foreground">
+                              {item.runtimeSummary}
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2">
+                          {isTrace && (
+                            <button
+                              type="button"
+                              className="text-xs text-muted-foreground hover:text-foreground"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (item.trace) setSelectedTrace(item.trace);
+                              }}
+                            >
+                              <Eye className="inline h-3.5 w-3.5 mr-0.5" />
+                              Trace
+                            </button>
+                          )}
+                          <Badge variant="outline" className={cn("text-[10px]", isEvent ? EVENT_BADGE_CLASS[item.event!.event] : statusClass(displayStatus))}>
+                            {isEvent ? eventVerb(item.event!.event) : displayStatus}
+                          </Badge>
+                          <span className="text-xs tabular-nums text-muted-foreground">
+                            {formatTime(item.timestamp)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {item.error && (
+                        <p className={cn(
+                          "mt-1 truncate text-xs",
+                          item.tone === "danger"
+                            ? "text-destructive"
+                            : item.tone === "warning"
+                              ? "text-amber-700 dark:text-amber-300"
+                              : "text-muted-foreground",
+                        )}>
+                          {item.error}
+                        </p>
+                      )}
+
+                      {isAgent && item.agent && (
+                        <div className="mt-1 flex flex-wrap items-center gap-2">
+                          {isFallbackAgent(item.agent.data) && (
+                            <span className="text-xs text-amber-700 dark:text-amber-300">
+                              Fallback:{" "}
+                              {formatFallbackReasonWithLegacyLabel(
+                                item.agent.data.fallbackReason,
+                              )}
+                            </span>
+                          )}
+                          {(item.agent.data.retryCount ?? 0) > 0 && (
+                            <Badge variant="outline" className={cn(RETRIED_BADGE_CLASS, "text-[10px]")}>
+                              retried {item.agent.data.retryCount}
+                            </Badge>
+                          )}
+                          {isTrackedAgent && (
+                            <Badge variant="outline" className="bg-sky-500/10 text-sky-700 border-sky-500/30 text-[10px] dark:text-sky-300">
+                              targeted retry
+                            </Badge>
+                          )}
+                          {canRetry && item.agent && (
                             <Button
                               type="button"
                               variant="outline"
                               size="sm"
-                              className="h-7 gap-1.5 text-xs"
-                              disabled={retryingAgentKey === `${agent.phase}:${agent.key}`}
-                              onClick={async () => {
+                              className="ml-auto h-6 gap-1 px-2 text-[10px]"
+                              disabled={retryingAgentKey === `${item.agent.phase}:${item.agent.key}`}
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                const agent = item.agent!;
                                 const actionKey = `${agent.phase}:${agent.key}`;
                                 setRetryingAgentKey(actionKey);
                                 try {
-                                  await onRetryAgent(
+                                  await onRetryAgent!(
                                     agent.phase as "research" | "evaluation",
                                     agent.key,
                                   );
@@ -1059,301 +1453,22 @@ export function AdminPipelineLivePanel({
                                 }
                               }}
                             >
-                              {retryingAgentKey === `${agent.phase}:${agent.key}` ? (
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              {retryingAgentKey === `${item.agent.phase}:${item.agent.key}` ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
                               ) : (
-                                <RotateCcw className="h-3.5 w-3.5" />
+                                <RotateCcw className="h-3 w-3" />
                               )}
-                              Retry agent
+                              Retry
                             </Button>
-                          </div>
-                        )}
-                      {(isFallbackAgent(agent.data) ||
-                        (agent.data.retryCount ?? 0) > 0 ||
-                        agent.data.lastEvent) && (
-                        <div className="mt-1.5 flex flex-wrap gap-1.5">
-                          {(agent.data.retryCount ?? 0) > 0 && (
-                            <Badge
-                              variant="outline"
-                              className="bg-amber-500/10 text-amber-700 border-amber-500/30 dark:text-amber-300"
-                            >
-                              retried {agent.data.retryCount}
-                            </Badge>
-                          )}
-                          {isFallbackAgent(agent.data) && (
-                            <Badge
-                              variant="outline"
-                              className="bg-amber-500/10 text-amber-700 border-amber-500/30 dark:text-amber-300"
-                            >
-                              fallback
-                            </Badge>
-                          )}
-                          {agent.data.lastEvent && (
-                            <Badge
-                              variant="outline"
-                              className={EVENT_BADGE_CLASS[agent.data.lastEvent]}
-                            >
-                              {eventVerb(agent.data.lastEvent)}
-                            </Badge>
-                          )}
-                          {isTrackedAgent && (
-                            <Badge
-                              variant="outline"
-                              className="bg-sky-500/10 text-sky-700 border-sky-500/30 dark:text-sky-300"
-                            >
-                              targeted retry
-                            </Badge>
                           )}
                         </div>
-                      )}
-                      {agent.data.error && (
-                        <p
-                          className={`mt-1 text-xs ${
-                            isFallbackAgent(agent.data)
-                              ? "text-amber-700 dark:text-amber-300"
-                              : "text-destructive"
-                          }`}
-                        >
-                          {normalizeAgentError(agent.data.error)}
-                        </p>
-                      )}
-                      {agent.data.rawProviderError && isFallbackAgent(agent.data) && (
-                        <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
-                          Provider: {previewText(agent.data.rawProviderError, 220)}
-                        </p>
-                      )}
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </ScrollArea>
-          </div>
-
-          <div className="space-y-2">
-            <h3 className="text-sm font-semibold">Event Timeline</h3>
-            <ScrollArea className="h-[280px] rounded-lg border">
-              <div className="space-y-2 p-3">
-                {eventTimeline.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    Waiting for lifecycle events.
-                  </p>
-                ) : (
-                  eventTimeline.map((event) => (
-                    <div
-                      key={event.id}
-                      className={`rounded-md border border-l-4 p-2.5 ${SURFACE_TONE_CLASS[toneForEvent(event.event)]}`}
-                    >
-                      <div className="flex items-center gap-2 text-sm">
-                        {eventIcon(event.event)}
-                        <span className="font-medium">{formatLabel(event.agentKey)}</span>
-                        <Badge variant="outline" className={EVENT_BADGE_CLASS[event.event]}>
-                          {eventVerb(event.event)}
-                        </Badge>
-                      </div>
-                      <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted-foreground">
-                        <span>Phase: {formatLabel(String(event.phase))}</span>
-                        <span>At: {formatTime(event.timestamp)}</span>
-                        {typeof event.attempt === "number" && <span>Attempt: {event.attempt}</span>}
-                        {typeof event.retryCount === "number" && (
-                          <span>Retries: {event.retryCount}</span>
-                        )}
-                        {event.fallbackReason && (
-                          <span>
-                            Reason: {formatFallbackReason(event.fallbackReason)}
-                          </span>
-                        )}
-                      </div>
-                      {event.error && (
-                        <p
-                          className={`mt-1 text-xs ${
-                            event.event === "fallback"
-                              ? "text-amber-700 dark:text-amber-300"
-                              : "text-destructive"
-                          }`}
-                        >
-                          {normalizeAgentError(event.error)}
-                        </p>
-                      )}
-                      {event.rawProviderError && event.event === "fallback" && (
-                        <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
-                          Provider: {previewText(event.rawProviderError, 220)}
-                        </p>
                       )}
                     </div>
-                  ))
-                )}
-              </div>
-            </ScrollArea>
-          </div>
-        </div>
-
-        <div className="grid gap-3 lg:grid-cols-2">
-          <div className="space-y-2">
-            <h3 className="text-sm font-semibold">AI Agent Traces</h3>
-            <ScrollArea className="h-[280px] rounded-lg border">
-              <div className="space-y-2 p-3">
-                {aiAgentTraceTimeline.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No AI-agent traces captured yet for this run.
-                  </p>
-                ) : (
-                  aiAgentTraceTimeline.map((trace) => (
-                    <div
-                      key={trace.id}
-                      className={`rounded-md border p-2.5 ${SURFACE_TONE_CLASS[
-                        trace.status === "failed"
-                          ? "danger"
-                          : trace.status === "fallback"
-                            ? "warning"
-                            : trace.status === "running"
-                              ? "info"
-                              : "success"
-                      ]} cursor-pointer`}
-                      onClick={() => setSelectedTrace(trace)}
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-sm font-medium">
-                          {formatLabel(trace.agentKey)} · {formatLabel(String(trace.phase))}
-                        </p>
-                        <Badge variant="outline" className={statusClass(trace.status)}>
-                          {trace.status}
-                        </Badge>
-                      </div>
-                      <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted-foreground">
-                        <span>Attempt: {trace.attempt ?? 1}</span>
-                        <span>Retries: {trace.retryCount ?? 0}</span>
-                        <span>Capture: {formatCaptureStatus(trace.captureStatus)}</span>
-                        <span>Started: {formatTime(trace.startedAt)}</span>
-                      </div>
-                      {trace.error && (
-                        <p
-                          className={`mt-1 text-xs ${
-                            trace.status === "fallback"
-                              ? "text-amber-700 dark:text-amber-300"
-                              : "text-destructive"
-                          }`}
-                        >
-                          {normalizeTraceError(trace)}
-                        </p>
-                      )}
-                      {trace.rawProviderError && trace.status === "fallback" && (
-                        <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
-                          Provider: {previewText(trace.rawProviderError, 220)}
-                        </p>
-                      )}
-                      <div className="mt-2 grid gap-2 md:grid-cols-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="justify-start gap-2 text-xs"
-                          onClick={() => setSelectedTrace(trace)}
-                        >
-                          <FileText className="h-3.5 w-3.5" />
-                          Input
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="justify-start gap-2 text-xs"
-                          onClick={() => setSelectedTrace(trace)}
-                        >
-                          <Eye className="h-3.5 w-3.5" />
-                          Output
-                        </Button>
-                      </div>
-                      <p className="mt-2 text-xs text-muted-foreground">
-                        Input: {previewText(toPrettyInput(trace))}
-                      </p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Output: {previewText(toPrettyOutput(trace))}
-                      </p>
-                    </div>
-                  ))
-                )}
-              </div>
-            </ScrollArea>
-          </div>
-
-          <div className="space-y-2">
-            <h3 className="text-sm font-semibold">Step Traces</h3>
-            <ScrollArea className="h-[280px] rounded-lg border">
-              <div className="space-y-2 p-3">
-                {stepTraceTimeline.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No step-level traces captured yet for this run.
-                  </p>
-                ) : (
-                  stepTraceTimeline.map((trace) => {
-                    const operation = readTraceOperation(trace);
-                    return (
-                      <div
-                        key={trace.id}
-                        className={`rounded-md border p-2.5 ${SURFACE_TONE_CLASS[
-                          trace.status === "failed"
-                            ? "danger"
-                            : trace.status === "running"
-                              ? "info"
-                              : "success"
-                        ]} cursor-pointer`}
-                        onClick={() => setSelectedTrace(trace)}
-                      >
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <p className="text-sm font-medium">
-                            {formatLabel(trace.stepKey || trace.agentKey)} · {formatLabel(String(trace.phase))}
-                          </p>
-                          <Badge variant="outline" className={statusClass(trace.status)}>
-                            {trace.status}
-                          </Badge>
-                        </div>
-                        <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted-foreground">
-                          <span>Kind: Step</span>
-                          {operation && <span>Operation: {operation}</span>}
-                          <span>Capture: {formatCaptureStatus(trace.captureStatus)}</span>
-                          <span>Started: {formatTime(trace.startedAt)}</span>
-                        </div>
-                        {trace.error && (
-                          <p className="mt-1 text-xs text-destructive">
-                            {normalizeTraceError(trace)}
-                          </p>
-                        )}
-                        <div className="mt-2 grid gap-2 md:grid-cols-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="justify-start gap-2 text-xs"
-                            onClick={() => setSelectedTrace(trace)}
-                          >
-                            <FileText className="h-3.5 w-3.5" />
-                            Input
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="justify-start gap-2 text-xs"
-                            onClick={() => setSelectedTrace(trace)}
-                          >
-                            <Eye className="h-3.5 w-3.5" />
-                            Output
-                          </Button>
-                        </div>
-                        <p className="mt-2 text-xs text-muted-foreground">
-                          Input: {previewText(toPrettyInput(trace))}
-                        </p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          Output: {previewText(toPrettyOutput(trace))}
-                        </p>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </ScrollArea>
-          </div>
+                  );
+                })
+              )}
+            </div>
+          </ScrollArea>
         </div>
 
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -1388,13 +1503,25 @@ export function AdminPipelineLivePanel({
             {selectedTrace?.status === "fallback" && (
               <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
                 Fallback reason:{" "}
-                {formatFallbackReason(selectedTrace.fallbackReason) ?? "Unknown"}
+                {formatFallbackReasonWithLegacyLabel(
+                  selectedTrace.fallbackReason,
+                )}
                 {selectedTrace.rawProviderError ? (
                   <>
                     {" "}
                     | Raw provider error: {selectedTrace.rawProviderError}
                   </>
                 ) : null}
+              </div>
+            )}
+            {selectedTraceWarning && selectedTrace?.status !== "fallback" && (
+              <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+                Warning: {selectedTraceWarning}
+              </div>
+            )}
+            {selectedTraceRuntimeSummary && (
+              <div className="rounded-md border border-sky-500/30 bg-sky-500/5 px-3 py-2 text-xs text-sky-700 dark:text-sky-300">
+                Runtime model config: {selectedTraceRuntimeSummary}
               </div>
             )}
             <div className="grid gap-3 md:grid-cols-2">

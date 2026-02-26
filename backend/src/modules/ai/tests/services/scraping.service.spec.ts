@@ -373,6 +373,83 @@ describe("ScrapingService", () => {
     expect(result.teamMembers.map((m) => m.name)).not.toContain("Cyrille Jacques");
   });
 
+  it("downgrades stale submitted executive founders and drops unverified submitted non-founders", async () => {
+    mockDb.limit.mockResolvedValueOnce([
+      {
+        id: "startup-joe-case",
+        userId: "user-123",
+        website: "https://airbnb.com",
+        name: "Airbnb",
+        industry: "travel",
+        stage: "seed",
+        description: "Marketplace",
+        teamMembers: [
+          {
+            name: "Joe Gebbia",
+            role: "CPO",
+            linkedinUrl: "https://linkedin.com/in/jgebbia",
+          },
+          {
+            name: "Former Exec",
+            role: "COO",
+            linkedinUrl: "https://linkedin.com/in/former-exec",
+          },
+        ],
+      },
+    ]);
+
+    const pipelineState = {
+      getPhaseResult: jest.fn().mockImplementation(
+        async (_startupId: string, phase: PipelinePhase) => {
+          if (phase === PipelinePhase.EXTRACTION) {
+            return {
+              founderNames: ["Joe Gebbia"],
+            };
+          }
+          return null;
+        },
+      ),
+    } as unknown as jest.Mocked<PipelineStateService>;
+
+    linkedin.enrichTeamMembers.mockResolvedValueOnce([
+      {
+        name: "Joe Gebbia",
+        role: "CPO",
+        linkedinUrl: "https://linkedin.com/in/jgebbia",
+        enrichmentStatus: "not_found",
+        confidenceReason: "Profile name does not match requested member name",
+      },
+      {
+        name: "Former Exec",
+        role: "COO",
+        linkedinUrl: "https://linkedin.com/in/former-exec",
+        enrichmentStatus: "not_found",
+        confidenceReason: "Current company does not match target company \"Airbnb\"",
+      },
+    ] as any);
+
+    const serviceWithPipelineState = new ScrapingService(
+      drizzle,
+      websiteScraper,
+      linkedin,
+      cache,
+      undefined,
+      pipelineState,
+    );
+
+    const result = await serviceWithPipelineState.run("startup-joe-case");
+
+    expect(result.teamMembers).toHaveLength(1);
+    expect(result.teamMembers[0]).toEqual(
+      expect.objectContaining({
+        name: "Joe Gebbia",
+        role: "Founder",
+        enrichmentStatus: "not_found",
+      }),
+    );
+    expect(result.teamMembers.map((m) => m.name)).not.toContain("Former Exec");
+  });
+
   describe("deck-based team discovery", () => {
     let pipelineState: jest.Mocked<PipelineStateService>;
     let aiProvider: jest.Mocked<AiProviderService>;

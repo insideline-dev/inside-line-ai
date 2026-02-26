@@ -353,11 +353,54 @@ export class ScrapingService {
       throw error;
     }
     const enrichedTeam = linkedinEnrichmentResult.teamMembers;
-
+    const normalizeMemberKey = (name: string | undefined): string =>
+      (name ?? "")
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, " ");
     const submittedNames = new Set(
-      submittedTeamMembers.map((member) => member.name.trim().toLowerCase()),
+      submittedTeamMembers.map((member) => normalizeMemberKey(member.name)),
     );
-    const trustedSources = new Set<string>(["submitted", "deck", "enrichment"]);
+    const founderEvidenceNames = new Set(
+      [...extractionFounderMembers, ...enrichmentFounderMembers, ...discoveredDeckMembers]
+        .filter((member) => this.isFounderRole(member.role))
+        .map((member) => normalizeMemberKey(member.name)),
+    );
+    const isSubmittedMember = (member: EnrichedTeamMember): boolean =>
+      submittedNames.has(normalizeMemberKey(member.name));
+    const hasFounderEvidence = (member: EnrichedTeamMember): boolean =>
+      founderEvidenceNames.has(normalizeMemberKey(member.name));
+    const isHistoricalAssociation = (member: EnrichedTeamMember): boolean =>
+      (member.confidenceReason ?? "")
+        .toLowerCase()
+        .includes("historical founder/executive association");
+    const isCurrentAssociation = (member: EnrichedTeamMember): boolean =>
+      (member.confidenceReason ?? "").toLowerCase().includes("currently employed at");
+    const normalizedEnrichedTeam = enrichedTeam.map((member) => {
+      if (!isSubmittedMember(member)) {
+        return member;
+      }
+      if (!hasFounderEvidence(member)) {
+        return member;
+      }
+
+      const shouldDowngradeToFounderRole =
+        (member.enrichmentStatus !== "success" || isHistoricalAssociation(member)) &&
+        !isCurrentAssociation(member);
+      if (!shouldDowngradeToFounderRole) {
+        return member;
+      }
+      if (this.isFounderRole(member.role)) {
+        return member;
+      }
+
+      return {
+        ...member,
+        role: "Founder",
+      };
+    });
+
+    const trustedSources = new Set<string>(["deck", "enrichment"]);
     const isTrustedUnverifiedSeed = (member: EnrichedTeamMember): boolean => {
       if (!member.teamMemberSource) {
         return false;
@@ -372,21 +415,40 @@ export class ScrapingService {
       }
       return false;
     };
-    const droppedUnverifiedTeamMembers = enrichedTeam.filter((member) => {
-      const isSubmittedMember = submittedNames.has(member.name.trim().toLowerCase());
-      if (isSubmittedMember) return false;
+    const shouldKeepSubmittedUnverifiedMember = (member: EnrichedTeamMember): boolean => {
+      if (!isSubmittedMember(member)) {
+        return false;
+      }
+      if (member.enrichmentStatus === "success") {
+        return true;
+      }
+      if (
+        member.enrichmentStatus === "error" ||
+        member.enrichmentStatus === "not_configured"
+      ) {
+        return true;
+      }
+      if (!member.linkedinUrl) {
+        return true;
+      }
+      if (hasFounderEvidence(member)) {
+        return true;
+      }
+      return false;
+    };
+    const droppedUnverifiedTeamMembers = normalizedEnrichedTeam.filter((member) => {
+      if (shouldKeepSubmittedUnverifiedMember(member)) return false;
       if (member.enrichmentStatus === "success") return false;
       if (isTrustedUnverifiedSeed(member)) return false;
       return true;
     });
-    const verifiedTeamMembers = enrichedTeam.filter((member) => {
-      const isSubmittedMember = submittedNames.has(member.name.trim().toLowerCase());
-      if (isSubmittedMember) return true;
+    const verifiedTeamMembers = normalizedEnrichedTeam.filter((member) => {
+      if (shouldKeepSubmittedUnverifiedMember(member)) return true;
       if (member.enrichmentStatus === "success") return true;
       if (isTrustedUnverifiedSeed(member)) return true;
       return false;
     });
-    const linkedinStatuses = enrichedTeam.reduce<Record<string, number>>((acc, member) => {
+    const linkedinStatuses = normalizedEnrichedTeam.reduce<Record<string, number>>((acc, member) => {
       const key = member.enrichmentStatus ?? "unknown";
       acc[key] = (acc[key] ?? 0) + 1;
       return acc;
@@ -394,7 +456,7 @@ export class ScrapingService {
     const linkedinErrors = scrapeErrors
       .filter((error) => error.type === "linkedin")
       .map((error) => `${error.target}: ${error.error}`);
-    const linkedinAssociationSummary = enrichedTeam.reduce<Record<string, number>>(
+    const linkedinAssociationSummary = normalizedEnrichedTeam.reduce<Record<string, number>>(
       (acc, member) => {
         const reason = (member.confidenceReason ?? "").toLowerCase();
         if (reason.includes("historical founder/executive association")) {
@@ -424,7 +486,7 @@ export class ScrapingService {
       },
       outputJson: {
         teamMembersRequested: teamMembers,
-        enrichedTeamMembers: enrichedTeam,
+        enrichedTeamMembers: normalizedEnrichedTeam,
         verifiedTeamMembers,
         droppedUnverifiedTeamMembers,
         enrichmentStatuses: linkedinStatuses,
@@ -449,7 +511,7 @@ export class ScrapingService {
         discoveredWebsiteLinkedinMembers: discoveredWebsiteLinkedinMembers.length,
         discoveredLinkedinLeaders: discoveredLinkedinLeaders.length,
         requestedTeamMembers: teamMembers.length,
-        enrichedTeamMembers: enrichedTeam.length,
+        enrichedTeamMembers: normalizedEnrichedTeam.length,
         cacheHits: linkedinEnrichmentResult.cacheHits,
         liveRequested: linkedinEnrichmentResult.liveRequested,
         liveEnriched: linkedinEnrichmentResult.liveEnriched,
@@ -464,7 +526,7 @@ export class ScrapingService {
         phase: "linkedin_enrichment",
         companyName: record.name,
         requestedTeamMembers: teamMembers.length,
-        enrichedTeamMembers: enrichedTeam.length,
+        enrichedTeamMembers: normalizedEnrichedTeam.length,
         successfulMatches: linkedinStatuses.success ?? 0,
         cacheHits: linkedinEnrichmentResult.cacheHits,
         liveRequested: linkedinEnrichmentResult.liveRequested,
@@ -807,6 +869,14 @@ export class ScrapingService {
       .toLowerCase()
       .replace(/[^a-z0-9]/g, "")
       .trim();
+  }
+
+  private isFounderRole(role: string | undefined): boolean {
+    if (!role) {
+      return false;
+    }
+
+    return /\bco[\s-]?founder\b|\bfounder\b/i.test(role);
   }
 
   private countLeadershipSeeds(members: TeamMemberInput[]): number {

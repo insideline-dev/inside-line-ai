@@ -6,11 +6,14 @@ import { NotificationModule } from "../../notification/notification.module";
 import { AgentMailModule } from "../integrations/agentmail/agentmail.module";
 import { AiModule } from "../ai";
 import { InvestorModule } from "../investor/investor.module";
+import { StartupModule } from "../startup";
+import { AdminModule } from "../admin";
 import { ClaraService } from "./clara.service";
 import { ClaraAiService } from "./clara-ai.service";
 import { ClaraSubmissionService } from "./clara-submission.service";
 import { ClaraConversationService } from "./clara-conversation.service";
 import { ClaraToolsService } from "./clara-tools.service";
+import { ClaraChannelService } from "./clara-channel.service";
 
 @Module({
   imports: [
@@ -21,6 +24,8 @@ import { ClaraToolsService } from "./clara-tools.service";
     forwardRef(() => AgentMailModule),
     forwardRef(() => AiModule),
     InvestorModule,
+    StartupModule,
+    AdminModule,
   ],
   providers: [
     ClaraService,
@@ -28,6 +33,7 @@ import { ClaraToolsService } from "./clara-tools.service";
     ClaraSubmissionService,
     ClaraConversationService,
     ClaraToolsService,
+    ClaraChannelService,
   ],
   exports: [ClaraService],
 })

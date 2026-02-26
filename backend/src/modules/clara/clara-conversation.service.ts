@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { eq, desc, sql } from "drizzle-orm";
+import { and, eq, desc, sql } from "drizzle-orm";
 import { DrizzleService } from "../../database";
 import {
   claraConversation,
@@ -152,6 +152,18 @@ export class ClaraConversationService {
     processed?: boolean;
     errorMessage?: string | null;
   }): Promise<void> {
+    const alreadyLogged = await this.hasMessage(
+      params.conversationId,
+      params.messageId,
+      params.direction,
+    );
+    if (alreadyLogged) {
+      this.logger.debug(
+        `Skipping duplicate Clara message log: conv=${params.conversationId} msg=${params.messageId} dir=${params.direction}`,
+      );
+      return;
+    }
+
     const values: NewClaraMessageRecord = {
       conversationId: params.conversationId,
       messageId: params.messageId,
@@ -176,6 +188,26 @@ export class ClaraConversationService {
         updatedAt: new Date(),
       })
       .where(eq(claraConversation.id, params.conversationId));
+  }
+
+  async hasMessage(
+    conversationId: string,
+    messageId: string,
+    direction: MessageDirection,
+  ): Promise<boolean> {
+    const rows = await this.drizzle.db
+      .select({ id: claraMessage.id })
+      .from(claraMessage)
+      .where(
+        and(
+          eq(claraMessage.conversationId, conversationId),
+          eq(claraMessage.messageId, messageId),
+          eq(claraMessage.direction, direction),
+        ),
+      )
+      .limit(1);
+
+    return Array.isArray(rows) && rows.length > 0;
   }
 
   async getRecentMessages(

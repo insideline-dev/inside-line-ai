@@ -322,14 +322,27 @@ export class StartupService {
   async update(id: string, userId: string, dto: UpdateStartup) {
     return this.drizzle.withRLS(userId, async (db) => {
       const existing = await this.findOne(id, userId);
+      const requestedFields = Object.entries(dto)
+        .filter(([, value]) => value !== undefined)
+        .map(([key]) => key);
+      const isTeamOnlyUpdate =
+        requestedFields.length > 0 &&
+        requestedFields.every((field) =>
+          field === "teamMembers" || field === "teamSize",
+        );
+      const isInvestorPrivateSubmission =
+        existing.submittedByRole === UserRole.INVESTOR &&
+        existing.isPrivate === true;
 
       if (
         existing.status === StartupStatus.SUBMITTED ||
         existing.status === StartupStatus.APPROVED
       ) {
-        throw new ForbiddenException(
-          "Cannot edit startup while submitted or approved",
-        );
+        if (!(isInvestorPrivateSubmission && isTeamOnlyUpdate)) {
+          throw new ForbiddenException(
+            "Cannot edit startup while submitted or approved",
+          );
+        }
       }
 
       const geographyUpdate = dto.location

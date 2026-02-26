@@ -36,6 +36,7 @@ export interface AttachmentMeta {
 }
 
 export interface MessageContext {
+  channel?: "email" | "whatsapp" | "other";
   threadId: string;
   messageId: string;
   inboxId: string;
@@ -45,10 +46,13 @@ export interface MessageContext {
   fromName: string | null;
   attachments: AttachmentMeta[];
   conversationHistory: ConversationMessage[];
+  actorUserId: string | null;
+  actorRole?: string | null;
   investorUserId: string | null;
   startupId: string | null;
   startupStage?: string | null;
   conversationStatus: ConversationStatus;
+  conversationMemory?: Record<string, unknown> | null;
 }
 
 export interface ConversationMessage {
@@ -65,4 +69,13 @@ export interface SubmissionResult {
   isDuplicate: boolean;
   isEnriched?: boolean;
   status: string;
+}
+
+export interface ClaraAgentRuntimeState {
+  replyHandled: boolean;
+  replyText: string | null;
+  replyAttachments: Array<{
+    filename: string;
+    contentType: string;
+  }>;
 }

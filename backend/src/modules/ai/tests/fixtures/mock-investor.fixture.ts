@@ -9,6 +9,7 @@ export interface MockInvestorCandidate {
   checkSizeMax: number | null;
   geographicFocus: string[];
   geographicFocusNodes: string[];
+  thesisSummary: string | null;
   thesisNarrative: string | null;
   notes: string | null;
   isActive: boolean;
@@ -25,6 +26,7 @@ export function createMockInvestorCandidates(): MockInvestorCandidate[] {
       checkSizeMax: 3_000_000,
       geographicFocus: ["North America"],
       geographicFocusNodes: ["l1:north_america"],
+      thesisSummary: "Seed-stage industrial SaaS in North America with compliance ROI.",
       thesisNarrative:
         "Invest in early-stage workflow software with clear compliance ROI and strong operator teams.",
       notes: "High conviction on industrial digitization",
@@ -39,6 +41,7 @@ export function createMockInvestorCandidates(): MockInvestorCandidate[] {
       checkSizeMax: 8_000_000,
       geographicFocus: ["Europe"],
       geographicFocusNodes: ["l1:europe"],
+      thesisSummary: "Series A Europe-focused climate and fintech growth opportunities.",
       thesisNarrative: "Growth-stage Europe-focused sector specialist.",
       notes: null,
       isActive: true,
@@ -52,6 +55,7 @@ export function createMockInvestorCandidates(): MockInvestorCandidate[] {
       checkSizeMax: 5_000_000,
       geographicFocus: ["Global"],
       geographicFocusNodes: ["l1:global"],
+      thesisSummary: null,
       thesisNarrative:
         "Generalist fund focused on strong teams with automation and workflow defensibility.",
       notes: "Prefers evidence-driven execution",

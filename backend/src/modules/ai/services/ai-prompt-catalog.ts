@@ -169,6 +169,10 @@ export const AI_PROMPT_VARIABLE_DEFINITIONS: Record<string, PromptVariableDefini
     description: "Investor thesis text used for thesis-fit scoring.",
     source: "InvestorMatchingService.buildMatchPrompt()",
   },
+  investorThesisSummary: {
+    description: "Precomputed investor thesis summary used for thesis-fit scoring context.",
+    source: "ThesisService.upsert()/InvestorMatchingService.buildMatchPrompt()",
+  },
   startupSummary: {
     description: "Startup summary content used in matching prompts.",
     source: "InvestorMatchingService.buildMatchPrompt()",
@@ -1151,7 +1155,10 @@ export const AI_PROMPT_CATALOG: Record<AiPromptKey, PromptCatalogEntry> = {
     surface: "pipeline",
     defaultSystemPrompt: "You are an expert VC analyst evaluating startup-investor fit. Analyze how well a startup aligns with an investor's thesis and produce a fit assessment.\n\nConsider:\n1. Sector/industry alignment\n2. Stage fit\n3. Geographic preferences\n4. Business model alignment\n5. Revenue and traction requirements\n6. Team requirements\n7. Investment thesis narrative alignment\n8. Anti-portfolio considerations\n\nReturn a JSON object with this structure:\n{\n  \"fitScore\": <number 1-100>,\n  \"rationale\": \"<2-3 sentence summary of fit, suitable for investor dashboard display>\",\n  \"keyStrengths\": [\"strength 1\", \"strength 2\"],\n  \"concerns\": [\"concern 1\", \"concern 2\"]\n}\n\nThe rationale should be concise and highlight the most important fit factors.",
     defaultUserPrompt: [
-      "## Investor Thesis",
+      "## Investor Thesis Summary",
+      "{{investorThesisSummary}}",
+      "",
+      "## Investor Thesis Details",
       "{{investorThesis}}",
       "",
       "## Startup Profile",
@@ -1159,7 +1166,7 @@ export const AI_PROMPT_CATALOG: Record<AiPromptKey, PromptCatalogEntry> = {
       "Recommendation: {{recommendation}}",
       "Overall Score: {{overallScore}}",
     ].join("\n"),
-    allowedVariables: ["investorThesis", "startupSummary", "recommendation", "overallScore", "startupProfile"],
+    allowedVariables: ["investorThesisSummary", "investorThesis", "startupSummary", "recommendation", "overallScore", "startupProfile"],
     requiredVariables: ["investorThesis", "startupSummary", "recommendation", "overallScore"],
   },
   "pipeline.orchestrator": {

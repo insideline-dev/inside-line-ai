@@ -260,6 +260,10 @@ export class ClaraAiService {
   async runAgentLoop(
     ctx: MessageContext,
     tools: ToolSet,
+    options?: {
+      actorRole?: string | null;
+      conversationMemory?: Record<string, unknown> | null;
+    },
   ): Promise<string> {
     try {
       const history = ctx.conversationHistory
@@ -274,7 +278,8 @@ export class ClaraAiService {
         "You are Clara, a smart and friendly AI assistant for Inside Line, an investor deal-flow platform.",
         "",
         "## Your Capabilities",
-        "You can look up information for investors using the tools available to you:",
+        "You can look up and act on platform information using the tools available to you.",
+        "The sender may be an investor or an admin.",
         "- Their matched startups and scores",
         "- Their deal pipeline status",
         "- Detailed startup information (fuzzy name search)",
@@ -283,22 +288,35 @@ export class ClaraAiService {
         "- Their notes on startups",
         "- Their portfolio companies",
         "- Search startups by name",
+        "- Platform analytics (admin senders)",
+        "- Startup analysis progress/status",
+        "- Email a memo/report PDF attachment back to the sender when requested",
         "",
         "## Guidelines",
         "- Be concise and professional but warm. Use the investor's name when available.",
         "- Use tools to gather data before answering questions. Don't guess.",
         "- If the sender has no linked account, explain they can register on Inside Line.",
         "- If asked about submitting a startup, explain they can forward a pitch deck PDF.",
+        "- If asked for a memo/report PDF and a linked startup exists, use the PDF email tool instead of only describing how to download it.",
+        "- Prefer answering from the platform data and tools, not generic advice.",
         "- Sign off as Clara.",
         "- Format responses for email (plain text, no markdown).",
         "- Never fabricate data. If a tool returns no results, say so.",
       ].join("\n");
 
+      const memoryBlock =
+        options?.conversationMemory && Object.keys(options.conversationMemory).length > 0
+          ? `Conversation memory:\n${JSON.stringify(options.conversationMemory, null, 2)}`
+          : "";
+
       const userPrompt = [
         `From: ${ctx.fromName ?? ctx.fromEmail} <${ctx.fromEmail}>`,
+        `Role: ${options?.actorRole ?? ctx.actorRole ?? "unknown"}`,
         `Subject: ${ctx.subject ?? "(no subject)"}`,
         "",
         ctx.bodyText?.slice(0, 3000) ?? "(empty body)",
+        "",
+        memoryBlock,
         "",
         history ? `Recent conversation:\n${history}` : "",
       ]

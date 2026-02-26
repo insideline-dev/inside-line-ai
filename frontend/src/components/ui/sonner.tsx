@@ -10,21 +10,24 @@ const Toaster = ({ richColors = true, ...props }: ToasterProps) => {
       toastOptions={{
         classNames: {
           toast:
-            "group toast group-[.toaster]:bg-background group-[.toaster]:text-foreground group-[.toaster]:border-border group-[.toaster]:shadow-lg",
+            "group toast !opacity-100 !backdrop-blur-none " +
+            "group-[.toaster]:bg-background group-[.toaster]:text-foreground " +
+            "group-[.toaster]:border-border group-[.toaster]:shadow-lg",
           description: "group-[.toast]:text-muted-foreground",
           actionButton: "group-[.toast]:bg-primary group-[.toast]:text-primary-foreground",
           cancelButton: "group-[.toast]:bg-muted group-[.toast]:text-muted-foreground",
           success:
-            "!border-emerald-500/35 !bg-emerald-500/10 !text-emerald-900 " +
-            "dark:!bg-emerald-500/15 dark:!text-emerald-200",
+            "!border-emerald-300 !bg-emerald-100 !text-emerald-900 " +
+            "dark:!border-emerald-800 dark:!bg-emerald-950 dark:!text-emerald-100",
           error:
-            "!border-destructive/40 !bg-destructive/10 !text-destructive",
+            "!border-red-300 !bg-red-100 !text-red-900 " +
+            "dark:!border-red-800 dark:!bg-red-950 dark:!text-red-100",
           warning:
-            "!border-amber-500/35 !bg-amber-500/10 !text-amber-900 " +
-            "dark:!bg-amber-500/15 dark:!text-amber-200",
+            "!border-amber-300 !bg-amber-100 !text-amber-900 " +
+            "dark:!border-amber-800 dark:!bg-amber-950 dark:!text-amber-100",
           info:
-            "!border-sky-500/35 !bg-sky-500/10 !text-sky-900 " +
-            "dark:!bg-sky-500/15 dark:!text-sky-200",
+            "!border-sky-300 !bg-sky-100 !text-sky-900 " +
+            "dark:!border-sky-800 dark:!bg-sky-950 dark:!text-sky-100",
         },
       }}
       {...props}

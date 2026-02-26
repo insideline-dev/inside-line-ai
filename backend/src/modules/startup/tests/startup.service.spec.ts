@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  ConflictException,
 } from "@nestjs/common";
 import { StartupService } from "../startup.service";
 import { DraftService } from "../draft.service";
@@ -918,6 +919,20 @@ describe("StartupService", () => {
           phase: "invalid-phase" as any,
         }),
       ).rejects.toThrow(BadRequestException);
+    });
+
+    it("should return conflict when reusable pipeline state is missing", async () => {
+      mockDb.limit.mockResolvedValueOnce([mockStartup]);
+      pipelineService.rerunFromPhase.mockRejectedValueOnce(
+        new Error(`Pipeline state for startup ${mockStartupId} not found`),
+      );
+
+      await expect(
+        service.adminRetryPhase(mockStartupId, mockUserId, {
+          phase: "research" as any,
+          forceRerun: true,
+        }),
+      ).rejects.toThrow(ConflictException);
     });
   });
 

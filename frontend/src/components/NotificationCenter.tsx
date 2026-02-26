@@ -45,6 +45,31 @@ export function NotificationCenter() {
     },
   });
 
+  const showNotificationToast = useCallback((notification: Notification) => {
+    const toastOptions = {
+      description: notification.message,
+    };
+
+    switch (notification.type) {
+      case "success":
+        toast.success(notification.title, toastOptions);
+        return;
+      case "error":
+        toast.error(notification.title, toastOptions);
+        return;
+      case "warning":
+        toast.warning(notification.title, toastOptions);
+        return;
+      case "match":
+        toast.success(notification.title, toastOptions);
+        return;
+      case "info":
+      default:
+        toast.info(notification.title, toastOptions);
+        return;
+    }
+  }, []);
+
   const handleNewNotification = useCallback(
     (notification: Notification) => {
       queryClient.setQueryData(
@@ -54,9 +79,9 @@ export function NotificationCenter() {
           data: [notification, ...(old?.data || [])],
         })
       );
-      toast(notification.title, { description: notification.message });
+      showNotificationToast(notification);
     },
-    [queryClient]
+    [queryClient, showNotificationToast]
   );
 
   const handleCountUpdate = useCallback((count: number) => {

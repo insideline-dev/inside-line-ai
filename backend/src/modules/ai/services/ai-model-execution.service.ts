@@ -14,12 +14,13 @@ import { AiProviderService } from "../providers/ai-provider.service";
 import { BraveSearchService } from "./brave-search.service";
 
 type GenerateTextCall = Parameters<typeof generateText>[0];
+type GenerateTextProviderOptions = GenerateTextCall["providerOptions"];
 
 export interface ModelExecutionResolution {
   resolvedConfig: ResolvedModelConfig;
   generateTextOptions: Pick<
     GenerateTextCall,
-    "model" | "tools" | "toolChoice" | "stopWhen"
+    "model" | "tools" | "toolChoice" | "stopWhen" | "providerOptions"
   >;
   searchEnforcement: {
     requiresProviderEvidence: boolean;
@@ -45,6 +46,7 @@ export class AiModelExecutionService {
   }): Promise<ModelExecutionResolution> {
     const resolvedConfig = await this.modelConfig.resolveConfig(params);
     const model = this.providers.resolveModel(resolvedConfig.modelName) as GenerateTextCall["model"];
+    const providerOptions = this.resolveProviderOptions(resolvedConfig.provider);
 
     const isResearchKey = isResearchPromptKey(params.key);
     const requiresProviderEvidence =
@@ -64,6 +66,7 @@ export class AiModelExecutionService {
           tools: undefined,
           toolChoice: undefined,
           stopWhen: undefined,
+          providerOptions,
         },
         searchEnforcement: {
           requiresProviderEvidence,
@@ -124,6 +127,7 @@ export class AiModelExecutionService {
         tools,
         toolChoice: "required",
         stopWhen: stepCountIs(requiresProviderEvidence && requiresBraveToolCall ? 8 : 6),
+        providerOptions,
       },
       searchEnforcement: {
         requiresProviderEvidence,
@@ -131,6 +135,20 @@ export class AiModelExecutionService {
       },
       usage: {
         getBraveToolCallCount: () => braveUsage.calls,
+      },
+    };
+  }
+
+  private resolveProviderOptions(
+    provider: ResolvedModelConfig["provider"],
+  ): GenerateTextProviderOptions | undefined {
+    if (provider !== "openai") {
+      return undefined;
+    }
+
+    return {
+      openai: {
+        reasoningEffort: "high",
       },
     };
   }

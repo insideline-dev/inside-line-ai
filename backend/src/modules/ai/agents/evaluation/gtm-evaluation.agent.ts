@@ -25,47 +25,38 @@ export class GtmEvaluationAgent extends BaseEvaluationAgent<GtmEvaluation> {
     super(providers, aiConfig, promptService, modelExecution);
   }
 
-  buildContext({ extraction, scraping, research }: EvaluationPipelineInput) {
+  buildContext(pipelineData: EvaluationPipelineInput) {
+    const { extraction, scraping } = pipelineData;
+    const subpages = Array.isArray(scraping.website?.subpages)
+      ? scraping.website.subpages
+      : [];
+    const notableClaims = Array.isArray(scraping.notableClaims)
+      ? scraping.notableClaims
+      : [];
     const websiteMarketingPages =
-      scraping.website?.subpages
-        .filter((page) => URL_PATH_PATTERNS.MARKETING.test(tryPathname(page.url)))
+      subpages
+        .filter(
+          (page) =>
+            typeof page?.url === "string" &&
+            URL_PATH_PATTERNS.MARKETING.test(tryPathname(page.url)),
+        )
         .map((page) => page.url) ?? [];
 
     const distributionChannels = Array.from(
       new Set([
-        ...scraping.notableClaims
+        ...notableClaims
           .filter((claim) => CONTENT_PATTERNS.DISTRIBUTION.test(claim))
           .map((claim) => claim),
         "Founder-led sales",
       ]),
     );
 
-    const marketContext = research.market
-      ? {
-          customerSegments: research.market.competitors.map((c) => c.name),
-          marketTrends: research.market.marketTrends,
-        }
-      : undefined;
-
-    const productContext = research.product
-      ? {
-          integrations: research.product.integrations,
-          features: research.product.features,
-        }
-      : undefined;
-
-    const competitorContext = research.competitor
-      ? {
-          competitorPositioning: research.competitor.competitors.map((c) => ({
-            name: c.name,
-            targetMarket: c.targetMarket,
-            pricing: c.pricing,
-          })),
-          marketPositioning: research.competitor.marketPositioning,
-        }
-      : undefined;
+    const marketContext = undefined;
+    const productContext = undefined;
+    const competitorContext = undefined;
 
     return {
+      researchReportText: this.buildResearchReportText(pipelineData),
       targetMarket: extraction.industry,
       websiteMarketingPages,
       distributionChannels,

@@ -27,28 +27,13 @@ export class ExitPotentialEvaluationAgent extends BaseEvaluationAgent<ExitPotent
     super(providers, aiConfig, promptService, modelExecution);
   }
 
-  buildContext({ extraction, research }: EvaluationPipelineInput) {
-    const competitorMandA =
-      research.news?.articles
-        .filter((article) =>
-          /(acquire|acquired|acquisition|merger|m&a)/i.test(
-            `${article.title} ${article.summary}`,
-          ),
-        )
-        .map((article) => ({
-          title: article.title,
-          source: article.source,
-          date: article.date,
-          url: article.url,
-        })) ?? [];
-
-    const exitOpportunities =
-      research.market?.marketTrends.filter((trend) =>
-        /(acquisition|consolidation|ipo|public market|roll-up|m&a)/i.test(trend),
-      ) ?? [];
-
+  buildContext(pipelineData: EvaluationPipelineInput) {
+    const { extraction } = pipelineData;
+    const competitorMandA: Array<Record<string, unknown>> = [];
+    const exitOpportunities: string[] = [];
     return {
-      marketSize: research.market?.marketSize ?? {},
+      researchReportText: this.buildResearchReportText(pipelineData),
+      marketSize: {},
       competitorMandA,
       businessModelScalability:
         extraction.rawText || "Scalability signal requires deeper diligence",

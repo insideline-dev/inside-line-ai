@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { and, eq, sql, desc } from "drizzle-orm";
+import { and, desc, eq, ilike, sql } from "drizzle-orm";
 import { DrizzleService } from "../../database";
 import { StorageService } from "../../storage";
 import { ASSET_TYPES } from "../../storage/storage.config";
@@ -264,22 +264,73 @@ export class ClaraSubmissionService {
     companyName: string,
     ownerUserId: string,
   ): Promise<{ id: string; name: string; status: string } | null> {
-    const [match] = await this.drizzle.db
-      .select({
-        id: startup.id,
-        name: startup.name,
-        status: startup.status,
-      })
-      .from(startup)
-      .where(
-        and(
-          eq(startup.userId, ownerUserId),
-          sql`similarity(${startup.name}, ${companyName}) > ${FUZZY_THRESHOLD}`,
-        ),
-      )
-      .orderBy(desc(sql`similarity(${startup.name}, ${companyName})`))
-      .limit(1);
-    return match ?? null;
+    try {
+      const [match] = await this.drizzle.db
+        .select({
+          id: startup.id,
+          name: startup.name,
+          status: startup.status,
+        })
+        .from(startup)
+        .where(
+          and(
+            eq(startup.userId, ownerUserId),
+            sql`similarity(${startup.name}, ${companyName}) > ${FUZZY_THRESHOLD}`,
+          ),
+        )
+        .orderBy(desc(sql`similarity(${startup.name}, ${companyName})`))
+        .limit(1);
+
+      return match ?? null;
+    } catch (error) {
+      if (!this.isMissingSimilarityFunction(error)) {
+        throw error;
+      }
+
+      this.logger.warn(
+        "pg_trgm similarity() unavailable; falling back to ILIKE duplicate detection",
+      );
+
+      const escaped = `%${this.escapeForILike(companyName)}%`;
+      const [match] = await this.drizzle.db
+        .select({
+          id: startup.id,
+          name: startup.name,
+          status: startup.status,
+        })
+        .from(startup)
+        .where(
+          and(
+            eq(startup.userId, ownerUserId),
+            ilike(startup.name, escaped),
+          ),
+        )
+        .limit(1);
+
+      return match ?? null;
+    }
+  }
+
+  private isMissingSimilarityFunction(error: unknown): boolean {
+    if (!error || typeof error !== "object") return false;
+
+    const record = error as {
+      message?: unknown;
+      cause?: { code?: unknown };
+    };
+
+    const message =
+      typeof record.message === "string" ? record.message : "";
+    const code =
+      record.cause && typeof record.cause.code === "string"
+        ? record.cause.code
+        : "";
+
+    return code === "42883" && message.includes("similarity(");
+  }
+
+  private escapeForILike(value: string): string {
+    return value.replaceAll("\\", "\\\\").replaceAll("%", "\\%").replaceAll("_", "\\_");
   }
 
   private async enrichExistingStartup(

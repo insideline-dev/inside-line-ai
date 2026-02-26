@@ -9,12 +9,43 @@ export interface PipelineFlowEdgeDefinition {
   from: string;
   to: string;
   label?: string;
+  sourceHandle?: string;
+  targetHandle?: string;
+  enabled?: boolean;
+  mapping?: PipelineFlowEdgeMapping;
+}
+
+export interface PipelineFlowEdgeFieldMapEntry {
+  fromPath: string;
+  toKey: string;
+  required?: boolean;
+}
+
+export interface PipelineFlowEdgeMapping {
+  mode?: "full_output" | "field_map";
+  fieldMap?: PipelineFlowEdgeFieldMapEntry[];
+  mergeStrategy?: "object" | "array";
 }
 
 export interface PipelineFlowDefinition {
   flowId: "pipeline" | "clara";
   nodes: string[];
   edges: PipelineFlowEdgeDefinition[];
+  nodeConfigs?: PipelineFlowNodeConfigs;
+}
+
+export interface PipelineFlowNodeConfigs {
+  scrape_website?: PipelineFlowScrapeWebsiteConfig;
+  [nodeId: string]: unknown;
+}
+
+export interface PipelineFlowScrapeWebsiteConfig {
+  scraping?: PipelineFlowScrapingConfig;
+}
+
+export interface PipelineFlowScrapingConfig {
+  manualPaths?: string[];
+  discoveryEnabled?: boolean;
 }
 
 @Injectable()
@@ -56,12 +87,21 @@ export class PipelineGraphCompilerService {
 
     const edges = edgesRaw.map((edge) => {
       const item = edge as Record<string, unknown>;
+      const mapping = this.parseEdgeMapping(item.mapping);
       return {
         from: String(item.from).trim(),
         to: String(item.to).trim(),
         ...(typeof item.label === "string" && item.label.trim()
           ? { label: item.label.trim() }
           : {}),
+        ...(typeof item.sourceHandle === "string" && item.sourceHandle.trim()
+          ? { sourceHandle: item.sourceHandle.trim() }
+          : {}),
+        ...(typeof item.targetHandle === "string" && item.targetHandle.trim()
+          ? { targetHandle: item.targetHandle.trim() }
+          : {}),
+        ...(typeof item.enabled === "boolean" ? { enabled: item.enabled } : {}),
+        ...(mapping ? { mapping } : {}),
       };
     });
 
@@ -77,12 +117,202 @@ export class PipelineGraphCompilerService {
         throw new Error(`Flow edge cannot self-reference node "${edge.from}"`);
       }
     }
+    const nodeConfigs = this.parseNodeConfigs(record.nodeConfigs, nodeSet);
 
     return {
       flowId,
       nodes,
       edges,
+      ...(nodeConfigs ? { nodeConfigs } : {}),
     };
+  }
+
+  private parseNodeConfigs(
+    value: unknown,
+    nodeSet: Set<string>,
+  ): PipelineFlowNodeConfigs | undefined {
+    if (value === undefined) {
+      return undefined;
+    }
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw new Error("flowDefinition.nodeConfigs must be an object");
+    }
+
+    const nodeConfigsRecord = value as Record<string, unknown>;
+    const parsed: PipelineFlowNodeConfigs = {};
+
+    for (const [nodeId, rawNodeConfig] of Object.entries(nodeConfigsRecord)) {
+      if (!nodeSet.has(nodeId)) {
+        throw new Error(`flowDefinition.nodeConfigs references unknown node "${nodeId}"`);
+      }
+
+      if (nodeId === "scrape_website") {
+        parsed.scrape_website = this.parseScrapeWebsiteConfig(rawNodeConfig);
+        continue;
+      }
+
+      parsed[nodeId] = rawNodeConfig;
+    }
+
+    return Object.keys(parsed).length > 0 ? parsed : undefined;
+  }
+
+  private parseScrapeWebsiteConfig(
+    value: unknown,
+  ): PipelineFlowScrapeWebsiteConfig {
+    if (value === undefined) {
+      return {};
+    }
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw new Error("flowDefinition.nodeConfigs.scrape_website must be an object");
+    }
+
+    const record = value as Record<string, unknown>;
+    const scraping = this.parseScrapingConfig(record.scraping);
+    return scraping ? { scraping } : {};
+  }
+
+  private parseScrapingConfig(
+    value: unknown,
+  ): PipelineFlowScrapingConfig | undefined {
+    if (value === undefined) {
+      return undefined;
+    }
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw new Error(
+        "flowDefinition.nodeConfigs.scrape_website.scraping must be an object",
+      );
+    }
+
+    const record = value as Record<string, unknown>;
+    const manualPaths = this.parseManualPaths(record.manualPaths);
+    const discoveryEnabled =
+      typeof record.discoveryEnabled === "boolean"
+        ? record.discoveryEnabled
+        : false;
+
+    return {
+      ...(manualPaths.length > 0 ? { manualPaths } : {}),
+      discoveryEnabled,
+    };
+  }
+
+  private parseManualPaths(value: unknown): string[] {
+    if (value === undefined) {
+      return [];
+    }
+    if (!Array.isArray(value) || value.some((entry) => typeof entry !== "string")) {
+      throw new Error(
+        "flowDefinition.nodeConfigs.scrape_website.scraping.manualPaths must be a string array",
+      );
+    }
+
+    const deduped = new Set<string>();
+    for (const rawPath of value) {
+      const normalized = this.normalizeManualPath(rawPath);
+      if (!normalized) {
+        continue;
+      }
+      deduped.add(normalized);
+    }
+
+    return Array.from(deduped);
+  }
+
+  private normalizeManualPath(rawPath: string): string | null {
+    const trimmed = rawPath.trim();
+    if (!trimmed) {
+      return null;
+    }
+    if (/^[a-z]+:\/\//i.test(trimmed)) {
+      throw new Error(
+        `Manual scrape path must be relative and cannot include protocol: "${rawPath}"`,
+      );
+    }
+    if (trimmed.startsWith("//")) {
+      throw new Error(
+        `Manual scrape path must be relative and cannot include host: "${rawPath}"`,
+      );
+    }
+
+    const slashNormalized = trimmed.replace(/\\/g, "/");
+    const [withoutHash] = slashNormalized.split("#", 1);
+    const [pathname] = withoutHash.split("?", 1);
+    const prefixed = pathname.startsWith("/") ? pathname : `/${pathname}`;
+    const collapsed = prefixed.replace(/\/{2,}/g, "/");
+    const segments = collapsed.split("/").filter(Boolean);
+    if (segments.some((segment) => segment === "..")) {
+      throw new Error(
+        `Manual scrape path cannot traverse parent segments: "${rawPath}"`,
+      );
+    }
+    if (segments.some((segment) => segment === ".")) {
+      return null;
+    }
+
+    if (collapsed === "/") {
+      return "/";
+    }
+    return collapsed.endsWith("/") ? collapsed.slice(0, -1) : collapsed;
+  }
+
+  private parseEdgeMapping(
+    value: unknown,
+  ): PipelineFlowEdgeMapping | undefined {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return undefined;
+    }
+    const record = value as Record<string, unknown>;
+    const modeRaw = record.mode;
+    const mergeStrategyRaw = record.mergeStrategy;
+    const fieldMapRaw = record.fieldMap;
+
+    const mode =
+      modeRaw === "full_output" || modeRaw === "field_map"
+        ? modeRaw
+        : undefined;
+    const mergeStrategy =
+      mergeStrategyRaw === "object" || mergeStrategyRaw === "array"
+        ? mergeStrategyRaw
+        : undefined;
+    const fieldMap = Array.isArray(fieldMapRaw)
+      ? fieldMapRaw
+          .filter(
+            (entry) =>
+              entry &&
+              typeof entry === "object" &&
+              !Array.isArray(entry) &&
+              typeof (entry as Record<string, unknown>).fromPath === "string" &&
+              typeof (entry as Record<string, unknown>).toKey === "string",
+          )
+          .map((entry) => {
+            const mapped = entry as Record<string, unknown>;
+            return {
+              fromPath: String(mapped.fromPath).trim(),
+              toKey: String(mapped.toKey).trim(),
+              ...(typeof mapped.required === "boolean"
+                ? { required: mapped.required }
+                : {}),
+            };
+          })
+          .filter((entry) => entry.fromPath.length > 0 && entry.toKey.length > 0)
+      : undefined;
+
+    if (!mode && !mergeStrategy && (!fieldMap || fieldMap.length === 0)) {
+      return undefined;
+    }
+
+    const result: PipelineFlowEdgeMapping = {};
+    if (mode) {
+      result.mode = mode;
+    }
+    if (mergeStrategy) {
+      result.mergeStrategy = mergeStrategy;
+    }
+    if (fieldMap && fieldMap.length > 0) {
+      result.fieldMap = fieldMap;
+    }
+    return result;
   }
 
   compilePipelineConfig(
@@ -107,6 +337,9 @@ export class PipelineGraphCompilerService {
     }
 
     for (const edge of normalizedFlow.edges) {
+      if (edge.enabled === false) {
+        continue;
+      }
       const fromPhase = this.resolvePhaseForNode(edge.from);
       const toPhase = this.resolvePhaseForNode(edge.to);
 

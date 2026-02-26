@@ -41,6 +41,12 @@ export class PipelineAgentTraceService {
   private readonly jsonByteLimit: number;
   private readonly metaByteLimit: number;
   private readonly retentionDays: number;
+  private readonly runtimeMetadata: {
+    buildId: string;
+    commitSha: string;
+    processPid: number;
+    startedAt: string;
+  };
   private lastCleanupAt = 0;
 
   constructor(
@@ -67,6 +73,19 @@ export class PipelineAgentTraceService {
       "AI_AGENT_TRACE_RETENTION_DAYS",
       30,
     );
+    this.runtimeMetadata = {
+      buildId:
+        process.env.APP_BUILD_ID?.trim() ||
+        process.env.BUILD_ID?.trim() ||
+        "dev",
+      commitSha:
+        process.env.APP_COMMIT_SHA?.trim() ||
+        process.env.GIT_SHA?.trim() ||
+        process.env.VERCEL_GIT_COMMIT_SHA?.trim() ||
+        "unknown",
+      processPid: process.pid,
+      startedAt: new Date().toISOString(),
+    };
   }
 
   async recordRun(input: RecordPipelineAgentRunInput): Promise<void> {
@@ -179,14 +198,45 @@ export class PipelineAgentTraceService {
   }
 
   private normalizeMeta(value: Record<string, unknown> | undefined): Record<string, unknown> | null {
-    if (!value) {
-      return null;
-    }
-    const normalized = this.normalizeJsonField(value, this.metaByteLimit);
+    const baseNormalized = this.normalizeJsonField(
+      value ?? {},
+      this.metaByteLimit,
+    );
+    const base =
+      baseNormalized &&
+      typeof baseNormalized === "object" &&
+      !Array.isArray(baseNormalized)
+        ? (baseNormalized as Record<string, unknown>)
+        : {};
+
+    const withRuntime = this.withRuntimeMetadata(base);
+    const normalized = this.normalizeJsonField(withRuntime, this.metaByteLimit);
     if (!normalized || typeof normalized !== "object" || Array.isArray(normalized)) {
-      return null;
+      return { runtime: this.runtimeMetadata };
     }
+
     return normalized as Record<string, unknown>;
+  }
+
+  private withRuntimeMetadata(
+    meta: Record<string, unknown>,
+  ): Record<string, unknown> {
+    const runtimeCandidate = meta.runtime;
+    const runtimeMeta =
+      runtimeCandidate &&
+      typeof runtimeCandidate === "object" &&
+      !Array.isArray(runtimeCandidate)
+        ? (runtimeCandidate as Record<string, unknown>)
+        : {};
+
+    const { runtime: _runtime, ...rest } = meta;
+    return {
+      runtime: {
+        ...runtimeMeta,
+        ...this.runtimeMetadata,
+      },
+      ...rest,
+    };
   }
 
   private limitJsonPayload(value: unknown, limitBytes: number): unknown {

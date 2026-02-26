@@ -46,20 +46,11 @@ Also provide:
 - Key narrative themes emerging from coverage
 
 === RESPONSE CONTRACT (CRITICAL) ===
-- Return ONLY a valid JSON object matching the requested schema.
-- Do NOT wrap output in markdown or code fences.
-- Do NOT include prose before or after the JSON object.
-- Required string fields must never be null (use "Unknown" when unavailable).
-- Use [] for missing arrays and {} for missing objects.
-- Use this exact top-level JSON shape and key names:
-{
-  "articles": [{"title": "", "source": "", "date": "", "summary": "", "url": "", "category": "funding|product|partnership|growth|general", "articleSentiment": "positive|negative|neutral"}],
-  "pressReleases": [],
-  "sentiment": "positive|neutral|negative",
-  "recentEvents": [],
-  "sentimentOverview": {"positive": 0, "negative": 0, "neutral": 0},
-  "sources": []
-}`;
+- Return ONLY plain text report output.
+- Do NOT return JSON.
+- Do NOT wrap output in markdown code fences.
+- Do NOT include commentary before or after the report.
+- Report must be comprehensive, evidence-driven, and at least 2500 characters.`;
 
 export const NEWS_RESEARCH_HUMAN_PROMPT = `Search news and public mentions for:
 

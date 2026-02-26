@@ -175,6 +175,17 @@ export const UpdateAiModelConfigDraftSchema = z
     { message: "At least one field must be provided" },
   );
 
+export const BulkApplyAiModelConfigScopeSchema = z.enum([
+  "all_ai_nodes",
+  "research_agents",
+  "evaluation_agents",
+]);
+
+export const BulkApplyAiModelConfigSchema = z.object({
+  scope: BulkApplyAiModelConfigScopeSchema,
+  modelName: z.enum(AI_RUNTIME_ALLOWED_MODEL_NAMES),
+});
+
 const ResolvedModelConfigSchema = z.object({
   source: ModelConfigSourceSchema,
   revisionId: z.string().uuid().nullable(),
@@ -206,6 +217,14 @@ export const AiModelConfigResponseSchema = z.object({
   revisions: z.array(AiModelConfigRevisionSchema),
   allowedModels: z.array(z.string()),
   runtimeConfigEnabled: z.boolean(),
+});
+
+export const BulkApplyAiModelConfigResponseSchema = z.object({
+  scope: BulkApplyAiModelConfigScopeSchema,
+  modelName: z.string(),
+  provider: z.string(),
+  appliedKeys: z.array(PromptKeySchema),
+  publishedRevisionIds: z.array(z.string().uuid()),
 });
 
 export const AiPromptOutputSchemaResponseSchema = z.object({
@@ -381,16 +400,21 @@ export type CreateAiPromptRevision = z.infer<typeof CreateAiPromptRevisionSchema
 export type UpdateAiPromptRevision = z.infer<typeof UpdateAiPromptRevisionSchema>;
 export type CreateAiModelConfigDraft = z.infer<typeof CreateAiModelConfigDraftSchema>;
 export type UpdateAiModelConfigDraft = z.infer<typeof UpdateAiModelConfigDraftSchema>;
+export type BulkApplyAiModelConfig = z.infer<typeof BulkApplyAiModelConfigSchema>;
 
 export class CreateAiPromptRevisionDto extends createZodDto(CreateAiPromptRevisionSchema) {}
 export class UpdateAiPromptRevisionDto extends createZodDto(UpdateAiPromptRevisionSchema) {}
 export class CreateAiModelConfigDraftDto extends createZodDto(CreateAiModelConfigDraftSchema) {}
 export class UpdateAiModelConfigDraftDto extends createZodDto(UpdateAiModelConfigDraftSchema) {}
+export class BulkApplyAiModelConfigDto extends createZodDto(BulkApplyAiModelConfigSchema) {}
 export class AiPromptDefinitionsResponseDto extends createZodDto(AiPromptDefinitionsResponseSchema) {}
 export class AiPromptRevisionsResponseDto extends createZodDto(AiPromptRevisionsResponseSchema) {}
 export class AiPromptRevisionResponseDto extends createZodDto(AiPromptRevisionSchema) {}
 export class AiPromptSeedResultDto extends createZodDto(AiPromptSeedResultSchema) {}
 export class AiModelConfigResponseDto extends createZodDto(AiModelConfigResponseSchema) {}
+export class BulkApplyAiModelConfigResponseDto extends createZodDto(
+  BulkApplyAiModelConfigResponseSchema,
+) {}
 export class AiPromptFlowResponseDto extends createZodDto(AiPromptFlowResponseSchema) {}
 export class AiPromptContextSchemaResponseDto extends createZodDto(AiPromptContextSchemaResponseSchema) {}
 export class PreviewAiPromptRequestDto extends createZodDto(PreviewAiPromptRequestSchema) {}

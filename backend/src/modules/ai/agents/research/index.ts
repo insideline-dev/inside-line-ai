@@ -1,23 +1,11 @@
 import type { ResearchAgentConfig } from "../../interfaces/agent.interface";
-import type {
-  CompetitorResearch,
-  MarketResearch,
-  NewsResearch,
-  ProductResearch,
-  TeamResearch,
-} from "../../schemas";
 import { CompetitorResearchAgent } from "./competitor-research.agent";
 import { MarketResearchAgent } from "./market-research.agent";
 import { NewsResearchAgent } from "./news-research.agent";
 import { ProductResearchAgent } from "./product-research.agent";
 import { TeamResearchAgent } from "./team-research.agent";
 
-export type ResearchAgentOutput =
-  | TeamResearch
-  | MarketResearch
-  | ProductResearch
-  | NewsResearch
-  | CompetitorResearch;
+export type ResearchAgentOutput = string;
 
 /** Phase 1 agents run in parallel */
 export const RESEARCH_AGENTS: Record<

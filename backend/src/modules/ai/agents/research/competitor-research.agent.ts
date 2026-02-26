@@ -1,17 +1,16 @@
 import type { ResearchAgentConfig } from "../../interfaces/agent.interface";
-import type { CompetitorResearch } from "../../schemas";
-import { CompetitorResearchSchema } from "../../schemas";
+import { z } from "zod";
 import {
   COMPETITOR_RESEARCH_HUMAN_PROMPT,
   COMPETITOR_RESEARCH_SYSTEM_PROMPT,
 } from "../../prompts/research/competitor-research.prompt";
 
-export const CompetitorResearchAgent: ResearchAgentConfig<CompetitorResearch> = {
+export const CompetitorResearchAgent: ResearchAgentConfig<string> = {
   key: "competitor",
   name: "Competitor Research",
   systemPrompt: COMPETITOR_RESEARCH_SYSTEM_PROMPT,
   humanPromptTemplate: COMPETITOR_RESEARCH_HUMAN_PROMPT,
-  schema: CompetitorResearchSchema,
+  schema: z.string(),
   contextBuilder: ({ extraction, scraping, researchParameters }) => ({
     companyName: extraction.companyName,
     industry: extraction.industry,
@@ -24,13 +23,20 @@ export const CompetitorResearchAgent: ResearchAgentConfig<CompetitorResearch> = 
     specificMarket: researchParameters?.specificMarket,
     businessModel: researchParameters?.businessModel,
   }),
-  fallback: () => ({
-    competitors: [],
-    indirectCompetitors: [],
-    marketPositioning:
-      "Competitive positioning could not be determined in fallback mode.",
-    competitiveLandscapeSummary:
-      "Competitive landscape analysis requires manual review.",
-    sources: [],
-  }),
+  fallback: ({ extraction }) =>
+    [
+      `Competitor Research Report: ${extraction.companyName}`,
+      "",
+      "Executive Summary",
+      "Competitive mapping is incomplete in deterministic fallback mode.",
+      "",
+      "Initial Positioning Signal",
+      "Current evidence is insufficient to validate direct and indirect competitor threat ranking.",
+      "",
+      "Evidence Gap",
+      "Comprehensive competitor landscape requires manual validation across product, funding, and GTM comparisons.",
+      "",
+      "Primary Source",
+      extraction.website || "No verified primary source URL available.",
+    ].join("\n"),
 };

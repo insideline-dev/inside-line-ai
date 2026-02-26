@@ -225,6 +225,39 @@ describe("ClaraSubmissionService", () => {
     expect(pipeline.startPipeline).toHaveBeenCalledWith("existing-startup", "admin-1");
   });
 
+  it("falls back when similarity() is unavailable and still detects duplicates", async () => {
+    mockDb.limit
+      .mockRejectedValueOnce({
+        message: "function similarity(text, unknown) does not exist",
+        cause: { code: "42883" },
+      })
+      .mockResolvedValueOnce([
+        {
+          id: "existing-startup",
+          name: "Acme Corp",
+          status: StartupStatus.SUBMITTED,
+        },
+      ]);
+
+    const ctx = createMessageContext({
+      attachments: [createAttachment()],
+    });
+
+    const result = await service.handleSubmission(ctx, "admin-1", "Acme Corp");
+
+    expect(result).toEqual({
+      startupId: "existing-startup",
+      startupName: "Acme Corp",
+      isDuplicate: true,
+      isEnriched: true,
+      status: StartupStatus.SUBMITTED,
+    });
+
+    expect(mockDb.limit).toHaveBeenCalledTimes(2);
+    expect(mockDb.insert).not.toHaveBeenCalled();
+    expect(pipeline.startPipeline).toHaveBeenCalledWith("existing-startup", "admin-1");
+  });
+
 
   it("marks critical attachment as failed after max retries", async () => {
     const ctx = createMessageContext({

@@ -34,6 +34,13 @@ export interface EvaluationPipelineInput {
   scraping: ScrapingResult;
   research: ResearchResult;
   enrichment?: EnrichmentResult;
+  mappedInputs?: Record<string, unknown>;
+  mappedInputSources?: Array<{
+    researchAgentId: ResearchAgentKey;
+    nodeId: string;
+    path?: string;
+  }>;
+  edgeDrivenInputFallbackUsed?: boolean;
 }
 
 export interface ResearchAgentConfig<TOutput> {
@@ -117,6 +124,7 @@ export interface EvaluationAgentCompletion {
   agent: EvaluationAgentKey;
   output: unknown;
   usedFallback: boolean;
+  dataSummary?: Record<string, unknown>;
   attempt?: number;
   retryCount?: number;
   error?: string;

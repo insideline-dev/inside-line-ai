@@ -33,6 +33,9 @@ describe("SynthesisAgent", () => {
     aiConfig = {
       getSynthesisTemperature: jest.fn().mockReturnValue(0.2),
       getSynthesisMaxOutputTokens: jest.fn().mockReturnValue(4000),
+      getSynthesisMaxAttempts: jest.fn().mockReturnValue(2),
+      getSynthesisAgentHardTimeoutMs: jest.fn().mockReturnValue(90_000),
+      getSynthesisAttemptTimeoutMs: jest.fn().mockReturnValue(90_000),
     } as unknown as jest.Mocked<AiConfigService>;
     promptService = {
       resolve: jest.fn().mockResolvedValue({
@@ -418,6 +421,63 @@ describe("SynthesisAgent", () => {
     expect(call?.system).toContain(
       "Do not include score/confidence phrasing in narrative fields",
     );
+  });
+
+  it("coerces legacy non-string research fields when building synthesis brief", async () => {
+    generateTextMock.mockResolvedValueOnce({
+      output: {
+        overallScore: 75,
+        recommendation: "Consider",
+        executiveSummary: "Summary",
+        strengths: ["Strength"],
+        concerns: ["Concern"],
+        investmentThesis: "Thesis",
+        nextSteps: ["Step"],
+        confidenceLevel: "Medium",
+        investorMemo: {
+          executiveSummary: "Investor memo",
+          sections: [],
+          recommendation: "Consider",
+          riskLevel: "medium",
+          dealHighlights: [],
+          keyDueDiligenceAreas: [],
+        },
+        founderReport: {
+          summary: "Founder report",
+          sections: [],
+          actionItems: [],
+        },
+        dataConfidenceNotes: "Confidence note",
+      },
+    });
+
+    const pipeline = createEvaluationPipelineInput();
+    const legacyResearch = pipeline.research as unknown as {
+      combinedReportText: unknown;
+      team: unknown;
+      market: unknown;
+    };
+    legacyResearch.combinedReportText = { summary: "Legacy combined report" };
+    legacyResearch.team = { summary: "Legacy team report" };
+    legacyResearch.market = ["Legacy market report"];
+
+    await service.run({
+      extraction: pipeline.extraction,
+      scraping: pipeline.scraping,
+      research: pipeline.research,
+      evaluation: createMockEvaluationResult(),
+      stageWeights: {
+        team: 0.25,
+        traction: 0.2,
+        market: 0.2,
+        product: 0.15,
+        dealTerms: 0.1,
+        exitPotential: 0.1,
+      },
+    });
+
+    const call = generateTextMock.mock.calls[0]?.[0];
+    expect(call?.prompt).toContain("Legacy combined report");
   });
 
   it("returns fallback result when generation fails", async () => {

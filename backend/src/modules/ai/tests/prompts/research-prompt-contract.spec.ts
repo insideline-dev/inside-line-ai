@@ -5,80 +5,27 @@ import { TEAM_RESEARCH_SYSTEM_PROMPT } from "../../prompts/research/team-researc
 import { NEWS_RESEARCH_SYSTEM_PROMPT } from "../../prompts/research/news-research.prompt";
 import { COMPETITOR_RESEARCH_SYSTEM_PROMPT } from "../../prompts/research/competitor-research.prompt";
 
+const PROMPTS = [
+  MARKET_RESEARCH_SYSTEM_PROMPT,
+  PRODUCT_RESEARCH_SYSTEM_PROMPT,
+  TEAM_RESEARCH_SYSTEM_PROMPT,
+  NEWS_RESEARCH_SYSTEM_PROMPT,
+  COMPETITOR_RESEARCH_SYSTEM_PROMPT,
+];
+
 describe("Research prompt contracts", () => {
-  it("market prompt includes canonical schema keys", () => {
-    const requiredKeys = [
-      "\"marketReports\"",
-      "\"competitors\"",
-      "\"indirectCompetitors\"",
-      "\"indirectCompetitorsDetailed\"",
-      "\"marketTrends\"",
-      "\"marketSize\"",
-      "\"marketDrivers\"",
-      "\"marketChallenges\"",
-      "\"sources\"",
-    ];
-    for (const key of requiredKeys) {
-      expect(MARKET_RESEARCH_SYSTEM_PROMPT).toContain(key);
+  it("enforces plain-text response contract for all research prompts", () => {
+    for (const prompt of PROMPTS) {
+      expect(prompt).toContain("Return ONLY plain text report output");
+      expect(prompt).toContain("Do NOT return JSON");
+      expect(prompt).toContain("at least 2500 characters");
     }
   });
 
-  it("product prompt includes canonical schema keys", () => {
-    const requiredKeys = [
-      "\"productPages\"",
-      "\"features\"",
-      "\"techStack\"",
-      "\"integrations\"",
-      "\"customerReviews\"",
-      "\"reviews\"",
-      "\"strengths\"",
-      "\"weaknesses\"",
-      "\"sources\"",
-    ];
-    for (const key of requiredKeys) {
-      expect(PRODUCT_RESEARCH_SYSTEM_PROMPT).toContain(key);
-    }
-  });
-
-  it("team prompt includes canonical schema keys", () => {
-    const requiredKeys = [
-      "\"linkedinProfiles\"",
-      "\"previousCompanies\"",
-      "\"education\"",
-      "\"achievements\"",
-      "\"onlinePresence\"",
-      "\"teamSummary\"",
-      "\"sources\"",
-    ];
-    for (const key of requiredKeys) {
-      expect(TEAM_RESEARCH_SYSTEM_PROMPT).toContain(key);
-    }
-  });
-
-  it("news prompt includes canonical schema keys", () => {
-    const requiredKeys = [
-      "\"articles\"",
-      "\"pressReleases\"",
-      "\"sentiment\"",
-      "\"recentEvents\"",
-      "\"sentimentOverview\"",
-      "\"sources\"",
-    ];
-    for (const key of requiredKeys) {
-      expect(NEWS_RESEARCH_SYSTEM_PROMPT).toContain(key);
-    }
-  });
-
-  it("competitor prompt includes canonical schema keys", () => {
-    const requiredKeys = [
-      "\"competitors\"",
-      "\"indirectCompetitors\"",
-      "\"marketPositioning\"",
-      "\"competitiveLandscapeSummary\"",
-      "\"sources\"",
-    ];
-    for (const key of requiredKeys) {
-      expect(COMPETITOR_RESEARCH_SYSTEM_PROMPT).toContain(key);
+  it("removes legacy JSON-only contract from all research prompts", () => {
+    for (const prompt of PROMPTS) {
+      expect(prompt).not.toContain("valid JSON object matching the requested schema");
+      expect(prompt).not.toContain("Use this exact top-level JSON shape and key names");
     }
   });
 });

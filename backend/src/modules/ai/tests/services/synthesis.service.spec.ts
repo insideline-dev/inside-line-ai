@@ -221,6 +221,38 @@ describe("SynthesisService", () => {
     );
   });
 
+  it("passes text-based research payloads through to synthesis agent", async () => {
+    pipelineState.getPhaseResult.mockImplementation(
+      (_startupId: string, phase: PipelinePhase) => {
+        if (phase === PipelinePhase.EXTRACTION) {
+          return Promise.resolve(pipeline.extraction);
+        }
+        if (phase === PipelinePhase.SCRAPING) {
+          return Promise.resolve(pipeline.scraping);
+        }
+        if (phase === PipelinePhase.RESEARCH) {
+          return Promise.resolve({
+            ...pipeline.research,
+            team: "Updated team report text",
+            combinedReportText: "## Team Research Report\\nUpdated team report text",
+          });
+        }
+        if (phase === PipelinePhase.EVALUATION) {
+          return Promise.resolve(createMockEvaluationResult());
+        }
+        return Promise.resolve(null);
+      },
+    );
+
+    await service.run("startup-1");
+
+    const synthesisInput = synthesisAgent.runDetailed.mock.calls[0]?.[0];
+    expect(synthesisInput?.research.team).toBe("Updated team report text");
+    expect(synthesisInput?.research.combinedReportText).toContain(
+      "Updated team report text",
+    );
+  });
+
   it("sanitizes preserved previous narrative when fallback reuses stored output", async () => {
     synthesisAgent.runDetailed.mockResolvedValueOnce({
       output: {

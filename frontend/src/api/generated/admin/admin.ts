@@ -52,6 +52,8 @@ import type {
   AiResolvedSchemaResponseDto,
   AiSchemaRevisionResponseDto,
   AiSchemaRevisionsResponseDto,
+  BulkApplyAiModelConfigDto,
+  BulkApplyAiModelConfigResponseDto,
   CreateAiAgentConfigDto,
   CreateAiModelConfigDraftDto,
   CreateAiPromptRevisionDto,
@@ -5833,6 +5835,88 @@ export function useAdminControllerGetAiAgentUpstreamFields<TData = Awaited<Retur
 
 
 /**
+ * @summary Apply and publish model config across all AI nodes, research agents, or evaluation agents
+ */
+export type adminControllerBulkApplyAiModelConfigResponse201 = {
+  data: BulkApplyAiModelConfigResponseDto
+  status: 201
+}
+    
+export type adminControllerBulkApplyAiModelConfigResponseSuccess = (adminControllerBulkApplyAiModelConfigResponse201) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerBulkApplyAiModelConfigResponse = (adminControllerBulkApplyAiModelConfigResponseSuccess)
+
+export const getAdminControllerBulkApplyAiModelConfigUrl = () => {
+
+
+  
+
+  return `/admin/ai-prompts/model-config/bulk-apply`
+}
+
+export const adminControllerBulkApplyAiModelConfig = async (bulkApplyAiModelConfigDto: BulkApplyAiModelConfigDto, options?: RequestInit): Promise<adminControllerBulkApplyAiModelConfigResponse> => {
+  
+  return customFetch<adminControllerBulkApplyAiModelConfigResponse>(getAdminControllerBulkApplyAiModelConfigUrl(),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      bulkApplyAiModelConfigDto,)
+  }
+);}
+
+
+
+
+export const getAdminControllerBulkApplyAiModelConfigMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerBulkApplyAiModelConfig>>, TError,{data: BodyType<BulkApplyAiModelConfigDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminControllerBulkApplyAiModelConfig>>, TError,{data: BodyType<BulkApplyAiModelConfigDto>}, TContext> => {
+
+const mutationKey = ['adminControllerBulkApplyAiModelConfig'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminControllerBulkApplyAiModelConfig>>, {data: BodyType<BulkApplyAiModelConfigDto>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  adminControllerBulkApplyAiModelConfig(data,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminControllerBulkApplyAiModelConfigMutationResult = NonNullable<Awaited<ReturnType<typeof adminControllerBulkApplyAiModelConfig>>>
+    export type AdminControllerBulkApplyAiModelConfigMutationBody = BodyType<BulkApplyAiModelConfigDto>
+    export type AdminControllerBulkApplyAiModelConfigMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Apply and publish model config across all AI nodes, research agents, or evaluation agents
+ */
+export const useAdminControllerBulkApplyAiModelConfig = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerBulkApplyAiModelConfig>>, TError,{data: BodyType<BulkApplyAiModelConfigDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof adminControllerBulkApplyAiModelConfig>>,
+        TError,
+        {data: BodyType<BulkApplyAiModelConfigDto>},
+        TContext
+      > => {
+      return useMutation(getAdminControllerBulkApplyAiModelConfigMutationOptions(options), queryClient);
+    }
+    /**
  * @summary Update model config draft revision
  */
 export type adminControllerUpdateAiModelConfigDraftResponse200 = {

@@ -11,5 +11,6 @@ export type CreateAiModelConfigDraftDtoModelName = typeof CreateAiModelConfigDra
 
 export const CreateAiModelConfigDraftDtoModelName = {
   'gpt-52': 'gpt-5.2',
-  'gemini-30-flash-preview': 'gemini-3.0-flash-preview',
+  'gemini-3-flash-preview': 'gemini-3-flash-preview',
+  'o4-mini-deep-research': 'o4-mini-deep-research',
 } as const;

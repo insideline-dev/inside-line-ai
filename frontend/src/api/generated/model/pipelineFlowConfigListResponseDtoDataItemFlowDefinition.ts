@@ -5,5 +5,14 @@
  * Inside Line API Documentation
  * OpenAPI spec version: 2.0
  */
+import type { PipelineFlowConfigListResponseDtoDataItemFlowDefinitionEdgesItem } from './pipelineFlowConfigListResponseDtoDataItemFlowDefinitionEdgesItem';
+import type { PipelineFlowConfigListResponseDtoDataItemFlowDefinitionFlowId } from './pipelineFlowConfigListResponseDtoDataItemFlowDefinitionFlowId';
+import type { PipelineFlowConfigListResponseDtoDataItemFlowDefinitionNodeConfigs } from './pipelineFlowConfigListResponseDtoDataItemFlowDefinitionNodeConfigs';
 
-export type PipelineFlowConfigListResponseDtoDataItemFlowDefinition = { [key: string]: unknown };
+export type PipelineFlowConfigListResponseDtoDataItemFlowDefinition = {
+  flowId: PipelineFlowConfigListResponseDtoDataItemFlowDefinitionFlowId;
+  /** @minItems 1 */
+  nodes: string[];
+  edges: PipelineFlowConfigListResponseDtoDataItemFlowDefinitionEdgesItem[];
+  nodeConfigs?: PipelineFlowConfigListResponseDtoDataItemFlowDefinitionNodeConfigs;
+};

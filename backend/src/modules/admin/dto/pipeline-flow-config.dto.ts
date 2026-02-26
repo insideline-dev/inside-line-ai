@@ -2,17 +2,50 @@ import { createZodDto } from "nestjs-zod";
 import { z } from "zod";
 
 const FlowConfigStatusSchema = z.enum(["draft", "published", "archived"]);
+const FlowEdgeFieldMappingSchema = z.object({
+  fromPath: z.string().min(1),
+  toKey: z.string().min(1),
+  required: z.boolean().optional(),
+});
+const FlowEdgeMappingSchema = z
+  .object({
+    mode: z.enum(["full_output", "field_map"]).optional(),
+    fieldMap: z.array(FlowEdgeFieldMappingSchema).optional(),
+    mergeStrategy: z.enum(["object", "array"]).optional(),
+  })
+  .optional();
 const FlowEdgeSchema = z.object({
   from: z.string().min(1),
   to: z.string().min(1),
   label: z.string().optional(),
+  sourceHandle: z.string().min(1).optional(),
+  targetHandle: z.string().min(1).optional(),
+  enabled: z.boolean().optional(),
+  mapping: FlowEdgeMappingSchema,
 });
+
+const FlowScrapeWebsiteNodeConfigSchema = z.object({
+  scraping: z
+    .object({
+      manualPaths: z.array(z.string().min(1)).max(100).optional(),
+      discoveryEnabled: z.boolean().optional(),
+    })
+    .optional(),
+});
+
+const FlowNodeConfigsSchema = z
+  .object({
+    scrape_website: FlowScrapeWebsiteNodeConfigSchema.optional(),
+  })
+  .catchall(z.unknown())
+  .optional();
 
 const FlowDefinitionSchema = z
   .object({
     flowId: z.enum(["pipeline", "clara"]),
     nodes: z.array(z.string().min(1)).min(1),
     edges: z.array(FlowEdgeSchema),
+    nodeConfigs: FlowNodeConfigsSchema,
   })
   .superRefine((value, ctx) => {
     const nodeSet = new Set(value.nodes);
@@ -57,7 +90,19 @@ const FlowDefinitionSchema = z
         });
       }
 
-      const pairKey = `${edge.from}->${edge.to}`;
+      const mappingMode = edge.mapping?.mode ?? "full_output";
+      if (
+        mappingMode === "field_map" &&
+        (!edge.mapping?.fieldMap || edge.mapping.fieldMap.length === 0)
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["edges", index, "mapping", "fieldMap"],
+          message: "field_map mapping requires at least one fieldMap entry",
+        });
+      }
+
+      const pairKey = `${edge.from}:${edge.sourceHandle ?? ""}->${edge.to}:${edge.targetHandle ?? ""}`;
       if (edgePairs.has(pairKey)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,

@@ -13,7 +13,10 @@ import {
   PipelineConfig,
   validatePipelineConfig,
 } from "../orchestrator/pipeline.config";
-import { PipelineGraphCompilerService } from "./pipeline-graph-compiler.service";
+import {
+  PipelineFlowDefinition,
+  PipelineGraphCompilerService,
+} from "./pipeline-graph-compiler.service";
 
 @Injectable()
 export class PipelineFlowConfigService {
@@ -41,6 +44,27 @@ export class PipelineFlowConfigService {
       .orderBy(desc(pipelineFlowConfig.publishedAt))
       .limit(1);
     return row ?? null;
+  }
+
+  async getPublishedParsedFlowDefinition(): Promise<{
+    configId: string;
+    version: number;
+    flowDefinition: PipelineFlowDefinition;
+  } | null> {
+    const published = await this.getPublished();
+    if (!published) {
+      return null;
+    }
+
+    const flowDefinition = this.graphCompiler.parseFlowDefinition(
+      published.flowDefinition,
+    );
+
+    return {
+      configId: published.id,
+      version: published.version,
+      flowDefinition,
+    };
   }
 
   async getById(id: string) {

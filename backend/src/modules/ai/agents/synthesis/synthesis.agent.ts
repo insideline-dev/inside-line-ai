@@ -119,6 +119,7 @@ export class SynthesisAgent {
                 prompt: renderedPrompt,
                 tools: execution?.generateTextOptions.tools,
                 toolChoice: execution?.generateTextOptions.toolChoice,
+                providerOptions: execution?.generateTextOptions.providerOptions,
                 abortSignal,
               }),
             attemptTimeoutMs,
@@ -709,100 +710,32 @@ export class SynthesisAgent {
       );
     }
 
-    if (research.team) {
-      sections.push(
-        [
-          "## Team Research",
-          research.team.previousCompanies.length
-            ? `Previous companies: ${research.team.previousCompanies.join(", ")}`
-            : "",
-          research.team.achievements.length
-            ? `Achievements: ${research.team.achievements.join("; ")}`
-            : "",
-        ]
-          .filter(Boolean)
-          .join("\n"),
-      );
-    }
-
-    if (research.market) {
-      sections.push(
-        [
-          "## Market Research",
-          research.market.marketSize.tam
-            ? `TAM: $${research.market.marketSize.tam.toLocaleString()}`
-            : "",
-          research.market.marketSize.sam
-            ? `SAM: $${research.market.marketSize.sam.toLocaleString()}`
-            : "",
-          research.market.marketTrends.length
-            ? `Trends: ${research.market.marketTrends.join("; ")}`
-            : "",
-          research.market.competitors.length
-            ? `Competitors: ${research.market.competitors.map((c) => c.name).join(", ")}`
-            : "",
-        ]
-          .filter(Boolean)
-          .join("\n"),
-      );
-    }
-
-    if (research.product) {
-      sections.push(
-        [
-          "## Product Research",
-          research.product.features.length
-            ? `Features: ${research.product.features.join(", ")}`
-            : "",
-          research.product.techStack.length
-            ? `Tech Stack: ${research.product.techStack.join(", ")}`
-            : "",
-          research.product.customerReviews?.summary
-            ? `Customer Reviews: ${research.product.customerReviews.summary}`
-            : "",
-        ]
-          .filter(Boolean)
-          .join("\n"),
-      );
-    }
-
-    if (research.news) {
-      sections.push(
-        [
-          "## News & Sentiment",
-          `Sentiment: ${research.news.sentiment}`,
-          research.news.articles.length
-            ? `Recent articles: ${research.news.articles.map((a) => a.title).join("; ")}`
-            : "",
-        ]
-          .filter(Boolean)
-          .join("\n"),
-      );
-    }
-
-    if (research.competitor) {
-      sections.push(
-        [
-          "## Competitor Research",
-          research.competitor.competitors.length
-            ? `Direct competitors: ${research.competitor.competitors
-                .map(
-                  (c) =>
-                    `${c.name}${c.threatLevel ? ` (${c.threatLevel} threat)` : ""}`,
-                )
-                .join(", ")}`
-            : "",
-          research.competitor.indirectCompetitors.length
-            ? `Indirect competitors: ${research.competitor.indirectCompetitors
-                .map((c) => c.name)
-                .join(", ")}`
-            : "",
-          research.competitor.marketPositioning || "",
-          research.competitor.competitiveLandscapeSummary || "",
-        ]
-          .filter(Boolean)
-          .join("\n"),
-      );
+    const combinedResearch = this.coerceResearchText(
+      research.combinedReportText,
+    );
+    if (combinedResearch) {
+      sections.push(["## Research Reports", combinedResearch].join("\n"));
+    } else {
+      const teamResearch = this.coerceResearchText(research.team);
+      if (teamResearch) {
+        sections.push(["## Team Research", teamResearch].join("\n"));
+      }
+      const marketResearch = this.coerceResearchText(research.market);
+      if (marketResearch) {
+        sections.push(["## Market Research", marketResearch].join("\n"));
+      }
+      const productResearch = this.coerceResearchText(research.product);
+      if (productResearch) {
+        sections.push(["## Product Research", productResearch].join("\n"));
+      }
+      const newsResearch = this.coerceResearchText(research.news);
+      if (newsResearch) {
+        sections.push(["## News Research", newsResearch].join("\n"));
+      }
+      const competitorResearch = this.coerceResearchText(research.competitor);
+      if (competitorResearch) {
+        sections.push(["## Competitor Research", competitorResearch].join("\n"));
+      }
     }
 
     const evalEntries = Object.entries(evaluation).filter(
@@ -857,5 +790,15 @@ export class SynthesisAgent {
     }
 
     return sections.join("\n\n");
+  }
+
+  private coerceResearchText(value: unknown): string {
+    if (typeof value === "string") {
+      return value.trim();
+    }
+    if (value == null) {
+      return "";
+    }
+    return this.safeStringify(value).trim();
   }
 }

@@ -10,6 +10,8 @@ import type { SourceEntry } from "../interfaces/phase-results.interface";
 import { ModelPurpose } from "../interfaces/pipeline.interface";
 import { AiProviderService } from "../providers/ai-provider.service";
 import { AiConfigService } from "./ai-config.service";
+import { isOpenAiDeepResearchModel } from "./ai-runtime-config.schema";
+import { OpenAiDeepResearchService } from "./openai-deep-research.service";
 
 interface ResearchRequest<TOutput extends { sources: string[] }> {
   agent: ResearchAgentKey;
@@ -18,6 +20,7 @@ interface ResearchRequest<TOutput extends { sources: string[] }> {
   tools?: GenerateTextTools;
   toolChoice?: GenerateTextToolChoice;
   stopWhen?: GenerateTextStopWhen;
+  providerOptions?: GenerateTextProviderOptions;
   searchEnforcement?: {
     requiresProviderEvidence: boolean;
     requiresBraveToolCall: boolean;
@@ -31,6 +34,38 @@ interface ResearchRequest<TOutput extends { sources: string[] }> {
 
 interface ResearchResponse<TOutput extends { sources: string[] }> {
   output: TOutput;
+  sources: SourceEntry[];
+  usedFallback: boolean;
+  error?: string;
+  fallbackReason?: PipelineFallbackReason;
+  rawProviderError?: string;
+  outputText?: string;
+  meta?: Record<string, unknown>;
+  attempt: number;
+  retryCount: number;
+}
+
+interface ResearchTextRequest {
+  agent: ResearchAgentKey;
+  modelName?: string;
+  model?: GenerateTextModel;
+  tools?: GenerateTextTools;
+  toolChoice?: GenerateTextToolChoice;
+  stopWhen?: GenerateTextStopWhen;
+  providerOptions?: GenerateTextProviderOptions;
+  searchEnforcement?: {
+    requiresProviderEvidence: boolean;
+    requiresBraveToolCall: boolean;
+  };
+  getBraveToolCallCount?: () => number;
+  prompt: string;
+  systemPrompt: string;
+  minReportLength: number;
+  fallback: () => string;
+}
+
+interface ResearchTextResponse {
+  output: string;
   sources: SourceEntry[];
   usedFallback: boolean;
   error?: string;
@@ -63,6 +98,7 @@ type GenerateTextModel = Parameters<typeof generateText>[0]["model"];
 type GenerateTextTools = Parameters<typeof generateText>[0]["tools"];
 type GenerateTextToolChoice = Parameters<typeof generateText>[0]["toolChoice"];
 type GenerateTextStopWhen = Parameters<typeof generateText>[0]["stopWhen"];
+type GenerateTextProviderOptions = Parameters<typeof generateText>[0]["providerOptions"];
 
 @Injectable()
 export class GeminiResearchService {
@@ -71,6 +107,7 @@ export class GeminiResearchService {
   constructor(
     private providers: AiProviderService,
     private aiConfig: AiConfigService,
+    private openAiDeepResearch: OpenAiDeepResearchService,
   ) {}
 
   async research<TOutput extends { sources: string[] }>(
@@ -108,6 +145,7 @@ export class GeminiResearchService {
         tools: request.tools,
         toolChoice: request.toolChoice,
         stopWhen: request.stopWhen,
+        providerOptions: request.providerOptions,
         timeoutMs: attemptTimeoutMs,
       });
       if (structured.success) {
@@ -196,6 +234,7 @@ export class GeminiResearchService {
         tools: request.tools,
         toolChoice: request.toolChoice,
         stopWhen: request.stopWhen,
+        providerOptions: request.providerOptions,
         timeoutMs: attemptTimeoutMs,
       });
       if (text.success) {
@@ -358,6 +397,213 @@ export class GeminiResearchService {
     };
   }
 
+  async researchText(request: ResearchTextRequest): Promise<ResearchTextResponse> {
+    const fallback = request.fallback().trim();
+    const modelName =
+      request.modelName ?? this.aiConfig.getModelForPurpose(ModelPurpose.RESEARCH);
+    const model =
+      request.model ??
+      (this.providers.resolveModelForPurpose(
+        ModelPurpose.RESEARCH,
+      ) as GenerateTextModel);
+    const maxAttempts = this.getResearchMaxAttempts();
+    const hardTimeoutMs = this.getResearchAgentHardTimeoutMs();
+    const startedAt = Date.now();
+    let lastError = "Unknown research error";
+    let lastOutputText = "";
+    let lastSources: SourceEntry[] = [];
+    let lastSourceSanitization: SourceSanitizationSummary = {
+      droppedCount: 0,
+      droppedHosts: [],
+    };
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      const remainingBudgetMs = this.getRemainingBudgetMs(startedAt, hardTimeoutMs);
+      if (remainingBudgetMs <= 0) {
+        lastError = `Research agent ${request.agent} exceeded hard timeout`;
+        break;
+      }
+
+      const attemptTimeoutMs = this.getAttemptTimeoutMs(remainingBudgetMs);
+      try {
+        let extractedSources: ExtractedSources;
+        let meta: Record<string, unknown> | undefined;
+
+        if (isOpenAiDeepResearchModel(modelName)) {
+          const deepResearch = await this.withTimeout(
+            () =>
+              this.openAiDeepResearch.runResearchText({
+                agent: request.agent,
+                modelName,
+                systemPrompt: request.systemPrompt,
+                prompt: request.prompt,
+                enableWebSearch:
+                  request.searchEnforcement?.requiresProviderEvidence ?? false,
+                timeoutMs: attemptTimeoutMs,
+              }),
+            attemptTimeoutMs,
+            `Research agent ${request.agent} timed out`,
+          );
+
+          extractedSources = {
+            entries: deepResearch.sources,
+            evidenceCount: deepResearch.sources.length,
+            sanitization: {
+              droppedCount: 0,
+              droppedHosts: [],
+            },
+          };
+          lastOutputText = deepResearch.text.trim();
+          meta = {
+            deepResearch: deepResearch.rawMeta,
+          };
+        } else {
+          const response = await this.withTimeout(
+            (abortSignal) =>
+              generateText({
+                model,
+                system: request.systemPrompt,
+                prompt: request.prompt,
+                tools: request.tools,
+                toolChoice: request.toolChoice,
+                stopWhen: request.stopWhen,
+                providerOptions: request.providerOptions,
+                temperature: this.aiConfig.getResearchTemperature(),
+                abortSignal,
+              }),
+            attemptTimeoutMs,
+            `Research agent ${request.agent} timed out`,
+          );
+
+          const responseRecord = (response ?? {}) as SourceCarrier & { text?: string };
+          extractedSources = this.extractSources(responseRecord, request.agent);
+          lastOutputText = this.resolveRawOutputText(responseRecord, undefined).trim();
+        }
+
+        lastSources = extractedSources.entries;
+        lastSourceSanitization = extractedSources.sanitization;
+
+        const enforcement = this.resolveSearchEnforcementStatus({
+          sourceCount: extractedSources.evidenceCount,
+          searchEnforcement: request.searchEnforcement,
+          braveToolCallCount: request.getBraveToolCallCount?.() ?? 0,
+        });
+        if (enforcement.error) {
+          lastError = enforcement.error;
+          if (attempt < maxAttempts) {
+            const delayMs = Math.min(
+              this.getRetryDelayMs(attempt),
+              Math.max(0, this.getRemainingBudgetMs(startedAt, hardTimeoutMs) - 50),
+            );
+            if (delayMs <= 0) {
+              lastError = `Research agent ${request.agent} exceeded hard timeout`;
+              break;
+            }
+            this.logger.warn(
+              `Research text agent ${request.agent} attempt ${attempt}/${maxAttempts} missing required search evidence, retrying in ${delayMs}ms: ${enforcement.error}`,
+            );
+            await this.sleep(delayMs);
+            continue;
+          }
+          if (lastOutputText.length >= request.minReportLength) {
+            this.logger.warn(
+              `Research text agent ${request.agent} completed without required search evidence; accepting output with warning: ${enforcement.error}`,
+            );
+            return {
+              output: lastOutputText,
+              sources: extractedSources.entries,
+              usedFallback: false,
+              outputText: lastOutputText,
+              meta: this.withSourceSanitizationMeta(
+                {
+                  ...meta,
+                  searchEnforcement: {
+                    missingProviderEvidence: enforcement.missingProviderEvidence,
+                    missingBraveToolCall: enforcement.missingBraveToolCall,
+                  },
+                },
+                extractedSources.sanitization,
+              ),
+              attempt,
+              retryCount: Math.max(0, attempt - 1),
+            };
+          }
+        }
+
+        if (lastOutputText.length < request.minReportLength) {
+          lastError = `Research report too short (${lastOutputText.length} chars, required ${request.minReportLength})`;
+          if (attempt < maxAttempts) {
+            const delayMs = Math.min(
+              this.getRetryDelayMs(attempt),
+              Math.max(0, this.getRemainingBudgetMs(startedAt, hardTimeoutMs) - 50),
+            );
+            if (delayMs <= 0) {
+              lastError = `Research agent ${request.agent} exceeded hard timeout`;
+              break;
+            }
+            this.logger.warn(
+              `Research text agent ${request.agent} attempt ${attempt}/${maxAttempts} produced short output, retrying in ${delayMs}ms: ${lastError}`,
+            );
+            await this.sleep(delayMs);
+            continue;
+          }
+        }
+
+        if (lastOutputText.length < request.minReportLength) {
+          break;
+        }
+
+        return {
+          output: lastOutputText,
+          sources: extractedSources.entries,
+          usedFallback: false,
+          outputText: lastOutputText,
+          meta: this.withSourceSanitizationMeta(meta, extractedSources.sanitization),
+          attempt,
+          retryCount: Math.max(0, attempt - 1),
+        };
+      } catch (error) {
+        lastError = this.errorMessage(error);
+        if (attempt < maxAttempts && this.isRetryableError(lastError)) {
+          const delayMs = Math.min(
+            this.getRetryDelayMs(attempt),
+            Math.max(0, this.getRemainingBudgetMs(startedAt, hardTimeoutMs) - 50),
+          );
+          if (delayMs <= 0) {
+            lastError = `Research agent ${request.agent} exceeded hard timeout`;
+            break;
+          }
+          this.logger.warn(
+            `Research text agent ${request.agent} attempt ${attempt}/${maxAttempts} failed, retrying in ${delayMs}ms: ${lastError}`,
+          );
+          await this.sleep(delayMs);
+          continue;
+        }
+        break;
+      }
+    }
+
+    const fallbackReason = this.classifyFallbackReason(lastError);
+    this.logger.warn(
+      `Research text agent ${request.agent} failed (model: ${modelName}), using fallback: ${lastError}`,
+    );
+    return {
+      output: fallback,
+      sources: lastSources.length > 0 ? lastSources : this.toInternalSource(request.agent),
+      usedFallback: true,
+      error: lastError,
+      fallbackReason,
+      rawProviderError: this.resolveRawProviderError(lastError, fallbackReason),
+      outputText: lastOutputText.length > 0 ? lastOutputText : fallback,
+      meta: this.withSourceSanitizationMeta(
+        undefined,
+        lastSourceSanitization,
+      ),
+      attempt: maxAttempts,
+      retryCount: Math.max(0, maxAttempts - 1),
+    };
+  }
+
   private async tryStructuredAttempt<TOutput extends { sources: string[] }>(input: {
     agent: ResearchAgentKey;
     model: GenerateTextModel;
@@ -367,6 +613,7 @@ export class GeminiResearchService {
     tools?: GenerateTextTools;
     toolChoice?: GenerateTextToolChoice;
     stopWhen?: GenerateTextStopWhen;
+    providerOptions?: GenerateTextProviderOptions;
     timeoutMs: number;
   }): Promise<
     | {
@@ -397,6 +644,7 @@ export class GeminiResearchService {
             tools: input.tools,
             toolChoice: input.toolChoice,
             stopWhen: input.stopWhen,
+            providerOptions: input.providerOptions,
             temperature: this.aiConfig.getResearchTemperature(),
             abortSignal,
           }),
@@ -475,6 +723,7 @@ export class GeminiResearchService {
     tools?: GenerateTextTools;
     toolChoice?: GenerateTextToolChoice;
     stopWhen?: GenerateTextStopWhen;
+    providerOptions?: GenerateTextProviderOptions;
     timeoutMs: number;
   }): Promise<
     | {
@@ -504,6 +753,7 @@ export class GeminiResearchService {
             tools: input.tools,
             toolChoice: input.toolChoice,
             stopWhen: input.stopWhen,
+            providerOptions: input.providerOptions,
             temperature: this.aiConfig.getResearchTemperature(),
             abortSignal,
           }),

@@ -37,6 +37,9 @@ describe("GeminiResearchService", () => {
   let service: GeminiResearchService;
   let providers: jest.Mocked<AiProviderService>;
   let aiConfig: jest.Mocked<AiConfigService>;
+  let openAiDeepResearch: {
+    runResearchText: ReturnType<typeof jest.fn>;
+  };
   const modelInstance = { id: "gemini-model-instance" };
 
   beforeEach(() => {
@@ -55,10 +58,21 @@ describe("GeminiResearchService", () => {
       getResearchAgentHardTimeoutMs: jest.fn(() => 30000),
     } as unknown as jest.Mocked<AiConfigService>;
 
-    service = new GeminiResearchServiceClass(
+    openAiDeepResearch = {
+      runResearchText: jest.fn(),
+    };
+
+    service = new (GeminiResearchServiceClass as unknown as new (
+      providers: AiProviderService,
+      aiConfig: AiConfigService,
+      openAiDeepResearch: {
+        runResearchText: (...args: unknown[]) => Promise<unknown>;
+      },
+    ) => GeminiResearchService)(
       providers as unknown as AiProviderService,
       aiConfig as unknown as AiConfigService,
-    ) as unknown as GeminiResearchService;
+      openAiDeepResearch,
+    ) as GeminiResearchService;
   });
 
   it("uses generateText with google search tool and extracts deduped sources", async () => {
@@ -129,6 +143,48 @@ describe("GeminiResearchService", () => {
     );
     expect(googleSearchMock).toHaveBeenCalledTimes(1);
     expect(providers.resolveModelForPurpose).toHaveBeenCalled();
+  });
+
+  it("routes o4-mini-deep-research text research through OpenAI deep research service", async () => {
+    openAiDeepResearch.runResearchText.mockResolvedValueOnce({
+      text: "Deep research report",
+      sources: [
+        {
+          name: "openai",
+          url: "https://example.com",
+          type: "search",
+          agent: "market",
+          timestamp: new Date().toISOString(),
+        },
+      ],
+      rawMeta: {
+        responseId: "resp_123",
+      },
+    });
+
+    const result = await service.researchText({
+      agent: "market",
+      modelName: "o4-mini-deep-research",
+      prompt: "market prompt",
+      systemPrompt: "market system",
+      minReportLength: 10,
+      fallback: () => "fallback report",
+    });
+
+    expect(openAiDeepResearch.runResearchText).toHaveBeenCalledTimes(1);
+    expect(openAiDeepResearch.runResearchText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agent: "market",
+        modelName: "o4-mini-deep-research",
+        systemPrompt: "market system",
+        prompt: "market prompt",
+        enableWebSearch: false,
+        timeoutMs: 30000,
+      }),
+    );
+    expect(generateTextMock).not.toHaveBeenCalled();
+    expect(result.usedFallback).toBe(false);
+    expect(result.output).toBe("Deep research report");
   });
 
   it("filters provider redirect URLs from output sources and records sanitization metadata", async () => {
@@ -354,6 +410,38 @@ describe("GeminiResearchService", () => {
     });
   });
 
+  it("keeps long text output and marks warning when provider/brave evidence is missing", async () => {
+    const report = "R".repeat(2600);
+    generateTextMock.mockResolvedValueOnce({
+      text: report,
+      sources: [],
+      providerMetadata: {},
+    });
+
+    const result = await service.researchText({
+      agent: "market",
+      prompt: "market prompt",
+      systemPrompt: "market system",
+      minReportLength: 2500,
+      searchEnforcement: {
+        requiresProviderEvidence: true,
+        requiresBraveToolCall: true,
+      },
+      getBraveToolCallCount: () => 0,
+      fallback: () => "fallback report",
+    });
+
+    expect(result.usedFallback).toBe(false);
+    expect(result.output).toBe(report);
+    expect(result.error).toBeUndefined();
+    expect(result.meta).toEqual({
+      searchEnforcement: {
+        missingProviderEvidence: true,
+        missingBraveToolCall: true,
+      },
+    });
+  });
+
   it("fallback sources default to empty array when undefined", async () => {
     generateTextMock.mockRejectedValue(new Error("Network error"));
 
@@ -484,6 +572,9 @@ describe("GeminiResearchService JSON extraction", () => {
   let service: GeminiResearchService;
   let providers: jest.Mocked<AiProviderService>;
   let aiConfig: jest.Mocked<AiConfigService>;
+  let openAiDeepResearch: {
+    runResearchText: ReturnType<typeof jest.fn>;
+  };
   const modelInstance = { id: "gemini-model-instance" };
 
   beforeEach(() => {
@@ -499,10 +590,21 @@ describe("GeminiResearchService JSON extraction", () => {
       getResearchTimeoutMs: jest.fn(() => 30000),
     } as unknown as jest.Mocked<AiConfigService>;
 
-    service = new GeminiResearchServiceClass(
+    openAiDeepResearch = {
+      runResearchText: jest.fn(),
+    };
+
+    service = new (GeminiResearchServiceClass as unknown as new (
+      providers: AiProviderService,
+      aiConfig: AiConfigService,
+      openAiDeepResearch: {
+        runResearchText: (...args: unknown[]) => Promise<unknown>;
+      },
+    ) => GeminiResearchService)(
       providers as unknown as AiProviderService,
       aiConfig as unknown as AiConfigService,
-    ) as unknown as GeminiResearchService;
+      openAiDeepResearch,
+    ) as GeminiResearchService;
   });
 
   it("rejects arrays and returns fallback", async () => {

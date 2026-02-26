@@ -27,19 +27,14 @@ export class CompetitiveAdvantageEvaluationAgent extends BaseEvaluationAgent<Com
     super(providers, aiConfig, promptService, modelExecution);
   }
 
-  buildContext({ research }: EvaluationPipelineInput) {
-    const patents =
-      research.team?.achievements.filter((achievement) =>
-        /(patent|filed|ip|intellectual property)/i.test(achievement),
-      ) ?? [];
-
+  buildContext(pipelineData: EvaluationPipelineInput) {
+    const patents: string[] = [];
     return {
-      marketResearch: research.market,
-      competitiveLandscape: research.market?.competitors ?? [],
-      productResearch: research.product,
-      extractedFeatures: research.product?.features ?? [],
+      researchReportText: this.buildResearchReportText(pipelineData),
+      competitiveLandscape: [],
+      extractedFeatures: [],
       patents,
-      techStack: research.product?.techStack ?? [],
+      techStack: [],
     };
   }
 

@@ -11,6 +11,7 @@ export type AiPipelineContextPreviewResponseDtoAgentsItemPromptKey = typeof AiPi
 
 export const AiPipelineContextPreviewResponseDtoAgentsItemPromptKey = {
   extractionfields: 'extraction.fields',
+  enrichmentgapFill: 'enrichment.gapFill',
   researchteam: 'research.team',
   researchmarket: 'research.market',
   researchproduct: 'research.product',

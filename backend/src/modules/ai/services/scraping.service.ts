@@ -27,6 +27,7 @@ import { AiProviderService } from "../providers/ai-provider.service";
 import { PipelineStateService } from "./pipeline-state.service";
 import { ScrapingCacheService } from "./scraping-cache.service";
 import { WebsiteScraperService } from "./website-scraper.service";
+import { PipelineFlowConfigService } from "./pipeline-flow-config.service";
 
 interface TeamMemberInput {
   name: string;
@@ -72,6 +73,14 @@ interface LinkedinEnrichmentRunResult {
   liveEnriched: number;
 }
 
+interface WebsiteScrapeSettings {
+  manualPaths: string[];
+  discoveryEnabled: boolean;
+  source: "default" | "published_flow";
+  configId?: string;
+  configVersion?: number;
+}
+
 @Injectable()
 export class ScrapingService {
   private readonly logger = new Logger(ScrapingService.name);
@@ -90,6 +99,7 @@ export class ScrapingService {
     @Optional() private pipelineState?: PipelineStateService,
     @Optional() private aiProvider?: AiProviderService,
     @Optional() private aiConfig?: AiConfigService,
+    @Optional() private pipelineFlowConfigService?: PipelineFlowConfigService,
   ) {
     this.debugLogEnabled =
       this.config?.get<boolean>("AI_SCRAPING_DEBUG_LOG_ENABLED", true) ?? true;
@@ -851,9 +861,16 @@ export class ScrapingService {
     errors: ScrapeError[],
     progress?: PhaseProgressCallback,
   ): Promise<WebsiteScrapedData | null> {
+    const websiteScrapeSettings = await this.resolveWebsiteScrapeSettings();
+    const cacheVariant = this.buildWebsiteCacheVariant(websiteScrapeSettings);
+
     progress?.onStepStart("cache_check", {
       inputJson: {
         url: websiteUrl,
+        discoveryEnabled: websiteScrapeSettings.discoveryEnabled,
+        manualPaths: websiteScrapeSettings.manualPaths,
+        configSource: websiteScrapeSettings.source,
+        configId: websiteScrapeSettings.configId ?? null,
       },
     });
     if (!websiteUrl) {
@@ -876,7 +893,10 @@ export class ScrapingService {
 
     let cached: WebsiteScrapedData | null = null;
     try {
-      cached = await this.scrapingCache.getWebsiteCache(websiteUrl);
+      cached = await this.scrapingCache.getWebsiteCache(
+        websiteUrl,
+        cacheVariant,
+      );
     } catch (error) {
       const message = this.asMessage(error);
       progress?.onStepFailed("cache_check", message, {
@@ -900,6 +920,8 @@ export class ScrapingService {
         summary: {
           hit: true,
           url: websiteUrl,
+          discoveryEnabled: websiteScrapeSettings.discoveryEnabled,
+          manualPathCount: websiteScrapeSettings.manualPaths.length,
         },
         outputJson: cached,
       });
@@ -910,18 +932,27 @@ export class ScrapingService {
       summary: {
         hit: false,
         url: websiteUrl,
+        discoveryEnabled: websiteScrapeSettings.discoveryEnabled,
+        manualPathCount: websiteScrapeSettings.manualPaths.length,
       },
     });
     progress?.onStepStart("website_scrape", {
       inputJson: {
         url: websiteUrl,
+        discoveryEnabled: websiteScrapeSettings.discoveryEnabled,
+        manualPaths: websiteScrapeSettings.manualPaths,
+        configSource: websiteScrapeSettings.source,
+        configId: websiteScrapeSettings.configId ?? null,
       },
     });
 
     try {
       this.logger.log(`[Scraping] Website cache miss for ${websiteUrl}; running deep scrape`);
-      const scraped = await this.websiteScraper.deepScrape(websiteUrl);
-      await this.scrapingCache.setWebsiteCache(websiteUrl, scraped);
+      const scraped = await this.websiteScraper.deepScrape(websiteUrl, {
+        manualPaths: websiteScrapeSettings.manualPaths,
+        discoveryEnabled: websiteScrapeSettings.discoveryEnabled,
+      });
+      await this.scrapingCache.setWebsiteCache(websiteUrl, scraped, cacheVariant);
       this.logger.debug(
         `[Scraping] Website scrape complete | pages=${scraped.metadata.pageCount} | links=${scraped.links.length} | teamBios=${scraped.teamBios.length}`,
       );
@@ -930,8 +961,13 @@ export class ScrapingService {
           pages: scraped.metadata.pageCount,
           links: scraped.links.length,
           teamBios: scraped.teamBios.length,
+          discoveryEnabled: websiteScrapeSettings.discoveryEnabled,
+          manualPathCount: websiteScrapeSettings.manualPaths.length,
         },
         outputJson: scraped,
+        meta: {
+          scrapeConfig: websiteScrapeSettings,
+        },
       });
       return scraped;
     } catch (error) {
@@ -949,6 +985,49 @@ export class ScrapingService {
       });
       this.logger.warn(`[Scraping] Website scrape failed for ${websiteUrl}: ${message}`);
       return null;
+    }
+  }
+
+  private buildWebsiteCacheVariant(settings: WebsiteScrapeSettings): string {
+    return JSON.stringify({
+      discoveryEnabled: settings.discoveryEnabled,
+      manualPaths: settings.manualPaths,
+    });
+  }
+
+  private async resolveWebsiteScrapeSettings(): Promise<WebsiteScrapeSettings> {
+    const fallback: WebsiteScrapeSettings = {
+      manualPaths: [],
+      discoveryEnabled: false,
+      source: "default",
+    };
+
+    if (!this.pipelineFlowConfigService) {
+      return fallback;
+    }
+
+    try {
+      const published = await this.pipelineFlowConfigService.getPublishedParsedFlowDefinition();
+      if (!published || published.flowDefinition.flowId !== "pipeline") {
+        return fallback;
+      }
+
+      const scrapingConfig =
+        published.flowDefinition.nodeConfigs?.scrape_website?.scraping;
+
+      return {
+        manualPaths:
+          scrapingConfig?.manualPaths?.filter((path) => path.trim().length > 0) ?? [],
+        discoveryEnabled: scrapingConfig?.discoveryEnabled === true,
+        source: "published_flow",
+        configId: published.configId,
+        configVersion: published.version,
+      };
+    } catch (error) {
+      this.logger.warn(
+        `[Scraping] Failed to resolve scrape settings from published flow config: ${this.asMessage(error)}`,
+      );
+      return fallback;
     }
   }
 

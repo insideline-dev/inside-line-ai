@@ -54,6 +54,9 @@ describe("AiModelExecutionService", () => {
     expect(providers.resolveModel).toHaveBeenCalledWith("gpt-5.2");
     expect(result.generateTextOptions.tools).toBeDefined();
     expect(result.generateTextOptions.toolChoice).toBe("required");
+    expect(result.generateTextOptions.providerOptions).toEqual({
+      openai: { reasoningEffort: "high" },
+    });
     expect(result.searchEnforcement.requiresProviderEvidence).toBe(true);
     expect(result.searchEnforcement.requiresBraveToolCall).toBe(false);
   });
@@ -77,6 +80,9 @@ describe("AiModelExecutionService", () => {
 
     const tools = (result.generateTextOptions.tools ?? {}) as Record<string, unknown>;
     expect(tools.brave_search).toBeDefined();
+    expect(result.generateTextOptions.providerOptions).toEqual({
+      openai: { reasoningEffort: "high" },
+    });
     expect(result.searchEnforcement.requiresProviderEvidence).toBe(false);
     expect(result.searchEnforcement.requiresBraveToolCall).toBe(true);
   });
@@ -107,6 +113,9 @@ describe("AiModelExecutionService", () => {
     expect(tools.web_search).toBeDefined();
     expect(tools.brave_search).toBeDefined();
     expect(result.generateTextOptions.toolChoice).toBe("required");
+    expect(result.generateTextOptions.providerOptions).toEqual({
+      openai: { reasoningEffort: "high" },
+    });
     expect(result.searchEnforcement.requiresProviderEvidence).toBe(true);
     expect(result.searchEnforcement.requiresBraveToolCall).toBe(true);
   });
@@ -130,6 +139,9 @@ describe("AiModelExecutionService", () => {
 
     expect(result.generateTextOptions.tools).toBeUndefined();
     expect(result.generateTextOptions.toolChoice).toBeUndefined();
+    expect(result.generateTextOptions.providerOptions).toEqual({
+      openai: { reasoningEffort: "high" },
+    });
     expect(result.searchEnforcement.requiresProviderEvidence).toBe(false);
     expect(result.searchEnforcement.requiresBraveToolCall).toBe(false);
   });
@@ -153,9 +165,10 @@ describe("AiModelExecutionService", () => {
 
     const key: AiPromptKey = "research.team";
     const stage: StartupStage = "seed" as StartupStage;
-    await service.resolveForPrompt({ key, stage });
+    const result = await service.resolveForPrompt({ key, stage });
 
     expect(modelConfig.resolveConfig).toHaveBeenCalledWith({ key, stage });
+    expect(result.generateTextOptions.providerOptions).toBeUndefined();
   });
 
   it("throws when brave-backed search is selected but brave is not configured", async () => {

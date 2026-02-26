@@ -5,6 +5,7 @@ import { ModelPurpose } from "../interfaces/pipeline.interface";
 export const AI_RUNTIME_ALLOWED_MODEL_NAMES = [
   "gpt-5.2",
   "gemini-3-flash-preview",
+  "o4-mini-deep-research",
 ] as const;
 
 export const AI_RUNTIME_MODEL_NAME_ALIASES: Record<string, string> = {
@@ -45,6 +46,18 @@ export type AiRuntimeModelProvider =
   | "google"
   | "anthropic"
   | "mistral";
+
+const OPENAI_DEEP_RESEARCH_MODEL_NAMES = new Set<string>([
+  "o3-deep-research",
+  "o3-deep-research-2025-06-26",
+  "o4-mini-deep-research",
+  "o4-mini-deep-research-2025-06-26",
+]);
+
+export function isOpenAiDeepResearchModel(modelName: string): boolean {
+  const normalized = normalizeRuntimeModelName(modelName).toLowerCase();
+  return OPENAI_DEEP_RESEARCH_MODEL_NAMES.has(normalized);
+}
 
 export const DEFAULT_CONTEXT_CONFIG: Required<
   Pick<

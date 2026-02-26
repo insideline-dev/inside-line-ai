@@ -236,6 +236,7 @@ export class InvestorMatchingService {
         system: promptConfig.systemPrompt,
         tools: execution?.generateTextOptions.tools,
         toolChoice: execution?.generateTextOptions.toolChoice,
+        providerOptions: execution?.generateTextOptions.providerOptions,
         prompt: this.promptService.renderTemplate(promptConfig.userPrompt, {
           investorThesis:
             candidate.thesisNarrative ?? candidate.notes ?? "No thesis provided",

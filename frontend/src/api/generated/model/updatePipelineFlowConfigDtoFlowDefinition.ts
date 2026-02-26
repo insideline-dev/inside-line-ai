@@ -5,5 +5,14 @@
  * Inside Line API Documentation
  * OpenAPI spec version: 2.0
  */
+import type { UpdatePipelineFlowConfigDtoFlowDefinitionEdgesItem } from './updatePipelineFlowConfigDtoFlowDefinitionEdgesItem';
+import type { UpdatePipelineFlowConfigDtoFlowDefinitionFlowId } from './updatePipelineFlowConfigDtoFlowDefinitionFlowId';
+import type { UpdatePipelineFlowConfigDtoFlowDefinitionNodeConfigs } from './updatePipelineFlowConfigDtoFlowDefinitionNodeConfigs';
 
-export type UpdatePipelineFlowConfigDtoFlowDefinition = { [key: string]: unknown };
+export type UpdatePipelineFlowConfigDtoFlowDefinition = {
+  flowId: UpdatePipelineFlowConfigDtoFlowDefinitionFlowId;
+  /** @minItems 1 */
+  nodes: string[];
+  edges: UpdatePipelineFlowConfigDtoFlowDefinitionEdgesItem[];
+  nodeConfigs?: UpdatePipelineFlowConfigDtoFlowDefinitionNodeConfigs;
+};

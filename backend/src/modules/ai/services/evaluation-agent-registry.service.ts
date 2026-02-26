@@ -33,6 +33,14 @@ import {
 } from "../agents/evaluation";
 import { AgentConfigService } from "./agent-config.service";
 import { DynamicAgentRunnerService } from "./dynamic-agent-runner.service";
+import {
+  EvaluationInputResolverService,
+  type ResolvedEvaluationInput,
+} from "./evaluation-input-resolver.service";
+
+type PersistedEvaluationTraceEvent = EvaluationAgentTraceEvent & {
+  meta?: Record<string, unknown>;
+};
 
 @Injectable()
 export class EvaluationAgentRegistryService {
@@ -59,6 +67,7 @@ export class EvaluationAgentRegistryService {
     private agentConfigService: AgentConfigService,
     private dynamicAgentRunner: DynamicAgentRunnerService,
     @Optional() private pipelineAgentTrace?: PipelineAgentTraceService,
+    @Optional() private evaluationInputResolver?: EvaluationInputResolverService,
   ) {
     this.agents = [
       this.team,
@@ -96,12 +105,17 @@ export class EvaluationAgentRegistryService {
     const fallbackReasonCounts: Partial<Record<EvaluationFallbackReason, number>> = {};
     await Promise.all(
       resolvedAgents.map(async (agent) => {
+        const resolvedInput = await this.resolvePipelineInputForAgent(
+          agent.key,
+          pipelineData,
+        );
+        const dataSummary = this.buildInputDataSummary(resolvedInput);
         const startedAt = new Date();
         this.emitAgentStart(onAgentStart, agent.key);
 
         try {
           const feedbackNotes = await this.loadFeedbackNotes(startupId, agent.key);
-          const result = await agent.run(pipelineData, {
+          const result = await agent.run(resolvedInput.pipelineData, {
             feedbackNotes,
             onLifecycle: (event) =>
               this.emitAgentLifecycle(onAgentLifecycle, event),
@@ -134,6 +148,7 @@ export class EvaluationAgentRegistryService {
             agent: result.key,
             output: result.output,
             usedFallback: result.usedFallback,
+            ...(dataSummary ? { dataSummary } : {}),
             ...(typeof result.attempt === "number"
               ? { attempt: result.attempt }
               : {}),
@@ -187,7 +202,7 @@ export class EvaluationAgentRegistryService {
             retryCount: 0,
           });
 
-          const fallbackOutput = agent.fallback(pipelineData);
+          const fallbackOutput = agent.fallback(resolvedInput.pipelineData);
           traceWrites.push(
             this.persistAgentTrace(startupId, pipelineRunId, {
               agent: agent.key,
@@ -201,6 +216,7 @@ export class EvaluationAgentRegistryService {
               error: errorMessage,
               fallbackReason,
               rawProviderError: errorMessage,
+              meta: this.buildUnhandledErrorMeta(error),
             }),
           );
 
@@ -219,6 +235,7 @@ export class EvaluationAgentRegistryService {
             agent: agent.key,
             output: fallbackOutput,
             usedFallback: true,
+            ...(dataSummary ? { dataSummary } : {}),
             attempt: 1,
             retryCount: 0,
             error: errorMessage,
@@ -296,9 +313,14 @@ export class EvaluationAgentRegistryService {
 
     const startedAt = new Date();
     this.emitAgentStart(onAgentStart, key);
+    const resolvedInput = await this.resolvePipelineInputForAgent(
+      key,
+      pipelineData,
+    );
+    const dataSummary = this.buildInputDataSummary(resolvedInput);
     try {
       const feedbackNotes = await this.loadFeedbackNotes(startupId, key);
-      const result = await agent.run(pipelineData, {
+      const result = await agent.run(resolvedInput.pipelineData, {
         feedbackNotes,
         onLifecycle: (event) =>
           this.emitAgentLifecycle(onAgentLifecycle, event),
@@ -329,6 +351,7 @@ export class EvaluationAgentRegistryService {
         agent: result.key,
         output: result.output,
         usedFallback: result.usedFallback,
+        ...(dataSummary ? { dataSummary } : {}),
         ...(typeof result.attempt === "number"
           ? { attempt: result.attempt }
           : {}),
@@ -363,7 +386,7 @@ export class EvaluationAgentRegistryService {
         durationMs: completedAt.getTime() - startedAt.getTime(),
         retryCount: 0,
       });
-      const fallbackOutput = agent.fallback(pipelineData);
+      const fallbackOutput = agent.fallback(resolvedInput.pipelineData);
       traceWrites.push(
         this.persistAgentTrace(startupId, pipelineRunId, {
           agent: key,
@@ -377,6 +400,7 @@ export class EvaluationAgentRegistryService {
           error: message,
           fallbackReason,
           rawProviderError: message,
+          meta: this.buildUnhandledErrorMeta(error),
         }),
       );
       await Promise.allSettled(traceWrites);
@@ -384,6 +408,7 @@ export class EvaluationAgentRegistryService {
         agent: key,
         output: fallbackOutput,
         usedFallback: true,
+        ...(dataSummary ? { dataSummary } : {}),
         attempt: 1,
         retryCount: 0,
         error: message,
@@ -439,7 +464,7 @@ export class EvaluationAgentRegistryService {
   private persistAgentTrace(
     startupId: string,
     pipelineRunId: string | undefined,
-    event: EvaluationAgentTraceEvent,
+    event: PersistedEvaluationTraceEvent,
   ): Promise<void> {
     if (!pipelineRunId) {
       return Promise.resolve();
@@ -461,6 +486,7 @@ export class EvaluationAgentRegistryService {
         inputPrompt: event.inputPrompt,
         outputText: event.outputText,
         outputJson: event.outputJson,
+        meta: event.meta,
         error: event.error,
         fallbackReason: event.fallbackReason,
         rawProviderError: event.rawProviderError,
@@ -471,6 +497,23 @@ export class EvaluationAgentRegistryService {
           `Failed to persist evaluation trace for ${event.agent}: ${message}`,
         );
       });
+  }
+
+  private buildUnhandledErrorMeta(error: unknown): Record<string, unknown> {
+    const message = error instanceof Error ? error.message : String(error);
+    const name = error instanceof Error ? error.name : "UnhandledError";
+    const stack =
+      error instanceof Error && typeof error.stack === "string"
+        ? error.stack.slice(0, 8_000)
+        : undefined;
+
+    return {
+      errorDetail: {
+        name,
+        message,
+        ...(stack ? { stack } : {}),
+      },
+    };
   }
 
   private safeStringify(value: unknown): string {
@@ -634,5 +677,71 @@ export class EvaluationAgentRegistryService {
         `Failed to mark phase-level evaluation feedback consumed: ${message}`,
       );
     }
+  }
+
+  private async resolvePipelineInputForAgent(
+    agentKey: EvaluationAgentKey,
+    pipelineData: EvaluationPipelineInput,
+  ): Promise<ResolvedEvaluationInput> {
+    if (!this.evaluationInputResolver) {
+      return {
+        pipelineData: {
+          ...pipelineData,
+          mappedInputs: { researchReportText: pipelineData.research.combinedReportText ?? "" },
+          mappedInputSources: [],
+          edgeDrivenInputFallbackUsed: false,
+        },
+        mappedInputs: { researchReportText: pipelineData.research.combinedReportText ?? "" },
+        sources: [],
+        fallbackUsed: false,
+        reason: "resolver_unavailable",
+      };
+    }
+
+    try {
+      return await this.evaluationInputResolver.resolveForAgent(
+        agentKey,
+        pipelineData,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `Failed to resolve edge-driven evaluation inputs for ${agentKey}: ${message}`,
+      );
+      return {
+        pipelineData: {
+          ...pipelineData,
+          mappedInputs: { researchReportText: pipelineData.research.combinedReportText ?? "" },
+          mappedInputSources: [],
+          edgeDrivenInputFallbackUsed: true,
+        },
+        mappedInputs: { researchReportText: pipelineData.research.combinedReportText ?? "" },
+        sources: [],
+        fallbackUsed: true,
+        reason: "resolver_error",
+      };
+    }
+  }
+
+  private buildInputDataSummary(
+    resolvedInput: ResolvedEvaluationInput,
+  ): Record<string, unknown> | undefined {
+    const linkedResearchAgents = Array.from(
+      new Set(resolvedInput.sources.map((source) => source.researchAgentId)),
+    );
+    if (
+      linkedResearchAgents.length === 0 &&
+      !resolvedInput.fallbackUsed &&
+      Object.keys(resolvedInput.mappedInputs).length === 0
+    ) {
+      return undefined;
+    }
+
+    return {
+      edgeDrivenInputFallbackUsed: resolvedInput.fallbackUsed,
+      mappedSourceCount: resolvedInput.sources.length,
+      linkedResearchAgents,
+      ...(resolvedInput.reason ? { mappingFallbackReason: resolvedInput.reason } : {}),
+    };
   }
 }

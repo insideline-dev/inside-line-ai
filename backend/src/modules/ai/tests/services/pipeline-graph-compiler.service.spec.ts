@@ -97,4 +97,38 @@ describe("PipelineGraphCompilerService", () => {
     expect(research?.timeoutMs).toBe(123_000);
     expect(research?.maxRetries).toBe(5);
   });
+
+  it("parses scrape_website node scraping config with normalized manual paths", () => {
+    const parsed = service.parseFlowDefinition({
+      ...createFlowDefinition(),
+      nodeConfigs: {
+        scrape_website: {
+          scraping: {
+            manualPaths: ["about", "/team/", "/about?x=1", "/team#bio"],
+            discoveryEnabled: true,
+          },
+        },
+      },
+    });
+
+    expect(parsed.nodeConfigs?.scrape_website?.scraping).toEqual({
+      manualPaths: ["/about", "/team"],
+      discoveryEnabled: true,
+    });
+  });
+
+  it("rejects absolute URLs in scrape_website manual paths", () => {
+    expect(() =>
+      service.parseFlowDefinition({
+        ...createFlowDefinition(),
+        nodeConfigs: {
+          scrape_website: {
+            scraping: {
+              manualPaths: ["https://example.com/about"],
+            },
+          },
+        },
+      }),
+    ).toThrow("Manual scrape path must be relative and cannot include protocol");
+  });
 });

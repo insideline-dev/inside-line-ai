@@ -24,8 +24,12 @@ export class DealTermsEvaluationAgent extends BaseEvaluationAgent<DealTermsEvalu
     super(providers, aiConfig, promptService, modelExecution);
   }
 
-  buildContext({ extraction, scraping, research }: EvaluationPipelineInput) {
-    const rawText = extraction.rawText;
+  readonly buildContext = (pipelineData: EvaluationPipelineInput) => {
+    const { extraction, scraping } = pipelineData;
+    const rawText = typeof extraction.rawText === "string" ? extraction.rawText : "";
+    const notableClaims = Array.isArray(scraping.notableClaims)
+      ? scraping.notableClaims
+      : [];
     const ctx = extraction.startupContext;
 
     const raiseType: "equity" | "safe" | "convertible" =
@@ -38,7 +42,7 @@ export class DealTermsEvaluationAgent extends BaseEvaluationAgent<DealTermsEvalu
     const leadInvestorStatus =
       ctx?.leadSecured === true ||
       /(lead investor|lead committed|anchor investor)/i.test(rawText) ||
-      scraping.notableClaims.some((claim) =>
+      notableClaims.some((claim) =>
         /(lead investor|lead committed|anchor investor)/i.test(claim),
       )
         ? true
@@ -57,17 +61,8 @@ export class DealTermsEvaluationAgent extends BaseEvaluationAgent<DealTermsEvalu
       ),
     );
 
-    const competitorFunding = research.competitor
-      ? research.competitor.competitors
-          .filter((c) => c.fundingRaised || c.fundingStage)
-          .map((c) => ({
-            name: c.name,
-            fundingRaised: c.fundingRaised,
-            fundingStage: c.fundingStage,
-          }))
-      : undefined;
-
-    const marketSizeContext = research.market?.marketSize ?? undefined;
+    const competitorFunding = undefined;
+    const marketSizeContext = undefined;
 
     const startupFormContext = ctx
       ? {
@@ -82,6 +77,7 @@ export class DealTermsEvaluationAgent extends BaseEvaluationAgent<DealTermsEvalu
       : undefined;
 
     return {
+      researchReportText: this.buildResearchReportText(pipelineData),
       fundingTarget: extraction.fundingAsk,
       currentValuation: extraction.valuation,
       raiseType,
@@ -91,7 +87,7 @@ export class DealTermsEvaluationAgent extends BaseEvaluationAgent<DealTermsEvalu
       marketSizeContext,
       startupFormContext,
     };
-  }
+  };
 
   fallback({ extraction }: EvaluationPipelineInput): DealTermsEvaluation {
     const ask = extraction.fundingAsk ?? 0;

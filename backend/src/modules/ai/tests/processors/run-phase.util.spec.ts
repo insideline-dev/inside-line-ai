@@ -86,6 +86,7 @@ describe("runPipelinePhase", () => {
     product: null,
     news: null,
     competitor: null,
+    combinedReportText: "",
     sources: [],
     errors: [],
   };
@@ -171,6 +172,7 @@ describe("runPipelinePhase", () => {
       product: null,
       news: null,
       competitor: null,
+      combinedReportText: "",
       sources: [],
       errors: [],
     };
@@ -206,6 +208,7 @@ describe("runPipelinePhase", () => {
       product: null,
       news: null,
       competitor: null,
+      combinedReportText: "",
       sources: [],
       errors: [],
     };

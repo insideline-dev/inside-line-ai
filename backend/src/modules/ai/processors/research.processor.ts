@@ -123,6 +123,7 @@ export class ResearchProcessor
               agent,
               output,
               usedFallback,
+              dataSummary,
               error,
               fallbackReason,
               rawProviderError,
@@ -169,6 +170,7 @@ export class ResearchProcessor
                   usedFallback,
                   fallbackReason,
                   rawProviderError,
+                  ...(dataSummary ? { dataSummary } : {}),
                   lifecycleEvent,
                 })
                 .catch((progressError) => {

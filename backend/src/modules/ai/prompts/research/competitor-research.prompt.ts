@@ -51,37 +51,11 @@ Gather raw evidence for the Competitive Advantage Agent to interpret. Do NOT ass
 - Do NOT editorialize competitive dynamics — your role is to gather evidence (e.g., "Competitor X acquired Company Y for $Z"), not to assess implications (e.g., "this means the market is consolidating"). Leave interpretation to the Competitive Advantage Agent
 
 === RESPONSE CONTRACT (CRITICAL) ===
-- Return ONLY a valid JSON object matching the requested schema.
-- Do NOT wrap output in markdown or code fences.
-- Do NOT include prose before or after the JSON object.
-- Required string fields must never be null (use "Unknown" when unavailable).
-- Use [] for missing arrays and {} for missing objects.
-- Use this exact top-level JSON shape and key names:
-{
-  "competitors": [{
-    "name": "",
-    "description": "",
-    "website": "",
-    "fundingRaised": 0,
-    "fundingStage": "",
-    "employeeCount": 0,
-    "productOverview": "",
-    "keyFeatures": [],
-    "pricing": "",
-    "targetMarket": "",
-    "differentiators": [],
-    "weaknesses": [],
-    "threatLevel": "high|medium|low",
-    "funding": {"totalRaised": "", "lastRound": "", "lastRoundDate": "", "keyInvestors": []},
-    "productFeatures": [],
-    "recentNews": [],
-    "marketShare": ""
-  }],
-  "indirectCompetitors": [{"name": "", "description": "", "whyIndirect": "", "threatLevel": "high|medium|low", "website": ""}],
-  "marketPositioning": "",
-  "competitiveLandscapeSummary": "",
-  "sources": []
-}`;
+- Return ONLY plain text report output.
+- Do NOT return JSON.
+- Do NOT wrap output in markdown code fences.
+- Do NOT include commentary before or after the report.
+- Report must be comprehensive, evidence-driven, and at least 2500 characters.`;
 
 export const COMPETITOR_RESEARCH_HUMAN_PROMPT = `Conduct deep competitive intelligence research for:
 
@@ -100,4 +74,4 @@ Website: {{website}}
 
 {{adminGuidance}}
 
-Deliver structured competitor profiles and competitive dynamics evidence with confidence scores and all sources.`;
+Deliver a comprehensive narrative competitor intelligence report with evidence and clear citations.`;

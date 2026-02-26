@@ -25,6 +25,11 @@ interface ResolvedSafeUrl {
   hostHeader: string;
 }
 
+export interface WebsiteDeepScrapeOptions {
+  manualPaths?: string[];
+  discoveryEnabled?: boolean;
+}
+
 @Injectable()
 export class WebsiteScraperService {
   private readonly logger = new Logger(WebsiteScraperService.name);
@@ -91,9 +96,19 @@ export class WebsiteScraperService {
     return resultMap;
   }
 
-  async deepScrape(url: string): Promise<WebsiteScrapedData> {
+  async deepScrape(
+    url: string,
+    options: WebsiteDeepScrapeOptions = {},
+  ): Promise<WebsiteScrapedData> {
     const homepageUrl = this.normalizeUrl(url, true);
-    this.logger.log(`[Scrape] Starting deep scrape for ${homepageUrl}`);
+    const discoveryEnabled = options.discoveryEnabled === true;
+    const manualUrls = this.resolveManualSubpages(
+      homepageUrl,
+      options.manualPaths ?? [],
+    );
+    this.logger.log(
+      `[Scrape] Starting deep scrape for ${homepageUrl} | discovery=${discoveryEnabled} | manualPaths=${manualUrls.length}`,
+    );
 
     let homepage: ScrapedPage;
     const crawl4aiResults = await this.fetchHtmlViaCrawl4ai([homepageUrl]);
@@ -107,15 +122,24 @@ export class WebsiteScraperService {
       this.logger.log("[Scrape] Homepage scraped via fetch (Crawl4AI fallback)");
     }
 
-    const subpageCandidates = this.discoverSubpages(homepage.links, homepageUrl);
-    this.logger.debug(
-      `[Scrape] Discovered ${subpageCandidates.length} subpage candidates: ${subpageCandidates.join(", ")}`,
-    );
-    const sitemapUrls = await this.fetchSitemapUrls(homepageUrl);
-    if (sitemapUrls.length > 0) {
+    const subpageCandidates = discoveryEnabled
+      ? this.discoverSubpages(homepage.links, homepageUrl)
+      : [];
+    if (discoveryEnabled) {
+      this.logger.debug(
+        `[Scrape] Discovered ${subpageCandidates.length} subpage candidates: ${subpageCandidates.join(", ")}`,
+      );
+    } else {
+      this.logger.debug("[Scrape] Discovery disabled; skipping link-based subpage discovery");
+    }
+    const sitemapUrls = discoveryEnabled
+      ? await this.fetchSitemapUrls(homepageUrl)
+      : [];
+    if (discoveryEnabled && sitemapUrls.length > 0) {
       this.logger.debug(`[Scrape] Found ${sitemapUrls.length} URLs from sitemap.xml`);
     }
     const allCandidates = [...new Set([
+      ...manualUrls,
       ...subpageCandidates,
       ...sitemapUrls.map((u) => this.normalizeUrl(u, false)),
     ])].filter((url) => url !== homepageUrl && url !== homepageUrl + "/")
@@ -240,6 +264,61 @@ export class WebsiteScraperService {
     }
 
     return Array.from(unique);
+  }
+
+  private resolveManualSubpages(
+    homepageUrl: string,
+    manualPaths: string[],
+  ): string[] {
+    const homepageHost = new URL(homepageUrl).hostname;
+    const urls = new Set<string>();
+
+    for (const rawPath of manualPaths) {
+      const normalizedPath = this.normalizeManualPath(rawPath);
+      if (!normalizedPath || normalizedPath === "/") {
+        continue;
+      }
+
+      try {
+        const resolved = new URL(normalizedPath, homepageUrl);
+        if (resolved.hostname !== homepageHost) {
+          continue;
+        }
+        if (this.isExcludedPath(resolved.pathname.toLowerCase())) {
+          continue;
+        }
+        urls.add(this.normalizeUrl(resolved.toString(), false));
+      } catch {
+        continue;
+      }
+    }
+
+    return Array.from(urls);
+  }
+
+  private normalizeManualPath(rawPath: string): string | null {
+    const trimmed = rawPath.trim();
+    if (!trimmed) {
+      return null;
+    }
+    if (/^[a-z]+:\/\//i.test(trimmed) || trimmed.startsWith("//")) {
+      return null;
+    }
+
+    const slashNormalized = trimmed.replace(/\\/g, "/");
+    const [withoutHash] = slashNormalized.split("#", 1);
+    const [pathname] = withoutHash.split("?", 1);
+    const prefixed = pathname.startsWith("/") ? pathname : `/${pathname}`;
+    const collapsed = prefixed.replace(/\/{2,}/g, "/");
+    const segments = collapsed.split("/").filter(Boolean);
+    if (segments.some((segment) => segment === "." || segment === "..")) {
+      return null;
+    }
+
+    if (collapsed === "/") {
+      return "/";
+    }
+    return collapsed.endsWith("/") ? collapsed.slice(0, -1) : collapsed;
   }
 
   private async scrapeSubpages(urls: string[]): Promise<ScrapedPage[]> {

@@ -748,7 +748,7 @@ export class AiPromptService {
       return null;
     }
 
-    const normalized = stage.trim().toLowerCase().replace(/-/g, "_");
+    const normalized = String(stage).trim().toLowerCase().replace(/-/g, "_");
     if (Object.values(StartupStage).includes(normalized as StartupStage)) {
       return normalized as StartupStage;
     }

@@ -11,6 +11,7 @@ export type AiSchemaRevisionsResponseDtoDefinitionKey = typeof AiSchemaRevisions
 
 export const AiSchemaRevisionsResponseDtoDefinitionKey = {
   extractionfields: 'extraction.fields',
+  enrichmentgapFill: 'enrichment.gapFill',
   researchteam: 'research.team',
   researchmarket: 'research.market',
   researchproduct: 'research.product',

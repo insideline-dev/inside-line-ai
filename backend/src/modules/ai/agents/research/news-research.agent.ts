@@ -1,18 +1,17 @@
 import type { ResearchAgentConfig } from "../../interfaces/agent.interface";
-import type { NewsResearch } from "../../schemas";
-import { NewsResearchSchema } from "../../schemas";
+import { z } from "zod";
 import {
   NEWS_RESEARCH_HUMAN_PROMPT,
   NEWS_RESEARCH_SYSTEM_PROMPT,
 } from "../../prompts/research/news-research.prompt";
 import { toValidUrl } from "./url.util";
 
-export const NewsResearchAgent: ResearchAgentConfig<NewsResearch> = {
+export const NewsResearchAgent: ResearchAgentConfig<string> = {
   key: "news",
   name: "News Research",
   systemPrompt: NEWS_RESEARCH_SYSTEM_PROMPT,
   humanPromptTemplate: NEWS_RESEARCH_HUMAN_PROMPT,
-  schema: NewsResearchSchema,
+  schema: z.string(),
   contextBuilder: ({ extraction, researchParameters }) => ({
     companyName: extraction.companyName,
     industry: extraction.industry,
@@ -26,18 +25,20 @@ export const NewsResearchAgent: ResearchAgentConfig<NewsResearch> = {
   }),
   fallback: ({ extraction }) => {
     const websiteUrl = toValidUrl(extraction.website);
-
-    return {
-      articles: [],
-      pressReleases: [
-        `${extraction.companyName} public announcement coverage is currently limited.`,
-      ],
-      sentiment: "neutral",
-      recentEvents: [
-        `No critical negative events detected in fallback mode for ${extraction.companyName}.`,
-      ],
-      sentimentOverview: undefined,
-      sources: websiteUrl ? [websiteUrl] : [],
-    };
+    return [
+      `News Research Report: ${extraction.companyName}`,
+      "",
+      "Executive Summary",
+      "Automated news sweep ran in deterministic fallback mode with limited verified coverage.",
+      "",
+      "Directional Sentiment",
+      "No critical negative signal was deterministically confirmed from fallback inputs.",
+      "",
+      "Evidence Gap",
+      "Recent article-level citation coverage requires manual follow-up using external news databases.",
+      "",
+      "Primary Source",
+      websiteUrl ?? "No verified primary source URL available.",
+    ].join("\n");
   },
 };

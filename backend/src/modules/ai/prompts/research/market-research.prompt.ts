@@ -101,27 +101,11 @@ Provide structured research output:
 - [List any areas where research was inconclusive or unavailable]
 
 === RESPONSE CONTRACT (CRITICAL) ===
-- Return ONLY a valid JSON object matching the requested schema.
-- Do NOT wrap output in markdown or code fences.
-- Do NOT include prose before or after the JSON object.
-- Required string fields must never be null (use "Unknown" when unavailable).
-- Use [] for missing arrays and {} for missing objects.
-- Use this exact top-level JSON shape and key names:
-{
-  "marketReports": [],
-  "competitors": [{"name": "", "description": "", "fundingRaised": 0, "url": ""}],
-  "indirectCompetitors": [],
-  "indirectCompetitorsDetailed": [{"name": "", "description": "", "whyIndirect": "", "threatLevel": "high|medium|low", "url": ""}],
-  "marketTrends": [],
-  "marketSize": {"tam": 0, "sam": 0, "som": 0},
-  "totalAddressableMarket": {"value": "", "year": "", "source": "", "confidence": "high|medium|low"},
-  "marketGrowthRate": {"cagr": "", "period": "", "source": ""},
-  "marketDrivers": [],
-  "marketChallenges": [],
-  "regulatoryLandscape": "",
-  "tamValidation": {"claimAccuracy": "", "explanation": ""},
-  "sources": []
-}`;
+- Return ONLY plain text report output.
+- Do NOT return JSON.
+- Do NOT wrap output in markdown code fences.
+- Do NOT include commentary before or after the report.
+- Report must be comprehensive, evidence-driven, and at least 2500 characters.`;
 
 export const MARKET_RESEARCH_HUMAN_PROMPT = `Deep market research for:
 

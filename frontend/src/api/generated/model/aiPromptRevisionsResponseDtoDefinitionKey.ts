@@ -11,6 +11,7 @@ export type AiPromptRevisionsResponseDtoDefinitionKey = typeof AiPromptRevisions
 
 export const AiPromptRevisionsResponseDtoDefinitionKey = {
   extractionfields: 'extraction.fields',
+  enrichmentgapFill: 'enrichment.gapFill',
   researchteam: 'research.team',
   researchmarket: 'research.market',
   researchproduct: 'research.product',

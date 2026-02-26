@@ -17,8 +17,10 @@ import {
   isAiPromptKey,
   type AiPromptKey,
 } from "./ai-prompt-catalog";
+import { AI_FLOW_DEFINITIONS } from "./ai-flow-catalog";
 import {
   AiModelConfigSchema,
+  isOpenAiDeepResearchModel,
   isResearchPromptKey,
   normalizeRuntimeModelName,
   resolveModelPurposeForPromptKey,
@@ -40,6 +42,24 @@ export interface UpdateModelConfigDraftInput {
   modelName?: AiModelConfig["modelName"];
   searchMode?: AiModelConfig["searchMode"];
   notes?: string;
+}
+
+export type BulkApplyModelScope =
+  | "all_ai_nodes"
+  | "research_agents"
+  | "evaluation_agents";
+
+export interface BulkApplyModelConfigInput {
+  scope: BulkApplyModelScope;
+  modelName: AiModelConfig["modelName"];
+}
+
+export interface BulkApplyModelConfigResult {
+  scope: BulkApplyModelScope;
+  modelName: string;
+  provider: string;
+  appliedKeys: AiPromptKey[];
+  publishedRevisionIds: string[];
 }
 
 export type ResolvedModelConfigSource =
@@ -200,10 +220,14 @@ export class AiModelConfigService {
         throw new BadRequestException("Only draft revisions can be published");
       }
 
-      this.validateModelConfigForKey(definition.key as AiPromptKey, {
+      const parsedModelConfig = this.parseModelConfig({
         modelName: draft.modelName as AiModelConfig["modelName"],
         searchMode: draft.searchMode,
       });
+      this.validateModelConfigForKey(
+        definition.key as AiPromptKey,
+        parsedModelConfig,
+      );
 
       await tx
         .update(aiModelConfigRevision)
@@ -225,6 +249,8 @@ export class AiModelConfigService {
         .update(aiModelConfigRevision)
         .set({
           status: "published",
+          modelName: parsedModelConfig.modelName,
+          searchMode: parsedModelConfig.searchMode,
           publishedBy: adminId,
           publishedAt: new Date(),
           updatedAt: new Date(),
@@ -280,6 +306,112 @@ export class AiModelConfigService {
     return archived;
   }
 
+  async bulkApplyAndPublish(
+    adminId: string,
+    input: BulkApplyModelConfigInput,
+  ): Promise<BulkApplyModelConfigResult> {
+    const normalizedModelName = normalizeRuntimeModelName(input.modelName);
+    const modelConfig = this.parseModelConfig({
+      modelName: normalizedModelName,
+      searchMode: "off",
+    });
+    const provider = resolveProviderForModelName(modelConfig.modelName);
+    const keys = this.resolveBulkTargetPromptKeys(input.scope);
+
+    if (keys.length === 0) {
+      throw new BadRequestException(
+        `No prompt keys found for scope ${input.scope}`,
+      );
+    }
+
+    const publishedRevisionIds = await this.drizzle.db.transaction(
+      async (tx) => {
+        const createdRevisionIds: string[] = [];
+
+        for (const key of keys) {
+          const searchMode = this.resolvePreferredSearchModeForKey(
+            key,
+            modelConfig.modelName,
+          );
+          const parsed = this.parseModelConfig({
+            modelName: modelConfig.modelName,
+            searchMode,
+          });
+          this.validateModelConfigForKey(key, parsed);
+
+          const definition = await this.getOrCreateDefinitionWithDb(tx, key);
+          const [maxRow] = await tx
+            .select({ value: max(aiModelConfigRevision.version) })
+            .from(aiModelConfigRevision)
+            .where(
+              and(
+                eq(aiModelConfigRevision.definitionId, definition.id),
+                isNull(aiModelConfigRevision.stage),
+              ),
+            );
+
+          const [created] = await tx
+            .insert(aiModelConfigRevision)
+            .values({
+              definitionId: definition.id,
+              stage: null,
+              status: "draft",
+              modelName: parsed.modelName,
+              searchMode: parsed.searchMode,
+              notes: `Bulk apply (${input.scope})`,
+              version: (maxRow?.value ?? 0) + 1,
+              createdBy: adminId,
+            })
+            .returning();
+
+          await tx
+            .update(aiModelConfigRevision)
+            .set({
+              status: "archived",
+              updatedAt: new Date(),
+            })
+            .where(
+              and(
+                eq(aiModelConfigRevision.definitionId, definition.id),
+                eq(aiModelConfigRevision.status, "published"),
+                isNull(aiModelConfigRevision.stage),
+              ),
+            );
+
+          const [published] = await tx
+            .update(aiModelConfigRevision)
+            .set({
+              status: "published",
+              modelName: parsed.modelName,
+              searchMode: parsed.searchMode,
+              publishedBy: adminId,
+              publishedAt: new Date(),
+              updatedAt: new Date(),
+            })
+            .where(eq(aiModelConfigRevision.id, created.id))
+            .returning();
+
+          if (!published) {
+            throw new BadRequestException(
+              `Failed to publish model config for key ${key}`,
+            );
+          }
+          createdRevisionIds.push(published.id);
+        }
+
+        return createdRevisionIds;
+      },
+    );
+
+    return {
+      scope: input.scope,
+      modelName: modelConfig.modelName,
+      provider,
+      appliedKeys: keys,
+      publishedRevisionIds,
+    };
+  }
+
   async resolveConfig(params: {
     key: AiPromptKey;
     stage?: StartupStage | string | null;
@@ -298,6 +430,7 @@ export class AiModelConfigService {
       const supportedSearchModes = this.getSupportedSearchModes(
         params.key,
         provider,
+        modelName,
       );
 
       return this.logResolvedConfig(
@@ -411,7 +544,11 @@ export class AiModelConfigService {
         modelName: modelConfig.modelName,
         provider,
         searchMode: modelConfig.searchMode,
-        supportedSearchModes: this.getSupportedSearchModes(params.key, provider),
+        supportedSearchModes: this.getSupportedSearchModes(
+          params.key,
+          provider,
+          modelConfig.modelName,
+        ),
       },
     );
   }
@@ -425,7 +562,11 @@ export class AiModelConfigService {
       ? "gemini-3-flash-preview"
       : this.aiConfig.getModelForPurpose(purpose);
     const provider = resolveProviderForModelName(modelName);
-    const supportedSearchModes = this.getSupportedSearchModes(key, provider);
+    const supportedSearchModes = this.getSupportedSearchModes(
+      key,
+      provider,
+      modelName,
+    );
 
     return {
       source: "default",
@@ -446,8 +587,13 @@ export class AiModelConfigService {
   private getSupportedSearchModes(
     key: AiPromptKey,
     provider: string,
+    modelName: string,
   ): AiRuntimeSearchMode[] {
     if (isResearchPromptKey(key)) {
+      if (isOpenAiDeepResearchModel(modelName)) {
+        return ["off", "provider_grounded_search"];
+      }
+
       if (provider === "google" || provider === "openai") {
         return [
           "off",
@@ -484,10 +630,27 @@ export class AiModelConfigService {
   ): void {
     const isResearch = isResearchPromptKey(key);
     const provider = resolveProviderForModelName(config.modelName);
+    const isDeepResearchModel = isOpenAiDeepResearchModel(config.modelName);
+
+    if (isDeepResearchModel && !isResearch) {
+      throw new BadRequestException(
+        `Model ${config.modelName} is only allowed for research prompt keys (${key})`,
+      );
+    }
 
     if (!isResearch && config.searchMode !== "off") {
       throw new BadRequestException(
         `searchMode=${config.searchMode} is not allowed for non-research prompt key ${key}`,
+      );
+    }
+
+    if (
+      isDeepResearchModel &&
+      (config.searchMode === "brave_tool_search" ||
+        config.searchMode === "provider_and_brave_search")
+    ) {
+      throw new BadRequestException(
+        `Model ${config.modelName} does not support Brave search modes`,
       );
     }
 
@@ -516,6 +679,59 @@ export class AiModelConfigService {
         );
       }
     }
+  }
+
+  private resolveBulkTargetPromptKeys(scope: BulkApplyModelScope): AiPromptKey[] {
+    const pipelineFlow = AI_FLOW_DEFINITIONS.find((flow) => flow.id === "pipeline");
+    if (!pipelineFlow) {
+      return [];
+    }
+
+    const keys = new Set<AiPromptKey>();
+    for (const node of pipelineFlow.nodes) {
+      for (const promptKey of node.promptKeys) {
+        if (!isAiPromptKey(promptKey)) {
+          continue;
+        }
+
+        if (scope === "research_agents" && !promptKey.startsWith("research.")) {
+          continue;
+        }
+        if (
+          scope === "evaluation_agents" &&
+          !promptKey.startsWith("evaluation.")
+        ) {
+          continue;
+        }
+
+        keys.add(promptKey);
+      }
+    }
+
+    return Array.from(keys).sort();
+  }
+
+  private resolvePreferredSearchModeForKey(
+    key: AiPromptKey,
+    modelName: string,
+  ): AiRuntimeSearchMode {
+    const provider = resolveProviderForModelName(modelName);
+    const supportedSearchModes = this.getSupportedSearchModes(
+      key,
+      provider,
+      modelName,
+    );
+
+    if (!isResearchPromptKey(key)) {
+      return "off";
+    }
+    if (supportedSearchModes.includes("provider_grounded_search")) {
+      return "provider_grounded_search";
+    }
+    if (supportedSearchModes.includes("brave_tool_search")) {
+      return "brave_tool_search";
+    }
+    return "off";
   }
 
   private parseModelConfig(input: unknown): AiModelConfig {
@@ -599,14 +815,15 @@ export class AiModelConfigService {
     };
   }
 
-  private async getOrCreateDefinition(
+  private async getOrCreateDefinitionWithDb(
+    db: any,
     key: string,
   ): Promise<AiPromptDefinition> {
     if (!isAiPromptKey(key)) {
       throw new BadRequestException(`Unsupported prompt key: ${key}`);
     }
 
-    const [existing] = await this.drizzle.db
+    const [existing] = await db
       .select()
       .from(aiPromptDefinition)
       .where(eq(aiPromptDefinition.key, key))
@@ -617,7 +834,7 @@ export class AiModelConfigService {
     }
 
     const catalog = AI_PROMPT_CATALOG[key];
-    const [created] = await this.drizzle.db
+    const [created] = await db
       .insert(aiPromptDefinition)
       .values({
         key,
@@ -628,5 +845,9 @@ export class AiModelConfigService {
       .returning();
 
     return created;
+  }
+
+  private async getOrCreateDefinition(key: string): Promise<AiPromptDefinition> {
+    return this.getOrCreateDefinitionWithDb(this.drizzle.db, key);
   }
 }

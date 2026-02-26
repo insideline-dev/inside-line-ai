@@ -4,16 +4,18 @@ import { eq } from "drizzle-orm";
 import { DrizzleService } from "../../database";
 import { user } from "../../auth/entities/auth.schema";
 import { startup } from "../startup/entities/startup.schema";
-import { AgentMailClientService } from "../integrations/agentmail/agentmail-client.service";
 import { ClaraConversationService } from "./clara-conversation.service";
 import { ClaraAiService } from "./clara-ai.service";
 import { ClaraSubmissionService } from "./clara-submission.service";
 import { ClaraToolsService } from "./clara-tools.service";
+import { ClaraChannelService } from "./clara-channel.service";
 import {
   ClaraIntent,
   ConversationStatus,
   MessageDirection,
   type AttachmentMeta,
+  type ClaraAgentRuntimeState,
+  type IntentClassification,
   type MessageContext,
 } from "./interfaces/clara.interface";
 
@@ -26,7 +28,7 @@ export class ClaraService {
   constructor(
     private config: ConfigService,
     private drizzle: DrizzleService,
-    private agentMailClient: AgentMailClientService,
+    private claraChannel: ClaraChannelService,
     private conversationService: ClaraConversationService,
     private claraAi: ClaraAiService,
     private submissionService: ClaraSubmissionService,
@@ -62,7 +64,7 @@ export class ClaraService {
     }
 
     try {
-      const message = await this.agentMailClient.getMessage(
+      const message = await this.claraChannel.getEmailMessage(
         inboxId,
         messageId,
       );
@@ -70,7 +72,10 @@ export class ClaraService {
       const rawFrom = message.from;
       const fromEmail = this.extractEmailAddress(rawFrom);
       const fromName = this.parseNameFromEmail(rawFrom);
-      const investorUserId = await this.findInvestorByEmail(fromEmail);
+      const senderUser = await this.findUserByEmail(fromEmail);
+      const actorUserId = senderUser?.id ?? null;
+      const actorRole = senderUser?.role ?? null;
+      const investorUserId = actorRole === "investor" ? actorUserId : null;
 
       const conversation = await this.conversationService.findOrCreate(
         threadId,
@@ -78,6 +83,30 @@ export class ClaraService {
         fromName,
         investorUserId,
       );
+
+      const isDuplicateInbound =
+        typeof (this.conversationService as ClaraConversationService & {
+          hasMessage?: (
+            conversationId: string,
+            messageId: string,
+            direction: MessageDirection,
+          ) => Promise<boolean>;
+        }).hasMessage === "function"
+          ? await (this.conversationService as ClaraConversationService & {
+              hasMessage: (
+                conversationId: string,
+                messageId: string,
+                direction: MessageDirection,
+              ) => Promise<boolean>;
+            }).hasMessage(conversation.id, messageId, MessageDirection.INBOUND)
+          : false;
+
+      if (isDuplicateInbound) {
+        this.logger.warn(
+          `Skipping duplicate Clara webhook message ${messageId} for thread ${threadId}`,
+        );
+        return;
+      }
 
       const history =
         await this.conversationService.getRecentMessages(conversation.id);
@@ -96,6 +125,7 @@ export class ClaraService {
       );
 
       const ctx: MessageContext = {
+        channel: "email",
         threadId,
         messageId,
         inboxId,
@@ -104,17 +134,49 @@ export class ClaraService {
         fromEmail,
         fromName,
         attachments,
+        actorUserId,
+        actorRole,
         conversationHistory: history,
         investorUserId,
         startupId: conversation.startupId,
         startupStage: startupContext.startupStage ?? null,
         conversationStatus: conversation.status as ConversationStatus,
+        conversationMemory:
+          conversation.context && typeof conversation.context === "object"
+            ? (conversation.context as Record<string, unknown>)
+            : null,
       };
 
       let replyText: string;
       let intent: ClaraIntent;
+      let intentClassification: IntentClassification;
+      let finalStartupId: string | null = conversation.startupId;
+      let finalStartupExtra = startupContext;
+      const agentRuntime: ClaraAgentRuntimeState = {
+        replyHandled: false,
+        replyText: null,
+        replyAttachments: [],
+      };
 
-      if (this.claraAi.isLikelySubmission(ctx)) {
+      if (typeof (this.claraAi as ClaraAiService & {
+        classifyIntent?: (context: MessageContext) => Promise<IntentClassification>;
+      }).classifyIntent === "function") {
+        intentClassification = await (this.claraAi as ClaraAiService & {
+          classifyIntent: (context: MessageContext) => Promise<IntentClassification>;
+        }).classifyIntent(ctx);
+      } else {
+        const fallbackSubmission = this.claraAi.isLikelySubmission(ctx);
+        intentClassification = {
+          intent: fallbackSubmission ? ClaraIntent.SUBMISSION : ClaraIntent.GREETING,
+          confidence: fallbackSubmission ? 0.95 : 0.4,
+          reasoning: "Legacy ClaraAi mock fallback",
+        };
+      }
+
+      if (
+        intentClassification.intent === ClaraIntent.SUBMISSION ||
+        this.claraAi.isLikelySubmission(ctx)
+      ) {
         intent = ClaraIntent.SUBMISSION;
 
         await this.conversationService.logMessage({
@@ -125,7 +187,7 @@ export class ClaraService {
           subject: message.subject,
           bodyText: message.text,
           intent,
-          intentConfidence: 0.95,
+          intentConfidence: intentClassification.confidence,
           attachments,
           processed: true,
         });
@@ -134,7 +196,7 @@ export class ClaraService {
 
         const extractedName = this.claraAi.extractCompanyFromFilename(
           attachments.find((a) => a.isPitchDeck)?.filename,
-        );
+        ) ?? intentClassification.extractedCompanyName;
 
         const result = await this.submissionService.handleSubmission(
           ctx,
@@ -143,6 +205,7 @@ export class ClaraService {
         );
 
         await this.conversationService.linkStartup(conversation.id, result.startupId);
+        finalStartupId = result.startupId;
         await this.conversationService.updateStatus(
           conversation.id,
           ConversationStatus.PROCESSING,
@@ -152,6 +215,10 @@ export class ClaraService {
           startupName: result.startupName,
           startupStatus: result.status,
           startupStage: startupContext.startupStage ?? "seed",
+        };
+        finalStartupExtra = {
+          ...startupContext,
+          ...extra,
         };
 
         if (result.isDuplicate) {
@@ -166,7 +233,7 @@ export class ClaraService {
           );
         }
       } else {
-        intent = ClaraIntent.GREETING;
+        intent = intentClassification.intent;
 
         await this.conversationService.logMessage({
           conversationId: conversation.id,
@@ -176,28 +243,79 @@ export class ClaraService {
           subject: message.subject,
           bodyText: message.text,
           intent,
+          intentConfidence: intentClassification.confidence,
           attachments,
           processed: true,
         });
 
         await this.conversationService.updateLastIntent(conversation.id, intent);
 
-        const tools = this.toolsService.buildTools(ctx.investorUserId);
-        replyText = await this.claraAi.runAgentLoop(ctx, tools);
+        const tools = this.toolsService.buildTools({
+          actorUserId,
+          actorRole,
+          linkedStartupId: conversation.startupId,
+          channel: "email",
+          inboxId: ctx.inboxId,
+          inReplyToMessageId: ctx.messageId,
+          runtime: agentRuntime,
+        });
+        replyText = await this.claraAi.runAgentLoop(ctx, tools, {
+          actorRole,
+          conversationMemory: ctx.conversationMemory,
+        });
       }
 
-      await this.agentMailClient.replyToMessage(inboxId, messageId, {
-        text: replyText,
-      });
+      if (!agentRuntime.replyHandled) {
+        await this.claraChannel.reply({
+          channel: "email",
+          email: {
+            inboxId,
+            inReplyToMessageId: messageId,
+          },
+          text: replyText,
+        });
+      }
+
+      const outboundText = agentRuntime.replyHandled
+        ? (agentRuntime.replyText ?? replyText)
+        : replyText;
 
       await this.conversationService.logMessage({
         conversationId: conversation.id,
         messageId: `reply-${messageId}`,
         direction: MessageDirection.OUTBOUND,
         fromEmail: `clara@agentmail.to`,
-        bodyText: replyText,
+        bodyText: outboundText,
+        attachments:
+          agentRuntime.replyHandled && agentRuntime.replyAttachments.length > 0
+            ? agentRuntime.replyAttachments.map((a, index) => ({
+                filename: a.filename,
+                contentType: a.contentType,
+                attachmentId: `generated-${index}`,
+                isPitchDeck: false,
+                status: "uploaded" as const,
+              }))
+            : null,
         processed: true,
       });
+
+      if (typeof this.conversationService.updateContext === "function") {
+        await this.conversationService.updateContext(
+          conversation.id,
+          this.mergeConversationContext(
+            conversation.context as Record<string, unknown> | null | undefined,
+            this.buildConversationMemoryPatch({
+              ctx,
+              intent,
+              intentClassification,
+              replyText: outboundText,
+              startupId: finalStartupId,
+              startupExtra: finalStartupExtra,
+              attachmentReply: agentRuntime.replyAttachments,
+            }),
+          ),
+        );
+      }
 
       this.logger.log(`Processed message ${messageId}: intent=${intent}`);
     } catch (error) {
@@ -244,9 +362,13 @@ export class ClaraService {
       "Clara",
     ].join("\n");
 
-    await this.agentMailClient.sendMessage(this.claraInboxId, {
-      to: [conversation.investorEmail],
-      subject: `Analysis Complete: ${startupRecord.name}`,
+    await this.claraChannel.send({
+      channel: "email",
+      email: {
+        inboxId: this.claraInboxId,
+        to: [conversation.investorEmail],
+        subject: `Analysis Complete: ${startupRecord.name}`,
+      },
       text: replyText,
     });
 
@@ -270,16 +392,16 @@ export class ClaraService {
     );
   }
 
-  private async findInvestorByEmail(
+  private async findUserByEmail(
     email: string,
-  ): Promise<string | null> {
-    const [investor] = await this.drizzle.db
-      .select({ id: user.id })
+  ): Promise<{ id: string; role: string } | null> {
+    const [sender] = await this.drizzle.db
+      .select({ id: user.id, role: user.role })
       .from(user)
       .where(eq(user.email, email))
       .limit(1);
 
-    if (investor) return investor.id;
+    if (sender) return { id: sender.id, role: sender.role };
     return null;
   }
 
@@ -337,6 +459,70 @@ export class ClaraService {
       startupStatus: record.status,
       score: record.overallScore ?? undefined,
       startupStage: record.stage,
+    };
+  }
+
+  private mergeConversationContext(
+    existing: Record<string, unknown> | null | undefined,
+    patch: Record<string, unknown>,
+  ): Record<string, unknown> {
+    const base =
+      existing && typeof existing === "object" && !Array.isArray(existing)
+        ? existing
+        : {};
+    return {
+      ...base,
+      ...patch,
+      memoryUpdatedAt: new Date().toISOString(),
+    };
+  }
+
+  private buildConversationMemoryPatch(params: {
+    ctx: MessageContext;
+    intent: ClaraIntent;
+    intentClassification: IntentClassification;
+    replyText: string;
+    startupId: string | null;
+    startupExtra: {
+      startupName?: string;
+      startupStatus?: string;
+      score?: number;
+      startupStage?: string;
+    };
+    attachmentReply: Array<{ filename: string; contentType: string }>;
+  }): Record<string, unknown> {
+    const { ctx, intent, intentClassification, replyText, startupId, startupExtra, attachmentReply } = params;
+
+    const bodyPreview = (ctx.bodyText ?? "").trim().slice(0, 300);
+    const replyPreview = (replyText ?? "").trim().slice(0, 300);
+    const previousTopics = Array.isArray(ctx.conversationMemory?.["recentTopics"])
+      ? (ctx.conversationMemory?.["recentTopics"] as unknown[])
+          .filter((v): v is string => typeof v === "string")
+      : [];
+    const topicCandidates = [
+      intent,
+      startupExtra.startupStatus ? `startup-status:${startupExtra.startupStatus}` : null,
+      attachmentReply.length > 0 ? `attachment:${attachmentReply[0]?.filename ?? "pdf"}` : null,
+    ].filter((v): v is string => Boolean(v));
+    const recentTopics = Array.from(new Set([...previousTopics, ...topicCandidates])).slice(-8);
+
+    return {
+      lastIntent: intent,
+      lastIntentConfidence: intentClassification.confidence,
+      lastIntentReasoning: intentClassification.reasoning,
+      lastInboundSubject: ctx.subject,
+      lastInboundPreview: bodyPreview,
+      lastReplyPreview: replyPreview,
+      lastSenderEmail: ctx.fromEmail,
+      lastSenderName: ctx.fromName,
+      actorRole: ctx.actorRole ?? null,
+      linkedStartupId: startupId,
+      linkedStartupName: startupExtra.startupName ?? null,
+      linkedStartupStatus: startupExtra.startupStatus ?? null,
+      linkedStartupScore:
+        typeof startupExtra.score === "number" ? startupExtra.score : null,
+      attachmentReplyHistory: attachmentReply,
+      recentTopics,
     };
   }
 }

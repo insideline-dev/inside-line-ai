@@ -45,12 +45,15 @@ import { toast } from "sonner";
 import {
   useStartupControllerFindOne,
   useStartupControllerGetDataRoom,
+  useStartupControllerGetProgress,
   useStartupControllerAdminDelete,
+  getStartupControllerGetProgressQueryKey,
   getStartupControllerFindOneQueryKey,
 } from "@/api/generated/startup/startup";
 import {
   useAdminControllerApproveStartup,
   useAdminControllerReanalyzeStartup,
+  useAdminControllerRetryStartupPhase,
   useAdminControllerRetryStartupAgent,
   useAdminControllerRejectStartup,
   useAdminControllerGetAllScoringWeights,
@@ -59,6 +62,10 @@ import {
   getAdminControllerGetStatsQueryKey,
   getAdminControllerGetAllStartupsQueryKey,
 } from "@/api/generated/admin/admin";
+import {
+  RetryPhaseDtoPhase,
+  type RetryPhaseDtoPhase as RetryPhaseValue,
+} from "@/api/generated/model/retryPhaseDtoPhase";
 import type { ScoringWeights } from "@/lib/score-utils";
 
 export const Route = createFileRoute("/_protected/admin/startup/$id")({
@@ -103,6 +110,43 @@ interface RetryTrackingState {
   requestedAt: string;
 }
 
+const PHASE_RERUN_OPTIONS: Array<{
+  value: RetryPhaseValue;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: RetryPhaseDtoPhase.extraction,
+    label: "From Extraction",
+    description: "Re-run the full pipeline from extraction",
+  },
+  {
+    value: RetryPhaseDtoPhase.enrichment,
+    label: "From Enrichment",
+    description: "Reuse extraction, re-run enrichment onward",
+  },
+  {
+    value: RetryPhaseDtoPhase.scraping,
+    label: "From Scraping",
+    description: "Reuse extraction, re-run scraping onward",
+  },
+  {
+    value: RetryPhaseDtoPhase.research,
+    label: "From Research",
+    description: "Reuse extraction/enrichment/scraping, re-run research onward",
+  },
+  {
+    value: RetryPhaseDtoPhase.evaluation,
+    label: "From Evaluation",
+    description: "Reuse prior stages, re-run evaluation + synthesis",
+  },
+  {
+    value: RetryPhaseDtoPhase.synthesis,
+    label: "From Synthesis",
+    description: "Reuse all prior stages, re-run synthesis only",
+  },
+];
+
 function formatLabel(value: string): string {
   return value
     .replace(/([a-z])([A-Z])/g, "$1 $2")
@@ -125,6 +169,20 @@ function unwrapApiResponse<T>(payload: unknown): T {
   return payload as T;
 }
 
+function hasPipelineProgressSnapshot(payload: unknown): boolean {
+  const unwrapped = unwrapApiResponse<unknown>(payload);
+  if (!unwrapped || typeof unwrapped !== "object") {
+    return false;
+  }
+
+  if (!("progress" in (unwrapped as Record<string, unknown>))) {
+    return false;
+  }
+
+  const progress = (unwrapped as Record<string, unknown>).progress;
+  return Boolean(progress && typeof progress === "object");
+}
+
 function AdminReviewPage() {
   const { id } = Route.useParams();
   const { user } = useAuth();
@@ -141,11 +199,18 @@ function AdminReviewPage() {
   const [initializedTabForStartupId, setInitializedTabForStartupId] = useState<
     string | null
   >(null);
+  const [rerunPhase, setRerunPhase] = useState<RetryPhaseValue | null>(null);
   const [trackedRetry, setTrackedRetry] = useState<RetryTrackingState | null>(
     null,
   );
 
   const { data: startupResponse, isLoading } = useStartupControllerFindOne(id);
+  const progressQuery = useStartupControllerGetProgress(id, {
+    query: {
+      enabled: Boolean(id),
+      staleTime: 30_000,
+    },
+  });
   const startup = startupResponse
     ? unwrapApiResponse<StartupDetail>(startupResponse)
     : undefined;
@@ -174,6 +239,13 @@ function AdminReviewPage() {
     );
     return stageData?.weights ?? null;
   }, [startup?.stage, stageScoringWeights]);
+
+  const canRerunFromPhase = useMemo(() => {
+    if (progressQuery.isLoading) {
+      return true;
+    }
+    return hasPipelineProgressSnapshot(progressQuery.data);
+  }, [progressQuery.data, progressQuery.isLoading]);
 
   const approveMutation = useAdminControllerApproveStartup({
     mutation: {
@@ -219,6 +291,7 @@ function AdminReviewPage() {
     mutation: {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getStartupControllerFindOneQueryKey(id) });
+        queryClient.invalidateQueries({ queryKey: getStartupControllerGetProgressQueryKey(id) });
         queryClient.invalidateQueries({ queryKey: getAdminControllerGetAllStartupsQueryKey() });
         toast.success("Reanalysis triggered", {
           description: "The startup evaluation has been queued for reanalysis.",
@@ -230,10 +303,35 @@ function AdminReviewPage() {
     },
   });
 
+  const retryPhaseMutation = useAdminControllerRetryStartupPhase({
+    mutation: {
+      onSuccess: (_result, variables) => {
+        queryClient.invalidateQueries({ queryKey: getStartupControllerFindOneQueryKey(id) });
+        queryClient.invalidateQueries({ queryKey: getStartupControllerGetProgressQueryKey(id) });
+        queryClient.invalidateQueries({ queryKey: getAdminControllerGetAllStartupsQueryKey() });
+        setActiveTab("pipeline-live");
+        toast.success("Phase re-evaluation triggered", {
+          description: `${formatLabel(
+            variables.data.phase,
+          )} and downstream stages were queued. Earlier stage results will be reused.`,
+        });
+      },
+      onError: (error: Error) => {
+        toast.error("Failed to trigger phase re-evaluation", {
+          description: error.message,
+        });
+      },
+      onSettled: () => {
+        setRerunPhase(null);
+      },
+    },
+  });
+
   const retryAgentMutation = useAdminControllerRetryStartupAgent({
     mutation: {
       onSuccess: (result, variables) => {
         queryClient.invalidateQueries({ queryKey: getStartupControllerFindOneQueryKey(id) });
+        queryClient.invalidateQueries({ queryKey: getStartupControllerGetProgressQueryKey(id) });
         queryClient.invalidateQueries({ queryKey: getAdminControllerGetAllStartupsQueryKey() });
         const retryResult = unwrapApiResponse<Record<string, unknown>>(result);
         const mode =
@@ -303,6 +401,7 @@ function AdminReviewPage() {
     mutation: {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getStartupControllerFindOneQueryKey(id) });
+        queryClient.invalidateQueries({ queryKey: getStartupControllerGetProgressQueryKey(id) });
         queryClient.invalidateQueries({ queryKey: getAdminControllerGetAllStartupsQueryKey() });
         toast.success("Pipeline cancelled", {
           description: "The AI pipeline has been stopped.",
@@ -317,6 +416,7 @@ function AdminReviewPage() {
   useEffect(() => {
     setTrackedRetry(null);
     setReanalyzingSection(null);
+    setRerunPhase(null);
     setInitializedTabForStartupId(null);
   }, [id]);
 
@@ -403,6 +503,18 @@ function AdminReviewPage() {
     });
   };
 
+  const handlePhaseRerun = (phase: RetryPhaseValue) => {
+    setRerunPhase(phase);
+    setActiveTab("pipeline-live");
+    retryPhaseMutation.mutate({
+      id,
+      data: {
+        phase,
+        forceRerun: true,
+      },
+    });
+  };
+
   const pdfData = evaluation
     ? {
         startup,
@@ -460,18 +572,65 @@ function AdminReviewPage() {
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
-            <Button
-              variant="outline"
-              onClick={() => reanalyzeMutation.mutate({ id })}
-              disabled={reanalyzeMutation.isPending}
-            >
-              {reanalyzeMutation.isPending ? (
-                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-              ) : (
-                <RefreshCw className="w-4 h-4 mr-2" />
-              )}
-              Re-evaluate
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  disabled={retryPhaseMutation.isPending || reanalyzeMutation.isPending}
+                >
+                  {retryPhaseMutation.isPending || reanalyzeMutation.isPending ? (
+                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                  )}
+                  Re-evaluate
+                  <ChevronDown className="w-4 h-4 ml-1" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-80">
+                {!canRerunFromPhase && (
+                  <DropdownMenuItem
+                    disabled
+                    className="flex flex-col items-start gap-0.5 py-2 opacity-100"
+                  >
+                    <span>Phase Re-run Unavailable</span>
+                    <span className="text-xs text-muted-foreground">
+                      No saved pipeline state was found. Use Full Reanalysis (Fresh).
+                    </span>
+                  </DropdownMenuItem>
+                )}
+                {PHASE_RERUN_OPTIONS.map((option) => (
+                  <DropdownMenuItem
+                    key={option.value}
+                    disabled={
+                      !canRerunFromPhase ||
+                      retryPhaseMutation.isPending ||
+                      reanalyzeMutation.isPending
+                    }
+                    onClick={() => {
+                      handlePhaseRerun(option.value);
+                    }}
+                    className="flex flex-col items-start gap-0.5 py-2"
+                  >
+                    <span>{option.label}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {option.description}
+                      {rerunPhase === option.value ? " (starting…)" : ""}
+                    </span>
+                  </DropdownMenuItem>
+                ))}
+                <DropdownMenuItem
+                  disabled={retryPhaseMutation.isPending || reanalyzeMutation.isPending}
+                  onClick={() => reanalyzeMutation.mutate({ id })}
+                  className="flex flex-col items-start gap-0.5 py-2"
+                >
+                  <span>Full Reanalysis (Fresh)</span>
+                  <span className="text-xs text-muted-foreground">
+                    Start a new full analysis run without relying on existing pipeline state
+                  </span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             {startup?.status === "analyzing" && (
               <Button
                 variant="destructive"

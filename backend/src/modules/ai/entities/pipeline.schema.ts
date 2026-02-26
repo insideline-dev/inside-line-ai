@@ -9,6 +9,7 @@ import {
   text,
   timestamp,
   uuid,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { user } from "../../../auth/entities";
 import { startup } from "../../startup/entities";
@@ -148,6 +149,44 @@ export const pipelineAgentRun = pgTable(
   ],
 );
 
+export const pipelineStateSnapshot = pgTable(
+  "pipeline_state_snapshots",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    startupId: uuid("startup_id")
+      .notNull()
+      .references(() => startup.id, { onDelete: "cascade" }),
+    pipelineRunId: text("pipeline_run_id")
+      .notNull()
+      .references(() => pipelineRun.pipelineRunId, { onDelete: "cascade" }),
+    status: pipelineRunStatusEnum("status")
+      .notNull()
+      .default(PipelineStatus.COMPLETED),
+    reusable: boolean("reusable").notNull().default(true),
+    snapshotVersion: integer("snapshot_version").notNull().default(1),
+    snapshot: jsonb("snapshot").$type<Record<string, unknown>>().notNull(),
+    sourceFingerprint: text("source_fingerprint"),
+    invalidReason: text("invalid_reason"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("pipeline_state_snapshot_run_idx").on(table.pipelineRunId),
+    index("pipeline_state_snapshot_startup_created_idx").on(
+      table.startupId,
+      table.createdAt,
+    ),
+    index("pipeline_state_snapshot_reusable_created_idx").on(
+      table.startupId,
+      table.reusable,
+      table.createdAt,
+    ),
+  ],
+);
+
 export const pipelineRunRelations = relations(pipelineRun, ({ one, many }) => ({
   startup: one(startup, {
     fields: [pipelineRun.startupId],
@@ -159,6 +198,7 @@ export const pipelineRunRelations = relations(pipelineRun, ({ one, many }) => ({
   }),
   failures: many(pipelineFailure),
   agentRuns: many(pipelineAgentRun),
+  stateSnapshots: many(pipelineStateSnapshot),
 }));
 
 export const pipelineFailureRelations = relations(pipelineFailure, ({ one }) => ({
@@ -183,9 +223,25 @@ export const pipelineAgentRunRelations = relations(pipelineAgentRun, ({ one }) =
   }),
 }));
 
+export const pipelineStateSnapshotRelations = relations(
+  pipelineStateSnapshot,
+  ({ one }) => ({
+    pipelineRun: one(pipelineRun, {
+      fields: [pipelineStateSnapshot.pipelineRunId],
+      references: [pipelineRun.pipelineRunId],
+    }),
+    startup: one(startup, {
+      fields: [pipelineStateSnapshot.startupId],
+      references: [startup.id],
+    }),
+  }),
+);
+
 export type PipelineRun = typeof pipelineRun.$inferSelect;
 export type NewPipelineRun = typeof pipelineRun.$inferInsert;
 export type PipelineFailure = typeof pipelineFailure.$inferSelect;
 export type NewPipelineFailure = typeof pipelineFailure.$inferInsert;
 export type PipelineAgentRun = typeof pipelineAgentRun.$inferSelect;
 export type NewPipelineAgentRun = typeof pipelineAgentRun.$inferInsert;
+export type PipelineStateSnapshot = typeof pipelineStateSnapshot.$inferSelect;
+export type NewPipelineStateSnapshot = typeof pipelineStateSnapshot.$inferInsert;

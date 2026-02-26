@@ -6,6 +6,8 @@ import { PipelineFeedbackService } from "../../services/pipeline-feedback.servic
 import { ResearchParametersService } from "../../services/research-parameters.service";
 import { AiPromptService } from "../../services/ai-prompt.service";
 import { PipelinePhase } from "../../interfaces/pipeline.interface";
+import { AiConfigService } from "../../services/ai-config.service";
+import { AiModelExecutionService } from "../../services/ai-model-execution.service";
 import type {
   ExtractionResult,
   ResearchResult,
@@ -355,5 +357,135 @@ describe("ResearchService", () => {
         usedFallback: true,
       }),
     );
+  });
+
+  it("applies configured stagger only to deep-research model agents", async () => {
+    const aiConfigWithStagger = {
+      getModelForPurpose: jest.fn().mockReturnValue("gemini-3-flash-preview"),
+      getResearchAgentStaggerMs: jest.fn().mockReturnValue(1000),
+    } as unknown as jest.Mocked<AiConfigService>;
+
+    const modelByPromptKey: Record<string, string> = {
+      "research.team": "gemini-3-flash-preview",
+      "research.market": "o4-mini-deep-research",
+      "research.product": "gpt-5.2",
+      "research.news": "o4-mini-deep-research",
+      "research.competitor": "o4-mini-deep-research",
+    };
+
+    const modelExecution = {
+      resolveForPrompt: jest.fn(async ({ key }: { key: string }) => ({
+        resolvedConfig: {
+          source: "published",
+          revisionId: "rev-1",
+          stage: null,
+          purpose: "research",
+          modelName: modelByPromptKey[key] ?? "gemini-3-flash-preview",
+          provider:
+            modelByPromptKey[key]?.startsWith("gemini") === true
+              ? "google"
+              : "openai",
+          searchMode: "provider_grounded_search",
+          supportedSearchModes: ["off", "provider_grounded_search"],
+        },
+        generateTextOptions: {
+          model: undefined,
+          tools: undefined,
+          toolChoice: undefined,
+          stopWhen: undefined,
+          providerOptions: undefined,
+        },
+        searchEnforcement: {
+          requiresProviderEvidence: false,
+          requiresBraveToolCall: false,
+        },
+        usage: {
+          getBraveToolCallCount: () => 0,
+        },
+      })),
+    } as unknown as jest.Mocked<AiModelExecutionService>;
+
+    service = new ResearchService(
+      pipelineState,
+      geminiResearch,
+      pipelineFeedback,
+      promptService,
+      researchParametersService,
+      undefined,
+      aiConfigWithStagger,
+      modelExecution,
+    );
+
+    const sleepSpy = jest
+      .spyOn(
+        service as unknown as { sleep: (ms: number) => Promise<void> },
+        "sleep",
+      )
+      .mockResolvedValue(undefined);
+
+    await service.run("startup-1");
+
+    const staggerValues = sleepSpy.mock.calls
+      .map(([value]) => value)
+      .sort((a, b) => a - b);
+    expect(staggerValues).toEqual([1000, 3000]);
+  });
+
+  it("does not stagger when all resolved models are non deep-research", async () => {
+    const aiConfigWithStagger = {
+      getModelForPurpose: jest.fn().mockReturnValue("gemini-3-flash-preview"),
+      getResearchAgentStaggerMs: jest.fn().mockReturnValue(1000),
+    } as unknown as jest.Mocked<AiConfigService>;
+
+    const modelExecution = {
+      resolveForPrompt: jest.fn(async () => ({
+        resolvedConfig: {
+          source: "published",
+          revisionId: "rev-1",
+          stage: null,
+          purpose: "research",
+          modelName: "gemini-3-flash-preview",
+          provider: "google",
+          searchMode: "provider_grounded_search",
+          supportedSearchModes: ["off", "provider_grounded_search"],
+        },
+        generateTextOptions: {
+          model: undefined,
+          tools: undefined,
+          toolChoice: undefined,
+          stopWhen: undefined,
+          providerOptions: undefined,
+        },
+        searchEnforcement: {
+          requiresProviderEvidence: false,
+          requiresBraveToolCall: false,
+        },
+        usage: {
+          getBraveToolCallCount: () => 0,
+        },
+      })),
+    } as unknown as jest.Mocked<AiModelExecutionService>;
+
+    service = new ResearchService(
+      pipelineState,
+      geminiResearch,
+      pipelineFeedback,
+      promptService,
+      researchParametersService,
+      undefined,
+      aiConfigWithStagger,
+      modelExecution,
+    );
+
+    const sleepSpy = jest
+      .spyOn(
+        service as unknown as { sleep: (ms: number) => Promise<void> },
+        "sleep",
+      )
+      .mockResolvedValue(undefined);
+
+    await service.run("startup-1");
+
+    expect(sleepSpy).not.toHaveBeenCalled();
   });
 });

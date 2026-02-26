@@ -97,4 +97,62 @@ describe("AiConfigService", () => {
     expect(service.getEvaluationTemperature()).toBe(0.1);
     expect(service.getEvaluationMaxOutputTokens()).toBe(8000);
   });
+
+  it("returns deep-research stagger default when unset", () => {
+    config.get.mockReturnValue(undefined);
+
+    expect(service.getResearchAgentStaggerMs()).toBe(180000);
+  });
+
+  it("uses configured deep-research stagger and allows zero to disable", () => {
+    config.get.mockImplementation((key: string) => {
+      if (key === "AI_RESEARCH_AGENT_STAGGER_MS") {
+        return 0;
+      }
+      return undefined;
+    });
+    expect(service.getResearchAgentStaggerMs()).toBe(0);
+
+    config.get.mockImplementation((key: string) => {
+      if (key === "AI_RESEARCH_AGENT_STAGGER_MS") {
+        return 120000;
+      }
+      return undefined;
+    });
+    expect(service.getResearchAgentStaggerMs()).toBe(120000);
+  });
+
+  it("uses one-hour default research attempt timeout when unset", () => {
+    config.get.mockImplementation((key: string, fallback?: unknown) => {
+      if (key === "AI_RESEARCH_ATTEMPT_TIMEOUT_MS") {
+        return undefined;
+      }
+      if (key === "AI_RESEARCH_TIMEOUT_MS") {
+        return fallback as number;
+      }
+      return undefined;
+    });
+
+    expect(service.getResearchAttemptTimeoutMs()).toBe(3_600_000);
+  });
+
+  it("enforces at least one-hour research hard-timeout fallback", () => {
+    config.get.mockImplementation((key: string, fallback?: unknown) => {
+      if (key === "AI_RESEARCH_AGENT_HARD_TIMEOUT_MS") {
+        return 0;
+      }
+      if (key === "AI_RESEARCH_ATTEMPT_TIMEOUT_MS") {
+        return undefined;
+      }
+      if (key === "AI_RESEARCH_TIMEOUT_MS") {
+        return fallback as number;
+      }
+      if (key === "AI_RESEARCH_MAX_ATTEMPTS") {
+        return 0;
+      }
+      return undefined;
+    });
+
+    expect(service.getResearchAgentHardTimeoutMs()).toBe(3_600_000);
+  });
 });

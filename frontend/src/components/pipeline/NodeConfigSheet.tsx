@@ -643,7 +643,7 @@ export function NodeConfigSheet({
 
                     <div className="flex justify-end">
                       <Button size="sm" onClick={applyScrapeConfig}>
-                        Apply Scrape Settings (Auto-save)
+                        Apply Scrape Settings (Auto-publish)
                       </Button>
                     </div>
                   </div>

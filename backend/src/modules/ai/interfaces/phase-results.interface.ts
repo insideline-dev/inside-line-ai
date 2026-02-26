@@ -114,6 +114,14 @@ export interface WebsiteScrapedData {
     keywords?: string;
     author?: string;
   };
+  scrapedRoutes?: Array<{
+    requestedPath: string;
+    resolvedUrl: string;
+    status: "ok" | "not_found" | "error";
+    title?: string;
+    contentLength?: number;
+    error?: string;
+  }>;
 }
 
 export interface EnrichedTeamMember {

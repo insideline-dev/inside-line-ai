@@ -4,6 +4,9 @@ import { QueueName, QUEUE_NAMES } from "../../../queue";
 import { DEFAULT_MODEL_BY_PURPOSE } from "../ai.config";
 import { ModelPurpose } from "../interfaces/pipeline.interface";
 
+const DEFAULT_RESEARCH_ATTEMPT_TIMEOUT_MS = 3_600_000;
+const DEFAULT_RESEARCH_AGENT_HARD_TIMEOUT_MS = 3_600_000;
+
 @Injectable()
 export class AiConfigService {
   constructor(private config: ConfigService) {}
@@ -40,11 +43,14 @@ export class AiConfigService {
   getResearchAttemptTimeoutMs(): number {
     const explicit = this.config.get<number>("AI_RESEARCH_ATTEMPT_TIMEOUT_MS");
     if (typeof explicit === "number" && Number.isFinite(explicit)) {
-      return this.toPositiveInt(explicit, 90_000);
+      return this.toPositiveInt(explicit, DEFAULT_RESEARCH_ATTEMPT_TIMEOUT_MS);
     }
 
-    const legacy = this.config.get<number>("AI_RESEARCH_TIMEOUT_MS", 90_000);
-    return this.toPositiveInt(legacy, 90_000);
+    const legacy = this.config.get<number>(
+      "AI_RESEARCH_TIMEOUT_MS",
+      DEFAULT_RESEARCH_ATTEMPT_TIMEOUT_MS,
+    );
+    return this.toPositiveInt(legacy, DEFAULT_RESEARCH_ATTEMPT_TIMEOUT_MS);
   }
 
   getResearchMaxAttempts(): number {
@@ -55,13 +61,27 @@ export class AiConfigService {
   getResearchAgentHardTimeoutMs(): number {
     const explicit = this.config.get<number>("AI_RESEARCH_AGENT_HARD_TIMEOUT_MS");
     if (typeof explicit === "number" && Number.isFinite(explicit)) {
-      return this.toPositiveInt(explicit, 210_000);
+      return this.toPositiveInt(explicit, DEFAULT_RESEARCH_AGENT_HARD_TIMEOUT_MS);
     }
 
     const computed =
       this.getResearchAttemptTimeoutMs() * this.getResearchMaxAttempts() +
       30_000;
-    return this.toPositiveInt(computed, 210_000);
+    return this.toPositiveInt(computed, DEFAULT_RESEARCH_AGENT_HARD_TIMEOUT_MS);
+  }
+
+  getResearchAgentStaggerMs(): number {
+    const configured = this.config.get<number>("AI_RESEARCH_AGENT_STAGGER_MS");
+    if (typeof configured !== "number" || !Number.isFinite(configured)) {
+      return 180_000;
+    }
+
+    const normalized = Math.floor(configured);
+    if (normalized < 0) {
+      return 180_000;
+    }
+
+    return normalized;
   }
 
   getMaxRetries(): number {

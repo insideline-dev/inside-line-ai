@@ -1,9 +1,11 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { eq } from "drizzle-orm";
+import type { AgentMail } from "agentmail";
 import { DrizzleService } from "../../database";
 import { user } from "../../auth/entities/auth.schema";
 import { startup } from "../startup/entities/startup.schema";
+import { PdfService } from "../startup/pdf.service";
 import { ClaraConversationService } from "./clara-conversation.service";
 import { ClaraAiService } from "./clara-ai.service";
 import { ClaraSubmissionService } from "./clara-submission.service";
@@ -33,6 +35,7 @@ export class ClaraService {
     private claraAi: ClaraAiService,
     private submissionService: ClaraSubmissionService,
     private toolsService: ClaraToolsService,
+    private pdfService: PdfService,
   ) {
     this.claraInboxId = this.config.get<string>("CLARA_INBOX_ID") ?? null;
     this.adminUserId =
@@ -84,7 +87,7 @@ export class ClaraService {
         investorUserId,
       );
 
-      const isDuplicateInbound =
+      const alreadyRepliedToMessage =
         typeof (this.conversationService as ClaraConversationService & {
           hasMessage?: (
             conversationId: string,
@@ -98,10 +101,14 @@ export class ClaraService {
                 messageId: string,
                 direction: MessageDirection,
               ) => Promise<boolean>;
-            }).hasMessage(conversation.id, messageId, MessageDirection.INBOUND)
+            }).hasMessage(
+              conversation.id,
+              `reply-${messageId}`,
+              MessageDirection.OUTBOUND,
+            )
           : false;
 
-      if (isDuplicateInbound) {
+      if (alreadyRepliedToMessage) {
         this.logger.warn(
           `Skipping duplicate Clara webhook message ${messageId} for thread ${threadId}`,
         );
@@ -349,6 +356,17 @@ export class ClaraService {
       ? ` with an overall score of ${overallScore.toFixed(1)}/100`
       : "";
 
+    const pdfAttachments = await this.buildCompletionPdfAttachments(
+      startupId,
+      startupRecord.name,
+      conversation.investorUserId ?? null,
+    );
+
+    const attachedDocsText =
+      pdfAttachments.length > 0
+        ? "I've attached both the investment memo and the full analysis report as PDFs for your review."
+        : "The analysis is complete. I wasn't able to attach the PDFs in this email, but you can download the memo and report from the platform.";
+
     const replyText = [
       `Hi ${conversation.investorName ?? "there"},`,
       "",
@@ -356,7 +374,8 @@ export class ClaraService {
       "",
       "Our AI has evaluated the startup across multiple dimensions including team, market opportunity, product, traction, financials, competitive advantage, and more.",
       "",
-      "You can reply to this email to ask questions about the analysis or request the full investment memo.",
+      attachedDocsText,
+      "You can also reply to this email to ask follow-up questions about the analysis.",
       "",
       "Best,",
       "Clara",
@@ -370,7 +389,12 @@ export class ClaraService {
         subject: `Analysis Complete: ${startupRecord.name}`,
       },
       text: replyText,
+      attachments: pdfAttachments.length > 0 ? pdfAttachments : undefined,
     });
+
+    this.logger.log(
+      `Pipeline completion email sent for startup ${startupId} to ${conversation.investorEmail} (attachments=${pdfAttachments.length})`,
+    );
 
     await this.conversationService.logMessage({
       conversationId: conversation.id,
@@ -379,6 +403,16 @@ export class ClaraService {
       fromEmail: `clara@agentmail.to`,
       subject: `Analysis Complete: ${startupRecord.name}`,
       bodyText: replyText,
+      attachments:
+        pdfAttachments.length > 0
+          ? pdfAttachments.map((att, index) => ({
+              filename: att.filename ?? `attachment-${index}.pdf`,
+              contentType: att.contentType ?? "application/pdf",
+              attachmentId: `pipeline-complete-${startupId}-${index}`,
+              isPitchDeck: false,
+              status: "uploaded" as const,
+            }))
+          : null,
       processed: true,
     });
 
@@ -460,6 +494,72 @@ export class ClaraService {
       score: record.overallScore ?? undefined,
       startupStage: record.stage,
     };
+  }
+
+  private async buildCompletionPdfAttachments(
+    startupId: string,
+    startupName: string,
+    preferredAccessorUserId: string | null,
+  ): Promise<AgentMail.SendAttachment[]> {
+    const safeName = startupName
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 60) || "startup";
+
+    const accessorCandidates = Array.from(
+      new Set(
+        [preferredAccessorUserId, this.adminUserId].filter(
+          (value): value is string => Boolean(value),
+        ),
+      ),
+    );
+
+    if (accessorCandidates.length === 0) {
+      this.logger.warn(
+        `No accessor user available to generate completion PDFs for startup ${startupId}`,
+      );
+      return [];
+    }
+
+    let lastError: unknown = null;
+
+    for (const accessorUserId of accessorCandidates) {
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
+        try {
+          const [memoBuffer, reportBuffer] = await Promise.all([
+            this.pdfService.generateMemo(startupId, accessorUserId),
+            this.pdfService.generateReport(startupId, accessorUserId),
+          ]);
+
+          return [
+            {
+              filename: `${safeName}-memo.pdf`,
+              contentType: "application/pdf",
+              content: memoBuffer.toString("base64"),
+            },
+            {
+              filename: `${safeName}-report.pdf`,
+              contentType: "application/pdf",
+              content: reportBuffer.toString("base64"),
+            },
+          ];
+        } catch (error) {
+          lastError = error;
+          this.logger.warn(
+            `Failed to generate completion PDF attachments for startup ${startupId} using accessor ${accessorUserId} (attempt ${attempt}/3): ${error instanceof Error ? error.message : String(error)}`,
+          );
+          if (attempt < 3) {
+            await new Promise((resolve) => setTimeout(resolve, 1500));
+          }
+        }
+      }
+    }
+
+    this.logger.warn(
+      `Giving up on completion PDF attachments for startup ${startupId} after ${accessorCandidates.length} accessor attempt(s): ${lastError instanceof Error ? lastError.message : String(lastError)}`,
+    );
+    return [];
   }
 
   private mergeConversationContext(

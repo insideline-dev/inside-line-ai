@@ -447,20 +447,45 @@ export class ClaraToolsService {
 
     if (!effectiveName) return null;
 
-    const [row] = await this.drizzle.db
-      .select({
-        ...selectShape,
-        similarity: sql<number>`similarity(${startup.name}, ${effectiveName})`.as("similarity"),
-      })
-      .from(startup)
-      .where(
-        and(
-          sql`similarity(${startup.name}, ${effectiveName}) > 0.3`,
-          this.buildStartupAccessFilter(actor),
-        ),
-      )
-      .orderBy(desc(sql`similarity(${startup.name}, ${effectiveName})`))
-      .limit(1);
+    let row:
+      | (AccessibleStartupRow & {
+          similarity?: number;
+        })
+      | null = null;
+    try {
+      const [fuzzyRow] = await this.drizzle.db
+        .select({
+          ...selectShape,
+          similarity: sql<number>`similarity(${startup.name}, CAST(${effectiveName} AS text))`.as("similarity"),
+        })
+        .from(startup)
+        .where(
+          and(
+            sql`similarity(${startup.name}, CAST(${effectiveName} AS text)) > 0.3`,
+            this.buildStartupAccessFilter(actor),
+          ),
+        )
+        .orderBy(desc(sql`similarity(${startup.name}, CAST(${effectiveName} AS text))`))
+        .limit(1);
+      row = fuzzyRow ?? null;
+    } catch (error) {
+      if (!this.isSimilarityUnavailable(error)) {
+        throw error;
+      }
+
+      const [fallbackRow] = await this.drizzle.db
+        .select(selectShape)
+        .from(startup)
+        .where(
+          and(
+            ilike(startup.name, `%${effectiveName}%`),
+            this.buildStartupAccessFilter(actor),
+          ),
+        )
+        .orderBy(desc(startup.createdAt))
+        .limit(1);
+      row = fallbackRow ?? null;
+    }
 
     if (!row) return null;
     if (!detailed) {
@@ -475,6 +500,11 @@ export class ClaraToolsService {
     }
 
     return row;
+  }
+
+  private isSimilarityUnavailable(error: unknown): boolean {
+    const message = error instanceof Error ? error.message : String(error);
+    return /function similarity\(/i.test(message) && /does not exist/i.test(message);
   }
 
   private async sendStartupPdfAttachment(params: {

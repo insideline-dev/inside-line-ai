@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { and, eq, sql, desc } from "drizzle-orm";
+import { and, eq, sql, desc, ilike } from "drizzle-orm";
 import { DrizzleService } from "../../database";
 import { StorageService } from "../../storage";
 import { ASSET_TYPES } from "../../storage/storage.config";
@@ -264,22 +264,57 @@ export class ClaraSubmissionService {
     companyName: string,
     ownerUserId: string,
   ): Promise<{ id: string; name: string; status: string } | null> {
-    const [match] = await this.drizzle.db
-      .select({
-        id: startup.id,
-        name: startup.name,
-        status: startup.status,
-      })
-      .from(startup)
-      .where(
-        and(
-          eq(startup.userId, ownerUserId),
-          sql`similarity(${startup.name}, ${companyName}) > ${FUZZY_THRESHOLD}`,
-        ),
-      )
-      .orderBy(desc(sql`similarity(${startup.name}, ${companyName})`))
-      .limit(1);
-    return match ?? null;
+    try {
+      const [match] = await this.drizzle.db
+        .select({
+          id: startup.id,
+          name: startup.name,
+          status: startup.status,
+        })
+        .from(startup)
+        .where(
+          and(
+            eq(startup.userId, ownerUserId),
+            sql`similarity(${startup.name}, CAST(${companyName} AS text)) > ${FUZZY_THRESHOLD}`,
+          ),
+        )
+        .orderBy(desc(sql`similarity(${startup.name}, CAST(${companyName} AS text))`))
+        .limit(1);
+      return match ?? null;
+    } catch (error) {
+      if (!this.isSimilarityUnavailable(error)) {
+        throw error;
+      }
+
+      this.logger.warn(
+        "pg_trgm similarity() unavailable; falling back to ILIKE duplicate detection",
+      );
+
+      const normalized = companyName.trim();
+      const [fallbackMatch] = await this.drizzle.db
+        .select({
+          id: startup.id,
+          name: startup.name,
+          status: startup.status,
+        })
+        .from(startup)
+        .where(
+          and(
+            eq(startup.userId, ownerUserId),
+            ilike(startup.name, `%${normalized}%`),
+          ),
+        )
+        .orderBy(desc(startup.createdAt))
+        .limit(1);
+
+      return fallbackMatch ?? null;
+    }
+  }
+
+  private isSimilarityUnavailable(error: unknown): boolean {
+    const message =
+      error instanceof Error ? error.message : String(error);
+    return /function similarity\(/i.test(message) && /does not exist/i.test(message);
   }
 
   private async enrichExistingStartup(

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { createFileRoute, useParams } from "@tanstack/react-router";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
@@ -10,12 +11,16 @@ import {
   InsightsTabContent,
   ProductTabContent,
   TeamTabContent,
+  SourcesTabContent,
 } from "@/components/startup-view";
 import {
   useStartupControllerFindOne,
+  useStartupControllerGetDataRoom,
 } from "@/api/generated/startup/startup";
+import { EditTeamSheet } from "@/components/startup/EditTeamSheet";
 import type { Startup } from "@/types/startup";
 import type { Evaluation } from "@/types/evaluation";
+import { Pencil } from "lucide-react";
 
 export const Route = createFileRoute("/_protected/founder/startup/$id")({
   component: StartupDetail,
@@ -23,6 +28,15 @@ export const Route = createFileRoute("/_protected/founder/startup/$id")({
 
 interface StartupWithEvaluation extends Startup {
   evaluation?: Evaluation;
+}
+
+interface DataRoomDocument {
+  id: string;
+  category?: string | null;
+  uploadedAt?: string | null;
+  assetUrl?: string | null;
+  assetKey?: string | null;
+  assetMimeType?: string | null;
 }
 
 function unwrapApiResponse<T>(payload: unknown): T {
@@ -40,6 +54,7 @@ function unwrapApiResponse<T>(payload: unknown): T {
 
 function StartupDetail() {
   const { id } = useParams({ from: "/_protected/founder/startup/$id" });
+  const [editTeamOpen, setEditTeamOpen] = useState(false);
 
   const {
     data: startupResponse,
@@ -58,6 +73,11 @@ function StartupDetail() {
   const startup = startupResponse
     ? unwrapApiResponse<StartupWithEvaluation>(startupResponse)
     : null;
+  const { data: dataRoomResponse } = useStartupControllerGetDataRoom(id, {
+    query: {
+      enabled: Boolean(id),
+    },
+  });
 
   if (error) {
     return (
@@ -98,6 +118,12 @@ function StartupDetail() {
   }
 
   const evaluation = startup.evaluation;
+  const rawDataRoomDocuments = dataRoomResponse
+    ? unwrapApiResponse<unknown>(dataRoomResponse)
+    : [];
+  const dataRoomDocuments = Array.isArray(rawDataRoomDocuments)
+    ? (rawDataRoomDocuments as DataRoomDocument[])
+    : [];
 
   // Extract team members from various sources
   const teamMembers = (() => {
@@ -144,11 +170,12 @@ function StartupDetail() {
       )}
 
       <Tabs defaultValue="summary" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="summary" data-testid="tab-summary">Summary</TabsTrigger>
           <TabsTrigger value="insights" data-testid="tab-insights">Insights</TabsTrigger>
           <TabsTrigger value="product" data-testid="tab-product">Product</TabsTrigger>
           <TabsTrigger value="team" data-testid="tab-team">Team</TabsTrigger>
+          <TabsTrigger value="sources" data-testid="tab-sources">Sources</TabsTrigger>
         </TabsList>
 
         <TabsContent value="summary" className="space-y-6">
@@ -206,6 +233,16 @@ function StartupDetail() {
         </TabsContent>
 
         <TabsContent value="team" className="space-y-6">
+          <div className="flex justify-end">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setEditTeamOpen(true)}
+            >
+              <Pencil className="mr-2 h-4 w-4" />
+              Edit Team
+            </Button>
+          </div>
           {evaluation ? (
             <TeamTabContent
               evaluation={evaluation}
@@ -223,7 +260,22 @@ function StartupDetail() {
             </Card>
           )}
         </TabsContent>
+
+        <TabsContent value="sources" className="space-y-6">
+          <SourcesTabContent
+            startup={startup}
+            evaluation={evaluation ?? null}
+            dataRoomDocuments={dataRoomDocuments}
+          />
+        </TabsContent>
       </Tabs>
+
+      <EditTeamSheet
+        open={editTeamOpen}
+        onOpenChange={setEditTeamOpen}
+        startupId={startup.id}
+        teamMembers={startup.teamMembers ?? []}
+      />
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import type { Evaluation, SectionScores, TeamComposition, MemoSection } from "@/types";
+import type { Evaluation, SectionScores, MemoSection } from "@/types";
 
 const createSectionScores = (base: number): SectionScores => ({
   team: Math.min(100, base + Math.random() * 15 - 7),
@@ -13,14 +13,6 @@ const createSectionScores = (base: number): SectionScores => ({
   dealTerms: Math.min(100, base + Math.random() * 15 - 7),
   exitPotential: Math.min(100, base + Math.random() * 15 - 7),
 });
-
-const mockTeamComposition: TeamComposition = {
-  hasBusinessLeader: true,
-  hasTechnicalLeader: true,
-  hasIndustryExpert: false,
-  teamBalance: "Strong technical and business leadership, could benefit from industry veteran",
-  gapsIdentified: ["Industry domain expert", "Sales leadership"],
-};
 
 const createMemoSections = (name: string): MemoSection[] => [
   {
@@ -62,37 +54,32 @@ export const mockEvaluations: Evaluation[] = [
     startupId: "1",
     sectionScores: createSectionScores(82),
     teamScore: 85,
-    founderMarketFit: 88,
-    executionRiskNotes: "Strong team with relevant experience, low execution risk",
-    teamComposition: mockTeamComposition,
     teamMemberEvaluations: [
       {
         name: "Alex Chen",
         role: "CEO",
         linkedinUrl: "https://linkedin.com/in/alexchen",
         linkedinAnalysis: {
-          currentPosition: "CEO & Co-Founder",
-          company: "DataSync AI",
-          yearsExperience: 12,
-          education: ["Stanford MBA", "MIT Computer Science"],
-          previousCompanies: ["Google", "Stripe", "YC Startup"],
-          skills: ["Product Strategy", "Enterprise Sales", "AI/ML"],
-          relevantExperience: "Previously built and sold B2B SaaS company",
-          strengthsForRole: ["Enterprise sales experience", "Technical background", "Prior exit"],
-          potentialConcerns: ["First time CEO of venture-backed company"],
-          founderFitScore: 92,
+          headline: "CEO & Co-Founder at DataSync AI",
+          summary: "Previously built and sold B2B SaaS company",
+          profilePictureUrl: undefined,
+          currentCompany: { name: "DataSync AI", title: "CEO & Co-Founder" },
+          experience: [
+            { title: "CEO & Co-Founder", company: "DataSync AI", duration: "2022 - Present" },
+            { title: "Senior Engineer", company: "Google", duration: "2018 - 2022" },
+          ],
+          education: [
+            { school: "Stanford", degree: "MBA", field: "Business" },
+            { school: "MIT", degree: "BS", field: "Computer Science" },
+          ],
         },
       },
     ],
     marketScore: 80,
-    tamValidation: { estimated: "$45B", confidence: "high", sources: 5 },
-    marketCredibility: 85,
     productScore: 84,
     productSummary: "AI-powered data synchronization with strong technical differentiation",
     extractedFeatures: ["Real-time sync", "AI conflict resolution", "Enterprise security"],
     tractionScore: 78,
-    momentumScore: 82,
-    tractionCredibility: 80,
     businessModelScore: 81,
     gtmScore: 79,
     financialsScore: 75,
@@ -215,7 +202,6 @@ export const mockEvaluations: Evaluation[] = [
     overallScore: 88,
     percentileRank: 92,
     teamScore: 92,
-    founderMarketFit: 95,
     marketScore: 86,
     productScore: 90,
     tractionScore: 85,

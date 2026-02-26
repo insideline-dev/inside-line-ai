@@ -18,12 +18,12 @@ import {
   type SectionScores,
 } from "./score-computation.service";
 import { SynthesisAgent } from "../agents/synthesis";
-import type {
-  SynthesisAgentOutput,
-} from "../agents/synthesis";
+import type { SynthesisAgentOutput } from "../agents/synthesis";
+import type { InvestorMemo, FounderReport } from "../schemas/synthesis.schema";
 import type { EvaluationFallbackReason } from "../interfaces/agent.interface";
 import { MemoGeneratorService } from "./memo-generator.service";
 import { AiConfigService } from "./ai-config.service";
+import { sanitizeNarrativeText } from "./narrative-sanitizer";
 
 export const SYNTHESIS_AGENT_KEY = "synthesisagent";
 
@@ -100,6 +100,9 @@ export class SynthesisService {
       overallScore,
       evaluation,
     );
+
+    const percentileRank = await this.scoreComputation.computePercentileRank(synthesis.overallScore);
+    synthesis.percentileRank = percentileRank;
 
     await this.persistResults(startupId, synthesis, evaluation, scraping, research);
 
@@ -471,13 +474,21 @@ export class SynthesisService {
 
       const executiveSummary =
         typeof existing.executiveSummary === "string"
-          ? existing.executiveSummary.trim()
+          ? sanitizeNarrativeText(existing.executiveSummary.trim())
           : "";
-      const strengths = this.toStringArray(existing.keyStrengths);
-      const risks = this.toStringArray(existing.keyRisks);
-      const recommendations = this.toStringArray(existing.recommendations);
-      const investorMemo = this.toStringValue(existing.investorMemo);
-      const founderReport = this.toStringValue(existing.founderReport);
+      const strengths = this.sanitizeStringArray(
+        this.toStringArray(existing.keyStrengths),
+      );
+      const risks = this.sanitizeStringArray(this.toStringArray(existing.keyRisks));
+      const recommendations = this.sanitizeStringArray(
+        this.toStringArray(existing.recommendations),
+      );
+      const investorMemo = this.sanitizeInvestorMemo(
+        this.toObjectValue<InvestorMemo>(existing.investorMemo),
+      );
+      const founderReport = this.sanitizeFounderReport(
+        this.toObjectValue<FounderReport>(existing.founderReport),
+      );
 
       const hasReusableNarrative =
         executiveSummary.length > 0 ||
@@ -493,7 +504,7 @@ export class SynthesisService {
 
       const previousConfidenceNotes =
         typeof existing.dataConfidenceNotes === "string"
-          ? existing.dataConfidenceNotes.trim()
+          ? sanitizeNarrativeText(existing.dataConfidenceNotes.trim())
           : "";
       const preservationNote =
         "Latest synthesis attempt returned empty structured output; previous narrative was preserved.";
@@ -537,10 +548,68 @@ export class SynthesisService {
       .filter((item) => item.length > 0);
   }
 
-  private toStringValue(value: unknown): string | null {
-    return typeof value === "string" && value.trim().length > 0
-      ? value.trim()
-      : null;
+  private toObjectValue<T extends object>(value: unknown): T | null {
+    return value !== null && typeof value === "object" ? (value as T) : null;
+  }
+
+  private sanitizeStringArray(values: string[]): string[] {
+    return values
+      .map((value) => sanitizeNarrativeText(value))
+      .map((value) => value.trim())
+      .filter((value) => value.length > 0);
+  }
+
+  private sanitizeInvestorMemo(memo: InvestorMemo | null): InvestorMemo | null {
+    if (!memo) {
+      return null;
+    }
+
+    return {
+      ...memo,
+      executiveSummary: sanitizeNarrativeText(memo.executiveSummary),
+      summary:
+        typeof memo.summary === "string"
+          ? sanitizeNarrativeText(memo.summary)
+          : memo.summary,
+      sections: (memo.sections ?? []).map((section) => ({
+        ...section,
+        content: sanitizeNarrativeText(section.content),
+        highlights: section.highlights
+          ? this.sanitizeStringArray(section.highlights)
+          : section.highlights,
+        concerns: section.concerns
+          ? this.sanitizeStringArray(section.concerns)
+          : section.concerns,
+      })),
+      dealHighlights: this.sanitizeStringArray(memo.dealHighlights ?? []),
+      keyDueDiligenceAreas: this.sanitizeStringArray(
+        memo.keyDueDiligenceAreas ?? [],
+      ),
+    };
+  }
+
+  private sanitizeFounderReport(
+    report: FounderReport | null,
+  ): FounderReport | null {
+    if (!report) {
+      return null;
+    }
+
+    return {
+      ...report,
+      summary: sanitizeNarrativeText(report.summary),
+      sections: (report.sections ?? []).map((section) => ({
+        ...section,
+        content: sanitizeNarrativeText(section.content),
+        highlights: section.highlights
+          ? this.sanitizeStringArray(section.highlights)
+          : section.highlights,
+        concerns: section.concerns
+          ? this.sanitizeStringArray(section.concerns)
+          : section.concerns,
+      })),
+      actionItems: this.sanitizeStringArray(report.actionItems ?? []),
+    };
   }
 
   private async performPostSynthesisOps(

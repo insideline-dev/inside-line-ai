@@ -124,6 +124,8 @@ export class ResearchProcessor
               output,
               usedFallback,
               error,
+              fallbackReason,
+              rawProviderError,
               rejected,
               attempt,
               retryCount,
@@ -165,6 +167,8 @@ export class ResearchProcessor
                   phaseRetryCount,
                   agentAttemptId: attemptId,
                   usedFallback,
+                  fallbackReason,
+                  rawProviderError,
                   lifecycleEvent,
                 })
                 .catch((progressError) => {
@@ -188,6 +192,8 @@ export class ResearchProcessor
                   output,
                   usedFallback,
                   error,
+                  fallbackReason,
+                  rawProviderError,
                   rejected,
                   attempt: resolvedAttempt,
                   retryCount: resolvedRetryCount,

@@ -85,6 +85,11 @@ export class InvestorController {
     return thesis;
   }
 
+  @Post('thesis/generate-summary')
+  async generateThesisSummary(@CurrentUser() user: User) {
+    return this.thesisService.generateSummary(user.id);
+  }
+
   @Delete('thesis')
   async deleteThesis(@CurrentUser() user: User) {
     await this.thesisService.delete(user.id);

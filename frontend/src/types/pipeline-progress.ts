@@ -14,7 +14,9 @@ export type PipelineFallbackReason =
   | "TIMEOUT"
   | "SCHEMA_OUTPUT_INVALID"
   | "MODEL_OR_PROVIDER_ERROR"
-  | "UNHANDLED_AGENT_EXCEPTION";
+  | "UNHANDLED_AGENT_EXCEPTION"
+  | "MISSING_PROVIDER_EVIDENCE"
+  | "MISSING_BRAVE_TOOL_CALL";
 
 export type PipelineAgentEventType =
   | "started"
@@ -105,6 +107,7 @@ export interface PipelineProgressData {
   phases: Record<string, PipelinePhaseProgress>;
   agentEvents?: PipelineAgentEvent[];
   agentTraces?: PipelineAgentTrace[];
+  phaseResults?: Record<string, unknown>;
 }
 
 export interface StartupProgressResponse {

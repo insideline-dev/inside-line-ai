@@ -98,10 +98,11 @@ export class RedisFallbackClient {
 
       redis
         .connect()
-        .then(() => {
+        .then(async () => {
           this.redis = redis;
           this.useMemory = false;
           this.logger.log("Redis connected");
+          await this.syncMemoryToRedis();
         })
         .catch((error) => {
           this.markRedisUnavailable(`initial connect failed: ${String(error)}`);

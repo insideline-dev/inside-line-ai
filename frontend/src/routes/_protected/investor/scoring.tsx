@@ -22,7 +22,10 @@ import {
   useInvestorControllerUpdateScoringPreference,
   getInvestorControllerGetThesisQueryKey,
   getInvestorControllerGetScoringPreferencesQueryKey,
+  getInvestorControllerGetMatchesQueryKey,
+  getInvestorControllerGetPipelineQueryKey,
 } from "@/api/generated/investor/investor";
+import { useToast } from "@/hooks/use-toast";
 import type { FundingStage } from "@/types";
 
 export const Route = createFileRoute("/_protected/investor/scoring")({
@@ -125,6 +128,7 @@ function writeSavedCustomCache(cache: Record<string, SavedCustomStageData>) {
 
 function InvestorScoringPage() {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [activeStage, setActiveStage] = useState<FundingStage>("seed");
   const [minThesisFitScore, setMinThesisFitScore] = useState(0);
   const [minStartupScore, setMinStartupScore] = useState(0);
@@ -187,6 +191,8 @@ function InvestorScoringPage() {
       {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: getInvestorControllerGetThesisQueryKey() });
+          queryClient.invalidateQueries({ queryKey: getInvestorControllerGetMatchesQueryKey() });
+          queryClient.invalidateQueries({ queryKey: getInvestorControllerGetPipelineQueryKey() });
           setThresholdsSaved(true);
           setTimeout(() => setThresholdsSaved(false), 2000);
         },
@@ -270,7 +276,12 @@ function InvestorScoringPage() {
             return Array.isArray(old) ? arr : { ...(old as object), data: arr };
           });
           await queryClient.refetchQueries({ queryKey });
+          queryClient.invalidateQueries({ queryKey: getInvestorControllerGetMatchesQueryKey() });
+          queryClient.invalidateQueries({ queryKey: getInvestorControllerGetPipelineQueryKey() });
           setEditingWeights((prev) => ({ ...prev, [stage]: fullWeights as Record<string, number> }));
+          toast.info("Scores are being recalculated...", {
+            description: "Your custom weights have been saved. Match scores will update shortly.",
+          });
         },
       },
     );
@@ -300,6 +311,11 @@ function InvestorScoringPage() {
           onSuccess: () => {
             queryClient.invalidateQueries({
               queryKey: getInvestorControllerGetScoringPreferencesQueryKey(),
+            });
+            queryClient.invalidateQueries({ queryKey: getInvestorControllerGetMatchesQueryKey() });
+            queryClient.invalidateQueries({ queryKey: getInvestorControllerGetPipelineQueryKey() });
+            toast.info("Scores are being recalculated...", {
+              description: "Custom weights enabled. Match scores will update shortly.",
             });
           },
         },
@@ -336,6 +352,8 @@ function InvestorScoringPage() {
             await queryClient.refetchQueries({
               queryKey: getInvestorControllerGetScoringPreferencesQueryKey(),
             });
+            queryClient.invalidateQueries({ queryKey: getInvestorControllerGetMatchesQueryKey() });
+            queryClient.invalidateQueries({ queryKey: getInvestorControllerGetPipelineQueryKey() });
           },
         },
       );
@@ -654,12 +672,25 @@ function InvestorScoringPage() {
 
                 <Card>
                   <CardHeader>
-                    <CardTitle>Weight Rationale</CardTitle>
+                    <div className="flex items-center gap-2">
+                      <CardTitle>
+                        {useCustomWeights && preferences.find((p) => p.stage === sw.stage)?.customRationale
+                          ? "Weight Rationale"
+                          : "Platform Rationale"}
+                      </CardTitle>
+                      <Badge variant={useCustomWeights && preferences.find((p) => p.stage === sw.stage)?.customRationale ? "default" : "secondary"}>
+                        {useCustomWeights && preferences.find((p) => p.stage === sw.stage)?.customRationale
+                          ? "Custom"
+                          : "Platform Default"}
+                      </Badge>
+                    </div>
                     <CardDescription>Why these weights matter at this stage</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     {WEIGHT_KEYS.map((key) => {
-                      const value = sw.rationale[key] ?? "";
+                      const pref = preferences.find((p) => p.stage === sw.stage);
+                      const customRationale = useCustomWeights ? pref?.customRationale : null;
+                      const value = customRationale?.[key] ?? sw.rationale[key] ?? "";
                       return (
                         <div key={key} className="space-y-1">
                           <h4 className="font-medium text-sm">{weightLabels[key] || key}</h4>

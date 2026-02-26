@@ -11,8 +11,20 @@ describe("SynthesisSchema", () => {
     investmentThesis: "Worth deeper diligence",
     nextSteps: ["Schedule founder call"],
     confidenceLevel: "Medium",
-    investorMemo: "Investor memo body",
-    founderReport: "Founder report body",
+    investorMemo: {
+      executiveSummary: "Investor memo body",
+      summary: "Test summary",
+      sections: [],
+      recommendation: "Consider",
+      riskLevel: "medium" as const,
+      dealHighlights: ["Strong team"],
+      keyDueDiligenceAreas: ["Validate revenue"],
+    },
+    founderReport: {
+      summary: "Founder report body",
+      sections: [],
+      actionItems: ["Focus on unit economics"],
+    },
     dataConfidenceNotes: "Confidence notes",
   } as const;
 

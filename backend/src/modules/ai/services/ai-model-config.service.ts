@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import { and, desc, eq, isNull, max, or } from "drizzle-orm";
@@ -19,6 +20,7 @@ import {
 import {
   AiModelConfigSchema,
   isResearchPromptKey,
+  normalizeRuntimeModelName,
   resolveModelPurposeForPromptKey,
   resolveProviderForModelName,
   type AiModelConfig,
@@ -58,6 +60,8 @@ export interface ResolvedModelConfig {
 
 @Injectable()
 export class AiModelConfigService {
+  private readonly logger = new Logger(AiModelConfigService.name);
+
   constructor(
     private drizzle: DrizzleService,
     private aiConfig: AiConfigService,
@@ -234,6 +238,48 @@ export class AiModelConfigService {
     return published;
   }
 
+  async archiveRevision(key: string, revisionId: string) {
+    const definition = await this.getOrCreateDefinition(key);
+
+    const [existing] = await this.drizzle.db
+      .select()
+      .from(aiModelConfigRevision)
+      .where(
+        and(
+          eq(aiModelConfigRevision.id, revisionId),
+          eq(aiModelConfigRevision.definitionId, definition.id),
+        ),
+      )
+      .limit(1);
+
+    if (!existing) {
+      throw new NotFoundException(
+        `Model config revision ${revisionId} not found for ${key}`,
+      );
+    }
+
+    if (existing.status === "published") {
+      throw new BadRequestException(
+        "Published revisions cannot be archived directly",
+      );
+    }
+
+    if (existing.status === "archived") {
+      return existing;
+    }
+
+    const [archived] = await this.drizzle.db
+      .update(aiModelConfigRevision)
+      .set({
+        status: "archived",
+        updatedAt: new Date(),
+      })
+      .where(eq(aiModelConfigRevision.id, revisionId))
+      .returning();
+
+    return archived;
+  }
+
   async resolveConfig(params: {
     key: AiPromptKey;
     stage?: StartupStage | string | null;
@@ -254,23 +300,31 @@ export class AiModelConfigService {
         provider,
       );
 
-      return {
-        source: "revision_override",
-        revisionId: override.id,
-        stage: normalizedStage,
-        purpose,
-        modelName,
-        provider,
-        searchMode: override.searchMode,
-        supportedSearchModes,
-      };
+      return this.logResolvedConfig(
+        params,
+        normalizedStage,
+        {
+          source: "revision_override",
+          revisionId: override.id,
+          stage: normalizedStage,
+          purpose,
+          modelName,
+          provider,
+          searchMode: override.searchMode,
+          supportedSearchModes,
+        },
+      );
     }
 
     if (!this.aiConfig.isPromptRuntimeConfigEnabled()) {
-      return this.buildDefaultResolvedConfig(
-        params.key,
+      return this.logResolvedConfig(
+        params,
         normalizedStage,
-        purpose,
+        this.buildDefaultResolvedConfig(
+          params.key,
+          normalizedStage,
+          purpose,
+        ),
       );
     }
 
@@ -281,10 +335,14 @@ export class AiModelConfigService {
       .limit(1);
 
     if (!definition) {
-      return this.buildDefaultResolvedConfig(
-        params.key,
+      return this.logResolvedConfig(
+        params,
         normalizedStage,
-        purpose,
+        this.buildDefaultResolvedConfig(
+          params.key,
+          normalizedStage,
+          purpose,
+        ),
       );
     }
 
@@ -323,10 +381,14 @@ export class AiModelConfigService {
     const selected = stageMatch ?? globalMatch;
 
     if (!selected) {
-      return this.buildDefaultResolvedConfig(
-        params.key,
+      return this.logResolvedConfig(
+        params,
         normalizedStage,
-        purpose,
+        this.buildDefaultResolvedConfig(
+          params.key,
+          normalizedStage,
+          purpose,
+        ),
       );
     }
 
@@ -338,16 +400,20 @@ export class AiModelConfigService {
 
     const provider = resolveProviderForModelName(modelConfig.modelName);
 
-    return {
-      source: "published",
-      revisionId: selected.id,
-      stage: normalizedStage,
-      purpose,
-      modelName: modelConfig.modelName,
-      provider,
-      searchMode: modelConfig.searchMode,
-      supportedSearchModes: this.getSupportedSearchModes(params.key, provider),
-    };
+    return this.logResolvedConfig(
+      params,
+      normalizedStage,
+      {
+        source: "published",
+        revisionId: selected.id,
+        stage: normalizedStage,
+        purpose,
+        modelName: modelConfig.modelName,
+        provider,
+        searchMode: modelConfig.searchMode,
+        supportedSearchModes: this.getSupportedSearchModes(params.key, provider),
+      },
+    );
   }
 
   private buildDefaultResolvedConfig(
@@ -355,7 +421,9 @@ export class AiModelConfigService {
     stage: StartupStage | null,
     purpose: ModelPurpose,
   ): ResolvedModelConfig {
-    const modelName = this.aiConfig.getModelForPurpose(purpose);
+    const modelName = isResearchPromptKey(key)
+      ? "gemini-3-flash-preview"
+      : this.aiConfig.getModelForPurpose(purpose);
     const provider = resolveProviderForModelName(modelName);
     const supportedSearchModes = this.getSupportedSearchModes(key, provider);
 
@@ -368,7 +436,9 @@ export class AiModelConfigService {
       provider,
       searchMode: supportedSearchModes.includes("provider_grounded_search")
         ? "provider_grounded_search"
-        : "off",
+        : supportedSearchModes.includes("brave_tool_search")
+          ? "brave_tool_search"
+          : "off",
       supportedSearchModes,
     };
   }
@@ -377,11 +447,35 @@ export class AiModelConfigService {
     key: AiPromptKey,
     provider: string,
   ): AiRuntimeSearchMode[] {
-    if (isResearchPromptKey(key) && provider === "google") {
-      return ["off", "provider_grounded_search"];
+    if (isResearchPromptKey(key)) {
+      if (provider === "google" || provider === "openai") {
+        return [
+          "off",
+          "provider_grounded_search",
+          "brave_tool_search",
+          "provider_and_brave_search",
+        ];
+      }
+
+      return ["off", "brave_tool_search"];
     }
 
     return ["off"];
+  }
+
+  private logResolvedConfig(
+    params: {
+      key: AiPromptKey;
+      stage?: StartupStage | string | null;
+      revisionId?: string;
+    },
+    normalizedStage: StartupStage | null,
+    resolved: ResolvedModelConfig,
+  ): ResolvedModelConfig {
+    this.logger.debug(
+      `[ModelConfig] Resolved | key=${params.key} | requestedStage=${params.stage ?? "global"} | normalizedStage=${normalizedStage ?? "global"} | runtimeEnabled=${this.aiConfig.isPromptRuntimeConfigEnabled()} | source=${resolved.source} | revisionId=${resolved.revisionId ?? "none"} | model=${resolved.modelName} | provider=${resolved.provider} | searchMode=${resolved.searchMode}`,
+    );
+    return resolved;
   }
 
   private validateModelConfigForKey(
@@ -397,23 +491,48 @@ export class AiModelConfigService {
       );
     }
 
-    if (config.searchMode === "provider_grounded_search") {
+    const requiresProviderGroundedSearch =
+      config.searchMode === "provider_grounded_search" ||
+      config.searchMode === "provider_and_brave_search";
+
+    if (requiresProviderGroundedSearch) {
       if (!isResearch) {
         throw new BadRequestException(
-          `Grounded search is only allowed for research prompt keys (${key})`,
+          `Provider grounded search is only allowed for research prompt keys (${key})`,
         );
       }
 
-      if (provider !== "google") {
+      if (provider !== "google" && provider !== "openai") {
         throw new BadRequestException(
-          `Grounded search requires a Gemini model for ${key}`,
+          `Grounded search requires a Gemini or OpenAI model for ${key}`,
+        );
+      }
+    }
+
+    if (config.searchMode === "brave_tool_search") {
+      if (!isResearch) {
+        throw new BadRequestException(
+          `Brave tool search is only allowed for research prompt keys (${key})`,
         );
       }
     }
   }
 
   private parseModelConfig(input: unknown): AiModelConfig {
-    const parsed = AiModelConfigSchema.safeParse(input);
+    const asRecord =
+      input && typeof input === "object" && !Array.isArray(input)
+        ? (input as Record<string, unknown>)
+        : null;
+    const normalizedInput = asRecord
+      ? {
+          ...asRecord,
+          modelName:
+            typeof asRecord.modelName === "string"
+              ? normalizeRuntimeModelName(asRecord.modelName)
+              : asRecord.modelName,
+        }
+      : input;
+    const parsed = AiModelConfigSchema.safeParse(normalizedInput);
 
     if (!parsed.success) {
       throw new BadRequestException(

@@ -83,6 +83,12 @@ export class StartupController {
     return this.startupService.findAll(user.id, query);
   }
 
+  @Get('evaluation/:id')
+  @Roles(UserRole.FOUNDER, UserRole.INVESTOR, UserRole.ADMIN)
+  async getEvaluationById(@CurrentUser() _user: User, @Param('id') id: string) {
+    return this.startupService.getEvaluation(id);
+  }
+
   @Get(':id')
   @Roles(UserRole.FOUNDER, UserRole.INVESTOR, UserRole.ADMIN)
   async findOne(@CurrentUser() user: User, @Param('id') id: string) {
@@ -179,7 +185,7 @@ export class StartupController {
   }
 
   @Get(':id/memo.pdf')
-  @Roles(UserRole.FOUNDER, UserRole.ADMIN)
+  @Roles(UserRole.FOUNDER, UserRole.INVESTOR, UserRole.ADMIN)
   @Header('Content-Type', 'application/pdf')
   async downloadMemo(
     @Param('id') id: string,
@@ -195,7 +201,7 @@ export class StartupController {
   }
 
   @Get(':id/report.pdf')
-  @Roles(UserRole.FOUNDER, UserRole.ADMIN)
+  @Roles(UserRole.FOUNDER, UserRole.INVESTOR, UserRole.ADMIN)
   @Header('Content-Type', 'application/pdf')
   async downloadReport(
     @Param('id') id: string,

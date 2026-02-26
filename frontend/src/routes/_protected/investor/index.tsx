@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -9,11 +10,15 @@ import { SearchAndFilters, useFilteredStartups, defaultFilters, type FilterState
 import {
   useInvestorControllerGetMatches,
   useInvestorControllerGetThesis,
+  getInvestorControllerGetMatchesQueryKey,
 } from "@/api/generated/investor/investor";
 import { AnalysisProgressBar } from "@/components/AnalysisProgressBar";
 import {
   useStartupControllerFindAll,
+  useStartupControllerApprove,
+  getStartupControllerFindAllQueryKey,
 } from "@/api/generated/startup/startup";
+import { useToast } from "@/hooks/use-toast";
 import {
   Target,
   MapPin,
@@ -27,7 +32,8 @@ import {
   FileSearch,
   Lock,
   Loader2,
-  Sliders
+  Sliders,
+  CheckCircle,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -153,9 +159,13 @@ function normalizeMatches(rows: RawMatchedStartup[]): MatchedStartup[] {
 function PrivateStartupCard({
   startup,
   getStatusBadge,
+  onApprove,
+  isApproving,
 }: {
   startup: PrivateStartup;
   getStatusBadge: (status: string) => ReactNode;
+  onApprove: (id: number) => void;
+  isApproving: boolean;
 }) {
   const [effectiveStatus, setEffectiveStatus] = useState(startup.status);
 
@@ -212,12 +222,31 @@ function PrivateStartupCard({
         )}
 
         {(effectiveStatus === "approved" || effectiveStatus === "pending_review") && (
-          <Button className="w-full mt-4" size="sm" asChild>
-            <Link to="/investor/startup/$id" params={{ id: String(startup.id) }}>
-              {effectiveStatus === "pending_review" ? "Review Analysis" : "View Analysis"}
-              <ArrowRight className="w-4 h-4 ml-2" />
-            </Link>
-          </Button>
+          <div className="flex gap-2 mt-4">
+            <Button className="flex-1" size="sm" asChild>
+              <Link to="/investor/startup/$id" params={{ id: String(startup.id) }}>
+                {effectiveStatus === "pending_review" ? "Review Analysis" : "View Analysis"}
+                <ArrowRight className="w-4 h-4 ml-2" />
+              </Link>
+            </Button>
+            {effectiveStatus === "pending_review" && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1 text-chart-2 border-chart-2/40 hover:bg-chart-2/10 hover:text-chart-2"
+                onClick={() => onApprove(startup.id)}
+                disabled={isApproving}
+                data-testid={`button-approve-startup-${startup.id}`}
+              >
+                {isApproving ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <CheckCircle className="w-4 h-4" />
+                )}
+                Approve
+              </Button>
+            )}
+          </div>
         )}
       </CardContent>
     </Card>
@@ -226,6 +255,25 @@ function PrivateStartupCard({
 
 function InvestorDashboard() {
   const [filters, setFilters] = useState<FilterState>(defaultFilters);
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const { mutate: approveStartup, isPending: isApproving, variables: approvingVars } = useStartupControllerApprove({
+    mutation: {
+      onSuccess: () => {
+        toast.success("Startup approved successfully");
+        queryClient.invalidateQueries({ queryKey: getStartupControllerFindAllQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getInvestorControllerGetMatchesQueryKey() });
+      },
+      onError: (error) => {
+        toast.error("Failed to approve startup", { description: (error as Error).message });
+      },
+    },
+  });
+
+  const handleApprove = (id: number) => {
+    approveStartup({ id: String(id), data: {} });
+  };
 
   const { data: thesisData } = useInvestorControllerGetThesis();
   const thesis = Array.isArray(thesisData) ? null : thesisData;
@@ -357,6 +405,8 @@ function InvestorDashboard() {
               key={startup.id}
               startup={startup}
               getStatusBadge={getStatusBadge}
+              onApprove={handleApprove}
+              isApproving={isApproving && approvingVars?.id === String(startup.id)}
             />
           ))}
         </div>

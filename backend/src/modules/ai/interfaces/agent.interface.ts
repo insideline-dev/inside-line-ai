@@ -5,6 +5,7 @@ import {
   ResearchResult,
   ScrapingResult,
 } from "./phase-results.interface";
+import type { ResearchParameters } from "./research-parameters.interface";
 
 export type ResearchAgentKey = "team" | "market" | "product" | "news" | "competitor";
 
@@ -25,6 +26,7 @@ export interface ResearchPipelineInput {
   extraction: ExtractionResult;
   scraping: ScrapingResult;
   enrichment?: EnrichmentResult;
+  researchParameters?: ResearchParameters;
 }
 
 export interface EvaluationPipelineInput {
@@ -74,6 +76,11 @@ export type EvaluationFallbackReason =
   | "SCHEMA_OUTPUT_INVALID"
   | "MODEL_OR_PROVIDER_ERROR"
   | "UNHANDLED_AGENT_EXCEPTION";
+
+export type PipelineFallbackReason =
+  | EvaluationFallbackReason
+  | "MISSING_PROVIDER_EVIDENCE"
+  | "MISSING_BRAVE_TOOL_CALL";
 
 export interface EvaluationAgentLifecycleEvent {
   agent: EvaluationAgentKey;

@@ -2,7 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { and, eq, lt } from "drizzle-orm";
 import { DrizzleService } from "../../../database";
-import type { EvaluationFallbackReason } from "../interfaces/agent.interface";
+import type { PipelineFallbackReason } from "../interfaces/agent.interface";
 import { PipelinePhase } from "../interfaces/pipeline.interface";
 import { pipelineAgentRun } from "../entities";
 
@@ -27,7 +27,7 @@ export interface RecordPipelineAgentRunInput {
   outputJson?: unknown;
   meta?: Record<string, unknown>;
   error?: string;
-  fallbackReason?: EvaluationFallbackReason;
+  fallbackReason?: PipelineFallbackReason;
   rawProviderError?: string;
   startedAt?: Date;
   completedAt?: Date;
@@ -89,6 +89,10 @@ export class PipelineAgentTraceService {
       input.rawProviderError,
     );
     const meta = this.normalizeMeta(input.meta);
+    const startedAt = input.startedAt ?? new Date();
+    const completedAt =
+      input.completedAt ??
+      (input.status === "running" ? null : new Date());
 
     await this.drizzle.db.insert(pipelineAgentRun).values({
       startupId: input.startupId,
@@ -109,8 +113,8 @@ export class PipelineAgentTraceService {
       outputJson,
       meta,
       error: input.error,
-      startedAt: input.startedAt ?? new Date(),
-      completedAt: input.completedAt ?? new Date(),
+      startedAt,
+      completedAt,
     });
   }
 
@@ -213,7 +217,7 @@ export class PipelineAgentTraceService {
   private attachTraceMeta(
     outputJson: unknown | null,
     traceKind: TraceKind,
-    fallbackReason: EvaluationFallbackReason | undefined,
+    fallbackReason: PipelineFallbackReason | undefined,
     rawProviderError: string | undefined,
   ): unknown | null {
     if (traceKind !== "ai_agent") {

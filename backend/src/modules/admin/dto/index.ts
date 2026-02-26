@@ -6,4 +6,7 @@ export * from './stats-query.dto';
 export * from "./retry-phase.dto";
 export * from "./retry-agent.dto";
 export * from "./ai-prompt.dto";
+export * from "./ai-schema.dto";
+export * from "./ai-agent-config.dto";
 export * from "./quick-create-startup.dto";
+export * from "./pipeline-flow-config.dto";

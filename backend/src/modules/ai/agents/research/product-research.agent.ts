@@ -21,9 +21,9 @@ export const ProductResearchAgent: ResearchAgentConfig<ProductResearch> = {
   systemPrompt: PRODUCT_RESEARCH_SYSTEM_PROMPT,
   humanPromptTemplate: PRODUCT_RESEARCH_HUMAN_PROMPT,
   schema: ProductResearchSchema,
-  contextBuilder: ({ extraction, scraping }) => ({
-    productDescription: extraction.rawText,
-    knownCompetitors: [],
+  contextBuilder: ({ extraction, scraping, researchParameters }) => ({
+    productDescription: researchParameters?.productDescription ?? extraction.rawText,
+    knownCompetitors: researchParameters?.knownCompetitors ?? [],
     websiteProductPages:
       scraping.website?.subpages
         .filter((page) =>
@@ -33,9 +33,10 @@ export const ProductResearchAgent: ResearchAgentConfig<ProductResearch> = {
         )
         .map((page) => page.url) ?? [],
     demoUrl: undefined,
-    // Page headings provided as context signals, not confirmed product features
     websiteHeadings:
       scraping.website?.headings.filter((heading) => heading.trim().length > 0) ?? [],
+    businessModel: researchParameters?.businessModel,
+    specificMarket: researchParameters?.specificMarket,
   }),
   fallback: ({ extraction }) => {
     const websiteUrl = toValidUrl(extraction.website);
@@ -50,6 +51,11 @@ export const ProductResearchAgent: ResearchAgentConfig<ProductResearch> = {
           "Public customer review coverage is limited in deterministic fallback mode.",
         sentiment: "neutral",
       },
+      reviews: [],
+      strengths: ["Core workflow automation"],
+      weaknesses: [],
+      competitivePosition: undefined,
+      marketDynamics: undefined,
       sources: websiteUrl ? [websiteUrl] : [],
     };
   },

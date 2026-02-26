@@ -6,6 +6,7 @@ import { ModelPurpose } from "../interfaces/pipeline.interface";
 import { AiProviderService } from "../providers/ai-provider.service";
 import { AiPromptService } from "./ai-prompt.service";
 import { AiConfigService } from "./ai-config.service";
+import { AiModelExecutionService } from "./ai-model-execution.service";
 
 const ExtractedFieldsSchema = z.object({
   companyName: z.string().min(1).optional(),
@@ -29,6 +30,7 @@ export class FieldExtractorService {
     private providers: AiProviderService,
     private promptService: AiPromptService,
     private aiConfig: AiConfigService,
+    private modelExecution?: AiModelExecutionService,
   ) {}
 
   async extractFields(
@@ -80,17 +82,27 @@ export class FieldExtractorService {
         key: "extraction.fields",
         stage: startupContext?.stage,
       });
+      const execution = this.modelExecution
+        ? await this.modelExecution.resolveForPrompt({
+            key: "extraction.fields",
+            stage: startupContext?.stage,
+          })
+        : null;
       const prompt = this.promptService.renderTemplate(promptConfig.userPrompt, {
         startupContextJson: JSON.stringify(context),
         pitchDeckText: this.truncateForPrompt(trimmed),
       });
 
       const { output } = await generateText({
-        model: this.providers.resolveModelForPurpose(ModelPurpose.EXTRACTION),
         output: Output.object({ schema: ExtractedFieldsSchema }),
         temperature: this.aiConfig.getExtractionTemperature(),
         system: promptConfig.systemPrompt,
         prompt,
+        model:
+          execution?.generateTextOptions.model ??
+          this.providers.resolveModelForPurpose(ModelPurpose.EXTRACTION),
+        tools: execution?.generateTextOptions.tools,
+        toolChoice: execution?.generateTextOptions.toolChoice,
       });
 
       return ExtractedFieldsSchema.parse(output);

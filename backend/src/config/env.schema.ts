@@ -128,6 +128,11 @@ export const envSchema = z.object({
   SCRAPING_MEMORY_CACHE_MAX_ENTRIES: z.coerce.number().default(5000),
   SCRAPING_CACHE_REDIS_RECOVERY_INTERVAL_MS: z.coerce.number().default(30000),
 
+  // Crawl4AI (headless browser scraping)
+  CRAWL4AI_URL: z.string().optional(),
+  CRAWL4AI_USERNAME: z.string().optional(),
+  CRAWL4AI_PASSWORD: z.string().optional(),
+
   // AI Providers
   OPENAI_API_KEY: z.string().optional(),
   GOOGLE_API_KEY: z.string().optional(), // Backward-compatible alias
@@ -145,6 +150,11 @@ export const envSchema = z.object({
   AI_MODEL_LOCATION_NORMALIZATION: z.string().default("gemini-3-flash-preview"),
   AI_MODEL_OCR: z.string().default("mistral-ocr-latest"),
   AI_MODEL_ENRICHMENT: z.string().default("gemini-3-flash-preview"),
+  AI_ENRICHMENT_ENABLED: z.coerce.boolean().default(false),
+  AI_SOURCE_SANITIZATION_ENABLED: z.coerce.boolean().default(true),
+  LINKEDIN_AI_VERIFIER_ENABLED: z.coerce.boolean().default(true),
+  LINKEDIN_AI_VERIFIER_MIN_CONFIDENCE: z.coerce.number().default(55),
+  LINKEDIN_AI_VERIFIER_MAX_CONFIDENCE: z.coerce.number().default(80),
   AI_ENRICHMENT_TIMEOUT_MS: z.coerce.number().default(300000),
   ENRICHMENT_CORRECTION_CONFIDENCE_THRESHOLD: z.coerce.number().default(0.85),
   AI_RESEARCH_TEMPERATURE: z.coerce.number().default(0.2),

@@ -108,7 +108,7 @@ export class PipelineStateService implements OnModuleDestroy {
         userId,
         status: PipelineStatus.RUNNING,
         quality: "standard",
-        currentPhase: PipelinePhase.ENRICHMENT,
+        currentPhase: PipelinePhase.EXTRACTION,
         phases: this.createInitialPhases(),
         results: {},
         retryCounts: {},
@@ -469,7 +469,12 @@ export class PipelineStateService implements OnModuleDestroy {
       releaseQueue = () => resolve();
     });
 
-    await previous.catch(() => undefined);
+    await previous.catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `[PipelineState] Previous state mutation failed before next mutation started: ${message}`,
+      );
+    });
 
     try {
       return await operation();

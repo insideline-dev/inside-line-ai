@@ -6,3 +6,4 @@ export { CompetitorsTabContent } from "./CompetitorsTabContent";
 export { ProductTabContent } from "./ProductTabContent";
 export { FounderInsightCard } from "./FounderInsightCard";
 export { InsightsTabContent } from "./InsightsTabContent";
+export { SourcesTabContent } from "./SourcesTabContent";

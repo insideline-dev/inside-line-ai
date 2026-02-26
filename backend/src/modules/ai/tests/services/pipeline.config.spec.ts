@@ -20,7 +20,7 @@ describe("pipeline.config", () => {
     };
 
     expect(() => validatePipelineConfig(duplicated)).toThrow(
-      'Duplicate pipeline phase "enrichment"',
+      'Duplicate pipeline phase "extraction"',
     );
   });
 

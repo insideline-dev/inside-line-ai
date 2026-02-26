@@ -496,7 +496,8 @@ describe("WebsiteScraperService", () => {
 
       await service.deepScrape("https://inside-line.test");
 
-      expect(fetchCalls.length).toBeLessThanOrEqual(5);
+      // +1 for the sitemap.xml probe added by fetchSitemapUrls
+      expect(fetchCalls.length).toBeLessThanOrEqual(6);
     });
   });
 

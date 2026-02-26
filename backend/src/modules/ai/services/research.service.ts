@@ -1,6 +1,7 @@
-import { Injectable, Optional } from "@nestjs/common";
+import { Injectable, Logger, Optional } from "@nestjs/common";
 import { ALL_RESEARCH_AGENTS, PHASE_2_RESEARCH_AGENTS, RESEARCH_AGENTS } from "../agents/research";
 import type {
+  PipelineFallbackReason,
   ResearchAgentConfig,
   ResearchAgentKey,
   ResearchPipelineInput,
@@ -14,12 +15,15 @@ import type { PipelineFeedback } from "../entities/pipeline-feedback.schema";
 import { PipelineStateService } from "./pipeline-state.service";
 import { GeminiResearchService } from "./gemini-research.service";
 import { PipelineFeedbackService } from "./pipeline-feedback.service";
+import { ResearchParametersService } from "./research-parameters.service";
 import { AiPromptService } from "./ai-prompt.service";
 import { RESEARCH_PROMPT_KEY_BY_AGENT } from "./ai-prompt-catalog";
 import { AiDebugLogService } from "./ai-debug-log.service";
 import { PipelineAgentTraceService } from "./pipeline-agent-trace.service";
-import { DEFAULT_MODEL_BY_PURPOSE } from "../ai.config";
 import { buildResearchPromptVariables } from "./research-prompt-variables";
+import { AgentConfigService } from "./agent-config.service";
+import { AiModelExecutionService } from "./ai-model-execution.service";
+import { AiConfigService } from "./ai-config.service";
 
 type ResearchAgentOutput =
   | NonNullable<ResearchResult["team"]>
@@ -36,6 +40,8 @@ export interface ResearchRunOptions {
     output?: ResearchAgentOutput;
     usedFallback: boolean;
     error?: string;
+    fallbackReason?: PipelineFallbackReason;
+    rawProviderError?: string;
     rejected: boolean;
     attempt?: number;
     retryCount?: number;
@@ -47,11 +53,17 @@ const PHASE_2_KEYS = Object.keys(PHASE_2_RESEARCH_AGENTS) as Array<keyof typeof 
 
 @Injectable()
 export class ResearchService {
+  private readonly logger = new Logger(ResearchService.name);
+
   constructor(
     private pipelineState: PipelineStateService,
     private geminiResearchService: GeminiResearchService,
     private pipelineFeedback: PipelineFeedbackService,
     private promptService: AiPromptService,
+    private researchParametersService: ResearchParametersService,
+    @Optional() private agentConfigService?: AgentConfigService,
+    @Optional() private aiConfig?: AiConfigService,
+    @Optional() private modelExecution?: AiModelExecutionService,
     @Optional() private aiDebugLog?: AiDebugLogService,
     @Optional() private pipelineAgentTrace?: PipelineAgentTraceService,
   ) {}
@@ -74,7 +86,19 @@ export class ResearchService {
       throw new Error("Research requires extraction and scraping results");
     }
 
-    const pipelineInput: ResearchPipelineInput = { extraction, scraping, enrichment: enrichment ?? undefined };
+    const researchParameters = await this.researchParametersService.generate(
+      extraction,
+      scraping,
+      enrichment ?? undefined,
+    );
+    this.logger.log(`[Research] Generated research parameters for ${extraction.companyName}`);
+
+    const pipelineInput: ResearchPipelineInput = {
+      extraction,
+      scraping,
+      enrichment: enrichment ?? undefined,
+      researchParameters,
+    };
     const pipelineRunId = await this.resolvePipelineRunId(startupId);
     const currentResult = options?.agentKey
       ? await this.pipelineState.getPhaseResult(startupId, PipelinePhase.RESEARCH)
@@ -85,9 +109,7 @@ export class ResearchService {
     let phaseFeedbackConsumed = false;
 
     const dedupeSources = new Map<string, SourceEntry>();
-    const researchModel =
-      process.env.AI_MODEL_RESEARCH ??
-      DEFAULT_MODEL_BY_PURPOSE[ModelPurpose.RESEARCH];
+    const { phase1Keys, phase2Keys } = await this.resolveResearchKeys();
     for (const source of result.sources) {
       const sourceKey = this.getSourceKey(source);
       if (!dedupeSources.has(sourceKey)) {
@@ -112,6 +134,8 @@ export class ResearchService {
         output: agentResult.output,
         usedFallback: agentResult.usedFallback,
         error: agentResult.error,
+        fallbackReason: agentResult.fallbackReason,
+        rawProviderError: agentResult.rawProviderError,
         rejected: agentResult.rejected,
         attempt: agentResult.attempt,
         retryCount: agentResult.retryCount,
@@ -135,12 +159,13 @@ export class ResearchService {
       }
 
       result.sources = Array.from(dedupeSources.values());
+      result.researchParameters = researchParameters;
       return result;
     }
 
     // ── Phase 1: team, market, product, news (parallel) ──
     await Promise.all(
-      PHASE_1_KEYS.map(async (key) => {
+      phase1Keys.map(async (key) => {
         const settledResult = await this.settleAgentRun(
           key,
           this.runSingleAgentSafe(
@@ -155,12 +180,12 @@ export class ResearchService {
         const agentResult = this.unwrapSettled(key, settledResult);
         await this.handleAgentResult({
           startupId,
+          pipelineRunId,
           key,
           agentResult,
           result,
           dedupeSources,
           onAgentComplete: options?.onAgentComplete,
-          model: researchModel,
         });
       }),
     );
@@ -168,7 +193,7 @@ export class ResearchService {
     // ── Phase 2: competitor (sequential, receives phase 1 context) ──
     const competitorInput = this.buildCompetitorInput(pipelineInput, result);
     await Promise.all(
-      PHASE_2_KEYS.map(async (key) => {
+      phase2Keys.map(async (key) => {
         const settledResult = await this.settleAgentRun(
           key,
           this.runSingleAgentSafe(
@@ -183,17 +208,18 @@ export class ResearchService {
         const agentResult = this.unwrapSettled(key, settledResult);
         await this.handleAgentResult({
           startupId,
+          pipelineRunId,
           key,
           agentResult,
           result,
           dedupeSources,
           onAgentComplete: options?.onAgentComplete,
-          model: researchModel,
         });
       }),
     );
 
     result.sources = Array.from(dedupeSources.values());
+    result.researchParameters = researchParameters;
 
     return result;
   }
@@ -243,6 +269,7 @@ export class ResearchService {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       const fallbackOutput = agent.fallback(pipelineInput);
+      const fallbackReason: PipelineFallbackReason = "UNHANDLED_AGENT_EXCEPTION";
       await this.recordAgentTraceSafely({
         startupId,
         pipelineRunId,
@@ -251,6 +278,8 @@ export class ResearchService {
         status: "fallback",
         usedFallback: true,
         error: errorMessage,
+        fallbackReason,
+        rawProviderError: errorMessage,
         outputJson: fallbackOutput,
         outputText: this.toOutputText(fallbackOutput),
       });
@@ -259,7 +288,12 @@ export class ResearchService {
         sources: [],
         usedFallback: true,
         error: errorMessage,
+        fallbackReason,
+        rawProviderError: errorMessage,
         rejected: true,
+        modelName:
+          this.aiConfig?.getModelForPurpose(ModelPurpose.RESEARCH) ??
+          "unknown",
         attempt: 1,
         retryCount: 0,
       };
@@ -280,6 +314,31 @@ export class ResearchService {
       key: RESEARCH_PROMPT_KEY_BY_AGENT[key],
       stage: pipelineInput.extraction.stage,
     });
+    const execution = this.modelExecution
+      ? await this.modelExecution.resolveForPrompt({
+          key: RESEARCH_PROMPT_KEY_BY_AGENT[key],
+          stage: pipelineInput.extraction.stage,
+        })
+      : null;
+    const runtimeTraceMeta = execution
+      ? {
+          modelConfig: {
+            promptKey: RESEARCH_PROMPT_KEY_BY_AGENT[key],
+            modelName: execution.resolvedConfig.modelName,
+            provider: execution.resolvedConfig.provider,
+            searchMode: execution.resolvedConfig.searchMode,
+            source: execution.resolvedConfig.source,
+            revisionId: execution.resolvedConfig.revisionId,
+            stage: execution.resolvedConfig.stage,
+          },
+          searchEnforcement: {
+            requiresProviderEvidence:
+              execution.searchEnforcement.requiresProviderEvidence,
+            requiresBraveToolCall:
+              execution.searchEnforcement.requiresBraveToolCall,
+          },
+        }
+      : undefined;
 
     const context = agent.contextBuilder(pipelineInput);
     const feedbackContext = await this.loadFeedbackContext(startupId, key);
@@ -302,6 +361,13 @@ export class ResearchService {
     try {
       const result = await this.geminiResearchService.research({
         agent: key,
+        modelName: execution?.resolvedConfig.modelName,
+        model: execution?.generateTextOptions.model,
+        tools: execution?.generateTextOptions.tools,
+        toolChoice: execution?.generateTextOptions.toolChoice,
+        stopWhen: execution?.generateTextOptions.stopWhen,
+        searchEnforcement: execution?.searchEnforcement,
+        getBraveToolCallCount: execution?.usage.getBraveToolCallCount,
         prompt,
         systemPrompt: [
           promptConfig.systemPrompt || agent.systemPrompt,
@@ -318,6 +384,7 @@ export class ResearchService {
         fallback: () => agent.fallback(pipelineInput),
       });
       const outputText = result.outputText ?? this.toOutputText(result.output);
+      const traceMeta = this.mergeTraceMeta(result.meta, runtimeTraceMeta);
       await this.recordAgentTraceSafely({
         startupId,
         pipelineRunId,
@@ -329,14 +396,25 @@ export class ResearchService {
         outputJson: result.output,
         outputText,
         error: result.error,
+        fallbackReason: result.fallbackReason,
+        rawProviderError: result.rawProviderError,
+        meta: traceMeta,
         attempt: result.attempt,
         retryCount: result.retryCount,
       });
 
-      return { ...result, rejected: false, inputPrompt: prompt, outputText };
+      return {
+        ...result,
+        meta: traceMeta,
+        rejected: false,
+        modelName: execution?.resolvedConfig.modelName,
+        inputPrompt: prompt,
+        outputText,
+      };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const fallbackOutput = agent.fallback(pipelineInput);
+      const fallbackReason: PipelineFallbackReason = "UNHANDLED_AGENT_EXCEPTION";
       await this.recordAgentTraceSafely({
         startupId,
         pipelineRunId,
@@ -348,6 +426,9 @@ export class ResearchService {
         outputJson: fallbackOutput,
         outputText: this.toOutputText(fallbackOutput),
         error: message,
+        fallbackReason,
+        rawProviderError: message,
+        meta: runtimeTraceMeta,
         attempt: 1,
         retryCount: 0,
       });
@@ -356,7 +437,11 @@ export class ResearchService {
         sources: [],
         usedFallback: true,
         error: message,
+        fallbackReason,
+        rawProviderError: message,
         rejected: false,
+        meta: runtimeTraceMeta,
+        modelName: execution?.resolvedConfig.modelName,
         attempt: 1,
         retryCount: 0,
         inputPrompt: prompt,
@@ -375,10 +460,12 @@ export class ResearchService {
           ? settledResult.reason.message
           : String(settledResult.reason);
       return {
-        output: undefined as unknown as ResearchAgentOutput,
+        output: null as unknown as ResearchAgentOutput,
         sources: [],
         usedFallback: true,
         error: errorMessage,
+        fallbackReason: "UNHANDLED_AGENT_EXCEPTION",
+        rawProviderError: errorMessage,
         rejected: true,
         attempt: 1,
         retryCount: 0,
@@ -402,6 +489,7 @@ export class ResearchService {
 
   private async handleAgentResult(input: {
     startupId: string;
+    pipelineRunId?: string;
     key: ResearchAgentKey;
     agentResult: AgentRunResult;
     result: ResearchResult;
@@ -411,20 +499,21 @@ export class ResearchService {
       output?: ResearchAgentOutput;
       usedFallback: boolean;
       error?: string;
+      fallbackReason?: PipelineFallbackReason;
+      rawProviderError?: string;
       rejected: boolean;
       attempt?: number;
       retryCount?: number;
     }) => void;
-    model: string;
   }): Promise<void> {
     const {
       startupId,
+      pipelineRunId,
       key,
       agentResult,
       result,
       dedupeSources,
       onAgentComplete,
-      model,
     } = input;
 
     onAgentComplete?.({
@@ -432,6 +521,8 @@ export class ResearchService {
       output: agentResult.output,
       usedFallback: agentResult.usedFallback,
       error: agentResult.error,
+      fallbackReason: agentResult.fallbackReason,
+      rawProviderError: agentResult.rawProviderError,
       rejected: agentResult.rejected,
       attempt: agentResult.attempt,
       retryCount: agentResult.retryCount,
@@ -441,6 +532,7 @@ export class ResearchService {
     if (agentResult.rejected) {
       await this.aiDebugLog?.logAgentFailure({
         startupId,
+        pipelineRunId,
         phase: PipelinePhase.RESEARCH,
         agentKey: key,
         error: agentResult.error ?? "Unknown error",
@@ -450,11 +542,16 @@ export class ResearchService {
 
     await this.aiDebugLog?.logAgentResult({
       startupId,
+      pipelineRunId,
       phase: PipelinePhase.RESEARCH,
       agentKey: key,
       usedFallback: agentResult.usedFallback,
       error: agentResult.error,
-      model,
+      model:
+        agentResult.modelName ??
+        this.aiConfig?.getModelForPurpose(ModelPurpose.RESEARCH) ?? "unknown",
+      attempt: agentResult.attempt,
+      retryCount: agentResult.retryCount,
       output: agentResult.output,
     });
 
@@ -477,7 +574,7 @@ export class ResearchService {
 
     if (agentResult.rejected) {
       result.errors.push({ agent: key, error: agentResult.error ?? "Unknown error" });
-      return;
+      if (!agentResult.output) return;
     }
 
     if (key === "team") {
@@ -630,6 +727,9 @@ export class ResearchService {
     error?: string;
     attempt?: number;
     retryCount?: number;
+    fallbackReason?: PipelineFallbackReason;
+    rawProviderError?: string;
+    meta?: Record<string, unknown>;
   }): Promise<void> {
     if (!input.pipelineRunId) {
       return;
@@ -649,7 +749,10 @@ export class ResearchService {
         inputPrompt: input.inputPrompt,
         outputText: input.outputText,
         outputJson: input.outputJson,
+        meta: input.meta,
         error: input.error,
+        fallbackReason: input.fallbackReason,
+        rawProviderError: input.rawProviderError,
         attempt: input.attempt,
         retryCount: input.retryCount,
       });
@@ -683,6 +786,93 @@ export class ResearchService {
       return String(value);
     }
   }
+
+  private mergeTraceMeta(
+    resultMeta: Record<string, unknown> | undefined,
+    runtimeMeta: Record<string, unknown> | undefined,
+  ): Record<string, unknown> | undefined {
+    if (!resultMeta && !runtimeMeta) {
+      return undefined;
+    }
+
+    const merged: Record<string, unknown> = {
+      ...(runtimeMeta ?? {}),
+      ...(resultMeta ?? {}),
+    };
+
+    const runtimeSearch = runtimeMeta?.searchEnforcement;
+    const resultSearch = resultMeta?.searchEnforcement;
+    if (
+      runtimeSearch &&
+      typeof runtimeSearch === "object" &&
+      !Array.isArray(runtimeSearch) &&
+      resultSearch &&
+      typeof resultSearch === "object" &&
+      !Array.isArray(resultSearch)
+    ) {
+      merged.searchEnforcement = {
+        ...(runtimeSearch as Record<string, unknown>),
+        ...(resultSearch as Record<string, unknown>),
+      };
+    }
+
+    return merged;
+  }
+
+  private async resolveResearchKeys(): Promise<{
+    phase1Keys: Array<keyof typeof RESEARCH_AGENTS>;
+    phase2Keys: Array<keyof typeof PHASE_2_RESEARCH_AGENTS>;
+  }> {
+    if (!this.agentConfigService) {
+      return {
+        phase1Keys: [...PHASE_1_KEYS],
+        phase2Keys: [...PHASE_2_KEYS],
+      };
+    }
+
+    const configs = await this.agentConfigService.getEnabled(
+      "research_orchestrator",
+      "pipeline",
+    );
+
+    if (configs.length === 0) {
+      return {
+        phase1Keys: [...PHASE_1_KEYS],
+        phase2Keys: [...PHASE_2_KEYS],
+      };
+    }
+
+    const allKeys = new Set(Object.keys(ALL_RESEARCH_AGENTS));
+    const configured = configs
+      .map((config) => ({
+        key: config.agentKey,
+        executionPhase: config.executionPhase,
+      }))
+      .filter((item): item is { key: ResearchAgentKey; executionPhase: number } =>
+        allKeys.has(item.key),
+      );
+
+    if (configured.length === 0) {
+      return {
+        phase1Keys: [...PHASE_1_KEYS],
+        phase2Keys: [...PHASE_2_KEYS],
+      };
+    }
+
+    const phase1Keys = configured
+      .filter((item) => item.executionPhase <= 1)
+      .map((item) => item.key)
+      .filter((key): key is keyof typeof RESEARCH_AGENTS => key in RESEARCH_AGENTS);
+    const phase2Keys = configured
+      .filter((item) => item.executionPhase > 1)
+      .map((item) => item.key)
+      .filter((key): key is keyof typeof PHASE_2_RESEARCH_AGENTS => key in PHASE_2_RESEARCH_AGENTS);
+
+    return {
+      phase1Keys: phase1Keys.length > 0 ? phase1Keys : [...PHASE_1_KEYS],
+      phase2Keys,
+    };
+  }
 }
 
 interface AgentRunResult {
@@ -690,7 +880,11 @@ interface AgentRunResult {
   sources: SourceEntry[];
   usedFallback: boolean;
   error?: string;
+  fallbackReason?: PipelineFallbackReason;
+  rawProviderError?: string;
   rejected: boolean;
+  meta?: Record<string, unknown>;
+  modelName?: string;
   attempt?: number;
   retryCount?: number;
   inputPrompt?: string;

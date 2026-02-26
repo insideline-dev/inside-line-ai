@@ -4,10 +4,15 @@ import { generateText, Output } from "ai";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { DrizzleService } from "../../../database";
-import { startup } from "../../startup/entities";
+import { startup, StartupStage } from "../../startup/entities";
 import type { EvaluationFallbackReason } from "../interfaces/agent.interface";
-import type { EnrichmentResult } from "../interfaces/phase-results.interface";
-import { ModelPurpose, PipelinePhase } from "../interfaces/pipeline.interface";
+import type {
+  ClaraEmailContext,
+  EnrichmentResult,
+  ExtractionResult,
+  ScrapingResult,
+} from "../interfaces/phase-results.interface";
+import { PipelinePhase } from "../interfaces/pipeline.interface";
 import type { PhaseProgressCallback } from "../interfaces/progress-callback.interface";
 import {
   ENRICHMENT_GAP_ANALYSIS_SYSTEM_PROMPT,
@@ -17,8 +22,11 @@ import { AiConfigService } from "./ai-config.service";
 import { AiProviderService } from "../providers/ai-provider.service";
 import { PipelineStateService } from "./pipeline-state.service";
 import { BraveSearchService, type BraveSearchResponse } from "./brave-search.service";
+import { ClaraEmailContextService } from "./clara-email-context.service";
+import { AiModelConfigService } from "./ai-model-config.service";
 
 export const ENRICHMENT_AGENT_KEY = "gap_fill_hybrid";
+export const ENRICHMENT_PROMPT_KEY = "enrichment.gapFill";
 
 type EnrichmentWithoutDbWrites = Omit<EnrichmentResult, "dbFieldsUpdated">;
 
@@ -48,6 +56,12 @@ const enrichmentOutputSchema = z.object({
   website: z.object({ value: z.string(), confidence: z.number(), source: z.string() }).optional(),
   foundingDate: z.object({ value: z.string(), confidence: z.number(), source: z.string() }).optional(),
   headquarters: z.object({ value: z.string(), confidence: z.number(), source: z.string() }).optional(),
+  fundingTarget: z.object({ value: z.number(), confidence: z.number(), source: z.string() }).optional(),
+  contactName: z.object({ value: z.string(), confidence: z.number(), source: z.string() }).optional(),
+  contactEmail: z.object({ value: z.string(), confidence: z.number(), source: z.string() }).optional(),
+  sectorIndustry: z.object({ value: z.string(), confidence: z.number(), source: z.string() }).optional(),
+  sectorIndustryGroup: z.object({ value: z.string(), confidence: z.number(), source: z.string() }).optional(),
+  productDescription: z.object({ value: z.string(), confidence: z.number(), source: z.string() }).optional(),
   discoveredFounders: z.array(z.object({
     name: z.string(),
     role: z.string().optional(),
@@ -69,13 +83,16 @@ const enrichmentOutputSchema = z.object({
     source: z.string(),
     confidence: z.number(),
   })).default([]),
-  socialProfiles: z.object({
-    crunchbaseUrl: z.string().optional(),
-    angelListUrl: z.string().optional(),
-    twitterUrl: z.string().optional(),
-    linkedinCompanyUrl: z.string().optional(),
-    githubUrl: z.string().optional(),
-  }).default({}),
+  socialProfiles: z.preprocess(
+    (value) => (Array.isArray(value) ? {} : value ?? {}),
+    z.object({
+      crunchbaseUrl: z.string().optional(),
+      angelListUrl: z.string().optional(),
+      twitterUrl: z.string().optional(),
+      linkedinCompanyUrl: z.string().optional(),
+      githubUrl: z.string().optional(),
+    }),
+  ).default({}),
   productSignals: z.object({
     pricing: z.string().optional(),
     customers: z.array(z.string()).optional(),
@@ -107,27 +124,29 @@ const enrichmentOutputSchema = z.object({
 
 type StartupRecord = typeof startup.$inferSelect;
 
-interface CorrectableField {
+interface EnrichableField {
   dbColumn: keyof StartupRecord;
   enrichmentKey: string;
   label: string;
+  correctable: boolean;
 }
 
-const CORRECTABLE_FIELDS: CorrectableField[] = [
-  { dbColumn: "website", enrichmentKey: "website", label: "Website" },
-  { dbColumn: "description", enrichmentKey: "companyDescription", label: "Description" },
-  { dbColumn: "tagline", enrichmentKey: "tagline", label: "Tagline" },
-  { dbColumn: "industry", enrichmentKey: "industry", label: "Industry" },
-  { dbColumn: "location", enrichmentKey: "headquarters", label: "Location" },
+const ENRICHABLE_FIELDS: EnrichableField[] = [
+  { dbColumn: "website", enrichmentKey: "website", label: "Website", correctable: true },
+  { dbColumn: "description", enrichmentKey: "companyDescription", label: "Description", correctable: true },
+  { dbColumn: "tagline", enrichmentKey: "tagline", label: "Tagline", correctable: true },
+  { dbColumn: "industry", enrichmentKey: "industry", label: "Industry", correctable: true },
+  { dbColumn: "location", enrichmentKey: "headquarters", label: "Location", correctable: true },
+  { dbColumn: "stage", enrichmentKey: "stage", label: "Stage", correctable: true },
+  { dbColumn: "fundingTarget", enrichmentKey: "fundingTarget", label: "Funding Target", correctable: false },
+  { dbColumn: "contactName", enrichmentKey: "contactName", label: "Contact Name", correctable: false },
+  { dbColumn: "contactEmail", enrichmentKey: "contactEmail", label: "Contact Email", correctable: false },
+  { dbColumn: "sectorIndustry", enrichmentKey: "sectorIndustry", label: "Sector Industry", correctable: false },
+  { dbColumn: "sectorIndustryGroup", enrichmentKey: "sectorIndustryGroup", label: "Sector Industry Group", correctable: false },
+  { dbColumn: "productDescription", enrichmentKey: "productDescription", label: "Product Description", correctable: false },
 ];
 
-const GAP_FILLABLE_FIELDS: Array<{ dbColumn: keyof StartupRecord; label: string }> = [
-  { dbColumn: "website", label: "Website" },
-  { dbColumn: "description", label: "Description" },
-  { dbColumn: "tagline", label: "Tagline" },
-  { dbColumn: "industry", label: "Industry" },
-  { dbColumn: "location", label: "Location" },
-];
+const CORRECTABLE_FIELDS = ENRICHABLE_FIELDS.filter((f) => f.correctable);
 
 interface EnrichmentSynthesisResult {
   prompt: string;
@@ -136,6 +155,7 @@ interface EnrichmentSynthesisResult {
   usedTextFallback: boolean;
   attempt: number;
   retryCount: number;
+  modelConfig?: EnrichmentRuntimeModelMeta;
   error?: string;
   fallbackReason?: EvaluationFallbackReason;
   rawProviderError?: string;
@@ -146,6 +166,23 @@ interface SearchRunResult {
   responses: BraveSearchResponse[];
   totalResults: number;
   queriesRun: number;
+}
+
+interface EnrichmentRuntimeModelMeta {
+  promptKey: string;
+  modelName: string;
+  provider: string;
+  searchMode: string;
+  source: string;
+  revisionId: string | null;
+  stage: string | null;
+}
+
+export interface EnrichmentNeedAssessment {
+  shouldRun: boolean;
+  missingFields: string[];
+  suspiciousFields: string[];
+  reason: string;
 }
 
 interface GroundingSourceCarrier {
@@ -170,6 +207,7 @@ export interface EnrichmentRunOptions {
     retryCount?: number;
     fallbackReason?: EvaluationFallbackReason;
     rawProviderError?: string;
+    meta?: Record<string, unknown>;
   }) => void;
 }
 
@@ -182,8 +220,45 @@ export class EnrichmentService {
     private pipelineState: PipelineStateService,
     private braveSearch: BraveSearchService,
     private aiProvider: AiProviderService,
+    private modelConfig: AiModelConfigService,
     private aiConfig: AiConfigService,
+    private claraEmailContext: ClaraEmailContextService,
   ) {}
+
+  async assessNeed(startupId: string): Promise<EnrichmentNeedAssessment> {
+    const record = await this.loadStartupRecord(startupId);
+    const extraction = await this.pipelineState.getPhaseResult(
+      startupId,
+      PipelinePhase.EXTRACTION,
+    ) as ExtractionResult | null;
+
+    const missingFields = this.identifyMissingFields(record);
+    const suspiciousFields = this.identifySuspiciousFields(record, extraction);
+    const shouldRun = missingFields.length > 0 || suspiciousFields.length > 0;
+
+    return {
+      shouldRun,
+      missingFields,
+      suspiciousFields,
+      reason: shouldRun
+        ? `Missing fields (${missingFields.length}) or suspicious fields (${suspiciousFields.length}) require enrichment`
+        : "No missing or suspicious fields after internal checks",
+    };
+  }
+
+  buildSkippedResult(reason: string): EnrichmentResult {
+    const result = this.buildEmptyResult();
+    result.webSearchSkipped = true;
+    result.skipReason = reason;
+    result.dataProvenance = {
+      fromExtraction: [],
+      fromWebsite: [],
+      fromEmail: [],
+      fromWebSearch: [],
+      fromAiSynthesis: [],
+    };
+    return result;
+  }
 
   async run(
     startupId: string,
@@ -194,26 +269,20 @@ export class EnrichmentService {
     let renderedPrompt: string | undefined;
 
     try {
-      const [record] = await this.drizzle.db
-        .select()
-        .from(startup)
-        .where(eq(startup.id, startupId))
-        .limit(1);
-
-      if (!record) {
-        throw new Error(`Startup ${startupId} not found`);
-      }
+      const record = await this.loadStartupRecord(startupId);
 
       const extraction = await this.pipelineState.getPhaseResult(
         startupId,
         PipelinePhase.EXTRACTION,
-      );
+      ) as ExtractionResult | null;
+      const scraping = await this.pipelineState.getPhaseResult(
+        startupId,
+        PipelinePhase.SCRAPING,
+      ) as ScrapingResult | null;
 
+      // Step 1: Gap analysis
       options?.onStepProgress?.onStepStart("gap_analysis", {
-        inputJson: {
-          startupId,
-          startupName: record.name,
-        },
+        inputJson: { startupId, startupName: record.name },
       });
       let missingFields: string[] = [];
       let suspiciousFields: string[] = [];
@@ -221,25 +290,13 @@ export class EnrichmentService {
         missingFields = this.identifyMissingFields(record);
         suspiciousFields = this.identifySuspiciousFields(record, extraction);
         options?.onStepProgress?.onStepComplete("gap_analysis", {
-          summary: {
-            missing: missingFields,
-            suspicious: suspiciousFields,
-          },
-          outputJson: {
-            missing: missingFields,
-            suspicious: suspiciousFields,
-          },
+          summary: { missing: missingFields, suspicious: suspiciousFields },
+          outputJson: { missing: missingFields, suspicious: suspiciousFields },
         });
       } catch (error) {
-        options?.onStepProgress?.onStepFailed(
-          "gap_analysis",
-          this.errorMessage(error),
-          {
-            outputJson: {
-              error: this.errorMessage(error),
-            },
-          },
-        );
+        options?.onStepProgress?.onStepFailed("gap_analysis", this.errorMessage(error), {
+          outputJson: { error: this.errorMessage(error) },
+        });
         throw error;
       }
 
@@ -247,109 +304,159 @@ export class EnrichmentService {
         `[Enrichment] Gap analysis | missing=${missingFields.length} | suspicious=${suspiciousFields.length}`,
       );
 
-      // Run Brave searches in parallel (if configured)
-      options?.onStepProgress?.onStepStart("web_search", {
-        inputJson: {
-          startupName: record.name,
-        },
+      const gaps = new Set(missingFields);
+      const dataProvenance: NonNullable<EnrichmentResult["dataProvenance"]> = {
+        fromExtraction: [],
+        fromWebsite: [],
+        fromEmail: [],
+        fromWebSearch: [],
+        fromAiSynthesis: [],
+      };
+
+      // Step 2: Resolve from extraction
+      options?.onStepProgress?.onStepStart("resolve_extraction", {
+        inputJson: { gapsBefore: Array.from(gaps) },
       });
-      let searchResults: SearchRunResult;
+      const extractionResolved = this.resolveFromExtraction(extraction, gaps);
+      dataProvenance.fromExtraction = Array.from(extractionResolved.keys());
+      options?.onStepProgress?.onStepComplete("resolve_extraction", {
+        summary: { resolved: dataProvenance.fromExtraction },
+        outputJson: { resolved: dataProvenance.fromExtraction, remainingGaps: Array.from(gaps) },
+      });
+
+      // Step 3: Resolve from company website context (if available from scraping phase)
+      options?.onStepProgress?.onStepStart("resolve_website", {
+        inputJson: { gapsBefore: Array.from(gaps), hasScrapingContext: scraping !== null },
+      });
+      const websiteResolved = this.resolveFromWebsiteContext(scraping, gaps);
+      dataProvenance.fromWebsite = Array.from(websiteResolved.keys());
+      options?.onStepProgress?.onStepComplete("resolve_website", {
+        summary: { resolved: dataProvenance.fromWebsite },
+        outputJson: { resolved: dataProvenance.fromWebsite, remainingGaps: Array.from(gaps) },
+      });
+
+      // Step 4: Resolve from email context
+      options?.onStepProgress?.onStepStart("resolve_email", {
+        inputJson: { gapsBefore: Array.from(gaps) },
+      });
+      let emailContext: ClaraEmailContext | null = null;
       try {
-        searchResults = await this.runSearches(record);
-        options?.onStepProgress?.onStepComplete("web_search", {
-          summary: {
-            queriesRun: searchResults.queriesRun,
-            totalResults: searchResults.totalResults,
-          },
-          outputJson: {
-            queriesRun: searchResults.queriesRun,
-            totalResults: searchResults.totalResults,
-            responses: searchResults.responses,
-          },
-        });
+        emailContext = await this.claraEmailContext.getEmailContext(startupId);
       } catch (error) {
-        options?.onStepProgress?.onStepFailed(
-          "web_search",
-          this.errorMessage(error),
-          {
-            outputJson: {
-              error: this.errorMessage(error),
-            },
-          },
-        );
-        throw error;
+        this.logger.warn(`[Enrichment] Failed to load email context: ${this.errorMessage(error)}`);
+      }
+      const emailResolved = this.resolveFromEmailContext(emailContext, gaps);
+      dataProvenance.fromEmail = Array.from(emailResolved.keys());
+      options?.onStepProgress?.onStepComplete("resolve_email", {
+        summary: { hasEmailContext: emailContext !== null, resolved: dataProvenance.fromEmail },
+        outputJson: { resolved: dataProvenance.fromEmail, remainingGaps: Array.from(gaps) },
+      });
+
+      // Merge all cascade-resolved fields
+      const cascadeResolved = new Map([
+        ...extractionResolved,
+        ...websiteResolved,
+        ...emailResolved,
+      ]);
+
+      // Early termination check
+      let webSearchSkipped = false;
+      let searchResults: SearchRunResult;
+      let synthesis: EnrichmentSynthesisResult;
+
+      if (gaps.size === 0 && suspiciousFields.length === 0) {
+        this.logger.log("[Enrichment] All gaps resolved from internal sources — skipping web search and AI synthesis");
+        webSearchSkipped = true;
+
+        searchResults = {
+          formattedResults: "No web search needed — all gaps resolved from internal sources.",
+          responses: [],
+          totalResults: 0,
+          queriesRun: 0,
+        };
+
+        synthesis = {
+          prompt: "",
+          output: this.buildSkippedResult("No remaining gaps after internal source resolution"),
+          usedFallback: false,
+          usedTextFallback: false,
+          attempt: 0,
+          retryCount: 0,
+        };
+      } else {
+        // Step 4: Web search (dynamic queries based on remaining gaps)
+        options?.onStepProgress?.onStepStart("web_search", {
+          inputJson: { startupName: record.name, remainingGaps: Array.from(gaps) },
+        });
+        try {
+          searchResults = await this.runSearches(record, gaps);
+          options?.onStepProgress?.onStepComplete("web_search", {
+            summary: { queriesRun: searchResults.queriesRun, totalResults: searchResults.totalResults },
+            outputJson: { queriesRun: searchResults.queriesRun, totalResults: searchResults.totalResults, responses: searchResults.responses },
+          });
+        } catch (error) {
+          options?.onStepProgress?.onStepFailed("web_search", this.errorMessage(error), {
+            outputJson: { error: this.errorMessage(error) },
+          });
+          throw error;
+        }
+
+        // Step 5: AI synthesis
+        options?.onStepProgress?.onStepStart("ai_synthesis", {
+          inputJson: { remainingGaps: Array.from(gaps), suspiciousFields, searchQueriesRun: searchResults.queriesRun },
+        });
+        try {
+          synthesis = await this.synthesize(
+            record,
+            extraction,
+            emailContext,
+            cascadeResolved,
+            gaps,
+            suspiciousFields,
+            searchResults,
+          );
+          options?.onStepProgress?.onStepComplete("ai_synthesis", {
+            summary: { attempt: synthesis.attempt, usedTextFallback: synthesis.usedTextFallback },
+            outputJson: synthesis.output,
+            outputText: this.serializeOutput(synthesis.output),
+          });
+        } catch (error) {
+          options?.onStepProgress?.onStepFailed("ai_synthesis", this.errorMessage(error), {
+            outputJson: { error: this.errorMessage(error) },
+          });
+          throw error;
+        }
       }
 
-      // Synthesize via Gemini
-      options?.onStepProgress?.onStepStart("ai_synthesis", {
-        inputJson: {
-          missingFields,
-          suspiciousFields,
-          searchQueriesRun: searchResults.queriesRun,
-        },
-      });
-      let synthesis: EnrichmentSynthesisResult;
-      try {
-        synthesis = await this.synthesize(
-          record,
-          extraction,
-          missingFields,
-          suspiciousFields,
-          searchResults,
-        );
-        options?.onStepProgress?.onStepComplete("ai_synthesis", {
-          summary: {
-            attempt: synthesis.attempt,
-            usedTextFallback: synthesis.usedTextFallback,
-          },
-          outputJson: synthesis.output,
-          outputText: this.serializeOutput(synthesis.output),
-        });
-      } catch (error) {
-        options?.onStepProgress?.onStepFailed(
-          "ai_synthesis",
-          this.errorMessage(error),
-          {
-            outputJson: {
-              error: this.errorMessage(error),
-            },
-          },
-        );
-        throw error;
-      }
       renderedPrompt = synthesis.prompt;
       const enrichmentResult = synthesis.output;
+      enrichmentResult.dataProvenance = dataProvenance;
+      enrichmentResult.webSearchSkipped = webSearchSkipped;
+      if (synthesis.modelConfig) {
+        enrichmentResult.runtimeModel = synthesis.modelConfig;
+      }
 
-      // Apply DB writes
+      // Step 6: DB writes
       options?.onStepProgress?.onStepStart("db_writes", {
         inputJson: enrichmentResult,
       });
       let dbWriteResult: { fieldsUpdated: string[]; foundersAdded: number };
       try {
-        dbWriteResult = await this.applyDbWrites(record, enrichmentResult);
+        dbWriteResult = await this.applyDbWrites(record, enrichmentResult, cascadeResolved);
         options?.onStepProgress?.onStepComplete("db_writes", {
-          summary: {
-            fieldsUpdated: dbWriteResult.fieldsUpdated,
-            foundersAdded: dbWriteResult.foundersAdded,
-          },
+          summary: { fieldsUpdated: dbWriteResult.fieldsUpdated, foundersAdded: dbWriteResult.foundersAdded },
           outputJson: dbWriteResult,
         });
       } catch (error) {
-        options?.onStepProgress?.onStepFailed(
-          "db_writes",
-          this.errorMessage(error),
-          {
-            outputJson: {
-              error: this.errorMessage(error),
-            },
-          },
-        );
+        options?.onStepProgress?.onStepFailed("db_writes", this.errorMessage(error), {
+          outputJson: { error: this.errorMessage(error) },
+        });
         throw error;
       }
       enrichmentResult.dbFieldsUpdated = dbWriteResult.fieldsUpdated;
 
       this.logger.log(
-        `[Enrichment] Completed | enriched=${enrichmentResult.fieldsEnriched.length} | corrected=${enrichmentResult.fieldsCorrected.length} | stillMissing=${enrichmentResult.fieldsStillMissing.length} | dbUpdated=${dbWriteResult.fieldsUpdated.length}`,
+        `[Enrichment] Completed | enriched=${enrichmentResult.fieldsEnriched.length} | corrected=${enrichmentResult.fieldsCorrected.length} | stillMissing=${enrichmentResult.fieldsStillMissing.length} | dbUpdated=${dbWriteResult.fieldsUpdated.length} | webSearchSkipped=${webSearchSkipped}`,
       );
 
       options?.onAgentComplete?.({
@@ -363,6 +470,9 @@ export class EnrichmentService {
         retryCount: synthesis.retryCount,
         fallbackReason: synthesis.fallbackReason,
         rawProviderError: synthesis.rawProviderError,
+        meta: synthesis.modelConfig
+          ? { modelConfig: synthesis.modelConfig }
+          : undefined,
       });
 
       return enrichmentResult;
@@ -385,6 +495,13 @@ export class EnrichmentService {
     if (!record.tagline) missing.push("tagline");
     if (!record.industry) missing.push("industry");
     if (!record.location) missing.push("location");
+    if (!record.stage) missing.push("stage");
+    if (!record.fundingTarget) missing.push("fundingTarget");
+    if (!record.contactName) missing.push("contactName");
+    if (!record.contactEmail) missing.push("contactEmail");
+    if (!record.sectorIndustry) missing.push("sectorIndustry");
+    if (!record.sectorIndustryGroup) missing.push("sectorIndustryGroup");
+    if (!record.productDescription) missing.push("productDescription");
     if (!record.teamMembers?.length) missing.push("teamMembers");
     return missing;
   }
@@ -416,7 +533,299 @@ export class EnrichmentService {
     return suspicious;
   }
 
-  private async runSearches(record: StartupRecord): Promise<SearchRunResult> {
+  private resolveFromExtraction(
+    extraction: ExtractionResult | null,
+    gaps: Set<string>,
+  ): Map<string, { value: string | number; source: string; confidence: number }> {
+    const resolved = new Map<string, { value: string | number; source: string; confidence: number }>();
+    if (!extraction) return resolved;
+
+    const mappings: Array<{ gapField: string; value: unknown; source: string }> = [
+      { gapField: "website", value: extraction.website, source: "pitch deck" },
+      { gapField: "tagline", value: extraction.tagline, source: "pitch deck" },
+      { gapField: "industry", value: extraction.industry, source: "pitch deck" },
+      { gapField: "stage", value: extraction.stage, source: "pitch deck" },
+      { gapField: "location", value: extraction.location, source: "pitch deck" },
+      { gapField: "fundingTarget", value: extraction.fundingAsk, source: "pitch deck" },
+    ];
+
+    if (extraction.startupContext) {
+      const ctx = extraction.startupContext;
+      mappings.push(
+        { gapField: "sectorIndustry", value: ctx.sectorIndustry, source: "submission form" },
+        { gapField: "sectorIndustryGroup", value: ctx.sectorIndustryGroup, source: "submission form" },
+        { gapField: "contactName", value: ctx.contactName, source: "submission form" },
+        { gapField: "contactEmail", value: ctx.contactEmail, source: "submission form" },
+        { gapField: "productDescription", value: ctx.productDescription, source: "submission form" },
+      );
+    }
+
+    if (gaps.has("teamMembers") && extraction.founderNames?.length) {
+      resolved.set("teamMembers", {
+        value: extraction.founderNames.join(", "),
+        source: "pitch deck",
+        confidence: 0.85,
+      });
+      gaps.delete("teamMembers");
+    }
+
+    for (const { gapField, value, source } of mappings) {
+      if (!gaps.has(gapField)) continue;
+      const strValue = typeof value === "number" ? value : String(value ?? "").trim();
+      if (!strValue || strValue === "0") continue;
+      resolved.set(gapField, { value: strValue, source, confidence: 0.85 });
+      gaps.delete(gapField);
+    }
+
+    return resolved;
+  }
+
+  private resolveFromEmailContext(
+    emailContext: ClaraEmailContext | null,
+    gaps: Set<string>,
+  ): Map<string, { value: string | number; source: string; confidence: number }> {
+    const resolved = new Map<string, { value: string | number; source: string; confidence: number }>();
+    if (!emailContext) {
+      return resolved;
+    }
+
+    const investorEmails = new Set(
+      emailContext.conversations
+        .map((conv) => conv.investorEmail?.trim().toLowerCase())
+        .filter((value): value is string => Boolean(value)),
+    );
+
+    const corpusParts: string[] = [emailContext.summary];
+    for (const conversation of emailContext.conversations) {
+      for (const message of conversation.messages) {
+        if (message.subject) corpusParts.push(message.subject);
+        if (message.bodyText) corpusParts.push(message.bodyText);
+      }
+    }
+    const corpus = corpusParts.join("\n");
+
+    if (gaps.has("website")) {
+      const website = this.extractFirstUrlFromText(corpus);
+      if (website) {
+        resolved.set("website", {
+          value: website,
+          source: "email context",
+          confidence: 0.7,
+        });
+        gaps.delete("website");
+      }
+    }
+
+    if (gaps.has("contactEmail")) {
+      const contactEmail = this.extractEmailsFromText(corpus).find((email) => {
+        const normalized = email.toLowerCase();
+        return !investorEmails.has(normalized) && !normalized.startsWith("noreply@");
+      });
+      if (contactEmail) {
+        resolved.set("contactEmail", {
+          value: contactEmail,
+          source: "email context",
+          confidence: 0.78,
+        });
+        gaps.delete("contactEmail");
+      }
+    }
+
+    if (gaps.has("contactName")) {
+      const contactEmail = resolved.get("contactEmail")?.value;
+      if (typeof contactEmail === "string") {
+        const inferred = this.inferContactNameFromEmail(contactEmail);
+        if (inferred) {
+          resolved.set("contactName", {
+            value: inferred,
+            source: "email context",
+            confidence: 0.62,
+          });
+          gaps.delete("contactName");
+        }
+      }
+    }
+
+    if (gaps.has("stage")) {
+      const stageCandidate = this.extractStageFromText(corpus);
+      if (stageCandidate) {
+        resolved.set("stage", {
+          value: stageCandidate,
+          source: "email context",
+          confidence: 0.62,
+        });
+        gaps.delete("stage");
+      }
+    }
+
+    return resolved;
+  }
+
+  private resolveFromWebsiteContext(
+    scraping: ScrapingResult | null,
+    gaps: Set<string>,
+  ): Map<string, { value: string | number; source: string; confidence: number }> {
+    const resolved = new Map<string, { value: string | number; source: string; confidence: number }>();
+    const website = scraping?.website;
+    const websiteUrl = website?.url?.trim() || scraping?.websiteUrl?.trim();
+
+    if (gaps.has("website") && websiteUrl) {
+      resolved.set("website", {
+        value: websiteUrl,
+        source: "company website",
+        confidence: 0.9,
+      });
+      gaps.delete("website");
+    }
+
+    if (website) {
+      const websiteDescription = website.description?.trim();
+      if (gaps.has("description") && websiteDescription) {
+        resolved.set("description", {
+          value: websiteDescription,
+          source: "company website",
+          confidence: 0.76,
+        });
+        gaps.delete("description");
+      }
+
+      if (gaps.has("productDescription") && websiteDescription) {
+        resolved.set("productDescription", {
+          value: websiteDescription,
+          source: "company website",
+          confidence: 0.72,
+        });
+        gaps.delete("productDescription");
+      }
+
+      if (gaps.has("teamMembers") && Array.isArray(website.teamBios) && website.teamBios.length > 0) {
+        const names = website.teamBios
+          .map((member) => member.name?.trim())
+          .filter((name): name is string => Boolean(name));
+        if (names.length > 0) {
+          resolved.set("teamMembers", {
+            value: names.join(", "),
+            source: "company website",
+            confidence: 0.8,
+          });
+          gaps.delete("teamMembers");
+        }
+      }
+
+      if (gaps.has("contactEmail")) {
+        const email = this.extractEmailsFromText(this.collectScrapedWebsiteText(website))[0];
+        if (email) {
+          resolved.set("contactEmail", {
+            value: email,
+            source: "company website",
+            confidence: 0.7,
+          });
+          gaps.delete("contactEmail");
+        }
+      }
+    }
+
+    return resolved;
+  }
+
+  private mapStageToEnum(value: string): string | null {
+    const normalized = value.toLowerCase().replace(/[\s-]+/g, "_");
+    const mapping: Record<string, string> = {
+      pre_seed: StartupStage.PRE_SEED,
+      preseed: StartupStage.PRE_SEED,
+      seed: StartupStage.SEED,
+      series_a: StartupStage.SERIES_A,
+      series_b: StartupStage.SERIES_B,
+      series_c: StartupStage.SERIES_C,
+      series_d: StartupStage.SERIES_D,
+      series_e: StartupStage.SERIES_E,
+      series_f: StartupStage.SERIES_F_PLUS,
+      series_f_plus: StartupStage.SERIES_F_PLUS,
+      "series_f+": StartupStage.SERIES_F_PLUS,
+    };
+    return mapping[normalized] ?? null;
+  }
+
+  private async resolveRuntimeModelConfig(
+    stage?: string | null,
+  ): Promise<EnrichmentRuntimeModelMeta> {
+    const resolved = await this.modelConfig.resolveConfig({
+      key: ENRICHMENT_PROMPT_KEY,
+      stage: stage ?? null,
+    });
+    return {
+      promptKey: ENRICHMENT_PROMPT_KEY,
+      modelName: resolved.modelName,
+      provider: resolved.provider,
+      searchMode: resolved.searchMode,
+      source: resolved.source,
+      revisionId: resolved.revisionId,
+      stage: resolved.stage,
+    };
+  }
+
+  private extractFirstUrlFromText(text: string): string | null {
+    const match = text.match(/https?:\/\/[^\s)]+/i);
+    return match?.[0]?.trim() ?? null;
+  }
+
+  private extractEmailsFromText(text: string): string[] {
+    const matches = text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) ?? [];
+    const dedupe = new Set(matches.map((email) => email.trim().toLowerCase()));
+    return Array.from(dedupe.values());
+  }
+
+  private inferContactNameFromEmail(email: string): string | null {
+    const local = email.split("@")[0]?.trim();
+    if (!local) {
+      return null;
+    }
+    const parts = local
+      .split(/[._-]+/)
+      .map((part) => part.trim())
+      .filter((part) => part.length > 1 && !/\d/.test(part));
+    if (parts.length < 2) {
+      return null;
+    }
+    return parts
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
+  }
+
+  private extractStageFromText(text: string): string | null {
+    const lowered = text.toLowerCase();
+    const candidates = [
+      "pre-seed",
+      "pre seed",
+      "seed",
+      "series a",
+      "series b",
+      "series c",
+      "series d",
+      "series e",
+      "series f",
+      "series f+",
+    ];
+    for (const candidate of candidates) {
+      if (lowered.includes(candidate)) {
+        return candidate;
+      }
+    }
+    return null;
+  }
+
+  private collectScrapedWebsiteText(website: NonNullable<ScrapingResult["website"]>): string {
+    const segments = [website.description, website.fullText];
+    for (const subpage of website.subpages ?? []) {
+      segments.push(subpage.content);
+    }
+    return segments.filter((segment): segment is string => Boolean(segment)).join("\n");
+  }
+
+  private async runSearches(
+    record: StartupRecord,
+    remainingGaps?: Set<string>,
+  ): Promise<SearchRunResult> {
     if (!this.braveSearch.isConfigured()) {
       this.logger.warn("[Enrichment] Brave Search not configured — skipping web searches");
       return {
@@ -428,13 +837,25 @@ export class EnrichmentService {
     }
 
     const companyName = record.name;
-    const queries = [
+    const queries: Array<{ query: string; options: { count: number } }> = [
       { query: `${companyName} startup company profile`, options: { count: 5 } },
-      { query: `${companyName} founder CEO LinkedIn site:linkedin.com OR site:crunchbase.com`, options: { count: 5 } },
-      { query: `${companyName} funding round raised site:crunchbase.com OR site:techcrunch.com`, options: { count: 5 } },
-      { query: `${companyName} pitch deck site:docsend.com OR site:slideshare.net`, options: { count: 3 } },
-      { query: `${companyName} product pricing customers reviews`, options: { count: 5 } },
     ];
+
+    if (remainingGaps?.has("teamMembers") || remainingGaps?.has("contactName")) {
+      queries.push({ query: `${companyName} founder CEO team site:crunchbase.com`, options: { count: 5 } });
+    }
+    if (remainingGaps?.has("fundingTarget") || remainingGaps?.has("stage")) {
+      queries.push({ query: `${companyName} funding round raised series site:crunchbase.com OR site:techcrunch.com`, options: { count: 5 } });
+    }
+    if (remainingGaps?.has("industry") || remainingGaps?.has("description") || remainingGaps?.has("productDescription")) {
+      queries.push({ query: `${companyName} company product description`, options: { count: 5 } });
+    }
+    if (remainingGaps?.has("website")) {
+      queries.push({ query: `${companyName} official website`, options: { count: 3 } });
+    }
+    if (remainingGaps?.has("location")) {
+      queries.push({ query: `${companyName} headquarters location office`, options: { count: 3 } });
+    }
 
     const results: BraveSearchResponse[] = [];
     const settled = await Promise.allSettled(
@@ -445,7 +866,7 @@ export class EnrichmentService {
 
     for (const result of settled) {
       if (result.status === "fulfilled") {
-        results.push(result.value);
+        results.push(this.filterSearchResponse(result.value));
       } else {
         const reason = result.reason instanceof Error ? result.reason.message : String(result.reason);
         this.logger.warn(`[Enrichment] Brave search failed: ${reason}`);
@@ -483,10 +904,30 @@ export class EnrichmentService {
     return sections.join("\n");
   }
 
+  private filterSearchResponse(response: BraveSearchResponse): BraveSearchResponse {
+    return {
+      ...response,
+      results: response.results.filter((result) => !this.isBlockedEnrichmentDomain(result.url)),
+    };
+  }
+
+  private isBlockedEnrichmentDomain(url: string): boolean {
+    const normalized = this.normalizeSourceUrl(url);
+    if (!normalized) {
+      return true;
+    }
+    return (
+      this.urlMatchesDomain(normalized, "slideshare.net") ||
+      this.urlMatchesDomain(normalized, "docsend.com")
+    );
+  }
+
   private async synthesize(
     record: StartupRecord,
-    extraction: { rawText?: string; founderNames?: string[] } | null,
-    missingFields: string[],
+    extraction: ExtractionResult | null,
+    emailContext: ClaraEmailContext | null,
+    resolvedFields: Map<string, { value: string | number; source: string; confidence: number }>,
+    remainingGaps: Set<string>,
     suspiciousFields: string[],
     searchResults: SearchRunResult,
   ): Promise<EnrichmentSynthesisResult> {
@@ -494,9 +935,41 @@ export class EnrichmentService {
       ? record.teamMembers.map((m) => `- ${m.name} (${m.role}) ${m.linkedinUrl || ""}`).join("\n")
       : "No team members known";
 
-    const extractionSummary = extraction
-      ? `Extracted from pitch deck: ${extraction.founderNames?.join(", ") || "no founders"}\nRaw text length: ${extraction.rawText?.length ?? 0} chars`
+    const extractionData = extraction
+      ? [
+          `Company: ${extraction.companyName || "N/A"}`,
+          `Tagline: ${extraction.tagline || "N/A"}`,
+          `Industry: ${extraction.industry || "N/A"}`,
+          `Stage: ${extraction.stage || "N/A"}`,
+          `Location: ${extraction.location || "N/A"}`,
+          `Website: ${extraction.website || "N/A"}`,
+          `Founders: ${extraction.founderNames?.join(", ") || "N/A"}`,
+          `Funding Ask: ${extraction.fundingAsk ? `$${extraction.fundingAsk}` : "N/A"}`,
+          `Raw text length: ${extraction.rawText?.length ?? 0} chars`,
+        ].join("\n")
       : "No extraction data available";
+
+    const formContext = extraction?.startupContext
+      ? [
+          `Sector Industry: ${extraction.startupContext.sectorIndustry || "N/A"}`,
+          `Sector Group: ${extraction.startupContext.sectorIndustryGroup || "N/A"}`,
+          `Contact: ${extraction.startupContext.contactName || "N/A"} (${extraction.startupContext.contactEmail || "N/A"})`,
+          `Product Description: ${extraction.startupContext.productDescription || "N/A"}`,
+          `TRL: ${extraction.startupContext.technologyReadinessLevel || "N/A"}`,
+        ].join("\n")
+      : "No submission form data available";
+
+    const emailContextText = emailContext?.summary || "No email conversation data available";
+
+    const resolvedFromInternal = resolvedFields.size > 0
+      ? Array.from(resolvedFields.entries())
+          .map(([field, data]) => `- ${field}: "${data.value}" (source: ${data.source}, confidence: ${data.confidence})`)
+          .join("\n")
+      : "None";
+
+    const remainingGapsText = remainingGaps.size > 0
+      ? Array.from(remainingGaps).join(", ")
+      : "None";
 
     const prompt = ENRICHMENT_GAP_ANALYSIS_USER_PROMPT_TEMPLATE
       .replace("{{companyName}}", record.name || "Unknown")
@@ -509,16 +982,22 @@ export class EnrichmentService {
       .replace("{{foundingDate}}", "")
       .replace("{{teamSize}}", String(record.teamSize ?? 0))
       .replace("{{fundingTarget}}", String(record.fundingTarget ?? 0))
+      .replace("{{sectorIndustry}}", record.sectorIndustry || "")
+      .replace("{{productDescription}}", record.productDescription || "")
+      .replace("{{contactName}}", record.contactName || "")
+      .replace("{{contactEmail}}", record.contactEmail || "")
       .replace("{{teamMembers}}", teamMembersText)
-      .replace("{{extractionSummary}}", extractionSummary)
-      .replace("{{missingFields}}", missingFields.join(", ") || "None")
+      .replace("{{extractionData}}", extractionData)
+      .replace("{{formContext}}", formContext)
+      .replace("{{emailContext}}", emailContextText)
+      .replace("{{resolvedFromInternal}}", resolvedFromInternal)
+      .replace("{{remainingGaps}}", remainingGapsText)
       .replace("{{suspiciousFields}}", suspiciousFields.join("\n") || "None")
       .replace("{{searchResults}}", searchResults.formattedResults);
 
-    const modelName = this.aiConfig.getModelForPurpose(ModelPurpose.ENRICHMENT);
-    const provider = this.aiProvider.resolveModelForPurpose(
-      ModelPurpose.ENRICHMENT,
-    );
+    const runtimeModel = await this.resolveRuntimeModelConfig(record.stage);
+    const modelName = runtimeModel.modelName;
+    const provider = this.aiProvider.resolveModel(modelName);
     const canUseGoogleSearchTool = this.isGeminiModel(modelName);
     const maxAttempts = this.getEnrichmentMaxAttempts();
     let lastError = "Unknown enrichment synthesis error";
@@ -535,6 +1014,7 @@ export class EnrichmentService {
         model: provider,
         canUseGoogleSearchTool,
       });
+      const missingFields = Array.from(remainingGaps);
       const structuredError = structured.success
         ? this.tryFinalizeSynthesisCandidate({
             candidate: structured.data,
@@ -556,6 +1036,7 @@ export class EnrichmentService {
             usedTextFallback: false,
             attempt,
             retryCount: Math.max(0, attempt - 1),
+            modelConfig: runtimeModel,
           };
         }
       }
@@ -586,6 +1067,7 @@ export class EnrichmentService {
             usedTextFallback: true,
             attempt,
             retryCount: Math.max(0, attempt - 1),
+            modelConfig: runtimeModel,
           };
         }
       }
@@ -624,6 +1106,7 @@ export class EnrichmentService {
       usedTextFallback: false,
       attempt: maxAttempts,
       retryCount: Math.max(0, maxAttempts - 1),
+      modelConfig: runtimeModel,
       fallbackReason: lastFallbackReason,
       rawProviderError: this.sanitizeRawProviderError(lastError),
       error: this.fallbackMessage(lastFallbackReason),
@@ -742,6 +1225,12 @@ export class EnrichmentService {
       website: candidate.website,
       foundingDate: candidate.foundingDate,
       headquarters: candidate.headquarters,
+      fundingTarget: candidate.fundingTarget,
+      contactName: candidate.contactName,
+      contactEmail: candidate.contactEmail,
+      sectorIndustry: candidate.sectorIndustry,
+      sectorIndustryGroup: candidate.sectorIndustryGroup,
+      productDescription: candidate.productDescription,
       discoveredFounders: candidate.discoveredFounders ?? [],
       fundingHistory: candidate.fundingHistory ?? [],
       pitchDeckUrls: candidate.pitchDeckUrls ?? [],
@@ -963,7 +1452,7 @@ export class EnrichmentService {
     backup: Partial<EnrichmentWithoutDbWrites>,
   ): EnrichmentWithoutDbWrites {
     const merged = this.coerceEnrichmentShape(primary);
-    const scalarKeys: Array<
+    const stringScalarKeys: Array<
       | "companyName"
       | "companyDescription"
       | "tagline"
@@ -972,6 +1461,11 @@ export class EnrichmentService {
       | "website"
       | "foundingDate"
       | "headquarters"
+      | "contactName"
+      | "contactEmail"
+      | "sectorIndustry"
+      | "sectorIndustryGroup"
+      | "productDescription"
     > = [
       "companyName",
       "companyDescription",
@@ -981,12 +1475,21 @@ export class EnrichmentService {
       "website",
       "foundingDate",
       "headquarters",
+      "contactName",
+      "contactEmail",
+      "sectorIndustry",
+      "sectorIndustryGroup",
+      "productDescription",
     ];
 
-    for (const key of scalarKeys) {
+    for (const key of stringScalarKeys) {
       if (!merged[key] && backup[key]) {
         merged[key] = backup[key];
       }
+    }
+
+    if (!merged.fundingTarget && backup.fundingTarget) {
+      merged.fundingTarget = backup.fundingTarget;
     }
 
     merged.discoveredFounders = this.normalizeFounders([
@@ -1046,6 +1549,9 @@ export class EnrichmentService {
         if (!normalizedUrl) {
           continue;
         }
+        if (this.isBlockedEnrichmentDomain(normalizedUrl)) {
+          continue;
+        }
 
         sourceMap.set(normalizedUrl, {
           url: normalizedUrl,
@@ -1067,20 +1573,6 @@ export class EnrichmentService {
         }
         if (!socialProfiles.githubUrl && this.urlMatchesDomain(normalizedUrl, "github.com")) {
           socialProfiles.githubUrl = normalizedUrl;
-        }
-
-        if (
-          this.urlMatchesDomain(normalizedUrl, "docsend.com") ||
-          this.urlMatchesDomain(normalizedUrl, "slideshare.net")
-        ) {
-          if (!pitchDeckMap.has(normalizedUrl)) {
-            const tier = this.classifySourceTier(normalizedUrl, officialWebsite);
-            pitchDeckMap.set(normalizedUrl, {
-              url: normalizedUrl,
-              source: normalizedUrl,
-              confidence: tier === "tier1" ? 0.85 : tier === "tier2" ? 0.72 : 0.58,
-            });
-          }
         }
 
         const founder = this.extractFounderFromSearchResult(
@@ -1536,7 +2028,7 @@ export class EnrichmentService {
   }
 
   private passesCorrectionEvidenceGate(
-    fieldDef: CorrectableField,
+    fieldDef: EnrichableField,
     enrichment: EnrichmentResult,
     officialWebsite?: string,
   ): boolean {
@@ -1576,20 +2068,47 @@ export class EnrichmentService {
   private async applyDbWrites(
     record: StartupRecord,
     enrichment: EnrichmentResult,
+    cascadeResolved: Map<string, { value: string | number; source: string; confidence: number }>,
   ): Promise<{ fieldsUpdated: string[]; foundersAdded: number }> {
     const correctionThreshold = this.aiConfig.getEnrichmentCorrectionThreshold();
     const gapFillThreshold = 0.3;
     const updates: Record<string, unknown> = {};
     const updatedFields: string[] = [];
-    let foundersAdded = 0;
+    const foundersAdded = 0;
 
-    // Gap fills
-    for (const { dbColumn, label } of GAP_FILLABLE_FIELDS) {
-      const enrichmentKey = CORRECTABLE_FIELDS.find((f) => f.dbColumn === dbColumn)?.enrichmentKey;
-      if (!enrichmentKey) continue;
+    // Apply cascade-resolved data (high confidence, from extraction/email)
+    for (const [field, data] of cascadeResolved) {
+      if (field === "teamMembers") continue; // handled separately below
+      const fieldDef = ENRICHABLE_FIELDS.find((f) =>
+        f.dbColumn === field || f.enrichmentKey === field,
+      );
+      if (!fieldDef) continue;
+
+      const currentValue = record[fieldDef.dbColumn];
+      const isEmpty = currentValue === null || currentValue === undefined || currentValue === "";
+      if (!isEmpty) continue;
+
+      // Special handling for stage: must map to enum
+      if (fieldDef.dbColumn === "stage" && typeof data.value === "string") {
+        const mapped = this.mapStageToEnum(data.value);
+        if (!mapped) continue;
+        updates[fieldDef.dbColumn] = mapped;
+      } else if (fieldDef.dbColumn === "fundingTarget") {
+        const numValue = typeof data.value === "number" ? data.value : Number(data.value);
+        if (!Number.isFinite(numValue) || numValue <= 0) continue;
+        updates[fieldDef.dbColumn] = Math.round(numValue);
+      } else {
+        updates[fieldDef.dbColumn] = data.value;
+      }
+      updatedFields.push(`${fieldDef.label} (cascade: ${data.source}, confidence=${data.confidence.toFixed(2)})`);
+    }
+
+    // AI enrichment gap fills
+    for (const { dbColumn, enrichmentKey, label } of ENRICHABLE_FIELDS) {
+      if (updates[dbColumn] !== undefined) continue; // already filled by cascade
 
       const enrichedField = enrichment[enrichmentKey as keyof EnrichmentResult] as
-        | { value: string; confidence: number }
+        | { value: string | number; confidence: number }
         | undefined;
 
       if (!enrichedField) continue;
@@ -1598,7 +2117,20 @@ export class EnrichmentService {
       const isEmpty = currentValue === null || currentValue === undefined || currentValue === "";
 
       if (isEmpty && enrichedField.confidence >= gapFillThreshold) {
-        updates[dbColumn] = enrichedField.value;
+        // Special handling for stage: must map to enum
+        if (dbColumn === "stage" && typeof enrichedField.value === "string") {
+          const mapped = this.mapStageToEnum(enrichedField.value);
+          if (!mapped) continue;
+          updates[dbColumn] = mapped;
+        } else if (dbColumn === "fundingTarget") {
+          const numValue = typeof enrichedField.value === "number"
+            ? enrichedField.value
+            : Number(enrichedField.value);
+          if (!Number.isFinite(numValue) || numValue <= 0) continue;
+          updates[dbColumn] = Math.round(numValue);
+        } else {
+          updates[dbColumn] = enrichedField.value;
+        }
         updatedFields.push(`${label} (gap fill, confidence=${enrichedField.confidence.toFixed(2)})`);
       }
     }
@@ -1620,30 +2152,21 @@ export class EnrichmentService {
           );
           continue;
         }
-        updates[fieldDef.dbColumn] = correction.newValue;
+        if (fieldDef.dbColumn === "stage") {
+          const mapped = this.mapStageToEnum(correction.newValue);
+          if (!mapped) {
+            this.logger.warn(
+              `[Enrichment] Skipping correction for Stage: invalid stage value "${correction.newValue}"`,
+            );
+            continue;
+          }
+          updates[fieldDef.dbColumn] = mapped;
+        } else {
+          updates[fieldDef.dbColumn] = correction.newValue;
+        }
         updatedFields.push(
           `${fieldDef.label} (corrected: "${correction.oldValue}" → "${correction.newValue}", confidence=${correction.confidence.toFixed(2)})`,
         );
-      }
-    }
-
-    // Merge discovered founders into teamMembers
-    if (enrichment.discoveredFounders.length > 0 && record.teamMembers) {
-      const existingNames = new Set(
-        record.teamMembers.map((m) => m.name.trim().toLowerCase()),
-      );
-      const newMembers = enrichment.discoveredFounders
-        .filter((f) => f.confidence >= 0.5 && !existingNames.has(f.name.trim().toLowerCase()))
-        .map((f) => ({
-          name: f.name,
-          role: f.role ?? "Founder",
-          linkedinUrl: f.linkedinUrl ?? "",
-        }));
-
-      if (newMembers.length > 0) {
-        updates.teamMembers = [...record.teamMembers, ...newMembers];
-        updatedFields.push(`teamMembers (+${newMembers.length} discovered)`);
-        foundersAdded = newMembers.length;
       }
     }
 
@@ -2099,7 +2622,11 @@ export class EnrichmentService {
   ): Array<{ url: string; title: string; type: string }> {
     const dedupe = new Map<string, { url: string; title: string; type: string }>();
     for (const source of [...aiSources, ...groundedSources]) {
-      if (!source.url || dedupe.has(source.url)) {
+      if (
+        !source.url ||
+        this.isBlockedEnrichmentDomain(source.url) ||
+        dedupe.has(source.url)
+      ) {
         continue;
       }
       dedupe.set(source.url, source);
@@ -2138,7 +2665,20 @@ export class EnrichmentService {
           clearTimeout(timer);
           reject(error);
         });
-    });
+      });
+  }
+
+  private async loadStartupRecord(startupId: string): Promise<StartupRecord> {
+    const [record] = await this.drizzle.db
+      .select()
+      .from(startup)
+      .where(eq(startup.id, startupId))
+      .limit(1);
+
+    if (!record) {
+      throw new Error(`Startup ${startupId} not found`);
+    }
+    return record;
   }
 
   private buildEmptyResult(): EnrichmentResult {

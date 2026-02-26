@@ -4,7 +4,7 @@ const nullToUndefined = (value: unknown): unknown =>
   value === null ? undefined : value;
 
 const nullToFallbackString = (fallback: string) => (value: unknown): unknown =>
-  value === null ? fallback : value;
+  value == null ? fallback : value;
 
 const stringArray = z.preprocess(
   (value) =>
@@ -15,7 +15,7 @@ const stringArray = z.preprocess(
 ).default([]);
 
 const optionalNarrative = z.preprocess(
-  nullToUndefined,
+  (value) => (value == null || value === "" ? undefined : value),
   z.string().min(1).optional(),
 );
 

@@ -3,31 +3,41 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   getAdminControllerGetAiPromptFlowQueryKey,
+  getAdminControllerGetAiModelConfigQueryKey,
   getAdminControllerGetAiPromptRevisionsQueryKey,
   getAdminControllerGetAiPromptsQueryKey,
+  useAdminControllerCreateAiModelConfigDraft,
   useAdminControllerCreateAiPromptRevision,
+  useAdminControllerGetAiModelConfig,
   useAdminControllerGetAiPromptContextSchema,
   useAdminControllerGetAiPromptFlow,
+  useAdminControllerGetAiPromptOutputSchema,
   useAdminControllerGetAiPromptRevisions,
   useAdminControllerGetAiPrompts,
+  useAdminControllerPublishAiModelConfigDraft,
   useAdminControllerPublishAiPromptRevision,
   useAdminControllerPreviewAiPrompt,
   useAdminControllerPreviewAiPipelineContext,
   useAdminControllerSeedAiPrompts,
+  useAdminControllerUpdateAiModelConfigDraft,
   useAdminControllerUpdateAiPromptRevision,
 } from "@/api/generated/admin/admin";
 import type {
+  AiModelConfigResponseDto,
   AiPromptContextSchemaResponseDto,
   AiPromptDefinitionsResponseDto,
   AiPromptDefinitionsResponseDtoItem,
   AiPromptFlowResponseDto,
   AiPromptFlowResponseDtoFlowsItem,
+  AiPromptFlowResponseDtoFlowsItemNodesItemInputsItem,
   AiPromptFlowResponseDtoFlowsItemNodesItem,
   AiPromptPreviewResponseDto,
+  AiPromptOutputSchemaResponseDto,
   AiPipelineContextPreviewResponseDto,
   AiPromptFlowResponseDtoFlowsItemNodesItemPromptKeysItem,
   AiPromptRevisionsResponseDto,
   AiPromptSeedResultDto,
+  CreateAiModelConfigDraftDto,
   PreviewAiPromptRequestDto,
 } from "@/api/generated/model";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -64,8 +74,10 @@ import {
   Layers,
   Linkedin,
   Newspaper,
+  Eye,
   RefreshCw,
   Rocket,
+  RotateCcw,
   Save,
   Search,
   Target,
@@ -79,6 +91,7 @@ export const Route = createFileRoute("/_protected/admin/agents")({
 type PromptKey = AiPromptFlowResponseDtoFlowsItemNodesItemPromptKeysItem;
 type FlowDefinition = AiPromptFlowResponseDtoFlowsItem;
 type FlowNode = AiPromptFlowResponseDtoFlowsItemNodesItem;
+type FlowPort = AiPromptFlowResponseDtoFlowsItemNodesItemInputsItem;
 type PromptDefinition = AiPromptDefinitionsResponseDtoItem;
 
 type PromptRevision = AiPromptRevisionsResponseDto["revisions"][number];
@@ -291,6 +304,233 @@ function NodeCard({
   );
 }
 
+function JsonSchemaTreeNode({
+  name,
+  schema,
+  depth = 0,
+}: {
+  name: string;
+  schema: unknown;
+  depth?: number;
+}) {
+  const [expanded, setExpanded] = useState(depth < 2);
+
+  if (!schema || typeof schema !== "object") {
+    return (
+      <div style={{ paddingLeft: `${depth * 16}px` }} className="py-1 text-xs">
+        <span className="font-mono text-muted-foreground">{name}</span>
+        <Badge variant="outline" className="ml-2 text-[10px]">
+          {typeof schema}
+        </Badge>
+      </div>
+    );
+  }
+
+  const schemaRecord = schema as Record<string, unknown>;
+  const type = schemaRecord.type;
+  const isArray = type === "array";
+  const isObject = type === "object";
+
+  if (!isArray && !isObject) {
+    return (
+      <div style={{ paddingLeft: `${depth * 16}px` }} className="py-1 text-xs">
+        <span className="font-mono text-muted-foreground">{name}</span>
+        <Badge variant="outline" className="ml-2 text-[10px]">
+          {typeof type === "string" ? type : "unknown"}
+        </Badge>
+      </div>
+    );
+  }
+
+  const propertiesRaw = schemaRecord.properties;
+  const properties =
+    propertiesRaw && typeof propertiesRaw === "object"
+      ? (propertiesRaw as Record<string, unknown>)
+      : {};
+  const itemsRaw = schemaRecord.items;
+  const items =
+    itemsRaw && typeof itemsRaw === "object"
+      ? (itemsRaw as Record<string, unknown>)
+      : {};
+
+  return (
+    <div style={{ paddingLeft: `${depth * 16}px` }} className="py-1 text-xs">
+      <button
+        type="button"
+        onClick={() => setExpanded((value) => !value)}
+        className="flex cursor-pointer items-center gap-1 font-mono text-muted-foreground hover:text-foreground"
+      >
+        <span>{expanded ? "▼" : "▶"}</span>
+        <span>{name}</span>
+        <Badge variant="outline" className="text-[10px]">
+          {isArray ? "array" : "object"}
+        </Badge>
+      </button>
+
+      {expanded ? (
+        <div>
+          {isArray && Object.keys(items).length > 0 ? (
+            <JsonSchemaTreeNode name="[items]" schema={items} depth={depth + 1} />
+          ) : null}
+          {isObject
+            ? Object.entries(properties).map(([key, value]) => (
+                <JsonSchemaTreeNode key={key} name={key} schema={value} depth={depth + 1} />
+              ))
+            : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function GraphContextPanel({
+  activeFlow,
+  selectedNode,
+  nodeById,
+  onSelectNode,
+}: {
+  activeFlow: FlowDefinition | null;
+  selectedNode: FlowNode;
+  nodeById: Map<string, FlowNode>;
+  onSelectNode: (nodeId: string) => void;
+}) {
+  const incomingEdges = activeFlow?.edges.filter((edge) => edge.to === selectedNode.id) ?? [];
+  const outgoingEdges = activeFlow?.edges.filter((edge) => edge.from === selectedNode.id) ?? [];
+  const inputPorts = selectedNode.inputs as FlowPort[];
+  const outputPorts = selectedNode.outputs as FlowPort[];
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">Inputs</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {inputPorts.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No inputs</p>
+          ) : (
+            inputPorts.map((port, index) => (
+              <div
+                key={`${port.label}-${index}`}
+                className="flex items-center justify-between rounded border p-2 text-xs"
+              >
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-[10px]">
+                    {port.type}
+                  </Badge>
+                  <span className="font-mono">{port.label}</span>
+                </div>
+                {port.fromNodeId ? (
+                  <button
+                    type="button"
+                    onClick={() => onSelectNode(port.fromNodeId!)}
+                    className="cursor-pointer rounded bg-blue-100 px-2 py-1 text-xs text-blue-700 hover:bg-blue-200"
+                  >
+                    {nodeById.get(port.fromNodeId)?.label ?? port.fromNodeId}
+                  </button>
+                ) : null}
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">Outputs</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {outputPorts.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No outputs</p>
+          ) : (
+            outputPorts.map((port, index) => (
+              <div
+                key={`${port.label}-${index}`}
+                className="flex items-start justify-between rounded border p-2 text-xs"
+              >
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-[10px]">
+                    {port.type}
+                  </Badge>
+                  <span className="font-mono">{port.label}</span>
+                </div>
+                {port.toNodeIds && port.toNodeIds.length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {port.toNodeIds.map((nodeId) => (
+                      <button
+                        key={nodeId}
+                        type="button"
+                        onClick={() => onSelectNode(nodeId)}
+                        className="cursor-pointer rounded bg-green-100 px-2 py-1 text-xs text-green-700 hover:bg-green-200"
+                      >
+                        {nodeById.get(nodeId)?.label ?? nodeId}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-2 gap-4">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Incoming</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1">
+            {incomingEdges.length === 0 ? (
+              <p className="text-xs text-muted-foreground">None</p>
+            ) : (
+              incomingEdges.map((edge) => {
+                const fromNode = nodeById.get(edge.from);
+                if (!fromNode) return null;
+                return (
+                  <button
+                    key={`${edge.from}->${edge.to}`}
+                    type="button"
+                    onClick={() => onSelectNode(edge.from)}
+                    className="block w-full cursor-pointer rounded p-2 text-left text-xs hover:bg-muted"
+                  >
+                    {fromNode.label}
+                  </button>
+                );
+              })
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Outgoing</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1">
+            {outgoingEdges.length === 0 ? (
+              <p className="text-xs text-muted-foreground">None</p>
+            ) : (
+              outgoingEdges.map((edge) => {
+                const toNode = nodeById.get(edge.to);
+                if (!toNode) return null;
+                return (
+                  <button
+                    key={`${edge.from}->${edge.to}`}
+                    type="button"
+                    onClick={() => onSelectNode(edge.to)}
+                    className="block w-full cursor-pointer rounded p-2 text-left text-xs hover:bg-muted"
+                  >
+                    {toNode.label}
+                  </button>
+                );
+              })
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
 function AdminAgentsPage() {
   const queryClient = useQueryClient();
 
@@ -302,6 +542,19 @@ function AdminAgentsPage() {
   const [systemPrompt, setSystemPrompt] = useState("");
   const [userPrompt, setUserPrompt] = useState("");
   const [notes, setNotes] = useState("");
+  const [modelName, setModelName] = useState("gemini-3-flash-preview");
+  const [searchMode, setSearchMode] = useState<
+    | "off"
+    | "provider_grounded_search"
+    | "brave_tool_search"
+    | "provider_and_brave_search"
+  >("provider_grounded_search");
+  const [enableLegacyModelEditing, setEnableLegacyModelEditing] = useState(false);
+  const [modelStage, setModelStage] = useState<"global" | StageOption>("global");
+  const [modelNotes, setModelNotes] = useState("");
+  const [activeEditorTab, setActiveEditorTab] = useState("prompts");
+  const [revisionStageFilter, setRevisionStageFilter] = useState<"all" | "global" | StageOption>("all");
+  const [schemaViewMode, setSchemaViewMode] = useState<"tree" | "json">("tree");
   const [previewStartupId, setPreviewStartupId] = useState("");
   const [previewStage, setPreviewStage] = useState<"auto" | StageOption>("auto");
   const [previewResult, setPreviewResult] = useState<AiPromptPreviewResponseDto | null>(null);
@@ -421,6 +674,24 @@ function AdminAgentsPage() {
       enabled: Boolean(currentPromptKey),
     },
   });
+  const modelConfigQuery = useAdminControllerGetAiModelConfig(
+    currentPromptKey ?? "",
+    undefined,
+    {
+      query: {
+        enabled: Boolean(currentPromptKey),
+      },
+    },
+  );
+  const outputSchemaQuery = useAdminControllerGetAiPromptOutputSchema(
+    currentPromptKey ?? "",
+    undefined,
+    {
+      query: {
+        enabled: Boolean(currentPromptKey),
+      },
+    },
+  );
 
   const revisionsPayload = useMemo(() => {
     const data = extractResponseData<AiPromptRevisionsResponseDto>(revisionsQuery.data);
@@ -430,8 +701,22 @@ function AdminAgentsPage() {
     const data = extractResponseData<AiPromptContextSchemaResponseDto>(contextSchemaQuery.data);
     return data;
   }, [contextSchemaQuery.data]);
+  const modelConfigPayload = useMemo(() => {
+    const data = extractResponseData<AiModelConfigResponseDto>(modelConfigQuery.data);
+    return data;
+  }, [modelConfigQuery.data]);
+  const outputSchemaPayload = useMemo(() => {
+    const data = extractResponseData<AiPromptOutputSchemaResponseDto>(outputSchemaQuery.data);
+    return data;
+  }, [outputSchemaQuery.data]);
 
   const revisions = revisionsPayload?.revisions ?? [];
+  const filteredRevisions = useMemo(() => {
+    if (revisionStageFilter === "all") return revisions;
+    const filterValue = revisionStageFilter === "global" ? null : revisionStageFilter;
+    return revisions.filter((r) => r.stage === filterValue);
+  }, [revisions, revisionStageFilter]);
+  const modelConfigRevisions = modelConfigPayload?.revisions ?? [];
   const selectedDefinition = currentPromptKey
     ? definitionsByKey.get(currentPromptKey) ?? null
     : null;
@@ -458,6 +743,14 @@ function AdminAgentsPage() {
         : null) ??
       null,
     [revisions, stageValue],
+  );
+  const modelStageValue: StageOption | null = modelStage === "global" ? null : modelStage;
+  const activeModelDraft = useMemo(
+    () =>
+      modelConfigRevisions.find(
+        (revision) => revision.status === "draft" && revision.stage === modelStageValue,
+      ) ?? null,
+    [modelConfigRevisions, modelStageValue],
   );
 
   useEffect(() => {
@@ -490,6 +783,27 @@ function AdminAgentsPage() {
   useEffect(() => {
     setPreviewResult(null);
   }, [currentPromptKey]);
+
+  useEffect(() => {
+    if (!currentPromptKey || !modelConfigPayload) {
+      setModelName("");
+      setSearchMode("off");
+      setModelStage("global");
+      setModelNotes("");
+      return;
+    }
+
+    if (modelConfigPayload.resolved) {
+      setModelName(modelConfigPayload.resolved.modelName);
+      setSearchMode(modelConfigPayload.resolved.searchMode);
+      setModelStage(
+        modelConfigPayload.resolved.stage
+          ? (modelConfigPayload.resolved.stage as StageOption)
+          : "global",
+      );
+      setModelNotes("");
+    }
+  }, [currentPromptKey, modelConfigPayload]);
 
   const seedMutation = useAdminControllerSeedAiPrompts({
     mutation: {
@@ -534,6 +848,48 @@ function AdminAgentsPage() {
         toast.success("Draft created");
       },
       onError: (error) => toast.error((error as Error).message || "Failed to create draft"),
+    },
+  });
+  const createModelConfigMutation = useAdminControllerCreateAiModelConfigDraft({
+    mutation: {
+      onSuccess: () => {
+        if (currentPromptKey) {
+          queryClient.invalidateQueries({
+            queryKey: getAdminControllerGetAiModelConfigQueryKey(currentPromptKey),
+          });
+        }
+        toast.success("Model config draft created");
+      },
+      onError: (error) =>
+        toast.error((error as Error).message || "Failed to create model config draft"),
+    },
+  });
+  const updateModelConfigMutation = useAdminControllerUpdateAiModelConfigDraft({
+    mutation: {
+      onSuccess: () => {
+        if (currentPromptKey) {
+          queryClient.invalidateQueries({
+            queryKey: getAdminControllerGetAiModelConfigQueryKey(currentPromptKey),
+          });
+        }
+        toast.success("Model config draft updated");
+      },
+      onError: (error) =>
+        toast.error((error as Error).message || "Failed to update model config draft"),
+    },
+  });
+  const publishModelConfigMutation = useAdminControllerPublishAiModelConfigDraft({
+    mutation: {
+      onSuccess: () => {
+        if (currentPromptKey) {
+          queryClient.invalidateQueries({
+            queryKey: getAdminControllerGetAiModelConfigQueryKey(currentPromptKey),
+          });
+        }
+        toast.success("Model config draft published");
+      },
+      onError: (error) =>
+        toast.error((error as Error).message || "Failed to publish model config draft"),
     },
   });
 
@@ -626,6 +982,68 @@ function AdminAgentsPage() {
     publishMutation.mutate({ key: currentPromptKey, revisionId });
   };
 
+  const handleLoadRevision = (revision: PromptRevision) => {
+    setSystemPrompt(revision.systemPrompt);
+    setUserPrompt(revision.userPrompt);
+    setNotes(revision.notes ?? "");
+    setEditorStage(revision.stage ?? "global");
+    setActiveEditorTab("prompts");
+    toast.success(`Loaded v${revision.version} (${formatStage(revision.stage)}) into editor`);
+  };
+
+  const handleRestoreAsDraft = (revision: PromptRevision) => {
+    if (!currentPromptKey) return;
+    createDraftMutation.mutate({
+      key: currentPromptKey,
+      data: {
+        stage: revision.stage,
+        systemPrompt: revision.systemPrompt,
+        userPrompt: revision.userPrompt,
+        notes: revision.notes ?? undefined,
+      },
+    });
+  };
+
+  const handleSaveModelConfigDraft = () => {
+    if (!currentPromptKey || !modelName) {
+      toast.error("Select a model before saving");
+      return;
+    }
+
+    const selectedModel = modelConfigPayload?.allowedModels.find(
+      (candidate) => candidate === modelName,
+    );
+    if (!selectedModel) {
+      toast.error("Select a valid model from the allowed list");
+      return;
+    }
+
+    const modelValue = selectedModel as CreateAiModelConfigDraftDto["modelName"];
+
+    if (activeModelDraft) {
+      updateModelConfigMutation.mutate({
+        key: currentPromptKey,
+        revisionId: activeModelDraft.id,
+        data: {
+          modelName: modelValue,
+          searchMode,
+          notes: modelNotes || undefined,
+        },
+      });
+      return;
+    }
+
+    createModelConfigMutation.mutate({
+      key: currentPromptKey,
+      data: {
+        modelName: modelValue,
+        searchMode,
+        stage: modelStageValue,
+        notes: modelNotes || undefined,
+      },
+    });
+  };
+
   const allowedVariables = contextSchema?.allowedVariables ?? revisionsPayload?.allowedVariables ?? selectedDefinition?.allowedVariables ?? [];
   const requiredVariables = contextSchema?.requiredVariables ?? revisionsPayload?.requiredVariables ?? selectedDefinition?.requiredVariables ?? [];
   const variableDefinitions = (contextSchema?.variableDefinitions as Record<string, VariableDefinition>) ??
@@ -689,20 +1107,6 @@ function AdminAgentsPage() {
     });
   };
 
-  const incomingNodeLabels = useMemo(() => {
-    if (!activeFlow || !selectedNode) return [];
-    return activeFlow.edges
-      .filter((edge) => edge.to === selectedNode.id)
-      .map((edge) => nodeById.get(edge.from)?.label ?? edge.from);
-  }, [activeFlow, selectedNode, nodeById]);
-
-  const outgoingNodeLabels = useMemo(() => {
-    if (!activeFlow || !selectedNode) return [];
-    return activeFlow.edges
-      .filter((edge) => edge.from === selectedNode.id)
-      .map((edge) => nodeById.get(edge.to)?.label ?? edge.to);
-  }, [activeFlow, selectedNode, nodeById]);
-
   const isLoading = definitionsQuery.isLoading || flowQuery.isLoading;
 
   return (
@@ -723,6 +1127,8 @@ function AdminAgentsPage() {
               if (currentPromptKey) {
                 revisionsQuery.refetch();
                 contextSchemaQuery.refetch();
+                modelConfigQuery.refetch();
+                outputSchemaQuery.refetch();
               }
             }}
           >
@@ -734,6 +1140,13 @@ function AdminAgentsPage() {
             {seedMutation.isPending ? "Seeding..." : "Seed From Code"}
           </Button>
         </div>
+      </div>
+
+      <div className="rounded-md border border-amber-300/70 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        Primary model and search configuration now lives in
+        {" "}
+        <span className="font-semibold">/admin/flow</span>
+        . This page remains available as an advanced fallback editor.
       </div>
 
       <Tabs
@@ -841,51 +1254,31 @@ function AdminAgentsPage() {
                         <CardTitle className="text-base">Graph Context (Static)</CardTitle>
                         <CardDescription>This node is runtime logic, not prompt-configured.</CardDescription>
                       </CardHeader>
-                      <CardContent className="space-y-4">
-                        <div>
-                          <p className="mb-2 text-sm font-medium">Inputs</p>
-                          <div className="flex flex-wrap gap-2">
-                            {selectedNode.inputs.map((input) => (
-                              <Badge key={input} variant="outline">
-                                {input}
-                              </Badge>
-                            ))}
-                          </div>
-                        </div>
-                        <div>
-                          <p className="mb-2 text-sm font-medium">Outputs</p>
-                          <div className="flex flex-wrap gap-2">
-                            {selectedNode.outputs.map((output) => (
-                              <Badge key={output}>{output}</Badge>
-                            ))}
-                          </div>
-                        </div>
-                        <div>
-                          <p className="mb-2 text-sm font-medium">Incoming Nodes</p>
-                          <p className="text-sm text-muted-foreground">
-                            {incomingNodeLabels.length > 0 ? incomingNodeLabels.join(", ") : "None"}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="mb-2 text-sm font-medium">Outgoing Nodes</p>
-                          <p className="text-sm text-muted-foreground">
-                            {outgoingNodeLabels.length > 0 ? outgoingNodeLabels.join(", ") : "None"}
-                          </p>
-                        </div>
+                      <CardContent>
+                        <GraphContextPanel
+                          activeFlow={activeFlow}
+                          selectedNode={selectedNode}
+                          nodeById={nodeById}
+                          onSelectNode={setSelectedNodeId}
+                        />
                       </CardContent>
                     </Card>
                   </div>
                 ) : (
-                  <div className="space-y-4 pb-6">
-                    <Tabs defaultValue="prompts" className="space-y-4">
-                    <TabsList>
+                  <div className="min-w-0 space-y-4 pb-6">
+                    <Tabs value={activeEditorTab} onValueChange={setActiveEditorTab} className="min-w-0 space-y-4">
+                    <div className="overflow-x-auto pb-1">
+                    <TabsList className="w-max min-w-full whitespace-nowrap">
                       <TabsTrigger value="prompts">Prompts</TabsTrigger>
                       <TabsTrigger value="variables">Variables</TabsTrigger>
                       <TabsTrigger value="revisions">Revisions</TabsTrigger>
+                      <TabsTrigger value="model-config">Model Config</TabsTrigger>
+                      <TabsTrigger value="output-schema">Output Schema</TabsTrigger>
                       <TabsTrigger value="runtime-preview">Runtime Preview</TabsTrigger>
                       <TabsTrigger value="pipeline-context">Pipeline Context</TabsTrigger>
                       <TabsTrigger value="context">Graph Context (Static)</TabsTrigger>
                     </TabsList>
+                    </div>
 
                     <TabsContent value="prompts" className="space-y-4">
                       {selectedNode.promptKeys.length > 1 ? (
@@ -1156,39 +1549,96 @@ function AdminAgentsPage() {
                     <TabsContent value="revisions">
                       <Card>
                         <CardHeader>
-                          <CardTitle className="text-base">Revision History</CardTitle>
-                          <CardDescription>
-                            Draft, published, and archived revisions for this prompt key.
-                          </CardDescription>
+                          <div className="flex items-center justify-between gap-4">
+                            <div>
+                              <CardTitle className="text-base">Revision History</CardTitle>
+                              <CardDescription>
+                                Draft, published, and archived revisions for this prompt key.
+                              </CardDescription>
+                            </div>
+                            <Select
+                              value={revisionStageFilter}
+                              onValueChange={(v) => setRevisionStageFilter(v as typeof revisionStageFilter)}
+                            >
+                              <SelectTrigger className="w-[140px]">
+                                <SelectValue placeholder="Filter stage" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="all">All Stages</SelectItem>
+                                <SelectItem value="global">Global</SelectItem>
+                                {STAGES.map((stage) => (
+                                  <SelectItem key={stage} value={stage}>
+                                    {formatStage(stage)}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
                         </CardHeader>
                         <CardContent className="space-y-3">
                           {revisionsQuery.isLoading ? (
                             Array.from({ length: 3 }).map((_, index) => (
                               <Skeleton key={index} className="h-16 w-full" />
                             ))
-                          ) : revisions.length === 0 ? (
-                            <p className="text-sm text-muted-foreground">No revisions found for this prompt key.</p>
+                          ) : filteredRevisions.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">
+                              {revisions.length === 0
+                                ? "No revisions found for this prompt key."
+                                : "No revisions match the selected stage filter."}
+                            </p>
                           ) : (
-                            revisions.map((revision: PromptRevision) => (
+                            filteredRevisions.map((revision: PromptRevision) => (
                               <div key={revision.id} className="rounded-md border p-3">
                                 <div className="flex flex-wrap items-center gap-2">
-                                  <Badge variant={revision.status === "published" ? "default" : "outline"}>
+                                  <Badge variant={revision.status === "published" ? "default" : revision.status === "draft" ? "secondary" : "outline"}>
                                     {revision.status}
                                   </Badge>
                                   <Badge variant="secondary">{formatStage(revision.stage)}</Badge>
                                   <span className="text-xs text-muted-foreground">v{revision.version}</span>
-                                  <span className="text-xs text-muted-foreground">{revision.id}</span>
-                                  {revision.status === "draft" ? (
+                                  <div className="ml-auto flex items-center gap-1">
                                     <Button
                                       size="sm"
-                                      variant="secondary"
-                                      className="ml-auto"
-                                      onClick={() => handlePublish(revision.id)}
+                                      variant="ghost"
+                                      onClick={() => handleLoadRevision(revision)}
+                                      title="Load into editor"
                                     >
-                                      Publish
+                                      <Eye className="mr-1 h-3 w-3" />
+                                      Load
                                     </Button>
-                                  ) : null}
+                                    {revision.status === "draft" ? (
+                                      <Button
+                                        size="sm"
+                                        variant="secondary"
+                                        onClick={() => handlePublish(revision.id)}
+                                      >
+                                        Publish
+                                      </Button>
+                                    ) : null}
+                                    {revision.status === "archived" ? (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => handleRestoreAsDraft(revision)}
+                                        disabled={createDraftMutation.isPending}
+                                      >
+                                        <RotateCcw className="mr-1 h-3 w-3" />
+                                        Restore
+                                      </Button>
+                                    ) : null}
+                                  </div>
                                 </div>
+                                {revision.userPrompt ? (
+                                  <p className="mt-2 truncate text-xs text-muted-foreground">
+                                    {revision.userPrompt.length > 80
+                                      ? `${revision.userPrompt.slice(0, 80)}...`
+                                      : revision.userPrompt}
+                                  </p>
+                                ) : null}
+                                {revision.notes ? (
+                                  <p className="mt-1 truncate text-xs italic text-muted-foreground">
+                                    {revision.notes}
+                                  </p>
+                                ) : null}
                                 <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
                                   <Clock className="h-3 w-3" />
                                   Updated {new Date(revision.updatedAt).toLocaleString()}
@@ -1198,6 +1648,275 @@ function AdminAgentsPage() {
                           )}
                         </CardContent>
                       </Card>
+                    </TabsContent>
+
+                    <TabsContent value="model-config" className="space-y-4">
+                      {!currentPromptKey ? (
+                        <Card>
+                          <CardContent className="pt-6">
+                            <p className="text-sm text-muted-foreground">
+                              Select a prompt to view model config
+                            </p>
+                          </CardContent>
+                        </Card>
+                      ) : (
+                        <>
+                          <Card className="border-amber-200 bg-amber-50">
+                            <CardContent className="pt-6">
+                              <div className="flex flex-wrap items-center justify-between gap-3">
+                                <div className="space-y-1">
+                                  <p className="text-sm font-medium text-amber-900">
+                                    Primary settings moved to /admin/flow
+                                  </p>
+                                  <p className="text-xs text-amber-900/90">
+                                    Use Flow for day-to-day model/search configuration. Enable this
+                                    editor only for fallback or advanced edits.
+                                  </p>
+                                </div>
+                                <Button
+                                  size="sm"
+                                  variant={enableLegacyModelEditing ? "secondary" : "outline"}
+                                  onClick={() =>
+                                    setEnableLegacyModelEditing((current) => !current)
+                                  }
+                                >
+                                  {enableLegacyModelEditing
+                                    ? "Disable Fallback Editing"
+                                    : "Enable Fallback Editing"}
+                                </Button>
+                              </div>
+                            </CardContent>
+                          </Card>
+
+                          <div
+                            className={`space-y-4 transition-opacity ${
+                              enableLegacyModelEditing
+                                ? "opacity-100"
+                                : "pointer-events-none opacity-50"
+                            }`}
+                          >
+                          {modelConfigPayload?.resolved ? (
+                            <Card className="border-blue-200 bg-blue-50">
+                              <CardContent className="pt-6">
+                                <div className="flex items-center justify-between">
+                                  <div className="space-y-1">
+                                    <p className="text-sm font-medium">Current Configuration</p>
+                                    <p className="text-xs text-muted-foreground">
+                                      {modelConfigPayload.resolved.modelName}
+                                      <Badge variant="outline" className="ml-2">
+                                        {modelConfigPayload.resolved.source}
+                                      </Badge>
+                                    </p>
+                                  </div>
+                                  <div className="text-xs font-mono text-muted-foreground">
+                                    {modelConfigPayload.resolved.provider}
+                                  </div>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          ) : null}
+
+                          <div>
+                            <Label>Stage</Label>
+                            <Select
+                              value={modelStage}
+                              onValueChange={(value) => setModelStage(value as "global" | StageOption)}
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="global">Global</SelectItem>
+                                {STAGES.map((stage) => (
+                                  <SelectItem key={stage} value={stage}>
+                                    {formatStage(stage)}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div>
+                            <Label>Model</Label>
+                            <Select value={modelName} onValueChange={setModelName}>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select model" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {(modelConfigPayload?.allowedModels ?? []).map((model) => (
+                                  <SelectItem key={model} value={model}>
+                                    {model}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          {modelConfigPayload?.resolved?.supportedSearchModes?.includes(
+                            "provider_grounded_search",
+                          ) ? (
+                            <div className="flex items-center justify-between">
+                              <Label>Grounded Search (Google)</Label>
+                              <input
+                                type="checkbox"
+                                checked={searchMode === "provider_grounded_search"}
+                                onChange={(event) =>
+                                  setSearchMode(
+                                    event.target.checked
+                                      ? "provider_grounded_search"
+                                      : "off",
+                                  )
+                                }
+                                className="h-4 w-4"
+                              />
+                            </div>
+                          ) : null}
+
+                          <div>
+                            <Label>Notes</Label>
+                            <Textarea
+                              value={modelNotes}
+                              onChange={(event) => setModelNotes(event.target.value)}
+                              placeholder="Optional notes about this configuration..."
+                              className="h-20"
+                            />
+                          </div>
+
+                          <div className="flex gap-2">
+                            <Button
+                              onClick={handleSaveModelConfigDraft}
+                              disabled={
+                                !modelName ||
+                                createModelConfigMutation.isPending ||
+                                updateModelConfigMutation.isPending
+                              }
+                            >
+                              {createModelConfigMutation.isPending ||
+                              updateModelConfigMutation.isPending
+                                ? "Saving..."
+                                : activeModelDraft
+                                  ? "Update Draft"
+                                  : "Save Draft"}
+                            </Button>
+                            <Button
+                              variant="outline"
+                              onClick={() => {
+                                if (!currentPromptKey || !activeModelDraft) return;
+                                publishModelConfigMutation.mutate({
+                                  key: currentPromptKey,
+                                  revisionId: activeModelDraft.id,
+                                });
+                              }}
+                              disabled={!activeModelDraft || publishModelConfigMutation.isPending}
+                            >
+                              {publishModelConfigMutation.isPending
+                                ? "Publishing..."
+                                : "Publish Draft"}
+                            </Button>
+                          </div>
+
+                          <Card>
+                            <CardHeader>
+                              <CardTitle className="text-sm">Revision History</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              <div className="space-y-2">
+                                {modelConfigRevisions.length === 0 ? (
+                                  <p className="text-sm text-muted-foreground">
+                                    No model config revisions for this prompt key.
+                                  </p>
+                                ) : (
+                                  modelConfigRevisions.map((revision) => (
+                                    <div
+                                      key={revision.id}
+                                      className="flex items-center justify-between rounded border p-2 text-sm"
+                                    >
+                                      <div>
+                                        <Badge variant="outline">{revision.status}</Badge>
+                                        <span className="ml-2 text-xs text-muted-foreground">
+                                          v{revision.version} • {formatStage(revision.stage)} •{" "}
+                                          {new Date(revision.createdAt).toLocaleDateString()}
+                                        </span>
+                                      </div>
+                                      <span className="text-xs">{revision.modelName}</span>
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+                            </CardContent>
+                          </Card>
+                          </div>
+                        </>
+                      )}
+                    </TabsContent>
+
+                    <TabsContent value="output-schema" className="space-y-4">
+                      {!currentPromptKey ? (
+                        <Card>
+                          <CardContent className="pt-6">
+                            <p className="text-sm text-muted-foreground">
+                              Select a prompt to view output schema
+                            </p>
+                          </CardContent>
+                        </Card>
+                      ) : (
+                        <>
+                          <Card className="border-amber-200 bg-amber-50">
+                            <CardContent className="pt-6">
+                              <p className="text-xs text-amber-900">
+                                Schema is defined in code. Editable schema config coming in a
+                                future update.
+                              </p>
+                            </CardContent>
+                          </Card>
+
+                          <div className="flex gap-2">
+                            <Button
+                              variant={schemaViewMode === "tree" ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => setSchemaViewMode("tree")}
+                            >
+                              Visual Tree
+                            </Button>
+                            <Button
+                              variant={schemaViewMode === "json" ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => setSchemaViewMode("json")}
+                            >
+                              Raw JSON
+                            </Button>
+                          </div>
+
+                          {outputSchemaQuery.isLoading ? (
+                            <Skeleton className="h-64 w-full" />
+                          ) : outputSchemaPayload ? (
+                            <Card>
+                              <CardContent className="pt-6">
+                                {schemaViewMode === "tree" ? (
+                                  <div className="space-y-2 font-mono text-xs">
+                                    <JsonSchemaTreeNode
+                                      name={currentPromptKey}
+                                      schema={outputSchemaPayload.jsonSchema}
+                                    />
+                                  </div>
+                                ) : (
+                                  <pre className="max-h-96 overflow-auto rounded bg-muted p-3 text-xs">
+                                    {JSON.stringify(outputSchemaPayload.jsonSchema, null, 2)}
+                                  </pre>
+                                )}
+                              </CardContent>
+                            </Card>
+                          ) : (
+                            <Card>
+                              <CardContent className="pt-6">
+                                <p className="text-sm text-muted-foreground">
+                                  No schema found for this prompt
+                                </p>
+                              </CardContent>
+                            </Card>
+                          )}
+                        </>
+                      )}
                     </TabsContent>
 
                     <TabsContent value="runtime-preview">
@@ -1544,37 +2263,13 @@ function AdminAgentsPage() {
                             Inputs, outputs, and graph neighbors for this agent node.
                           </CardDescription>
                         </CardHeader>
-                        <CardContent className="space-y-4">
-                          <div>
-                            <p className="mb-2 text-sm font-medium">Inputs</p>
-                            <div className="flex flex-wrap gap-2">
-                              {selectedNode.inputs.map((input) => (
-                                <Badge key={input} variant="outline">
-                                  {input}
-                                </Badge>
-                              ))}
-                            </div>
-                          </div>
-                          <div>
-                            <p className="mb-2 text-sm font-medium">Outputs</p>
-                            <div className="flex flex-wrap gap-2">
-                              {selectedNode.outputs.map((output) => (
-                                <Badge key={output}>{output}</Badge>
-                              ))}
-                            </div>
-                          </div>
-                          <div>
-                            <p className="mb-2 text-sm font-medium">Incoming Nodes</p>
-                            <p className="text-sm text-muted-foreground">
-                              {incomingNodeLabels.length > 0 ? incomingNodeLabels.join(", ") : "None"}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="mb-2 text-sm font-medium">Outgoing Nodes</p>
-                            <p className="text-sm text-muted-foreground">
-                              {outgoingNodeLabels.length > 0 ? outgoingNodeLabels.join(", ") : "None"}
-                            </p>
-                          </div>
+                        <CardContent>
+                          <GraphContextPanel
+                            activeFlow={activeFlow}
+                            selectedNode={selectedNode}
+                            nodeById={nodeById}
+                            onSelectNode={setSelectedNodeId}
+                          />
                         </CardContent>
                       </Card>
                     </TabsContent>

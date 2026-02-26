@@ -20,7 +20,7 @@ const optionalString = z.preprocess(
 
 const requiredStringFromNull = (fallback: string) =>
   z.preprocess(
-    (value) => (value === null ? fallback : value),
+    (value) => (value == null ? fallback : value),
     z.string().min(1),
   );
 
@@ -73,6 +73,24 @@ export const MarketResearchSchema = z.object({
       som: optionalNonNegativeNumber,
     })
     .default({}),
+  totalAddressableMarket: z.object({
+    value: z.string(),
+    year: z.string(),
+    source: z.string(),
+    confidence: z.enum(["high", "medium", "low"]),
+  }).optional(),
+  marketGrowthRate: z.object({
+    cagr: optionalString,
+    period: optionalString,
+    source: optionalString,
+  }).optional(),
+  marketDrivers: stringArray,
+  marketChallenges: stringArray,
+  regulatoryLandscape: optionalString,
+  tamValidation: z.object({
+    claimAccuracy: z.string(),
+    explanation: z.string(),
+  }).optional(),
   sources: urlArray,
 });
 

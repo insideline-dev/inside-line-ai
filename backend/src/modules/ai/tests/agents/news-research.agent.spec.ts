@@ -34,9 +34,34 @@ describe("NewsResearchAgent", () => {
       "geographicFocus",
       "industry",
       "knownFunding",
+      "specificMarket",
     ]);
     expect(context).not.toHaveProperty("teamMembers");
     expect(context).not.toHaveProperty("productDescription");
     expect(context).not.toHaveProperty("claimedTAM");
+    expect(context.specificMarket).toBeUndefined();
+  });
+
+  it("uses researchParameters when available", () => {
+    const inputWithParams: ResearchPipelineInput = {
+      ...pipelineInput,
+      researchParameters: {
+        companyName: "Inside Line",
+        sector: "SaaS",
+        specificMarket: "AI-powered startup diligence",
+        productDescription: "Automated VC due diligence platform",
+        targetCustomers: "Venture capital firms",
+        knownCompetitors: ["Harmonic", "Sourcescrub"],
+        geographicFocus: "United States",
+        businessModel: "SaaS subscription",
+        fundingStage: "seed",
+        teamMembers: [],
+        claimedMetrics: { tam: "$5B", growthRate: "25% CAGR" },
+      },
+    };
+    const context = NewsResearchAgent.contextBuilder(inputWithParams);
+
+    expect(context.geographicFocus).toBe("United States");
+    expect(context.specificMarket).toBe("AI-powered startup diligence");
   });
 });

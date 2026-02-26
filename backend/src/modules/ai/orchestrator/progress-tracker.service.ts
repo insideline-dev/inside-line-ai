@@ -4,7 +4,7 @@ import { z } from "zod";
 import { DrizzleService } from "../../../database";
 import { NotificationGateway } from "../../../notification/notification.gateway";
 import { startupEvaluation } from "../../analysis/entities";
-import type { EvaluationFallbackReason } from "../interfaces/agent.interface";
+import type { PipelineFallbackReason } from "../interfaces/agent.interface";
 import {
   PhaseStatus,
   PipelinePhase,
@@ -18,6 +18,8 @@ const FallbackReasonSchema = z.enum([
   "SCHEMA_OUTPUT_INVALID",
   "MODEL_OR_PROVIDER_ERROR",
   "UNHANDLED_AGENT_EXCEPTION",
+  "MISSING_PROVIDER_EVIDENCE",
+  "MISSING_BRAVE_TOOL_CALL",
 ]);
 const DataSummarySchema = z.record(z.string(), z.unknown());
 
@@ -130,7 +132,7 @@ export class ProgressTrackerService {
       const phasesCompleted = (Object.entries(phases) as Array<
         [PipelinePhase, PhaseProgress]
       >)
-        .filter(([, value]) => value.status === PhaseStatus.COMPLETED)
+        .filter(([, value]) => isPhaseTerminal(value.status))
         .map(([phase]) => phase);
       const overallProgress = Math.round(
         (phasesCompleted.length / Object.keys(phases).length) * 100,
@@ -221,7 +223,7 @@ export class ProgressTrackerService {
       payload.phasesCompleted = (Object.entries(payload.phases) as Array<
         [PipelinePhase, PhaseProgress]
       >)
-        .filter(([, value]) => value.status === PhaseStatus.COMPLETED)
+        .filter(([, value]) => isPhaseTerminal(value.status))
         .map(([phaseName]) => phaseName);
       payload.overallProgress = Math.round(
         (payload.phasesCompleted.length / Object.keys(payload.phases).length) *
@@ -261,7 +263,7 @@ export class ProgressTrackerService {
     phaseRetryCount?: number;
     agentAttemptId?: string;
     usedFallback?: boolean;
-    fallbackReason?: EvaluationFallbackReason;
+    fallbackReason?: PipelineFallbackReason;
     rawProviderError?: string;
     lifecycleEvent?: "started" | "retrying" | "completed" | "failed" | "fallback";
     dataSummary?: Record<string, unknown>;
@@ -594,7 +596,7 @@ export class ProgressTrackerService {
       pipelineRunId,
       startupId,
       status: PipelineStatus.RUNNING,
-      currentPhase: PipelinePhase.ENRICHMENT,
+      currentPhase: PipelinePhase.EXTRACTION,
       overallProgress: 0,
       phasesCompleted: [],
       phases,
@@ -627,7 +629,20 @@ export class ProgressTrackerService {
     next: AgentLifecycleEvent,
   ): AgentLifecycleEvent[] {
     const MAX_EVENTS = 300;
-    const duplicate = existing.some((event) => event.id === next.id);
+    const duplicate = existing.some(
+      (event) =>
+        event.id === next.id ||
+        (event.pipelineRunId === next.pipelineRunId &&
+          event.phase === next.phase &&
+          event.agentKey === next.agentKey &&
+          event.event === next.event &&
+          (event.agentAttemptId ?? null) === (next.agentAttemptId ?? null) &&
+          (event.attempt ?? null) === (next.attempt ?? null) &&
+          (event.retryCount ?? null) === (next.retryCount ?? null) &&
+          (event.phaseRetryCount ?? null) === (next.phaseRetryCount ?? null) &&
+          (event.error ?? null) === (next.error ?? null) &&
+          (event.fallbackReason ?? null) === (next.fallbackReason ?? null)),
+    );
     if (duplicate) {
       return existing;
     }
@@ -706,7 +721,7 @@ export class ProgressTrackerService {
     }
 
     const completed = [...orderedPhases].reverse().find(
-      (phase) => payload.phases[phase]?.status === PhaseStatus.COMPLETED,
+      (phase) => isPhaseTerminal(payload.phases[phase]?.status ?? PhaseStatus.PENDING),
     );
     return completed ?? fallback;
   }
@@ -1026,7 +1041,9 @@ export class ProgressTrackerService {
           record.fallbackReason === "TIMEOUT" ||
           record.fallbackReason === "SCHEMA_OUTPUT_INVALID" ||
           record.fallbackReason === "MODEL_OR_PROVIDER_ERROR" ||
-          record.fallbackReason === "UNHANDLED_AGENT_EXCEPTION"
+          record.fallbackReason === "UNHANDLED_AGENT_EXCEPTION" ||
+          record.fallbackReason === "MISSING_PROVIDER_EVIDENCE" ||
+          record.fallbackReason === "MISSING_BRAVE_TOOL_CALL"
             ? record.fallbackReason
             : undefined,
         rawProviderError:

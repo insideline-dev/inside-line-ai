@@ -13,6 +13,7 @@ import { IntegrationHealthService } from './integration-health.service';
 import { SystemConfigService } from './system-config.service';
 import { BulkDataService } from './bulk-data.service';
 import { AdminMatchingService } from './admin-matching.service';
+import { AdminInvestorService } from './admin-investor.service';
 import { StartupModule } from '../startup';
 import { UnipileModule } from '../integrations/unipile/unipile.module';
 import { DatabaseModule } from '../../database';
@@ -55,6 +56,7 @@ import { NotificationModule } from '../../notification/notification.module';
     SystemConfigService,
     BulkDataService,
     AdminMatchingService,
+    AdminInvestorService,
   ],
   exports: [AnalyticsService, UserManagementService, ScoringConfigService],
 })

@@ -238,6 +238,110 @@ export function useStartupControllerFindAll<TData = Awaited<ReturnType<typeof st
 
 
 
+export type startupControllerGetEvaluationByIdResponse200 = {
+  data: void
+  status: 200
+}
+    
+export type startupControllerGetEvaluationByIdResponseSuccess = (startupControllerGetEvaluationByIdResponse200) & {
+  headers: Headers;
+};
+;
+
+export type startupControllerGetEvaluationByIdResponse = (startupControllerGetEvaluationByIdResponseSuccess)
+
+export const getStartupControllerGetEvaluationByIdUrl = (id: string,) => {
+
+
+  
+
+  return `/startups/evaluation/${id}`
+}
+
+export const startupControllerGetEvaluationById = async (id: string, options?: RequestInit): Promise<startupControllerGetEvaluationByIdResponse> => {
+  
+  return customFetch<startupControllerGetEvaluationByIdResponse>(getStartupControllerGetEvaluationByIdUrl(id),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getStartupControllerGetEvaluationByIdQueryKey = (id: string,) => {
+    return [
+    `/startups/evaluation/${id}`
+    ] as const;
+    }
+
+    
+export const getStartupControllerGetEvaluationByIdQueryOptions = <TData = Awaited<ReturnType<typeof startupControllerGetEvaluationById>>, TError = ErrorType<unknown>>(id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof startupControllerGetEvaluationById>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getStartupControllerGetEvaluationByIdQueryKey(id);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof startupControllerGetEvaluationById>>> = ({ signal }) => startupControllerGetEvaluationById(id, { signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof startupControllerGetEvaluationById>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type StartupControllerGetEvaluationByIdQueryResult = NonNullable<Awaited<ReturnType<typeof startupControllerGetEvaluationById>>>
+export type StartupControllerGetEvaluationByIdQueryError = ErrorType<unknown>
+
+
+export function useStartupControllerGetEvaluationById<TData = Awaited<ReturnType<typeof startupControllerGetEvaluationById>>, TError = ErrorType<unknown>>(
+ id: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof startupControllerGetEvaluationById>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof startupControllerGetEvaluationById>>,
+          TError,
+          Awaited<ReturnType<typeof startupControllerGetEvaluationById>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useStartupControllerGetEvaluationById<TData = Awaited<ReturnType<typeof startupControllerGetEvaluationById>>, TError = ErrorType<unknown>>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof startupControllerGetEvaluationById>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof startupControllerGetEvaluationById>>,
+          TError,
+          Awaited<ReturnType<typeof startupControllerGetEvaluationById>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useStartupControllerGetEvaluationById<TData = Awaited<ReturnType<typeof startupControllerGetEvaluationById>>, TError = ErrorType<unknown>>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof startupControllerGetEvaluationById>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useStartupControllerGetEvaluationById<TData = Awaited<ReturnType<typeof startupControllerGetEvaluationById>>, TError = ErrorType<unknown>>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof startupControllerGetEvaluationById>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getStartupControllerGetEvaluationByIdQueryOptions(id,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
 export type startupControllerFindOneResponse200 = {
   data: void
   status: 200

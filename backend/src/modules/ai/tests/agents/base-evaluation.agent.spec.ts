@@ -39,10 +39,10 @@ mock.module("ai", () => ({
 import { NoObjectGeneratedError } from "ai";
 import { BaseEvaluationAgent } from "../../agents/evaluation/base-evaluation.agent";
 import type { EvaluationPipelineInput } from "../../interfaces/agent.interface";
-import { ModelPurpose } from "../../interfaces/pipeline.interface";
 import type { AiProviderService } from "../../providers/ai-provider.service";
 import type { AiConfigService } from "../../services/ai-config.service";
 import type { AiPromptService } from "../../services/ai-prompt.service";
+import type { AiModelExecutionService } from "../../services/ai-model-execution.service";
 import { createEvaluationPipelineInput } from "../fixtures/evaluation-pipeline.fixture";
 
 type TestOutput = {
@@ -60,6 +60,8 @@ type NarrativeOutput = {
   narrativeSummary?: string;
   memoNarrative?: string;
 };
+
+const SCORE_CONFIDENCE_PATTERN = /\b\d{1,3}\s*\/\s*100\b[\s\S]*\bconfidence\b/i;
 
 class TestEvaluationAgent extends BaseEvaluationAgent<TestOutput> {
   readonly key = "team" as const;
@@ -111,6 +113,7 @@ describe("BaseEvaluationAgent", () => {
   let providers: jest.Mocked<AiProviderService>;
   let aiConfig: jest.Mocked<AiConfigService>;
   let promptService: jest.Mocked<AiPromptService>;
+  let modelExecution: jest.Mocked<AiModelExecutionService>;
   const modelInstance = { providerModel: "gemini-3.0-flash" };
   let agent: TestEvaluationAgent;
   let pipelineData: EvaluationPipelineInput;
@@ -119,8 +122,28 @@ describe("BaseEvaluationAgent", () => {
     generateTextMock.mockReset();
 
     providers = {
-      resolveModelForPurpose: jest.fn().mockReturnValue(modelInstance),
+      resolveModel: jest.fn().mockReturnValue(modelInstance),
     } as unknown as jest.Mocked<AiProviderService>;
+
+    modelExecution = {
+      resolveForPrompt: jest.fn().mockResolvedValue({
+        resolvedConfig: {
+          source: "published",
+          revisionId: "rev-1",
+          stage: "seed",
+          purpose: "evaluation",
+          modelName: "gpt-5.2",
+          provider: "openai",
+          searchMode: "off",
+          supportedSearchModes: ["off"],
+        },
+        generateTextOptions: {
+          model: modelInstance,
+          tools: undefined,
+          toolChoice: undefined,
+        },
+      }),
+    } as unknown as jest.Mocked<AiModelExecutionService>;
 
     aiConfig = {
       getEvaluationTemperature: jest.fn().mockReturnValue(0.2),
@@ -149,6 +172,7 @@ describe("BaseEvaluationAgent", () => {
       providers as unknown as AiProviderService,
       aiConfig as unknown as AiConfigService,
       promptService as unknown as AiPromptService,
+      modelExecution as unknown as AiModelExecutionService,
     );
 
     pipelineData = createEvaluationPipelineInput();
@@ -169,9 +193,10 @@ describe("BaseEvaluationAgent", () => {
 
     const result = await agent.run(pipelineData);
 
-    expect(providers.resolveModelForPurpose).toHaveBeenCalledWith(
-      ModelPurpose.EVALUATION,
-    );
+    expect(modelExecution.resolveForPrompt).toHaveBeenCalledWith({
+      key: "evaluation.team",
+      stage: pipelineData.extraction.stage,
+    });
     expect(agent.buildContext).toHaveBeenCalledWith(pipelineData);
     expect(generateTextMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -519,6 +544,7 @@ describe("BaseEvaluationAgent", () => {
       providers as unknown as AiProviderService,
       aiConfig as unknown as AiConfigService,
       promptService as unknown as AiPromptService,
+      modelExecution as unknown as AiModelExecutionService,
     );
 
     generateTextMock.mockResolvedValueOnce({
@@ -544,6 +570,8 @@ describe("BaseEvaluationAgent", () => {
       .filter((value) => value.length > 0);
     expect(paragraphs.length).toBeGreaterThanOrEqual(4);
     expect((output.narrativeSummary ?? "").length).toBeGreaterThan(420);
+    expect(output.narrativeSummary ?? "").not.toMatch(SCORE_CONFIDENCE_PATTERN);
+    expect(output.memoNarrative ?? "").not.toMatch(SCORE_CONFIDENCE_PATTERN);
   });
 
   it("preserves existing long narrativeSummary and mirrors it to memoNarrative", async () => {
@@ -551,6 +579,7 @@ describe("BaseEvaluationAgent", () => {
       providers as unknown as AiProviderService,
       aiConfig as unknown as AiConfigService,
       promptService as unknown as AiPromptService,
+      modelExecution as unknown as AiModelExecutionService,
     );
 
     const longNarrative = [
@@ -577,11 +606,48 @@ describe("BaseEvaluationAgent", () => {
     expect(result.output.memoNarrative).toBe(longNarrative);
   });
 
+  it("strips score/confidence phrasing from existing narrative text", async () => {
+    const narrativeAgent = new NarrativeEvaluationAgent(
+      providers as unknown as AiProviderService,
+      aiConfig as unknown as AiConfigService,
+      promptService as unknown as AiPromptService,
+      modelExecution as unknown as AiModelExecutionService,
+    );
+
+    const longNarrativeWithScoring = [
+      "This section is currently scored at 88/100 with 85% confidence. Paragraph one contains detailed analysis tied to verified operating signals.",
+      "Paragraph two clarifies what evidence is strong, where assumptions remain, and which facts still require external validation before conviction can increase.",
+      "Paragraph three maps risks to mitigation paths and distinguishes data risk from execution risk in a way that supports structured diligence.",
+      "Paragraph four closes with practical IC implications and concrete milestones required before escalating investment commitment.",
+    ].join("\n\n");
+
+    generateTextMock.mockResolvedValueOnce({
+      output: {
+        score: 79,
+        confidence: 0.65,
+        feedback: "Concise summary.",
+        narrativeSummary: longNarrativeWithScoring,
+        keyFindings: ["Signal one"],
+        risks: ["Risk one"],
+        dataGaps: ["Gap one"],
+      },
+    });
+
+    const result = await narrativeAgent.run(pipelineData);
+    expect(result.output.narrativeSummary ?? "").not.toMatch(
+      SCORE_CONFIDENCE_PATTERN,
+    );
+    expect(result.output.memoNarrative ?? "").not.toMatch(
+      SCORE_CONFIDENCE_PATTERN,
+    );
+  });
+
   it("upgrades long single-paragraph feedback into multi-paragraph narrative fields", async () => {
     const narrativeAgent = new NarrativeEvaluationAgent(
       providers as unknown as AiProviderService,
       aiConfig as unknown as AiConfigService,
       promptService as unknown as AiPromptService,
+      modelExecution as unknown as AiModelExecutionService,
     );
 
     const longSingleParagraph = [

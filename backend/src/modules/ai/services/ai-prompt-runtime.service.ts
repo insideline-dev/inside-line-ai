@@ -90,11 +90,15 @@ type PipelineContextAgentPreview = {
   resolvedVariables: TemplateVariables;
   renderedSystemPrompt: string;
   renderedUserPrompt: string;
+  renderedSystemPromptWithDynamic: string;
+  renderedUserPromptWithDynamic: string;
   parsedContextJson: unknown | null;
   parsedContextSections: ParsedContextSection[] | null;
   hashes: {
     renderedSystemPrompt: string;
     renderedUserPrompt: string;
+    renderedSystemPromptWithDynamic: string;
+    renderedUserPromptWithDynamic: string;
     variables: string;
   };
 };
@@ -170,6 +174,37 @@ const RUNTIME_SCHEMA_BY_KEY: Record<AiPromptKey, PromptRuntimeSchema> = {
       { path: "pitchDeckText", label: "Pitch Deck Text", type: "string", sourceVariable: "pitchDeckText" },
     ],
     notes: ["Context uses startup intake fields plus extracted pitch deck text when available."],
+  },
+  "enrichment.gapFill": {
+    requiredPhases: [PipelinePhase.EXTRACTION],
+    fields: [
+      { path: "companyName", label: "Company Name", type: "string", sourceVariable: "companyName" },
+      { path: "tagline", label: "Tagline", type: "string", sourceVariable: "tagline" },
+      { path: "description", label: "Description", type: "string", sourceVariable: "description" },
+      { path: "industry", label: "Industry", type: "string", sourceVariable: "industry" },
+      { path: "stage", label: "Stage", type: "string", sourceVariable: "stage" },
+      { path: "website", label: "Website", type: "string", sourceVariable: "website" },
+      { path: "location", label: "Location", type: "string", sourceVariable: "location" },
+      { path: "foundingDate", label: "Founding Date", type: "string", sourceVariable: "foundingDate" },
+      { path: "teamSize", label: "Team Size", type: "number", sourceVariable: "teamSize" },
+      { path: "fundingTarget", label: "Funding Target", type: "number", sourceVariable: "fundingTarget" },
+      { path: "sectorIndustry", label: "Sector Industry", type: "string", sourceVariable: "sectorIndustry" },
+      { path: "productDescription", label: "Product Description", type: "string", sourceVariable: "productDescription" },
+      { path: "contactName", label: "Contact Name", type: "string", sourceVariable: "contactName" },
+      { path: "contactEmail", label: "Contact Email", type: "string", sourceVariable: "contactEmail" },
+      { path: "teamMembers", label: "Team Members", type: "array", sourceVariable: "teamMembers" },
+      { path: "extractionData", label: "Extraction Data", type: "object", sourceVariable: "extractionData" },
+      { path: "formContext", label: "Form Context", type: "object", sourceVariable: "formContext" },
+      { path: "emailContext", label: "Email Context", type: "object", sourceVariable: "emailContext" },
+      { path: "resolvedFromInternal", label: "Resolved From Internal", type: "object", sourceVariable: "resolvedFromInternal" },
+      { path: "remainingGaps", label: "Remaining Gaps", type: "array", sourceVariable: "remainingGaps" },
+      { path: "suspiciousFields", label: "Suspicious Fields", type: "array", sourceVariable: "suspiciousFields" },
+      { path: "searchResults", label: "Search Results", type: "object", sourceVariable: "searchResults" },
+    ],
+    notes: [
+      "Gap fill should prioritize internal sources before external web evidence.",
+      "Search results should only be used for unresolved gaps after internal resolution.",
+    ],
   },
   "research.team": {
     requiredPhases: [PipelinePhase.EXTRACTION, PipelinePhase.SCRAPING],
@@ -416,6 +451,56 @@ const RUNTIME_SCHEMA_BY_KEY: Record<AiPromptKey, PromptRuntimeSchema> = {
     ],
     notes: ["Matching prompts run per investor thesis. Preview uses request thesis or first active thesis as fallback."],
   },
+  "pipeline.orchestrator": {
+    requiredPhases: [],
+    fields: [
+      { path: "startupId", label: "Startup ID", type: "string", sourceVariable: "startupId" },
+      { path: "autoApprove", label: "Auto Approve", type: "string", sourceVariable: "autoApprove" },
+      { path: "companyName", label: "Company Name", type: "string", sourceVariable: "companyName" },
+    ],
+    notes: ["Pipeline orchestrator coordinates all analysis agents for a startup evaluation."],
+  },
+  "extraction.linkedin": {
+    requiredPhases: [],
+    fields: [
+      { path: "companyName", label: "Company Name", type: "string", sourceVariable: "companyName" },
+      { path: "website", label: "Website", type: "string", sourceVariable: "website" },
+      { path: "discoveredTeamMembers", label: "Discovered Team Members", type: "string", sourceVariable: "discoveredTeamMembers" },
+      { path: "existingTeamMembers", label: "Existing Team Members", type: "string", sourceVariable: "existingTeamMembers" },
+    ],
+    notes: ["LinkedIn enrichment stage discovers and enriches team member profiles."],
+  },
+  "research.orchestrator": {
+    requiredPhases: [],
+    fields: [
+      { path: "companyName", label: "Company Name", type: "string", sourceVariable: "companyName" },
+      { path: "sector", label: "Sector", type: "string", sourceVariable: "sector" },
+      { path: "website", label: "Website", type: "string", sourceVariable: "website" },
+      { path: "deckContent", label: "Deck Content", type: "string", sourceVariable: "deckContent" },
+      { path: "websiteContent", label: "Website Content", type: "string", sourceVariable: "websiteContent" },
+      { path: "teamMembers", label: "Team Members", type: "string", sourceVariable: "teamMembers" },
+    ],
+    notes: ["Research orchestrator coordinates 4 specialized deep research agents."],
+  },
+  "matching.investorThesis": {
+    requiredPhases: [],
+    fields: [
+      { path: "fundName", label: "Fund Name", type: "string", sourceVariable: "fundName" },
+      { path: "fundDescription", label: "Fund Description", type: "string", sourceVariable: "fundDescription" },
+      { path: "stages", label: "Target Stages", type: "string", sourceVariable: "stages" },
+      { path: "sectors", label: "Target Sectors", type: "string", sourceVariable: "sectors" },
+      { path: "geographies", label: "Target Geographies", type: "string", sourceVariable: "geographies" },
+      { path: "businessModels", label: "Business Models", type: "string", sourceVariable: "businessModels" },
+      { path: "checkSizeMin", label: "Check Size Min", type: "string", sourceVariable: "checkSizeMin" },
+      { path: "checkSizeMax", label: "Check Size Max", type: "string", sourceVariable: "checkSizeMax" },
+      { path: "minRevenue", label: "Min Revenue", type: "string", sourceVariable: "minRevenue" },
+      { path: "minGrowthRate", label: "Min Growth Rate", type: "string", sourceVariable: "minGrowthRate" },
+      { path: "thesisNarrative", label: "Thesis Narrative", type: "string", sourceVariable: "thesisNarrative" },
+      { path: "antiPortfolio", label: "Anti-Portfolio", type: "string", sourceVariable: "antiPortfolio" },
+      { path: "portfolioCompanies", label: "Portfolio Companies", type: "string", sourceVariable: "portfolioCompanies" },
+    ],
+    notes: ["Investor thesis generation creates holistic thesis summaries from investor profile data."],
+  },
   "clara.intent": {
     requiredPhases: [],
     fields: [
@@ -515,6 +600,14 @@ export class AiPromptRuntimeService {
       promptConfig.userPrompt,
       resolved.variables,
     );
+    const renderedSystemPromptWithDynamic = await this.applyDynamicVariables(
+      renderedSystemPrompt,
+      resolved.startupId,
+    );
+    const renderedUserPromptWithDynamic = await this.applyDynamicVariables(
+      renderedUserPrompt,
+      resolved.startupId,
+    );
     const isEvaluationPrompt = key.startsWith("evaluation.");
     const parsedContextJson = isEvaluationPrompt
       ? this.parseContextJsonVariable(resolved.variables.contextJson)
@@ -540,6 +633,8 @@ export class AiPromptRuntimeService {
         userPromptTemplate: promptConfig.userPrompt,
         renderedSystemPrompt,
         renderedUserPrompt,
+        renderedSystemPromptWithDynamic,
+        renderedUserPromptWithDynamic,
       },
       model,
       resolvedVariables: resolved.variables,
@@ -549,6 +644,12 @@ export class AiPromptRuntimeService {
       hashes: {
         renderedSystemPrompt: this.sha256(renderedSystemPrompt),
         renderedUserPrompt: this.sha256(renderedUserPrompt),
+        renderedSystemPromptWithDynamic: this.sha256(
+          renderedSystemPromptWithDynamic,
+        ),
+        renderedUserPromptWithDynamic: this.sha256(
+          renderedUserPromptWithDynamic,
+        ),
         variables: this.sha256(
           JSON.stringify(
             Object.keys(resolved.variables)
@@ -596,6 +697,14 @@ export class AiPromptRuntimeService {
         promptConfig.userPrompt,
         resolved.variables,
       );
+      const renderedSystemPromptWithDynamic = await this.applyDynamicVariables(
+        renderedSystemPrompt,
+        resolved.startupId,
+      );
+      const renderedUserPromptWithDynamic = await this.applyDynamicVariables(
+        renderedUserPrompt,
+        resolved.startupId,
+      );
       const parsedContextJson = this.parseContextJsonVariable(
         resolved.variables.contextJson,
       );
@@ -615,11 +724,19 @@ export class AiPromptRuntimeService {
         resolvedVariables: resolved.variables,
         renderedSystemPrompt,
         renderedUserPrompt,
+        renderedSystemPromptWithDynamic,
+        renderedUserPromptWithDynamic,
         parsedContextJson,
         parsedContextSections,
         hashes: {
           renderedSystemPrompt: this.sha256(renderedSystemPrompt),
           renderedUserPrompt: this.sha256(renderedUserPrompt),
+          renderedSystemPromptWithDynamic: this.sha256(
+            renderedSystemPromptWithDynamic,
+          ),
+          renderedUserPromptWithDynamic: this.sha256(
+            renderedUserPromptWithDynamic,
+          ),
           variables: this.sha256(
             JSON.stringify(
               Object.keys(resolved.variables)
@@ -975,12 +1092,26 @@ export class AiPromptRuntimeService {
 
   private resolveModelPreview(key: AiPromptKey) {
     const purpose = this.resolveModelPurpose(key);
-    const modelName = this.aiConfig.getModelForPurpose(purpose);
+    const modelName = key.startsWith("research.")
+      ? "gemini-3-flash-preview"
+      : this.aiConfig.getModelForPurpose(purpose);
     const provider = this.resolveProviderForModel(modelName);
 
-    const supportedSearchModes: Array<"off" | "provider_grounded_search"> =
-      purpose === ModelPurpose.RESEARCH && provider === "google"
-        ? ["off", "provider_grounded_search"]
+    const supportedSearchModes: Array<
+      | "off"
+      | "provider_grounded_search"
+      | "brave_tool_search"
+      | "provider_and_brave_search"
+    > =
+      purpose === ModelPurpose.RESEARCH && (provider === "google" || provider === "openai")
+        ? [
+            "off",
+            "provider_grounded_search",
+            "brave_tool_search",
+            "provider_and_brave_search",
+          ]
+        : purpose === ModelPurpose.RESEARCH
+          ? ["off", "brave_tool_search"]
         : ["off"];
 
     return {
@@ -990,12 +1121,18 @@ export class AiPromptRuntimeService {
       searchMode:
         supportedSearchModes.includes("provider_grounded_search")
           ? "provider_grounded_search"
+          : supportedSearchModes.includes("brave_tool_search")
+            ? "brave_tool_search"
           : "off",
       supportedSearchModes,
     };
   }
 
   private resolveModelPurpose(key: AiPromptKey): ModelPurpose {
+    if (key === "enrichment.gapFill") {
+      return ModelPurpose.ENRICHMENT;
+    }
+
     if (key === "extraction.fields") {
       return ModelPurpose.EXTRACTION;
     }
@@ -1380,6 +1517,176 @@ export class AiPromptRuntimeService {
     }
 
     return definitions;
+  }
+
+  private async applyDynamicVariables(
+    template: string,
+    startupId: string | null,
+  ): Promise<string> {
+    if (!startupId) {
+      return template;
+    }
+
+    const tokens = Array.from(
+      template.matchAll(/{{\s*([a-zA-Z0-9_-]+(?:\.[^{}|\s]+)?(?:\|[a-zA-Z0-9_-]+)?)\s*}}/g),
+    ).map((match) => match[1]).filter((value): value is string => Boolean(value));
+
+    if (tokens.length === 0) {
+      return template;
+    }
+
+    const uniqueTokens = Array.from(new Set(tokens));
+    const tokenValues = new Map<string, string>();
+    const phaseCache = new Map<PipelinePhase, unknown | null>();
+
+    for (const token of uniqueTokens) {
+      const [rawToken, filter] = token.split("|");
+      const [nodeId, ...fieldPathParts] = (rawToken ?? "").split(".");
+      if (!nodeId) {
+        continue;
+      }
+
+      const fieldPath = fieldPathParts.length > 0 ? fieldPathParts.join(".") : null;
+
+      const value = await this.resolveDynamicTokenValue(
+        startupId,
+        nodeId,
+        fieldPath,
+        filter,
+        phaseCache,
+      );
+      tokenValues.set(token, value);
+    }
+
+    let output = template;
+    for (const [token, replacement] of tokenValues.entries()) {
+      const pattern = new RegExp(`{{\\s*${this.escapeRegex(token)}\\s*}}`, "g");
+      output = output.replace(pattern, replacement);
+    }
+
+    return output;
+  }
+
+  private async resolveDynamicTokenValue(
+    startupId: string,
+    nodeId: string,
+    fieldPath: string | null,
+    filter: string | undefined,
+    phaseCache: Map<PipelinePhase, unknown | null>,
+  ): Promise<string> {
+    const resolved = await this.resolveNodeOutput(startupId, nodeId, phaseCache);
+    if (resolved === null || resolved === undefined) {
+      return "[not available]";
+    }
+
+    const value = fieldPath
+      ? this.deepGet(resolved, fieldPath.replace(/\[\]/g, "").split("."))
+      : resolved;
+    if (value === undefined) {
+      return "[not available]";
+    }
+
+    if (typeof value === "string") {
+      return value;
+    }
+
+    if (filter === "pretty") {
+      return JSON.stringify(value, null, 2);
+    }
+
+    return JSON.stringify(value);
+  }
+
+  private async resolveNodeOutput(
+    startupId: string,
+    nodeId: string,
+    phaseCache: Map<PipelinePhase, unknown | null>,
+  ): Promise<unknown> {
+    const loadPhase = async (phase: PipelinePhase) => {
+      if (!phaseCache.has(phase)) {
+        const result = await this.pipelineState.getPhaseResult(startupId, phase);
+        phaseCache.set(phase, result ?? null);
+      }
+
+      return phaseCache.get(phase) ?? null;
+    };
+
+    if (nodeId === "extract_fields") {
+      return loadPhase(PipelinePhase.EXTRACTION);
+    }
+
+    if (nodeId === "scrape_website") {
+      return loadPhase(PipelinePhase.SCRAPING);
+    }
+
+    if (nodeId === "gap_fill_hybrid" || nodeId === "linkedin_enrichment") {
+      return loadPhase(PipelinePhase.ENRICHMENT);
+    }
+
+    if (nodeId === "synthesis_final") {
+      return loadPhase(PipelinePhase.SYNTHESIS);
+    }
+
+    if (nodeId.startsWith("research_")) {
+      const key = nodeId.replace(/^research_/, "");
+      const research = (await loadPhase(PipelinePhase.RESEARCH)) as
+        | Record<string, unknown>
+        | null;
+      return research?.[key] ?? null;
+    }
+
+    if (nodeId.startsWith("evaluation_")) {
+      const rawKey = nodeId.replace(/^evaluation_/, "");
+      const key = rawKey.replace(/_([a-z])/g, (_, char: string) =>
+        char.toUpperCase(),
+      );
+      const evaluation = (await loadPhase(PipelinePhase.EVALUATION)) as
+        | Record<string, unknown>
+        | null;
+      return evaluation?.[key] ?? null;
+    }
+
+    return null;
+  }
+
+  private deepGet(target: unknown, segments: string[]): unknown {
+    let current = target;
+
+    for (const segment of segments) {
+      if (current === null || current === undefined) {
+        return undefined;
+      }
+
+      if (Array.isArray(current)) {
+        const numericIndex = Number(segment);
+        if (Number.isInteger(numericIndex)) {
+          current = current[numericIndex];
+          continue;
+        }
+
+        current = current
+          .map((value) =>
+            value && typeof value === "object"
+              ? (value as Record<string, unknown>)[segment]
+              : undefined,
+          )
+          .filter((value) => value !== undefined);
+        continue;
+      }
+
+      if (typeof current === "object") {
+        current = (current as Record<string, unknown>)[segment];
+        continue;
+      }
+
+      return undefined;
+    }
+
+    return current;
+  }
+
+  private escapeRegex(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   }
 
   private sha256(value: string): string {

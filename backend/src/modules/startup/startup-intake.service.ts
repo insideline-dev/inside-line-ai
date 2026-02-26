@@ -127,6 +127,28 @@ export class StartupIntakeService {
 
     const geography = deriveStartupGeography(params.location);
     const slug = this.generateSlug(params.name);
+    const normalizedTeamMembers = (params.teamMembers ?? []).map((m) => ({
+      name: m.name,
+      role: m.role,
+      linkedinUrl: m.linkedinUrl ?? '',
+    }));
+    const teamMembersWithLinkedin = normalizedTeamMembers.filter((m) =>
+      Boolean(m.linkedinUrl?.trim()),
+    ).length;
+
+    this.logger.debug(
+      `[QuickCreate] Input summary | name=${params.name} | website=${Boolean(params.website)} | pitchDeckUrl=${Boolean(params.pitchDeckUrl)} | stage=${params.stage} | fundingTarget=${params.fundingTarget} | teamSize=${params.teamSize} | teamMembers=${normalizedTeamMembers.length} | teamMembersWithLinkedin=${teamMembersWithLinkedin}`,
+    );
+
+    if (!params.pitchDeckUrl) {
+      this.logger.warn(
+        `[QuickCreate] No pitchDeckUrl provided for ${params.name}; extraction will use startup-context fallback unless a deck path/url is added before the extraction phase runs`,
+      );
+    }
+
+    this.logger.debug(
+      "[QuickCreate] Quick create only persists a subset of startup context fields; additional diligence fields remain null/default until edited (sectorIndustryGroup, sectorIndustry, valuationType, raiseType, leadSecured, leadInvestorName, contactName/contactEmail/phone, previousFunding*, technologyReadinessLevel, productDescription, demoVideoUrl, productScreenshots)",
+    );
 
     const [created] = await this.drizzle.db
       .insert(startup)
@@ -148,11 +170,7 @@ export class StartupIntakeService {
         stage: params.stage,
         fundingTarget: params.fundingTarget,
         teamSize: params.teamSize,
-        teamMembers: (params.teamMembers ?? []).map((m) => ({
-          name: m.name,
-          role: m.role,
-          linkedinUrl: m.linkedinUrl ?? '',
-        })),
+        teamMembers: normalizedTeamMembers,
         pitchDeckUrl: params.pitchDeckUrl ?? undefined,
         status: StartupStatus.SUBMITTED,
         submittedAt: new Date(),
@@ -160,6 +178,9 @@ export class StartupIntakeService {
       .returning();
 
     this.logger.log(`Quick-created startup ${created.id} (${params.name}) by admin ${params.adminUserId}`);
+    this.logger.debug(
+      `[QuickCreate] Persisted startup ${created.id} | pitchDeckPath=${Boolean(created.pitchDeckPath)} | pitchDeckUrl=${Boolean(created.pitchDeckUrl)} | roundCurrency=${created.roundCurrency ?? "null"} | valuationKnown=${created.valuationKnown === null ? "null" : String(created.valuationKnown)} | valuationType=${created.valuationType ?? "null"} | raiseType=${created.raiseType ?? "null"} | contactEmail=${Boolean(created.contactEmail)} | productDescription=${Boolean(created.productDescription)}`,
+    );
 
     await this.pipeline.startPipeline(created.id, params.adminUserId);
 

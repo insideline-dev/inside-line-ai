@@ -5,15 +5,20 @@
  * Inside Line API Documentation
  * OpenAPI spec version: 2.0
  */
+import type { AiPromptFlowResponseDtoFlowsItemNodesItemInputsItem } from './aiPromptFlowResponseDtoFlowsItemNodesItemInputsItem';
 import type { AiPromptFlowResponseDtoFlowsItemNodesItemKind } from './aiPromptFlowResponseDtoFlowsItemNodesItemKind';
+import type { AiPromptFlowResponseDtoFlowsItemNodesItemOutputsItem } from './aiPromptFlowResponseDtoFlowsItemNodesItemOutputsItem';
 import type { AiPromptFlowResponseDtoFlowsItemNodesItemPromptKeysItem } from './aiPromptFlowResponseDtoFlowsItemNodesItemPromptKeysItem';
+import type { AiPromptFlowResponseDtoFlowsItemNodesItemRuntimeModel } from './aiPromptFlowResponseDtoFlowsItemNodesItemRuntimeModel';
 
 export type AiPromptFlowResponseDtoFlowsItemNodesItem = {
   id: string;
   label: string;
   description: string;
   kind: AiPromptFlowResponseDtoFlowsItemNodesItemKind;
+  enabled?: boolean;
+  runtimeModel?: AiPromptFlowResponseDtoFlowsItemNodesItemRuntimeModel;
   promptKeys: AiPromptFlowResponseDtoFlowsItemNodesItemPromptKeysItem[];
-  inputs: string[];
-  outputs: string[];
+  inputs: AiPromptFlowResponseDtoFlowsItemNodesItemInputsItem[];
+  outputs: AiPromptFlowResponseDtoFlowsItemNodesItemOutputsItem[];
 };

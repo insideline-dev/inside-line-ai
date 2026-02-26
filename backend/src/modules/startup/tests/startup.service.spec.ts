@@ -113,7 +113,7 @@ describe("StartupService", () => {
       getModelForPurpose: jest.fn((purpose: ModelPurpose) =>
         purpose === ModelPurpose.SYNTHESIS
           ? "gpt-5.2"
-          : "gemini-3.0-flash-preview",
+          : "gemini-3-flash-preview",
       ),
     } as unknown as jest.Mocked<AiConfigService>;
 
@@ -268,7 +268,7 @@ describe("StartupService", () => {
           (source) =>
             source.agent === "TeamAgent" &&
             source.type === "api" &&
-            source.model === "gemini-3.0-flash-preview",
+            source.model === "gemini-3-flash-preview",
         ),
       ).toBe(true);
     });
@@ -314,6 +314,9 @@ describe("StartupService", () => {
         .filter((value) => value.length > 0);
       expect(paragraphs.length).toBeGreaterThanOrEqual(4);
       expect((narrativeSummary ?? "").length).toBeGreaterThan(420);
+      expect(narrativeSummary ?? "").not.toMatch(
+        /\b\d{1,3}\s*\/\s*100\b[\s\S]*\bconfidence\b/i,
+      );
     });
 
     it("should not include evaluation data before approval for founders", async () => {
@@ -322,7 +325,9 @@ describe("StartupService", () => {
         status: StartupStatus.PENDING_REVIEW,
       };
 
-      mockDb.limit.mockResolvedValueOnce([reviewingStartup]);
+      mockDb.limit
+        .mockResolvedValueOnce([reviewingStartup])
+        .mockResolvedValueOnce([]);
 
       const result = await service.findOne(mockStartupId, mockUserId);
 
@@ -1021,7 +1026,12 @@ describe("StartupService", () => {
     });
 
     it("falls back to full reanalysis when pipeline state is missing", async () => {
-      mockDb.limit.mockResolvedValueOnce([mockStartup]);
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          ...mockStartup,
+          userId: "different-owner-id",
+        },
+      ]);
       pipelineService.getPipelineStatus.mockResolvedValueOnce(null);
 
       const result = await service.adminRetryAgent(mockStartupId, mockUserId, {

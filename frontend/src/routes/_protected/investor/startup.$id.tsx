@@ -8,7 +8,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, Plus, Save, Trash2 } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
 import {
   useStartupControllerFindOne,
   useStartupControllerFindApprovedById,
@@ -17,8 +16,11 @@ import {
   getStartupControllerFindOneQueryKey,
   getStartupControllerFindApprovedByIdQueryKey,
 } from "@/api/generated/startup/startup";
-import { useInvestorControllerGetEffectiveWeights } from "@/api/generated/investor/investor";
-import { useInvestorControllerGetMatchDetails } from "@/api/generated/investor/investor";
+import {
+  useInvestorControllerGetEffectiveWeights,
+  useInvestorControllerGetMatchDetails,
+} from "@/api/generated/investor/investor";
+import { useToast } from "@/hooks/use-toast";
 import {
   StartupHeader,
   SummaryCard,
@@ -28,6 +30,7 @@ import {
   ProductTabContent,
   InsightsTabContent,
 } from "@/components/startup-view";
+import { getDisplayOverallScore } from "@/lib/evaluation-display";
 
 export const Route = createFileRoute("/_protected/investor/startup/$id")({
   component: InvestorStartupDetailPage,
@@ -93,9 +96,17 @@ function InvestorStartupDetailPage() {
   const weights = weightsRes
     ? unwrapApiResponse<Record<string, unknown>>(weightsRes)
     : undefined;
+  const evaluationFromStartup =
+    startup && typeof startup === "object" && "evaluation" in startup
+      ? ((startup as { evaluation?: Record<string, unknown> }).evaluation ?? undefined)
+      : undefined;
   const evaluation = evalRes
     ? unwrapApiResponse<Record<string, unknown>>(evalRes)
-    : undefined;
+    : evaluationFromStartup;
+  const overallScore = getDisplayOverallScore(
+    (evaluation as any) ?? null,
+    typeof startup?.overallScore === "number" ? startup.overallScore : null,
+  );
   const match = matchRes
     ? unwrapApiResponse<Record<string, unknown>>(matchRes)
     : undefined;
@@ -200,8 +211,8 @@ function InvestorStartupDetailPage() {
         backLink="/investor"
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            {evaluation?.overallScore ? (
-              <ScoreRing score={evaluation.overallScore as number} size="lg" label="Overall Score" showLabel />
+            {overallScore > 0 ? (
+              <ScoreRing score={overallScore} size="lg" label="Overall Score" showLabel />
             ) : null}
           </div>
         }
@@ -246,11 +257,19 @@ function InvestorStartupDetailPage() {
         </TabsList>
 
         <TabsContent value="memo">
-          <MemoTabContent startup={startup as any} evaluation={evaluation as any} weights={weights as any} />
+          {evaluation ? (
+            <MemoTabContent startup={startup as any} evaluation={evaluation as any} weights={weights as any} />
+          ) : (
+            <Card className="border-dashed">
+              <CardContent className="p-12 text-center text-muted-foreground">
+                Evaluation details are not available yet.
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="product">
-          <ProductTabContent startup={startup as any} evaluation={evaluation as any} />
+          <ProductTabContent startup={startup as any} evaluation={(evaluation as any) ?? null} />
         </TabsContent>
 
         <TabsContent value="team">
@@ -369,7 +388,7 @@ function InvestorStartupDetailPage() {
             </Card>
           )}
           <TeamTabContent
-            evaluation={evaluation as any}
+            evaluation={(evaluation as any) ?? null}
             teamMembers={teamMembersForSave as any}
             companyName={startup.name as string}
           />
@@ -377,13 +396,13 @@ function InvestorStartupDetailPage() {
 
         <TabsContent value="competitors">
           <CompetitorsTabContent
-            evaluation={evaluation as any}
+            evaluation={(evaluation as any) ?? null}
             companyName={startup.name as string}
           />
         </TabsContent>
 
         <TabsContent value="insights">
-          <InsightsTabContent evaluation={evaluation as any} />
+          <InsightsTabContent evaluation={(evaluation as any) ?? null} />
         </TabsContent>
       </Tabs>
     </div>

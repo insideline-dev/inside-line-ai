@@ -4,8 +4,20 @@ import { ModelPurpose } from "../interfaces/pipeline.interface";
 
 export const AI_RUNTIME_ALLOWED_MODEL_NAMES = [
   "gpt-5.2",
-  "gemini-3.0-flash-preview",
+  "gemini-3-flash-preview",
 ] as const;
+
+export const AI_RUNTIME_MODEL_NAME_ALIASES: Record<string, string> = {
+  "gemini-3.0-flash-preview": "gemini-3-flash-preview",
+};
+
+export function normalizeRuntimeModelName(modelName: string): string {
+  const normalized = modelName.trim();
+  if (!normalized) {
+    return normalized;
+  }
+  return AI_RUNTIME_MODEL_NAME_ALIASES[normalized] ?? normalized;
+}
 
 export const AiContextConfigSchema = z.object({
   includePaths: z.array(z.string().trim().min(1)).min(1),
@@ -16,7 +28,12 @@ export const AiContextConfigSchema = z.object({
 
 export const AiModelConfigSchema = z.object({
   modelName: z.enum(AI_RUNTIME_ALLOWED_MODEL_NAMES),
-  searchMode: z.enum(["off", "provider_grounded_search"]),
+  searchMode: z.enum([
+    "off",
+    "provider_grounded_search",
+    "brave_tool_search",
+    "provider_and_brave_search",
+  ]),
 });
 
 export type AiContextConfig = z.infer<typeof AiContextConfigSchema>;
@@ -49,6 +66,10 @@ export function isResearchPromptKey(key: AiPromptKey): boolean {
 export function resolveModelPurposeForPromptKey(
   key: AiPromptKey,
 ): ModelPurpose {
+  if (key === "enrichment.gapFill") {
+    return ModelPurpose.ENRICHMENT;
+  }
+
   if (key === "extraction.fields") {
     return ModelPurpose.EXTRACTION;
   }

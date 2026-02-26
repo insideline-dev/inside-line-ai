@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Database,
   ExternalLink,
+  File,
   Globe,
   Linkedin,
   Sparkles,
@@ -10,6 +11,8 @@ import {
 } from "lucide-react";
 import type { Startup } from "@/types/startup";
 import type { Evaluation } from "@/types/evaluation";
+import { roundUpScore } from "@/lib/round-score";
+import { getDisplayOverallScore, getDisplaySectionScore } from "@/lib/evaluation-display";
 
 interface SourceLike {
   name?: string;
@@ -26,6 +29,16 @@ interface SourceLike {
 interface SourcesTabContentProps {
   startup: Startup;
   evaluation: Evaluation | null;
+  dataRoomDocuments?: DataRoomDocument[];
+}
+
+interface DataRoomDocument {
+  id: string;
+  category?: string | null;
+  uploadedAt?: string | null;
+  assetUrl?: string | null;
+  assetKey?: string | null;
+  assetMimeType?: string | null;
 }
 
 const AGENT_LABEL: Record<string, string> = {
@@ -33,6 +46,7 @@ const AGENT_LABEL: Record<string, string> = {
   market: "MarketDeepResearch",
   product: "ProductDeepResearch",
   news: "NewsDeepResearch",
+  competitor: "CompetitorDeepResearch",
 };
 
 const AI_AGENT_ROWS = [
@@ -142,9 +156,21 @@ function SourceRow({
   );
 }
 
-export function SourcesTabContent({ startup, evaluation }: SourcesTabContentProps) {
+export function SourcesTabContent({
+  startup,
+  evaluation,
+  dataRoomDocuments = [],
+}: SourcesTabContentProps) {
   const allSources = (evaluation?.sources as unknown as SourceLike[]) || [];
-  const rawSources = allSources.filter((item) => Boolean(item?.url));
+  const isDocumentSource = (source: SourceLike): boolean => {
+    const t = (source.type || "").toLowerCase();
+    const c = (source.category || "").toLowerCase();
+    return t === "document" || c === "document";
+  };
+  const websiteSourcesFromEvaluation = allSources.filter(
+    (item) => Boolean(item?.url) && !isDocumentSource(item),
+  );
+  const documentSourcesFromEvaluation = allSources.filter(isDocumentSource);
 
   const modelByAgent = allSources.reduce(
     (acc, source) => {
@@ -184,12 +210,53 @@ export function SourcesTabContent({ startup, evaluation }: SourcesTabContentProp
           },
         ]
       : []),
-    ...rawSources.map((source) => ({
+    ...websiteSourcesFromEvaluation.map((source) => ({
       url: source.url,
       title: source.name || source.title || source.url || "Source",
       subtitle: source.relevance || source.type || "Research source",
       agentLabel: getSourceAgentLabel(source.agent),
       timestamp: source.timestamp || evaluation?.updatedAt || evaluation?.createdAt,
+    })),
+  ];
+
+  const documentSources = [
+    ...(startup.pitchDeckUrl
+      ? [
+          {
+            url: startup.pitchDeckUrl,
+            title: `${startup.name} — Pitch Deck`,
+            subtitle: "Uploaded pitch deck",
+            agentLabel: "Orchestrator",
+            timestamp: startup.updatedAt || startup.createdAt,
+          },
+        ]
+      : startup.pitchDeckPath
+        ? [
+            {
+              url: undefined as string | undefined,
+              title: `${startup.name} — Pitch Deck`,
+              subtitle: startup.pitchDeckPath,
+              agentLabel: "Orchestrator",
+              timestamp: startup.updatedAt || startup.createdAt,
+            },
+          ]
+        : []),
+    ...documentSourcesFromEvaluation.map((source) => ({
+        url: source.url,
+        title: source.name || source.title || "Document",
+        subtitle: source.relevance || "Document source",
+        agentLabel: getSourceAgentLabel(source.agent),
+        timestamp: source.timestamp || evaluation?.updatedAt || evaluation?.createdAt,
+      })),
+    ...dataRoomDocuments.map((document) => ({
+      url: document.assetUrl || undefined,
+      title:
+        (document.assetKey &&
+          document.assetKey.split("/").filter(Boolean).slice(-1)[0]) ||
+        `${startup.name} — ${document.category || "Data room document"}`,
+      subtitle: `Data room${document.category ? ` · ${document.category}` : ""}`,
+      agentLabel: "Orchestrator",
+      timestamp: document.uploadedAt || startup.updatedAt || startup.createdAt,
     })),
   ];
 
@@ -207,14 +274,20 @@ export function SourcesTabContent({ startup, evaluation }: SourcesTabContentProp
   );
 
   const aiAgentRows = AI_AGENT_ROWS.map((row) => {
+    const rowScore =
+      row.key === "synthesis"
+        ? getDisplayOverallScore(evaluation, startup.overallScore)
+        : getDisplaySectionScore(evaluation, row.key as Parameters<typeof getDisplaySectionScore>[1]);
     const score =
-      row.scoreKey === "overallScore"
-        ? evaluation?.overallScore
-        : (evaluation as Record<string, unknown> | null)?.[row.scoreKey];
+      typeof rowScore === "number"
+        ? rowScore
+        : row.scoreKey === "overallScore"
+          ? getDisplayOverallScore(evaluation, startup.overallScore)
+          : (evaluation as Record<string, unknown> | null)?.[row.scoreKey];
 
     return {
       ...row,
-      score: typeof score === "number" ? Math.round(score) : null,
+      score: typeof score === "number" ? roundUpScore(score) : null,
       model: modelByAgent[row.key] || "Model unavailable",
     };
   }).filter((row) => row.score !== null);
@@ -254,6 +327,31 @@ export function SourcesTabContent({ startup, evaluation }: SourcesTabContentProp
             ))
           ) : (
             <p className="text-sm text-muted-foreground">No website sources found.</p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className={sectionTitleClass()}>
+            <File className="h-4 w-4 text-blue-600" />
+            Documents
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {documentSources.length > 0 ? (
+            documentSources.map((row, idx) => (
+              <SourceRow
+                key={`doc-${row.title}-${idx}`}
+                url={row.url}
+                title={row.title}
+                subtitle={row.subtitle}
+                agentLabel={row.agentLabel}
+                timestamp={row.timestamp}
+              />
+            ))
+          ) : (
+            <p className="text-sm text-muted-foreground">No document sources found.</p>
           )}
         </CardContent>
       </Card>

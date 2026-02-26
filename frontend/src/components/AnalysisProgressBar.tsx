@@ -146,6 +146,17 @@ export function AnalysisProgressBar({
   }, [progress?.phases]);
 
   useEffect(() => {
+    if (
+      !pipelineStatus ||
+      pipelineStatus === "running" ||
+      pipelineStatus === "pending" ||
+      pipelineStatus === "queued"
+    ) {
+      terminalNotified.current = false;
+    }
+  }, [pipelineStatus, progress?.pipelineRunId]);
+
+  useEffect(() => {
     if (terminalNotified.current) {
       return;
     }

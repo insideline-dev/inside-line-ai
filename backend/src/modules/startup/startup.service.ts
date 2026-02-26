@@ -38,6 +38,7 @@ import {
   type StartupEvaluation,
 } from "../analysis/entities/analysis.schema";
 import { deriveStartupGeography } from "../geography";
+import { sanitizeNarrativeText } from "../ai/services/narrative-sanitizer";
 
 function escapeIlike(input: string): string {
   return input.replace(/[%_\\]/g, (ch) => `\\${ch}`).slice(0, 200);
@@ -156,6 +157,24 @@ export class StartupService {
     "legal",
     "dealTerms",
     "exitPotential",
+  ]);
+  private static readonly PHASE_STEP_AGENT_KEYS = new Set([
+    "pdf_fetch",
+    "text_extraction",
+    "ocr_fallback",
+    "field_extraction",
+    "gap_analysis",
+    "resolve_extraction",
+    "resolve_website",
+    "resolve_email",
+    "web_search",
+    "ai_synthesis",
+    "db_writes",
+    "cache_check",
+    "website_scrape",
+    "team_discovery",
+    "linkedin_enrichment_step",
+    "linkedin_enrichment",
   ]);
 
   constructor(
@@ -281,7 +300,7 @@ export class StartupService {
         throw new NotFoundException(`Startup with ID ${id} not found`);
       }
 
-      return this.withEvaluation(db, found, false);
+      return this.withEvaluation(db, found, true);
     });
   }
 
@@ -666,7 +685,7 @@ export class StartupService {
     const existingState = await this.aiPipeline.getPipelineStatus(id);
     if (!existingState) {
       mode = "full_reanalysis_fallback";
-      await this.aiPipeline.startPipeline(id, found.userId);
+      await this.aiPipeline.startPipeline(id, adminId);
       this.logger.warn(
         `Pipeline state missing for startup ${id}; falling back to full reanalysis for admin retry request`,
       );
@@ -688,6 +707,34 @@ export class StartupService {
       accepted: true,
       feedbackAccepted: Boolean(feedback),
       mode,
+    };
+  }
+
+  async adminCancelPipeline(id: string, adminId: string) {
+    const [found] = await this.drizzle.db
+      .select()
+      .from(startup)
+      .where(eq(startup.id, id))
+      .limit(1);
+
+    if (!found) {
+      throw new NotFoundException(`Startup with ID ${id} not found`);
+    }
+
+    if (!this.aiConfig.isPipelineEnabled()) {
+      throw new BadRequestException("AI pipeline is disabled");
+    }
+
+    const result = await this.aiPipeline.cancelPipeline(id);
+
+    this.logger.log(
+      `Admin ${adminId} cancelled pipeline for startup ${id}, removed ${result.removedJobs} jobs`,
+    );
+
+    return {
+      startupId: id,
+      cancelled: true,
+      removedJobs: result.removedJobs,
     };
   }
 
@@ -1206,28 +1253,27 @@ export class StartupService {
 
     const record = { ...(section as Record<string, unknown>) };
     const existingNarrative = this.pickNarrative(record);
-    const normalizedExisting = existingNarrative?.trim() ?? "";
+    const normalizedExisting = existingNarrative
+      ? sanitizeNarrativeText(existingNarrative).trim()
+      : "";
     if (this.isDetailedNarrative(normalizedExisting)) {
       record.narrativeSummary = normalizedExisting;
       record.memoNarrative = normalizedExisting;
+      if (typeof record.feedback === "string") {
+        record.feedback = sanitizeNarrativeText(record.feedback);
+      }
       return record;
     }
 
-    const feedback = this.readString(record.feedback);
-    const score = this.readNumber(record.score);
-    const confidence = this.readNumber(record.confidence);
+    const feedback = sanitizeNarrativeText(this.readString(record.feedback) ?? "");
     const keyFindings = this.readStringArray(record.keyFindings).slice(0, 4);
     const risks = this.readStringArray(record.risks).slice(0, 3);
     const dataGaps = this.readStringArray(record.dataGaps).slice(0, 3);
 
-    const confidencePercent =
-      confidence !== null ? Math.round(confidence * 100) : null;
     const paragraphOneParts = [
-      score !== null
-        ? `This section is currently scored at ${Math.round(score)}/100${confidencePercent !== null ? ` with ${confidencePercent}% confidence` : ""}.`
-        : "This section currently has directional signal but limited confidence due to sparse evidence.",
       feedback ||
-        "The current assessment should be treated as provisional pending additional primary-source diligence.",
+        "This section currently has directional signal but limited evidence depth in this run.",
+      "The current assessment should be treated as provisional pending additional primary-source diligence.",
     ].filter((part) => part.length > 0);
     const paragraphOne = paragraphOneParts.join(" ").trim();
 
@@ -1269,10 +1315,11 @@ export class StartupService {
       .join("\n\n");
 
     if (narrative.length > 0) {
-      record.narrativeSummary = narrative;
-      record.memoNarrative = narrative;
+      const sanitizedNarrative = sanitizeNarrativeText(narrative);
+      record.narrativeSummary = sanitizedNarrative;
+      record.memoNarrative = sanitizedNarrative;
       if (!this.isDetailedNarrative(feedback ?? "")) {
-        record.feedback = narrative;
+        record.feedback = sanitizedNarrative;
       }
     }
 
@@ -1303,10 +1350,6 @@ export class StartupService {
     }
     const trimmed = value.trim();
     return trimmed.length > 0 ? trimmed : null;
-  }
-
-  private readNumber(value: unknown): number | null {
-    return typeof value === "number" && Number.isFinite(value) ? value : null;
   }
 
   private readStringArray(value: unknown): string[] {
@@ -1375,7 +1418,9 @@ export class StartupService {
       | "TIMEOUT"
       | "SCHEMA_OUTPUT_INVALID"
       | "MODEL_OR_PROVIDER_ERROR"
-      | "UNHANDLED_AGENT_EXCEPTION";
+      | "UNHANDLED_AGENT_EXCEPTION"
+      | "MISSING_PROVIDER_EVIDENCE"
+      | "MISSING_BRAVE_TOOL_CALL";
     rawProviderError?: string;
     outputJson: unknown;
   } {
@@ -1406,7 +1451,9 @@ export class StartupService {
       metaRecord.fallbackReason === "TIMEOUT" ||
       metaRecord.fallbackReason === "SCHEMA_OUTPUT_INVALID" ||
       metaRecord.fallbackReason === "MODEL_OR_PROVIDER_ERROR" ||
-      metaRecord.fallbackReason === "UNHANDLED_AGENT_EXCEPTION"
+      metaRecord.fallbackReason === "UNHANDLED_AGENT_EXCEPTION" ||
+      metaRecord.fallbackReason === "MISSING_PROVIDER_EVIDENCE" ||
+      metaRecord.fallbackReason === "MISSING_BRAVE_TOOL_CALL"
         ? metaRecord.fallbackReason
         : undefined;
     const rawProviderError =
@@ -1521,6 +1568,7 @@ export class StartupService {
         ),
         ...(includeAdminDetails
           ? {
+              phaseResults: pipelineState?.results ?? {},
               agentEvents: (trackedProgress.agentEvents ?? []).map((event) => ({
                 id: event.id,
                 pipelineRunId: event.pipelineRunId,
@@ -1607,7 +1655,9 @@ export class StartupService {
             })(),
           ]),
         ),
-        ...(includeAdminDetails ? { agentTraces } : {}),
+        ...(includeAdminDetails
+          ? { phaseResults: pipelineState.results ?? {}, agentTraces }
+          : {}),
       };
       return response;
     }
@@ -1665,7 +1715,9 @@ export class StartupService {
         | "TIMEOUT"
         | "SCHEMA_OUTPUT_INVALID"
         | "MODEL_OR_PROVIDER_ERROR"
-        | "UNHANDLED_AGENT_EXCEPTION";
+        | "UNHANDLED_AGENT_EXCEPTION"
+        | "MISSING_PROVIDER_EVIDENCE"
+        | "MISSING_BRAVE_TOOL_CALL";
       rawProviderError?: string;
       captureStatus?: "captured" | "missing" | "provider_error_only";
       startedAt?: string;
@@ -1695,8 +1747,14 @@ export class StartupService {
     }
 
     return rows.map((row) => {
+      const inferredStepKey =
+        row.stepKey ??
+        (this.isPhaseStepAgentKey(row.agentKey) ? row.agentKey : undefined);
       const traceKind =
-        row.traceKind === "phase_step" ? "phase_step" : "ai_agent";
+        row.traceKind === "phase_step" ||
+        (!row.traceKind && Boolean(inferredStepKey))
+          ? "phase_step"
+          : "ai_agent";
       const traceMeta =
         traceKind === "ai_agent"
           ? this.parseTraceMeta(row.outputJson)
@@ -1729,7 +1787,7 @@ export class StartupService {
         phase: row.phase,
         agentKey: row.agentKey,
         traceKind,
-        stepKey: row.stepKey ?? undefined,
+        stepKey: traceKind === "phase_step" ? inferredStepKey : undefined,
         status: row.status,
         attempt: row.attempt,
         retryCount: row.retryCount,
@@ -1748,6 +1806,10 @@ export class StartupService {
         completedAt: row.completedAt ? row.completedAt.toISOString() : null,
       };
     });
+  }
+
+  private isPhaseStepAgentKey(agentKey: string): boolean {
+    return StartupService.PHASE_STEP_AGENT_KEYS.has(agentKey);
   }
 
   private resolvePhaseProgress(

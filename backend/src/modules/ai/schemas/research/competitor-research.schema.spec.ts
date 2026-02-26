@@ -54,6 +54,86 @@ describe("CompetitorResearchSchema", () => {
     expect(parsed.competitiveLandscapeSummary).toBe("");
   });
 
+  it("normalizes rich competitor payloads into canonical schema output", () => {
+    const parsed = CompetitorResearchSchema.parse({
+      competitorIdentification: {
+        directCompetitors: [
+          {
+            name: "MaxAB",
+            website: "https://maxab.io/",
+            reasoning: "Direct B2B FMCG e-commerce competitor in North Africa.",
+          },
+          {
+            name: "Wasoko",
+            website: "https://wasoko.com/",
+            reasoning: "Pan-African B2B retail platform.",
+          },
+        ],
+        indirectCompetitors: [
+          {
+            name: "WafR",
+            website: "https://wafr.ma/",
+            reasoning: "Loyalty/discount product serving similar retailers.",
+          },
+        ],
+        emergingThreats: [
+          {
+            name: "Retailo",
+            website: "https://retailo.co/",
+            reasoning: "Fast-growing MENA player that could enter market.",
+          },
+        ],
+      },
+      competitorProfiles: [
+        {
+          name: "MaxAB",
+          funding: {
+            totalRaised: "100000000",
+            lastRound: "Series B",
+            keyInvestors: ["Silver Lake"],
+          },
+          team: {
+            size: "500-1000",
+            hiringVelocity: "Moderate",
+          },
+          product: {
+            coreFeatures: ["B2B Marketplace", "Embedded Finance"],
+            techApproach: "Supply-chain software and forecasting",
+            recentLaunches: "Expanded credit facilities",
+          },
+          pricing: {
+            model: "Markup",
+            tiers: "Unknown",
+          },
+          positioning: {
+            messaging: "Supply chain efficiency for traditional retail.",
+          },
+          traction: {
+            metrics: "Serves 150,000+ retailers.",
+          },
+        },
+      ],
+      featureComparisonMatrix: [
+        { feature: "Embedded BNPL", startup: "Full Support", maxAB: "Full Support" },
+      ],
+      competitiveDynamics: {
+        marketShareSignals: [{ evidence: "Competes in Morocco" }],
+        barriersToEntry: [{ evidence: "Logistics CAPEX" }],
+      },
+      sources: ["https://maxab.io/", "https://wasoko.com/"],
+    });
+
+    expect(parsed.competitors).toHaveLength(2);
+    expect(parsed.competitors[0].name).toBe("MaxAB");
+    expect(parsed.competitors[0].pricing).toContain("Markup");
+    expect(parsed.competitors[0].fundingRaised).toBe(100_000_000);
+    expect(parsed.competitors[0].employeeCount).toBeUndefined();
+    expect(parsed.indirectCompetitors.map((c) => c.name)).toEqual(["WafR", "Retailo"]);
+    expect(parsed.marketPositioning).toContain("MaxAB");
+    expect(parsed.competitiveLandscapeSummary).toContain("direct competitor");
+    expect(parsed.sources).toEqual(["https://maxab.io/", "https://wasoko.com/"]);
+  });
+
   it("defaults competitor sub-arrays when omitted", () => {
     const parsed = CompetitorDetailSchema.parse({
       name: "Rival",
@@ -91,6 +171,22 @@ describe("CompetitorResearchSchema", () => {
     expect(parsed.pricing).toBeUndefined();
     expect(parsed.targetMarket).toBeUndefined();
     expect(parsed.threatLevel).toBeUndefined();
+  });
+
+  it("coerces object pricing to a string", () => {
+    const parsed = CompetitorDetailSchema.parse({
+      name: "PricingCo",
+      description: "Returns structured pricing payload",
+      productOverview: "Platform",
+      pricing: {
+        model: "transaction_fee",
+        range: "$10-$50",
+      },
+    });
+
+    expect(typeof parsed.pricing).toBe("string");
+    expect(parsed.pricing).toContain("transaction_fee");
+    expect(parsed.pricing).toContain("$10-$50");
   });
 
   it("treats null optional values as undefined", () => {
@@ -131,12 +227,12 @@ describe("IndirectCompetitorDetailSchema", () => {
     expect(parsed.whyIndirect).toBe("Adjacent market overlap");
   });
 
-  it("requires whyIndirect field", () => {
-    expect(() =>
-      IndirectCompetitorDetailSchema.parse({
-        name: "NoWhy",
-        description: "Missing whyIndirect",
-      }),
-    ).toThrow();
+  it("defaults missing whyIndirect field", () => {
+    const parsed = IndirectCompetitorDetailSchema.parse({
+      name: "NoWhy",
+      description: "Missing whyIndirect",
+    });
+
+    expect(parsed.whyIndirect).toBe("Indirect relationship not specified");
   });
 });

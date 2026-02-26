@@ -152,6 +152,113 @@ describe("LinkedinEnrichmentService", () => {
     expect(result[0]?.confidenceReason).toContain("Current company does not match target company");
   });
 
+  it("accepts historical founder/executive profiles when name match is strong", async () => {
+    unipile.getProfile.mockResolvedValueOnce({
+      id: "travis-1",
+      firstName: "Travis",
+      lastName: "Kalanick",
+      headline: "Founder at CloudKitchens",
+      location: "Los Angeles",
+      profileUrl: "https://linkedin.com/in/traviskalanick",
+      profileImageUrl: null,
+      summary: "Founded Uber and led it through global expansion.",
+      currentCompany: { name: "CloudKitchens", title: "Founder" },
+      experience: [
+        {
+          company: "CloudKitchens",
+          title: "Founder",
+          startDate: "2018",
+          endDate: null,
+          current: true,
+        },
+        {
+          company: "Uber",
+          title: "Founder & CEO",
+          startDate: "2009",
+          endDate: "2017",
+          current: false,
+        },
+      ],
+      education: [],
+    });
+
+    const result = await service.enrichTeamMembers(
+      "user-1",
+      [
+        {
+          name: "Travis Kalanick",
+          role: "CEO",
+          linkedinUrl: "https://linkedin.com/in/traviskalanick",
+        },
+      ],
+      { companyName: "Uber" },
+    );
+
+    expect(result[0]?.enrichmentStatus).toBe("success");
+    expect(result[0]?.matchConfidence).toBeGreaterThanOrEqual(70);
+    expect(result[0]?.confidenceReason).toContain(
+      "historical founder/executive association",
+    );
+  });
+
+  it("rejects operational profiles for leadership requests at target company", async () => {
+    unipile.searchProfiles.mockResolvedValueOnce([
+      {
+        id: "uber-driver-1",
+        firstName: "John",
+        lastName: "Smith",
+        headline: "Uber Driver",
+        location: "San Francisco",
+        profileUrl: "https://linkedin.com/in/john-smith-uber-driver",
+        profileImageUrl: null,
+        summary: null,
+        currentCompany: { name: "Uber", title: "Driver Partner" },
+        experience: [
+          {
+            company: "Uber",
+            title: "Driver Partner",
+            startDate: "2024",
+            endDate: null,
+            current: true,
+          },
+        ],
+        education: [],
+      },
+    ]);
+    unipile.getProfile.mockResolvedValueOnce({
+      id: "uber-driver-1",
+      firstName: "John",
+      lastName: "Smith",
+      headline: "Uber Driver",
+      location: "San Francisco",
+      profileUrl: "https://linkedin.com/in/john-smith-uber-driver",
+      profileImageUrl: null,
+      summary: null,
+      currentCompany: { name: "Uber", title: "Driver Partner" },
+      experience: [
+        {
+          company: "Uber",
+          title: "Driver Partner",
+          startDate: "2024",
+          endDate: null,
+          current: true,
+        },
+      ],
+      education: [],
+    });
+
+    const result = await service.enrichTeamMembers(
+      "user-1",
+      [{ name: "John Smith", role: "Founder" }],
+      { companyName: "Uber" },
+    );
+
+    expect(result[0]?.enrichmentStatus).toBe("not_found");
+    expect(result[0]?.confidenceReason).toContain(
+      "operational/non-executive",
+    );
+  });
+
   it("continues when one member enrichment fails", async () => {
     unipile.getProfile.mockRejectedValueOnce(new Error("upstream error"));
 
@@ -165,6 +272,38 @@ describe("LinkedinEnrichmentService", () => {
 
     expect(result[0]?.enrichmentStatus).toBe("error");
     expect(unipile.searchProfiles).not.toHaveBeenCalled();
+  });
+
+  it("short-circuits remaining member requests after a rate-limit error", async () => {
+    unipile.getProfile.mockRejectedValueOnce(
+      new Error(
+        'Unipile API error: {"status":429,"type":"errors/too_many_requests","title":"Too many requests"}',
+      ),
+    );
+
+    const result = await service.enrichTeamMembers(
+      "user-1",
+      [
+        {
+          name: "Alex Founder",
+          role: "CEO",
+          linkedinUrl: "https://linkedin.com/in/alex-founder",
+        },
+        {
+          name: "Sam Builder",
+          role: "CTO",
+          linkedinUrl: "https://linkedin.com/in/sam-builder",
+        },
+      ],
+      { companyName: "Inside Line" },
+    );
+
+    expect(unipile.getProfile).toHaveBeenCalledTimes(1);
+    expect(result).toHaveLength(2);
+    expect(result[0]?.enrichmentStatus).toBe("error");
+    expect(result[0]?.confidenceReason).toContain("rate-limited");
+    expect(result[1]?.enrichmentStatus).toBe("error");
+    expect(result[1]?.confidenceReason).toContain("rate-limited");
   });
 
   it("retries via search when a provided linkedin URL is unreachable", async () => {
@@ -476,13 +615,13 @@ describe("LinkedinEnrichmentService", () => {
     ]);
   });
 
-  it("accepts profiles with current target-company experience even when currentCompany is null", async () => {
+  it("accepts C-level profiles with current target-company experience even when currentCompany is null", async () => {
     unipile.searchProfilesInCompany.mockResolvedValue([
       {
         id: "curr-exp-1",
         firstName: "Dana",
         lastName: "Lead",
-        headline: "Head of Product",
+        headline: "CTO",
         location: "SF",
         profileUrl: "https://linkedin.com/in/dana-lead",
         profileImageUrl: null,
@@ -491,7 +630,7 @@ describe("LinkedinEnrichmentService", () => {
         experience: [
           {
             company: "Airbnb",
-            title: "Head of Product",
+            title: "CTO",
             startDate: "2023",
             endDate: null,
             current: true,
@@ -510,9 +649,42 @@ describe("LinkedinEnrichmentService", () => {
     expect(discovered).toEqual([
       {
         name: "Dana Lead",
-        role: "Head of Product",
+        role: "CTO",
         linkedinUrl: "https://linkedin.com/in/dana-lead",
       },
     ]);
+  });
+
+  it("stops company leadership discovery after a rate-limit response", async () => {
+    unipile.searchProfilesInCompany
+      .mockRejectedValueOnce(
+        new Error(
+          'Unipile API error: {"status":429,"type":"errors/too_many_requests","title":"Too many requests"}',
+        ),
+      )
+      .mockResolvedValueOnce([
+        {
+          id: "should-not-run",
+          firstName: "Never",
+          lastName: "Called",
+          headline: "CEO",
+          location: "SF",
+          profileUrl: "https://linkedin.com/in/never-called",
+          profileImageUrl: null,
+          summary: null,
+          currentCompany: { name: "Airbnb", title: "CEO" },
+          experience: [],
+          education: [],
+        },
+      ]);
+
+    const discovered = await service.discoverCompanyLeadershipMembers(
+      "Airbnb",
+      [],
+      "https://airbnb.com",
+    );
+
+    expect(discovered).toEqual([]);
+    expect(unipile.searchProfilesInCompany).toHaveBeenCalledTimes(1);
   });
 });

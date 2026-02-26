@@ -129,8 +129,9 @@ describe("PhaseTransitionService", () => {
 
   it("does not re-queue phases already in waiting state", () => {
     const state = createState({
-      [PipelinePhase.EXTRACTION]: PhaseStatus.WAITING,
-      [PipelinePhase.SCRAPING]: PhaseStatus.COMPLETED,
+      [PipelinePhase.EXTRACTION]: PhaseStatus.COMPLETED,
+      [PipelinePhase.ENRICHMENT]: PhaseStatus.WAITING,
+      [PipelinePhase.SCRAPING]: PhaseStatus.WAITING,
     });
 
     const decision = service.decideNextPhases(state);

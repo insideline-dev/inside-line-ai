@@ -40,6 +40,7 @@ import {
   Link2,
   MessageSquare,
   Binoculars,
+  Workflow,
   Plus,
   ChevronsUpDown,
   Calendar,
@@ -47,6 +48,7 @@ import {
   Handshake,
   DollarSign,
   Trophy,
+  UserRoundSearch,
   type LucideIcon,
 } from "lucide-react";
 import { useAuth, useLogout } from "@/lib/auth";
@@ -79,8 +81,10 @@ const roleNavItems: Record<UserRole, NavItem[]> = {
     { title: "Review Queue", url: "/admin", icon: Shield },
     { title: "Analytics", url: "/admin/analytics", icon: BarChart3 },
     { title: "Users", url: "/admin/users", icon: Users },
+    { title: "Investors", url: "/admin/investors", icon: UserRoundSearch },
     { title: "Scouts", url: "/admin/scouts", icon: Binoculars },
     { title: "Agents", url: "/admin/agents", icon: Bot },
+    { title: "Flow", url: "/admin/flow", icon: Workflow },
     { title: "Conversations", url: "/admin/conversations", icon: MessageSquare },
     { title: "Scoring", url: "/admin/scoring", icon: Scale },
     { title: "Integrations", url: "/admin/integrations", icon: Link2 },

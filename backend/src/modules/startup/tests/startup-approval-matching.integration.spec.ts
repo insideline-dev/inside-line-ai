@@ -10,6 +10,8 @@ import { AiConfigService } from "../../ai/services/ai-config.service";
 import { PipelineService } from "../../ai/services/pipeline.service";
 import { PipelineFeedbackService } from "../../ai/services/pipeline-feedback.service";
 import { StartupMatchingPipelineService } from "../../ai/services/startup-matching-pipeline.service";
+import { EnrichmentService } from "../../ai/services/enrichment.service";
+import { PipelineTemplateService } from "../../ai/services/pipeline-template.service";
 import { NotificationService } from "../../../notification/notification.service";
 import { InvestorMatchingService } from "../../ai/services/investor-matching.service";
 import { PipelineStateService } from "../../ai/services/pipeline-state.service";
@@ -413,11 +415,25 @@ describe("Startup lifecycle integration: submit -> pipeline complete -> approve 
 
     const lifecycleAiConfig = {
       isPipelineEnabled: jest.fn().mockReturnValue(true),
+      isEnrichmentEnabled: jest.fn().mockReturnValue(true),
     } as unknown as jest.Mocked<AiConfigService>;
 
     const moduleRef = {
       get: jest.fn().mockReturnValue(null),
     } as unknown as jest.Mocked<ModuleRef>;
+
+    const pipelineTemplateService = {
+      getRuntimeSnapshot: jest.fn().mockResolvedValue(null),
+    } as unknown as jest.Mocked<PipelineTemplateService>;
+
+    const enrichmentService = {
+      assessNeed: jest.fn().mockResolvedValue({
+        shouldRun: true,
+        missing: [],
+        suspicious: [],
+      }),
+      buildSkippedResult: jest.fn(),
+    } as unknown as jest.Mocked<EnrichmentService>;
 
     lifecyclePipelineService = new PipelineService(
       drizzle,
@@ -430,6 +446,8 @@ describe("Startup lifecycle integration: submit -> pipeline complete -> approve 
       progressTracker,
       phaseTransition,
       errorRecovery,
+      pipelineTemplateService,
+      enrichmentService,
       moduleRef,
     );
   });

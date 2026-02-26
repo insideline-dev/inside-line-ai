@@ -1,8 +1,12 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { generateText, Output } from "ai";
+import { z } from "zod";
 import { UnipileService } from '../../integrations/unipile/unipile.service';
 import type { LinkedInProfile } from '../../integrations/unipile/entities';
 import type { EnrichedTeamMember } from '../interfaces/phase-results.interface';
+import { ModelPurpose } from '../interfaces/pipeline.interface';
+import { AiProviderService } from '../providers/ai-provider.service';
 
 interface TeamMemberInput {
   name: string;
@@ -19,6 +23,8 @@ interface ProfileMatchAssessment {
   accepted: boolean;
   confidence: number;
   reason: string;
+  associationType?: "current" | "historical" | "none";
+  adjudicatedBy?: "deterministic" | "ai";
 }
 
 interface RejectedCandidateDecision {
@@ -42,12 +48,24 @@ interface LinkedinEnrichmentOptions {
   onTrace?: (event: LinkedinEnrichmentTraceEvent) => void;
 }
 
+const LinkedInIdentityVerifierSchema = z.object({
+  accepted: z.boolean(),
+  confidence: z.number().int().min(0).max(100),
+  reason: z.string().min(1),
+});
+
 @Injectable()
 export class LinkedinEnrichmentService {
   private readonly logger = new Logger(LinkedinEnrichmentService.name);
   private readonly batchSize: number;
   private readonly maxCompanyLeadershipCandidates: number;
+  private readonly companyLeadershipDiscoveryTarget: number;
+  private readonly maxLeadershipDiscoveryQueries: number;
   private readonly maxProfileCandidates = 3;
+  private readonly historicalFounderMinNameConfidence = 85;
+  private readonly aiVerifierEnabled: boolean;
+  private readonly aiVerifierMinConfidence: number;
+  private readonly aiVerifierMaxConfidence: number;
   private readonly nameStopWords = new Set([
     'mr',
     'mrs',
@@ -59,26 +77,66 @@ export class LinkedinEnrichmentService {
     'iii',
     'iv',
   ]);
+  private readonly companyTokenStopWords = new Set([
+    "inc",
+    "llc",
+    "ltd",
+    "limited",
+    "corp",
+    "corporation",
+    "co",
+    "company",
+    "group",
+    "holdings",
+    "ventures",
+    "capital",
+    "technologies",
+    "technology",
+    "tech",
+    "systems",
+    "solutions",
+    "labs",
+    "lab",
+    "global",
+    "international",
+  ]);
   private readonly companyLeadershipQueries = [
     'founder',
     'co-founder',
     'ceo',
     'cto',
-    'coo',
     'cfo',
+    'coo',
     'cpo',
-    'vp',
-    'head',
-    'director',
+    'president',
+    'chairman',
   ] as const;
+  private readonly executiveLeadershipPattern =
+    /\b(founder|co[\s-]?founder|chairman|chief|ceo|cto|coo|cfo|cmo|cpo|president)\b/i;
 
   constructor(
     private unipileService: UnipileService,
     @Optional() private config?: ConfigService,
+    @Optional() private aiProviders?: AiProviderService,
   ) {
     this.batchSize = this.config?.get<number>('LINKEDIN_BATCH_SIZE', 10) ?? 10;
     this.maxCompanyLeadershipCandidates =
       this.config?.get<number>('LINKEDIN_COMPANY_DISCOVERY_MAX', 6) ?? 6;
+    const configuredTarget =
+      this.config?.get<number>('LINKEDIN_COMPANY_DISCOVERY_TARGET', 3) ?? 3;
+    this.companyLeadershipDiscoveryTarget = Math.max(
+      1,
+      Math.min(configuredTarget, this.maxCompanyLeadershipCandidates),
+    );
+    this.maxLeadershipDiscoveryQueries =
+      this.config?.get<number>('LINKEDIN_COMPANY_DISCOVERY_MAX_QUERIES', 3) ??
+      3;
+    this.aiVerifierEnabled =
+      this.config?.get<boolean>('LINKEDIN_AI_VERIFIER_ENABLED', true) ?? true;
+    this.aiVerifierMinConfidence =
+      this.config?.get<number>('LINKEDIN_AI_VERIFIER_MIN_CONFIDENCE', 55) ?? 55;
+    this.aiVerifierMaxConfidence =
+      this.config?.get<number>('LINKEDIN_AI_VERIFIER_MAX_CONFIDENCE', 80) ?? 80;
   }
 
   async discoverCompanyLeadershipMembers(
@@ -102,8 +160,12 @@ export class LinkedinEnrichmentService {
     );
 
     const candidates = new Map<string, TeamMemberInput>();
+    const discoveryQueries = this.companyLeadershipQueries.slice(
+      0,
+      Math.max(1, this.maxLeadershipDiscoveryQueries),
+    );
     const traceOptions = options?.onTrace ? { onTrace: options.onTrace } : undefined;
-    for (const query of this.companyLeadershipQueries) {
+    for (const query of discoveryQueries) {
       let matches: LinkedInProfile[] = [];
       this.emitTrace(options, {
         operation: "unipile.search_profiles_in_company",
@@ -150,6 +212,18 @@ export class LinkedinEnrichmentService {
         this.logger.debug(
           `[LinkedInDiscovery] query=${query} company=${normalizedCompany} failed: ${message}`,
         );
+        if (this.isRateLimitError(message)) {
+          this.logger.warn(
+            `[LinkedInDiscovery] rate limited by Unipile; stopping leadership discovery for ${normalizedCompany}`,
+          );
+          break;
+        }
+        if (this.isIntegrationUnavailableError(message)) {
+          this.logger.warn(
+            `[LinkedInDiscovery] LinkedIn integration unavailable; skipping company leadership discovery for ${normalizedCompany}`,
+          );
+          break;
+        }
         continue;
       }
 
@@ -168,6 +242,13 @@ export class LinkedinEnrichmentService {
         if (!candidates.has(dedupeKey)) {
           candidates.set(dedupeKey, member);
         }
+      }
+
+      if (candidates.size >= this.companyLeadershipDiscoveryTarget) {
+        this.logger.debug(
+          `[LinkedInDiscovery] company=${normalizedCompany} reached discovery target (${this.companyLeadershipDiscoveryTarget}), stopping additional queries`,
+        );
+        break;
       }
     }
 
@@ -206,19 +287,39 @@ export class LinkedinEnrichmentService {
     }
 
     const enriched: EnrichedTeamMember[] = [];
+    let rateLimited = false;
+    let rateLimitReason = "LinkedIn provider rate-limited this request (429)";
 
     for (let index = 0; index < members.length; index += this.batchSize) {
       const batch = members.slice(index, index + this.batchSize);
-      const settled = await Promise.allSettled(
-        batch.map((member) =>
-          this.enrichMember(userId, member, startupContext, options),
-        ),
-      );
+      for (const member of batch) {
+        if (rateLimited) {
+          enriched.push(
+            this.buildRateLimitedMember(member, rateLimitReason),
+          );
+          this.emitTrace(options, {
+            operation: "linkedin.enrich_member",
+            status: "failed",
+            inputJson: {
+              member,
+              startupContext,
+            },
+            error: rateLimitReason,
+            meta: {
+              rateLimited: true,
+              skipped: true,
+            },
+          });
+          continue;
+        }
 
-      for (let batchIndex = 0; batchIndex < settled.length; batchIndex += 1) {
-        const result = settled[batchIndex];
-        const member = batch[batchIndex];
-        if (result.status === 'fulfilled') {
+        try {
+          const result = await this.enrichMember(
+            userId,
+            member,
+            startupContext,
+            options,
+          );
           this.emitTrace(options, {
             operation: "linkedin.enrich_member",
             status: "completed",
@@ -226,32 +327,82 @@ export class LinkedinEnrichmentService {
               member,
               startupContext,
             },
-            outputJson: result.value,
+            outputJson: result,
           });
-          enriched.push(result.value);
+          enriched.push(result);
           continue;
-        }
+        } catch (error) {
+          const rejectedMessage =
+            error instanceof Error
+              ? error.message
+              : String(error);
+          if (this.isRateLimitError(rejectedMessage)) {
+            rateLimited = true;
+            rateLimitReason = this.formatRateLimitReason(rejectedMessage);
+            enriched.push(
+              this.buildRateLimitedMember(member, rateLimitReason),
+            );
+            this.emitTrace(options, {
+              operation: "linkedin.enrich_member",
+              status: "failed",
+              inputJson: {
+                member,
+                startupContext,
+              },
+              error: rejectedMessage,
+              meta: {
+                rateLimited: true,
+                shortCircuit: true,
+              },
+            });
+            this.logger.warn(
+              `[LinkedInEnrichment] Rate limited by Unipile; short-circuiting remaining members in this run`,
+            );
+            continue;
+          }
 
-        enriched.push({
-          name: member.name,
-          role: member.role,
-          linkedinUrl: member.linkedinUrl,
-          enrichmentStatus: 'error',
-          matchConfidence: 0,
-          confidenceReason: 'LinkedIn profile resolution failed with an unexpected error',
-        });
-        this.emitTrace(options, {
-          operation: "linkedin.enrich_member",
-          status: "failed",
-          inputJson: {
-            member,
-            startupContext,
-          },
-          error:
-            result.reason instanceof Error
-              ? result.reason.message
-              : String(result.reason),
-        });
+          if (this.isIntegrationUnavailableError(rejectedMessage)) {
+            enriched.push({
+              name: member.name,
+              role: member.role,
+              linkedinUrl: member.linkedinUrl,
+              enrichmentStatus: 'not_configured',
+              matchConfidence: 0,
+              confidenceReason: 'LinkedIn integration authorization failed or is unavailable',
+            });
+            this.emitTrace(options, {
+              operation: "linkedin.enrich_member",
+              status: "failed",
+              inputJson: {
+                member,
+                startupContext,
+              },
+              error: rejectedMessage,
+              meta: {
+                integrationUnavailable: true,
+              },
+            });
+            continue;
+          }
+
+          enriched.push({
+            name: member.name,
+            role: member.role,
+            linkedinUrl: member.linkedinUrl,
+            enrichmentStatus: 'error',
+            matchConfidence: 0,
+            confidenceReason: 'LinkedIn profile resolution failed with an unexpected error',
+          });
+          this.emitTrace(options, {
+            operation: "linkedin.enrich_member",
+            status: "failed",
+            inputJson: {
+              member,
+              startupContext,
+            },
+            error: rejectedMessage,
+          });
+        }
       }
     }
 
@@ -266,9 +417,28 @@ export class LinkedinEnrichmentService {
   ): Promise<EnrichedTeamMember> {
     const attemptedUrls: string[] = [];
     const rejectedCandidates: RejectedCandidateDecision[] = [];
-    let candidateUrls: string[] = member.linkedinUrl
-      ? [member.linkedinUrl]
-      : await this.getSearchCandidateUrls(member, startupContext, [], options);
+    let candidateUrls: string[];
+    try {
+      candidateUrls = member.linkedinUrl
+        ? [member.linkedinUrl]
+        : await this.getSearchCandidateUrls(member, startupContext, [], options);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (this.isRateLimitError(message)) {
+        throw error;
+      }
+      if (this.isIntegrationUnavailableError(message)) {
+        return {
+          name: member.name,
+          role: member.role,
+          linkedinUrl: member.linkedinUrl,
+          enrichmentStatus: 'not_configured',
+          matchConfidence: 0,
+          confidenceReason: 'LinkedIn integration authorization failed or is unavailable',
+        };
+      }
+      throw error;
+    }
     let usedSearchFallback = !member.linkedinUrl;
     let sawRecoverableFetchError = false;
     let lastAttemptedUrl: string | undefined;
@@ -304,17 +474,58 @@ export class LinkedinEnrichmentService {
             reason: 'Profile lookup returned no profile data',
           });
         } else {
-          const assessment = this.assessRequestedProfile(profile, member, startupContext);
+          let assessment = this.assessRequestedProfile(
+            profile,
+            member,
+            startupContext,
+          );
+          if (
+            !assessment.accepted &&
+            this.shouldRunAiAdjudication(assessment)
+          ) {
+            const aiAssessment = await this.assessRequestedProfileWithAi(
+              profile,
+              member,
+              startupContext,
+            );
+            if (aiAssessment) {
+              assessment = aiAssessment;
+            }
+          }
           if (!assessment.accepted) {
             rejectedCandidates.push({
               linkedinUrl,
               confidence: assessment.confidence,
               reason: assessment.reason,
             });
+            this.emitMatchDecision(options, {
+              requestedMember: member,
+              linkedinUrl,
+              accepted: false,
+              confidence: assessment.confidence,
+              reason: assessment.reason,
+              associationType: assessment.associationType ?? "none",
+              adjudicatedBy: assessment.adjudicatedBy ?? "deterministic",
+              attemptedUrls,
+              rejectedCandidates,
+            });
             this.logger.debug(
               `[LinkedInEnrichment] profile mismatch for ${member.name}; candidate ${linkedinUrl} rejected (${assessment.reason}, confidence=${assessment.confidence})`,
             );
           } else {
+            this.emitMatchDecision(options, {
+              requestedMember: member,
+              linkedinUrl,
+              accepted: true,
+              confidence: assessment.confidence,
+              reason: assessment.reason,
+              associationType:
+                assessment.associationType ??
+                this.deriveAssociationType(profile, startupContext?.companyName),
+              adjudicatedBy: assessment.adjudicatedBy ?? "deterministic",
+              attemptedUrls,
+              rejectedCandidates,
+            });
             return {
               name: member.name,
               role: member.role,
@@ -331,6 +542,16 @@ export class LinkedinEnrichmentService {
         const message = error instanceof Error ? error.message : String(error);
         if (this.isRateLimitError(message)) {
           throw error;
+        }
+        if (this.isIntegrationUnavailableError(message)) {
+          return {
+            name: member.name,
+            role: member.role,
+            linkedinUrl,
+            enrichmentStatus: 'not_configured',
+            matchConfidence: 0,
+            confidenceReason: 'LinkedIn integration authorization failed or is unavailable',
+          };
         }
 
         if (!this.isRecoverableFetchError(message)) {
@@ -373,6 +594,19 @@ export class LinkedinEnrichmentService {
     const bestRejectedCandidate = this.pickBestRejectedCandidate(rejectedCandidates);
 
     if (sawRecoverableFetchError) {
+      this.emitMatchDecision(options, {
+        requestedMember: member,
+        linkedinUrl: lastAttemptedUrl ?? member.linkedinUrl,
+        accepted: false,
+        confidence: bestRejectedCandidate?.confidence ?? 0,
+        reason:
+          bestRejectedCandidate?.reason ??
+          "All candidate profile lookups failed with recoverable errors",
+        associationType: "none",
+        adjudicatedBy: "deterministic",
+        attemptedUrls,
+        rejectedCandidates,
+      });
       return {
         name: member.name,
         role: member.role,
@@ -385,6 +619,19 @@ export class LinkedinEnrichmentService {
       };
     }
 
+    this.emitMatchDecision(options, {
+      requestedMember: member,
+      linkedinUrl: lastAttemptedUrl ?? member.linkedinUrl,
+      accepted: false,
+      confidence: bestRejectedCandidate?.confidence ?? 0,
+      reason:
+        bestRejectedCandidate?.reason ??
+        "No candidate profile matched name/company constraints",
+      associationType: "none",
+      adjudicatedBy: "deterministic",
+      attemptedUrls,
+      rejectedCandidates,
+    });
     return {
       name: member.name,
       role: member.role,
@@ -500,7 +747,47 @@ export class LinkedinEnrichmentService {
   }
 
   private isRateLimitError(message: string): boolean {
-    return /\b429\b/.test(message);
+    const normalized = message.toLowerCase();
+    return (
+      /\b429\b/.test(normalized) ||
+      normalized.includes("too many requests") ||
+      normalized.includes("too_many_requests") ||
+      normalized.includes("rate limit")
+    );
+  }
+
+  private buildRateLimitedMember(
+    member: TeamMemberInput,
+    reason: string,
+  ): EnrichedTeamMember {
+    return {
+      name: member.name,
+      role: member.role,
+      linkedinUrl: member.linkedinUrl,
+      enrichmentStatus: "error",
+      matchConfidence: 0,
+      confidenceReason: reason,
+    };
+  }
+
+  private formatRateLimitReason(message: string): string {
+    if (!message || message.trim().length === 0) {
+      return "LinkedIn provider rate-limited this request (429)";
+    }
+
+    return `LinkedIn provider rate-limited this request (429): ${message}`;
+  }
+
+  private isIntegrationUnavailableError(message: string): boolean {
+    const normalized = message.toLowerCase();
+    return (
+      normalized.includes('linkedin integration not configured') ||
+      normalized.includes('linkedin integration authorization failed') ||
+      normalized.includes('unipile api error 401') ||
+      normalized.includes('unipile api error 403') ||
+      normalized.includes('unauthorized') ||
+      normalized.includes('forbidden')
+    );
   }
 
   private mapProfile(
@@ -565,6 +852,20 @@ export class LinkedinEnrichmentService {
     return value.trim();
   }
 
+  private extractYearFromDate(value: string | null | undefined): number | null {
+    if (!value) {
+      return null;
+    }
+
+    const match = value.match(/\b(19|20)\d{2}\b/);
+    if (!match?.[0]) {
+      return null;
+    }
+
+    const parsed = Number.parseInt(match[0], 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
   private toCandidate(
     profile: LinkedInProfile,
     companyName: string,
@@ -598,12 +899,12 @@ export class LinkedinEnrichmentService {
     companyName: string,
     headline: string,
   ): boolean {
-    const leadershipPattern =
-      /\b(founder|co[\s-]?founder|chief|ceo|cto|coo|cfo|cmo|cpo|president|vice president|vp|head|director|managing director|general manager|partner)\b/i;
     const currentRoleTexts = this.getCurrentRoleTexts(profile, companyName);
     const hasLeadershipSignal =
-      leadershipPattern.test(headline) ||
-      currentRoleTexts.some((text) => leadershipPattern.test(text));
+      this.executiveLeadershipPattern.test(headline) ||
+      currentRoleTexts.some((text) =>
+        this.executiveLeadershipPattern.test(text),
+      );
     if (!hasLeadershipSignal) {
       return false;
     }
@@ -686,12 +987,24 @@ export class LinkedinEnrichmentService {
       return true;
     }
 
-    const targetTokens = target.split(" ").filter((token) => token.length >= 3);
+    const targetTokens = target
+      .split(" ")
+      .filter(
+        (token) =>
+          token.length >= 3 && !this.companyTokenStopWords.has(token),
+      );
     if (targetTokens.length === 0) {
       return false;
     }
 
-    return targetTokens.some((token) => candidate.includes(token));
+    const matchedTokens = targetTokens.filter((token) => candidate.includes(token));
+    if (matchedTokens.length >= 2) {
+      return true;
+    }
+    if (matchedTokens.length === 1 && targetTokens.length === 1) {
+      return matchedTokens[0]!.length >= 6;
+    }
+    return false;
   }
 
   private normalizeCompanyText(value: string | null | undefined): string {
@@ -721,25 +1034,81 @@ export class LinkedinEnrichmentService {
         accepted: false,
         confidence: 0,
         reason: "Profile name does not match requested member name",
+        associationType: "none",
+        adjudicatedBy: "deterministic",
       };
     }
 
     const companyName = startupContext?.companyName?.trim();
     if (!companyName) {
+      const accepted = nameConfidence >= this.historicalFounderMinNameConfidence;
       return {
-        accepted: true,
-        confidence: Math.max(70, nameConfidence),
-        reason: "Name matched; company context was not provided",
+        accepted,
+        confidence: nameConfidence,
+        reason: accepted
+          ? "Name matched strongly, but company context was not provided"
+          : "Name matched, but company context was not provided so profile association could not be verified",
+        associationType: "none",
+        adjudicatedBy: "deterministic",
       };
     }
 
-    // Strict accuracy gate: only accept profiles that are currently at target company.
-    // This avoids ex-employees and self-employed matches that happen to share name tokens.
     if (!this.isCurrentAtTargetCompany(profile, companyName)) {
+      if (
+        nameConfidence >= this.historicalFounderMinNameConfidence &&
+        this.hasHistoricalLeadershipAtTargetCompany(profile, companyName)
+      ) {
+        return {
+          accepted: true,
+          confidence: Math.max(70, Math.round(nameConfidence * 0.9)),
+          reason: `Name matched and has verified historical founder/executive association with "${companyName}" (not currently employed)`,
+          associationType: "historical",
+          adjudicatedBy: "deterministic",
+        };
+      }
+
       return {
         accepted: false,
         confidence: Math.max(10, Math.round(nameConfidence * 0.6)),
         reason: `Current company does not match target company "${companyName}"`,
+        associationType: "none",
+        adjudicatedBy: "deterministic",
+      };
+    }
+
+    if (this.hasDisqualifyingOperationalRole(profile, companyName)) {
+      return {
+        accepted: false,
+        confidence: Math.max(10, Math.round(nameConfidence * 0.5)),
+        reason: `Current role indicates operational/non-executive work at "${companyName}"`,
+        associationType: "none",
+        adjudicatedBy: "deterministic",
+      };
+    }
+
+    if (!this.hasReasonableCurrentTimeline(profile, companyName)) {
+      return {
+        accepted: false,
+        confidence: Math.max(10, Math.round(nameConfidence * 0.6)),
+        reason: "Current role timeline appears inconsistent or unverifiable",
+        associationType: "none",
+        adjudicatedBy: "deterministic",
+      };
+    }
+
+    const leadershipExpected = this.roleRequiresLeadership(
+      requestedMember.role,
+    );
+    if (
+      leadershipExpected &&
+      !this.hasLeadershipSignalAtTargetCompany(profile, companyName)
+    ) {
+      return {
+        accepted: false,
+        confidence: Math.max(15, Math.round(nameConfidence * 0.65)),
+        reason: `Requested role "${requestedMember.role ?? "leadership"}" requires leadership evidence at "${companyName}"`,
+        associationType: "none",
+        adjudicatedBy: "deterministic",
       };
     }
 
@@ -747,7 +1116,249 @@ export class LinkedinEnrichmentService {
       accepted: true,
       confidence: Math.min(100, nameConfidence + 8),
       reason: `Name matched and currently employed at "${companyName}"`,
+      associationType: "current",
+      adjudicatedBy: "deterministic",
     };
+  }
+
+  private shouldRunAiAdjudication(
+    assessment: ProfileMatchAssessment,
+  ): boolean {
+    if (!this.aiVerifierEnabled) {
+      return false;
+    }
+    if (assessment.accepted) {
+      return false;
+    }
+    if (!this.aiProviders) {
+      return false;
+    }
+    return (
+      assessment.confidence >= this.aiVerifierMinConfidence &&
+      assessment.confidence <= this.aiVerifierMaxConfidence
+    );
+  }
+
+  private async assessRequestedProfileWithAi(
+    profile: LinkedInProfile,
+    requestedMember: TeamMemberInput,
+    startupContext?: StartupContextInput,
+  ): Promise<ProfileMatchAssessment | null> {
+    if (!this.aiProviders) {
+      return null;
+    }
+
+    try {
+      const response = await generateText({
+        model: this.aiProviders.resolveModelForPurpose(ModelPurpose.RESEARCH),
+        temperature: 0,
+        system: [
+          "You are an identity verification agent for LinkedIn profile matching.",
+          "Return ONLY a JSON object with keys: accepted, confidence, reason.",
+          "Be strict: accept only when the profile is very likely the exact same person.",
+          "Current association with target company is preferred.",
+          "You may also accept if there is strong historical founder/executive association with the target company, and clearly state that it is historical (not current).",
+          "Reject operational/non-executive profiles (for example driver/courier roles) when leadership is expected.",
+        ].join("\n"),
+        prompt: JSON.stringify(
+          {
+            requestedMember: {
+              name: requestedMember.name,
+              role: requestedMember.role ?? null,
+            },
+            startupContext: {
+              companyName: startupContext?.companyName ?? null,
+              website: startupContext?.website ?? null,
+            },
+            candidateProfile: {
+              firstName: profile.firstName ?? null,
+              lastName: profile.lastName ?? null,
+              headline: profile.headline ?? null,
+              currentCompany: profile.currentCompany ?? null,
+              experience: profile.experience.slice(0, 8).map((entry) => ({
+                company: entry.company,
+                title: entry.title,
+                startDate: entry.startDate,
+                endDate: entry.endDate,
+                current: entry.current,
+              })),
+              profileUrl: profile.profileUrl ?? null,
+            },
+          },
+          null,
+          2,
+        ),
+        output: Output.object({ schema: LinkedInIdentityVerifierSchema }),
+      });
+
+      return {
+        ...response.output,
+        associationType: this.deriveAssociationType(
+          profile,
+          startupContext?.companyName,
+        ),
+        adjudicatedBy: "ai",
+      };
+    } catch (error) {
+      this.logger.debug(
+        `[LinkedInEnrichment] AI verifier unavailable for ${requestedMember.name}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return null;
+    }
+  }
+
+  private roleRequiresLeadership(role: string | undefined): boolean {
+    if (!role) {
+      return false;
+    }
+
+    return /\b(founder|co[\s-]?founder|chief|ceo|cto|coo|cfo|cmo|cpo|president|vp|vice president|head|director|partner)\b/i.test(
+      role,
+    );
+  }
+
+  private hasLeadershipSignalAtTargetCompany(
+    profile: LinkedInProfile,
+    companyName: string,
+  ): boolean {
+    const leadershipPattern =
+      /\b(founder|co[\s-]?founder|chief|ceo|cto|coo|cfo|cmo|cpo|president|vice president|vp|head|director|managing director|general manager|partner)\b/i;
+
+    if (
+      this.matchesTargetCompany(profile.currentCompany?.name, companyName) &&
+      leadershipPattern.test(profile.currentCompany?.title ?? "")
+    ) {
+      return true;
+    }
+
+    return profile.experience.some(
+      (entry) =>
+        entry.current &&
+        this.matchesTargetCompany(entry.company, companyName) &&
+        leadershipPattern.test(entry.title ?? ""),
+    );
+  }
+
+  private hasHistoricalLeadershipAtTargetCompany(
+    profile: LinkedInProfile,
+    companyName: string,
+  ): boolean {
+    const leadershipPattern =
+      /\b(founder|co[\s-]?founder|chairman|chief|ceo|cto|coo|cfo|cmo|cpo|president|vice president|vp|head|director|managing director|general manager|partner)\b/i;
+
+    return profile.experience.some(
+      (entry) =>
+        !entry.current &&
+        this.matchesTargetCompany(entry.company, companyName) &&
+        leadershipPattern.test(entry.title ?? ""),
+    );
+  }
+
+  private deriveAssociationType(
+    profile: LinkedInProfile,
+    companyName: string | undefined,
+  ): "current" | "historical" | "none" {
+    const target = companyName?.trim();
+    if (!target) {
+      return "none";
+    }
+    if (this.isCurrentAtTargetCompany(profile, target)) {
+      return "current";
+    }
+    if (this.hasHistoricalLeadershipAtTargetCompany(profile, target)) {
+      return "historical";
+    }
+    return "none";
+  }
+
+  private emitMatchDecision(
+    options: LinkedinEnrichmentOptions | undefined,
+    params: {
+      requestedMember: TeamMemberInput;
+      linkedinUrl?: string;
+      accepted: boolean;
+      confidence: number;
+      reason: string;
+      associationType: "current" | "historical" | "none";
+      adjudicatedBy: "deterministic" | "ai";
+      attemptedUrls: string[];
+      rejectedCandidates: RejectedCandidateDecision[];
+    },
+  ): void {
+    this.emitTrace(options, {
+      operation: "linkedin.match_decision",
+      status: params.accepted ? "completed" : "failed",
+      inputJson: {
+        requestedMember: params.requestedMember,
+      },
+      outputJson: {
+        linkedinUrl: params.linkedinUrl,
+        accepted: params.accepted,
+        confidence: params.confidence,
+        reason: params.reason,
+      },
+      meta: {
+        associationType: params.associationType,
+        adjudicatedBy: params.adjudicatedBy,
+        attemptedUrls: params.attemptedUrls,
+        rejectedCandidateCount: params.rejectedCandidates.length,
+        rejectedCandidates: params.rejectedCandidates,
+      },
+    });
+  }
+
+  private hasDisqualifyingOperationalRole(
+    profile: LinkedInProfile,
+    companyName: string,
+  ): boolean {
+    const disqualifyingPattern =
+      /\b(driver|courier|delivery|rideshare|independent contractor|contractor|partner driver)\b/i;
+
+    if (
+      this.matchesTargetCompany(profile.currentCompany?.name, companyName) &&
+      disqualifyingPattern.test(
+        `${profile.currentCompany?.title ?? ""} ${profile.headline ?? ""}`,
+      )
+    ) {
+      return true;
+    }
+
+    return profile.experience.some(
+      (entry) =>
+        entry.current &&
+        this.matchesTargetCompany(entry.company, companyName) &&
+        disqualifyingPattern.test(`${entry.title ?? ""} ${profile.headline ?? ""}`),
+    );
+  }
+
+  private hasReasonableCurrentTimeline(
+    profile: LinkedInProfile,
+    companyName: string,
+  ): boolean {
+    const currentYear = new Date().getFullYear();
+    const candidateYears: number[] = [];
+
+    for (const entry of profile.experience) {
+      if (
+        !entry.current ||
+        !this.matchesTargetCompany(entry.company, companyName)
+      ) {
+        continue;
+      }
+      const startYear = this.extractYearFromDate(entry.startDate);
+      if (startYear !== null) {
+        candidateYears.push(startYear);
+      }
+    }
+
+    if (candidateYears.length === 0) {
+      // Missing dates are common on public profiles; don't reject solely for that.
+      return true;
+    }
+
+    return candidateYears.every((year) => year <= currentYear + 1);
   }
 
   private pickBestRejectedCandidate(

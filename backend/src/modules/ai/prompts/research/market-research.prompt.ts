@@ -105,7 +105,23 @@ Provide structured research output:
 - Do NOT wrap output in markdown or code fences.
 - Do NOT include prose before or after the JSON object.
 - Required string fields must never be null (use "Unknown" when unavailable).
-- Use [] for missing arrays and {} for missing objects.`;
+- Use [] for missing arrays and {} for missing objects.
+- Use this exact top-level JSON shape and key names:
+{
+  "marketReports": [],
+  "competitors": [{"name": "", "description": "", "fundingRaised": 0, "url": ""}],
+  "indirectCompetitors": [],
+  "indirectCompetitorsDetailed": [{"name": "", "description": "", "whyIndirect": "", "threatLevel": "high|medium|low", "url": ""}],
+  "marketTrends": [],
+  "marketSize": {"tam": 0, "sam": 0, "som": 0},
+  "totalAddressableMarket": {"value": "", "year": "", "source": "", "confidence": "high|medium|low"},
+  "marketGrowthRate": {"cagr": "", "period": "", "source": ""},
+  "marketDrivers": [],
+  "marketChallenges": [],
+  "regulatoryLandscape": "",
+  "tamValidation": {"claimAccuracy": "", "explanation": ""},
+  "sources": []
+}`;
 
 export const MARKET_RESEARCH_HUMAN_PROMPT = `Deep market research for:
 

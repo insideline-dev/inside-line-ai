@@ -5,10 +5,12 @@ import { z } from "zod";
 import { DrizzleService } from "../../../database";
 import type { SynthesisResult } from "../interfaces/phase-results.interface";
 import { AiProviderService } from "../providers/ai-provider.service";
+import { ModelPurpose } from "../interfaces/pipeline.interface";
 import { investorThesis, startupMatch } from "../../investor/entities";
 import { user, UserRole } from "../../../auth/entities/auth.schema";
 import { AiPromptService } from "./ai-prompt.service";
 import { AiConfigService } from "./ai-config.service";
+import { AiModelExecutionService } from "./ai-model-execution.service";
 import {
   ScoreComputationService,
   type SectionScores,
@@ -23,7 +25,6 @@ const ThesisFitSchema = z.object({
   thesisFitScore: z.number().int().min(0).max(100),
   fitRationale: z.string().min(1),
 });
-const THESIS_ALIGNMENT_MODEL = "gemini-3-flash-preview";
 
 interface StartupMatchInput {
   startupId: string;
@@ -71,6 +72,7 @@ export interface InvestorMatchingOutput {
 @Injectable()
 export class InvestorMatchingService {
   private readonly logger = new Logger(InvestorMatchingService.name);
+  private readonly candidateEvaluationConcurrency = 8;
 
   constructor(
     private drizzle: DrizzleService,
@@ -78,6 +80,7 @@ export class InvestorMatchingService {
     private promptService: AiPromptService,
     private aiConfig: AiConfigService,
     private scoreComputation: ScoreComputationService,
+    private modelExecution?: AiModelExecutionService,
   ) {}
 
   async matchStartup(input: StartupMatchInput): Promise<InvestorMatchingOutput> {
@@ -125,8 +128,10 @@ export class InvestorMatchingService {
       usedFallback: boolean;
     };
 
-    const aligned = await Promise.all(
-      firstFilterPassed.map(async (candidate) => {
+    const aligned = await this.mapWithConcurrency(
+      firstFilterPassed,
+      this.candidateEvaluationConcurrency,
+      async (candidate) => {
         const fit = await this.alignThesis(candidate, input);
         const weightedStartupScore = await this.computeInvestorWeightedScore(
           input,
@@ -164,7 +169,7 @@ export class InvestorMatchingService {
           isMatch,
           usedFallback: fit.usedFallback,
         } satisfies EvaluatedCandidate;
-      }),
+      },
     );
 
     return {
@@ -226,13 +231,23 @@ export class InvestorMatchingService {
         key: "matching.thesis",
         stage: input.startup.stage,
       });
+      const execution = this.modelExecution
+        ? await this.modelExecution.resolveForPrompt({
+            key: "matching.thesis",
+            stage: input.startup.stage,
+          })
+        : null;
 
       const { output } = await generateText({
-        model: this.providers.resolveModel(THESIS_ALIGNMENT_MODEL),
+        model:
+          execution?.generateTextOptions.model ??
+          this.providers.resolveModelForPurpose(ModelPurpose.THESIS_ALIGNMENT),
         output: Output.object({ schema: ThesisFitSchema }),
         temperature: this.aiConfig.getMatchingTemperature(),
         maxOutputTokens: this.aiConfig.getMatchingMaxOutputTokens(),
         system: promptConfig.systemPrompt,
+        tools: execution?.generateTextOptions.tools,
+        toolChoice: execution?.generateTextOptions.toolChoice,
         prompt: this.promptService.renderTemplate(promptConfig.userPrompt, {
           investorThesisSummary: candidate.thesisSummary ?? "Not available",
           investorThesis:
@@ -348,6 +363,38 @@ export class InvestorMatchingService {
       thesisFitScore,
       fitRationale,
     });
+  }
+
+  private async mapWithConcurrency<TInput, TOutput>(
+    items: TInput[],
+    concurrency: number,
+    mapper: (item: TInput, index: number) => Promise<TOutput>,
+  ): Promise<TOutput[]> {
+    if (items.length === 0) {
+      return [];
+    }
+
+    const limit = Math.max(1, Math.floor(concurrency));
+    const results = new Array<TOutput>(items.length);
+    let cursor = 0;
+
+    const worker = async () => {
+      while (true) {
+        const index = cursor;
+        cursor += 1;
+        if (index >= items.length) {
+          return;
+        }
+        results[index] = await mapper(items[index]!, index);
+      }
+    };
+
+    const workers = Array.from(
+      { length: Math.min(limit, items.length) },
+      () => worker(),
+    );
+    await Promise.all(workers);
+    return results;
   }
 
 }

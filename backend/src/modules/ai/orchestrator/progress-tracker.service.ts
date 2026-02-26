@@ -249,6 +249,61 @@ export class ProgressTrackerService {
     });
   }
 
+  async resetPhasesForRerun(params: {
+    startupId: string;
+    userId: string;
+    pipelineRunId: string;
+    phases: PipelinePhase[];
+  }): Promise<PipelineProgressPayload> {
+    return this.withMutationLock(params.startupId, async () => {
+      const payload = await this.ensureProgress(
+        params.startupId,
+        params.pipelineRunId,
+      );
+      const now = new Date().toISOString();
+      const uniquePhases = [...new Set(params.phases)];
+
+      for (const phaseName of uniquePhases) {
+        payload.phases[phaseName] = {
+          status: PhaseStatus.PENDING,
+          retryCount: 0,
+          agents: {},
+        };
+      }
+
+      payload.phasesCompleted = (Object.entries(payload.phases) as Array<
+        [PipelinePhase, PhaseProgress]
+      >)
+        .filter(([, value]) => isPhaseTerminal(value.status))
+        .map(([phaseName]) => phaseName);
+      payload.overallProgress = Math.round(
+        (payload.phasesCompleted.length / Object.keys(payload.phases).length) *
+          100,
+      );
+      payload.currentPhase = this.resolveCurrentPhase(payload, payload.currentPhase);
+      payload.estimatedTimeRemaining = this.estimateTimeRemaining(payload);
+      payload.updatedAt = now;
+
+      await this.persistProgress(params.startupId, payload);
+
+      for (const phaseName of uniquePhases) {
+        this.emitPhaseEvent(
+          params.userId,
+          params.startupId,
+          params.pipelineRunId,
+          phaseName,
+          payload.phases[phaseName],
+        );
+      }
+
+      this.logger.debug(
+        `[Pipeline] Batched rerun reset progress for phases: ${uniquePhases.join(", ") || "none"} | Startup: ${params.startupId} | Run: ${params.pipelineRunId}`,
+      );
+
+      return payload;
+    });
+  }
+
   async updateAgentProgress(params: {
     startupId: string;
     userId: string;

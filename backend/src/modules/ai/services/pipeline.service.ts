@@ -198,6 +198,7 @@ export class PipelineService {
   }
 
   async rerunFromPhase(startupId: string, phase: PipelinePhase): Promise<void> {
+    const rerunStartedAt = Date.now();
     const state = await this.pipelineState.get(startupId);
     if (!state) {
       throw new Error(`Pipeline state for startup ${startupId} not found`);
@@ -208,10 +209,25 @@ export class PipelineService {
       throw new BadRequestException(`Unknown phase "${phase}"`);
     }
 
+    let stepStartedAt = Date.now();
     const newRunId = await this.beginManualRun(state, phase);
-    await this.queue.removePipelineJobs(startupId);
-    await this.updateStartupStatus(startupId, StartupStatus.ANALYZING);
+    this.logger.debug(
+      `[Pipeline] Manual rerun setup | Step: beginManualRun | Startup: ${startupId} | Phase: ${phase} | Run: ${newRunId} | Duration: ${Date.now() - stepStartedAt}ms`,
+    );
 
+    stepStartedAt = Date.now();
+    const removedJobs = await this.queue.removePipelineJobs(startupId);
+    this.logger.debug(
+      `[Pipeline] Manual rerun setup | Step: removePipelineJobs | Startup: ${startupId} | Phase: ${phase} | Run: ${newRunId} | Removed: ${removedJobs} | Duration: ${Date.now() - stepStartedAt}ms`,
+    );
+
+    stepStartedAt = Date.now();
+    await this.updateStartupStatus(startupId, StartupStatus.ANALYZING);
+    this.logger.debug(
+      `[Pipeline] Manual rerun setup | Step: updateStartupStatus | Startup: ${startupId} | Phase: ${phase} | Run: ${newRunId} | Duration: ${Date.now() - stepStartedAt}ms`,
+    );
+
+    stepStartedAt = Date.now();
     for (const phaseToReset of phasesToReset) {
       await this.resetPhaseForRerun({
         startupId,
@@ -219,10 +235,32 @@ export class PipelineService {
         pipelineRunId: newRunId,
         phase: phaseToReset,
         clearResult: true,
+        skipProgressUpdate: true,
       });
     }
+    this.logger.debug(
+      `[Pipeline] Manual rerun setup | Step: resetPhaseStateForRerun | Startup: ${startupId} | Phase: ${phase} | Run: ${newRunId} | Phases: ${phasesToReset.join(", ")} | Duration: ${Date.now() - stepStartedAt}ms`,
+    );
 
+    stepStartedAt = Date.now();
+    await this.progressTracker.resetPhasesForRerun({
+      startupId,
+      userId: state.userId,
+      pipelineRunId: newRunId,
+      phases: phasesToReset,
+    });
+    this.logger.debug(
+      `[Pipeline] Manual rerun setup | Step: resetProgressForRerun(batch) | Startup: ${startupId} | Phase: ${phase} | Run: ${newRunId} | Phases: ${phasesToReset.join(", ")} | Duration: ${Date.now() - stepStartedAt}ms`,
+    );
+
+    stepStartedAt = Date.now();
     await this.queuePhase({ startupId, pipelineRunId: newRunId, userId: state.userId, phase });
+    this.logger.debug(
+      `[Pipeline] Manual rerun setup | Step: queuePhase | Startup: ${startupId} | Phase: ${phase} | Run: ${newRunId} | Duration: ${Date.now() - stepStartedAt}ms`,
+    );
+    this.logger.log(
+      `[Pipeline] Manual rerun prepared | Startup: ${startupId} | Phase: ${phase} | Run: ${newRunId} | Total setup duration: ${Date.now() - rerunStartedAt}ms`,
+    );
   }
 
   async retryAgent(startupId: string, request: RetryAgentRequest): Promise<void> {
@@ -916,7 +954,9 @@ export class PipelineService {
     phase: PipelinePhase;
     clearResult: boolean;
     preserveTelemetry?: boolean;
+    skipProgressUpdate?: boolean;
   }): Promise<void> {
+    const startedAt = Date.now();
     if (params.clearResult) {
       await this.pipelineState.clearPhaseResult(params.startupId, params.phase);
     }
@@ -926,13 +966,18 @@ export class PipelineService {
     } else {
       await this.pipelineState.resetPhase(params.startupId, params.phase);
     }
-    await this.progressTracker.updatePhaseProgress({
-      startupId: params.startupId,
-      userId: params.userId,
-      pipelineRunId: params.pipelineRunId,
-      phase: params.phase,
-      status: PhaseStatus.PENDING,
-    });
+    if (!params.skipProgressUpdate) {
+      await this.progressTracker.updatePhaseProgress({
+        startupId: params.startupId,
+        userId: params.userId,
+        pipelineRunId: params.pipelineRunId,
+        phase: params.phase,
+        status: PhaseStatus.PENDING,
+      });
+    }
+    this.logger.debug(
+      `[Pipeline] resetPhaseForRerun | Startup: ${params.startupId} | Run: ${params.pipelineRunId} | Phase: ${params.phase} | ClearResult: ${params.clearResult} | PreserveTelemetry: ${Boolean(params.preserveTelemetry)} | SkipProgressUpdate: ${Boolean(params.skipProgressUpdate)} | Duration: ${Date.now() - startedAt}ms`,
+    );
   }
 
   private isValidAgentForPhase(
@@ -966,6 +1011,7 @@ export class PipelineService {
     state: PipelineState,
     currentPhase: PipelinePhase,
   ): Promise<string> {
+    const startedAt = Date.now();
     const nextRunId = randomUUID();
     const initialPhaseStatuses = Object.fromEntries(
       Object.entries(state.phases).map(([phase, value]) => [
@@ -975,21 +1021,38 @@ export class PipelineService {
     ) as Partial<Record<PipelinePhase, PhaseStatus>>;
 
     if (state.status === PipelineStatus.RUNNING) {
+      const cancelPrevStartedAt = Date.now();
       await this.updatePipelineRunStatus(
         state.pipelineRunId,
         PipelineStatus.CANCELLED,
         "Superseded by manual rerun",
       );
+      this.logger.debug(
+        `[Pipeline] beginManualRun | Step: cancelPreviousRunRecord | Startup: ${state.startupId} | PrevRun: ${state.pipelineRunId} | NextRun: ${nextRunId} | Duration: ${Date.now() - cancelPrevStartedAt}ms`,
+      );
     }
 
+    let stepStartedAt = Date.now();
     await this.pipelineState.setPipelineRunId(state.startupId, nextRunId);
+    this.logger.debug(
+      `[Pipeline] beginManualRun | Step: setPipelineRunId | Startup: ${state.startupId} | NextRun: ${nextRunId} | Duration: ${Date.now() - stepStartedAt}ms`,
+    );
+    stepStartedAt = Date.now();
     await this.pipelineState.setStatus(state.startupId, PipelineStatus.RUNNING);
+    this.logger.debug(
+      `[Pipeline] beginManualRun | Step: setPipelineStatus(state) | Startup: ${state.startupId} | NextRun: ${nextRunId} | Duration: ${Date.now() - stepStartedAt}ms`,
+    );
+    stepStartedAt = Date.now();
     await this.createPipelineRunRecord({
       ...state,
       pipelineRunId: nextRunId,
       status: PipelineStatus.RUNNING,
       quality: "standard",
     });
+    this.logger.debug(
+      `[Pipeline] beginManualRun | Step: createPipelineRunRecord | Startup: ${state.startupId} | NextRun: ${nextRunId} | Duration: ${Date.now() - stepStartedAt}ms`,
+    );
+    stepStartedAt = Date.now();
     await this.progressTracker.initProgress({
       startupId: state.startupId,
       userId: state.userId,
@@ -998,13 +1061,12 @@ export class PipelineService {
       initialPhaseStatuses,
       currentPhase,
     });
-    await this.progressTracker.setPipelineStatus({
-      startupId: state.startupId,
-      userId: state.userId,
-      pipelineRunId: nextRunId,
-      status: PipelineStatus.RUNNING,
-      currentPhase,
-    });
+    this.logger.debug(
+      `[Pipeline] beginManualRun | Step: initProgress | Startup: ${state.startupId} | NextRun: ${nextRunId} | CurrentPhase: ${currentPhase} | Duration: ${Date.now() - stepStartedAt}ms`,
+    );
+    this.logger.debug(
+      `[Pipeline] beginManualRun | Total | Startup: ${state.startupId} | NextRun: ${nextRunId} | CurrentPhase: ${currentPhase} | Duration: ${Date.now() - startedAt}ms`,
+    );
 
     return nextRunId;
   }

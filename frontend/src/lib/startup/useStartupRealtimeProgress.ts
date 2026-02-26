@@ -77,6 +77,10 @@ function isTerminalAgentStatus(status: string | undefined): boolean {
   return status === "completed" || status === "failed";
 }
 
+function isTerminalPipelineStatus(status: string | undefined): boolean {
+  return Boolean(status && TERMINAL_PIPELINE_STATUSES.has(status));
+}
+
 function normalizeNonNegativeInt(value: number | undefined, fallback = 0): number {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     return fallback;
@@ -213,6 +217,84 @@ function buildDefaultProgress(): PipelineProgressData {
     ),
     updatedAt: new Date().toISOString(),
   };
+}
+
+function phaseOrderIndex(phase: string | undefined): number {
+  if (!phase) {
+    return -1;
+  }
+  return PIPELINE_PHASE_ORDER.indexOf(phase as (typeof PIPELINE_PHASE_ORDER)[number]);
+}
+
+function resetProgressForIncomingRun(
+  current: PipelineProgressData,
+  pipelineRunId: string,
+  currentPhase?: string,
+): PipelineProgressData {
+  const next = buildDefaultProgress();
+  const currentPhaseIndex = phaseOrderIndex(currentPhase);
+
+  if (currentPhaseIndex > 0) {
+    for (let index = 0; index < currentPhaseIndex; index += 1) {
+      const phaseKey = PIPELINE_PHASE_ORDER[index];
+      const previousPhase = current.phases[phaseKey];
+      if (!previousPhase) {
+        continue;
+      }
+      if (previousPhase.status !== "completed" && previousPhase.status !== "skipped") {
+        continue;
+      }
+
+      next.phases[phaseKey] = {
+        ...next.phases[phaseKey],
+        status: previousPhase.status,
+        progress: 100,
+        retryCount:
+          typeof previousPhase.retryCount === "number"
+            ? previousPhase.retryCount
+            : next.phases[phaseKey].retryCount,
+      };
+    }
+
+    if (current.phaseResults && typeof current.phaseResults === "object") {
+      const preservedResults = Object.entries(current.phaseResults).filter(
+        ([phaseKey]) => {
+          const index = phaseOrderIndex(phaseKey);
+          return index >= 0 && index < currentPhaseIndex;
+        },
+      );
+      if (preservedResults.length > 0) {
+        next.phaseResults = Object.fromEntries(preservedResults);
+      }
+    }
+  }
+
+  next.pipelineRunId = pipelineRunId;
+  next.pipelineStatus = "running";
+  if (currentPhase) {
+    next.currentPhase = currentPhase;
+  }
+
+  return recomputeProgress(next);
+}
+
+function prepareProgressForIncomingRun(
+  current: PipelineProgressData,
+  pipelineRunId: string,
+  currentPhase?: string,
+): PipelineProgressData | null {
+  if (!current.pipelineRunId || current.pipelineRunId === pipelineRunId) {
+    return {
+      ...current,
+      pipelineRunId,
+    };
+  }
+
+  if (!isTerminalPipelineStatus(current.pipelineStatus)) {
+    return null;
+  }
+
+  return resetProgressForIncomingRun(current, pipelineRunId, currentPhase);
 }
 
 function ensurePhase(
@@ -358,10 +440,13 @@ export function useStartupRealtimeProgress(
       if (!queryKey) return;
       queryClient.setQueryData(queryKey, (current) =>
         patchProgressPayload(current, (base) => {
-          const next = { ...base };
-          next.pipelineRunId = data.pipelineRunId;
+          const next = prepareProgressForIncomingRun(base, data.pipelineRunId);
+          if (!next) {
+            return base;
+          }
           next.pipelineStatus = "running";
           next.currentPhase = next.currentPhase || PIPELINE_PHASE_ORDER[0];
+          delete next.error;
           return recomputeProgress(next);
         }),
       );
@@ -370,15 +455,10 @@ export function useStartupRealtimeProgress(
       if (!queryKey) return;
       queryClient.setQueryData(queryKey, (current) =>
         patchProgressPayload(current, (base) => {
-          const next = { ...base };
-          if (
-            next.pipelineRunId &&
-            data.pipelineRunId &&
-            next.pipelineRunId !== data.pipelineRunId
-          ) {
-            return next;
+          const next = prepareProgressForIncomingRun(base, data.pipelineRunId);
+          if (!next) {
+            return base;
           }
-          next.pipelineRunId = data.pipelineRunId;
           next.pipelineStatus = data.status;
           next.overallProgress = 100;
           if (data.error) {
@@ -398,15 +478,10 @@ export function useStartupRealtimeProgress(
       if (!queryKey) return;
       queryClient.setQueryData(queryKey, (current) =>
         patchProgressPayload(current, (base) => {
-          const next = { ...base };
-          if (
-            next.pipelineRunId &&
-            data.pipelineRunId &&
-            next.pipelineRunId !== data.pipelineRunId
-          ) {
-            return next;
+          const next = prepareProgressForIncomingRun(base, data.pipelineRunId);
+          if (!next) {
+            return base;
           }
-          next.pipelineRunId = data.pipelineRunId;
           next.pipelineStatus = data.status;
           next.error = data.error;
           return recomputeProgress(next);
@@ -423,15 +498,10 @@ export function useStartupRealtimeProgress(
       if (!queryKey) return;
       queryClient.setQueryData(queryKey, (current) =>
         patchProgressPayload(current, (base) => {
-          const next = { ...base };
-          if (
-            next.pipelineRunId &&
-            data.pipelineRunId &&
-            next.pipelineRunId !== data.pipelineRunId
-          ) {
-            return next;
+          const next = prepareProgressForIncomingRun(base, data.pipelineRunId);
+          if (!next) {
+            return base;
           }
-          next.pipelineRunId = data.pipelineRunId;
           next.pipelineStatus = data.status;
           next.error = data.error;
           return recomputeProgress(next);
@@ -448,15 +518,17 @@ export function useStartupRealtimeProgress(
       if (!queryKey) return;
       queryClient.setQueryData(queryKey, (current) =>
         patchProgressPayload(current, (base) => {
-          const next = { ...base };
+          let next = { ...base };
           if (data.pipelineRunId) {
-            if (
-              next.pipelineRunId &&
-              next.pipelineRunId !== data.pipelineRunId
-            ) {
-              return next;
+            const prepared = prepareProgressForIncomingRun(
+              next,
+              data.pipelineRunId,
+              data.phase,
+            );
+            if (!prepared) {
+              return base;
             }
-            next.pipelineRunId = data.pipelineRunId;
+            next = prepared;
           }
 
           const phase = ensurePhase(next, data.phase);
@@ -513,15 +585,17 @@ export function useStartupRealtimeProgress(
       if (!queryKey) return;
       queryClient.setQueryData(queryKey, (current) =>
         patchProgressPayload(current, (base) => {
-          const next = { ...base };
+          let next = { ...base };
           if (data.pipelineRunId) {
-            if (
-              next.pipelineRunId &&
-              next.pipelineRunId !== data.pipelineRunId
-            ) {
-              return next;
+            const prepared = prepareProgressForIncomingRun(
+              next,
+              data.pipelineRunId,
+              data.phase,
+            );
+            if (!prepared) {
+              return base;
             }
-            next.pipelineRunId = data.pipelineRunId;
+            next = prepared;
           }
 
           const phase = ensurePhase(next, data.phase);

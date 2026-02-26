@@ -4,6 +4,7 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  ConflictException,
 } from "@nestjs/common";
 import { eq, and, or, ilike, sql, desc } from "drizzle-orm";
 import { UserRole } from "../../auth/entities/auth.schema";
@@ -610,10 +611,20 @@ export class StartupService {
       });
     }
 
-    if (request.forceRerun) {
-      await this.aiPipeline.rerunFromPhase(id, request.phase);
-    } else {
-      await this.aiPipeline.retryPhase(id, request.phase);
+    try {
+      if (request.forceRerun) {
+        await this.aiPipeline.rerunFromPhase(id, request.phase);
+      } else {
+        await this.aiPipeline.retryPhase(id, request.phase);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes(`Pipeline state for startup ${id} not found`)) {
+        throw new ConflictException(
+          "No reusable pipeline state is available for this startup. Use Full Reanalysis (Fresh).",
+        );
+      }
+      throw error;
     }
 
     this.logger.log(

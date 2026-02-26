@@ -1,18 +1,17 @@
 import type { ResearchAgentConfig } from "../../interfaces/agent.interface";
-import type { MarketResearch } from "../../schemas";
-import { MarketResearchSchema } from "../../schemas";
+import { z } from "zod";
 import {
   MARKET_RESEARCH_HUMAN_PROMPT,
   MARKET_RESEARCH_SYSTEM_PROMPT,
 } from "../../prompts/research/market-research.prompt";
 import { toValidUrl } from "./url.util";
 
-export const MarketResearchAgent: ResearchAgentConfig<MarketResearch> = {
+export const MarketResearchAgent: ResearchAgentConfig<string> = {
   key: "market",
   name: "Market Research",
   systemPrompt: MARKET_RESEARCH_SYSTEM_PROMPT,
   humanPromptTemplate: MARKET_RESEARCH_HUMAN_PROMPT,
-  schema: MarketResearchSchema,
+  schema: z.string(),
   contextBuilder: ({ extraction, scraping, researchParameters }) => ({
     industry: extraction.industry,
     geographicFocus: researchParameters?.geographicFocus ?? (extraction.location ? [extraction.location] : []),
@@ -25,29 +24,20 @@ export const MarketResearchAgent: ResearchAgentConfig<MarketResearch> = {
   }),
   fallback: ({ extraction }) => {
     const websiteUrl = toValidUrl(extraction.website);
-
-    return {
-      marketReports: [
-        `${extraction.industry} benchmarks should be validated with external reports`,
-      ],
-      competitors: [],
-      indirectCompetitors: [],
-      indirectCompetitorsDetailed: [],
-      marketTrends: [
-        `Early-stage ${extraction.industry} investment interest remains selective`,
-      ],
-      marketSize: {
-        tam: undefined,
-        sam: undefined,
-        som: undefined,
-      },
-      marketDrivers: [],
-      marketChallenges: [],
-      regulatoryLandscape: undefined,
-      totalAddressableMarket: undefined,
-      marketGrowthRate: undefined,
-      tamValidation: undefined,
-      sources: websiteUrl ? [websiteUrl] : [],
-    };
+    return [
+      `Market Research Report: ${extraction.companyName}`,
+      "",
+      "Executive Summary",
+      `Fallback mode active. Independent TAM/SAM/SOM validation for ${extraction.industry} requires manual analyst verification.`,
+      "",
+      "Preliminary Directional Signal",
+      `Early-stage capital allocation in ${extraction.industry} remains selective and evidence-driven.`,
+      "",
+      "Key Gap",
+      "No high-confidence third-party market datasets were captured in automated mode.",
+      "",
+      "Primary Source",
+      websiteUrl ?? "No verified primary source URL available.",
+    ].join("\n");
   },
 };

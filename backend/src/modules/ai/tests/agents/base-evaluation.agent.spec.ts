@@ -79,6 +79,10 @@ class TestEvaluationAgent extends BaseEvaluationAgent<TestOutput> {
     score: 50,
     verdict: "Fallback verdict",
   }));
+
+  readonly exposeBuildResearchReportText = (
+    pipelineData: EvaluationPipelineInput,
+  ): string => this.buildResearchReportText(pipelineData);
 }
 
 class NarrativeEvaluationAgent extends BaseEvaluationAgent<NarrativeOutput> {
@@ -443,6 +447,28 @@ describe("BaseEvaluationAgent", () => {
     expect(call?.prompt).toContain("<user_provided_data>");
     expect(call?.prompt).toContain("AI-powered analytics platform");
     expect(call?.prompt).toContain("</user_provided_data>");
+  });
+
+  it("coerces non-string research branches to text without throwing", () => {
+    const withLegacyResearch = createEvaluationPipelineInput();
+    const legacyResearch = withLegacyResearch.research as unknown as {
+      combinedReportText: unknown;
+      team: unknown;
+      market: unknown;
+      competitor: unknown;
+    };
+    legacyResearch.combinedReportText = "";
+    legacyResearch.team = { summary: "Legacy team object payload" };
+    legacyResearch.market = ["Legacy market array payload"];
+    legacyResearch.competitor = { scorecard: { moat: "moderate" } };
+
+    const report = agent.exposeBuildResearchReportText(withLegacyResearch);
+
+    expect(report).toContain("Team Research Report");
+    expect(report).toContain("Legacy team object payload");
+    expect(report).toContain("Market Research Report");
+    expect(report).toContain("Legacy market array payload");
+    expect(report).toContain("Competitor Research Report");
   });
 
   it("formatContext wraps JSON values in user_provided_data tags", async () => {

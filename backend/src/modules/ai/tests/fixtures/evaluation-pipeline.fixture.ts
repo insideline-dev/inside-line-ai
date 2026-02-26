@@ -153,170 +153,31 @@ export function createEvaluationPipelineInput(): EvaluationPipelineInput {
       scrapeErrors: [],
     },
     research: {
-      team: {
-        linkedinProfiles: [
-          {
-            name: "Amina Rao",
-            title: "CEO",
-            company: "Clipaf",
-            experience: ["PlantOps", "FactoryFlow"],
-            url: "https://linkedin.com/in/amina-rao",
-            patents: [],
-            previousExits: [],
-            notableAchievements: [],
-            educationHighlights: [],
-            sources: [],
-          },
-        ],
-        previousCompanies: ["PlantOps", "FactoryFlow"],
-        education: ["MIT"],
-        achievements: [
-          "Filed workflow orchestration patent family",
-          "Scaled industrial operations platform to enterprise customers",
-        ],
-        onlinePresence: {
-          github: "https://github.com/clipaf",
-          personalSites: ["https://clipaf.com/team"],
-        },
-        sources: ["https://linkedin.com/in/amina-rao"],
-      },
-      market: {
-        marketReports: ["Industrial automation market outlook 2026"],
-        competitors: [
-          {
-            name: "FactoryCloud",
-            description: "Industrial analytics and compliance workflows",
-            fundingRaised: 45_000_000,
-            url: "https://factorycloud.example.com",
-          },
-          {
-            name: "OpsPilot",
-            description: "Workflow orchestration for operations teams",
-            fundingRaised: 28_000_000,
-            url: "https://opspilot.example.com",
-          },
-        ],
-        indirectCompetitors: ["Internal ERP custom workflows", "Manual spreadsheet operations"],
-        indirectCompetitorsDetailed: [
-          {
-            name: "Internal ERP custom workflows",
-            description: "Enterprises extending ERP modules instead of adopting dedicated tools",
-            whyIndirect: "Competes for same workflow automation budget",
-            threatLevel: "medium",
-          },
-          {
-            name: "Manual spreadsheet operations",
-            description: "Ops teams relying on spreadsheet-based compliance tracking",
-            whyIndirect: "Low-cost substitute with poor scalability",
-            threatLevel: "low",
-          },
-        ],
-        marketTrends: [
-          "Regulatory pressure increasing for digital compliance evidence",
-          "M&A activity accelerating in industrial workflow software",
-        ],
-        marketSize: {
-          tam: 8_500_000_000,
-          sam: 2_200_000_000,
-          som: 180_000_000,
-        },
-        marketDrivers: [],
-        marketChallenges: [],
-        sources: ["https://market.example.com/report"],
-      },
-      product: {
-        productPages: [
-          "https://clipaf.com/product",
-          "https://clipaf.com/features",
-          "https://clipaf.com/demo",
-        ],
-        features: [
-          "Automated compliance checks",
-          "Audit report generation",
-          "Field operations workflow copilot",
-        ],
-        techStack: ["TypeScript", "PostgreSQL", "Redis"],
-        integrations: ["SAP", "Salesforce"],
-        customerReviews: {
-          summary: "Customers highlight implementation speed and reporting quality.",
-          sentiment: "positive",
-        },
-        reviews: [],
-        strengths: [],
-        weaknesses: [],
-        sources: ["https://product.example.com/review"],
-      },
-      news: {
-        articles: [
-          {
-            title: "Clipaf expands into enterprise manufacturing",
-            source: "Tech Daily",
-            date: "2026-01-12",
-            summary:
-              "Expansion includes new channel partnerships and security certifications.",
-            url: "https://news.example.com/clipaf-enterprise",
-          },
-          {
-            title: "Industrial software consolidator acquires QOps",
-            source: "Market Wire",
-            date: "2025-11-03",
-            summary:
-              "Acquisition underscores active M&A demand in workflow and compliance tooling.",
-            url: "https://news.example.com/qops-acquisition",
-          },
-        ],
-        pressReleases: ["Clipaf announces partner ecosystem launch"],
-        sentiment: "positive",
-        recentEvents: ["Partner program launch", "New enterprise logos"],
-        sources: ["https://news.example.com/clipaf-enterprise"],
-      },
-      competitor: {
-        competitors: [
-          {
-            name: "FactoryCloud",
-            description: "Industrial analytics and compliance workflows",
-            website: "https://factorycloud.example.com",
-            fundingRaised: 45_000_000,
-            fundingStage: "Series B",
-            employeeCount: 200,
-            productOverview: "Cloud-based industrial analytics platform with compliance reporting modules",
-            keyFeatures: ["Analytics dashboard", "Compliance reporting", "IoT integration"],
-            pricing: "Enterprise annual contracts starting at $50K/yr",
-            targetMarket: "Enterprise manufacturing and industrial operations",
-            differentiators: ["Larger integration ecosystem", "More mature analytics"],
-            weaknesses: ["Generic platform, not AI-native", "Complex implementation"],
-            threatLevel: "high",
-            productFeatures: [],
-            recentNews: [],
-          },
-          {
-            name: "OpsPilot",
-            description: "Workflow orchestration for operations teams",
-            website: "https://opspilot.example.com",
-            fundingRaised: 28_000_000,
-            fundingStage: "Series A",
-            productOverview: "Workflow orchestration tool focused on operations team productivity",
-            keyFeatures: ["Drag-and-drop workflows", "Team collaboration"],
-            targetMarket: "Mid-market operations teams",
-            differentiators: ["Simpler UX", "Faster deployment"],
-            weaknesses: ["No compliance focus", "Limited to workflow orchestration"],
-            threatLevel: "medium",
-            productFeatures: [],
-            recentNews: [],
-          },
-        ],
-        indirectCompetitors: [
-          {
-            name: "Internal ERP custom workflows",
-            description: "Enterprises extending ERP modules instead of adopting dedicated tools",
-            whyIndirect: "Competes for same workflow automation budget",
-            threatLevel: "medium",
-          },
-        ],
-        marketPositioning: "Positioned as AI-native vertical specialist for industrial compliance",
-        competitiveLandscapeSummary: "Fragmented market with horizontal players and limited vertical AI-native competition",
-        sources: ["https://crunchbase.example.com/factorycloud"],
-      },
+      team: "Team report text: founders have industrial SaaS background and execution history.",
+      market:
+        "Market report text: industrial workflow software demand is increasing with compliance tailwinds.",
+      product:
+        "Product report text: AI copilots automate compliance workflows and reporting for operations teams.",
+      news:
+        "News report text: company launched partner ecosystem and received positive trade publication coverage.",
+      competitor:
+        "Competitor report text: fragmented market with horizontal incumbents and vertical niche challengers.",
+      combinedReportText: [
+        "## Team Research Report",
+        "Team report text: founders have industrial SaaS background and execution history.",
+        "",
+        "## Market Research Report",
+        "Market report text: industrial workflow software demand is increasing with compliance tailwinds.",
+        "",
+        "## Product Research Report",
+        "Product report text: AI copilots automate compliance workflows and reporting for operations teams.",
+        "",
+        "## News Research Report",
+        "News report text: company launched partner ecosystem and received positive trade publication coverage.",
+        "",
+        "## Competitor Research Report",
+        "Competitor report text: fragmented market with horizontal incumbents and vertical niche challengers.",
+      ].join("\n"),
       sources: [
         {
           name: "Clipaf Website",

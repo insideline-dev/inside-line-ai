@@ -24,15 +24,16 @@ export class MarketEvaluationAgent extends BaseEvaluationAgent<MarketEvaluation>
     super(providers, aiConfig, promptService, modelExecution);
   }
 
-  buildContext({ extraction, research }: EvaluationPipelineInput) {
-    const claimedTAM = research.market?.marketSize.tam;
+  buildContext(pipelineData: EvaluationPipelineInput) {
+    const { extraction } = pipelineData;
+    const claimedTAM = undefined;
 
     return {
-      marketResearch: research.market,
+      researchReportText: this.buildResearchReportText(pipelineData),
       industry: extraction.industry,
       claimedTAM,
       targetMarket: extraction.industry,
-      competitiveLandscape: research.market?.competitors ?? [],
+      competitiveLandscape: [],
     };
   }
 

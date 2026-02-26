@@ -40,45 +40,37 @@ export class TractionEvaluationAgent extends BaseEvaluationAgent<TractionEvaluat
     };
   }
 
-  buildContext({ extraction, scraping, research }: EvaluationPipelineInput) {
-    const previousFunding =
-      research.news?.articles
-        .filter((article) =>
-          CONTENT_PATTERNS.FUNDING.test(`${article.title} ${article.summary}`),
-        )
-        .map((article) => ({
-          title: article.title,
-          date: article.date,
-          source: article.source,
-          url: article.url,
-        })) ?? [];
+  buildContext(pipelineData: EvaluationPipelineInput) {
+    const { extraction, scraping } = pipelineData;
+    const notableClaims = Array.isArray(scraping.notableClaims)
+      ? scraping.notableClaims
+      : [];
+    const customerLogos = Array.isArray(scraping.website?.customerLogos)
+      ? scraping.website.customerLogos
+      : [];
+    const testimonials = Array.isArray(scraping.website?.testimonials)
+      ? scraping.website.testimonials
+      : [];
+    const previousFunding = notableClaims
+      .filter((claim) => CONTENT_PATTERNS.FUNDING.test(claim))
+      .map((claim) => ({
+        title: this.truncate(claim, 160),
+        source: "Notable claim",
+      }));
 
     const tractionMetrics = {
-      notableClaims: scraping.notableClaims
+      notableClaims: notableClaims
         .slice(0, 15)
         .map((claim) => this.truncate(claim, 220)),
-      customerLogos: scraping.website?.customerLogos.length ?? 0,
-      testimonials: scraping.website?.testimonials.length ?? 0,
+      customerLogos: customerLogos.length,
+      testimonials: testimonials.length,
       fundingAsk: extraction.fundingAsk,
     };
 
-    const newsResearch = research.news
-      ? {
-          sentiment: research.news.sentiment,
-          recentEvents: research.news.recentEvents
-            .slice(0, 8)
-            .map((event) => this.truncate(event, 220)),
-          articles: research.news.articles.slice(0, 12).map((article) => ({
-            title: this.truncate(article.title, 160),
-            source: article.source,
-            date: article.date,
-            summary: this.truncate(article.summary, 320),
-            url: article.url,
-          })),
-        }
-      : null;
+    const newsResearch = null;
 
     return {
+      researchReportText: this.buildResearchReportText(pipelineData),
       tractionMetrics,
       stage: extraction.stage,
       newsResearch,
@@ -116,16 +108,17 @@ export class TractionEvaluationAgent extends BaseEvaluationAgent<TractionEvaluat
       return output;
     }
 
-    const stage = pipelineData.extraction.stage.toLowerCase();
+    const stage = typeof pipelineData.extraction.stage === "string"
+      ? pipelineData.extraction.stage.toLowerCase()
+      : "";
     const earlyStagePattern = /\b(idea|pre[ _-]?seed|seed|pre[ _-]?series[ _-]?a)\b/;
     const isEarlyStage = earlyStagePattern.test(stage);
 
     const evidenceCorpus = [
-      ...pipelineData.scraping.notableClaims,
-      ...(pipelineData.research.news?.recentEvents ?? []),
-      ...(pipelineData.research.news?.articles.map(
-        (article) => `${article.title} ${article.summary}`,
-      ) ?? []),
+      ...(Array.isArray(pipelineData.scraping.notableClaims)
+        ? pipelineData.scraping.notableClaims
+        : []),
+      pipelineData.research.combinedReportText ?? "",
     ]
       .join(" ")
       .toLowerCase();

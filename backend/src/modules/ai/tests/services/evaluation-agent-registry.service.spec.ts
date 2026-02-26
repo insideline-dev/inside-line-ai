@@ -212,6 +212,44 @@ describe("EvaluationAgentRegistryService", () => {
     expect(agents[1].fallback).toHaveBeenCalledTimes(1);
   });
 
+  it("records structured error detail metadata for unhandled evaluation exceptions", async () => {
+    const traceService = {
+      recordRun: jest.fn().mockResolvedValue(undefined),
+    } as unknown as PipelineAgentTraceService;
+    const agents = ALL_KEYS.map((key) =>
+      createAgent(key, { reject: key === "team" }),
+    );
+
+    const service = createRegistry(
+      agents,
+      pipelineState as unknown as PipelineStateService,
+      phaseTransition as unknown as PhaseTransitionService,
+      pipelineFeedback as unknown as PipelineFeedbackService,
+      agentConfigService as unknown as AgentConfigService,
+      dynamicAgentRunner as unknown as DynamicAgentRunnerService,
+      traceService,
+    );
+
+    await service.runAll("startup-trace-1", pipelineData);
+
+    expect((traceService.recordRun as jest.Mock).mock.calls).toEqual(
+      expect.arrayContaining([
+        [
+          expect.objectContaining({
+            agentKey: "team",
+            status: "fallback",
+            meta: expect.objectContaining({
+              errorDetail: expect.objectContaining({
+                name: "Error",
+                message: "team hard failure",
+              }),
+            }),
+          }),
+        ],
+      ]),
+    );
+  });
+
   it("emits per-agent completion payload via callback", async () => {
     const agents = ALL_KEYS.map((key) => createAgent(key));
     const onAgentStart = jest.fn();
@@ -336,7 +374,13 @@ describe("EvaluationAgentRegistryService", () => {
     await service.runOne("startup-7", "team", pipelineData);
 
     expect(agents[0].run).toHaveBeenCalledWith(
-      pipelineData,
+      expect.objectContaining({
+        extraction: pipelineData.extraction,
+        scraping: pipelineData.scraping,
+        mappedInputs: expect.objectContaining({
+          researchReportText: pipelineData.research.combinedReportText,
+        }),
+      }),
       expect.objectContaining({
         feedbackNotes: expect.arrayContaining([
           expect.objectContaining({

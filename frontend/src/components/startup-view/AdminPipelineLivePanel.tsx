@@ -560,6 +560,14 @@ function readSummaryArray(
   return Array.isArray(value) ? value : undefined;
 }
 
+function readSummaryBoolean(
+  summary: Record<string, unknown> | undefined,
+  key: string,
+): boolean | undefined {
+  const value = summary?.[key];
+  return typeof value === "boolean" ? value : undefined;
+}
+
 function formatCompactNumber(value: number): string {
   if (value >= 1_000_000) return `${Math.round(value / 100_000) / 10}M`;
   if (value >= 1_000) return `${Math.round(value / 100) / 10}K`;
@@ -644,6 +652,39 @@ function buildDataFlowBadges(
         : null,
       typeof fieldsUpdated === "number" && fieldsUpdated > 0
         ? `${fieldsUpdated} fields updated`
+        : null,
+    ].filter((value): value is string => Boolean(value));
+  }
+
+  if (phase === "evaluation") {
+    let mappedSourceCount = 0;
+    let fallbackCount = 0;
+    const linkedResearchAgents = new Set<string>();
+
+    for (const summary of Object.values(summaries)) {
+      const sourceCount = readSummaryNumber(summary, "mappedSourceCount");
+      if (typeof sourceCount === "number") {
+        mappedSourceCount += sourceCount;
+      }
+      if (readSummaryBoolean(summary, "edgeDrivenInputFallbackUsed") === true) {
+        fallbackCount += 1;
+      }
+      const linked = readSummaryArray(summary, "linkedResearchAgents");
+      for (const agent of linked ?? []) {
+        if (typeof agent === "string" && agent.trim().length > 0) {
+          linkedResearchAgents.add(agent);
+        }
+      }
+    }
+
+    const linkedList = Array.from(linkedResearchAgents).sort();
+    return [
+      mappedSourceCount > 0 ? `${mappedSourceCount} mapped inputs` : null,
+      linkedList.length > 0
+        ? `Linked research: ${linkedList.join(", ")}`
+        : null,
+      fallbackCount > 0
+        ? `${fallbackCount} agents using legacy research input`
         : null,
     ].filter((value): value is string => Boolean(value));
   }

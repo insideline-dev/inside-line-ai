@@ -1,10 +1,13 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
+  getAdminControllerGetAiPromptFlowQueryKey,
   useAdminControllerGetAiPromptFlow,
+  useAdminControllerGetAiModelConfig,
   useAdminControllerListPipelineFlowConfigs,
+  useAdminControllerBulkApplyAiModelConfig,
   useAdminControllerCreatePipelineFlowConfig,
   useAdminControllerUpdatePipelineFlowConfig,
   useAdminControllerPublishPipelineFlowConfig,
@@ -15,6 +18,14 @@ import type { PhaseConfig, PipelineConfig } from "@/components/pipeline/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -56,16 +67,132 @@ function normalizeFlowEdges(value: unknown): FlowEdgeDefinition[] | null {
     if (typeof edgeRecord.from !== "string" || typeof edgeRecord.to !== "string") {
       return null;
     }
+    const mapping =
+      edgeRecord.mapping &&
+      typeof edgeRecord.mapping === "object" &&
+      !Array.isArray(edgeRecord.mapping)
+        ? (edgeRecord.mapping as FlowEdgeDefinition["mapping"])
+        : undefined;
     edges.push({
       from: edgeRecord.from,
       to: edgeRecord.to,
       ...(typeof edgeRecord.label === "string" ? { label: edgeRecord.label } : {}),
+      ...(typeof edgeRecord.sourceHandle === "string"
+        ? { sourceHandle: edgeRecord.sourceHandle }
+        : {}),
+      ...(typeof edgeRecord.targetHandle === "string"
+        ? { targetHandle: edgeRecord.targetHandle }
+        : {}),
+      ...(typeof edgeRecord.enabled === "boolean"
+        ? { enabled: edgeRecord.enabled }
+        : {}),
+      ...(mapping ? { mapping } : {}),
     });
   }
   return edges;
 }
 
+interface ScrapeWebsiteNodeConfig {
+  scraping?: {
+    manualPaths?: string[];
+    discoveryEnabled?: boolean;
+  };
+}
+
+type FlowNodeConfigs = Record<string, unknown> & {
+  scrape_website?: ScrapeWebsiteNodeConfig;
+};
+
+function normalizeManualScrapePath(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  if (/^[a-z]+:\/\//i.test(trimmed) || trimmed.startsWith("//")) {
+    return null;
+  }
+
+  const slashNormalized = trimmed.replace(/\\/g, "/");
+  const [withoutHash] = slashNormalized.split("#", 1);
+  const [pathname] = withoutHash.split("?", 1);
+  const prefixed = pathname.startsWith("/") ? pathname : `/${pathname}`;
+  const collapsed = prefixed.replace(/\/{2,}/g, "/");
+  const segments = collapsed.split("/").filter(Boolean);
+  if (segments.some((segment) => segment === "." || segment === "..")) {
+    return null;
+  }
+
+  if (collapsed === "/") {
+    return "/";
+  }
+  return collapsed.endsWith("/") ? collapsed.slice(0, -1) : collapsed;
+}
+
+function normalizeFlowNodeConfigs(value: unknown): FlowNodeConfigs {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  const record = value as Record<string, unknown>;
+  const normalized: FlowNodeConfigs = {};
+
+  for (const [nodeId, rawConfig] of Object.entries(record)) {
+    if (nodeId !== "scrape_website") {
+      normalized[nodeId] = rawConfig;
+      continue;
+    }
+
+    if (!rawConfig || typeof rawConfig !== "object" || Array.isArray(rawConfig)) {
+      continue;
+    }
+
+    const scrapeRecord = rawConfig as Record<string, unknown>;
+    const scrapingRaw = scrapeRecord.scraping;
+    if (!scrapingRaw || typeof scrapingRaw !== "object" || Array.isArray(scrapingRaw)) {
+      continue;
+    }
+
+    const scrapingRecord = scrapingRaw as Record<string, unknown>;
+    const discoveryEnabled = scrapingRecord.discoveryEnabled === true;
+    const dedupedPaths = new Set<string>();
+    if (Array.isArray(scrapingRecord.manualPaths)) {
+      for (const path of scrapingRecord.manualPaths) {
+        if (typeof path !== "string") {
+          continue;
+        }
+        const normalizedPath = normalizeManualScrapePath(path);
+        if (!normalizedPath || normalizedPath === "/") {
+          continue;
+        }
+        dedupedPaths.add(normalizedPath);
+      }
+    }
+
+    if (!discoveryEnabled && dedupedPaths.size === 0) {
+      continue;
+    }
+
+    normalized.scrape_website = {
+      scraping: {
+        ...(dedupedPaths.size > 0 ? { manualPaths: Array.from(dedupedPaths) } : {}),
+        discoveryEnabled,
+      },
+    };
+  }
+
+  return normalized;
+}
+
 function AdminFlowPage() {
+  const resolveProvider = (modelName: string): string => {
+    if (modelName.startsWith("gemini")) {
+      return "google";
+    }
+    if (modelName.startsWith("gpt") || modelName.startsWith("o")) {
+      return "openai";
+    }
+    return "unknown";
+  };
   const queryClient = useQueryClient();
   const [selectedFlowId, setSelectedFlowId] = useState<string>("pipeline");
   const [draftId, setDraftId] = useState<string | null>(null);
@@ -73,13 +200,70 @@ function AdminFlowPage() {
   const [draftEdgesByFlowId, setDraftEdgesByFlowId] = useState<
     Record<string, FlowEdgeDefinition[]>
   >({});
+  const [draftNodeConfigsByFlowId, setDraftNodeConfigsByFlowId] = useState<
+    Record<string, FlowNodeConfigs>
+  >({});
   const [isDirty, setIsDirty] = useState(false);
 
   const { data: flowData, isLoading: flowLoading } =
     useAdminControllerGetAiPromptFlow();
+  const { data: modelConfigData } = useAdminControllerGetAiModelConfig(
+    "research.market",
+    undefined,
+  );
 
   const { data: configsData } =
     useAdminControllerListPipelineFlowConfigs();
+
+  const modelConfigPayload = extractResponseData<{
+    allowedModels?: string[];
+  }>(modelConfigData);
+  const allowedModels = useMemo(
+    () =>
+      modelConfigPayload?.allowedModels && modelConfigPayload.allowedModels.length > 0
+        ? modelConfigPayload.allowedModels
+        : [
+            "gpt-5.2",
+            "gemini-3-flash-preview",
+            "o4-mini-deep-research",
+          ],
+    [modelConfigPayload?.allowedModels],
+  );
+  const researchModelOptions = useMemo(() => allowedModels, [allowedModels]);
+  const nonResearchModelOptions = useMemo(
+    () => allowedModels.filter((model) => !model.toLowerCase().includes("deep-research")),
+    [allowedModels],
+  );
+
+  const [allAiModelName, setAllAiModelName] = useState<string>("gpt-5.2");
+  const [researchModelName, setResearchModelName] = useState<string>("o4-mini-deep-research");
+  const [evaluationModelName, setEvaluationModelName] = useState<string>("gpt-5.2");
+  const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
+
+  useEffect(() => {
+    if (allowedModels.length === 0) {
+      return;
+    }
+
+    const nonResearchFallback = nonResearchModelOptions[0] ?? allowedModels[0];
+    const researchFallback = researchModelOptions[0] ?? allowedModels[0];
+    if (!nonResearchModelOptions.includes(allAiModelName)) {
+      setAllAiModelName(nonResearchFallback);
+    }
+    if (!researchModelOptions.includes(researchModelName)) {
+      setResearchModelName(researchFallback);
+    }
+    if (!nonResearchModelOptions.includes(evaluationModelName)) {
+      setEvaluationModelName(nonResearchFallback);
+    }
+  }, [
+    allAiModelName,
+    allowedModels,
+    evaluationModelName,
+    nonResearchModelOptions,
+    researchModelName,
+    researchModelOptions,
+  ]);
 
   const createDraftMutation = useAdminControllerCreatePipelineFlowConfig({
     mutation: {
@@ -122,6 +306,35 @@ function AdminFlowPage() {
     },
   });
 
+  const bulkApplyMutation = useAdminControllerBulkApplyAiModelConfig({
+    mutation: {
+      onSuccess: async (response) => {
+        const result = extractResponseData<{
+          scope: string;
+          appliedKeys: string[];
+        }>(response);
+
+        toast.success(
+          `Applied model to ${result.appliedKeys.length} prompt keys (${result.scope}).`,
+        );
+
+        await Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: getAdminControllerGetAiPromptFlowQueryKey(),
+          }),
+          queryClient.invalidateQueries({
+            predicate: (query) =>
+              Array.isArray(query.queryKey) &&
+              typeof query.queryKey[0] === "string" &&
+              query.queryKey[0].startsWith("/admin/ai-prompts/"),
+          }),
+        ]);
+      },
+      onError: (err) =>
+        toast.error((err as Error).message || "Failed to bulk apply model config"),
+    },
+  });
+
   const flows = extractResponseData<{ flows: AiPromptFlowResponseDtoFlowsItem[] }>(
     flowData,
   )?.flows;
@@ -138,6 +351,7 @@ function AdminFlowPage() {
       flowDefinition?: {
         flowId?: string;
         edges?: unknown;
+        nodeConfigs?: unknown;
       };
     }>;
   }>(configsData);
@@ -150,28 +364,68 @@ function AdminFlowPage() {
     [history],
   );
 
+  const buildDraftPayloadForFlow = useCallback(
+    (
+      flowId: string,
+      overrides?: {
+        edges?: FlowEdgeDefinition[];
+        nodeConfigs?: FlowNodeConfigs;
+      },
+    ): Record<string, unknown> | null => {
+      const flow = flows?.find((entry) => entry.id === flowId);
+      if (!flow) {
+        return null;
+      }
+
+      const selectedEdges =
+        overrides?.edges ??
+        draftEdgesByFlowId[flow.id] ??
+        (flow.edges as FlowEdgeDefinition[]);
+      const selectedNodeConfigs =
+        overrides?.nodeConfigs ?? draftNodeConfigsByFlowId[flow.id] ?? {};
+
+      return {
+        name: `Pipeline Config ${new Date().toLocaleDateString()}`,
+        flowDefinition: {
+          flowId: flow.id,
+          nodes: flow.nodes.map((node) => node.id),
+          edges: selectedEdges,
+          nodeConfigs: selectedNodeConfigs,
+        } as Record<string, unknown>,
+        pipelineConfig: {
+          ...DEFAULT_PIPELINE_CONFIG,
+          phases: history.present,
+        } as unknown as Record<string, unknown>,
+      } as Record<string, unknown>;
+    },
+    [draftEdgesByFlowId, draftNodeConfigsByFlowId, flows, history.present],
+  );
+
+  const persistDraftForFlow = useCallback(
+    (
+      flowId: string,
+      overrides?: {
+        edges?: FlowEdgeDefinition[];
+        nodeConfigs?: FlowNodeConfigs;
+      },
+    ) => {
+      const payload = buildDraftPayloadForFlow(flowId, overrides);
+      if (!payload) {
+        return;
+      }
+
+      if (draftId) {
+        updateDraftMutation.mutate({ id: draftId, data: payload as never });
+      } else {
+        createDraftMutation.mutate({ data: payload as never });
+      }
+    },
+    [buildDraftPayloadForFlow, createDraftMutation, draftId, updateDraftMutation],
+  );
+
   const handleSaveDraft = () => {
     if (!selectedFlow) return;
-    const selectedEdges =
-      draftEdgesByFlowId[selectedFlow.id] ?? (selectedFlow.edges as FlowEdgeDefinition[]);
-    const payload = {
-      name: `Pipeline Config ${new Date().toLocaleDateString()}`,
-      flowDefinition: {
-        flowId: selectedFlow.id,
-        nodes: selectedFlow.nodes.map((n) => n.id),
-        edges: selectedEdges,
-      } as Record<string, unknown>,
-      pipelineConfig: {
-        ...DEFAULT_PIPELINE_CONFIG,
-        phases: history.present,
-      } as unknown as Record<string, unknown>,
-    };
-
-    if (draftId) {
-      updateDraftMutation.mutate({ id: draftId, data: payload });
-    } else {
-      createDraftMutation.mutate({ data: payload });
-    }
+    persistDraftForFlow(selectedFlow.id);
   };
 
   const handlePublish = () => {
@@ -185,6 +439,7 @@ function AdminFlowPage() {
   const handleReset = () => {
     history.replace(DEFAULT_PIPELINE_CONFIG.phases);
     setDraftEdgesByFlowId({});
+    setDraftNodeConfigsByFlowId({});
     setDraftId(null);
     setIsDirty(false);
     toast.info("Reset to defaults");
@@ -210,6 +465,13 @@ function AdminFlowPage() {
         ...current,
         [loadedFlowId]: loadedEdges,
       }));
+      const loadedNodeConfigs = normalizeFlowNodeConfigs(
+        config.flowDefinition?.nodeConfigs,
+      );
+      setDraftNodeConfigsByFlowId((current) => ({
+        ...current,
+        [loadedFlowId]: loadedNodeConfigs,
+      }));
       setSelectedFlowId(loadedFlowId);
     }
     setIsDirty(false);
@@ -226,6 +488,48 @@ function AdminFlowPage() {
       setIsDirty(true);
     },
     [],
+  );
+
+  const handleFlowNodeConfigChange = useCallback(
+    (flowId: string, nodeId: string, nodeConfig: unknown | undefined) => {
+      const currentForFlow = { ...(draftNodeConfigsByFlowId[flowId] ?? {}) };
+      const nextNodeConfigsForFlow: FlowNodeConfigs = currentForFlow;
+
+      if (nodeId === "scrape_website") {
+        const normalized = normalizeFlowNodeConfigs({
+          scrape_website: nodeConfig,
+        });
+        if (normalized.scrape_website) {
+          nextNodeConfigsForFlow.scrape_website = normalized.scrape_website;
+        } else {
+          delete nextNodeConfigsForFlow.scrape_website;
+        }
+      } else if (nodeConfig === undefined) {
+        delete nextNodeConfigsForFlow[nodeId];
+      } else {
+        nextNodeConfigsForFlow[nodeId] = nodeConfig;
+      }
+
+      setDraftNodeConfigsByFlowId((current) => ({
+        ...current,
+        [flowId]: nextNodeConfigsForFlow,
+      }));
+      setIsDirty(true);
+      persistDraftForFlow(flowId, { nodeConfigs: nextNodeConfigsForFlow });
+    },
+    [draftNodeConfigsByFlowId, persistDraftForFlow],
+  );
+
+  const handleBulkApply = useCallback(
+    (scope: "all_ai_nodes" | "research_agents" | "evaluation_agents", modelName: string) => {
+      bulkApplyMutation.mutate({
+        data: {
+          scope,
+          modelName: modelName as never,
+        },
+      });
+    },
+    [bulkApplyMutation],
   );
 
   const isSaving = createDraftMutation.isPending || updateDraftMutation.isPending;
@@ -281,6 +585,130 @@ function AdminFlowPage() {
             <RotateCcw className="h-3.5 w-3.5 mr-1" />
             Reset
           </Button>
+
+          <Dialog open={bulkDialogOpen} onOpenChange={setBulkDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm" className="h-8">
+                Bulk Apply Models
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[760px]">
+              <DialogHeader>
+                <DialogTitle>Bulk Apply Models</DialogTitle>
+                <DialogDescription>
+                  Apply and publish model config across grouped AI agents.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-3">
+                <div className="rounded-md border p-3">
+                  <div className="flex items-center justify-between gap-3 mb-2">
+                    <div>
+                      <p className="text-sm font-medium">All AI Nodes</p>
+                      <p className="text-xs text-muted-foreground">
+                        Applies to all prompt-backed AI nodes in pipeline flow.
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      disabled={bulkApplyMutation.isPending}
+                      onClick={() => handleBulkApply("all_ai_nodes", allAiModelName)}
+                    >
+                      Apply
+                    </Button>
+                  </div>
+                  <Select value={allAiModelName} onValueChange={setAllAiModelName}>
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue placeholder="Select model" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(nonResearchModelOptions.length > 0
+                        ? nonResearchModelOptions
+                        : allowedModels
+                      ).map((model) => (
+                        <SelectItem key={model} value={model} className="text-xs">
+                          {model}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="rounded-md border p-3">
+                  <div className="flex items-center justify-between gap-3 mb-2">
+                    <div>
+                      <p className="text-sm font-medium">Research Agents</p>
+                      <p className="text-xs text-muted-foreground">
+                        Applies model + inferred provider to all research agents.
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      disabled={bulkApplyMutation.isPending}
+                      onClick={() => handleBulkApply("research_agents", researchModelName)}
+                    >
+                      Apply
+                    </Button>
+                  </div>
+                  <div className="space-y-2">
+                    <Select value={researchModelName} onValueChange={setResearchModelName}>
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue placeholder="Select model" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {researchModelOptions.map((model) => (
+                          <SelectItem key={model} value={model} className="text-xs">
+                            {model}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Badge variant="outline" className="text-[10px]">
+                      provider: {resolveProvider(researchModelName)}
+                    </Badge>
+                  </div>
+                </div>
+
+                <div className="rounded-md border p-3">
+                  <div className="flex items-center justify-between gap-3 mb-2">
+                    <div>
+                      <p className="text-sm font-medium">Evaluation Agents</p>
+                      <p className="text-xs text-muted-foreground">
+                        Applies model to all evaluation agents (search remains off).
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      disabled={bulkApplyMutation.isPending}
+                      onClick={() =>
+                        handleBulkApply("evaluation_agents", evaluationModelName)
+                      }
+                    >
+                      Apply
+                    </Button>
+                  </div>
+                  <Select
+                    value={evaluationModelName}
+                    onValueChange={setEvaluationModelName}
+                  >
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue placeholder="Select model" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(nonResearchModelOptions.length > 0
+                        ? nonResearchModelOptions
+                        : allowedModels
+                      ).map((model) => (
+                        <SelectItem key={model} value={model} className="text-xs">
+                          {model}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
@@ -310,6 +738,7 @@ function AdminFlowPage() {
                   pipelineConfig={
                     f.id === "pipeline" ? history.present : undefined
                   }
+                  flowNodeConfigs={draftNodeConfigsByFlowId[f.id] ?? {}}
                   onPipelineConfigChange={
                     f.id === "pipeline" ? handlePipelineConfigChange : undefined
                   }
@@ -325,6 +754,12 @@ function AdminFlowPage() {
                   onFlowEdgesChange={
                     f.id === "pipeline"
                       ? (edges) => handleFlowEdgesChange(f.id, edges)
+                      : undefined
+                  }
+                  onFlowNodeConfigChange={
+                    f.id === "pipeline"
+                      ? (nodeId, nodeConfig) =>
+                          handleFlowNodeConfigChange(f.id, nodeId, nodeConfig)
                       : undefined
                   }
                 />

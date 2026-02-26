@@ -130,25 +130,11 @@ Notes: [Any discrepancies]
 [Expected signals missing given product type and stage, negative patterns observed]
 
 === RESPONSE CONTRACT (CRITICAL) ===
-- Return ONLY a valid JSON object matching the requested schema.
-- Do NOT wrap output in markdown or code fences.
-- Do NOT include prose before or after the JSON object.
-- Required string fields must never be null (use "Unknown" when unavailable).
-- Use [] for missing arrays and {} for missing objects.
-- Use this exact top-level JSON shape and key names:
-{
-  "productPages": [],
-  "features": [],
-  "techStack": [],
-  "integrations": [],
-  "customerReviews": {"summary": "", "sentiment": "positive|neutral|negative"},
-  "reviews": [{"source": "", "rating": "", "summary": "", "url": ""}],
-  "strengths": [],
-  "weaknesses": [],
-  "competitivePosition": "",
-  "marketDynamics": {"entryBarriers": "", "substitutes": [], "buyerPower": "", "supplierPower": ""},
-  "sources": []
-}`;
+- Return ONLY plain text report output.
+- Do NOT return JSON.
+- Do NOT wrap output in markdown code fences.
+- Do NOT include commentary before or after the report.
+- Report must be comprehensive, evidence-driven, and at least 2500 characters.`;
 
 export const PRODUCT_RESEARCH_HUMAN_PROMPT = `Conduct deep product intelligence research for:
 

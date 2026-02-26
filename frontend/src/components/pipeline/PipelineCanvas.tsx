@@ -10,6 +10,7 @@ import {
   type EdgeChange,
   type NodeTypes,
   type NodeMouseHandler,
+  type EdgeMouseHandler,
   type Connection,
   MarkerType,
   ConnectionLineType,
@@ -18,6 +19,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { NodeConfigSheet } from "./NodeConfigSheet";
+import { EdgeConfigSheet } from "./EdgeConfigSheet";
 import { getLayoutedElements } from "./layout";
 import type {
   AiPromptFlowResponseDtoFlowsItem,
@@ -78,6 +80,7 @@ function flowToReactFlow(flow: AiPromptFlowResponseDtoFlowsItem) {
         stage: stage?.title,
         promptKeys: node.promptKeys,
         enabled,
+        modelName: node.runtimeModel?.modelName,
         schemaFieldCount: node.outputs.length,
         childCount: childCountByOrchestrator[node.id] ?? 0,
       },
@@ -88,14 +91,40 @@ function flowToReactFlow(flow: AiPromptFlowResponseDtoFlowsItem) {
     const sourceNode = flow.nodes.find((node) => node.id === edge.from);
     const sourceType = sourceNode?.outputs?.[0]?.type;
     const edgeColor = edgeColorFromType(sourceType);
+    const edgeRecord = edge as unknown as Record<string, unknown>;
+    const enabled =
+      typeof edgeRecord.enabled === "boolean" ? edgeRecord.enabled : true;
+    const mapping =
+      edgeRecord.mapping &&
+      typeof edgeRecord.mapping === "object" &&
+      !Array.isArray(edgeRecord.mapping)
+        ? edgeRecord.mapping
+        : undefined;
 
     return {
       id: `e-${edge.from}-${edge.to}-${i}`,
       source: edge.from,
       target: edge.to,
+      ...(typeof edgeRecord.sourceHandle === "string" &&
+      edgeRecord.sourceHandle.trim().length > 0
+        ? { sourceHandle: edgeRecord.sourceHandle }
+        : {}),
+      ...(typeof edgeRecord.targetHandle === "string" &&
+      edgeRecord.targetHandle.trim().length > 0
+        ? { targetHandle: edgeRecord.targetHandle }
+        : {}),
+      data: {
+        enabled,
+        ...(mapping ? { mapping } : {}),
+      },
       label: edge.label ?? sourceType,
       animated: true,
-      style: { strokeWidth: 1.75, stroke: edgeColor },
+      style: {
+        strokeWidth: 1.75,
+        stroke: edgeColor,
+        opacity: enabled ? 1 : 0.45,
+        strokeDasharray: enabled ? undefined : "6 4",
+      },
       labelStyle: { fill: edgeColor, fontSize: 10 },
       markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14, color: edgeColor },
     };
@@ -107,7 +136,9 @@ function flowToReactFlow(flow: AiPromptFlowResponseDtoFlowsItem) {
 interface PipelineCanvasProps {
   flow: AiPromptFlowResponseDtoFlowsItem;
   pipelineConfig?: PhaseConfig[];
+  flowNodeConfigs?: Record<string, unknown>;
   onPipelineConfigChange?: (configs: PhaseConfig[]) => void;
+  onFlowNodeConfigChange?: (nodeId: string, nodeConfig: unknown | undefined) => void;
   canUndo?: boolean;
   canRedo?: boolean;
   onUndo?: () => void;
@@ -118,6 +149,28 @@ interface PipelineCanvasProps {
   saveDisabled?: boolean;
   publishDisabled?: boolean;
   onFlowEdgesChange?: (edges: FlowEdgeDefinition[]) => void;
+}
+
+function resolvePhaseForNodeId(nodeId: string): string | null {
+  if (nodeId === "extract_fields") {
+    return "extraction";
+  }
+  if (nodeId === "scrape_website") {
+    return "scraping";
+  }
+  if (nodeId === "gap_fill_hybrid" || nodeId === "linkedin_enrichment") {
+    return "enrichment";
+  }
+  if (nodeId.startsWith("research_")) {
+    return "research";
+  }
+  if (nodeId.startsWith("evaluation_")) {
+    return "evaluation";
+  }
+  if (nodeId === "synthesis_final") {
+    return "synthesis";
+  }
+  return null;
 }
 
 function CanvasInner(props: PipelineCanvasProps) {
@@ -176,6 +229,7 @@ function CanvasInner(props: PipelineCanvasProps) {
         const nextEdges = addEdge(
           {
             ...connection,
+            data: { enabled: true },
             animated: true,
             interactionWidth: 30,
             style: { strokeWidth: 3, stroke: "#0f172a" },
@@ -269,17 +323,100 @@ function CanvasInner(props: PipelineCanvasProps) {
   const [selectedNode, setSelectedNode] =
     useState<AiPromptFlowResponseDtoFlowsItemNodesItem | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+  const [edgeSheetOpen, setEdgeSheetOpen] = useState(false);
 
   const onNodeClick: NodeMouseHandler = useCallback(
     (_event: React.MouseEvent, node: Node) => {
       const flowNode = props.flow.nodes.find((n) => n.id === node.id);
       if (flowNode) {
+        setEdgeSheetOpen(false);
+        setSelectedEdgeId(null);
         setSelectedNode(flowNode);
         setSheetOpen(true);
       }
     },
     [props.flow.nodes],
   );
+
+  const onEdgeClick: EdgeMouseHandler = useCallback(
+    (_event, edge) => {
+      if (!isEditablePipelineFlow) {
+        return;
+      }
+      setSheetOpen(false);
+      setSelectedEdgeId(edge.id);
+      setEdgeSheetOpen(true);
+    },
+    [isEditablePipelineFlow],
+  );
+
+  const selectedEdge = useMemo(
+    () => edges.find((edge) => edge.id === selectedEdgeId) ?? null,
+    [edges, selectedEdgeId],
+  );
+
+  const flowNodeLabelById = useMemo(
+    () =>
+      new Map(
+        props.flow.nodes.map((node) => [node.id, node.label] as const),
+      ),
+    [props.flow.nodes],
+  );
+
+  const sourceLabel = selectedEdge
+    ? flowNodeLabelById.get(selectedEdge.source) ?? selectedEdge.source
+    : undefined;
+  const targetLabel = selectedEdge
+    ? flowNodeLabelById.get(selectedEdge.target) ?? selectedEdge.target
+    : undefined;
+
+  useEffect(() => {
+    if (!selectedEdgeId) {
+      return;
+    }
+    const stillExists = edges.some((edge) => edge.id === selectedEdgeId);
+    if (!stillExists) {
+      setSelectedEdgeId(null);
+      setEdgeSheetOpen(false);
+    }
+  }, [edges, selectedEdgeId]);
+
+  const updateSelectedEdge = useCallback(
+    (updater: (edge: Edge) => Edge) => {
+      if (!selectedEdgeId) {
+        return;
+      }
+      setEdges((currentEdges) => {
+        let touched = false;
+        const nextEdges = currentEdges.map((edge) => {
+          if (edge.id !== selectedEdgeId) {
+            return edge;
+          }
+          touched = true;
+          return updater(edge);
+        });
+        if (touched) {
+          emitFlowEdges(nextEdges);
+        }
+        return nextEdges;
+      });
+    },
+    [emitFlowEdges, selectedEdgeId],
+  );
+
+  const deleteSelectedEdge = useCallback(() => {
+    if (!selectedEdgeId) {
+      return;
+    }
+    setEdges((currentEdges) => {
+      const nextEdges = currentEdges.filter((edge) => edge.id !== selectedEdgeId);
+      emitFlowEdges(nextEdges);
+      return nextEdges;
+    });
+    setSelectedEdgeId(null);
+    setEdgeSheetOpen(false);
+  }, [emitFlowEdges, selectedEdgeId]);
 
   useEffect(() => {
     const listener = (event: KeyboardEvent) => {
@@ -300,6 +437,10 @@ function CanvasInner(props: PipelineCanvasProps) {
 
   const selectedPhaseConfig = useMemo(() => {
     if (!selectedNode || !props.pipelineConfig) return undefined;
+    const resolvedPhase = resolvePhaseForNodeId(selectedNode.id);
+    if (resolvedPhase) {
+      return props.pipelineConfig.find((phase) => phase.phase === resolvedPhase);
+    }
     return props.pipelineConfig.find((p) =>
       selectedNode.id.startsWith(p.phase) || selectedNode.id.includes(p.phase),
     );
@@ -325,6 +466,7 @@ function CanvasInner(props: PipelineCanvasProps) {
         onEdgesChange={onEdgesChange}
         onReconnect={isEditablePipelineFlow ? onReconnect : undefined}
         onNodeClick={onNodeClick}
+        onEdgeClick={onEdgeClick}
         onEdgeMouseEnter={(_event, edge) => setHoveredEdgeId(edge.id)}
         onEdgeMouseLeave={() => setHoveredEdgeId(null)}
         onConnect={isEditablePipelineFlow ? onConnect : undefined}
@@ -369,6 +511,24 @@ function CanvasInner(props: PipelineCanvasProps) {
         node={selectedNode}
         phaseConfig={selectedPhaseConfig}
         onPhaseConfigChange={handlePhaseConfigChange}
+        nodeConfig={selectedNode ? props.flowNodeConfigs?.[selectedNode.id] : undefined}
+        onNodeConfigChange={
+          selectedNode
+            ? (nodeConfig) =>
+                props.onFlowNodeConfigChange?.(selectedNode.id, nodeConfig)
+            : undefined
+        }
+      />
+
+      <EdgeConfigSheet
+        open={edgeSheetOpen}
+        onOpenChange={setEdgeSheetOpen}
+        edge={selectedEdge}
+        sourceLabel={sourceLabel}
+        targetLabel={targetLabel}
+        canEdit={isEditablePipelineFlow}
+        onChange={updateSelectedEdge}
+        onDelete={deleteSelectedEdge}
       />
     </div>
   );

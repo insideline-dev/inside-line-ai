@@ -24,43 +24,47 @@ export class TeamEvaluationAgent extends BaseEvaluationAgent<TeamEvaluation> {
     super(providers, aiConfig, promptService, modelExecution);
   }
 
-  buildContext({ extraction, scraping, research }: EvaluationPipelineInput) {
-    const linkedInProfiles = [
-      ...(research.team?.linkedinProfiles ?? []),
-      ...scraping.teamMembers.flatMap((member) =>
-        member.linkedinProfile
-          ? [
-              {
-                name: member.name,
-                headline: member.linkedinProfile.headline,
-                summary: member.linkedinProfile.summary,
-                experience: member.linkedinProfile.experience,
-                education: member.linkedinProfile.education,
-                url: member.linkedinUrl,
-              },
-            ]
-          : [],
-      ),
-    ];
+  buildContext(pipelineData: EvaluationPipelineInput) {
+    const { extraction, scraping } = pipelineData;
+    const teamMembers = Array.isArray(scraping.teamMembers)
+      ? scraping.teamMembers
+      : [];
+    const linkedInProfiles = teamMembers.flatMap((member) =>
+      member.linkedinProfile
+        ? [
+            {
+              name: member.name,
+              headline: member.linkedinProfile.headline,
+              summary: member.linkedinProfile.summary,
+              experience: member.linkedinProfile.experience,
+              education: member.linkedinProfile.education,
+              url: member.linkedinUrl,
+            },
+          ]
+        : [],
+    );
 
     return {
-      teamMembers: scraping.teamMembers,
+      teamMembers,
       linkedinProfiles: linkedInProfiles,
-      teamResearch: research.team,
+      researchReportText: this.buildResearchReportText(pipelineData),
       companyDescription: extraction.rawText || extraction.tagline,
       industry: extraction.industry,
     };
   }
 
   fallback({ extraction, scraping }: EvaluationPipelineInput): TeamEvaluation {
+    const teamMembers = Array.isArray(scraping.teamMembers)
+      ? scraping.teamMembers
+      : [];
     return TeamEvaluationSchema.parse({
       ...baseEvaluation(25, "Team evaluation incomplete — requires manual review"),
       founderQuality: "Founding team has domain-relevant background",
-      teamCompletion: clampScore(25 + scraping.teamMembers.length * 5),
+      teamCompletion: clampScore(25 + teamMembers.length * 5),
       executionCapability: "Execution capability appears moderate to strong",
       founderMarketFitScore: clampScore(25 + stageMultiplier(extraction.stage)),
-      teamMembers: scraping.teamMembers.length
-        ? scraping.teamMembers.map((member) => ({
+      teamMembers: teamMembers.length
+        ? teamMembers.map((member) => ({
             name: member.name,
             role: member.role ?? "Unknown",
             background: "Background details pending expanded enrichment",
@@ -69,7 +73,7 @@ export class TeamEvaluationAgent extends BaseEvaluationAgent<TeamEvaluation> {
           }))
         : [
             {
-              name: extraction.founderNames[0] ?? "Founding Team",
+              name: extraction.founderNames?.[0] ?? "Founding Team",
               role: "Founder",
               background: "Background details are limited",
               strengths: ["Domain interest"],

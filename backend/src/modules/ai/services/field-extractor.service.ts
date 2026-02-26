@@ -103,6 +103,7 @@ export class FieldExtractorService {
           this.providers.resolveModelForPurpose(ModelPurpose.EXTRACTION),
         tools: execution?.generateTextOptions.tools,
         toolChoice: execution?.generateTextOptions.toolChoice,
+        providerOptions: execution?.generateTextOptions.providerOptions,
       });
 
       return ExtractedFieldsSchema.parse(output);

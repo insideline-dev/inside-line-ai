@@ -28,20 +28,20 @@ export class FinancialsEvaluationAgent extends BaseEvaluationAgent<FinancialsEva
     super(providers, aiConfig, promptService, modelExecution);
   }
 
-  buildContext({ extraction, research }: EvaluationPipelineInput) {
+  buildContext(pipelineData: EvaluationPipelineInput) {
+    const { extraction } = pipelineData;
     const fundingTarget = extraction.fundingAsk;
     const currentValuation = extraction.valuation;
     const burnRate = fundingTarget ? Math.max(0, fundingTarget / 18) : undefined;
-    const previousFunding =
-      research.news?.articles
-        .filter((article) =>
-          CONTENT_PATTERNS.FUNDING.test(`${article.title} ${article.summary}`),
-        )
-        .map((article) => ({
-          title: article.title,
-          date: article.date,
-          source: article.source,
-        })) ?? [];
+    const notableClaims = Array.isArray(pipelineData.scraping.notableClaims)
+      ? pipelineData.scraping.notableClaims
+      : [];
+    const previousFunding = notableClaims
+      .filter((claim) => CONTENT_PATTERNS.FUNDING.test(claim))
+      .map((claim) => ({
+        title: claim,
+        source: "Notable claim",
+      }));
 
     const financialProjections = {
       runwayMonths: burnRate ? Math.max(1, Math.round((fundingTarget ?? 0) / burnRate)) : 0,
@@ -50,6 +50,7 @@ export class FinancialsEvaluationAgent extends BaseEvaluationAgent<FinancialsEva
     };
 
     return {
+      researchReportText: this.buildResearchReportText(pipelineData),
       financialProjections,
       fundingTarget,
       previousFunding,

@@ -123,6 +123,7 @@ export class EvaluationProcessor
             agent,
             output,
             usedFallback,
+            dataSummary,
             attempt,
             retryCount,
             error,
@@ -165,6 +166,7 @@ export class EvaluationProcessor
                 usedFallback,
                 fallbackReason,
                 rawProviderError,
+                ...(dataSummary ? { dataSummary } : {}),
                 lifecycleEvent: usedFallback
                   ? "fallback"
                   : isFailed

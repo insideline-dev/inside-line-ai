@@ -1,6 +1,5 @@
 import type { ResearchAgentConfig } from "../../interfaces/agent.interface";
-import type { ProductResearch } from "../../schemas";
-import { ProductResearchSchema } from "../../schemas";
+import { z } from "zod";
 import {
   PRODUCT_RESEARCH_HUMAN_PROMPT,
   PRODUCT_RESEARCH_SYSTEM_PROMPT,
@@ -15,12 +14,12 @@ const tryPathname = (url: string): string => {
   }
 };
 
-export const ProductResearchAgent: ResearchAgentConfig<ProductResearch> = {
+export const ProductResearchAgent: ResearchAgentConfig<string> = {
   key: "product",
   name: "Product Research",
   systemPrompt: PRODUCT_RESEARCH_SYSTEM_PROMPT,
   humanPromptTemplate: PRODUCT_RESEARCH_HUMAN_PROMPT,
-  schema: ProductResearchSchema,
+  schema: z.string(),
   contextBuilder: ({ extraction, scraping, researchParameters }) => ({
     productDescription: researchParameters?.productDescription ?? extraction.rawText,
     knownCompetitors: researchParameters?.knownCompetitors ?? [],
@@ -40,23 +39,20 @@ export const ProductResearchAgent: ResearchAgentConfig<ProductResearch> = {
   }),
   fallback: ({ extraction }) => {
     const websiteUrl = toValidUrl(extraction.website);
-
-    return {
-      productPages: websiteUrl ? [websiteUrl] : [],
-      features: ["Core workflow automation"],
-      techStack: ["Unknown"],
-      integrations: [],
-      customerReviews: {
-        summary:
-          "Public customer review coverage is limited in deterministic fallback mode.",
-        sentiment: "neutral",
-      },
-      reviews: [],
-      strengths: ["Core workflow automation"],
-      weaknesses: [],
-      competitivePosition: undefined,
-      marketDynamics: undefined,
-      sources: websiteUrl ? [websiteUrl] : [],
-    };
+    return [
+      `Product Research Report: ${extraction.companyName}`,
+      "",
+      "Executive Summary",
+      "Deterministic fallback mode captured only baseline product signals.",
+      "",
+      "Initial Product Signal",
+      `Company positioning indicates workflow automation focus within ${extraction.industry}.`,
+      "",
+      "Evidence Gap",
+      "Automated review did not collect sufficient technical, customer, or deployment evidence for high-confidence product diligence.",
+      "",
+      "Primary Source",
+      websiteUrl ?? "No verified primary source URL available.",
+    ].join("\n");
   },
 };

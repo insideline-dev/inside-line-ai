@@ -69,7 +69,8 @@ import { DynamicAgentRunnerService } from "./services/dynamic-agent-runner.servi
 import { AiModelExecutionService } from "./services/ai-model-execution.service";
 import { PipelineTemplateService } from "./services/pipeline-template.service";
 import { SchemaCompilerService } from "./services/schema-compiler.service";
-
+import { EvaluationInputResolverService } from "./services/evaluation-input-resolver.service";
+import { OpenAiDeepResearchService } from "./services/openai-deep-research.service";
 
 @Global()
 @Module({
@@ -95,11 +96,13 @@ import { SchemaCompilerService } from "./services/schema-compiler.service";
     DynamicAgentRunnerService,
     AiModelExecutionService,
     PipelineTemplateService,
+    EvaluationInputResolverService,
     PipelineStateService,
     PipelineFeedbackService,
     PipelineAgentTraceService,
     PipelineService,
     GeminiResearchService,
+    OpenAiDeepResearchService,
     ExtractionService,
     PdfTextExtractorService,
     PptxTextExtractorService,
@@ -156,6 +159,8 @@ import { SchemaCompilerService } from "./services/schema-compiler.service";
     DynamicAgentRunnerService,
     AiModelExecutionService,
     PipelineTemplateService,
+    EvaluationInputResolverService,
+    OpenAiDeepResearchService,
     PipelineStateService,
     PipelineFeedbackService,
     PipelineService,

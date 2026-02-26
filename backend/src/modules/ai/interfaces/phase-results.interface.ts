@@ -2,19 +2,14 @@ import type { ResearchParameters } from "./research-parameters.interface";
 import type {
   BusinessModelEvaluation,
   CompetitiveAdvantageEvaluation,
-  CompetitorResearch,
   DealTermsEvaluation,
   ExitPotentialEvaluation,
   FinancialsEvaluation,
   GtmEvaluation,
   LegalEvaluation,
   MarketEvaluation,
-  MarketResearch,
-  NewsResearch,
   ProductEvaluation,
-  ProductResearch,
   TeamEvaluation,
-  TeamResearch,
   TractionEvaluation,
 } from "../schemas";
 import type { InvestorMemo, FounderReport } from "../schemas/synthesis.schema";
@@ -182,11 +177,12 @@ export interface SourceEntry {
 }
 
 export interface ResearchResult {
-  team: TeamResearch | null;
-  market: MarketResearch | null;
-  product: ProductResearch | null;
-  news: NewsResearch | null;
-  competitor: CompetitorResearch | null;
+  team: string | null;
+  market: string | null;
+  product: string | null;
+  news: string | null;
+  competitor: string | null;
+  combinedReportText: string;
   sources: SourceEntry[];
   errors: Array<{ agent: "team" | "market" | "product" | "news" | "competitor"; error: string }>;
   researchParameters?: ResearchParameters;

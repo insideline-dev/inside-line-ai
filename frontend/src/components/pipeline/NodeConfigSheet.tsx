@@ -51,6 +51,8 @@ interface NodeConfigSheetProps {
   node: AiPromptFlowResponseDtoFlowsItemNodesItem | null;
   phaseConfig?: PhaseConfigData;
   onPhaseConfigChange?: (config: Partial<PhaseConfigData>) => void;
+  nodeConfig?: unknown;
+  onNodeConfigChange?: (config: unknown | undefined) => void;
 }
 
 type JsonSchemaNode = {
@@ -93,12 +95,73 @@ function extractJsonSchemaPaths(node: JsonSchemaNode | undefined, prefix = ""): 
   return prefix ? [prefix] : [];
 }
 
+function normalizeManualScrapePath(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  if (/^[a-z]+:\/\//i.test(trimmed) || trimmed.startsWith("//")) {
+    return null;
+  }
+
+  const slashNormalized = trimmed.replace(/\\/g, "/");
+  const [withoutHash] = slashNormalized.split("#", 1);
+  const [pathname] = withoutHash.split("?", 1);
+  const prefixed = pathname.startsWith("/") ? pathname : `/${pathname}`;
+  const collapsed = prefixed.replace(/\/{2,}/g, "/");
+  const segments = collapsed.split("/").filter(Boolean);
+  if (segments.some((segment) => segment === "." || segment === "..")) {
+    return null;
+  }
+  if (collapsed === "/") {
+    return "/";
+  }
+  return collapsed.endsWith("/") ? collapsed.slice(0, -1) : collapsed;
+}
+
+function parseScrapeNodeConfig(value: unknown): {
+  discoveryEnabled: boolean;
+  manualPaths: string[];
+} {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { discoveryEnabled: false, manualPaths: [] };
+  }
+  const nodeRecord = value as Record<string, unknown>;
+  const scrapingRaw = nodeRecord.scraping;
+  if (!scrapingRaw || typeof scrapingRaw !== "object" || Array.isArray(scrapingRaw)) {
+    return { discoveryEnabled: false, manualPaths: [] };
+  }
+
+  const scrapingRecord = scrapingRaw as Record<string, unknown>;
+  const discoveryEnabled = scrapingRecord.discoveryEnabled === true;
+  const deduped = new Set<string>();
+  if (Array.isArray(scrapingRecord.manualPaths)) {
+    for (const path of scrapingRecord.manualPaths) {
+      if (typeof path !== "string") {
+        continue;
+      }
+      const normalized = normalizeManualScrapePath(path);
+      if (!normalized || normalized === "/") {
+        continue;
+      }
+      deduped.add(normalized);
+    }
+  }
+
+  return {
+    discoveryEnabled,
+    manualPaths: Array.from(deduped),
+  };
+}
+
 export function NodeConfigSheet({
   open,
   onOpenChange,
   node,
   phaseConfig,
   onPhaseConfigChange,
+  nodeConfig,
+  onNodeConfigChange,
 }: NodeConfigSheetProps) {
   const normalizeModelName = (value: string): string =>
     value === "gemini-3.0-flash-preview" ? "gemini-3-flash-preview" : value;
@@ -128,6 +191,8 @@ export function NodeConfigSheet({
     GLOBAL_STAGE,
   );
   const [modelFormDirty, setModelFormDirty] = useState(false);
+  const [scrapeDiscoveryEnabled, setScrapeDiscoveryEnabled] = useState(false);
+  const [scrapeManualPathsInput, setScrapeManualPathsInput] = useState("");
   const nodeId = node?.id ?? "";
 
   const { data: upstreamData, isLoading: isUpstreamLoading } =
@@ -206,6 +271,7 @@ export function NodeConfigSheet({
   }, [declaredOutputFields, node]);
 
   const isSystem = node?.kind === "system";
+  const isScrapeWebsiteNode = node?.id === "scrape_website";
   const selectedKey = activePromptKey ?? node?.promptKeys[0] ?? null;
   const modelConfigStageQuery =
     modelStage === GLOBAL_STAGE ? undefined : { stage: modelStage };
@@ -334,6 +400,18 @@ export function NodeConfigSheet({
   }, [GLOBAL_STAGE, node?.id, node?.promptKeys]);
 
   useEffect(() => {
+    if (!isScrapeWebsiteNode) {
+      setScrapeDiscoveryEnabled(false);
+      setScrapeManualPathsInput("");
+      return;
+    }
+
+    const parsed = parseScrapeNodeConfig(nodeConfig);
+    setScrapeDiscoveryEnabled(parsed.discoveryEnabled);
+    setScrapeManualPathsInput(parsed.manualPaths.join("\n"));
+  }, [isScrapeWebsiteNode, node?.id, nodeConfig]);
+
+  useEffect(() => {
     if (modelFormDirty) {
       return;
     }
@@ -381,6 +459,7 @@ export function NodeConfigSheet({
   };
 
   const isResearchNode = selectedKey?.startsWith("research.") ?? false;
+  const isDeepResearchModel = modelName.toLowerCase().includes("deep-research");
   const selectedModelProvider = modelName.startsWith("gemini")
     ? "google"
     : modelName.startsWith("gpt") || modelName.startsWith("o")
@@ -389,7 +468,7 @@ export function NodeConfigSheet({
   const supportsProviderSearch =
     isResearchNode &&
     (selectedModelProvider === "google" || selectedModelProvider === "openai");
-  const supportsBraveSearch = isResearchNode;
+  const supportsBraveSearch = isResearchNode && !isDeepResearchModel;
 
   const refreshModelConfigState = async () => {
     if (!selectedKey) return;
@@ -460,6 +539,33 @@ export function NodeConfigSheet({
     await refreshModelConfigState();
   };
 
+  const applyScrapeConfig = () => {
+    if (!isScrapeWebsiteNode) {
+      return;
+    }
+
+    const manualPaths = Array.from(
+      new Set(
+        scrapeManualPathsInput
+          .split(/\r?\n/)
+          .map((line) => normalizeManualScrapePath(line))
+          .filter((line): line is string => Boolean(line && line !== "/")),
+      ),
+    );
+
+    if (!scrapeDiscoveryEnabled && manualPaths.length === 0) {
+      onNodeConfigChange?.(undefined);
+      return;
+    }
+
+    onNodeConfigChange?.({
+      scraping: {
+        ...(manualPaths.length > 0 ? { manualPaths } : {}),
+        discoveryEnabled: scrapeDiscoveryEnabled,
+      },
+    });
+  };
+
   if (!node) return null;
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -504,6 +610,45 @@ export function NodeConfigSheet({
 
             {phaseConfig ? (
               <>
+                {isScrapeWebsiteNode ? (
+                  <div className="space-y-3 rounded-md border p-3">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label>Enable Discovery</Label>
+                        <p className="text-xs text-muted-foreground">
+                          When off, scraping only uses homepage + manual paths.
+                        </p>
+                      </div>
+                      <Switch
+                        checked={scrapeDiscoveryEnabled}
+                        onCheckedChange={setScrapeDiscoveryEnabled}
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label>Manual Relative Paths</Label>
+                      <Textarea
+                        value={scrapeManualPathsInput}
+                        onChange={(event) =>
+                          setScrapeManualPathsInput(event.target.value)
+                        }
+                        className="min-h-24 text-xs font-mono"
+                        placeholder={"/about\n/team\n/pricing"}
+                      />
+                      <p className="text-[11px] text-muted-foreground">
+                        One path per line. Use relative paths only (for example
+                        `/about` or `team`).
+                      </p>
+                    </div>
+
+                    <div className="flex justify-end">
+                      <Button size="sm" onClick={applyScrapeConfig}>
+                        Apply Scrape Settings (Auto-save)
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
+
                 <div className="space-y-2">
                   <Label>Timeout (minutes)</Label>
                   <div className="flex items-center gap-3">
@@ -806,7 +951,11 @@ export function NodeConfigSheet({
                             <SelectContent>
                               {(modelConfigPayload.allowedModels.length > 0
                                 ? modelConfigPayload.allowedModels
-                                : ["gpt-5.2", "gemini-3-flash-preview"]
+                                : [
+                                    "gpt-5.2",
+                                    "gemini-3-flash-preview",
+                                    "o4-mini-deep-research",
+                                  ]
                               ).map((model) => (
                                 <SelectItem key={model} value={model} className="text-xs">
                                   {model === "gemini-3-flash-preview"

@@ -5,5 +5,14 @@
  * Inside Line API Documentation
  * OpenAPI spec version: 2.0
  */
+import type { CreatePipelineFlowConfigDtoFlowDefinitionEdgesItem } from './createPipelineFlowConfigDtoFlowDefinitionEdgesItem';
+import type { CreatePipelineFlowConfigDtoFlowDefinitionFlowId } from './createPipelineFlowConfigDtoFlowDefinitionFlowId';
+import type { CreatePipelineFlowConfigDtoFlowDefinitionNodeConfigs } from './createPipelineFlowConfigDtoFlowDefinitionNodeConfigs';
 
-export type CreatePipelineFlowConfigDtoFlowDefinition = { [key: string]: unknown };
+export type CreatePipelineFlowConfigDtoFlowDefinition = {
+  flowId: CreatePipelineFlowConfigDtoFlowDefinitionFlowId;
+  /** @minItems 1 */
+  nodes: string[];
+  edges: CreatePipelineFlowConfigDtoFlowDefinitionEdgesItem[];
+  nodeConfigs?: CreatePipelineFlowConfigDtoFlowDefinitionNodeConfigs;
+};

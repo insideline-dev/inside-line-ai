@@ -144,7 +144,12 @@ export class SynthesisService {
       );
     }
 
-    return { extraction, research, scraping, evaluation };
+    return {
+      extraction,
+      research,
+      scraping,
+      evaluation,
+    };
   }
 
   private computeSectionScores(evaluation: EvaluationResult): SectionScores {

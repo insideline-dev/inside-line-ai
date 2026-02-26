@@ -1033,6 +1033,7 @@ export class ScrapingService {
           teamBios: scraped.teamBios.length,
           discoveryEnabled: websiteScrapeSettings.discoveryEnabled,
           manualPathCount: websiteScrapeSettings.manualPaths.length,
+          scrapedRoutes: scraped.scrapedRoutes,
         },
         outputJson: scraped,
         meta: {

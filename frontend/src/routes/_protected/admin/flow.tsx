@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -6,6 +6,8 @@ import {
   getAdminControllerGetAiPromptFlowQueryKey,
   useAdminControllerGetAiPromptFlow,
   useAdminControllerGetAiModelConfig,
+  useAdminControllerGetActivePipelineFlowConfig,
+  getAdminControllerGetActivePipelineFlowConfigQueryKey,
   useAdminControllerListPipelineFlowConfigs,
   useAdminControllerBulkApplyAiModelConfig,
   useAdminControllerCreatePipelineFlowConfig,
@@ -14,7 +16,7 @@ import {
   getAdminControllerListPipelineFlowConfigsQueryKey,
 } from "@/api/generated/admin/admin";
 import { PipelineCanvas } from "@/components/pipeline/PipelineCanvas";
-import type { PhaseConfig, PipelineConfig } from "@/components/pipeline/types";
+import type { PhaseConfig } from "@/components/pipeline/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -41,6 +43,11 @@ import type { AiPromptFlowResponseDtoFlowsItem } from "@/api/generated/model";
 import { useUndoRedo } from "@/components/pipeline/hooks/use-undo-redo";
 import type { FlowEdgeDefinition } from "@/components/pipeline/flow-edges";
 import { DEFAULT_PIPELINE_CONFIG } from "./-flow.defaults";
+import {
+  parseFlowConfigRecord,
+  selectInitialFlowConfigCandidate,
+  type FlowConfigRecord,
+} from "./-flow-config-helpers";
 
 export const Route = createFileRoute("/_protected/admin/flow")({
   component: AdminFlowPage,
@@ -204,6 +211,7 @@ function AdminFlowPage() {
     Record<string, FlowNodeConfigs>
   >({});
   const [isDirty, setIsDirty] = useState(false);
+  const hasHydratedInitialConfigRef = useRef(false);
 
   const { data: flowData, isLoading: flowLoading } =
     useAdminControllerGetAiPromptFlow();
@@ -214,6 +222,11 @@ function AdminFlowPage() {
 
   const { data: configsData } =
     useAdminControllerListPipelineFlowConfigs();
+  const {
+    data: activeConfigData,
+    isFetched: hasFetchedActiveConfig,
+    isError: hasActiveConfigError,
+  } = useAdminControllerGetActivePipelineFlowConfig();
 
   const modelConfigPayload = extractResponseData<{
     allowedModels?: string[];
@@ -295,12 +308,17 @@ function AdminFlowPage() {
 
   const publishMutation = useAdminControllerPublishPipelineFlowConfig({
     mutation: {
-      onSuccess: () => {
+      onSuccess: async () => {
         setDraftId(null);
         toast.success("Config published!");
-        queryClient.invalidateQueries({
-          queryKey: getAdminControllerListPipelineFlowConfigsQueryKey(),
-        });
+        await Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: getAdminControllerListPipelineFlowConfigsQueryKey(),
+          }),
+          queryClient.invalidateQueries({
+            queryKey: getAdminControllerGetActivePipelineFlowConfigQueryKey(),
+          }),
+        ]);
       },
       onError: (err) => toast.error((err as Error).message || "Failed to publish"),
     },
@@ -340,21 +358,11 @@ function AdminFlowPage() {
   )?.flows;
   const selectedFlow = flows?.find((f) => f.id === selectedFlowId);
 
-  const configs = extractResponseData<{
-    data: Array<{
-      id: string;
-      name: string;
-      status: string;
-      version: number;
-      updatedAt: string;
-      pipelineConfig?: PipelineConfig;
-      flowDefinition?: {
-        flowId?: string;
-        edges?: unknown;
-        nodeConfigs?: unknown;
-      };
-    }>;
-  }>(configsData);
+  const configs = extractResponseData<{ data: FlowConfigRecord[] }>(configsData);
+  const activeConfig = useMemo(
+    () => parseFlowConfigRecord(extractResponseData<unknown>(activeConfigData)),
+    [activeConfigData],
+  );
 
   const handlePipelineConfigChange = useCallback(
     (updated: PhaseConfig[]) => {
@@ -402,7 +410,7 @@ function AdminFlowPage() {
   );
 
   const persistDraftForFlow = useCallback(
-    (
+    async (
       flowId: string,
       overrides?: {
         edges?: FlowEdgeDefinition[];
@@ -411,21 +419,30 @@ function AdminFlowPage() {
     ) => {
       const payload = buildDraftPayloadForFlow(flowId, overrides);
       if (!payload) {
-        return;
+        return null;
       }
 
       if (draftId) {
-        updateDraftMutation.mutate({ id: draftId, data: payload as never });
-      } else {
-        createDraftMutation.mutate({ data: payload as never });
+        const updated = await updateDraftMutation.mutateAsync({
+          id: draftId,
+          data: payload as never,
+        });
+        const updatedDraft = extractResponseData<{ id: string }>(updated);
+        return updatedDraft.id;
       }
+
+      const created = await createDraftMutation.mutateAsync({
+        data: payload as never,
+      });
+      const createdDraft = extractResponseData<{ id: string }>(created);
+      return createdDraft.id;
     },
     [buildDraftPayloadForFlow, createDraftMutation, draftId, updateDraftMutation],
   );
 
-  const handleSaveDraft = () => {
+  const handleSaveDraft = async () => {
     if (!selectedFlow) return;
-    persistDraftForFlow(selectedFlow.id);
+    await persistDraftForFlow(selectedFlow.id);
   };
 
   const handlePublish = () => {
@@ -445,39 +462,84 @@ function AdminFlowPage() {
     toast.info("Reset to defaults");
   };
 
+  const applyLoadedConfig = useCallback(
+    (
+      config: FlowConfigRecord,
+      options?: { showToast?: boolean; historyMode?: "push" | "replace" },
+    ) => {
+      const historyMode = options?.historyMode ?? "push";
+      const showToast = options?.showToast ?? true;
+      setDraftId(config.status === "draft" ? config.id : null);
+      const loadedPhases = config.pipelineConfig?.phases;
+      if (loadedPhases) {
+        if (historyMode === "replace") {
+          history.replace(loadedPhases as PhaseConfig[]);
+        } else {
+          history.push(loadedPhases as PhaseConfig[]);
+        }
+      }
+      const loadedFlowId =
+        config.flowDefinition?.flowId && typeof config.flowDefinition.flowId === "string"
+          ? config.flowDefinition.flowId
+          : null;
+      const loadedEdges = normalizeFlowEdges(config.flowDefinition?.edges);
+      if (loadedFlowId && loadedEdges) {
+        setDraftEdgesByFlowId((current) => ({
+          ...current,
+          [loadedFlowId]: loadedEdges,
+        }));
+        const loadedNodeConfigs = normalizeFlowNodeConfigs(
+          config.flowDefinition?.nodeConfigs,
+        );
+        setDraftNodeConfigsByFlowId((current) => ({
+          ...current,
+          [loadedFlowId]: loadedNodeConfigs,
+        }));
+        setSelectedFlowId(loadedFlowId);
+      }
+      setIsDirty(false);
+
+      if (showToast) {
+        toast.info(`Loaded: ${config.name}`);
+      }
+    },
+    [history],
+  );
+
   const handleLoadConfig = (configId: string) => {
     const config = configs?.data?.find((c) => c.id === configId);
     if (!config) return;
-
-    setDraftId(config.id);
-
-    const loadedPhases = config.pipelineConfig?.phases;
-    if (loadedPhases) {
-      history.push(loadedPhases as PhaseConfig[]);
-    }
-    const loadedFlowId =
-      config.flowDefinition?.flowId && typeof config.flowDefinition.flowId === "string"
-        ? config.flowDefinition.flowId
-        : null;
-    const loadedEdges = normalizeFlowEdges(config.flowDefinition?.edges);
-    if (loadedFlowId && loadedEdges) {
-      setDraftEdgesByFlowId((current) => ({
-        ...current,
-        [loadedFlowId]: loadedEdges,
-      }));
-      const loadedNodeConfigs = normalizeFlowNodeConfigs(
-        config.flowDefinition?.nodeConfigs,
-      );
-      setDraftNodeConfigsByFlowId((current) => ({
-        ...current,
-        [loadedFlowId]: loadedNodeConfigs,
-      }));
-      setSelectedFlowId(loadedFlowId);
-    }
-    setIsDirty(false);
-
-    toast.info(`Loaded: ${config.name}`);
+    applyLoadedConfig(config);
   };
+
+  useEffect(() => {
+    if (hasHydratedInitialConfigRef.current) {
+      return;
+    }
+    if (!hasFetchedActiveConfig && !hasActiveConfigError) {
+      return;
+    }
+    if (!activeConfig && !configs?.data) {
+      return;
+    }
+
+    const preferredConfig = selectInitialFlowConfigCandidate({
+      flowId: "pipeline",
+      activeConfig,
+      configList: configs?.data,
+    });
+
+    hasHydratedInitialConfigRef.current = true;
+    if (preferredConfig) {
+      applyLoadedConfig(preferredConfig, { showToast: false, historyMode: "replace" });
+    }
+  }, [
+    activeConfig,
+    applyLoadedConfig,
+    configs?.data,
+    hasActiveConfigError,
+    hasFetchedActiveConfig,
+  ]);
 
   const handleFlowEdgesChange = useCallback(
     (flowId: string, edges: FlowEdgeDefinition[]) => {
@@ -491,7 +553,7 @@ function AdminFlowPage() {
   );
 
   const handleFlowNodeConfigChange = useCallback(
-    (flowId: string, nodeId: string, nodeConfig: unknown | undefined) => {
+    async (flowId: string, nodeId: string, nodeConfig: unknown | undefined) => {
       const currentForFlow = { ...(draftNodeConfigsByFlowId[flowId] ?? {}) };
       const nextNodeConfigsForFlow: FlowNodeConfigs = currentForFlow;
 
@@ -515,9 +577,18 @@ function AdminFlowPage() {
         [flowId]: nextNodeConfigsForFlow,
       }));
       setIsDirty(true);
-      persistDraftForFlow(flowId, { nodeConfigs: nextNodeConfigsForFlow });
+      const persistedDraftId = await persistDraftForFlow(flowId, {
+        nodeConfigs: nextNodeConfigsForFlow,
+      });
+      if (nodeId === "scrape_website" && persistedDraftId) {
+        await publishMutation.mutateAsync({ id: persistedDraftId });
+      }
     },
-    [draftNodeConfigsByFlowId, persistDraftForFlow],
+    [
+      draftNodeConfigsByFlowId,
+      persistDraftForFlow,
+      publishMutation,
+    ],
   );
 
   const handleBulkApply = useCallback(

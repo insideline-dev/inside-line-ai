@@ -1091,6 +1091,28 @@ describe("PipelineService", () => {
         }),
       );
     });
+
+    it("extends research phase timeout budget to support deep-research agents", async () => {
+      stateService.get.mockResolvedValueOnce(createState());
+
+      aiConfig.getResearchAgentHardTimeoutMs = jest.fn().mockReturnValue(3_600_000);
+      aiConfig.getResearchAgentStaggerMs = jest.fn().mockReturnValue(180_000);
+
+      await (service as any).queuePhase({
+        startupId: "startup-1",
+        pipelineRunId: "run-1",
+        userId: "user-1",
+        phase: PipelinePhase.RESEARCH,
+      });
+
+      expect(errorRecovery.schedulePhaseTimeout).toHaveBeenCalledWith(
+        expect.objectContaining({
+          startupId: "startup-1",
+          phase: PipelinePhase.RESEARCH,
+          timeoutMs: 7_740_000,
+        }),
+      );
+    });
   });
 
   describe("isValidAgentForPhase", () => {

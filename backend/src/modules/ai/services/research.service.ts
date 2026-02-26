@@ -24,6 +24,7 @@ import { buildResearchPromptVariables } from "./research-prompt-variables";
 import { AgentConfigService } from "./agent-config.service";
 import { AiModelExecutionService } from "./ai-model-execution.service";
 import { AiConfigService } from "./ai-config.service";
+import { isOpenAiDeepResearchModel } from "./ai-runtime-config.schema";
 
 type ResearchAgentOutput =
   | NonNullable<ResearchResult["team"]>
@@ -109,6 +110,10 @@ export class ResearchService {
     const result = this.createInitialResult(currentResult, options?.agentKey);
     const shouldConsumePhaseFeedback = Boolean(options?.agentKey);
     let phaseFeedbackConsumed = false;
+    const researchAgentStaggerMs = Math.max(
+      0,
+      this.aiConfig?.getResearchAgentStaggerMs() ?? 180_000,
+    );
 
     const dedupeSources = new Map<string, SourceEntry>();
     const { phase1Keys, phase2Keys } = await this.resolveResearchKeys();
@@ -129,7 +134,10 @@ export class ResearchService {
         key,
         agent,
         pipelineInput,
-        options?.onAgentStart,
+        {
+          onAgentStart: options?.onAgentStart,
+          startDelayMs: 0,
+        },
       );
       options?.onAgentComplete?.({
         agent: key,
@@ -169,7 +177,7 @@ export class ResearchService {
 
     // ── Phase 1: team, market, product, news (parallel) ──
     await Promise.all(
-      phase1Keys.map(async (key) => {
+      phase1Keys.map(async (key, index) => {
         const settledResult = await this.settleAgentRun(
           key,
           this.runSingleAgentSafe(
@@ -178,7 +186,10 @@ export class ResearchService {
             key,
             RESEARCH_AGENTS[key],
             pipelineInput,
-            options?.onAgentStart,
+            {
+              onAgentStart: options?.onAgentStart,
+              startDelayMs: index * researchAgentStaggerMs,
+            },
           ),
         );
         const agentResult = this.unwrapSettled(key, settledResult);
@@ -197,7 +208,7 @@ export class ResearchService {
     // ── Phase 2: competitor (sequential, receives phase 1 context) ──
     const competitorInput = this.buildCompetitorInput(pipelineInput, result);
     await Promise.all(
-      phase2Keys.map(async (key) => {
+      phase2Keys.map(async (key, index) => {
         const settledResult = await this.settleAgentRun(
           key,
           this.runSingleAgentSafe(
@@ -206,7 +217,10 @@ export class ResearchService {
             key,
             PHASE_2_RESEARCH_AGENTS[key],
             competitorInput,
-            options?.onAgentStart,
+            {
+              onAgentStart: options?.onAgentStart,
+              startDelayMs: index * researchAgentStaggerMs,
+            },
           ),
         );
         const agentResult = this.unwrapSettled(key, settledResult);
@@ -259,7 +273,10 @@ export class ResearchService {
     key: ResearchAgentKey,
     agent: ResearchAgentConfig<ResearchAgentOutput>,
     pipelineInput: ResearchPipelineInput,
-    onAgentStart?: (agent: ResearchAgentKey) => void,
+    options?: {
+      onAgentStart?: (agent: ResearchAgentKey) => void;
+      startDelayMs?: number;
+    },
   ): Promise<AgentRunResult> {
     try {
       const agentResult = await this.runSingleAgent(
@@ -268,7 +285,7 @@ export class ResearchService {
         key,
         agent,
         pipelineInput,
-        onAgentStart,
+        options,
       );
       return agentResult;
     } catch (error) {
@@ -311,10 +328,11 @@ export class ResearchService {
     key: ResearchAgentKey,
     agent: ResearchAgentConfig<ResearchAgentOutput>,
     pipelineInput: ResearchPipelineInput,
-    onAgentStart?: (agent: ResearchAgentKey) => void,
+    options?: {
+      onAgentStart?: (agent: ResearchAgentKey) => void;
+      startDelayMs?: number;
+    },
   ): Promise<AgentRunResult> {
-    onAgentStart?.(key);
-
     const promptKey = RESEARCH_PROMPT_KEY_BY_AGENT[key];
     const promptConfig = await this.promptService.resolve({
       key: promptKey,
@@ -350,6 +368,25 @@ export class ResearchService {
       };
       dataSummary.modelName = execution.resolvedConfig.modelName;
     }
+    const requestedDelayMs = Math.max(0, options?.startDelayMs ?? 0);
+    const modelNameForStagger = execution?.resolvedConfig.modelName;
+    const staggerDelayMs = this.resolveAgentStartDelayMs(
+      requestedDelayMs,
+      modelNameForStagger,
+    );
+    const staggerApplied = staggerDelayMs > 0;
+    runtimeTraceMeta.stagger = {
+      requestedDelayMs,
+      staggerDelayMs,
+      staggerApplied,
+      staggerReason: staggerApplied ? "deep_research_model" : undefined,
+    };
+    dataSummary.staggerDelayMs = staggerDelayMs;
+    dataSummary.staggerApplied = staggerApplied;
+    if (staggerApplied) {
+      await this.sleep(staggerDelayMs);
+    }
+    options?.onAgentStart?.(key);
 
     const context = agent.contextBuilder(pipelineInput);
     const feedbackContext = await this.loadFeedbackContext(startupId, key);
@@ -784,6 +821,29 @@ export class ResearchService {
 
     const state = await stateReader.get(startupId);
     return state?.pipelineRunId ?? undefined;
+  }
+
+  private resolveAgentStartDelayMs(
+    requestedDelayMs: number,
+    modelName: string | undefined,
+  ): number {
+    if (requestedDelayMs <= 0) {
+      return 0;
+    }
+    if (!modelName) {
+      return 0;
+    }
+    if (!isOpenAiDeepResearchModel(modelName)) {
+      return 0;
+    }
+    return requestedDelayMs;
+  }
+
+  private async sleep(ms: number): Promise<void> {
+    if (ms <= 0) {
+      return;
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, ms));
   }
 
   private mergeTraceMeta(

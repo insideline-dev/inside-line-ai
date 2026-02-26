@@ -69,6 +69,10 @@ interface QueuePhaseParams {
   metadata?: Record<string, unknown>;
 }
 
+const MIN_RESEARCH_PHASE_TIMEOUT_MS = 3_600_000;
+const DEFAULT_RESEARCH_AGENT_STAGGER_MS = 180_000;
+const RESEARCH_PHASE_1_MAX_STAGGER_OFFSETS = 3;
+
 @Injectable()
 export class PipelineService {
   private readonly logger = new Logger(PipelineService.name);
@@ -673,11 +677,46 @@ export class PipelineService {
     this.errorRecovery.schedulePhaseTimeout({
       startupId,
       phase,
-      timeoutMs: phaseConfig.timeoutMs + delayMs,
+      timeoutMs: this.resolvePhaseTimeoutMs(phase, phaseConfig.timeoutMs) + delayMs,
       onTimeout: () => {
         void this.handlePhaseTimeout(startupId, phase);
       },
     });
+  }
+
+  private resolvePhaseTimeoutMs(
+    phase: PipelinePhase,
+    configuredTimeoutMs: number,
+  ): number {
+    const normalizedConfiguredTimeout = Number.isFinite(configuredTimeoutMs)
+      ? Math.max(1, Math.floor(configuredTimeoutMs))
+      : 1;
+    if (phase !== PipelinePhase.RESEARCH) {
+      return normalizedConfiguredTimeout;
+    }
+
+    const config = this.aiConfig as Partial<AiConfigService>;
+    const researchHardTimeoutMs =
+      typeof config.getResearchAgentHardTimeoutMs === "function"
+        ? config.getResearchAgentHardTimeoutMs()
+        : MIN_RESEARCH_PHASE_TIMEOUT_MS;
+    const researchStaggerMs =
+      typeof config.getResearchAgentStaggerMs === "function"
+        ? config.getResearchAgentStaggerMs()
+        : DEFAULT_RESEARCH_AGENT_STAGGER_MS;
+
+    // Research runs in two waves: phase 1 staggered agents, then competitor agent.
+    // Budget phase timeout to accommodate worst-case deep-research duration.
+    const phase1MaxStartDelayMs =
+      Math.max(0, researchStaggerMs) * RESEARCH_PHASE_1_MAX_STAGGER_OFFSETS;
+    const deepResearchBudgetMs = researchHardTimeoutMs * 2 + phase1MaxStartDelayMs;
+
+    return Math.max(
+      normalizedConfiguredTimeout,
+      MIN_RESEARCH_PHASE_TIMEOUT_MS,
+      researchHardTimeoutMs,
+      deepResearchBudgetMs,
+    );
   }
 
   private async updateStartupStatus(

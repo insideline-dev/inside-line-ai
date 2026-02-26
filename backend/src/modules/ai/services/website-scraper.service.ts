@@ -4,7 +4,6 @@ import * as cheerio from "cheerio";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import type { WebsiteScrapedData } from "../interfaces/phase-results.interface";
-import { Crawl4aiService } from "./crawl4ai.service";
 
 interface ScrapedPage {
   url: string;
@@ -23,6 +22,20 @@ interface ScrapedPage {
 interface ResolvedSafeUrl {
   fetchUrl: string;
   hostHeader: string;
+}
+
+export interface ScrapedRouteResult {
+  requestedPath: string;
+  resolvedUrl: string;
+  status: "ok" | "not_found" | "error";
+  title?: string;
+  contentLength?: number;
+  error?: string;
+}
+
+interface SubpageScrapeResult {
+  pages: ScrapedPage[];
+  routeResults: ScrapedRouteResult[];
 }
 
 export interface WebsiteDeepScrapeOptions {
@@ -48,13 +61,12 @@ export class WebsiteScraperService {
 
   constructor(
     @Optional() private config?: ConfigService,
-    @Optional() private crawl4ai?: Crawl4aiService,
   ) {
     this.maxSubpages = this.validatePositiveInt(
       this.config?.get<number>("SCRAPING_MAX_SUBPAGES", 40) ?? 40, 1, 200,
     );
     this.batchSize = this.validatePositiveInt(
-      this.config?.get<number>("SCRAPING_BATCH_SIZE", 5) ?? 5, 1, 50,
+      this.config?.get<number>("SCRAPING_BATCH_SIZE", 8) ?? 8, 1, 50,
     );
     this.maxLinksPerPage = this.validatePositiveInt(
       this.config?.get<number>("SCRAPING_MAX_LINKS_PER_PAGE", 100) ?? 100, 1, 1000,
@@ -78,24 +90,6 @@ export class WebsiteScraperService {
     return clamped;
   }
 
-  private async fetchHtmlViaCrawl4ai(urls: string[]): Promise<Map<string, { html: string; markdown: string }>> {
-    const resultMap = new Map<string, { html: string; markdown: string }>();
-    if (!this.crawl4ai?.isConfigured()) return resultMap;
-
-    const results = await this.crawl4ai.crawl(urls);
-    for (const result of results) {
-      if (result.success && (result.cleanedHtml || result.html)) {
-        resultMap.set(result.url, {
-          html: result.cleanedHtml || result.html,
-          markdown: result.markdown || "",
-        });
-      } else if (!result.success) {
-        this.logger.debug(`[Crawl4AI] Failed for ${result.url}: ${result.errorMessage}`);
-      }
-    }
-    return resultMap;
-  }
-
   async deepScrape(
     url: string,
     options: WebsiteDeepScrapeOptions = {},
@@ -106,43 +100,81 @@ export class WebsiteScraperService {
       homepageUrl,
       options.manualPaths ?? [],
     );
+    const hasManualPaths = manualUrls.length > 0;
     this.logger.log(
       `[Scrape] Starting deep scrape for ${homepageUrl} | discovery=${discoveryEnabled} | manualPaths=${manualUrls.length}`,
     );
 
-    let homepage: ScrapedPage;
-    const crawl4aiResults = await this.fetchHtmlViaCrawl4ai([homepageUrl]);
-    const homepageCrawl = crawl4aiResults.get(homepageUrl);
+    const homepage = await this.fetchAndParsePage(homepageUrl);
+    this.logger.log("[Scrape] Homepage scraped via fetch+Cheerio");
 
-    if (homepageCrawl) {
-      homepage = this.parseHtml(homepageUrl, homepageCrawl.html, homepageCrawl.markdown);
-      this.logger.log("[Scrape] Homepage scraped via Crawl4AI");
-    } else {
-      homepage = await this.fetchAndParsePage(homepageUrl);
-      this.logger.log("[Scrape] Homepage scraped via fetch (Crawl4AI fallback)");
+    // Always fetch sitemap when manual paths exist (for fuzzy matching)
+    const sitemapUrls = hasManualPaths || discoveryEnabled
+      ? await this.fetchSitemapUrls(homepageUrl)
+      : [];
+    if (sitemapUrls.length > 0) {
+      this.logger.debug(`[Scrape] Found ${sitemapUrls.length} URLs from sitemap.xml`);
     }
 
+    let allCandidates: string[];
+    let routeResults: ScrapedRouteResult[] = [];
+
+    if (hasManualPaths) {
+      // Manual paths are the source of truth — sitemap only enhances them via fuzzy matching
+      const sitemapMatches = this.matchManualPathsToSitemap(manualUrls, sitemapUrls, homepageUrl);
+      const resolvedManualUrls = manualUrls.map((manualUrl) => {
+        const matched = sitemapMatches.get(manualUrl);
+        if (matched && matched !== manualUrl) {
+          const requestedPath = new URL(manualUrl).pathname;
+          this.logger.log(`[Scrape] Sitemap match: ${requestedPath} → ${matched}`);
+        }
+        return matched ?? manualUrl;
+      });
+      allCandidates = [...new Set(resolvedManualUrls)]
+        .filter((u) => u !== homepageUrl && u !== homepageUrl + "/")
+        .slice(0, this.maxSubpages);
+
+      const { pages: subpages, routeResults: subpageRouteResults } =
+        await this.scrapeSubpagesWithRouteTracking(allCandidates, manualUrls, sitemapMatches);
+      routeResults = subpageRouteResults;
+
+      // Log per-path results
+      for (const route of routeResults) {
+        const statusLabel = route.status === "ok" ? "OK" : route.status.toUpperCase();
+        const titleLabel = route.title ? `"${route.title}"` : "no title";
+        const sizeLabel = route.contentLength != null ? `${route.contentLength} chars` : "n/a";
+        this.logger.log(
+          `[Scrape] ${route.requestedPath} → ${route.resolvedUrl} | ${statusLabel} | ${sizeLabel} | ${titleLabel}${route.error ? ` | ${route.error}` : ""}`,
+        );
+      }
+
+      const successfulPages = subpages;
+      if (successfulPages.length > 0) {
+        this.logger.debug(
+          `[Scrape] Successfully scraped ${successfulPages.length} manual subpages`,
+        );
+      }
+
+      const pages: ScrapedPage[] = [homepage, ...successfulPages];
+      return this.buildScrapedData(homepage, successfulPages, pages, routeResults);
+    }
+
+    // No manual paths — use discovery if enabled (backward compat)
     const subpageCandidates = discoveryEnabled
       ? this.discoverSubpages(homepage.links, homepageUrl)
       : [];
     if (discoveryEnabled) {
       this.logger.debug(
-        `[Scrape] Discovered ${subpageCandidates.length} subpage candidates: ${subpageCandidates.join(", ")}`,
+        `[Scrape] Discovered ${subpageCandidates.length} subpage candidates`,
       );
     } else {
       this.logger.debug("[Scrape] Discovery disabled; skipping link-based subpage discovery");
     }
-    const sitemapUrls = discoveryEnabled
-      ? await this.fetchSitemapUrls(homepageUrl)
-      : [];
-    if (discoveryEnabled && sitemapUrls.length > 0) {
-      this.logger.debug(`[Scrape] Found ${sitemapUrls.length} URLs from sitemap.xml`);
-    }
-    const allCandidates = [...new Set([
-      ...manualUrls,
+
+    allCandidates = [...new Set([
       ...subpageCandidates,
       ...sitemapUrls.map((u) => this.normalizeUrl(u, false)),
-    ])].filter((url) => url !== homepageUrl && url !== homepageUrl + "/")
+    ])].filter((u) => u !== homepageUrl && u !== homepageUrl + "/")
       .slice(0, this.maxSubpages);
     const subpages = await this.scrapeSubpages(allCandidates);
     if (subpages.length > 0) {
@@ -151,7 +183,15 @@ export class WebsiteScraperService {
       );
     }
     const pages: ScrapedPage[] = [homepage, ...subpages];
+    return this.buildScrapedData(homepage, subpages, pages);
+  }
 
+  private buildScrapedData(
+    homepage: ScrapedPage,
+    subpages: ScrapedPage[],
+    pages: ScrapedPage[],
+    scrapedRoutes?: ScrapedRouteResult[],
+  ): WebsiteScrapedData {
     const teamBios = this.dedupeTeamBios(
       pages.flatMap((page) => page.teamBios),
     );
@@ -210,10 +250,11 @@ export class WebsiteScraperService {
         keywords: homepage.metadata.keywords,
         author: homepage.metadata.author,
       },
+      scrapedRoutes,
     };
 
     this.logger.log(
-      `[Scrape] Completed deep scrape for ${homepageUrl} | Pages: ${result.metadata.pageCount} | Team bios: ${result.teamBios.length} | Links: ${result.links.length} | Testimonials: ${result.testimonials.length}`,
+      `[Scrape] Completed deep scrape for ${homepage.url} | Pages: ${result.metadata.pageCount} | Team bios: ${result.teamBios.length} | Links: ${result.links.length} | Testimonials: ${result.testimonials.length}${scrapedRoutes ? ` | Routes: ${scrapedRoutes.filter((r) => r.status === "ok").length}/${scrapedRoutes.length} OK` : ""}`,
     );
     return result;
   }
@@ -296,6 +337,55 @@ export class WebsiteScraperService {
     return Array.from(urls);
   }
 
+  private matchManualPathsToSitemap(
+    manualUrls: string[],
+    sitemapUrls: string[],
+    homepageUrl: string,
+  ): Map<string, string> {
+    const matches = new Map<string, string>();
+    if (sitemapUrls.length === 0) return matches;
+
+    const homepageHost = new URL(homepageUrl).hostname;
+    const normalizedSitemapUrls = sitemapUrls
+      .map((u) => {
+        try {
+          const parsed = new URL(u);
+          return parsed.hostname === homepageHost ? this.normalizeUrl(u, false) : null;
+        } catch {
+          return null;
+        }
+      })
+      .filter((u): u is string => u !== null);
+
+    for (const manualUrl of manualUrls) {
+      const manualPathname = new URL(manualUrl).pathname.toLowerCase();
+      const manualSegments = manualPathname.split("/").filter(Boolean);
+      const finalSegment = manualSegments[manualSegments.length - 1];
+      if (!finalSegment) continue;
+
+      // 1. Exact pathname match in sitemap
+      const exactMatch = normalizedSitemapUrls.find((sitemapUrl) => {
+        const sitemapPathname = new URL(sitemapUrl).pathname.toLowerCase();
+        return sitemapPathname === manualPathname || sitemapPathname === `${manualPathname}/`;
+      });
+      if (exactMatch) {
+        matches.set(manualUrl, exactMatch);
+        continue;
+      }
+
+      // 2. Fuzzy match: sitemap URL contains the same final segment as a path component
+      const fuzzyMatch = normalizedSitemapUrls.find((sitemapUrl) => {
+        const sitemapSegments = new URL(sitemapUrl).pathname.toLowerCase().split("/").filter(Boolean);
+        return sitemapSegments.includes(finalSegment);
+      });
+      if (fuzzyMatch) {
+        matches.set(manualUrl, fuzzyMatch);
+      }
+    }
+
+    return matches;
+  }
+
   private normalizeManualPath(rawPath: string): string | null {
     const trimmed = rawPath.trim();
     if (!trimmed) {
@@ -323,33 +413,17 @@ export class WebsiteScraperService {
 
   private async scrapeSubpages(urls: string[]): Promise<ScrapedPage[]> {
     const pages: ScrapedPage[] = [];
-    let crawl4aiCount = 0;
-    let fetchCount = 0;
 
-    // Try Crawl4AI for all URLs first
-    const crawl4aiResults = await this.fetchHtmlViaCrawl4ai(urls);
-    const fallbackUrls: string[] = [];
-
-    for (const url of urls) {
-      const crawlResult = crawl4aiResults.get(url);
-      if (crawlResult) {
-        pages.push(this.parseHtml(url, crawlResult.html, crawlResult.markdown));
-        crawl4aiCount++;
-      } else {
-        fallbackUrls.push(url);
-      }
-    }
-
-    // Fetch fallback for URLs that Crawl4AI didn't handle
-    for (let index = 0; index < fallbackUrls.length; index += this.batchSize) {
+    for (let index = 0; index < urls.length; index += this.batchSize) {
       if (index > 0 && this.batchDelayMs > 0) {
         await new Promise<void>((resolve) => setTimeout(resolve, this.batchDelayMs));
       }
 
-      const batch = fallbackUrls.slice(index, index + this.batchSize);
+      const batch = urls.slice(index, index + this.batchSize);
       this.logger.debug(
-        `[Scrape] Processing fetch fallback batch ${Math.floor(index / this.batchSize) + 1} (${batch.length} urls)`,
+        `[Scrape] Fetching batch ${Math.floor(index / this.batchSize) + 1}/${Math.ceil(urls.length / this.batchSize)} (${batch.length} urls)`,
       );
+
       const settled = await Promise.allSettled(
         batch.map((url) => this.fetchAndParsePage(url, true)),
       );
@@ -357,26 +431,91 @@ export class WebsiteScraperService {
       for (const result of settled) {
         if (result.status === "fulfilled" && result.value) {
           pages.push(result.value);
-          fetchCount++;
-          continue;
-        }
-
-        if (result.status === "rejected") {
+        } else if (result.status === "rejected") {
           this.logger.warn(
-            `[Scrape] Failed subpage scrape in batch: ${this.asMessage(result.reason)}`,
+            `[Scrape] Failed subpage fetch: ${this.asMessage(result.reason)}`,
           );
         }
       }
     }
 
-    this.logger.log(
-      `[Scrape] ${crawl4aiCount} subpages via Crawl4AI, ${fetchCount} via fetch fallback`,
-    );
-
+    this.logger.log(`[Scrape] Scraped ${pages.length}/${urls.length} subpages via fetch+Cheerio`);
     return pages;
   }
 
-  private parseHtml(pageUrl: string, html: string, markdown?: string): ScrapedPage {
+  private async scrapeSubpagesWithRouteTracking(
+    resolvedUrls: string[],
+    originalManualUrls: string[],
+    sitemapMatches: Map<string, string>,
+  ): Promise<SubpageScrapeResult> {
+    const pages: ScrapedPage[] = [];
+    const routeResults: ScrapedRouteResult[] = [];
+
+    // Build reverse mapping: resolved URL → original manual URL(s)
+    const resolvedToManual = new Map<string, string>();
+    for (const manualUrl of originalManualUrls) {
+      const resolved = sitemapMatches.get(manualUrl) ?? manualUrl;
+      resolvedToManual.set(resolved, manualUrl);
+    }
+
+    for (let index = 0; index < resolvedUrls.length; index += this.batchSize) {
+      if (index > 0 && this.batchDelayMs > 0) {
+        await new Promise<void>((resolve) => setTimeout(resolve, this.batchDelayMs));
+      }
+
+      const batch = resolvedUrls.slice(index, index + this.batchSize);
+      this.logger.debug(
+        `[Scrape] Fetching batch ${Math.floor(index / this.batchSize) + 1}/${Math.ceil(resolvedUrls.length / this.batchSize)} (${batch.length} urls)`,
+      );
+
+      const settled = await Promise.allSettled(
+        batch.map((url) => this.fetchAndParsePage(url, true)),
+      );
+
+      for (let i = 0; i < batch.length; i++) {
+        const batchUrl = batch[i]!;
+        const result = settled[i]!;
+        const originalManualUrl = resolvedToManual.get(batchUrl);
+        const requestedPath = originalManualUrl
+          ? new URL(originalManualUrl).pathname
+          : new URL(batchUrl).pathname;
+
+        if (result.status === "fulfilled" && result.value) {
+          pages.push(result.value);
+          routeResults.push({
+            requestedPath,
+            resolvedUrl: batchUrl,
+            status: "ok",
+            title: result.value.title || undefined,
+            contentLength: result.value.content.length,
+          });
+        } else {
+          const errorMsg = result.status === "rejected"
+            ? this.asMessage(result.reason)
+            : "Unknown error";
+          const is404 = errorMsg.includes("404");
+          routeResults.push({
+            requestedPath,
+            resolvedUrl: batchUrl,
+            status: is404 ? "not_found" : "error",
+            error: errorMsg,
+          });
+          if (result.status === "rejected") {
+            this.logger.warn(
+              `[Scrape] Failed subpage fetch: ${this.asMessage(result.reason)}`,
+            );
+          }
+        }
+      }
+    }
+
+    this.logger.log(
+      `[Scrape] Scraped ${pages.length}/${resolvedUrls.length} manual subpages via fetch+Cheerio`,
+    );
+    return { pages, routeResults };
+  }
+
+  private parseHtml(pageUrl: string, html: string): ScrapedPage {
     const $ = cheerio.load(html);
 
     const title =
@@ -404,16 +543,9 @@ export class WebsiteScraperService {
       .filter((entry): entry is { url: string; text: string } => Boolean(entry))
       .slice(0, this.maxLinksPerPage);
 
-    // Prefer Crawl4AI markdown for content (better for JS-rendered pages),
-    // fall back to extracting text from HTML body
-    let content: string;
-    if (markdown) {
-      content = markdown.trim();
-    } else {
-      const bodyTextRoot = $("body").clone();
-      bodyTextRoot.find("script, style, noscript, template").remove();
-      content = bodyTextRoot.text().replace(/\s+/g, " ").trim();
-    }
+    const bodyTextRoot = $("body").clone();
+    bodyTextRoot.find("script, style, noscript, template").remove();
+    const content = bodyTextRoot.text().replace(/\s+/g, " ").trim();
 
     const page: ScrapedPage = {
       url: this.normalizeUrl(pageUrl, pageUrl.endsWith("/")),

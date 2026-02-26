@@ -11,6 +11,7 @@ export type AiPromptPreviewResponseDtoKey = typeof AiPromptPreviewResponseDtoKey
 
 export const AiPromptPreviewResponseDtoKey = {
   extractionfields: 'extraction.fields',
+  enrichmentgapFill: 'enrichment.gapFill',
   researchteam: 'research.team',
   researchmarket: 'research.market',
   researchproduct: 'research.product',

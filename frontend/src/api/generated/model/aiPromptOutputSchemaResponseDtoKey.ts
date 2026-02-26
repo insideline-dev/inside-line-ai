@@ -11,6 +11,7 @@ export type AiPromptOutputSchemaResponseDtoKey = typeof AiPromptOutputSchemaResp
 
 export const AiPromptOutputSchemaResponseDtoKey = {
   extractionfields: 'extraction.fields',
+  enrichmentgapFill: 'enrichment.gapFill',
   researchteam: 'research.team',
   researchmarket: 'research.market',
   researchproduct: 'research.product',

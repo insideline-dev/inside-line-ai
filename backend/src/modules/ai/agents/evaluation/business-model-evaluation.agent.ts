@@ -27,10 +27,12 @@ export class BusinessModelEvaluationAgent extends BaseEvaluationAgent<BusinessMo
     super(providers, aiConfig, promptService, modelExecution);
   }
 
-  buildContext({ extraction, scraping, research }: EvaluationPipelineInput) {
+  buildContext(pipelineData: EvaluationPipelineInput) {
+    const { extraction, scraping } = pipelineData;
     const deckBusinessModelSection = extraction.rawText || extraction.tagline;
     const pricing = scraping.website?.pricing;
-    const revenueModel = pricing?.plans.length
+    const pricingPlans = Array.isArray(pricing?.plans) ? pricing.plans : [];
+    const revenueModel = pricingPlans.length
       ? "Tiered subscription pricing with enterprise expansion"
       : "Revenue model detail is limited in current materials";
     const unitEconomics = {
@@ -40,36 +42,12 @@ export class BusinessModelEvaluationAgent extends BaseEvaluationAgent<BusinessMo
         : undefined,
     };
 
-    const marketContext = research.market
-      ? {
-          competitors: research.market.competitors.map((c) => ({
-            name: c.name,
-            description: c.description,
-          })),
-          marketTrends: research.market.marketTrends,
-        }
-      : undefined;
-
-    const productContext = research.product
-      ? {
-          features: research.product.features,
-          integrations: research.product.integrations,
-        }
-      : undefined;
-
-    const competitorContext = research.competitor
-      ? {
-          competitorPricing: research.competitor.competitors
-            .filter((c) => c.pricing)
-            .map((c) => ({ name: c.name, pricing: c.pricing })),
-          competitorModels: research.competitor.competitors.map((c) => ({
-            name: c.name,
-            productOverview: c.productOverview,
-          })),
-        }
-      : undefined;
+    const marketContext = undefined;
+    const productContext = undefined;
+    const competitorContext = undefined;
 
     return {
+      researchReportText: this.buildResearchReportText(pipelineData),
       deckBusinessModelSection,
       pricing,
       revenueModel,

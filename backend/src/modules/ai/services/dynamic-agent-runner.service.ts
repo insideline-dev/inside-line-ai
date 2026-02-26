@@ -69,6 +69,7 @@ export class DynamicAgentRunnerService {
           maxOutputTokens: this.aiConfig.getEvaluationMaxOutputTokens(),
           tools: executionOptions?.generateTextOptions.tools,
           toolChoice: executionOptions?.generateTextOptions.toolChoice,
+          providerOptions: executionOptions?.generateTextOptions.providerOptions,
         });
 
         return {

@@ -101,7 +101,13 @@ describe("ScrapingService", () => {
   it("orchestrates website scrape and linkedin enrichment", async () => {
     const result = await service.run("startup-1");
 
-    expect(websiteScraper.deepScrape).toHaveBeenCalledWith("https://inside-line.test");
+    expect(websiteScraper.deepScrape).toHaveBeenCalledWith(
+      "https://inside-line.test",
+      {
+        manualPaths: [],
+        discoveryEnabled: false,
+      },
+    );
     expect(linkedin.enrichTeamMembers).toHaveBeenCalledTimes(1);
     expect(linkedin.enrichTeamMembers).toHaveBeenCalledWith(
       "user-123",

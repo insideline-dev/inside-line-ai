@@ -25,18 +25,37 @@ export class ProductEvaluationAgent extends BaseEvaluationAgent<ProductEvaluatio
     super(providers, aiConfig, promptService, modelExecution);
   }
 
-  buildContext({ extraction, scraping, research }: EvaluationPipelineInput) {
+  buildContext(pipelineData: EvaluationPipelineInput) {
+    const { extraction, scraping } = pipelineData;
+    const subpages = Array.isArray(scraping.website?.subpages)
+      ? scraping.website.subpages
+      : [];
+    const links = Array.isArray(scraping.website?.links)
+      ? scraping.website.links
+      : [];
+    const notableClaims = Array.isArray(scraping.notableClaims)
+      ? scraping.notableClaims
+      : [];
     const scrapedProductPages =
-      scraping.website?.subpages
-        .filter((page) => URL_PATH_PATTERNS.PRODUCT.test(tryPathname(page.url)))
+      subpages
+        .filter(
+          (page) =>
+            typeof page?.url === "string" &&
+            URL_PATH_PATTERNS.PRODUCT.test(tryPathname(page.url)),
+        )
         .map((page) => page.url) ?? [];
 
     const scrapedDemoLinks =
-      scraping.website?.links
+      links
         .filter(
           (link) =>
-            CONTENT_PATTERNS.DEMO_LINK.test(link.text) ||
-            URL_PATH_PATTERNS.DEMO.test(link.url),
+            (typeof link?.text === "string" &&
+              CONTENT_PATTERNS.DEMO_LINK.test(link.text)) ||
+            (typeof link?.url === "string" && URL_PATH_PATTERNS.DEMO.test(link.url)),
+        )
+        .filter(
+          (link): link is { url: string; text: string } =>
+            typeof link.url === "string",
         )
         .map((link) => link.url) ?? [];
 
@@ -44,20 +63,18 @@ export class ProductEvaluationAgent extends BaseEvaluationAgent<ProductEvaluatio
       new Set([
         ...scrapedProductPages,
         ...scrapedDemoLinks,
-        ...(research.product?.productPages ?? []),
-        ...(research.product?.sources ?? []),
       ]),
     ).filter((url) => URL_PATH_PATTERNS.PRODUCT.test(url));
 
     const demoUrl = websiteProductPages.find((url) => URL_PATH_PATTERNS.DEMO.test(url));
     const extractedFeatures =
-      research.product?.features.length
-        ? research.product.features
+      notableClaims.length > 0
+        ? notableClaims.slice(0, 8)
         : ["Core product workflow details are limited"];
 
     return {
+      researchReportText: this.buildResearchReportText(pipelineData),
       deckProductSection: extraction.rawText || extraction.tagline,
-      productResearch: research.product,
       websiteProductPages,
       demoUrl,
       extractedFeatures,

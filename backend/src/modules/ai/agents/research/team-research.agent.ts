@@ -1,18 +1,17 @@
 import type { ResearchAgentConfig } from "../../interfaces/agent.interface";
-import type { TeamResearch } from "../../schemas";
-import { TeamResearchSchema } from "../../schemas";
+import { z } from "zod";
 import {
   TEAM_RESEARCH_HUMAN_PROMPT,
   TEAM_RESEARCH_SYSTEM_PROMPT,
 } from "../../prompts/research/team-research.prompt";
 import { toValidUrl } from "./url.util";
 
-export const TeamResearchAgent: ResearchAgentConfig<TeamResearch> = {
+export const TeamResearchAgent: ResearchAgentConfig<string> = {
   key: "team",
   name: "Team Research",
   systemPrompt: TEAM_RESEARCH_SYSTEM_PROMPT,
   humanPromptTemplate: TEAM_RESEARCH_HUMAN_PROMPT,
-  schema: TeamResearchSchema,
+  schema: z.string(),
   contextBuilder: ({ extraction, scraping, researchParameters }) => ({
     companyName: extraction.companyName,
     teamMembers: scraping.teamMembers,
@@ -24,40 +23,30 @@ export const TeamResearchAgent: ResearchAgentConfig<TeamResearch> = {
   }),
   fallback: ({ extraction, scraping }) => {
     const websiteUrl = toValidUrl(extraction.website);
-    const linkedinProfiles: TeamResearch["linkedinProfiles"] = [];
+    const members = scraping.teamMembers
+      .map((member) => {
+        const linkedin = toValidUrl(member.linkedinUrl);
+        const details = [member.role ? `Role: ${member.role}` : "", linkedin ? `LinkedIn: ${linkedin}` : ""]
+          .filter(Boolean)
+          .join(" | ");
+        return details.length > 0 ? `- ${member.name}: ${details}` : `- ${member.name}`;
+      })
+      .join("\n");
 
-    for (const member of scraping.teamMembers) {
-      const url = toValidUrl(member.linkedinUrl);
-      if (!url) {
-        continue;
-      }
-
-      linkedinProfiles.push({
-        name: member.name,
-        title: member.role ?? "Founder",
-        company: extraction.companyName,
-        experience: [],
-        url,
-        patents: [],
-        previousExits: [],
-        notableAchievements: [],
-        educationHighlights: [],
-        sources: [],
-      });
-    }
-
-    return {
-      linkedinProfiles,
-      previousCompanies: [],
-      education: [],
-      achievements: [
-        "Public team history needs deeper validation through external profiles",
-      ],
-      onlinePresence: {
-        personalSites: websiteUrl ? [websiteUrl] : [],
-      },
-      teamSummary: undefined,
-      sources: websiteUrl ? [websiteUrl] : [],
-    };
+    return [
+      `Team Research Report: ${extraction.companyName}`,
+      "",
+      "Executive Summary",
+      "Automated team diligence fell back to deterministic mode due to provider/runtime constraints.",
+      "",
+      "Observed Team Members",
+      members.length > 0 ? members : "- Team roster unavailable in scraped context.",
+      "",
+      "Assessment",
+      "External verification for prior exits, patents, and role chronology requires manual diligence follow-up.",
+      "",
+      "Primary Source",
+      websiteUrl ?? "No verified primary source URL available.",
+    ].join("\n");
   },
 };

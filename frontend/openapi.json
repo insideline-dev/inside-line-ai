@@ -5012,6 +5012,38 @@
         ]
       }
     },
+    "/admin/ai-prompts/model-config/bulk-apply": {
+      "post": {
+        "operationId": "AdminController_bulkApplyAiModelConfig",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkApplyAiModelConfigDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkApplyAiModelConfigResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Apply and publish model config across all AI nodes, research agents, or evaluation agents",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
     "/admin/ai-prompts/{key}/model-config/{revisionId}": {
       "patch": {
         "operationId": "AdminController_updateAiModelConfigDraft",
@@ -10282,6 +10314,7 @@
               "type": "string",
               "enum": [
                 "extraction.fields",
+                "enrichment.gapFill",
                 "research.team",
                 "research.market",
                 "research.product",
@@ -10583,6 +10616,7 @@
                           "type": "string",
                           "enum": [
                             "extraction.fields",
+                            "enrichment.gapFill",
                             "research.team",
                             "research.market",
                             "research.product",
@@ -10741,6 +10775,7 @@
                 "type": "string",
                 "enum": [
                   "extraction.fields",
+                  "enrichment.gapFill",
                   "research.team",
                   "research.market",
                   "research.product",
@@ -11320,6 +11355,7 @@
                 "type": "string",
                 "enum": [
                   "extraction.fields",
+                  "enrichment.gapFill",
                   "research.team",
                   "research.market",
                   "research.product",
@@ -12244,7 +12280,8 @@
             "type": "string",
             "enum": [
               "gpt-5.2",
-              "gemini-3.0-flash-preview"
+              "gemini-3-flash-preview",
+              "o4-mini-deep-research"
             ]
           },
           "searchMode": {
@@ -12280,6 +12317,100 @@
           "searchMode"
         ]
       },
+      "BulkApplyAiModelConfigDto": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "enum": [
+              "all_ai_nodes",
+              "research_agents",
+              "evaluation_agents"
+            ]
+          },
+          "modelName": {
+            "type": "string",
+            "enum": [
+              "gpt-5.2",
+              "gemini-3-flash-preview",
+              "o4-mini-deep-research"
+            ]
+          }
+        },
+        "required": [
+          "scope",
+          "modelName"
+        ]
+      },
+      "BulkApplyAiModelConfigResponseDto": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "enum": [
+              "all_ai_nodes",
+              "research_agents",
+              "evaluation_agents"
+            ]
+          },
+          "modelName": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "appliedKeys": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "extraction.fields",
+                "enrichment.gapFill",
+                "research.team",
+                "research.market",
+                "research.product",
+                "research.news",
+                "research.competitor",
+                "evaluation.team",
+                "evaluation.market",
+                "evaluation.product",
+                "evaluation.traction",
+                "evaluation.businessModel",
+                "evaluation.gtm",
+                "evaluation.financials",
+                "evaluation.competitiveAdvantage",
+                "evaluation.legal",
+                "evaluation.dealTerms",
+                "evaluation.exitPotential",
+                "synthesis.final",
+                "matching.thesis",
+                "pipeline.orchestrator",
+                "extraction.linkedin",
+                "research.orchestrator",
+                "matching.investorThesis",
+                "clara.intent",
+                "clara.response",
+                "clara.agent"
+              ]
+            }
+          },
+          "publishedRevisionIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          }
+        },
+        "required": [
+          "scope",
+          "modelName",
+          "provider",
+          "appliedKeys",
+          "publishedRevisionIds"
+        ]
+      },
       "UpdateAiModelConfigDraftDto": {
         "type": "object",
         "properties": {
@@ -12287,7 +12418,8 @@
             "type": "string",
             "enum": [
               "gpt-5.2",
-              "gemini-3.0-flash-preview"
+              "gemini-3-flash-preview",
+              "o4-mini-deep-research"
             ]
           },
           "searchMode": {
@@ -12359,6 +12491,7 @@
             "type": "string",
             "enum": [
               "extraction.fields",
+              "enrichment.gapFill",
               "research.team",
               "research.market",
               "research.product",
@@ -12449,6 +12582,7 @@
             "type": "string",
             "enum": [
               "extraction.fields",
+              "enrichment.gapFill",
               "research.team",
               "research.market",
               "research.product",
@@ -12648,6 +12782,7 @@
             "type": "string",
             "enum": [
               "extraction.fields",
+              "enrichment.gapFill",
               "research.team",
               "research.market",
               "research.product",
@@ -12912,6 +13047,7 @@
                   "type": "string",
                   "enum": [
                     "extraction.fields",
+                    "enrichment.gapFill",
                     "research.team",
                     "research.market",
                     "research.product",
@@ -13276,7 +13412,131 @@
                 },
                 "flowDefinition": {
                   "type": "object",
-                  "additionalProperties": true
+                  "properties": {
+                    "flowId": {
+                      "type": "string",
+                      "enum": [
+                        "pipeline",
+                        "clara"
+                      ]
+                    },
+                    "nodes": {
+                      "minItems": 1,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "edges": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "from": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "to": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "sourceHandle": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "targetHandle": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "enabled": {
+                            "type": "boolean"
+                          },
+                          "mapping": {
+                            "type": "object",
+                            "properties": {
+                              "mode": {
+                                "type": "string",
+                                "enum": [
+                                  "full_output",
+                                  "field_map"
+                                ]
+                              },
+                              "fieldMap": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "fromPath": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "toKey": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "required": {
+                                      "type": "boolean"
+                                    }
+                                  },
+                                  "required": [
+                                    "fromPath",
+                                    "toKey"
+                                  ]
+                                }
+                              },
+                              "mergeStrategy": {
+                                "type": "string",
+                                "enum": [
+                                  "object",
+                                  "array"
+                                ]
+                              }
+                            }
+                          }
+                        },
+                        "required": [
+                          "from",
+                          "to"
+                        ]
+                      }
+                    },
+                    "nodeConfigs": {
+                      "type": "object",
+                      "properties": {
+                        "scrape_website": {
+                          "type": "object",
+                          "properties": {
+                            "scraping": {
+                              "type": "object",
+                              "properties": {
+                                "manualPaths": {
+                                  "maxItems": 100,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  }
+                                },
+                                "discoveryEnabled": {
+                                  "type": "boolean"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "additionalProperties": true
+                    }
+                  },
+                  "required": [
+                    "flowId",
+                    "nodes",
+                    "edges"
+                  ]
                 },
                 "pipelineConfig": {
                   "type": "object",
@@ -13368,7 +13628,131 @@
           },
           "flowDefinition": {
             "type": "object",
-            "additionalProperties": true
+            "properties": {
+              "flowId": {
+                "type": "string",
+                "enum": [
+                  "pipeline",
+                  "clara"
+                ]
+              },
+              "nodes": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "edges": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "from": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "to": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "sourceHandle": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "targetHandle": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "mapping": {
+                      "type": "object",
+                      "properties": {
+                        "mode": {
+                          "type": "string",
+                          "enum": [
+                            "full_output",
+                            "field_map"
+                          ]
+                        },
+                        "fieldMap": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "fromPath": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "toKey": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "required": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "fromPath",
+                              "toKey"
+                            ]
+                          }
+                        },
+                        "mergeStrategy": {
+                          "type": "string",
+                          "enum": [
+                            "object",
+                            "array"
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "required": [
+                    "from",
+                    "to"
+                  ]
+                }
+              },
+              "nodeConfigs": {
+                "type": "object",
+                "properties": {
+                  "scrape_website": {
+                    "type": "object",
+                    "properties": {
+                      "scraping": {
+                        "type": "object",
+                        "properties": {
+                          "manualPaths": {
+                            "maxItems": 100,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "discoveryEnabled": {
+                            "type": "boolean"
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "additionalProperties": true
+              }
+            },
+            "required": [
+              "flowId",
+              "nodes",
+              "edges"
+            ]
           },
           "pipelineConfig": {
             "type": "object",
@@ -13432,7 +13816,131 @@
           },
           "flowDefinition": {
             "type": "object",
-            "additionalProperties": true
+            "properties": {
+              "flowId": {
+                "type": "string",
+                "enum": [
+                  "pipeline",
+                  "clara"
+                ]
+              },
+              "nodes": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "edges": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "from": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "to": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "sourceHandle": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "targetHandle": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "mapping": {
+                      "type": "object",
+                      "properties": {
+                        "mode": {
+                          "type": "string",
+                          "enum": [
+                            "full_output",
+                            "field_map"
+                          ]
+                        },
+                        "fieldMap": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "fromPath": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "toKey": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "required": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "fromPath",
+                              "toKey"
+                            ]
+                          }
+                        },
+                        "mergeStrategy": {
+                          "type": "string",
+                          "enum": [
+                            "object",
+                            "array"
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "required": [
+                    "from",
+                    "to"
+                  ]
+                }
+              },
+              "nodeConfigs": {
+                "type": "object",
+                "properties": {
+                  "scrape_website": {
+                    "type": "object",
+                    "properties": {
+                      "scraping": {
+                        "type": "object",
+                        "properties": {
+                          "manualPaths": {
+                            "maxItems": 100,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "discoveryEnabled": {
+                            "type": "boolean"
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "additionalProperties": true
+              }
+            },
+            "required": [
+              "flowId",
+              "nodes",
+              "edges"
+            ]
           },
           "pipelineConfig": {
             "type": "object",
@@ -13459,7 +13967,131 @@
           },
           "flowDefinition": {
             "type": "object",
-            "additionalProperties": true
+            "properties": {
+              "flowId": {
+                "type": "string",
+                "enum": [
+                  "pipeline",
+                  "clara"
+                ]
+              },
+              "nodes": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "edges": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "from": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "to": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "sourceHandle": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "targetHandle": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "mapping": {
+                      "type": "object",
+                      "properties": {
+                        "mode": {
+                          "type": "string",
+                          "enum": [
+                            "full_output",
+                            "field_map"
+                          ]
+                        },
+                        "fieldMap": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "fromPath": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "toKey": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "required": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "fromPath",
+                              "toKey"
+                            ]
+                          }
+                        },
+                        "mergeStrategy": {
+                          "type": "string",
+                          "enum": [
+                            "object",
+                            "array"
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "required": [
+                    "from",
+                    "to"
+                  ]
+                }
+              },
+              "nodeConfigs": {
+                "type": "object",
+                "properties": {
+                  "scrape_website": {
+                    "type": "object",
+                    "properties": {
+                      "scraping": {
+                        "type": "object",
+                        "properties": {
+                          "manualPaths": {
+                            "maxItems": 100,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "discoveryEnabled": {
+                            "type": "boolean"
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "additionalProperties": true
+              }
+            },
+            "required": [
+              "flowId",
+              "nodes",
+              "edges"
+            ]
           },
           "pipelineConfig": {
             "type": "object",

@@ -276,7 +276,7 @@ const RUNTIME_SCHEMA_BY_KEY: Record<AiPromptKey, PromptRuntimeSchema> = {
       ...EVALUATION_STARTUP_SNAPSHOT_FIELDS,
       { path: "contextJson.teamMembers", label: "Team Members", type: "array", sourceVariable: "contextJson" },
       { path: "contextJson.linkedinProfiles", label: "LinkedIn Profiles", type: "array", sourceVariable: "contextJson" },
-      { path: "contextJson.teamResearch", label: "Team Research", type: "object", sourceVariable: "contextJson" },
+      { path: "contextJson.researchReportText", label: "Research Report Text", type: "string", sourceVariable: "contextJson" },
       { path: "contextSections", label: "Formatted Context Sections", type: "string", sourceVariable: "contextSections" },
     ],
     notes: [
@@ -288,7 +288,7 @@ const RUNTIME_SCHEMA_BY_KEY: Record<AiPromptKey, PromptRuntimeSchema> = {
     requiredPhases: [PipelinePhase.EXTRACTION, PipelinePhase.SCRAPING, PipelinePhase.RESEARCH],
     fields: [
       ...EVALUATION_STARTUP_SNAPSHOT_FIELDS,
-      { path: "contextJson.marketResearch", label: "Market Research", type: "object", sourceVariable: "contextJson" },
+      { path: "contextJson.researchReportText", label: "Research Report Text", type: "string", sourceVariable: "contextJson" },
       { path: "contextJson.competitiveLandscape", label: "Competitive Landscape", type: "array", sourceVariable: "contextJson" },
       { path: "contextSections", label: "Formatted Context Sections", type: "string", sourceVariable: "contextSections" },
     ],
@@ -301,7 +301,7 @@ const RUNTIME_SCHEMA_BY_KEY: Record<AiPromptKey, PromptRuntimeSchema> = {
     requiredPhases: [PipelinePhase.EXTRACTION, PipelinePhase.SCRAPING, PipelinePhase.RESEARCH],
     fields: [
       ...EVALUATION_STARTUP_SNAPSHOT_FIELDS,
-      { path: "contextJson.productResearch", label: "Product Research", type: "object", sourceVariable: "contextJson" },
+      { path: "contextJson.researchReportText", label: "Research Report Text", type: "string", sourceVariable: "contextJson" },
       { path: "contextJson.websiteProductPages", label: "Website Product Pages", type: "array", sourceVariable: "contextJson" },
       { path: "contextJson.extractedFeatures", label: "Extracted Features", type: "array", sourceVariable: "contextJson" },
       { path: "contextSections", label: "Formatted Context Sections", type: "string", sourceVariable: "contextSections" },
@@ -316,7 +316,7 @@ const RUNTIME_SCHEMA_BY_KEY: Record<AiPromptKey, PromptRuntimeSchema> = {
     fields: [
       ...EVALUATION_STARTUP_SNAPSHOT_FIELDS,
       { path: "contextJson.tractionMetrics", label: "Traction Metrics", type: "object", sourceVariable: "contextJson" },
-      { path: "contextJson.newsResearch", label: "News Research", type: "object", sourceVariable: "contextJson" },
+      { path: "contextJson.researchReportText", label: "Research Report Text", type: "string", sourceVariable: "contextJson" },
       { path: "contextJson.previousFunding", label: "Previous Funding", type: "array", sourceVariable: "contextJson" },
       { path: "contextSections", label: "Formatted Context Sections", type: "string", sourceVariable: "contextSections" },
     ],
@@ -329,6 +329,7 @@ const RUNTIME_SCHEMA_BY_KEY: Record<AiPromptKey, PromptRuntimeSchema> = {
     requiredPhases: [PipelinePhase.EXTRACTION, PipelinePhase.SCRAPING, PipelinePhase.RESEARCH],
     fields: [
       ...EVALUATION_STARTUP_SNAPSHOT_FIELDS,
+      { path: "contextJson.researchReportText", label: "Research Report Text", type: "string", sourceVariable: "contextJson" },
       { path: "contextJson.pricing", label: "Pricing", type: "object", sourceVariable: "contextJson" },
       { path: "contextJson.unitEconomics", label: "Unit Economics", type: "object", sourceVariable: "contextJson" },
       { path: "contextJson.marketContext", label: "Market Context", type: "object", sourceVariable: "contextJson" },
@@ -343,6 +344,7 @@ const RUNTIME_SCHEMA_BY_KEY: Record<AiPromptKey, PromptRuntimeSchema> = {
     requiredPhases: [PipelinePhase.EXTRACTION, PipelinePhase.SCRAPING, PipelinePhase.RESEARCH],
     fields: [
       ...EVALUATION_STARTUP_SNAPSHOT_FIELDS,
+      { path: "contextJson.researchReportText", label: "Research Report Text", type: "string", sourceVariable: "contextJson" },
       { path: "contextJson.websiteMarketingPages", label: "Website Marketing Pages", type: "array", sourceVariable: "contextJson" },
       { path: "contextJson.distributionChannels", label: "Distribution Channels", type: "array", sourceVariable: "contextJson" },
       { path: "contextJson.customerAcquisitionStrategy", label: "Customer Acquisition Strategy", type: "string", sourceVariable: "contextJson" },
@@ -357,6 +359,7 @@ const RUNTIME_SCHEMA_BY_KEY: Record<AiPromptKey, PromptRuntimeSchema> = {
     requiredPhases: [PipelinePhase.EXTRACTION, PipelinePhase.SCRAPING, PipelinePhase.RESEARCH],
     fields: [
       ...EVALUATION_STARTUP_SNAPSHOT_FIELDS,
+      { path: "contextJson.researchReportText", label: "Research Report Text", type: "string", sourceVariable: "contextJson" },
       { path: "contextJson.financialProjections", label: "Financial Projections", type: "object", sourceVariable: "contextJson" },
       { path: "contextJson.previousFunding", label: "Previous Funding", type: "array", sourceVariable: "contextJson" },
       { path: "contextJson.currentValuation", label: "Current Valuation", type: "number", sourceVariable: "contextJson" },
@@ -371,9 +374,8 @@ const RUNTIME_SCHEMA_BY_KEY: Record<AiPromptKey, PromptRuntimeSchema> = {
     requiredPhases: [PipelinePhase.EXTRACTION, PipelinePhase.SCRAPING, PipelinePhase.RESEARCH],
     fields: [
       ...EVALUATION_STARTUP_SNAPSHOT_FIELDS,
-      { path: "contextJson.marketResearch", label: "Market Research", type: "object", sourceVariable: "contextJson" },
+      { path: "contextJson.researchReportText", label: "Research Report Text", type: "string", sourceVariable: "contextJson" },
       { path: "contextJson.competitiveLandscape", label: "Competitive Landscape", type: "array", sourceVariable: "contextJson" },
-      { path: "contextJson.productResearch", label: "Product Research", type: "object", sourceVariable: "contextJson" },
       { path: "contextSections", label: "Formatted Context Sections", type: "string", sourceVariable: "contextSections" },
     ],
     notes: [
@@ -385,6 +387,7 @@ const RUNTIME_SCHEMA_BY_KEY: Record<AiPromptKey, PromptRuntimeSchema> = {
     requiredPhases: [PipelinePhase.EXTRACTION, PipelinePhase.SCRAPING, PipelinePhase.RESEARCH],
     fields: [
       ...EVALUATION_STARTUP_SNAPSHOT_FIELDS,
+      { path: "contextJson.researchReportText", label: "Research Report Text", type: "string", sourceVariable: "contextJson" },
       { path: "contextJson.complianceMentions", label: "Compliance Mentions", type: "array", sourceVariable: "contextJson" },
       { path: "contextJson.regulatoryLandscape", label: "Regulatory Landscape", type: "array", sourceVariable: "contextJson" },
       { path: "contextJson.corporateStructure", label: "Corporate Structure", type: "object", sourceVariable: "contextJson" },
@@ -399,6 +402,7 @@ const RUNTIME_SCHEMA_BY_KEY: Record<AiPromptKey, PromptRuntimeSchema> = {
     requiredPhases: [PipelinePhase.EXTRACTION, PipelinePhase.SCRAPING, PipelinePhase.RESEARCH],
     fields: [
       ...EVALUATION_STARTUP_SNAPSHOT_FIELDS,
+      { path: "contextJson.researchReportText", label: "Research Report Text", type: "string", sourceVariable: "contextJson" },
       { path: "contextJson.fundingTarget", label: "Funding Target", type: "number", sourceVariable: "contextJson" },
       { path: "contextJson.currentValuation", label: "Current Valuation", type: "number", sourceVariable: "contextJson" },
       { path: "contextJson.raiseType", label: "Raise Type", type: "string", sourceVariable: "contextJson" },
@@ -413,6 +417,7 @@ const RUNTIME_SCHEMA_BY_KEY: Record<AiPromptKey, PromptRuntimeSchema> = {
     requiredPhases: [PipelinePhase.EXTRACTION, PipelinePhase.SCRAPING, PipelinePhase.RESEARCH],
     fields: [
       ...EVALUATION_STARTUP_SNAPSHOT_FIELDS,
+      { path: "contextJson.researchReportText", label: "Research Report Text", type: "string", sourceVariable: "contextJson" },
       { path: "contextJson.marketSize", label: "Market Size", type: "object", sourceVariable: "contextJson" },
       { path: "contextJson.competitorMandA", label: "Competitor M&A", type: "array", sourceVariable: "contextJson" },
       { path: "contextJson.exitOpportunities", label: "Exit Opportunities", type: "array", sourceVariable: "contextJson" },

@@ -26,13 +26,18 @@ export class ScrapingCacheService implements OnModuleDestroy {
 
   async getWebsiteCache<T extends WebsiteScrapedData = WebsiteScrapedData>(
     url: string,
+    variant = "default",
   ): Promise<T | null> {
-    return this.getCache<T>(this.getWebsiteCacheKey(url));
+    return this.getCache<T>(this.getWebsiteCacheKey(url, variant));
   }
 
-  async setWebsiteCache(url: string, data: unknown): Promise<void> {
+  async setWebsiteCache(
+    url: string,
+    data: unknown,
+    variant = "default",
+  ): Promise<void> {
     await this.setCache(
-      this.getWebsiteCacheKey(url),
+      this.getWebsiteCacheKey(url, variant),
       data,
       this.getWebsiteTtlSeconds(),
     );
@@ -54,8 +59,10 @@ export class ScrapingCacheService implements OnModuleDestroy {
     await this.redisClient.destroy();
   }
 
-  private getWebsiteCacheKey(url: string): string {
-    return `scrape:website:${this.hashUrl(url)}`;
+  private getWebsiteCacheKey(url: string, variant: string): string {
+    const normalizedUrl = this.normalizeUrl(url);
+    const normalizedVariant = variant.trim().toLowerCase() || "default";
+    return `scrape:website:${this.hashValue(`${normalizedUrl}|${normalizedVariant}`)}`;
   }
 
   private getLinkedinCacheKey(url: string): string {
@@ -63,8 +70,11 @@ export class ScrapingCacheService implements OnModuleDestroy {
   }
 
   private hashUrl(url: string): string {
-    const normalized = this.normalizeUrl(url);
-    return createHash("sha256").update(normalized).digest("hex");
+    return this.hashValue(this.normalizeUrl(url));
+  }
+
+  private hashValue(value: string): string {
+    return createHash("sha256").update(value).digest("hex");
   }
 
   private normalizeUrl(url: string): string {

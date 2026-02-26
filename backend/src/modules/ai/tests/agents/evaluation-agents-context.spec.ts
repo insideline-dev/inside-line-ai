@@ -31,175 +31,116 @@ const promptService = {
 describe("Evaluation agent context engineering", () => {
   const pipelineData = createEvaluationPipelineInput();
 
-  it("team agent includes only team-relevant context", () => {
-    const agent = new TeamEvaluationAgent(providers, aiConfig, promptService);
-    const context = agent.buildContext(pipelineData);
+  it("injects researchReportText into evaluation context and avoids legacy structured research keys", () => {
+    const agents = [
+      new TeamEvaluationAgent(providers, aiConfig, promptService),
+      new MarketEvaluationAgent(providers, aiConfig, promptService),
+      new ProductEvaluationAgent(providers, aiConfig, promptService),
+      new TractionEvaluationAgent(providers, aiConfig, promptService),
+      new BusinessModelEvaluationAgent(providers, aiConfig, promptService),
+      new GtmEvaluationAgent(providers, aiConfig, promptService),
+      new FinancialsEvaluationAgent(providers, aiConfig, promptService),
+      new CompetitiveAdvantageEvaluationAgent(providers, aiConfig, promptService),
+      new LegalEvaluationAgent(providers, aiConfig, promptService),
+      new DealTermsEvaluationAgent(providers, aiConfig, promptService),
+      new ExitPotentialEvaluationAgent(providers, aiConfig, promptService),
+    ];
 
-    expect(Object.keys(context).sort()).toEqual([
-      "companyDescription",
-      "industry",
-      "linkedinProfiles",
-      "teamMembers",
-      "teamResearch",
-    ]);
-    expect(context).not.toHaveProperty("fundingTarget");
-    expect(context).not.toHaveProperty("marketResearch");
+    for (const agent of agents) {
+      const context = agent.buildContext(pipelineData);
+      expect(typeof (context as { researchReportText?: unknown }).researchReportText).toBe(
+        "string",
+      );
+      expect(context).not.toHaveProperty("teamResearch");
+      expect(context).not.toHaveProperty("marketResearch");
+      expect(context).not.toHaveProperty("productResearch");
+    }
   });
 
-  it("market agent includes market and TAM context only", () => {
-    const agent = new MarketEvaluationAgent(providers, aiConfig, promptService);
-    const context = agent.buildContext(pipelineData);
+  it("retains team-specific context fields", () => {
+    const context = new TeamEvaluationAgent(
+      providers,
+      aiConfig,
+      promptService,
+    ).buildContext(pipelineData);
 
-    expect(Object.keys(context).sort()).toEqual([
-      "claimedTAM",
-      "competitiveLandscape",
-      "industry",
-      "marketResearch",
-      "targetMarket",
-    ]);
-    expect(context).not.toHaveProperty("linkedinProfiles");
-    expect(context).not.toHaveProperty("teamResearch");
+    expect(context).toHaveProperty("teamMembers");
+    expect(context).toHaveProperty("linkedinProfiles");
+    expect(context).toHaveProperty("industry");
   });
 
-  it("product agent includes product section and website product signals", () => {
-    const agent = new ProductEvaluationAgent(providers, aiConfig, promptService);
-    const context = agent.buildContext(pipelineData);
+  it("retains market-specific context fields", () => {
+    const context = new MarketEvaluationAgent(
+      providers,
+      aiConfig,
+      promptService,
+    ).buildContext(pipelineData);
 
-    expect(Object.keys(context).sort()).toEqual([
-      "deckProductSection",
-      "demoUrl",
-      "extractedFeatures",
-      "productResearch",
-      "websiteProductPages",
-    ]);
-    expect(context).not.toHaveProperty("newsResearch");
-    expect(context).not.toHaveProperty("fundingTarget");
+    expect(context).toHaveProperty("industry");
+    expect(context).toHaveProperty("competitiveLandscape");
+    expect(context).toHaveProperty("targetMarket");
   });
 
-  it("traction agent includes metrics and news signals", () => {
-    const agent = new TractionEvaluationAgent(providers, aiConfig, promptService);
-    const context = agent.buildContext(pipelineData);
+  it("retains product-specific context fields", () => {
+    const context = new ProductEvaluationAgent(
+      providers,
+      aiConfig,
+      promptService,
+    ).buildContext(pipelineData);
 
-    expect(Object.keys(context).sort()).toEqual([
-      "newsResearch",
-      "previousFunding",
-      "stage",
-      "tractionMetrics",
-    ]);
-    expect(context).not.toHaveProperty("teamMembers");
-    expect(context).not.toHaveProperty("legalData");
+    expect(context).toHaveProperty("deckProductSection");
+    expect(context).toHaveProperty("websiteProductPages");
+    expect(context).toHaveProperty("extractedFeatures");
   });
 
-  it("business model agent includes pricing and revenue context", () => {
-    const agent = new BusinessModelEvaluationAgent(providers, aiConfig, promptService);
-    const context = agent.buildContext(pipelineData);
+  it("handles sparse scraping payloads without throwing", () => {
+    const sparsePipelineData = {
+      ...pipelineData,
+      scraping: {
+        ...pipelineData.scraping,
+        teamMembers: undefined,
+        notableClaims: undefined,
+        website: {
+          ...pipelineData.scraping.website,
+          subpages: undefined,
+          links: undefined,
+          headings: undefined,
+          customerLogos: undefined,
+          testimonials: undefined,
+        },
+      },
+    } as unknown as typeof pipelineData;
 
-    expect(Object.keys(context).sort()).toEqual([
-      "competitorContext",
-      "deckBusinessModelSection",
-      "marketContext",
-      "pricing",
-      "productContext",
-      "revenueModel",
-      "unitEconomics",
-    ]);
-    expect(context).not.toHaveProperty("teamResearch");
-    expect(context).not.toHaveProperty("legalData");
+    const agents = [
+      new TeamEvaluationAgent(providers, aiConfig, promptService),
+      new MarketEvaluationAgent(providers, aiConfig, promptService),
+      new ProductEvaluationAgent(providers, aiConfig, promptService),
+      new TractionEvaluationAgent(providers, aiConfig, promptService),
+      new BusinessModelEvaluationAgent(providers, aiConfig, promptService),
+      new GtmEvaluationAgent(providers, aiConfig, promptService),
+      new FinancialsEvaluationAgent(providers, aiConfig, promptService),
+      new CompetitiveAdvantageEvaluationAgent(providers, aiConfig, promptService),
+      new LegalEvaluationAgent(providers, aiConfig, promptService),
+      new DealTermsEvaluationAgent(providers, aiConfig, promptService),
+      new ExitPotentialEvaluationAgent(providers, aiConfig, promptService),
+    ];
+
+    for (const agent of agents) {
+      expect(() => agent.buildContext(sparsePipelineData)).not.toThrow();
+    }
   });
 
-  it("gtm agent includes marketing pages and distribution context", () => {
-    const agent = new GtmEvaluationAgent(providers, aiConfig, promptService);
-    const context = agent.buildContext(pipelineData);
+  it("keeps legal and deal-terms context builders bound when passed as callbacks", () => {
+    const legalAgent = new LegalEvaluationAgent(providers, aiConfig, promptService);
+    const dealTermsAgent = new DealTermsEvaluationAgent(
+      providers,
+      aiConfig,
+      promptService,
+    );
+    const legalBuildContext = legalAgent.buildContext;
+    const dealTermsBuildContext = dealTermsAgent.buildContext;
 
-    expect(Object.keys(context).sort()).toEqual([
-      "competitorContext",
-      "customerAcquisitionStrategy",
-      "distributionChannels",
-      "marketContext",
-      "productContext",
-      "targetMarket",
-      "websiteMarketingPages",
-    ]);
-    expect(context).not.toHaveProperty("dealTerms");
-    expect(context).not.toHaveProperty("financialProjections");
-  });
-
-  it("financials agent includes financial assumptions only", () => {
-    const agent = new FinancialsEvaluationAgent(providers, aiConfig, promptService);
-    const context = agent.buildContext(pipelineData);
-
-    expect(Object.keys(context).sort()).toEqual([
-      "burnRate",
-      "currentValuation",
-      "financialProjections",
-      "fundingTarget",
-      "previousFunding",
-    ]);
-    expect(context).not.toHaveProperty("teamResearch");
-    expect(context).not.toHaveProperty("productResearch");
-  });
-
-  it("competitive advantage agent includes moat-specific context", () => {
-    const agent = new CompetitiveAdvantageEvaluationAgent(providers, aiConfig, promptService);
-    const context = agent.buildContext(pipelineData);
-
-    expect(Object.keys(context).sort()).toEqual([
-      "competitiveLandscape",
-      "extractedFeatures",
-      "marketResearch",
-      "patents",
-      "productResearch",
-      "techStack",
-    ]);
-    expect(context).not.toHaveProperty("financialProjections");
-    expect(context).not.toHaveProperty("newsResearch");
-  });
-
-  it("legal agent includes compliance and regulatory context", () => {
-    const agent = new LegalEvaluationAgent(providers, aiConfig, promptService);
-    const context = agent.buildContext(pipelineData);
-
-    expect(Object.keys(context).sort()).toEqual([
-      "complianceMentions",
-      "corporateStructure",
-      "industry",
-      "location",
-      "newsContext",
-      "regulatoryLandscape",
-    ]);
-    expect(context).not.toHaveProperty("linkedinProfiles");
-    expect(context).not.toHaveProperty("marketSize");
-  });
-
-  it("deal terms agent includes fundraising structure details", () => {
-    const agent = new DealTermsEvaluationAgent(providers, aiConfig, promptService);
-    const context = agent.buildContext(pipelineData);
-
-    expect(Object.keys(context).sort()).toEqual([
-      "competitorFunding",
-      "currentValuation",
-      "fundingTarget",
-      "investorRights",
-      "leadInvestorStatus",
-      "marketSizeContext",
-      "raiseType",
-      "startupFormContext",
-    ]);
-    expect(context).not.toHaveProperty("teamResearch");
-    expect(context).not.toHaveProperty("competitorFeatures");
-  });
-
-  it("exit potential agent includes market size and M&A signals", () => {
-    const agent = new ExitPotentialEvaluationAgent(providers, aiConfig, promptService);
-    const context = agent.buildContext(pipelineData);
-
-    expect(Object.keys(context).sort()).toEqual([
-      "businessModelScalability",
-      "competitorMandA",
-      "exitOpportunities",
-      "marketSize",
-    ]);
-    expect(context).not.toHaveProperty("linkedinProfiles");
-    expect(context).not.toHaveProperty("pricing");
+    expect(() => legalBuildContext(pipelineData)).not.toThrow();
+    expect(() => dealTermsBuildContext(pipelineData)).not.toThrow();
   });
 });

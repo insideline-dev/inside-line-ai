@@ -19,7 +19,7 @@ const normalizeHttpUrl = (value: unknown): string | undefined => {
   }
 
   candidate = candidate
-    .replace(/^["'<(\[]+/, "")
+    .replace(/^[["'<(]+/, "")
     .replace(/["'>)\]]+$/, "")
     .replace(/&amp;/gi, "&");
 

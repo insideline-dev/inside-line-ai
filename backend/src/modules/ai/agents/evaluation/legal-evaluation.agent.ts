@@ -24,14 +24,26 @@ export class LegalEvaluationAgent extends BaseEvaluationAgent<LegalEvaluation> {
     super(providers, aiConfig, promptService, modelExecution);
   }
 
-  buildContext({ extraction, scraping, research }: EvaluationPipelineInput) {
+  readonly buildContext = (pipelineData: EvaluationPipelineInput) => {
+    const { extraction, scraping } = pipelineData;
+    const rawText = typeof extraction.rawText === "string" ? extraction.rawText : "";
+    const notableClaims = Array.isArray(scraping.notableClaims)
+      ? scraping.notableClaims
+      : [];
+    const headings = Array.isArray(scraping.website?.headings)
+      ? scraping.website.headings
+      : [];
     const complianceMentions = Array.from(
       new Set(
         [
-          extraction.rawText,
-          ...scraping.notableClaims,
-          ...(scraping.website?.headings ?? []),
+          rawText,
+          ...notableClaims,
+          ...headings,
         ]
+          .filter(
+            (entry): entry is string =>
+              typeof entry === "string" && entry.trim().length > 0,
+          )
           .flatMap((entry) =>
             entry
               .split(/[.,]/)
@@ -46,15 +58,9 @@ export class LegalEvaluationAgent extends BaseEvaluationAgent<LegalEvaluation> {
       ),
     );
 
-    const regulatoryLandscape = research.market?.marketTrends ?? [];
-
-    const newsContext = research.news
-      ? {
-          regulatoryNews: research.news.articles
-            .filter((a) => /(regulat|compliance|legal|policy)/i.test(a.title + " " + a.summary))
-            .map((a) => ({ title: a.title, summary: a.summary })),
-        }
-      : undefined;
+    const regulatoryLandscape: string[] = [];
+    const newsContext: { regulatoryNews: Array<{ title: string; summary: string }> } | undefined =
+      undefined;
 
     const corporateStructure = extraction.startupContext
       ? {
@@ -64,6 +70,7 @@ export class LegalEvaluationAgent extends BaseEvaluationAgent<LegalEvaluation> {
       : undefined;
 
     return {
+      researchReportText: this.buildResearchReportText(pipelineData),
       location: extraction.location,
       industry: extraction.industry,
       complianceMentions,
@@ -71,7 +78,7 @@ export class LegalEvaluationAgent extends BaseEvaluationAgent<LegalEvaluation> {
       newsContext,
       corporateStructure,
     };
-  }
+  };
 
   fallback(): LegalEvaluation {
     return LegalEvaluationSchema.parse({

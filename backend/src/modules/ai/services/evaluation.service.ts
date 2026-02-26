@@ -14,6 +14,7 @@ import { EVALUATION_SCHEMAS } from "../schemas";
 import { EVALUATION_AGENT_KEYS } from "../constants/agent-keys";
 import { AiDebugLogService } from "./ai-debug-log.service";
 import { DEFAULT_MODEL_BY_PURPOSE } from "../ai.config";
+import { normalizeResearchResult } from "./research-result-normalizer";
 
 export interface EvaluationRunOptions {
   onAgentStart?: (agent: EvaluationAgentKey) => void;
@@ -118,7 +119,8 @@ export class EvaluationService {
       );
     }
 
-    return { extraction, scraping, research };
+    const { result: normalizedResearch } = normalizeResearchResult(research);
+    return { extraction, scraping, research: normalizedResearch };
   }
 
   private mergeAgentResult(

@@ -13,6 +13,21 @@ describe("flow edge helpers", () => {
         source: "extract_fields",
         target: "gap_fill_hybrid",
         label: "object",
+        sourceHandle: "source-a",
+        targetHandle: "target-a",
+        data: {
+          enabled: true,
+          mapping: {
+            mode: "field_map",
+            fieldMap: [
+              {
+                fromPath: "marketSize.tam",
+                toKey: "marketSizing.tam",
+                required: true,
+              },
+            ],
+          },
+        },
       },
       {
         id: "e-2",
@@ -22,7 +37,24 @@ describe("flow edge helpers", () => {
     ];
 
     expect(toFlowEdgeDefinitions(edges)).toEqual([
-      { from: "extract_fields", to: "gap_fill_hybrid", label: "object" },
+      {
+        from: "extract_fields",
+        to: "gap_fill_hybrid",
+        label: "object",
+        sourceHandle: "source-a",
+        targetHandle: "target-a",
+        enabled: true,
+        mapping: {
+          mode: "field_map",
+          fieldMap: [
+            {
+              fromPath: "marketSize.tam",
+              toKey: "marketSizing.tam",
+              required: true,
+            },
+          ],
+        },
+      },
       { from: "research_team", to: "evaluation_orchestrator" },
     ]);
   });
@@ -42,4 +74,3 @@ describe("flow edge helpers", () => {
     ).toBe(false);
   });
 });
-

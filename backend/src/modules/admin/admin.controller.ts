@@ -68,6 +68,8 @@ import {
   UpdateAiPromptRevisionDto,
   CreateAiModelConfigDraftDto,
   UpdateAiModelConfigDraftDto,
+  BulkApplyAiModelConfigDto,
+  BulkApplyAiModelConfigResponseDto,
   AiPromptDefinitionsResponseDto,
   AiPromptRevisionsResponseDto,
   AiPromptRevisionResponseDto,
@@ -776,6 +778,19 @@ export class AdminController {
   ) {
     await this.aiModelConfigService.createDraft(key, admin.id, dto);
     return this.buildAiModelConfigResponse(key);
+  }
+
+  @Post('ai-prompts/model-config/bulk-apply')
+  @ApiOperation({
+    summary:
+      "Apply and publish model config across all AI nodes, research agents, or evaluation agents",
+  })
+  @ApiResponse({ status: 201, type: BulkApplyAiModelConfigResponseDto })
+  async bulkApplyAiModelConfig(
+    @CurrentUser() admin: User,
+    @Body() dto: BulkApplyAiModelConfigDto,
+  ) {
+    return this.aiModelConfigService.bulkApplyAndPublish(admin.id, dto);
   }
 
   @Patch('ai-prompts/:key/model-config/:revisionId')

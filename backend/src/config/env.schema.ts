@@ -128,11 +128,6 @@ export const envSchema = z.object({
   SCRAPING_MEMORY_CACHE_MAX_ENTRIES: z.coerce.number().default(5000),
   SCRAPING_CACHE_REDIS_RECOVERY_INTERVAL_MS: z.coerce.number().default(30000),
 
-  // Crawl4AI (headless browser scraping)
-  CRAWL4AI_URL: z.string().optional(),
-  CRAWL4AI_USERNAME: z.string().optional(),
-  CRAWL4AI_PASSWORD: z.string().optional(),
-
   // AI Providers
   OPENAI_API_KEY: z.string().optional(),
   GOOGLE_API_KEY: z.string().optional(), // Backward-compatible alias
@@ -160,10 +155,11 @@ export const envSchema = z.object({
   AI_ENRICHMENT_TIMEOUT_MS: z.coerce.number().default(300000),
   ENRICHMENT_CORRECTION_CONFIDENCE_THRESHOLD: z.coerce.number().default(0.85),
   AI_RESEARCH_TEMPERATURE: z.coerce.number().default(0.2),
-  AI_RESEARCH_TIMEOUT_MS: z.coerce.number().default(90000),
-  AI_RESEARCH_ATTEMPT_TIMEOUT_MS: z.coerce.number().default(90000),
+  AI_RESEARCH_TIMEOUT_MS: z.coerce.number().default(3600000),
+  AI_RESEARCH_ATTEMPT_TIMEOUT_MS: z.coerce.number().default(3600000),
   AI_RESEARCH_MAX_ATTEMPTS: z.coerce.number().default(2),
-  AI_RESEARCH_AGENT_HARD_TIMEOUT_MS: z.coerce.number().default(210000),
+  AI_RESEARCH_AGENT_HARD_TIMEOUT_MS: z.coerce.number().default(3600000),
+  AI_RESEARCH_AGENT_STAGGER_MS: z.coerce.number().default(180000),
   AI_EVALUATION_TEMPERATURE: z.coerce.number().default(0.2),
   AI_EVALUATION_MAX_OUTPUT_TOKENS: z.coerce.number().default(4000),
   AI_EVALUATION_TIMEOUT_MS: z.coerce.number().default(90000),

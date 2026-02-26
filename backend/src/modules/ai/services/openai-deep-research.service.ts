@@ -7,6 +7,8 @@ import { ConfigService } from "@nestjs/config";
 import OpenAI from "openai";
 import type { SourceEntry } from "../interfaces/phase-results.interface";
 
+const DEFAULT_DEEP_RESEARCH_TIMEOUT_MS = 3_600_000;
+
 interface OpenAiDeepResearchTextRequest {
   agent: SourceEntry["agent"];
   modelName: string;
@@ -292,7 +294,7 @@ export class OpenAiDeepResearchService {
       return Math.floor(configured);
     }
 
-    return 90_000;
+    return DEFAULT_DEEP_RESEARCH_TIMEOUT_MS;
   }
 
   private getPollIntervalMs(): number {

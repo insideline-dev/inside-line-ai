@@ -55,6 +55,7 @@ type PreviewInput = {
   startupId?: string;
   stage?: StartupStage | null;
   investorThesis?: string;
+  investorThesisSummary?: string;
   fromEmail?: string;
   subject?: string;
   body?: string;
@@ -446,6 +447,7 @@ const RUNTIME_SCHEMA_BY_KEY: Record<AiPromptKey, PromptRuntimeSchema> = {
   "matching.thesis": {
     requiredPhases: [PipelinePhase.EXTRACTION, PipelinePhase.SYNTHESIS],
     fields: [
+      { path: "investorThesisSummary", label: "Investor Thesis Summary", type: "string", sourceVariable: "investorThesisSummary" },
       { path: "investorThesis", label: "Investor Thesis", type: "string", sourceVariable: "investorThesis" },
       { path: "startupSummary", label: "Startup Summary", type: "string", sourceVariable: "startupSummary" },
       { path: "recommendation", label: "Recommendation", type: "string", sourceVariable: "recommendation" },
@@ -1050,12 +1052,17 @@ export class AiPromptRuntimeService {
     }>(startupId, PipelinePhase.SYNTHESIS, "matching.thesis");
 
     const resolvedThesis =
-      input.investorThesis ?? (await this.getDefaultInvestorThesis()) ?? "No thesis provided";
+      input.investorThesis ?? (await this.getDefaultInvestorThesis()) ?? "Not available";
+    const resolvedThesisSummary =
+      input.investorThesisSummary ??
+      (await this.getDefaultInvestorThesisSummary()) ??
+      "Not available";
 
     return {
       stage: this.normalizeStage(input.stage ?? extraction.stage),
       startupId,
       variables: {
+        investorThesisSummary: resolvedThesisSummary,
         investorThesis: resolvedThesis,
         startupSummary: synthesis.executiveSummary,
         recommendation: synthesis.recommendation,
@@ -1067,12 +1074,25 @@ export class AiPromptRuntimeService {
 
   private async getDefaultInvestorThesis(): Promise<string | null> {
     const [row] = await this.drizzle.db
-      .select({ thesisNarrative: investorThesis.thesisNarrative, notes: investorThesis.notes })
+      .select({
+        thesisNarrative: investorThesis.thesisNarrative,
+        notes: investorThesis.notes,
+      })
       .from(investorThesis)
       .where(eq(investorThesis.isActive, true))
       .limit(1);
 
     return row?.thesisNarrative ?? row?.notes ?? null;
+  }
+
+  private async getDefaultInvestorThesisSummary(): Promise<string | null> {
+    const [row] = await this.drizzle.db
+      .select({ thesisSummary: investorThesis.thesisSummary })
+      .from(investorThesis)
+      .where(eq(investorThesis.isActive, true))
+      .limit(1);
+
+    return row?.thesisSummary ?? null;
   }
 
   private resolveModelPreview(key: AiPromptKey) {

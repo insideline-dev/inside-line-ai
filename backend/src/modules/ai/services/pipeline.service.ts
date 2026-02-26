@@ -19,6 +19,7 @@ import { PipelineFeedbackService } from "./pipeline-feedback.service";
 import { PipelineAgentTraceService } from "./pipeline-agent-trace.service";
 import { PipelineTemplateService } from "./pipeline-template.service";
 import { PipelineStateService } from "./pipeline-state.service";
+import { PipelineStateSnapshotService } from "./pipeline-state-snapshot.service";
 import { StartupMatchingPipelineService } from "./startup-matching-pipeline.service";
 import { EnrichmentService } from "./enrichment.service";
 import {
@@ -94,6 +95,7 @@ export class PipelineService {
     private queue: QueueService,
     private notifications: NotificationService,
     private pipelineState: PipelineStateService,
+    private pipelineStateSnapshots: PipelineStateSnapshotService,
     private aiConfig: AiConfigService,
     private startupMatching: StartupMatchingPipelineService,
     private pipelineFeedback: PipelineFeedbackService,
@@ -163,7 +165,7 @@ export class PipelineService {
   }
 
   async getPipelineStatus(startupId: string): Promise<PipelineState | null> {
-    return this.pipelineState.get(startupId);
+    return this.getPipelineStateWithSnapshotFallback(startupId);
   }
 
   async getTrackedProgress(startupId: string) {
@@ -199,7 +201,7 @@ export class PipelineService {
 
   async rerunFromPhase(startupId: string, phase: PipelinePhase): Promise<void> {
     const rerunStartedAt = Date.now();
-    const state = await this.pipelineState.get(startupId);
+    const state = await this.getPipelineStateWithSnapshotFallback(startupId);
     if (!state) {
       throw new Error(`Pipeline state for startup ${startupId} not found`);
     }
@@ -264,7 +266,7 @@ export class PipelineService {
   }
 
   async retryAgent(startupId: string, request: RetryAgentRequest): Promise<void> {
-    const state = await this.pipelineState.get(startupId);
+    const state = await this.getPipelineStateWithSnapshotFallback(startupId);
     if (!state) {
       throw new Error(`Pipeline state for startup ${startupId} not found`);
     }
@@ -571,6 +573,32 @@ export class PipelineService {
 
   private async queuePhase(params: QueuePhaseParams): Promise<void> {
     const { startupId, pipelineRunId, userId, phase, delayMs = 0, retryCount = 0, waitingError, metadata } = params;
+    const latestState = await this.pipelineState.get(startupId);
+    if (!latestState) {
+      this.logger.debug(
+        `[Pipeline] Skipping queue for ${phase}; pipeline state missing for startup ${startupId}`,
+      );
+      return;
+    }
+    if (latestState.pipelineRunId !== pipelineRunId) {
+      this.logger.debug(
+        `[Pipeline] Skipping queue for ${phase}; stale run ${pipelineRunId} (current: ${latestState.pipelineRunId}) for startup ${startupId}`,
+      );
+      return;
+    }
+    if (latestState.status !== PipelineStatus.RUNNING) {
+      this.logger.debug(
+        `[Pipeline] Skipping queue for ${phase}; pipeline status is ${latestState.status} for startup ${startupId}`,
+      );
+      return;
+    }
+    if (latestState.phases[phase]?.status !== PhaseStatus.PENDING) {
+      this.logger.debug(
+        `[Pipeline] Skipping queue for ${phase}; phase status is ${latestState.phases[phase]?.status ?? "missing"} for startup ${startupId}`,
+      );
+      return;
+    }
+
     if (phase === PipelinePhase.ENRICHMENT) {
       if (!this.aiConfig.isEnrichmentEnabled()) {
         const skippedResult = this.enrichmentService.buildSkippedResult(
@@ -757,6 +785,73 @@ export class PipelineService {
     }
   }
 
+  private async getPipelineStateWithSnapshotFallback(
+    startupId: string,
+  ): Promise<PipelineState | null> {
+    const liveState = await this.pipelineState.get(startupId);
+    if (liveState) {
+      return liveState;
+    }
+
+    const snapshot = await this.pipelineStateSnapshots.getLatestReusableSnapshot(
+      startupId,
+    );
+    if (!snapshot) {
+      return null;
+    }
+
+    try {
+      const restored = await this.pipelineState.restoreFromSnapshot(
+        snapshot,
+        startupId,
+      );
+      this.logger.log(
+        `[Pipeline] Restored reusable pipeline state from DB snapshot for startup ${startupId} (run ${restored.pipelineRunId})`,
+      );
+      return restored;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `[Pipeline] Failed to restore pipeline state snapshot for startup ${startupId}: ${message}`,
+      );
+      return null;
+    }
+  }
+
+  private async persistCompletedPipelineStateSnapshotSafely(
+    startupId: string,
+    expectedPipelineRunId: string,
+  ): Promise<void> {
+    try {
+      const state = await this.pipelineState.get(startupId);
+      if (!state) {
+        this.logger.warn(
+          `[Pipeline] Skipping DB snapshot persistence; pipeline state missing for startup ${startupId} after completion`,
+        );
+        return;
+      }
+      if (state.pipelineRunId !== expectedPipelineRunId) {
+        this.logger.warn(
+          `[Pipeline] Skipping DB snapshot persistence; current run ${state.pipelineRunId} does not match completed run ${expectedPipelineRunId} for startup ${startupId}`,
+        );
+        return;
+      }
+      if (state.status !== PipelineStatus.COMPLETED) {
+        this.logger.warn(
+          `[Pipeline] Skipping DB snapshot persistence; state status is ${state.status} (expected completed) for startup ${startupId}, run ${expectedPipelineRunId}`,
+        );
+        return;
+      }
+
+      await this.pipelineStateSnapshots.saveCompletedSnapshot(state);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `[Pipeline] Failed to persist reusable pipeline state snapshot for startup ${startupId}, run ${expectedPipelineRunId}: ${message}`,
+      );
+    }
+  }
+
   private async applyTransitions(
     startupId: string,
     lastError?: string,
@@ -819,6 +914,10 @@ export class PipelineService {
         currentPhase: refreshed.currentPhase,
         error: degradedReason,
       });
+      await this.persistCompletedPipelineStateSnapshotSafely(
+        startupId,
+        refreshed.pipelineRunId,
+      );
       await this.finalizeStartupAfterPipelineCompletion(startupId, refreshed.userId);
       if (shouldNotifyTerminal) {
         await this.notifyPipelineLifecycle({
@@ -846,6 +945,10 @@ export class PipelineService {
       currentPhase: PipelinePhase.SYNTHESIS,
       overallScore: synthesisResult?.overallScore,
     });
+    await this.persistCompletedPipelineStateSnapshotSafely(
+      startupId,
+      refreshed.pipelineRunId,
+    );
     await this.finalizeStartupAfterPipelineCompletion(startupId, refreshed.userId);
     if (shouldNotifyTerminal) {
       await this.notifyPipelineLifecycle({

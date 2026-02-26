@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { Card, CardContent } from "@/components/ui/card";
@@ -104,6 +104,8 @@ type AdminStartupTab =
   | "edit"
   | "raw";
 
+const TERMINAL_PIPELINE_STATUSES = new Set(["completed", "failed", "cancelled"]);
+
 interface RetryTrackingState {
   phase: "research" | "evaluation";
   agentKey: string;
@@ -183,6 +185,29 @@ function hasPipelineProgressSnapshot(payload: unknown): boolean {
   return Boolean(progress && typeof progress === "object");
 }
 
+function getPipelineProgressMeta(payload: unknown): {
+  pipelineStatus: string | null;
+  pipelineRunId: string | null;
+} {
+  const unwrapped = unwrapApiResponse<unknown>(payload);
+  if (!unwrapped || typeof unwrapped !== "object") {
+    return { pipelineStatus: null, pipelineRunId: null };
+  }
+
+  const progress = (unwrapped as Record<string, unknown>).progress;
+  if (!progress || typeof progress !== "object") {
+    return { pipelineStatus: null, pipelineRunId: null };
+  }
+
+  const record = progress as Record<string, unknown>;
+  return {
+    pipelineStatus:
+      typeof record.pipelineStatus === "string" ? record.pipelineStatus : null,
+    pipelineRunId:
+      typeof record.pipelineRunId === "string" ? record.pipelineRunId : null,
+  };
+}
+
 function AdminReviewPage() {
   const { id } = Route.useParams();
   const { user } = useAuth();
@@ -203,6 +228,7 @@ function AdminReviewPage() {
   const [trackedRetry, setTrackedRetry] = useState<RetryTrackingState | null>(
     null,
   );
+  const terminalStartupSyncKeyRef = useRef<string | null>(null);
 
   const { data: startupResponse, isLoading } = useStartupControllerFindOne(id);
   const progressQuery = useStartupControllerGetProgress(id, {
@@ -246,6 +272,41 @@ function AdminReviewPage() {
     }
     return hasPipelineProgressSnapshot(progressQuery.data);
   }, [progressQuery.data, progressQuery.isLoading]);
+  const progressMeta = useMemo(
+    () => getPipelineProgressMeta(progressQuery.data),
+    [progressQuery.data],
+  );
+  const hasTerminalPipelineProgress = Boolean(
+    progressMeta.pipelineStatus &&
+      TERMINAL_PIPELINE_STATUSES.has(progressMeta.pipelineStatus),
+  );
+  const isStartupAnalyzingUi =
+    startup?.status === "analyzing" && !hasTerminalPipelineProgress;
+
+  useEffect(() => {
+    if (!startup?.id || startup.status !== "analyzing" || !hasTerminalPipelineProgress) {
+      terminalStartupSyncKeyRef.current = null;
+      return;
+    }
+
+    const syncKey = `${progressMeta.pipelineRunId ?? "none"}:${progressMeta.pipelineStatus ?? "unknown"}`;
+    if (terminalStartupSyncKeyRef.current === syncKey) {
+      return;
+    }
+    terminalStartupSyncKeyRef.current = syncKey;
+
+    void queryClient.invalidateQueries({ queryKey: getStartupControllerFindOneQueryKey(id) });
+    void queryClient.invalidateQueries({ queryKey: getAdminControllerGetAllStartupsQueryKey() });
+    void queryClient.invalidateQueries({ queryKey: getAdminControllerGetStatsQueryKey() });
+  }, [
+    hasTerminalPipelineProgress,
+    id,
+    progressMeta.pipelineRunId,
+    progressMeta.pipelineStatus,
+    queryClient,
+    startup?.id,
+    startup?.status,
+  ]);
 
   const approveMutation = useAdminControllerApproveStartup({
     mutation: {
@@ -428,14 +489,14 @@ function AdminReviewPage() {
       return;
     }
     setActiveTab(
-      startup.status === "analyzing" || !evaluation ? "pipeline-live" : "summary",
+      isStartupAnalyzingUi || !evaluation ? "pipeline-live" : "summary",
     );
     setInitializedTabForStartupId(startup.id);
   }, [
     evaluation,
     initializedTabForStartupId,
+    isStartupAnalyzingUi,
     startup?.id,
-    startup?.status,
   ]);
 
   if (isLoading) {
@@ -631,7 +692,7 @@ function AdminReviewPage() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            {startup?.status === "analyzing" && (
+            {isStartupAnalyzingUi && (
               <Button
                 variant="destructive"
                 size="default"
@@ -682,7 +743,7 @@ function AdminReviewPage() {
               trackedRetry={trackedRetry}
               onClearTrackedRetry={() => setTrackedRetry(null)}
               onCancelPipeline={
-                startup.status === "analyzing"
+                isStartupAnalyzingUi
                   ? () => {
                       if (window.confirm("Cancel the running pipeline? This will stop all queued jobs.")) {
                         cancelPipelineMutation.mutate({ id });

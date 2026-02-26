@@ -171,6 +171,30 @@ export class PipelineStateService implements OnModuleDestroy {
     return this.read(startupId);
   }
 
+  async restoreFromSnapshot(
+    snapshot: unknown,
+    expectedStartupId?: string,
+  ): Promise<PipelineState> {
+    return this.withStateMutationLock(async () => {
+      const parsed = PipelineStateSchema.safeParse(snapshot);
+      if (!parsed.success) {
+        throw new Error(
+          `Invalid pipeline state snapshot: ${parsed.error.message}`,
+        );
+      }
+
+      const state = parsed.data as PipelineState;
+      if (expectedStartupId && state.startupId !== expectedStartupId) {
+        throw new Error(
+          `Pipeline state snapshot startup mismatch: expected ${expectedStartupId}, got ${state.startupId}`,
+        );
+      }
+
+      await this.persist(state);
+      return state;
+    });
+  }
+
   async updatePhase(
     startupId: string,
     phase: PipelinePhase,

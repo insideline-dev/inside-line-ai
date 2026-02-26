@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   getStartupControllerGetProgressQueryKey,
@@ -434,6 +434,30 @@ export function useStartupRealtimeProgress(
     };
   }, [query.data]);
   const progress = progressResponse?.progress ?? null;
+  const terminalStartupSyncKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!id) {
+      terminalStartupSyncKeyRef.current = null;
+      return;
+    }
+
+    const pipelineStatus = progress?.pipelineStatus;
+    if (!pipelineStatus || !TERMINAL_PIPELINE_STATUSES.has(pipelineStatus)) {
+      terminalStartupSyncKeyRef.current = null;
+      return;
+    }
+
+    const syncKey = `${progress?.pipelineRunId ?? "none"}:${pipelineStatus}`;
+    if (terminalStartupSyncKeyRef.current === syncKey) {
+      return;
+    }
+    terminalStartupSyncKeyRef.current = syncKey;
+
+    void queryClient.invalidateQueries({
+      queryKey: getStartupControllerFindOneQueryKey(id),
+    });
+  }, [id, progress?.pipelineRunId, progress?.pipelineStatus, queryClient]);
 
   usePipelineStatus(enabled && socketEnabled ? id : null, {
     onPipelineStarted: (data) => {

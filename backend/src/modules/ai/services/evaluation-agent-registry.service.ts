@@ -37,6 +37,7 @@ import {
   EvaluationInputResolverService,
   type ResolvedEvaluationInput,
 } from "./evaluation-input-resolver.service";
+import { AiConfigService } from "./ai-config.service";
 
 type PersistedEvaluationTraceEvent = EvaluationAgentTraceEvent & {
   meta?: Record<string, unknown>;
@@ -68,6 +69,7 @@ export class EvaluationAgentRegistryService {
     private dynamicAgentRunner: DynamicAgentRunnerService,
     @Optional() private pipelineAgentTrace?: PipelineAgentTraceService,
     @Optional() private evaluationInputResolver?: EvaluationInputResolverService,
+    @Optional() private aiConfig?: AiConfigService,
   ) {
     this.agents = [
       this.team,
@@ -103,8 +105,16 @@ export class EvaluationAgentRegistryService {
     const fallbackKeys: EvaluationAgentKey[] = [];
     const warnings: Array<{ agent: string; message: string }> = [];
     const fallbackReasonCounts: Partial<Record<EvaluationFallbackReason, number>> = {};
+    const evaluationAgentStaggerMs = Math.max(
+      0,
+      this.aiConfig?.getEvaluationAgentStaggerMs() ?? 0,
+    );
     await Promise.all(
-      resolvedAgents.map(async (agent) => {
+      resolvedAgents.map(async (agent, index) => {
+        const startDelayMs = index * evaluationAgentStaggerMs;
+        if (startDelayMs > 0) {
+          await this.sleep(startDelayMs);
+        }
         const resolvedInput = await this.resolvePipelineInputForAgent(
           agent.key,
           pipelineData,
@@ -294,6 +304,13 @@ export class EvaluationAgentRegistryService {
       exitPotential: outputs.get("exitPotential") as EvaluationResult["exitPotential"],
       summary,
     };
+  }
+
+  private async sleep(ms: number): Promise<void> {
+    if (ms <= 0) {
+      return;
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, ms));
   }
 
   async runOne(

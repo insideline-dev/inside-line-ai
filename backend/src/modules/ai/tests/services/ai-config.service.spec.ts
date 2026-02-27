@@ -101,7 +101,7 @@ describe("AiConfigService", () => {
   it("returns deep-research stagger default when unset", () => {
     config.get.mockReturnValue(undefined);
 
-    expect(service.getResearchAgentStaggerMs()).toBe(180000);
+    expect(service.getResearchAgentStaggerMs()).toBe(5000);
   });
 
   it("uses configured deep-research stagger and allows zero to disable", () => {
@@ -120,6 +120,30 @@ describe("AiConfigService", () => {
       return undefined;
     });
     expect(service.getResearchAgentStaggerMs()).toBe(120000);
+  });
+
+  it("returns evaluation agent stagger default when unset", () => {
+    config.get.mockReturnValue(undefined);
+
+    expect(service.getEvaluationAgentStaggerMs()).toBe(5000);
+  });
+
+  it("uses configured evaluation agent stagger and allows zero to disable", () => {
+    config.get.mockImplementation((key: string) => {
+      if (key === "AI_EVALUATION_AGENT_STAGGER_MS") {
+        return 0;
+      }
+      return undefined;
+    });
+    expect(service.getEvaluationAgentStaggerMs()).toBe(0);
+
+    config.get.mockImplementation((key: string) => {
+      if (key === "AI_EVALUATION_AGENT_STAGGER_MS") {
+        return 15000;
+      }
+      return undefined;
+    });
+    expect(service.getEvaluationAgentStaggerMs()).toBe(15000);
   });
 
   it("uses one-hour default research attempt timeout when unset", () => {

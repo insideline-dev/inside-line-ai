@@ -40,6 +40,10 @@ describe("GeminiResearchService", () => {
   let openAiDeepResearch: {
     runResearchText: ReturnType<typeof jest.fn>;
   };
+  let pipelineAgentTrace: {
+    getLatestDeepResearchCheckpoint: ReturnType<typeof jest.fn>;
+    recordDeepResearchCheckpoint: ReturnType<typeof jest.fn>;
+  };
   const modelInstance = { id: "gemini-model-instance" };
 
   beforeEach(() => {
@@ -61,6 +65,10 @@ describe("GeminiResearchService", () => {
     openAiDeepResearch = {
       runResearchText: jest.fn(),
     };
+    pipelineAgentTrace = {
+      getLatestDeepResearchCheckpoint: jest.fn().mockResolvedValue(null),
+      recordDeepResearchCheckpoint: jest.fn().mockResolvedValue(undefined),
+    };
 
     service = new (GeminiResearchServiceClass as unknown as new (
       providers: AiProviderService,
@@ -68,10 +76,15 @@ describe("GeminiResearchService", () => {
       openAiDeepResearch: {
         runResearchText: (...args: unknown[]) => Promise<unknown>;
       },
+      pipelineAgentTrace?: {
+        getLatestDeepResearchCheckpoint: (...args: unknown[]) => Promise<unknown>;
+        recordDeepResearchCheckpoint: (...args: unknown[]) => Promise<void>;
+      },
     ) => GeminiResearchService)(
       providers as unknown as AiProviderService,
       aiConfig as unknown as AiConfigService,
       openAiDeepResearch,
+      pipelineAgentTrace,
     ) as GeminiResearchService;
   });
 
@@ -185,6 +198,94 @@ describe("GeminiResearchService", () => {
     expect(generateTextMock).not.toHaveBeenCalled();
     expect(result.usedFallback).toBe(false);
     expect(result.output).toBe("Deep research report");
+  });
+
+  it("resumes deep research polling from stored checkpoint and persists checkpoint events", async () => {
+    pipelineAgentTrace.getLatestDeepResearchCheckpoint.mockResolvedValueOnce({
+      responseId: "resp_resume",
+      status: "in_progress",
+      resumed: false,
+      phaseRetryCount: 0,
+    });
+    openAiDeepResearch.runResearchText.mockImplementationOnce(async (input) => {
+      const request = input as {
+        onCheckpoint?: (event: {
+          responseId: string;
+          status?: string;
+          resumed: boolean;
+          timeoutMs: number;
+          pollIntervalMs: number;
+          checkpointEvent: "created" | "resumed" | "terminal";
+        }) => Promise<void>;
+      };
+      await request.onCheckpoint?.({
+        responseId: "resp_resume",
+        status: "in_progress",
+        resumed: true,
+        timeoutMs: 30000,
+        pollIntervalMs: 15000,
+        checkpointEvent: "resumed",
+      });
+      await request.onCheckpoint?.({
+        responseId: "resp_resume",
+        status: "completed",
+        resumed: true,
+        timeoutMs: 30000,
+        pollIntervalMs: 15000,
+        checkpointEvent: "terminal",
+      });
+      return {
+        text: "Deep resumed report",
+        sources: [],
+        rawMeta: {
+          responseId: "resp_resume",
+          status: "completed",
+        },
+      };
+    });
+
+    const result = await service.researchText({
+      agent: "market",
+      startupId: "startup-1",
+      pipelineRunId: "run-1",
+      phaseRetryCount: 1,
+      agentAttemptId: "run-1:research:market:phase-1:attempt-1",
+      modelName: "o4-mini-deep-research",
+      prompt: "market prompt",
+      systemPrompt: "market system",
+      minReportLength: 10,
+      fallback: () => "fallback report",
+    });
+
+    expect(pipelineAgentTrace.getLatestDeepResearchCheckpoint).toHaveBeenCalledWith({
+      startupId: "startup-1",
+      pipelineRunId: "run-1",
+      phase: "research",
+      agentKey: "market",
+    });
+    expect(openAiDeepResearch.runResearchText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        resumeResponseId: "resp_resume",
+      }),
+    );
+    expect(pipelineAgentTrace.recordDeepResearchCheckpoint).toHaveBeenCalledWith(
+      expect.objectContaining({
+        startupId: "startup-1",
+        pipelineRunId: "run-1",
+        responseId: "resp_resume",
+        checkpointEvent: "resumed",
+      }),
+    );
+    expect(pipelineAgentTrace.recordDeepResearchCheckpoint).toHaveBeenCalledWith(
+      expect.objectContaining({
+        startupId: "startup-1",
+        pipelineRunId: "run-1",
+        responseId: "resp_resume",
+        checkpointEvent: "terminal",
+      }),
+    );
+    expect(result.usedFallback).toBe(false);
+    expect(result.output).toBe("Deep resumed report");
   });
 
   it("filters provider redirect URLs from output sources and records sanitization metadata", async () => {

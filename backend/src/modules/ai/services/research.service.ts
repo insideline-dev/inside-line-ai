@@ -24,7 +24,6 @@ import { buildResearchPromptVariables } from "./research-prompt-variables";
 import { AgentConfigService } from "./agent-config.service";
 import { AiModelExecutionService } from "./ai-model-execution.service";
 import { AiConfigService } from "./ai-config.service";
-import { isOpenAiDeepResearchModel } from "./ai-runtime-config.schema";
 
 type ResearchAgentOutput =
   | NonNullable<ResearchResult["team"]>
@@ -35,6 +34,7 @@ type ResearchAgentOutput =
 
 export interface ResearchRunOptions {
   agentKey?: ResearchAgentKey;
+  phaseRetryCount?: number;
   onAgentStart?: (agent: ResearchAgentKey) => void;
   onAgentComplete?: (payload: {
     agent: ResearchAgentKey;
@@ -103,6 +103,7 @@ export class ResearchService {
       researchParameters,
     };
     const pipelineRunId = await this.resolvePipelineRunId(startupId);
+    const phaseRetryCount = this.resolvePhaseRetryCount(options?.phaseRetryCount);
     const currentResult = options?.agentKey
       ? await this.pipelineState.getPhaseResult(startupId, PipelinePhase.RESEARCH)
       : null;
@@ -112,7 +113,7 @@ export class ResearchService {
     let phaseFeedbackConsumed = false;
     const researchAgentStaggerMs = Math.max(
       0,
-      this.aiConfig?.getResearchAgentStaggerMs() ?? 180_000,
+      this.aiConfig?.getResearchAgentStaggerMs() ?? 5_000,
     );
 
     const dedupeSources = new Map<string, SourceEntry>();
@@ -137,6 +138,7 @@ export class ResearchService {
         {
           onAgentStart: options?.onAgentStart,
           startDelayMs: 0,
+          phaseRetryCount,
         },
       );
       options?.onAgentComplete?.({
@@ -189,6 +191,7 @@ export class ResearchService {
             {
               onAgentStart: options?.onAgentStart,
               startDelayMs: index * researchAgentStaggerMs,
+              phaseRetryCount,
             },
           ),
         );
@@ -220,6 +223,7 @@ export class ResearchService {
             {
               onAgentStart: options?.onAgentStart,
               startDelayMs: index * researchAgentStaggerMs,
+              phaseRetryCount,
             },
           ),
         );
@@ -276,6 +280,7 @@ export class ResearchService {
     options?: {
       onAgentStart?: (agent: ResearchAgentKey) => void;
       startDelayMs?: number;
+      phaseRetryCount?: number;
     },
   ): Promise<AgentRunResult> {
     try {
@@ -331,6 +336,7 @@ export class ResearchService {
     options?: {
       onAgentStart?: (agent: ResearchAgentKey) => void;
       startDelayMs?: number;
+      phaseRetryCount?: number;
     },
   ): Promise<AgentRunResult> {
     const promptKey = RESEARCH_PROMPT_KEY_BY_AGENT[key];
@@ -345,10 +351,19 @@ export class ResearchService {
         })
       : null;
     const runtimeTraceMeta: Record<string, unknown> = {};
+    const phaseRetryCount = this.resolvePhaseRetryCount(options?.phaseRetryCount);
+    const agentAttemptId = this.buildResearchAgentAttemptId(
+      pipelineRunId,
+      key,
+      phaseRetryCount,
+      1,
+    );
     const dataSummary: Record<string, unknown> = {
       outputMode: "text_report",
       minReportLength: MIN_RESEARCH_REPORT_LENGTH,
       schemaPromptKey: promptKey,
+      phaseRetryCount,
+      ...(agentAttemptId ? { agentAttemptId } : {}),
     };
     if (execution) {
       runtimeTraceMeta.modelConfig = {
@@ -369,17 +384,15 @@ export class ResearchService {
       dataSummary.modelName = execution.resolvedConfig.modelName;
     }
     const requestedDelayMs = Math.max(0, options?.startDelayMs ?? 0);
-    const modelNameForStagger = execution?.resolvedConfig.modelName;
     const staggerDelayMs = this.resolveAgentStartDelayMs(
       requestedDelayMs,
-      modelNameForStagger,
     );
     const staggerApplied = staggerDelayMs > 0;
     runtimeTraceMeta.stagger = {
       requestedDelayMs,
       staggerDelayMs,
       staggerApplied,
-      staggerReason: staggerApplied ? "deep_research_model" : undefined,
+      staggerReason: staggerApplied ? "configured_agent_stagger" : undefined,
     };
     dataSummary.staggerDelayMs = staggerDelayMs;
     dataSummary.staggerApplied = staggerApplied;
@@ -409,6 +422,10 @@ export class ResearchService {
     try {
       const result = await this.geminiResearchService.researchText({
         agent: key,
+        startupId,
+        pipelineRunId,
+        phaseRetryCount,
+        agentAttemptId,
         modelName: execution?.resolvedConfig.modelName,
         model: execution?.generateTextOptions.model,
         tools: execution?.generateTextOptions.tools,
@@ -823,17 +840,30 @@ export class ResearchService {
     return state?.pipelineRunId ?? undefined;
   }
 
+  private resolvePhaseRetryCount(value: number | undefined): number {
+    if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+      return 0;
+    }
+    return Math.floor(value);
+  }
+
+  private buildResearchAgentAttemptId(
+    pipelineRunId: string | undefined,
+    agent: ResearchAgentKey,
+    phaseRetryCount: number,
+    attempt: number,
+  ): string | undefined {
+    if (!pipelineRunId) {
+      return undefined;
+    }
+
+    return `${pipelineRunId}:${PipelinePhase.RESEARCH}:${agent}:phase-${phaseRetryCount}:attempt-${Math.max(1, Math.floor(attempt))}`;
+  }
+
   private resolveAgentStartDelayMs(
     requestedDelayMs: number,
-    modelName: string | undefined,
   ): number {
     if (requestedDelayMs <= 0) {
-      return 0;
-    }
-    if (!modelName) {
-      return 0;
-    }
-    if (!isOpenAiDeepResearchModel(modelName)) {
       return 0;
     }
     return requestedDelayMs;

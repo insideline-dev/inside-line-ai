@@ -16,12 +16,25 @@ interface OpenAiDeepResearchTextRequest {
   prompt: string;
   enableWebSearch: boolean;
   timeoutMs?: number;
+  resumeResponseId?: string;
+  abortSignal?: AbortSignal;
+  onCheckpoint?: (event: OpenAiDeepResearchCheckpointEvent) => Promise<void> | void;
 }
 
 interface OpenAiDeepResearchTextResponse {
   text: string;
   sources: SourceEntry[];
   rawMeta: Record<string, unknown>;
+}
+
+export interface OpenAiDeepResearchCheckpointEvent {
+  responseId: string;
+  status?: string;
+  modelName?: string;
+  resumed: boolean;
+  timeoutMs: number;
+  pollIntervalMs: number;
+  checkpointEvent: "created" | "resumed" | "terminal";
 }
 
 @Injectable()
@@ -52,33 +65,72 @@ export class OpenAiDeepResearchService {
     }
 
     const client = this.getClient();
-    const createdResponse = await client.responses.create({
-      model: request.modelName,
-      background: true,
-      input: [
-        {
-          role: "system",
-          content: request.systemPrompt,
-        },
-        {
-          role: "user",
-          content: request.prompt,
-        },
-      ],
-      tools: request.enableWebSearch
-        ? [{ type: "web_search_preview" }]
-        : undefined,
+    const timeoutMs = this.resolveTimeoutMs(request.timeoutMs);
+    const pollIntervalMs = this.getPollIntervalMs();
+    const resumeResponseId = request.resumeResponseId?.trim();
+    const resumed = typeof resumeResponseId === "string" && resumeResponseId.length > 0;
+    const createdResponse = resumed
+      ? null
+      : await client.responses.create({
+          model: request.modelName,
+          background: true,
+          input: [
+            {
+              role: "system",
+              content: request.systemPrompt,
+            },
+            {
+              role: "user",
+              content: request.prompt,
+            },
+          ],
+          tools: request.enableWebSearch
+            ? [{ type: "web_search_preview" }]
+            : undefined,
+        });
+    const initialResponse = resumed
+      ? await client.responses.retrieve(resumeResponseId)
+      : createdResponse;
+    const responseId =
+      this.readString(initialResponse, "id") ??
+      (createdResponse ? this.readString(createdResponse, "id") : undefined);
+    if (!responseId) {
+      throw new Error("OpenAI deep research response is missing id");
+    }
+
+    await this.emitCheckpoint(request.onCheckpoint, {
+      responseId,
+      status: this.readStatus(initialResponse),
+      modelName:
+        this.readString(initialResponse, "model") ??
+        (createdResponse ? this.readString(createdResponse, "model") : undefined),
+      resumed,
+      timeoutMs,
+      pollIntervalMs,
+      checkpointEvent: resumed ? "resumed" : "created",
     });
 
-    const timeoutMs = this.resolveTimeoutMs(request.timeoutMs);
     const response = await this.awaitTerminalResponse(
       client,
-      createdResponse,
+      initialResponse,
       timeoutMs,
+      pollIntervalMs,
+      request.abortSignal,
     );
     const status = this.readStatus(response);
-    const responseId =
-      this.readString(response, "id") ?? this.readString(createdResponse, "id");
+
+    await this.emitCheckpoint(request.onCheckpoint, {
+      responseId,
+      status,
+      modelName:
+        this.readString(response, "model") ??
+        (createdResponse ? this.readString(createdResponse, "model") : undefined),
+      resumed,
+      timeoutMs,
+      pollIntervalMs,
+      checkpointEvent: "terminal",
+    });
+
     if (status !== "completed") {
       throw new Error(
         `OpenAI deep research response ${responseId ?? "unknown"} ended with status ${status ?? "unknown"}`,
@@ -95,10 +147,13 @@ export class OpenAiDeepResearchService {
       rawMeta: {
         responseId,
         status,
-        initialStatus: this.readStatus(createdResponse),
+        initialStatus: this.readStatus(initialResponse),
+        resumed,
+        timeoutMs,
+        pollIntervalMs,
         model:
           this.readString(response, "model") ??
-          this.readString(createdResponse, "model"),
+          (createdResponse ? this.readString(createdResponse, "model") : undefined),
       },
     };
   }
@@ -162,7 +217,10 @@ export class OpenAiDeepResearchService {
     client: OpenAI,
     initialResponse: unknown,
     timeoutMs: number,
+    pollIntervalMs: number,
+    abortSignal?: AbortSignal,
   ): Promise<unknown> {
+    this.throwIfAborted(abortSignal);
     const initialStatus = this.readStatus(initialResponse);
     if (this.isTerminalStatus(initialStatus)) {
       return initialResponse;
@@ -175,6 +233,7 @@ export class OpenAiDeepResearchService {
 
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
+      this.throwIfAborted(abortSignal);
       const response = await client.responses.retrieve(responseId);
       const status = this.readStatus(response);
       if (this.isTerminalStatus(status)) {
@@ -185,7 +244,7 @@ export class OpenAiDeepResearchService {
       if (remainingMs <= 0) {
         break;
       }
-      await this.sleep(Math.min(this.getPollIntervalMs(), remainingMs));
+      await this.sleep(Math.min(pollIntervalMs, remainingMs), abortSignal);
     }
 
     throw new Error(
@@ -308,11 +367,61 @@ export class OpenAiDeepResearchService {
     ) {
       return Math.floor(configured);
     }
-    return 2_000;
+    return 15_000;
   }
 
-  private async sleep(ms: number): Promise<void> {
-    await new Promise<void>((resolve) => setTimeout(resolve, ms));
+  private async sleep(ms: number, abortSignal?: AbortSignal): Promise<void> {
+    if (ms <= 0) {
+      return;
+    }
+    if (!abortSignal) {
+      await new Promise<void>((resolve) => setTimeout(resolve, ms));
+      return;
+    }
+
+    this.throwIfAborted(abortSignal);
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        abortSignal.removeEventListener("abort", onAbort);
+        resolve();
+      }, ms);
+      const onAbort = () => {
+        clearTimeout(timer);
+        abortSignal.removeEventListener("abort", onAbort);
+        reject(this.toAbortError(abortSignal));
+      };
+      abortSignal.addEventListener("abort", onAbort, { once: true });
+    });
+  }
+
+  private throwIfAborted(abortSignal: AbortSignal | undefined): void {
+    if (!abortSignal?.aborted) {
+      return;
+    }
+    throw this.toAbortError(abortSignal);
+  }
+
+  private toAbortError(abortSignal: AbortSignal): Error {
+    const reason = abortSignal.reason;
+    if (reason instanceof Error) {
+      return reason;
+    }
+    if (typeof reason === "string" && reason.trim().length > 0) {
+      return new Error(reason);
+    }
+    return new Error("OpenAI deep research request was aborted");
+  }
+
+  private async emitCheckpoint(
+    callback:
+      | ((event: OpenAiDeepResearchCheckpointEvent) => Promise<void> | void)
+      | undefined,
+    event: OpenAiDeepResearchCheckpointEvent,
+  ): Promise<void> {
+    if (!callback) {
+      return;
+    }
+    await callback(event);
   }
 
   private asRecord(value: unknown): Record<string, unknown> {

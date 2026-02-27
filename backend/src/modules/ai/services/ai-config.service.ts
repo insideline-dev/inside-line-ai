@@ -73,12 +73,26 @@ export class AiConfigService {
   getResearchAgentStaggerMs(): number {
     const configured = this.config.get<number>("AI_RESEARCH_AGENT_STAGGER_MS");
     if (typeof configured !== "number" || !Number.isFinite(configured)) {
-      return 180_000;
+      return 5_000;
     }
 
     const normalized = Math.floor(configured);
     if (normalized < 0) {
-      return 180_000;
+      return 5_000;
+    }
+
+    return normalized;
+  }
+
+  getEvaluationAgentStaggerMs(): number {
+    const configured = this.config.get<number>("AI_EVALUATION_AGENT_STAGGER_MS");
+    if (typeof configured !== "number" || !Number.isFinite(configured)) {
+      return 5_000;
+    }
+
+    const normalized = Math.floor(configured);
+    if (normalized < 0) {
+      return 5_000;
     }
 
     return normalized;

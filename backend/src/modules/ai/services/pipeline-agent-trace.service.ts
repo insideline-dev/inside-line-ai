@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { and, eq, lt } from "drizzle-orm";
+import { and, desc, eq, lt } from "drizzle-orm";
 import { DrizzleService } from "../../../database";
 import type { PipelineFallbackReason } from "../interfaces/agent.interface";
 import { PipelinePhase } from "../interfaces/pipeline.interface";
@@ -8,6 +8,34 @@ import { pipelineAgentRun } from "../entities";
 
 type AgentRunStatus = "running" | "completed" | "failed" | "fallback";
 type TraceKind = "ai_agent" | "phase_step";
+export const OPENAI_DEEP_RESEARCH_STEP_KEY = "openai_deep_research";
+
+interface DeepResearchMeta {
+  responseId: string;
+  status: string;
+  modelName?: string;
+  resumed?: boolean;
+  pollIntervalMs?: number;
+  timeoutMs?: number;
+  phaseRetryCount?: number;
+  agentAttemptId?: string;
+  checkpointEvent?: string;
+  lastPolledAt?: string;
+}
+
+export interface DeepResearchCheckpoint {
+  responseId: string;
+  status: string;
+  modelName?: string;
+  resumed: boolean;
+  pollIntervalMs?: number;
+  timeoutMs?: number;
+  phaseRetryCount: number;
+  agentAttemptId?: string;
+  checkpointEvent?: string;
+  startedAt?: Date;
+  completedAt?: Date;
+}
 
 export interface RecordPipelineAgentRunInput {
   startupId: string;
@@ -31,6 +59,29 @@ export interface RecordPipelineAgentRunInput {
   rawProviderError?: string;
   startedAt?: Date;
   completedAt?: Date;
+}
+
+export interface RecordDeepResearchCheckpointInput {
+  startupId: string;
+  pipelineRunId: string;
+  phase: PipelinePhase;
+  agentKey: string;
+  responseId: string;
+  status: string;
+  modelName?: string;
+  resumed?: boolean;
+  pollIntervalMs?: number;
+  timeoutMs?: number;
+  phaseRetryCount?: number;
+  agentAttemptId?: string;
+  checkpointEvent?: string;
+}
+
+export interface FindDeepResearchCheckpointInput {
+  startupId: string;
+  pipelineRunId: string;
+  phase: PipelinePhase;
+  agentKey: string;
 }
 
 @Injectable()
@@ -172,6 +223,94 @@ export class PipelineAgentTraceService {
       );
   }
 
+  async recordDeepResearchCheckpoint(
+    input: RecordDeepResearchCheckpointInput,
+  ): Promise<void> {
+    const status = input.status.trim().toLowerCase();
+    if (!status || !input.responseId?.trim()) {
+      return;
+    }
+
+    const phaseRetryCount = this.normalizeNonNegativeInt(input.phaseRetryCount, 0);
+    const mappedStatus = this.mapDeepResearchStatus(status);
+
+    await this.recordRun({
+      startupId: input.startupId,
+      pipelineRunId: input.pipelineRunId,
+      phase: input.phase,
+      agentKey: input.agentKey,
+      traceKind: "phase_step",
+      stepKey: OPENAI_DEEP_RESEARCH_STEP_KEY,
+      status: mappedStatus,
+      attempt: phaseRetryCount + 1,
+      retryCount: phaseRetryCount,
+      meta: {
+        deepResearch: {
+          responseId: input.responseId.trim(),
+          status,
+          ...(input.modelName ? { modelName: input.modelName } : {}),
+          resumed: Boolean(input.resumed),
+          ...(typeof input.pollIntervalMs === "number"
+            ? { pollIntervalMs: Math.max(1, Math.floor(input.pollIntervalMs)) }
+            : {}),
+          ...(typeof input.timeoutMs === "number"
+            ? { timeoutMs: Math.max(1, Math.floor(input.timeoutMs)) }
+            : {}),
+          phaseRetryCount,
+          ...(input.agentAttemptId ? { agentAttemptId: input.agentAttemptId } : {}),
+          ...(input.checkpointEvent ? { checkpointEvent: input.checkpointEvent } : {}),
+          lastPolledAt: new Date().toISOString(),
+        },
+      },
+    });
+  }
+
+  async getLatestDeepResearchCheckpoint(
+    input: FindDeepResearchCheckpointInput,
+  ): Promise<DeepResearchCheckpoint | null> {
+    const [row] = await this.drizzle.db
+      .select({
+        meta: pipelineAgentRun.meta,
+        startedAt: pipelineAgentRun.startedAt,
+        completedAt: pipelineAgentRun.completedAt,
+      })
+      .from(pipelineAgentRun)
+      .where(
+        and(
+          eq(pipelineAgentRun.startupId, input.startupId),
+          eq(pipelineAgentRun.pipelineRunId, input.pipelineRunId),
+          eq(pipelineAgentRun.phase, input.phase),
+          eq(pipelineAgentRun.agentKey, input.agentKey),
+          eq(pipelineAgentRun.traceKind, "phase_step"),
+          eq(pipelineAgentRun.stepKey, OPENAI_DEEP_RESEARCH_STEP_KEY),
+        ),
+      )
+      .orderBy(
+        desc(pipelineAgentRun.startedAt),
+        desc(pipelineAgentRun.createdAt),
+      )
+      .limit(1);
+
+    const parsed = this.readDeepResearchMeta(row?.meta);
+    if (!parsed) {
+      return null;
+    }
+
+    return {
+      responseId: parsed.responseId,
+      status: parsed.status,
+      modelName: parsed.modelName,
+      resumed: Boolean(parsed.resumed),
+      pollIntervalMs: parsed.pollIntervalMs,
+      timeoutMs: parsed.timeoutMs,
+      phaseRetryCount: this.normalizeNonNegativeInt(parsed.phaseRetryCount, 0),
+      agentAttemptId: parsed.agentAttemptId,
+      checkpointEvent: parsed.checkpointEvent,
+      startedAt: row?.startedAt,
+      completedAt: row?.completedAt ?? undefined,
+    };
+  }
+
   private truncateText(value: string | undefined, limit: number): string | null {
     if (!value) {
       return null;
@@ -311,5 +450,71 @@ export class PipelineAgentTraceService {
       return fallback;
     }
     return Math.max(0, Math.floor(value));
+  }
+
+  private mapDeepResearchStatus(status: string): AgentRunStatus {
+    if (status === "completed") {
+      return "completed";
+    }
+    if (
+      status === "failed" ||
+      status === "cancelled" ||
+      status === "incomplete" ||
+      status === "expired"
+    ) {
+      return "failed";
+    }
+    return "running";
+  }
+
+  private readDeepResearchMeta(meta: unknown): DeepResearchMeta | null {
+    if (!meta || typeof meta !== "object" || Array.isArray(meta)) {
+      return null;
+    }
+
+    const root = meta as Record<string, unknown>;
+    const deepResearch = root.deepResearch;
+    if (
+      !deepResearch ||
+      typeof deepResearch !== "object" ||
+      Array.isArray(deepResearch)
+    ) {
+      return null;
+    }
+
+    const record = deepResearch as Record<string, unknown>;
+    const responseId = record.responseId;
+    const status = record.status;
+    if (
+      typeof responseId !== "string" ||
+      responseId.trim().length === 0 ||
+      typeof status !== "string" ||
+      status.trim().length === 0
+    ) {
+      return null;
+    }
+
+    return {
+      responseId: responseId.trim(),
+      status: status.trim().toLowerCase(),
+      ...(typeof record.modelName === "string" ? { modelName: record.modelName } : {}),
+      ...(typeof record.resumed === "boolean" ? { resumed: record.resumed } : {}),
+      ...(typeof record.pollIntervalMs === "number"
+        ? { pollIntervalMs: record.pollIntervalMs }
+        : {}),
+      ...(typeof record.timeoutMs === "number" ? { timeoutMs: record.timeoutMs } : {}),
+      ...(typeof record.phaseRetryCount === "number"
+        ? { phaseRetryCount: record.phaseRetryCount }
+        : {}),
+      ...(typeof record.agentAttemptId === "string"
+        ? { agentAttemptId: record.agentAttemptId }
+        : {}),
+      ...(typeof record.checkpointEvent === "string"
+        ? { checkpointEvent: record.checkpointEvent }
+        : {}),
+      ...(typeof record.lastPolledAt === "string"
+        ? { lastPolledAt: record.lastPolledAt }
+        : {}),
+    };
   }
 }

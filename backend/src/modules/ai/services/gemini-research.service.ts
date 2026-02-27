@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, Optional } from "@nestjs/common";
 import { generateText, Output } from "ai";
 import { z } from "zod";
 import { INTERNAL_PIPELINE_SOURCE } from "../agents/evaluation/evaluation-utils";
@@ -7,11 +7,15 @@ import type {
   ResearchAgentKey,
 } from "../interfaces/agent.interface";
 import type { SourceEntry } from "../interfaces/phase-results.interface";
-import { ModelPurpose } from "../interfaces/pipeline.interface";
+import { ModelPurpose, PipelinePhase } from "../interfaces/pipeline.interface";
 import { AiProviderService } from "../providers/ai-provider.service";
 import { AiConfigService } from "./ai-config.service";
 import { isOpenAiDeepResearchModel } from "./ai-runtime-config.schema";
-import { OpenAiDeepResearchService } from "./openai-deep-research.service";
+import {
+  OpenAiDeepResearchCheckpointEvent,
+  OpenAiDeepResearchService,
+} from "./openai-deep-research.service";
+import { PipelineAgentTraceService } from "./pipeline-agent-trace.service";
 
 interface ResearchRequest<TOutput extends { sources: string[] }> {
   agent: ResearchAgentKey;
@@ -47,6 +51,10 @@ interface ResearchResponse<TOutput extends { sources: string[] }> {
 
 interface ResearchTextRequest {
   agent: ResearchAgentKey;
+  startupId?: string;
+  pipelineRunId?: string;
+  phaseRetryCount?: number;
+  agentAttemptId?: string;
   modelName?: string;
   model?: GenerateTextModel;
   tools?: GenerateTextTools;
@@ -108,6 +116,7 @@ export class GeminiResearchService {
     private providers: AiProviderService,
     private aiConfig: AiConfigService,
     private openAiDeepResearch: OpenAiDeepResearchService,
+    @Optional() private pipelineAgentTrace?: PipelineAgentTraceService,
   ) {}
 
   async research<TOutput extends { sources: string[] }>(
@@ -430,8 +439,10 @@ export class GeminiResearchService {
         let meta: Record<string, unknown> | undefined;
 
         if (isOpenAiDeepResearchModel(modelName)) {
+          const checkpoint = await this.getDeepResearchResumeCheckpoint(request);
+          const resumeResponseId = checkpoint?.responseId;
           const deepResearch = await this.withTimeout(
-            () =>
+            (abortSignal) =>
               this.openAiDeepResearch.runResearchText({
                 agent: request.agent,
                 modelName,
@@ -440,6 +451,11 @@ export class GeminiResearchService {
                 enableWebSearch:
                   request.searchEnforcement?.requiresProviderEvidence ?? false,
                 timeoutMs: attemptTimeoutMs,
+                resumeResponseId,
+                abortSignal,
+                onCheckpoint: async (event) => {
+                  await this.persistDeepResearchCheckpoint(request, event);
+                },
               }),
             attemptTimeoutMs,
             `Research agent ${request.agent} timed out`,
@@ -455,7 +471,13 @@ export class GeminiResearchService {
           };
           lastOutputText = deepResearch.text.trim();
           meta = {
-            deepResearch: deepResearch.rawMeta,
+            deepResearch: {
+              ...deepResearch.rawMeta,
+              ...(resumeResponseId
+                ? { resumedFromCheckpoint: true, resumeResponseId }
+                : {}),
+              ...(checkpoint ? { checkpoint } : {}),
+            },
           };
         } else {
           const response = await this.withTimeout(
@@ -1386,6 +1408,103 @@ export class GeminiResearchService {
       return config.getResearchAgentHardTimeoutMs();
     }
     return this.getResearchAttemptTimeoutMs() * this.getResearchMaxAttempts() + 30_000;
+  }
+
+  private async getDeepResearchResumeCheckpoint(
+    request: ResearchTextRequest,
+  ): Promise<{ responseId: string } | null> {
+    if (!this.pipelineAgentTrace) {
+      return null;
+    }
+    if (!request.startupId || !request.pipelineRunId) {
+      return null;
+    }
+
+    try {
+      const checkpoint =
+        await this.pipelineAgentTrace.getLatestDeepResearchCheckpoint({
+          startupId: request.startupId,
+          pipelineRunId: request.pipelineRunId,
+          phase: PipelinePhase.RESEARCH,
+          agentKey: request.agent,
+        });
+      if (!checkpoint) {
+        return null;
+      }
+      if (this.isDeepResearchTerminalStatus(checkpoint.status)) {
+        return null;
+      }
+      return {
+        responseId: checkpoint.responseId,
+      };
+    } catch (error) {
+      this.logger.warn(
+        `Failed to load deep research checkpoint for ${request.agent}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return null;
+    }
+  }
+
+  private async persistDeepResearchCheckpoint(
+    request: ResearchTextRequest,
+    event: OpenAiDeepResearchCheckpointEvent,
+  ): Promise<void> {
+    if (!this.pipelineAgentTrace) {
+      return;
+    }
+    if (!request.startupId || !request.pipelineRunId) {
+      return;
+    }
+    if (!event.responseId?.trim()) {
+      return;
+    }
+
+    try {
+      await this.pipelineAgentTrace.recordDeepResearchCheckpoint({
+        startupId: request.startupId,
+        pipelineRunId: request.pipelineRunId,
+        phase: PipelinePhase.RESEARCH,
+        agentKey: request.agent,
+        responseId: event.responseId,
+        status: event.status ?? "in_progress",
+        modelName: event.modelName ?? request.modelName,
+        resumed: event.resumed,
+        pollIntervalMs: event.pollIntervalMs,
+        timeoutMs: event.timeoutMs,
+        phaseRetryCount: this.resolvePhaseRetryCount(request.phaseRetryCount),
+        agentAttemptId: request.agentAttemptId,
+        checkpointEvent: event.checkpointEvent,
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Failed to persist deep research checkpoint for ${request.agent}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+
+  private resolvePhaseRetryCount(value: number | undefined): number {
+    if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+      return 0;
+    }
+    return Math.floor(value);
+  }
+
+  private isDeepResearchTerminalStatus(status: string | undefined): boolean {
+    if (!status) {
+      return false;
+    }
+    const normalized = status.trim().toLowerCase();
+    return (
+      normalized === "completed" ||
+      normalized === "failed" ||
+      normalized === "cancelled" ||
+      normalized === "incomplete" ||
+      normalized === "expired"
+    );
   }
 
   private async withTimeout<T>(

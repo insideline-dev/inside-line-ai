@@ -147,6 +147,78 @@ describe("OpenAiDeepResearchService", () => {
     ]);
   });
 
+  it("resumes polling from an existing response id without creating a new response", async () => {
+    retrieveResponseMock
+      .mockResolvedValueOnce({
+        id: "resp_resume",
+        status: "in_progress",
+        model: "o4-mini-deep-research",
+      })
+      .mockResolvedValueOnce({
+        id: "resp_resume",
+        status: "completed",
+        model: "o4-mini-deep-research",
+        output_text: "Resumed deep report",
+      });
+    const checkpointSpy = jest.fn();
+    const service = new OpenAiDeepResearchService(buildConfig());
+
+    const result = await service.runResearchText({
+      agent: "market",
+      modelName: "o4-mini-deep-research",
+      systemPrompt: "system",
+      prompt: "prompt",
+      enableWebSearch: true,
+      resumeResponseId: "resp_resume",
+      onCheckpoint: checkpointSpy,
+    });
+
+    expect(createResponseMock).not.toHaveBeenCalled();
+    expect(retrieveResponseMock).toHaveBeenCalledTimes(2);
+    expect(retrieveResponseMock).toHaveBeenNthCalledWith(1, "resp_resume");
+    expect(retrieveResponseMock).toHaveBeenNthCalledWith(2, "resp_resume");
+    expect(checkpointSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        responseId: "resp_resume",
+        checkpointEvent: "resumed",
+        resumed: true,
+      }),
+    );
+    expect(checkpointSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        responseId: "resp_resume",
+        checkpointEvent: "terminal",
+        status: "completed",
+        resumed: true,
+      }),
+    );
+    expect(result.text).toBe("Resumed deep report");
+  });
+
+  it("aborts active polling when abort signal is triggered", async () => {
+    createResponseMock.mockResolvedValueOnce({
+      id: "resp_abort",
+      status: "in_progress",
+      model: "o4-mini-deep-research",
+    });
+    const controller = new AbortController();
+    controller.abort(new Error("abort now"));
+    const service = new OpenAiDeepResearchService(buildConfig());
+
+    await expect(
+      service.runResearchText({
+        agent: "market",
+        modelName: "o4-mini-deep-research",
+        systemPrompt: "system",
+        prompt: "prompt",
+        enableWebSearch: true,
+        abortSignal: controller.signal,
+      }),
+    ).rejects.toThrow("abort now");
+
+    expect(retrieveResponseMock).not.toHaveBeenCalled();
+  });
+
   it("throws when deep research response ends in non-completed terminal status", async () => {
     createResponseMock.mockResolvedValueOnce({
       id: "resp_failed",
@@ -206,5 +278,16 @@ describe("OpenAiDeepResearchService", () => {
         enableWebSearch: true,
       }),
     ).rejects.toThrow("OPENAI_API_KEY is not configured");
+  });
+
+  it("defaults poll interval to 15 seconds when unset", () => {
+    const config = buildConfig({
+      OPENAI_DEEP_RESEARCH_POLL_INTERVAL_MS: undefined,
+    });
+    const service = new OpenAiDeepResearchService(config);
+
+    expect(
+      (service as unknown as { getPollIntervalMs: () => number }).getPollIntervalMs(),
+    ).toBe(15_000);
   });
 });

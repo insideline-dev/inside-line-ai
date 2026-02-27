@@ -86,6 +86,7 @@ export class ResearchProcessor
           startupId,
           {
             ...(agentKey ? { agentKey } : {}),
+            phaseRetryCount,
             onAgentStart: (agent) => {
               const attemptId = this.buildAgentAttemptId(
                 pipelineRunId,

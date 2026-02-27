@@ -11,6 +11,7 @@ import type { PipelineFeedbackService } from "../../services/pipeline-feedback.s
 import type { PipelineAgentTraceService } from "../../services/pipeline-agent-trace.service";
 import type { AgentConfigService } from "../../services/agent-config.service";
 import type { DynamicAgentRunnerService } from "../../services/dynamic-agent-runner.service";
+import type { AiConfigService } from "../../services/ai-config.service";
 import { createEvaluationPipelineInput } from "../fixtures/evaluation-pipeline.fixture";
 
 const ALL_KEYS: EvaluationAgentKey[] = [
@@ -73,6 +74,7 @@ function createRegistry(
   agentConfigService: AgentConfigService,
   dynamicAgentRunner: DynamicAgentRunnerService,
   pipelineAgentTrace?: PipelineAgentTraceService,
+  aiConfig?: AiConfigService,
 ): EvaluationAgentRegistryService {
   const constructorArgs = [
     agents[0],
@@ -92,6 +94,8 @@ function createRegistry(
     agentConfigService,
     dynamicAgentRunner,
     pipelineAgentTrace,
+    undefined,
+    aiConfig,
   ] as unknown as ConstructorParameters<typeof EvaluationAgentRegistryService>;
 
   return new EvaluationAgentRegistryService(...constructorArgs);
@@ -103,6 +107,7 @@ describe("EvaluationAgentRegistryService", () => {
   let pipelineFeedback: jest.Mocked<PipelineFeedbackService>;
   let agentConfigService: jest.Mocked<AgentConfigService>;
   let dynamicAgentRunner: jest.Mocked<DynamicAgentRunnerService>;
+  let aiConfig: jest.Mocked<AiConfigService>;
   const pipelineData = createEvaluationPipelineInput();
 
   beforeEach(() => {
@@ -129,6 +134,10 @@ describe("EvaluationAgentRegistryService", () => {
     dynamicAgentRunner = {
       run: jest.fn(),
     } as unknown as jest.Mocked<DynamicAgentRunnerService>;
+
+    aiConfig = {
+      getEvaluationAgentStaggerMs: jest.fn().mockReturnValue(0),
+    } as unknown as jest.Mocked<AiConfigService>;
   });
 
   it("marks run as healthy when all agents return structured outputs", async () => {
@@ -274,6 +283,36 @@ describe("EvaluationAgentRegistryService", () => {
         usedFallback: false,
       }),
     );
+  });
+
+  it("applies staggered starts across evaluation agents when configured", async () => {
+    const agents = ALL_KEYS.map((key) => createAgent(key));
+    aiConfig.getEvaluationAgentStaggerMs.mockReturnValue(5);
+
+    const service = createRegistry(
+      agents,
+      pipelineState as unknown as PipelineStateService,
+      phaseTransition as unknown as PhaseTransitionService,
+      pipelineFeedback as unknown as PipelineFeedbackService,
+      agentConfigService as unknown as AgentConfigService,
+      dynamicAgentRunner as unknown as DynamicAgentRunnerService,
+      undefined,
+      aiConfig as unknown as AiConfigService,
+    );
+
+    const sleepSpy = jest
+      .spyOn(
+        service as unknown as { sleep: (ms: number) => Promise<void> },
+        "sleep",
+      )
+      .mockResolvedValue(undefined);
+
+    await service.runAll("startup-stagger-1", pipelineData);
+
+    const delays = sleepSpy.mock.calls
+      .map(([delay]) => delay)
+      .sort((a, b) => a - b);
+    expect(delays).toEqual([5, 10, 15, 20, 25, 30, 35, 40, 45, 50]);
   });
 
   it("continues when telemetry recording fails", async () => {

@@ -23,6 +23,7 @@ describe("ResearchService", () => {
   let pipelineFeedback: jest.Mocked<PipelineFeedbackService>;
   let researchParametersService: jest.Mocked<ResearchParametersService>;
   let promptService: jest.Mocked<AiPromptService>;
+  let aiConfig: jest.Mocked<AiConfigService>;
 
   const mockResearchParameters: ResearchParameters = {
     companyName: "Inside Line",
@@ -131,12 +132,18 @@ describe("ResearchService", () => {
       }),
     } as unknown as jest.Mocked<AiPromptService>;
 
+    aiConfig = {
+      getResearchAgentStaggerMs: jest.fn().mockReturnValue(0),
+    } as unknown as jest.Mocked<AiConfigService>;
+
     service = new ResearchService(
       pipelineState,
       geminiResearch,
       pipelineFeedback,
       promptService,
       researchParametersService,
+      undefined,
+      aiConfig,
     );
   });
 
@@ -359,7 +366,7 @@ describe("ResearchService", () => {
     );
   });
 
-  it("applies configured stagger only to deep-research model agents", async () => {
+  it("applies configured stagger across all research agents", async () => {
     const aiConfigWithStagger = {
       getModelForPurpose: jest.fn().mockReturnValue("gemini-3-flash-preview"),
       getResearchAgentStaggerMs: jest.fn().mockReturnValue(1000),
@@ -428,10 +435,10 @@ describe("ResearchService", () => {
     const staggerValues = sleepSpy.mock.calls
       .map(([value]) => value)
       .sort((a, b) => a - b);
-    expect(staggerValues).toEqual([1000, 3000]);
+    expect(staggerValues).toEqual([1000, 2000, 3000]);
   });
 
-  it("does not stagger when all resolved models are non deep-research", async () => {
+  it("stagger remains model-agnostic for non deep-research models", async () => {
     const aiConfigWithStagger = {
       getModelForPurpose: jest.fn().mockReturnValue("gemini-3-flash-preview"),
       getResearchAgentStaggerMs: jest.fn().mockReturnValue(1000),
@@ -486,6 +493,9 @@ describe("ResearchService", () => {
 
     await service.run("startup-1");
 
-    expect(sleepSpy).not.toHaveBeenCalled();
+    const staggerValues = sleepSpy.mock.calls
+      .map(([value]) => value)
+      .sort((a, b) => a - b);
+    expect(staggerValues).toEqual([1000, 2000, 3000]);
   });
 });

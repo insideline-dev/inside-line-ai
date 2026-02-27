@@ -7,7 +7,22 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, Plus, Save, Trash2 } from "lucide-react";
+import {
+  BarChart2,
+  ChevronDown,
+  Download,
+  FileText,
+  Loader2,
+  Plus,
+  Save,
+  Trash2,
+} from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   useStartupControllerFindOne,
   useStartupControllerFindApprovedById,
@@ -21,6 +36,8 @@ import {
   useInvestorControllerGetMatchDetails,
 } from "@/api/generated/investor/investor";
 import { useToast } from "@/hooks/use-toast";
+import { useCurrentUser } from "@/lib/auth";
+import { downloadMemo, downloadReport } from "@/lib/pdf/download";
 import {
   StartupHeader,
   SummaryCard,
@@ -59,6 +76,7 @@ function InvestorStartupDetailPage() {
   const { id } = Route.useParams();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { data: user } = useCurrentUser();
 
   const {
     data: ownStartupRes,
@@ -188,6 +206,41 @@ function InvestorStartupDetailPage() {
   });
   const isLoading = ownStartupLoading || approvedStartupLoading || evalLoading;
   const error = approvedStartupError || evalError;
+  const [downloading, setDownloading] = useState(false);
+
+  const pdfData = evaluation
+    ? {
+        startup,
+        evaluation,
+        weights: (weights as Record<string, number> | null) ?? null,
+        watermarkEmail: user?.email ?? null,
+      }
+    : null;
+
+  const handleDownload = async (type: "memo" | "report") => {
+    if (!pdfData) return;
+    if (!pdfData.watermarkEmail) {
+      toast.error("Unable to generate watermark", {
+        description: "User email is required for PDF watermarking.",
+      });
+      return;
+    }
+
+    setDownloading(true);
+    try {
+      if (type === "memo") await downloadMemo(pdfData as any);
+      else await downloadReport(pdfData as any);
+      toast.success(
+        `${type === "memo" ? "Investment Memo" : "Analysis Report"} downloaded`,
+      );
+    } catch (e) {
+      toast.error("Failed to generate PDF", {
+        description: (e as Error).message,
+      });
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   if (isLoading) {
     return <div className="flex items-center justify-center py-12"><Loader2 className="h-8 w-8 animate-spin" /></div>;
@@ -211,6 +264,27 @@ function InvestorStartupDetailPage() {
         backLink="/investor"
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            {evaluation ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" disabled={downloading || !user?.email}>
+                    <Download className="w-4 h-4 mr-2" />
+                    Download
+                    <ChevronDown className="w-4 h-4 ml-1" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => handleDownload("memo")}>
+                    <FileText className="w-4 h-4 mr-2" />
+                    Download Memo
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleDownload("report")}>
+                    <BarChart2 className="w-4 h-4 mr-2" />
+                    Download Report
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : null}
             {overallScore > 0 ? (
               <ScoreRing score={overallScore} size="lg" label="Overall Score" showLabel />
             ) : null}

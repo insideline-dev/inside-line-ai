@@ -275,15 +275,14 @@ export class ClaraSubmissionService {
         .where(
           and(
             eq(startup.userId, ownerUserId),
-            sql`similarity(${startup.name}, ${companyName}) > ${FUZZY_THRESHOLD}`,
+            sql`similarity(${startup.name}, CAST(${companyName} AS text)) > ${FUZZY_THRESHOLD}`,
           ),
         )
-        .orderBy(desc(sql`similarity(${startup.name}, ${companyName})`))
+        .orderBy(desc(sql`similarity(${startup.name}, CAST(${companyName} AS text))`))
         .limit(1);
-
       return match ?? null;
     } catch (error) {
-      if (!this.isMissingSimilarityFunction(error)) {
+      if (!this.isSimilarityUnavailable(error)) {
         throw error;
       }
 
@@ -291,8 +290,9 @@ export class ClaraSubmissionService {
         "pg_trgm similarity() unavailable; falling back to ILIKE duplicate detection",
       );
 
-      const escaped = `%${this.escapeForILike(companyName)}%`;
-      const [match] = await this.drizzle.db
+      const normalized = companyName.trim();
+      const escaped = `%${this.escapeForILike(normalized)}%`;
+      const [fallbackMatch] = await this.drizzle.db
         .select({
           id: startup.id,
           name: startup.name,
@@ -305,32 +305,41 @@ export class ClaraSubmissionService {
             ilike(startup.name, escaped),
           ),
         )
+        .orderBy(desc(startup.createdAt))
         .limit(1);
 
-      return match ?? null;
+      return fallbackMatch ?? null;
     }
   }
 
-  private isMissingSimilarityFunction(error: unknown): boolean {
+  private isSimilarityUnavailable(error: unknown): boolean {
     if (!error || typeof error !== "object") return false;
 
     const record = error as {
       message?: unknown;
       cause?: { code?: unknown };
+      code?: unknown;
     };
 
-    const message =
-      typeof record.message === "string" ? record.message : "";
+    const message = typeof record.message === "string" ? record.message : "";
     const code =
-      record.cause && typeof record.cause.code === "string"
-        ? record.cause.code
-        : "";
+      typeof record.code === "string"
+        ? record.code
+        : record.cause && typeof record.cause.code === "string"
+          ? record.cause.code
+          : "";
 
-    return code === "42883" && message.includes("similarity(");
+    return (
+      (code === "42883" && /similarity\(/i.test(message)) ||
+      (/function similarity\(/i.test(message) && /does not exist/i.test(message))
+    );
   }
 
   private escapeForILike(value: string): string {
-    return value.replaceAll("\\", "\\\\").replaceAll("%", "\\%").replaceAll("_", "\\_");
+    return value
+      .replaceAll("\\", "\\\\")
+      .replaceAll("%", "\\%")
+      .replaceAll("_", "\\_");
   }
 
   private async enrichExistingStartup(

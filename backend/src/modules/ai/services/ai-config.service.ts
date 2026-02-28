@@ -3,6 +3,7 @@ import { ConfigService } from "@nestjs/config";
 import { QueueName, QUEUE_NAMES } from "../../../queue";
 import { DEFAULT_MODEL_BY_PURPOSE } from "../ai.config";
 import { ModelPurpose } from "../interfaces/pipeline.interface";
+import { ResearchAgentKey } from "../interfaces/agent.interface";
 
 const DEFAULT_RESEARCH_ATTEMPT_TIMEOUT_MS = 3_600_000;
 const DEFAULT_RESEARCH_AGENT_HARD_TIMEOUT_MS = 3_600_000;

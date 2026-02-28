@@ -7,13 +7,17 @@ import { DealPipelineService } from "../../investor/deal-pipeline.service";
 import { ThesisService } from "../../investor/thesis.service";
 import { InvestorNoteService } from "../../investor/investor-note.service";
 import { PortfolioService } from "../../investor/portfolio.service";
+import { ClaraChannelService } from "../clara-channel.service";
+import { PdfService } from "../../startup/pdf.service";
+import { AnalyticsService } from "../../admin/analytics.service";
+import { StartupService } from "../../startup/startup.service";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 const NO_ACCOUNT_MSG =
-  "No investor account is linked to this email address. The sender may need to register on Inside Line first.";
+  "No Inside Line account is linked to this email address. The sender may need to register on Inside Line first.";
 
 const INVESTOR_ID = "investor-123";
 
@@ -142,6 +146,22 @@ describe("ClaraToolsService", () => {
         { provide: ThesisService, useValue: thesisService },
         { provide: InvestorNoteService, useValue: noteService },
         { provide: PortfolioService, useValue: portfolioService },
+        {
+          provide: ClaraChannelService,
+          useValue: { reply: jest.fn().mockResolvedValue(undefined), send: jest.fn().mockResolvedValue(undefined) },
+        },
+        {
+          provide: PdfService,
+          useValue: { generatePdf: jest.fn().mockResolvedValue(Buffer.from('')), extractText: jest.fn().mockResolvedValue('') },
+        },
+        {
+          provide: AnalyticsService,
+          useValue: { getStartupStats: jest.fn() },
+        },
+        {
+          provide: StartupService,
+          useValue: { findOne: jest.fn(), approve: jest.fn() },
+        },
       ],
     }).compile();
 
@@ -225,7 +245,7 @@ describe("ClaraToolsService", () => {
       mockDb.limit.mockResolvedValueOnce([mockStartup]);
       const result = await tools.getStartupDetails.execute({ name: "Acme" });
       expect(mockDb.select).toHaveBeenCalled();
-      expect(result).toEqual([mockStartup]);
+      expect(result).toEqual(mockStartup);
     });
 
     it("searchStartups still queries DB (not investor-gated)", async () => {
@@ -332,15 +352,15 @@ describe("ClaraToolsService", () => {
       expect(mockDb.from).toHaveBeenCalled();
       expect(mockDb.where).toHaveBeenCalled();
       expect(mockDb.orderBy).toHaveBeenCalled();
-      expect(mockDb.limit).toHaveBeenCalledWith(3);
+      expect(mockDb.limit).toHaveBeenCalledWith(1);
     });
 
-    it("returns array of startup results when matches are found", async () => {
+    it("returns the matching startup when found", async () => {
       mockDb.limit.mockResolvedValueOnce([mockStartup]);
       const tools = service.buildTools(INVESTOR_ID);
       const result = await tools.getStartupDetails.execute({ name: "Acme" });
 
-      expect(result).toEqual([mockStartup]);
+      expect(result).toEqual(mockStartup);
     });
 
     it("returns not-found message when no startups match", async () => {
@@ -348,16 +368,7 @@ describe("ClaraToolsService", () => {
       const tools = service.buildTools(INVESTOR_ID);
       const result = await tools.getStartupDetails.execute({ name: "Nonexistent" });
 
-      expect(result).toEqual({ message: 'No startups found matching "Nonexistent".' });
-    });
-
-    it("returns up to 3 results for ambiguous queries", async () => {
-      const three = [mockStartup, { ...mockStartup, id: "s2" }, { ...mockStartup, id: "s3" }];
-      mockDb.limit.mockResolvedValueOnce(three);
-      const tools = service.buildTools(INVESTOR_ID);
-      const result = await tools.getStartupDetails.execute({ name: "corp" });
-
-      expect((result as unknown[]).length).toBe(3);
+      expect(result).toEqual({ message: 'No accessible startup found matching "Nonexistent".' });
     });
   });
 
@@ -388,7 +399,7 @@ describe("ClaraToolsService", () => {
       const tools = service.buildTools(INVESTOR_ID);
       const result = await tools.getStartupStatus.execute({ name: "Ghost" });
 
-      expect(result).toEqual({ message: 'No startup found matching "Ghost".' });
+      expect(result).toEqual({ message: 'No accessible startup found matching "Ghost".' });
     });
   });
 
@@ -464,7 +475,7 @@ describe("ClaraToolsService", () => {
       const tools = service.buildTools(INVESTOR_ID);
       const result = await tools.getMyNotes.execute({ startupName: "Unknown Corp" });
 
-      expect(result).toEqual({ message: 'No startup found matching "Unknown Corp".' });
+      expect(result).toEqual({ message: 'No accessible startup found matching "Unknown Corp".' });
       expect(noteService.getNotes).not.toHaveBeenCalled();
     });
   });

@@ -197,6 +197,29 @@ describe("EvaluationAgentRegistryService", () => {
     });
   });
 
+  it("does NOT mark run as degraded when 3 or fewer agents use fallback", async () => {
+    const fallbackKeys = new Set<EvaluationAgentKey>(["team", "market", "product"]);
+
+    const agents = ALL_KEYS.map((key) =>
+      createAgent(key, { fallback: fallbackKeys.has(key) }),
+    );
+
+    const service = createRegistry(
+      agents,
+      pipelineState as unknown as PipelineStateService,
+      phaseTransition as unknown as PhaseTransitionService,
+      pipelineFeedback as unknown as PipelineFeedbackService,
+      agentConfigService as unknown as AgentConfigService,
+      dynamicAgentRunner as unknown as DynamicAgentRunnerService,
+    );
+
+    const result = await service.runAll("startup-threshold", pipelineData);
+
+    expect(result.summary.fallbackAgents).toBe(3);
+    // 3 is NOT > 3, so degraded should be false (assuming completedAgents >= minimumRequired)
+    expect(result.summary.degraded).toBe(false);
+  });
+
   it("uses agent fallback output when an agent throws", async () => {
     const agents = ALL_KEYS.map((key) =>
       createAgent(key, { reject: key === "market" }),

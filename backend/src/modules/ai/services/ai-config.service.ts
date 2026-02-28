@@ -70,6 +70,10 @@ export class AiConfigService {
     return this.toPositiveInt(computed, DEFAULT_RESEARCH_AGENT_HARD_TIMEOUT_MS);
   }
 
+  getResearchAttemptTimeoutMsForAgent(_agent: ResearchAgentKey): number {
+    return this.getResearchAttemptTimeoutMs();
+  }
+
   getResearchAgentStaggerMs(): number {
     const configured = this.config.get<number>("AI_RESEARCH_AGENT_STAGGER_MS");
     if (typeof configured !== "number" || !Number.isFinite(configured)) {

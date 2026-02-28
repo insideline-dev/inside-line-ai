@@ -21,7 +21,11 @@ export const ProductResearchAgent: ResearchAgentConfig<string> = {
   humanPromptTemplate: PRODUCT_RESEARCH_HUMAN_PROMPT,
   schema: z.string(),
   contextBuilder: ({ extraction, scraping, researchParameters }) => ({
-    productDescription: researchParameters?.productDescription ?? extraction.rawText,
+    productDescription:
+      researchParameters?.productDescription?.trim() ||
+      extraction.startupContext?.productDescription?.trim() ||
+      extraction.tagline?.trim() ||
+      extraction.rawText,
     knownCompetitors: researchParameters?.knownCompetitors ?? [],
     websiteProductPages:
       scraping.website?.subpages

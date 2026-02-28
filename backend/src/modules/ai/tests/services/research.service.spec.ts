@@ -73,6 +73,38 @@ describe("ResearchService", () => {
     timestamp: new Date().toISOString(),
   });
 
+  const validProductReport = [
+    "Verification:",
+    "Target: Inside Line | Domain: https://inside-line.test | Confidence: High",
+    "Notes: Anchor data aligned.",
+    "",
+    "Product Type & Vertical:",
+    "Software | Venture workflow infrastructure",
+    "",
+    "Research Approach:",
+    "Prioritized product maturity, technical signals, and buyer proof.",
+    "",
+    "Findings:",
+    "1. Product: Workflow automation and diligence tooling.",
+    "2. Maturity: MVP in production with active pilots.",
+    "3. Customer: VC teams and angel groups.",
+    "4. Pricing & GTM: SaaS with sales-assisted onboarding.",
+    "5. Customer Evidence: Early pilots and usage quotes.",
+    "6. Technical: API integrations and model-backed workflow logic.",
+    "7. Integrations & Stickiness: CRM and data-room integrations.",
+    "8. Compliance: Basic data controls documented; audits pending.",
+    "9. Other Relevant Signals: Strong implementation support.",
+    "",
+    "Unverified Items:",
+    "Enterprise SSO roadmap timeline.",
+    "",
+    "Research Gaps:",
+    "No public uptime history.",
+    "",
+    "Notably Absent / Risk Signals:",
+    "Limited third-party validation at current stage.",
+  ].join("\n");
+
   beforeEach(() => {
     pipelineState = {
       getPhaseResult: jest.fn().mockImplementation((_startupId: string, phase: PipelinePhase) => {
@@ -94,6 +126,13 @@ describe("ResearchService", () => {
             sources: [source("market")],
             usedFallback: true,
             error: "Market provider timeout",
+          });
+        }
+        if (agent === "product") {
+          return Promise.resolve({
+            output: validProductReport,
+            sources: [source("product")],
+            usedFallback: false,
           });
         }
 
@@ -150,10 +189,10 @@ describe("ResearchService", () => {
   it("runs all research agents and returns text-only reports with combinedReportText", async () => {
     const result = await service.run("startup-1");
 
-    expect(geminiResearch.researchText).toHaveBeenCalledTimes(5);
+    expect(geminiResearch.researchText).toHaveBeenCalledTimes(6);
     expect(result.team).toBe("team report text");
     expect(result.market).toBe("Market report text");
-    expect(result.product).toBe("product report text");
+    expect(result.product).toContain("Verification:");
     expect(result.news).toBe("news report text");
     expect(result.competitor).toBe("competitor report text");
     expect(result.combinedReportText).toContain("Team Research Report");
@@ -166,10 +205,12 @@ describe("ResearchService", () => {
   it("injects startup form context into each agent prompt", async () => {
     await service.run("startup-1");
 
-    const firstCall = geminiResearch.researchText.mock.calls[0]?.[0];
-    expect(firstCall?.prompt).toContain("startupFormContext");
-    expect(firstCall?.prompt).toContain("raiseType");
-    expect(firstCall?.prompt).toContain("technologyReadinessLevel");
+    const contextualCall = geminiResearch.researchText.mock.calls
+      .map((call) => call[0])
+      .find((call) => call.prompt.includes("startupFormContext"));
+    expect(contextualCall?.prompt).toContain("startupFormContext");
+    expect(contextualCall?.prompt).toContain("raiseType");
+    expect(contextualCall?.prompt).toContain("technologyReadinessLevel");
   });
 
   it("throws when required upstream phase results are missing", async () => {
@@ -203,7 +244,7 @@ describe("ResearchService", () => {
 
     const result = await service.run("startup-1", { agentKey: "market" });
 
-    expect(geminiResearch.researchText).toHaveBeenCalledTimes(1);
+    expect(geminiResearch.researchText).toHaveBeenCalledTimes(2);
     expect(result.team).toBe("old-team");
     expect(result.product).toBe("old-product");
     expect(result.market).toBe("Market report text");
@@ -250,11 +291,50 @@ describe("ResearchService", () => {
   });
 
   it("consumes agent-level and phase-level feedback on successful targeted rerun", async () => {
-    geminiResearch.researchText.mockResolvedValueOnce({
-      output: "Updated market report",
-      sources: [source("market")],
-      usedFallback: false,
+    promptService.resolve.mockImplementation(async ({ key, stage }: { key: string; stage?: string | null }) => {
+      if (key === "research.orchestrator") {
+        return {
+          key,
+          stage: (stage ?? "seed") as any,
+          systemPrompt: "orchestrator-system",
+          userPrompt: "ORCH for {{companyName}}",
+          source: "code" as const,
+          revisionId: null,
+        };
+      }
+
+      return {
+        key,
+        stage: (stage ?? "seed") as any,
+        systemPrompt: "test-system",
+        userPrompt: "{{contextJson}}",
+        source: "code" as const,
+        revisionId: null,
+      };
     });
+    geminiResearch.researchText.mockImplementation(
+      async ({ agent, prompt }: { agent: SourceEntry["agent"]; prompt: string }) => {
+        if (prompt.includes("ORCH for")) {
+          return {
+            output: "orchestrator guidance",
+            sources: [],
+            usedFallback: false,
+          };
+        }
+        if (agent === "market") {
+          return {
+            output: "Updated market report",
+            sources: [source("market")],
+            usedFallback: false,
+          };
+        }
+        return {
+          output: `${agent} report text`,
+          sources: [source(agent)],
+          usedFallback: false,
+        };
+      },
+    );
 
     pipelineState.getPhaseResult.mockImplementation(
       (_startupId: string, phase: PipelinePhase) => {
@@ -347,6 +427,148 @@ describe("ResearchService", () => {
     const result = await service.run("startup-1");
 
     expect(result.researchParameters).toEqual(mockResearchParameters);
+  });
+
+  it("runs research orchestrator guidance and injects it into downstream prompts", async () => {
+    promptService.resolve.mockImplementation(async ({ key, stage }: { key: string; stage?: string | null }) => {
+      if (key === "research.orchestrator") {
+        return {
+          key,
+          stage: (stage ?? "seed") as any,
+          systemPrompt: "orchestrator-system",
+          userPrompt: "ORCH for {{companyName}}",
+          source: "code" as const,
+          revisionId: null,
+        };
+      }
+
+      return {
+        key,
+        stage: (stage ?? "seed") as any,
+        systemPrompt: "test-system",
+        userPrompt: "{{contextJson}}\nGUIDANCE={{orchestratorGuidance}}",
+        source: "code" as const,
+        revisionId: null,
+      };
+    });
+
+    geminiResearch.researchText.mockImplementation(
+      async ({ agent, prompt }: { agent: SourceEntry["agent"]; prompt: string }) => {
+        if (prompt.includes("ORCH for")) {
+          return {
+            output: "Use sharper focus on team execution and moat risks.",
+            sources: [],
+            usedFallback: false,
+          };
+        }
+        if (agent === "product") {
+          return {
+            output: validProductReport,
+            sources: [source("product")],
+            usedFallback: false,
+          };
+        }
+
+        return {
+          output: `${agent} report text`,
+          sources: [source(agent)],
+          usedFallback: false,
+        };
+      },
+    );
+
+    await service.run("startup-1");
+
+    const downstreamPrompt = geminiResearch.researchText.mock.calls
+      .map((call) => call[0])
+      .find((call) => call.prompt.includes("GUIDANCE=") && !call.prompt.includes("ORCH for"));
+
+    expect(downstreamPrompt?.prompt).toContain(
+      "Use sharper focus on team execution and moat risks.",
+    );
+  });
+
+  it("adds research fallback summary metadata to result", async () => {
+    geminiResearch.researchText.mockImplementation(
+      async ({ agent, prompt }: { agent: SourceEntry["agent"]; prompt: string }) => {
+        if (prompt.includes("ORCH for")) {
+          return {
+            output: "orchestrator guidance",
+            sources: [],
+            usedFallback: false,
+          };
+        }
+        if (agent === "team" || agent === "market" || agent === "product") {
+          return {
+            output: `${agent} fallback report`,
+            sources: [],
+            usedFallback: true,
+            error: `${agent} fallback`,
+          };
+        }
+        return {
+          output: `${agent} report text`,
+          sources: [source(agent)],
+          usedFallback: false,
+        };
+      },
+    );
+
+    const result = await service.run("startup-1");
+
+    expect((result as any).researchFallbackSummary).toEqual(
+      expect.objectContaining({
+        attemptedAgents: 5,
+        fallbackAgents: 3,
+        warning: true,
+      }),
+    );
+  });
+
+  it("falls back when product research output misses required structure", async () => {
+    geminiResearch.researchText.mockImplementation(
+      async ({ agent, prompt }: { agent: SourceEntry["agent"]; prompt: string }) => {
+        if (prompt.includes("ORCH for")) {
+          return {
+            output: "orchestrator guidance",
+            sources: [],
+            usedFallback: false,
+          };
+        }
+        if (agent === "product") {
+          return {
+            output:
+              "This is an unstructured product summary that does not include the required contract headings or numbered findings sections.",
+            sources: [source("product")],
+            usedFallback: false,
+          };
+        }
+        return {
+          output: `${agent} report text`,
+          sources: [source(agent)],
+          usedFallback: false,
+        };
+      },
+    );
+
+    const result = await service.run("startup-1");
+
+    expect(result.product).toContain("Deterministic fallback mode");
+    expect(result.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          agent: "product",
+          error: expect.stringContaining("PRODUCT_REPORT_STRUCTURE_INVALID"),
+        }),
+      ]),
+    );
+    expect((result as any).researchFallbackSummary).toEqual(
+      expect.objectContaining({
+        attemptedAgents: 5,
+        fallbackAgents: 1,
+        warning: true,
+      }),
+    );
   });
 
   it("emits per-agent start and completion callbacks", async () => {

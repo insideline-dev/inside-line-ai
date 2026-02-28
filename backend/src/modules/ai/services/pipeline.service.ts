@@ -750,7 +750,7 @@ export class PipelineService {
         await this.startupMatching.queueStartupMatching({
           startupId,
           requestedBy,
-          triggerSource: "retry",
+          triggerSource: "pipeline_completion",
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);

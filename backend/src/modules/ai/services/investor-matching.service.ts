@@ -148,6 +148,7 @@ export class InvestorMatchingService {
           weightedStartupScore,
           compositeFitScore,
           fit.fitRationale,
+          fit.usedFallback,
         );
 
         const candidateThreshold =
@@ -318,6 +319,7 @@ export class InvestorMatchingService {
     weightedStartupScore: number,
     compositeFitScore: number,
     fitRationale: string,
+    thesisFitFallback = false,
   ): Promise<void> {
     const [existing] = await this.drizzle.db
       .select({ id: startupMatch.id })
@@ -340,6 +342,7 @@ export class InvestorMatchingService {
       matchReason: `Composite fit ${compositeFitScore}/100 (thesis ${thesisFitScore}, weighted startup ${Math.round(weightedStartupScore)}). ${fitRationale}`,
       thesisFitScore,
       fitRationale,
+      thesisFitFallback,
       updatedAt: new Date(),
     };
 
@@ -363,6 +366,7 @@ export class InvestorMatchingService {
       matchReason: `Composite fit ${compositeFitScore}/100 (thesis ${thesisFitScore}, weighted startup ${Math.round(weightedStartupScore)}). ${fitRationale}`,
       thesisFitScore,
       fitRationale,
+      thesisFitFallback,
     });
   }
 

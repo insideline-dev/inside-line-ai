@@ -281,7 +281,7 @@ export class EvaluationAgentRegistryService {
       fallbackKeys,
       warnings,
       fallbackReasonCounts,
-      degraded: completedAgents < minimumRequired || fallbackAgents > 0,
+      degraded: completedAgents < minimumRequired || fallbackAgents > 3,
     };
 
     if (summary.degraded) {

@@ -359,9 +359,23 @@ export abstract class BaseEvaluationAgent<TOutput>
           fallbackReason,
           rawProviderError,
         });
-        this.logger.warn(
-          `${this.key} evaluation fallback used: ${normalizedMessage}`,
-        );
+
+        if (fallbackReason === "SCHEMA_OUTPUT_INVALID" && error instanceof z.ZodError) {
+          const zodIssues = error.issues
+            .slice(0, 8)
+            .map((issue) => {
+              const path = issue.path.length > 0 ? issue.path.join(".") : "(root)";
+              return `${path}: ${issue.message}`;
+            })
+            .join(" | ");
+          this.logger.warn(
+            `[FALLBACK] Agent "${this.key}" fell back due to schema validation failure. Reason: ${fallbackReason}. Zod errors: ${zodIssues}`,
+          );
+        } else {
+          this.logger.warn(
+            `[FALLBACK] Agent "${this.key}" fell back. Reason: ${fallbackReason}. Message: ${normalizedMessage}`,
+          );
+        }
         const fallbackOutput = this.normalizeNarrativeFields(
           this.fallback(pipelineData),
         );

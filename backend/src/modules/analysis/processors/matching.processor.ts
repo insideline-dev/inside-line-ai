@@ -1,3 +1,9 @@
+/**
+ * @deprecated This legacy matching processor uses simple score-based matching without AI thesis alignment.
+ * It has been REMOVED from the AnalysisModule providers. The active matching processor is
+ * `modules/ai/processors/matching.processor.ts` which uses AI-powered thesis alignment.
+ * This file is kept for reference only and is NOT registered in any module.
+ */
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Job } from 'bullmq';

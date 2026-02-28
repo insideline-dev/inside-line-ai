@@ -2,6 +2,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import { DrizzleService } from '../../database';
@@ -15,12 +16,23 @@ import {
   getInvestorGeographyTaxonomy,
   mapNodeIdsToLabels,
 } from '../geography';
+import { startup, StartupStatus } from '../startup/entities/startup.schema';
+import { StartupMatchingPipelineService } from '../ai/services/startup-matching-pipeline.service';
+import { AiProviderService } from '../ai/providers/ai-provider.service';
+import { ModelPurpose } from '../ai/interfaces/pipeline.interface';
+import { generateText } from 'ai';
+
+const THESIS_SUMMARY_BATCH_SIZE = 10;
 
 @Injectable()
 export class ThesisService {
   private readonly logger = new Logger(ThesisService.name);
 
-  constructor(private drizzle: DrizzleService) {}
+  constructor(
+    private drizzle: DrizzleService,
+    @Optional() private startupMatching?: StartupMatchingPipelineService,
+    @Optional() private aiProviders?: AiProviderService,
+  ) {}
 
   async findOne(userId: string) {
     return this.drizzle.withRLS(userId, async (db) => {
@@ -53,14 +65,17 @@ export class ThesisService {
         payload.geographicFocus = mapNodeIdsToLabels(geographicFocusNodes);
       }
 
-      const thesisSummary = this.buildThesisSummary({
+      const mergedThesis = {
         ...(existing ?? {}),
         ...payload,
-      } as Record<string, unknown>);
+      } as Record<string, unknown>;
+
+      const thesisSummary = await this.generateAiSummaryWithFallback(mergedThesis);
 
       payload.thesisSummary = thesisSummary;
       payload.thesisSummaryGeneratedAt = thesisSummary ? new Date() : null;
 
+      let result: typeof investorThesis.$inferSelect;
       if (existing) {
         const [updated] = await db
           .update(investorThesis)
@@ -72,20 +87,116 @@ export class ThesisService {
           .returning();
 
         this.logger.log(`Updated thesis for user ${userId}`);
-        return updated;
+        result = updated;
+      } else {
+        const [created] = await db
+          .insert(investorThesis)
+          .values({
+            userId,
+            ...payload,
+          })
+          .returning();
+
+        this.logger.log(`Created thesis for user ${userId}`);
+        result = created;
       }
 
-      const [created] = await db
-        .insert(investorThesis)
-        .values({
-          userId,
-          ...payload,
-        })
-        .returning();
+      // Trigger re-matching for all approved startups when thesis is updated
+      if (existing && this.startupMatching) {
+        void this.triggerRematching(userId).catch((err: unknown) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          this.logger.error(`Failed to trigger re-matching after thesis update for user ${userId}: ${msg}`);
+        });
+      }
 
-      this.logger.log(`Created thesis for user ${userId}`);
-      return created;
+      return result;
     });
+  }
+
+  private async triggerRematching(investorUserId: string): Promise<void> {
+    if (!this.startupMatching) return;
+
+    const approvedStartups = await this.drizzle.db
+      .select({ id: startup.id })
+      .from(startup)
+      .where(eq(startup.status, StartupStatus.APPROVED));
+
+    if (approvedStartups.length === 0) {
+      this.logger.log(`No approved startups to re-match after thesis update for investor ${investorUserId}`);
+      return;
+    }
+
+    this.logger.log(`Triggering re-matching for ${approvedStartups.length} approved startups after thesis update for investor ${investorUserId}`);
+
+    // Process in batches to avoid overwhelming the queue
+    for (let i = 0; i < approvedStartups.length; i += THESIS_SUMMARY_BATCH_SIZE) {
+      const batch = approvedStartups.slice(i, i + THESIS_SUMMARY_BATCH_SIZE);
+      await Promise.all(
+        batch.map((s) =>
+          this.startupMatching!.queueStartupMatching({
+            startupId: s.id,
+            requestedBy: investorUserId,
+            triggerSource: 'thesis_update',
+            requireApproved: false,
+          }).catch((err: unknown) => {
+            const msg = err instanceof Error ? err.message : String(err);
+            this.logger.warn(`Failed to queue re-matching for startup ${s.id}: ${msg}`);
+          }),
+        ),
+      );
+    }
+
+    this.logger.log(`Re-matching queued for ${approvedStartups.length} startups after thesis update`);
+  }
+
+  private async generateAiSummaryWithFallback(thesis: Record<string, unknown>): Promise<string | null> {
+    if (this.aiProviders) {
+      try {
+        const model = this.aiProviders.resolveModelForPurpose(ModelPurpose.THESIS_ALIGNMENT);
+
+        const industries = Array.isArray(thesis.industries) ? (thesis.industries as string[]).join(', ') : '';
+        const stages = Array.isArray(thesis.stages) ? (thesis.stages as string[]).join(', ') : '';
+        const geography = Array.isArray(thesis.geographicFocus) ? (thesis.geographicFocus as string[]).join(', ') : '';
+        const checkMin = typeof thesis.checkSizeMin === 'number' ? `$${(thesis.checkSizeMin / 1000).toFixed(0)}K` : null;
+        const checkMax = typeof thesis.checkSizeMax === 'number' ? `$${(thesis.checkSizeMax / 1000).toFixed(0)}K` : null;
+        const checkSize = checkMin && checkMax ? `${checkMin}–${checkMax}` : checkMin ?? checkMax ?? '';
+        const narrative = typeof thesis.thesisNarrative === 'string' ? thesis.thesisNarrative : '';
+        const mustHaves = Array.isArray(thesis.mustHaveFeatures) ? (thesis.mustHaveFeatures as string[]).join(', ') : '';
+        const dealBreakers = Array.isArray(thesis.dealBreakers) ? (thesis.dealBreakers as string[]).join(', ') : '';
+
+        const prompt = [
+          `Generate a concise, professional investment thesis summary for this investor based on their criteria.`,
+          `Write it as a 2-3 sentence paragraph that captures their investment focus and preferences.`,
+          `\nCriteria:`,
+          industries && `- Industries: ${industries}`,
+          stages && `- Stages: ${stages}`,
+          checkSize && `- Check size: ${checkSize}`,
+          geography && `- Geography: ${geography}`,
+          narrative && `- Thesis narrative: ${narrative}`,
+          mustHaves && `- Must-haves: ${mustHaves}`,
+          dealBreakers && `- Deal breakers: ${dealBreakers}`,
+        ]
+          .filter(Boolean)
+          .join('\n');
+
+        const { text } = await generateText({
+          model,
+          prompt,
+          maxOutputTokens: 300,
+          temperature: 0.3,
+        });
+
+        const trimmed = text.trim();
+        if (trimmed.length > 0) {
+          return trimmed.slice(0, 2000);
+        }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.warn(`AI thesis summary generation failed, using rule-based fallback: ${msg}`);
+      }
+    }
+
+    return this.buildThesisSummary(thesis);
   }
 
   async delete(userId: string) {

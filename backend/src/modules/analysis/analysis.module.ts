@@ -7,7 +7,7 @@ import { InvestorModule } from '../investor';
 import { AnalysisService } from './analysis.service';
 import {
   ScoringProcessor,
-  MatchingProcessor,
+  // MatchingProcessor is deprecated — use modules/ai/processors/matching.processor.ts instead
   PdfProcessor,
   MarketAnalysisProcessor,
 } from './processors';
@@ -23,7 +23,7 @@ import {
   providers: [
     AnalysisService,
     ScoringProcessor,
-    MatchingProcessor,
+    // MatchingProcessor removed — legacy, replaced by AI matching processor in ai.module.ts
     PdfProcessor,
     MarketAnalysisProcessor,
   ],

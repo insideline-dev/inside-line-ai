@@ -86,6 +86,7 @@ export class ScrapingService {
   private readonly logger = new Logger(ScrapingService.name);
   private readonly debugLogEnabled: boolean;
   private readonly debugLogPath: string;
+  private readonly defaultDiscoveryEnabled: boolean;
   private readonly executiveLeadershipPattern =
     /\b(founder|co[\s-]?founder|chairman|chief|ceo|cto|coo|cfo|cmo|cpo|president)\b/i;
   private readonly minLeadershipSeedCountForDiscoverySkip = 2;
@@ -108,6 +109,8 @@ export class ScrapingService {
         "AI_SCRAPING_DEBUG_LOG_PATH",
         "logs/ai-scraping-debug.jsonl",
       ) ?? "logs/ai-scraping-debug.jsonl";
+    this.defaultDiscoveryEnabled =
+      this.config?.get<boolean>("SCRAPING_DISCOVERY_ENABLED", true) ?? true;
   }
 
   async run(
@@ -1069,7 +1072,7 @@ export class ScrapingService {
   private async resolveWebsiteScrapeSettings(): Promise<WebsiteScrapeSettings> {
     const fallback: WebsiteScrapeSettings = {
       manualPaths: [],
-      discoveryEnabled: true,
+      discoveryEnabled: this.defaultDiscoveryEnabled,
       source: "default",
     };
 
@@ -1085,11 +1088,15 @@ export class ScrapingService {
 
       const scrapingConfig =
         published.flowDefinition.nodeConfigs?.scrape_website?.scraping;
+      const discoveryEnabled =
+        typeof scrapingConfig?.discoveryEnabled === "boolean"
+          ? scrapingConfig.discoveryEnabled
+          : this.defaultDiscoveryEnabled;
 
       return {
         manualPaths:
           scrapingConfig?.manualPaths?.filter((path) => path.trim().length > 0) ?? [],
-        discoveryEnabled: scrapingConfig?.discoveryEnabled === true,
+        discoveryEnabled,
         source: "published_flow",
         configId: published.configId,
         configVersion: published.version,

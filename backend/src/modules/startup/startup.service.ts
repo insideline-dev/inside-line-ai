@@ -489,6 +489,7 @@ export class StartupService {
         startupId: id,
         requestedBy: actorId,
         triggerSource: "approval",
+        requireApproved: false,
       });
       this.logger.log(
         `Queued startup matching for ${id} (analysisJobId=${queued.analysisJobId}, queueJobId=${queued.queueJobId})`,

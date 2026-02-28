@@ -631,6 +631,7 @@ describe("StartupService", () => {
         startupId: mockStartupId,
         requestedBy: mockUserId,
         triggerSource: "approval",
+        requireApproved: false,
       });
     });
 

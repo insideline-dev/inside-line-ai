@@ -479,6 +479,7 @@ export class PipelineService {
         this.phaseTransition.getConfig().defaultRetryPolicy,
         retryCount,
       );
+      await this.pipelineState.resetPhase(startupId, phase);
       await this.queuePhase({
         startupId,
         pipelineRunId: state.pipelineRunId,

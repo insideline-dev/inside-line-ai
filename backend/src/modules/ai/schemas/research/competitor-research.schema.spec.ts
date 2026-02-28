@@ -146,15 +146,14 @@ describe("CompetitorResearchSchema", () => {
     expect(parsed.weaknesses).toEqual([]);
   });
 
-  it("rejects invalid website URL", () => {
-    expect(() =>
-      CompetitorDetailSchema.parse({
-        name: "Bad",
-        description: "Bad URL",
-        productOverview: "Overview",
-        website: "not-a-url",
-      }),
-    ).toThrow();
+  it("coerces invalid website URL to undefined", () => {
+    const parsed = CompetitorDetailSchema.parse({
+      name: "Bad",
+      description: "Bad URL",
+      productOverview: "Overview",
+      website: "not-a-url",
+    });
+    expect(parsed.website).toBeUndefined();
   });
 
   it("allows optional fields on competitor", () => {

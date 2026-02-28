@@ -23,6 +23,7 @@ import { DynamicFlowCatalogService } from '../../ai/services/dynamic-flow-catalo
 import { SchemaCompilerService } from '../../ai/services/schema-compiler.service';
 import { EarlyAccessService } from '../../early-access';
 import { AdminInvestorService } from '../admin-investor.service';
+import { AiConfigService } from '../../ai/services/ai-config.service';
 import { UserRole } from '../../../auth/entities/auth.schema';
 import { StartupStatus } from '../../startup/entities/startup.schema';
 import { PipelinePhase } from '../../ai/interfaces/pipeline.interface';
@@ -183,6 +184,13 @@ describe('AdminController', () => {
             createDraft: jest.fn(),
             updateDraft: jest.fn(),
             publishRevision: jest.fn(),
+          },
+        },
+        {
+          provide: AiConfigService,
+          useValue: {
+            getResearchAttemptTimeoutMs: jest.fn().mockReturnValue(3_600_000),
+            getResearchAttemptTimeoutMsForAgent: jest.fn().mockReturnValue(3_600_000),
           },
         },
         {

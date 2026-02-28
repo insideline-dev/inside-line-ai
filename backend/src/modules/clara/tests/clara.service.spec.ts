@@ -7,6 +7,8 @@ import { ClaraConversationService } from '../clara-conversation.service';
 import { ClaraAiService } from '../clara-ai.service';
 import { ClaraSubmissionService } from '../clara-submission.service';
 import { ClaraToolsService } from '../clara-tools.service';
+import { ClaraChannelService } from '../clara-channel.service';
+import { PdfService } from '../../startup/pdf.service';
 import { ConversationStatus, MessageDirection } from '../interfaces/clara.interface';
 
 describe('ClaraService', () => {
@@ -14,6 +16,7 @@ describe('ClaraService', () => {
   let configService: { get: jest.Mock };
   let drizzleService: ReturnType<typeof createMockDrizzle>;
   let agentMailClient: Record<string, jest.Mock>;
+  let claraChannel: Record<string, jest.Mock>;
   let conversationService: Record<string, jest.Mock>;
   let claraAi: {
     isLikelySubmission: jest.Mock;
@@ -89,6 +92,11 @@ describe('ClaraService', () => {
       replyToMessage: jest.fn().mockResolvedValue({ messageId: 'reply-1' }),
       sendMessage: jest.fn().mockResolvedValue({ messageId: 'msg-1' }),
     };
+    claraChannel = {
+      getEmailMessage: jest.fn().mockResolvedValue(mockMessage),
+      reply: jest.fn().mockResolvedValue({ messageId: 'reply-1' }),
+      send: jest.fn().mockResolvedValue({ messageId: 'msg-1' }),
+    };
     conversationService = {
       findOrCreate: jest.fn().mockResolvedValue(mockConversation),
       getRecentMessages: jest.fn().mockResolvedValue([]),
@@ -121,11 +129,12 @@ describe('ClaraService', () => {
         ClaraService,
         { provide: ConfigService, useValue: configService },
         { provide: DrizzleService, useValue: drizzleService },
-        { provide: AgentMailClientService, useValue: agentMailClient },
+        { provide: ClaraChannelService, useValue: claraChannel },
         { provide: ClaraConversationService, useValue: conversationService },
         { provide: ClaraAiService, useValue: claraAi },
         { provide: ClaraSubmissionService, useValue: submissionService },
         { provide: ClaraToolsService, useValue: toolsService },
+        { provide: PdfService, useValue: { generatePdf: jest.fn().mockResolvedValue(Buffer.from('')), extractText: jest.fn().mockResolvedValue('') } },
       ],
     }).compile();
 
@@ -151,11 +160,12 @@ describe('ClaraService', () => {
           ClaraService,
           { provide: ConfigService, useValue: configService },
           { provide: DrizzleService, useValue: drizzleService },
-          { provide: AgentMailClientService, useValue: agentMailClient },
+          { provide: ClaraChannelService, useValue: claraChannel },
           { provide: ClaraConversationService, useValue: conversationService },
           { provide: ClaraAiService, useValue: claraAi },
           { provide: ClaraSubmissionService, useValue: submissionService },
           { provide: ClaraToolsService, useValue: toolsService },
+        { provide: PdfService, useValue: { generatePdf: jest.fn().mockResolvedValue(Buffer.from('')), extractText: jest.fn().mockResolvedValue('') } },
         ],
       }).compile();
 
@@ -171,11 +181,12 @@ describe('ClaraService', () => {
           ClaraService,
           { provide: ConfigService, useValue: configService },
           { provide: DrizzleService, useValue: drizzleService },
-          { provide: AgentMailClientService, useValue: agentMailClient },
+          { provide: ClaraChannelService, useValue: claraChannel },
           { provide: ClaraConversationService, useValue: conversationService },
           { provide: ClaraAiService, useValue: claraAi },
           { provide: ClaraSubmissionService, useValue: submissionService },
           { provide: ClaraToolsService, useValue: toolsService },
+        { provide: PdfService, useValue: { generatePdf: jest.fn().mockResolvedValue(Buffer.from('')), extractText: jest.fn().mockResolvedValue('') } },
         ],
       }).compile();
 
@@ -191,11 +202,12 @@ describe('ClaraService', () => {
           ClaraService,
           { provide: ConfigService, useValue: configService },
           { provide: DrizzleService, useValue: drizzleService },
-          { provide: AgentMailClientService, useValue: agentMailClient },
+          { provide: ClaraChannelService, useValue: claraChannel },
           { provide: ClaraConversationService, useValue: conversationService },
           { provide: ClaraAiService, useValue: claraAi },
           { provide: ClaraSubmissionService, useValue: submissionService },
           { provide: ClaraToolsService, useValue: toolsService },
+        { provide: PdfService, useValue: { generatePdf: jest.fn().mockResolvedValue(Buffer.from('')), extractText: jest.fn().mockResolvedValue('') } },
         ],
       }).compile();
 
@@ -231,7 +243,7 @@ describe('ClaraService', () => {
         ],
       };
 
-      agentMailClient.getMessage.mockResolvedValueOnce(messageWithAttachment);
+      claraChannel.getEmailMessage.mockResolvedValueOnce(messageWithAttachment);
       claraAi.isLikelySubmission.mockReturnValueOnce(true);
       claraAi.extractCompanyFromFilename.mockReturnValueOnce('TestCo');
 
@@ -239,7 +251,7 @@ describe('ClaraService', () => {
 
       await service.handleIncomingMessage('inbox-1', 'thread-123', 'msg-123');
 
-      expect(agentMailClient.getMessage).toHaveBeenCalledWith('inbox-1', 'msg-123');
+      expect(claraChannel.getEmailMessage).toHaveBeenCalledWith('inbox-1', 'msg-123');
       expect(conversationService.findOrCreate).toHaveBeenCalledWith(
         'thread-123',
         'investor@example.com',
@@ -266,10 +278,8 @@ describe('ClaraService', () => {
         'conv-1',
         ConversationStatus.PROCESSING,
       );
-      expect(agentMailClient.replyToMessage).toHaveBeenCalledWith(
-        'inbox-1',
-        'msg-123',
-        expect.objectContaining({ text: expect.any(String) }),
+      expect(claraChannel.reply).toHaveBeenCalledWith(
+        expect.objectContaining({ channel: 'email', text: expect.any(String) }),
       );
       expect(conversationService.logMessage).toHaveBeenCalledTimes(2); // inbound + outbound
     });
@@ -286,7 +296,7 @@ describe('ClaraService', () => {
         ],
       };
 
-      agentMailClient.getMessage.mockResolvedValueOnce(messageWithAttachment);
+      claraChannel.getEmailMessage.mockResolvedValueOnce(messageWithAttachment);
       claraAi.isLikelySubmission.mockReturnValueOnce(true);
       submissionService.handleSubmission.mockResolvedValueOnce({
         startupId: 'startup-1',
@@ -300,9 +310,7 @@ describe('ClaraService', () => {
 
       await service.handleIncomingMessage('inbox-1', 'thread-123', 'msg-123');
 
-      expect(agentMailClient.replyToMessage).toHaveBeenCalledWith(
-        'inbox-1',
-        'msg-123',
+      expect(claraChannel.reply).toHaveBeenCalledWith(
         expect.objectContaining({
           text: expect.stringContaining('already have TestCo'),
         }),
@@ -319,10 +327,8 @@ describe('ClaraService', () => {
 
       expect(toolsService.buildTools).toHaveBeenCalled();
       expect(claraAi.runAgentLoop).toHaveBeenCalled();
-      expect(agentMailClient.replyToMessage).toHaveBeenCalledWith(
-        'inbox-1',
-        'msg-123',
-        expect.objectContaining({ text: 'Agent response' }),
+      expect(claraChannel.reply).toHaveBeenCalledWith(
+        expect.objectContaining({ channel: 'email', text: 'Agent response' }),
       );
     });
   });
@@ -336,11 +342,12 @@ describe('ClaraService', () => {
           ClaraService,
           { provide: ConfigService, useValue: configService },
           { provide: DrizzleService, useValue: drizzleService },
-          { provide: AgentMailClientService, useValue: agentMailClient },
+          { provide: ClaraChannelService, useValue: claraChannel },
           { provide: ClaraConversationService, useValue: conversationService },
           { provide: ClaraAiService, useValue: claraAi },
           { provide: ClaraSubmissionService, useValue: submissionService },
           { provide: ClaraToolsService, useValue: toolsService },
+        { provide: PdfService, useValue: { generatePdf: jest.fn().mockResolvedValue(Buffer.from('')), extractText: jest.fn().mockResolvedValue('') } },
         ],
       }).compile();
 
@@ -348,7 +355,7 @@ describe('ClaraService', () => {
 
       await testService.handleIncomingMessage('inbox-1', 'thread-123', 'msg-123');
 
-      expect(agentMailClient.getMessage).not.toHaveBeenCalled();
+      expect(claraChannel.getEmailMessage).not.toHaveBeenCalled();
     });
   });
 
@@ -367,11 +374,9 @@ describe('ClaraService', () => {
       await service.notifyPipelineComplete('startup-1', 85.5);
 
       expect(conversationService.findByStartupId).toHaveBeenCalledWith('startup-1');
-      expect(agentMailClient.sendMessage).toHaveBeenCalledWith(
-        'inbox-1',
+      expect(claraChannel.send).toHaveBeenCalledWith(
         expect.objectContaining({
-          to: ['investor@example.com'],
-          subject: 'Analysis Complete: TestCo',
+          channel: 'email',
           text: expect.stringContaining('overall score of 85.5/100'),
         }),
       );
@@ -398,8 +403,7 @@ describe('ClaraService', () => {
 
       await service.notifyPipelineComplete('startup-1');
 
-      expect(agentMailClient.sendMessage).toHaveBeenCalledWith(
-        'inbox-1',
+      expect(claraChannel.send).toHaveBeenCalledWith(
         expect.objectContaining({
           text: expect.not.stringContaining('overall score'),
         }),
@@ -412,7 +416,7 @@ describe('ClaraService', () => {
       await service.notifyPipelineComplete('startup-1', 85.5);
 
       expect(drizzleService.db.select).not.toHaveBeenCalled();
-      expect(agentMailClient.sendMessage).not.toHaveBeenCalled();
+      expect(claraChannel.send).not.toHaveBeenCalled();
     });
 
     it('should no-op when startup record not found', async () => {
@@ -426,7 +430,7 @@ describe('ClaraService', () => {
 
       await service.notifyPipelineComplete('startup-1', 85.5);
 
-      expect(agentMailClient.sendMessage).not.toHaveBeenCalled();
+      expect(claraChannel.send).not.toHaveBeenCalled();
     });
 
     it('should no-op when Clara is not configured', async () => {
@@ -437,11 +441,12 @@ describe('ClaraService', () => {
           ClaraService,
           { provide: ConfigService, useValue: configService },
           { provide: DrizzleService, useValue: drizzleService },
-          { provide: AgentMailClientService, useValue: agentMailClient },
+          { provide: ClaraChannelService, useValue: claraChannel },
           { provide: ClaraConversationService, useValue: conversationService },
           { provide: ClaraAiService, useValue: claraAi },
           { provide: ClaraSubmissionService, useValue: submissionService },
           { provide: ClaraToolsService, useValue: toolsService },
+        { provide: PdfService, useValue: { generatePdf: jest.fn().mockResolvedValue(Buffer.from('')), extractText: jest.fn().mockResolvedValue('') } },
         ],
       }).compile();
 

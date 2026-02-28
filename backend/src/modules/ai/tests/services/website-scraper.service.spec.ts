@@ -57,7 +57,7 @@ describe("WebsiteScraperService", () => {
       } as Response;
     }) as any;
 
-    const result = await service.deepScrape("https://inside-line.test");
+    const result = await service.deepScrape("https://inside-line.test", { discoveryEnabled: true });
 
     expect(result.url).toBe("https://inside-line.test/");
     expect(result.title).toBe("Inside Line");
@@ -441,7 +441,7 @@ describe("WebsiteScraperService", () => {
       }) as any;
 
       const startTime = Date.now();
-      await service.deepScrape("https://inside-line.test");
+      await service.deepScrape("https://inside-line.test", { discoveryEnabled: true });
       const elapsed = Date.now() - startTime;
 
       expect(elapsed).toBeGreaterThanOrEqual(100);

@@ -117,6 +117,7 @@ export const envSchema = z.object({
   AI_AGENT_DEBUG_LOG_ENABLED: z.coerce.boolean().default(true),
   AI_AGENT_DEBUG_LOG_PATH: z.string().default("logs/ai-agent-debug.jsonl"),
   AI_AGENT_TRACE_RETENTION_DAYS: z.coerce.number().default(30),
+  AI_PROMPT_STRICT_DB_REQUIRED: z.coerce.boolean().default(false),
   SCRAPING_MAX_LINKS_PER_PAGE: z.coerce.number().default(100),
   SCRAPING_MAX_PATH_DEPTH: z.coerce.number().default(4),
   SCRAPING_BATCH_DELAY_MS: z.coerce.number().default(500),

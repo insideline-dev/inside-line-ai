@@ -3,7 +3,9 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { and, asc, desc, eq, inArray, isNull, max, or } from "drizzle-orm";
 import { DrizzleService } from "../../../database";
 import {
@@ -85,7 +87,10 @@ export class AiPromptService {
     "- Put quantitative values only in dedicated structured numeric fields.",
   ].join("\n");
 
-  constructor(private drizzle: DrizzleService) {}
+  constructor(
+    private drizzle: DrizzleService,
+    @Optional() private config?: ConfigService,
+  ) {}
 
   async resolve(params: ResolvePromptParams): Promise<ResolvedPrompt> {
     const normalizedStage = this.normalizeStage(params.stage);
@@ -108,7 +113,12 @@ export class AiPromptService {
 
       if (!definition) {
         if (fallback) {
-          const guardedFallback = this.injectNarrativeGuardrails(fallback);
+          const guardedFallback = this.resolveCodeFallback({
+            key: params.key,
+            stage: normalizedStage,
+            reason: `Prompt definition not found for key ${params.key}`,
+            fallback,
+          });
           this.setCache(cacheKey, guardedFallback);
           return guardedFallback;
         }
@@ -146,7 +156,12 @@ export class AiPromptService {
 
       if (!selected) {
         if (fallback) {
-          const guardedFallback = this.injectNarrativeGuardrails(fallback);
+          const guardedFallback = this.resolveCodeFallback({
+            key: params.key,
+            stage: normalizedStage,
+            reason: `No published prompt revision found for key ${params.key}`,
+            fallback,
+          });
           this.setCache(cacheKey, guardedFallback);
           return guardedFallback;
         }
@@ -172,13 +187,45 @@ export class AiPromptService {
         throw error;
       }
       const message = error instanceof Error ? error.message : String(error);
-      this.logger.warn(
-        `Prompt resolution failed for ${params.key} (${normalizedStage ?? "global"}), using code fallback: ${message}`,
-      );
-      const guardedFallback = this.injectNarrativeGuardrails(fallback);
+      const guardedFallback = this.resolveCodeFallback({
+        key: params.key,
+        stage: normalizedStage,
+        reason: message,
+        fallback,
+      });
       this.setCache(cacheKey, guardedFallback);
       return guardedFallback;
     }
+  }
+
+  async getPromptCoverageAudit(stage?: string | null) {
+    const normalizedStage = this.normalizeStage(stage);
+    const definitions = await this.listPromptDefinitions();
+    const strictModeEnabled = this.isStrictDbModeEnabled();
+
+    return {
+      strictModeEnabled,
+      stage: normalizedStage,
+      items: definitions.map((definition) => {
+        const hasPublishedGlobal = Boolean(definition.publishedGlobal);
+        const hasPublishedStage = normalizedStage
+          ? definition.publishedStages.some((item) => item.stage === normalizedStage)
+          : false;
+        const wouldFallback = normalizedStage
+          ? !hasPublishedStage && !hasPublishedGlobal
+          : !hasPublishedGlobal;
+        const isCritical = this.isCriticalPipelinePrompt(definition.key);
+
+        return {
+          key: definition.key,
+          isCritical,
+          hasPublishedGlobal,
+          hasPublishedStage: normalizedStage ? hasPublishedStage : null,
+          wouldFallback,
+          strictViolation: strictModeEnabled && isCritical && wouldFallback,
+        };
+      }),
+    };
   }
 
   renderTemplate(
@@ -755,6 +802,42 @@ export class AiPromptService {
 
     this.logger.warn(`Ignoring unknown startup stage for prompt resolution: ${stage}`);
     return null;
+  }
+
+  private isStrictDbModeEnabled(): boolean {
+    return this.config?.get<boolean>("AI_PROMPT_STRICT_DB_REQUIRED", false) ?? false;
+  }
+
+  private isCriticalPipelinePrompt(key: string): boolean {
+    return (
+      key === "synthesis.final" ||
+      key.startsWith("evaluation.") ||
+      key.startsWith("research.")
+    );
+  }
+
+  private resolveCodeFallback(input: {
+    key: string;
+    stage: StartupStage | null;
+    reason: string;
+    fallback: ResolvedPrompt;
+  }): ResolvedPrompt {
+    const strictModeEnabled = this.isStrictDbModeEnabled();
+    const isCritical = this.isCriticalPipelinePrompt(input.key);
+    if (strictModeEnabled && isCritical) {
+      throw new NotFoundException(
+        `Missing published prompt revision for critical key ${input.key} (${input.stage ?? "global"}) while AI_PROMPT_STRICT_DB_REQUIRED=true`,
+      );
+    }
+
+    const message =
+      `Prompt resolution falling back to code for ${input.key} (${input.stage ?? "global"}): ${input.reason}`;
+    if (isCritical) {
+      this.logger.error(message);
+    } else {
+      this.logger.warn(message);
+    }
+    return this.injectNarrativeGuardrails(input.fallback);
   }
 
   private validatePromptTemplate(

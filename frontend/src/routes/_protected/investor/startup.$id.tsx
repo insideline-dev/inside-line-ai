@@ -128,6 +128,12 @@ function InvestorStartupDetailPage() {
   const match = matchRes
     ? unwrapApiResponse<Record<string, unknown>>(matchRes)
     : undefined;
+  const thesisRationaleText =
+    typeof match?.fitRationale === "string" && match.fitRationale.trim().length > 0
+      ? match.fitRationale
+      : typeof match?.matchReason === "string" && match.matchReason.trim().length > 0
+        ? match.matchReason
+        : null;
   const [teamMembersDraft, setTeamMembersDraft] = useState<EditableTeamMember[]>([]);
 
   const normalizedInitialTeamMembers = useMemo(() => {
@@ -301,7 +307,7 @@ function InvestorStartupDetailPage() {
         weights={weights as any}
       />
 
-      {(typeof match?.thesisFitScore === "number" || typeof match?.fitRationale === "string") && (
+      {(typeof match?.thesisFitScore === "number" || typeof thesisRationaleText === "string") && (
         <Card>
           <CardHeader>
             <CardTitle>Thesis Alignment</CardTitle>
@@ -314,8 +320,8 @@ function InvestorStartupDetailPage() {
                 <span className="text-sm text-muted-foreground">Thesis fit score</span>
               </div>
             )}
-            {typeof match?.fitRationale === "string" && match.fitRationale.trim().length > 0 && (
-              <p className="text-sm text-muted-foreground">{match.fitRationale as string}</p>
+            {typeof thesisRationaleText === "string" && thesisRationaleText.trim().length > 0 && (
+              <p className="text-sm text-muted-foreground">{thesisRationaleText}</p>
             )}
           </CardContent>
         </Card>

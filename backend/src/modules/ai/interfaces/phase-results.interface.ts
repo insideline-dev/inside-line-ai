@@ -194,6 +194,14 @@ export interface ResearchResult {
   sources: SourceEntry[];
   errors: Array<{ agent: "team" | "market" | "product" | "news" | "competitor"; error: string }>;
   researchParameters?: ResearchParameters;
+  orchestratorGuidance?: string;
+  researchFallbackSummary?: {
+    attemptedAgents: number;
+    fallbackAgents: number;
+    fallbackRatio: number;
+    criticalFallbackAgents: Array<"team" | "market" | "product">;
+    warning: boolean;
+  };
 }
 
 export interface EvaluationSummary {

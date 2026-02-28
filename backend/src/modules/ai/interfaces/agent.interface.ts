@@ -27,6 +27,7 @@ export interface ResearchPipelineInput {
   scraping: ScrapingResult;
   enrichment?: EnrichmentResult;
   researchParameters?: ResearchParameters;
+  orchestratorGuidance?: string;
 }
 
 export interface EvaluationPipelineInput {

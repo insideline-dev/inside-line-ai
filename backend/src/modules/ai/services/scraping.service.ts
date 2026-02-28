@@ -1069,7 +1069,7 @@ export class ScrapingService {
   private async resolveWebsiteScrapeSettings(): Promise<WebsiteScrapeSettings> {
     const fallback: WebsiteScrapeSettings = {
       manualPaths: [],
-      discoveryEnabled: false,
+      discoveryEnabled: true,
       source: "default",
     };
 

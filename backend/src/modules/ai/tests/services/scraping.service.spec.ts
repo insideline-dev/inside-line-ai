@@ -105,7 +105,7 @@ describe("ScrapingService", () => {
       "https://inside-line.test",
       {
         manualPaths: [],
-        discoveryEnabled: false,
+        discoveryEnabled: true,
       },
     );
     expect(linkedin.enrichTeamMembers).toHaveBeenCalledTimes(1);

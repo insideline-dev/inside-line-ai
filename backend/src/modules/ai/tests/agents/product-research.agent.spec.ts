@@ -89,4 +89,33 @@ describe("ProductResearchAgent", () => {
     expect(context.businessModel).toBe("SaaS subscription");
     expect(context.specificMarket).toBe("AI-powered startup diligence");
   });
+
+  it("falls back to startup form productDescription when researchParameters value is empty", () => {
+    const inputWithEmptyProductDescription: ResearchPipelineInput = {
+      ...pipelineInput,
+      extraction: {
+        ...pipelineInput.extraction,
+        startupContext: {
+          productDescription: "Startup form product description",
+        },
+      },
+      researchParameters: {
+        companyName: "Inside Line",
+        sector: "SaaS",
+        specificMarket: "AI-powered startup diligence",
+        productDescription: "",
+        targetCustomers: "Venture capital firms",
+        knownCompetitors: ["Harmonic", "Sourcescrub"],
+        geographicFocus: "United States",
+        businessModel: "SaaS subscription",
+        fundingStage: "seed",
+        teamMembers: [],
+        claimedMetrics: { tam: "$5B", growthRate: "25% CAGR" },
+      },
+    };
+
+    const context = ProductResearchAgent.contextBuilder(inputWithEmptyProductDescription);
+
+    expect(context.productDescription).toBe("Startup form product description");
+  });
 });

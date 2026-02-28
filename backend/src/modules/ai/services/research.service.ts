@@ -53,6 +53,25 @@ export interface ResearchRunOptions {
 const PHASE_1_KEYS = Object.keys(RESEARCH_AGENTS) as Array<keyof typeof RESEARCH_AGENTS>;
 const PHASE_2_KEYS = Object.keys(PHASE_2_RESEARCH_AGENTS) as Array<keyof typeof PHASE_2_RESEARCH_AGENTS>;
 const MIN_RESEARCH_REPORT_LENGTH = 2500;
+const RESEARCH_ORCHESTRATOR_FALLBACK_GUIDANCE =
+  "Focus research on high-confidence evidence for team execution, market timing, product differentiation, and material risks.";
+const RESEARCH_FALLBACK_WARNING_RATIO = 0.4;
+const CRITICAL_RESEARCH_AGENTS: ResearchAgentKey[] = [
+  "team",
+  "market",
+  "product",
+];
+const PRODUCT_RESEARCH_FINDING_LABELS = [
+  "Product",
+  "Maturity",
+  "Customer",
+  "Pricing & GTM",
+  "Customer Evidence",
+  "Technical",
+  "Integrations & Stickiness",
+  "Compliance",
+  "Other Relevant Signals",
+] as const;
 
 @Injectable()
 export class ResearchService {
@@ -95,26 +114,36 @@ export class ResearchService {
       enrichment ?? undefined,
     );
     this.logger.log(`[Research] Generated research parameters for ${extraction.companyName}`);
+    const pipelineRunId = await this.resolvePipelineRunId(startupId);
+    const phaseRetryCount = this.resolvePhaseRetryCount(options?.phaseRetryCount);
+    const orchestratorGuidance = await this.generateOrchestratorGuidance({
+      startupId,
+      extraction,
+      scraping,
+      researchParameters: researchParameters ?? undefined,
+      stage: extraction.stage,
+    });
 
     const pipelineInput: ResearchPipelineInput = {
       extraction,
       scraping,
       enrichment: enrichment ?? undefined,
       researchParameters,
+      orchestratorGuidance,
     };
-    const pipelineRunId = await this.resolvePipelineRunId(startupId);
-    const phaseRetryCount = this.resolvePhaseRetryCount(options?.phaseRetryCount);
     const currentResult = options?.agentKey
       ? await this.pipelineState.getPhaseResult(startupId, PipelinePhase.RESEARCH)
       : null;
 
     const result = this.createInitialResult(currentResult, options?.agentKey);
+    result.orchestratorGuidance = orchestratorGuidance;
     const shouldConsumePhaseFeedback = Boolean(options?.agentKey);
     let phaseFeedbackConsumed = false;
     const researchAgentStaggerMs = Math.max(
       0,
       this.aiConfig?.getResearchAgentStaggerMs() ?? 5_000,
     );
+    const fallbackByAgent = new Map<ResearchAgentKey, boolean>();
 
     const dedupeSources = new Map<string, SourceEntry>();
     const { phase1Keys, phase2Keys } = await this.resolveResearchKeys();
@@ -154,6 +183,7 @@ export class ResearchService {
         retryCount: agentResult.retryCount,
       });
       this.mergeAgentResult(result, key, agentResult, dedupeSources);
+      fallbackByAgent.set(key, agentResult.usedFallback);
 
       if (!agentResult.usedFallback) {
         await this.pipelineFeedback.markConsumedByScope({
@@ -174,6 +204,11 @@ export class ResearchService {
       result.sources = Array.from(dedupeSources.values());
       result.combinedReportText = this.buildCombinedReportText(result);
       result.researchParameters = researchParameters;
+      result.researchFallbackSummary = this.buildResearchFallbackSummary(
+        fallbackByAgent,
+        [key],
+      );
+      this.logResearchFallbackSummaryIfNeeded(startupId, result.researchFallbackSummary);
       return result;
     }
 
@@ -205,6 +240,7 @@ export class ResearchService {
           dedupeSources,
           onAgentComplete: options?.onAgentComplete,
         });
+        fallbackByAgent.set(key, agentResult.usedFallback);
       }),
     );
 
@@ -237,12 +273,18 @@ export class ResearchService {
           dedupeSources,
           onAgentComplete: options?.onAgentComplete,
         });
+        fallbackByAgent.set(key, agentResult.usedFallback);
       }),
     );
 
     result.sources = Array.from(dedupeSources.values());
     result.combinedReportText = this.buildCombinedReportText(result);
     result.researchParameters = researchParameters;
+    result.researchFallbackSummary = this.buildResearchFallbackSummary(
+      fallbackByAgent,
+      [...phase1Keys, ...phase2Keys],
+    );
+    this.logResearchFallbackSummaryIfNeeded(startupId, result.researchFallbackSummary);
 
     return result;
   }
@@ -450,6 +492,60 @@ export class ResearchService {
         fallback: () => agent.fallback(pipelineInput),
       });
       const outputText = result.outputText ?? result.output;
+      const outputValidationError = result.usedFallback
+        ? null
+        : this.validateResearchOutputStructure(
+            key,
+            outputText,
+          );
+      if (outputValidationError) {
+        const fallbackOutput = agent.fallback(pipelineInput);
+        const fallbackReason: PipelineFallbackReason = "SCHEMA_OUTPUT_INVALID";
+        const errorMessage = `PRODUCT_REPORT_STRUCTURE_INVALID: ${outputValidationError}`;
+        const traceMeta = this.mergeTraceMeta(result.meta, {
+          ...runtimeTraceMeta,
+          outputValidation: {
+            status: "failed",
+            validator: "product_report_contract_v1",
+            reason: outputValidationError,
+          },
+        });
+        await this.recordAgentTraceSafely({
+          startupId,
+          pipelineRunId,
+          phase: PipelinePhase.RESEARCH,
+          agentKey: key,
+          status: "fallback",
+          usedFallback: true,
+          inputPrompt: prompt,
+          outputText: fallbackOutput,
+          error: errorMessage,
+          fallbackReason,
+          rawProviderError: errorMessage,
+          meta: traceMeta,
+          attempt: result.attempt,
+          retryCount: result.retryCount,
+        });
+        return {
+          output: fallbackOutput,
+          sources: result.sources,
+          usedFallback: true,
+          dataSummary: {
+            ...dataSummary,
+            outputValidation: "product_report_contract_invalid",
+          },
+          error: errorMessage,
+          fallbackReason,
+          rawProviderError: errorMessage,
+          rejected: false,
+          meta: traceMeta,
+          modelName: execution?.resolvedConfig.modelName,
+          attempt: result.attempt,
+          retryCount: result.retryCount,
+          inputPrompt: prompt,
+          outputText: fallbackOutput,
+        };
+      }
       const traceMeta = this.mergeTraceMeta(result.meta, runtimeTraceMeta);
       await this.recordAgentTraceSafely({
         startupId,
@@ -699,11 +795,181 @@ export class ResearchService {
       combinedReportText: current.combinedReportText ?? "",
       sources: [...retainedSources],
       errors: [...current.errors],
+      ...(typeof current.orchestratorGuidance === "string"
+        ? { orchestratorGuidance: current.orchestratorGuidance }
+        : {}),
+      ...(current.researchFallbackSummary
+        ? { researchFallbackSummary: current.researchFallbackSummary }
+        : {}),
     };
+  }
+
+  private async generateOrchestratorGuidance(input: {
+    startupId: string;
+    extraction: ResearchPipelineInput["extraction"];
+    scraping: ResearchPipelineInput["scraping"];
+    researchParameters?: ResearchPipelineInput["researchParameters"];
+    stage?: string | null;
+  }): Promise<string> {
+    try {
+      const promptConfig = await this.promptService.resolve({
+        key: "research.orchestrator",
+        stage: input.stage,
+      });
+      const teamMembers = input.scraping.teamMembers
+        .map((member) => member.name?.trim())
+        .filter((name): name is string => typeof name === "string" && name.length > 0)
+        .join(", ");
+      const prompt = this.promptService.renderTemplate(promptConfig.userPrompt, {
+        companyName: input.extraction.companyName ?? "Unknown company",
+        sector:
+          input.researchParameters?.sector ??
+          input.extraction.industry ??
+          "Unknown sector",
+        website:
+          input.extraction.website ??
+          input.scraping.websiteUrl ??
+          "Unknown website",
+        deckContent: input.extraction.rawText ?? "",
+        websiteContent:
+          input.scraping.website?.fullText ??
+          input.scraping.websiteSummary ??
+          "",
+        teamMembers: teamMembers.length > 0 ? teamMembers : "No team members provided",
+      });
+      const guidanceResult = await this.geminiResearchService.researchText({
+        agent: "team",
+        startupId: input.startupId,
+        prompt,
+        systemPrompt: promptConfig.systemPrompt,
+        minReportLength: 300,
+        modelName:
+          typeof (this.aiConfig as { getModelForPurpose?: unknown } | undefined)
+            ?.getModelForPurpose === "function"
+            ? this.aiConfig!.getModelForPurpose(ModelPurpose.RESEARCH)
+            : undefined,
+        fallback: () => RESEARCH_ORCHESTRATOR_FALLBACK_GUIDANCE,
+      });
+      const guidance = (guidanceResult.outputText ?? guidanceResult.output).trim();
+      if (guidance.length > 0) {
+        return guidance.slice(0, 4000);
+      }
+
+      this.logger.warn(
+        `[Research] Empty orchestrator guidance output for startup ${input.startupId}; using fallback guidance`,
+      );
+      return RESEARCH_ORCHESTRATOR_FALLBACK_GUIDANCE;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `[Research] Orchestrator guidance generation failed for startup ${input.startupId}: ${message}`,
+      );
+      return RESEARCH_ORCHESTRATOR_FALLBACK_GUIDANCE;
+    }
+  }
+
+  private buildResearchFallbackSummary(
+    fallbackByAgent: Map<ResearchAgentKey, boolean>,
+    attemptedKeys: ResearchAgentKey[],
+  ): ResearchResult["researchFallbackSummary"] {
+    const attemptedAgents = attemptedKeys.length;
+    const fallbackAgents = attemptedKeys.filter((key) => fallbackByAgent.get(key) === true);
+    const fallbackRatio =
+      attemptedAgents > 0 ? fallbackAgents.length / attemptedAgents : 0;
+    const criticalFallbackAgents = CRITICAL_RESEARCH_AGENTS.filter(
+      (key): key is "team" | "market" | "product" =>
+        attemptedKeys.includes(key) && fallbackByAgent.get(key) === true,
+    );
+    const warning =
+      fallbackRatio >= RESEARCH_FALLBACK_WARNING_RATIO ||
+      criticalFallbackAgents.length > 0;
+
+    return {
+      attemptedAgents,
+      fallbackAgents: fallbackAgents.length,
+      fallbackRatio: Number(fallbackRatio.toFixed(3)),
+      criticalFallbackAgents,
+      warning,
+    };
+  }
+
+  private logResearchFallbackSummaryIfNeeded(
+    startupId: string,
+    summary: ResearchResult["researchFallbackSummary"],
+  ): void {
+    if (!summary?.warning) {
+      return;
+    }
+
+    const criticalAgents =
+      summary.criticalFallbackAgents.length > 0
+        ? summary.criticalFallbackAgents.join(",")
+        : "none";
+    this.logger.warn(
+      `[Research] Elevated fallback ratio for startup ${startupId}: ${summary.fallbackAgents}/${summary.attemptedAgents} (${summary.fallbackRatio}) | criticalFallbackAgents=${criticalAgents}`,
+    );
   }
 
   private getSourceKey(source: SourceEntry): string {
     return `${source.agent}::${source.url ?? source.name}`;
+  }
+
+  private validateResearchOutputStructure(
+    key: ResearchAgentKey,
+    outputText: string,
+  ): string | null {
+    if (key !== "product") {
+      return null;
+    }
+
+    return this.validateProductResearchReport(outputText);
+  }
+
+  private validateProductResearchReport(outputText: string): string | null {
+    const normalized = outputText.replace(/\r/g, "").trim();
+    if (normalized.length === 0) {
+      return "empty report output";
+    }
+
+    const requiredHeadings: Array<{ label: string; pattern: RegExp }> = [
+      { label: "Verification", pattern: /(^|\n)\s*(?:\*\*)?\s*Verification\s*(?:\*\*)?\s*:/i },
+      {
+        label: "Product Type & Vertical",
+        pattern: /(^|\n)\s*(?:\*\*)?\s*Product Type\s*&\s*Vertical\s*(?:\*\*)?\s*:/i,
+      },
+      { label: "Research Approach", pattern: /(^|\n)\s*(?:\*\*)?\s*Research Approach\s*(?:\*\*)?\s*:/i },
+      { label: "Findings", pattern: /(^|\n)\s*(?:\*\*)?\s*Findings\s*(?:\*\*)?\s*:/i },
+      { label: "Unverified Items", pattern: /(^|\n)\s*(?:\*\*)?\s*Unverified Items\s*(?:\*\*)?\s*:/i },
+      { label: "Research Gaps", pattern: /(^|\n)\s*(?:\*\*)?\s*Research Gaps\s*(?:\*\*)?\s*:/i },
+      {
+        label: "Notably Absent / Risk Signals",
+        pattern:
+          /(^|\n)\s*(?:\*\*)?\s*Notably Absent\s*\/\s*Risk Signals\s*(?:\*\*)?\s*:/i,
+      },
+    ];
+
+    for (const heading of requiredHeadings) {
+      if (!heading.pattern.test(normalized)) {
+        return `missing heading "${heading.label}"`;
+      }
+    }
+
+    for (const [index, label] of PRODUCT_RESEARCH_FINDING_LABELS.entries()) {
+      const sectionNumber = index + 1;
+      const pattern = new RegExp(
+        `(^|\\n)\\s*${sectionNumber}[\\.)]\\s*(?:\\*\\*)?\\s*${this.escapeRegExp(label)}\\s*(?:\\*\\*)?\\s*:`,
+        "i",
+      );
+      if (!pattern.test(normalized)) {
+        return `missing findings section ${sectionNumber} (${label})`;
+      }
+    }
+
+    return null;
+  }
+
+  private escapeRegExp(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   }
 
   private buildCombinedReportText(result: ResearchResult): string {

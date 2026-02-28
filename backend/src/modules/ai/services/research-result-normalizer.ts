@@ -51,6 +51,17 @@ export function normalizeResearchResult(
     ...(source?.researchParameters && typeof source.researchParameters === "object"
       ? { researchParameters: source.researchParameters as ResearchResult["researchParameters"] }
       : {}),
+    ...(typeof source?.orchestratorGuidance === "string"
+      ? { orchestratorGuidance: source.orchestratorGuidance }
+      : {}),
+    ...(source?.researchFallbackSummary &&
+      typeof source.researchFallbackSummary === "object" &&
+      !Array.isArray(source.researchFallbackSummary)
+      ? {
+          researchFallbackSummary:
+            source.researchFallbackSummary as ResearchResult["researchFallbackSummary"],
+        }
+      : {}),
   };
 
   if (!result.combinedReportText.trim()) {

@@ -29,6 +29,7 @@ type ResearchTemplateVariables = {
   geographicFocus: string;
   businessModel: string;
   fundingStage: string;
+  orchestratorGuidance: string;
 };
 
 const DEFAULT_TEXT = "Not provided";
@@ -292,9 +293,13 @@ export const buildResearchPromptVariables = (input: {
     firstNonEmpty(extraction.tagline, scraping.notableClaims[0]) ?? DEFAULT_TEXT;
 
   const rp = pipelineInput.researchParameters;
+  const orchestratorGuidance =
+    firstNonEmpty(pipelineInput.orchestratorGuidance) ??
+    "No orchestrator guidance available.";
 
   const promptContext = {
     ...agentContext,
+    orchestratorGuidance,
     startupFormContext,
     adminFeedback: adminFeedback.map((item) => ({
       scope: item.scope,
@@ -330,6 +335,7 @@ export const buildResearchPromptVariables = (input: {
       geographicFocus: rp?.geographicFocus || DEFAULT_TEXT,
       businessModel: rp?.businessModel || DEFAULT_TEXT,
       fundingStage: rp?.fundingStage || DEFAULT_TEXT,
+      orchestratorGuidance,
     },
   };
 };

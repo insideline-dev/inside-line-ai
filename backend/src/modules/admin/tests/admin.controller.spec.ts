@@ -160,6 +160,7 @@ describe('AdminController', () => {
           provide: AiPromptService,
           useValue: {
             listPromptDefinitions: jest.fn(),
+            getPromptCoverageAudit: jest.fn(),
             getFlowGraph: jest.fn(),
             getRevisionsByKey: jest.fn(),
             createDraft: jest.fn(),
@@ -793,6 +794,26 @@ describe('AdminController', () => {
 
       expect(result).toEqual(payload);
       expect(aiPromptService.listPromptDefinitions).toHaveBeenCalled();
+    });
+
+    it('should return prompt coverage audit', async () => {
+      const payload = {
+        strictModeEnabled: false,
+        items: [
+          {
+            key: 'evaluation.team',
+            isCritical: true,
+            hasPublishedGlobal: false,
+            wouldFallback: true,
+          },
+        ],
+      };
+      aiPromptService.getPromptCoverageAudit.mockResolvedValueOnce(payload as any);
+
+      const result = await controller.getAiPromptCoverageAudit();
+
+      expect(result).toEqual(payload);
+      expect(aiPromptService.getPromptCoverageAudit).toHaveBeenCalled();
     });
 
     it('should return flow graph metadata', async () => {

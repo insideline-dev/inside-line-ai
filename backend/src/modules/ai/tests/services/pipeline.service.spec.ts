@@ -21,6 +21,7 @@ import { PipelineTemplateService } from "../../services/pipeline-template.servic
 import { EnrichmentService } from "../../services/enrichment.service";
 import { ModuleRef } from "@nestjs/core";
 import { NotificationService } from "../../../../notification/notification.service";
+import { StorageService } from "../../../../storage";
 
 function createState(
   overrides: Partial<PipelineState> = {},
@@ -120,6 +121,7 @@ describe("PipelineService", () => {
   let enrichmentService: jest.Mocked<EnrichmentService>;
   let moduleRef: jest.Mocked<ModuleRef>;
   let notifications: jest.Mocked<NotificationService>;
+  let storage: jest.Mocked<StorageService>;
 
   const mockDb = {
     mode: "none" as "none" | "select" | "update" | "insert",
@@ -345,6 +347,10 @@ describe("PipelineService", () => {
       createAndBroadcast: jest.fn().mockResolvedValue(undefined),
     } as unknown as jest.Mocked<NotificationService>;
 
+    storage = {
+      exists: jest.fn().mockResolvedValue(true),
+    } as unknown as jest.Mocked<StorageService>;
+
     service = new PipelineService(
       drizzle,
       queue,
@@ -359,6 +365,7 @@ describe("PipelineService", () => {
       errorRecovery,
       pipelineTemplateService,
       enrichmentService,
+      storage,
       moduleRef,
     );
   });
@@ -410,6 +417,21 @@ describe("PipelineService", () => {
     await expect(service.startPipeline("startup-1", "user-1")).rejects.toThrow(
       BadRequestException,
     );
+    expect(stateService.init).not.toHaveBeenCalled();
+  });
+
+  it("rejects pipeline start when pitch deck path is missing in storage", async () => {
+    stateService.get.mockResolvedValueOnce(null);
+    mockDb.limit.mockImplementationOnce(() =>
+      Promise.resolve([{ pitchDeckPath: "startups/deck.pdf" }]),
+    );
+    storage.exists.mockResolvedValueOnce(false);
+
+    await expect(service.startPipeline("startup-1", "user-1")).rejects.toThrow(
+      BadRequestException,
+    );
+
+    expect(storage.exists).toHaveBeenCalledWith("startups/deck.pdf");
     expect(stateService.init).not.toHaveBeenCalled();
   });
 

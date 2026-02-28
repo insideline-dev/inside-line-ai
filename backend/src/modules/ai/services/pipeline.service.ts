@@ -3,6 +3,7 @@ import { ModuleRef } from "@nestjs/core";
 import { randomUUID } from "crypto";
 import { eq } from "drizzle-orm";
 import { DrizzleService } from "../../../database";
+import { StorageService } from "../../../storage";
 import { NotificationType } from "../../../notification/entities";
 import { NotificationService } from "../../../notification/notification.service";
 import { QueueService } from "../../../queue";
@@ -108,6 +109,7 @@ export class PipelineService {
     private errorRecovery: ErrorRecoveryService,
     private pipelineTemplateService: PipelineTemplateService,
     private enrichmentService: EnrichmentService,
+    private storage: StorageService,
     private moduleRef: ModuleRef,
     @Optional() private pipelineAgentTrace?: PipelineAgentTraceService,
   ) {}
@@ -135,6 +137,8 @@ export class PipelineService {
         `Pipeline already running for startup ${startupId}`,
       );
     }
+
+    await this.assertPitchDeckStorageReady(startupId);
 
     const state = await this.pipelineState.init(startupId, userId);
     await this.pipelineAgentTrace?.cleanupExpired().catch((error) => {
@@ -166,6 +170,36 @@ export class PipelineService {
       `Started AI pipeline ${state.pipelineRunId} for startup ${startupId}`,
     );
     return state.pipelineRunId;
+  }
+
+  private async assertPitchDeckStorageReady(startupId: string): Promise<void> {
+    const [startupRecord] = await this.drizzle.db
+      .select({
+        pitchDeckPath: startup.pitchDeckPath,
+      })
+      .from(startup)
+      .where(eq(startup.id, startupId))
+      .limit(1);
+
+    if (!startupRecord?.pitchDeckPath) {
+      return;
+    }
+
+    try {
+      const exists = await this.storage.exists(startupRecord.pitchDeckPath);
+      if (exists) {
+        return;
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new BadRequestException(
+        `Unable to verify pitch deck in storage for startup ${startupId}: ${message}`,
+      );
+    }
+
+    throw new BadRequestException(
+      `Pitch deck file is missing in storage for startup ${startupId}. Expected object key: ${startupRecord.pitchDeckPath}. Re-upload the file and retry the analysis.`,
+    );
   }
 
   async getPipelineStatus(startupId: string): Promise<PipelineState | null> {

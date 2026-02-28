@@ -156,7 +156,7 @@ export const envSchema = z.object({
   AI_RESEARCH_MAX_ATTEMPTS: z.coerce.number().default(2),
   AI_RESEARCH_AGENT_HARD_TIMEOUT_MS: z.coerce.number().default(3600000),
   AI_RESEARCH_AGENT_STAGGER_MS: z.coerce.number().default(5000),
-  AI_COMPETITOR_RESEARCH_ATTEMPT_TIMEOUT_MS: z.coerce.number().default(240000),
+
   AI_EVALUATION_AGENT_STAGGER_MS: z.coerce.number().default(5000),
   OPENAI_DEEP_RESEARCH_POLL_INTERVAL_MS: z.coerce.number().default(15000),
   AI_EVALUATION_TEMPERATURE: z.coerce.number().default(0.2),

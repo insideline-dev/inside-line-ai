@@ -66,6 +66,7 @@ describe("InvestorMatchingService", () => {
 
     providers = {
       resolveModel: jest.fn().mockReturnValue(resolvedModel),
+      resolveModelForPurpose: jest.fn().mockReturnValue(resolvedModel),
     } as unknown as jest.Mocked<AiProviderService>;
 
     promptService = {
@@ -126,7 +127,7 @@ describe("InvestorMatchingService", () => {
       synthesis: createMockSynthesisResult(),
     });
 
-    expect(providers.resolveModel).toHaveBeenCalledWith("gemini-3-flash-preview");
+    expect(providers.resolveModelForPurpose).toHaveBeenCalledWith("thesis_alignment");
     expect(result.candidatesEvaluated).toBe(2);
     expect(generateTextMock).toHaveBeenCalledTimes(2);
     expect(scoreComputation.computeWithInvestorPreferences).toHaveBeenCalledTimes(2);
@@ -175,5 +176,30 @@ describe("InvestorMatchingService", () => {
 
     expect(result.matches).toHaveLength(1);
     expect(result.matches[0]?.thesisFitScore).toBe(85);
+  });
+
+  it("sets thesisFitFallback=true when alignThesis fails and falls back", async () => {
+    generateTextMock.mockRejectedValue(new Error("AI provider timeout"));
+
+    const insertValues = jest.fn().mockResolvedValue(undefined);
+    (drizzle.db.insert as jest.Mock).mockImplementation(() => {
+      return { values: insertValues };
+    });
+
+    await service.matchStartup({
+      startupId: "startup-fallback",
+      startup: {
+        industry: "Industrial SaaS",
+        stage: StartupStage.SEED,
+        fundingTarget: 2_500_000,
+        location: "San Francisco, CA",
+      },
+      synthesis: createMockSynthesisResult(),
+    });
+
+    // Both candidates should have attempted insert/update with thesisFitFallback=true
+    expect(insertValues).toHaveBeenCalledWith(
+      expect.objectContaining({ thesisFitFallback: true }),
+    );
   });
 });

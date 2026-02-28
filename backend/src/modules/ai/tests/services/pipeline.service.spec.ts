@@ -207,17 +207,42 @@ describe("PipelineService", () => {
       removePipelineJobs: jest.fn().mockResolvedValue(0),
     } as unknown as jest.Mocked<QueueService>;
 
+    let _trackedState: PipelineState = createState();
     stateService = {
-      get: jest.fn().mockResolvedValue(createState()),
+      get: jest.fn().mockImplementation(() => Promise.resolve({ ..._trackedState, phases: { ..._trackedState.phases } })),
       init: jest.fn().mockResolvedValue(createState()),
-      updatePhase: jest.fn().mockResolvedValue(undefined),
-      setStatus: jest.fn().mockResolvedValue(undefined),
+      updatePhase: jest.fn().mockImplementation((_startupId: string, phase: PipelinePhase, status: PhaseStatus) => {
+        _trackedState = {
+          ..._trackedState,
+          phases: {
+            ..._trackedState.phases,
+            [phase]: { ..._trackedState.phases[phase as PipelinePhase], status },
+          },
+        };
+        return Promise.resolve(undefined);
+      }),
+      setStatus: jest.fn().mockImplementation((_startupId: string, status: PipelineStatus) => {
+        _trackedState = { ..._trackedState, status };
+        return Promise.resolve(undefined);
+      }),
       setPhaseResult: jest.fn().mockResolvedValue(undefined),
       clearPhaseResult: jest.fn().mockResolvedValue(undefined),
       resetRetryCount: jest.fn().mockResolvedValue(undefined),
-      resetPhase: jest.fn().mockResolvedValue(undefined),
+      resetPhase: jest.fn().mockImplementation((_startupId: string, phase: PipelinePhase) => {
+        _trackedState = {
+          ..._trackedState,
+          phases: {
+            ..._trackedState.phases,
+            [phase]: { ..._trackedState.phases[phase as PipelinePhase], status: PhaseStatus.PENDING },
+          },
+        };
+        return Promise.resolve(undefined);
+      }),
       resetPhaseStatus: jest.fn().mockResolvedValue(undefined),
-      setPipelineRunId: jest.fn().mockResolvedValue(undefined),
+      setPipelineRunId: jest.fn().mockImplementation((_startupId: string, runId: string) => {
+        _trackedState = { ..._trackedState, pipelineRunId: runId };
+        return Promise.resolve(undefined);
+      }),
       incrementRetryCount: jest.fn().mockResolvedValue(1),
       setQuality: jest.fn().mockResolvedValue(undefined),
       getPhaseResult: jest.fn().mockResolvedValue(null),
@@ -238,6 +263,7 @@ describe("PipelineService", () => {
       updatePhaseProgress: jest.fn().mockResolvedValue(undefined),
       setPipelineStatus: jest.fn().mockResolvedValue(undefined),
       updateAgentProgress: jest.fn().mockResolvedValue(undefined),
+      resetPhasesForRerun: jest.fn().mockResolvedValue(undefined),
     } as unknown as jest.Mocked<ProgressTrackerService>;
 
     phaseTransition = {
@@ -739,7 +765,7 @@ describe("PipelineService", () => {
     expect(startupMatching.queueStartupMatching).toHaveBeenCalledWith({
       startupId: "startup-1",
       requestedBy: "user-1",
-      triggerSource: "retry",
+      triggerSource: "pipeline_completion",
     });
   });
 
@@ -940,7 +966,7 @@ describe("PipelineService", () => {
   });
 
   it("marks active phase failed and retries when timeout handler fires", async () => {
-    stateService.get.mockResolvedValue(createState({}, {
+    stateService.get.mockResolvedValueOnce(createState({}, {
       [PipelinePhase.RESEARCH]: PhaseStatus.WAITING,
     }));
     stateService.incrementRetryCount.mockResolvedValueOnce(1);

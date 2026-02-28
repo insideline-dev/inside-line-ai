@@ -1,7 +1,9 @@
 /**
- * One-time script: seeds the 4 new prompt definitions added in Feb 2026
- * (pipeline.orchestrator, extraction.linkedin, research.orchestrator, matching.investorThesis)
- * and updates the matching.thesis system prompt with the new thesisAlignment prompt.
+ * One-time script: seeds required prompt definitions and published global revisions for:
+ * - New orchestration keys (pipeline.orchestrator, extraction.linkedin, research.orchestrator, matching.investorThesis)
+ * - All evaluation prompts
+ * - Synthesis prompt (synthesis.final)
+ * - Updates matching.thesis system prompt to the latest catalog default
  *
  * Run: cd backend && bun run scripts/seed-new-prompt-definitions.ts
  */
@@ -19,6 +21,25 @@ const NEW_KEYS: AiPromptKey[] = [
   'matching.investorThesis',
 ];
 
+const EVALUATION_AND_SYNTHESIS_KEYS: AiPromptKey[] = [
+  'evaluation.team',
+  'evaluation.market',
+  'evaluation.product',
+  'evaluation.traction',
+  'evaluation.businessModel',
+  'evaluation.gtm',
+  'evaluation.financials',
+  'evaluation.competitiveAdvantage',
+  'evaluation.legal',
+  'evaluation.dealTerms',
+  'evaluation.exitPotential',
+  'synthesis.final',
+];
+
+const REQUIRED_KEYS: AiPromptKey[] = [
+  ...new Set([...NEW_KEYS, ...EVALUATION_AND_SYNTHESIS_KEYS]),
+];
+
 const UPDATE_MATCHING_THESIS = true;
 
 async function main() {
@@ -30,10 +51,13 @@ async function main() {
   const client = postgres(databaseUrl, { max: 1 });
   const db = drizzle(client, { schema });
 
-  console.log('Seeding new prompt definitions...\n');
+  const strictDbRequired =
+    String(process.env.AI_PROMPT_STRICT_DB_REQUIRED ?? '').toLowerCase() === 'true';
+  console.log('Seeding required prompt definitions...\n');
+  console.log(`AI_PROMPT_STRICT_DB_REQUIRED=${strictDbRequired ? 'true' : 'false'}`);
 
-  // 1. Upsert definitions for the 4 new keys
-  for (const key of NEW_KEYS) {
+  // 1. Upsert definitions + global published revisions for required keys
+  for (const key of REQUIRED_KEYS) {
     const catalog = AI_PROMPT_CATALOG[key];
 
     const [existing] = await db
@@ -129,7 +153,53 @@ async function main() {
     }
   }
 
+  // 4. Verification: ensure all required keys have published global revisions
+  const verification = await Promise.all(
+    REQUIRED_KEYS.map(async (key) => {
+      const [row] = await db
+        .select({
+          definitionId: schema.aiPromptDefinition.id,
+          revisionId: schema.aiPromptRevision.id,
+        })
+        .from(schema.aiPromptDefinition)
+        .leftJoin(
+          schema.aiPromptRevision,
+          and(
+            eq(schema.aiPromptRevision.definitionId, schema.aiPromptDefinition.id),
+            eq(schema.aiPromptRevision.status, 'published'),
+            isNull(schema.aiPromptRevision.stage),
+          ),
+        )
+        .where(eq(schema.aiPromptDefinition.key, key))
+        .limit(1);
+
+      return {
+        key,
+        hasDefinition: Boolean(row?.definitionId),
+        hasPublishedGlobal: Boolean(row?.revisionId),
+      };
+    }),
+  );
+
+  const missing = verification.filter(
+    (item) => !item.hasDefinition || !item.hasPublishedGlobal,
+  );
+
+  console.log('\nVerification summary:');
+  for (const item of verification) {
+    console.log(
+      `  ${item.hasPublishedGlobal ? 'OK' : 'MISSING'}  ${item.key} (definition=${item.hasDefinition ? 'yes' : 'no'}, published_global=${item.hasPublishedGlobal ? 'yes' : 'no'})`,
+    );
+  }
+
   await client.end();
+
+  if (missing.length > 0) {
+    throw new Error(
+      `Missing required published prompt revisions for: ${missing.map((item) => item.key).join(', ')}`,
+    );
+  }
+
   console.log('\nDone.');
 }
 

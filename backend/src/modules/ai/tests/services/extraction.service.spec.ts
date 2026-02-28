@@ -216,8 +216,14 @@ describe("ExtractionService", () => {
       new Error("invalid PDF"),
     );
     mistralOcr.extractFromPdf.mockRejectedValueOnce(new Error("OCR timeout"));
-    await expect(service.run("startup-1")).rejects.toThrow(
-      "No extractable deck text; OCR fallback failed: OCR timeout",
+    const result = await service.run("startup-1");
+
+    expect(result.source).toBe("startup-context");
+    expect(result.rawText).toContain("AI diligence pipeline");
+    expect(result.warnings).toContain("pdf-parse failed: invalid PDF");
+    expect(result.warnings).toContain("Mistral OCR failed: OCR timeout");
+    expect(result.warnings).toContain(
+      "No extractable deck text; falling back to startup form data",
     );
   });
 

@@ -425,6 +425,18 @@ export class AdminController {
     return this.aiPromptService.listPromptDefinitions();
   }
 
+  @Get('ai-prompts/coverage-audit')
+  @ApiOperation({ summary: "Audit prompt coverage and identify critical keys that would fallback to code" })
+  @ApiQuery({
+    name: 'stage',
+    required: false,
+    type: String,
+    description: 'Optional startup stage to evaluate stage-specific coverage',
+  })
+  async getAiPromptCoverageAudit(@Query('stage') stage?: string) {
+    return this.aiPromptService.getPromptCoverageAudit(stage);
+  }
+
   @Get('ai-prompts/flow')
   @ApiOperation({ summary: "Get AI flow metadata for visual prompt management" })
   @ApiResponse({ status: 200, type: AiPromptFlowResponseDto })

@@ -24,6 +24,63 @@ export class MarketEvaluationAgent extends BaseEvaluationAgent<MarketEvaluation>
     super(providers, aiConfig, promptService, modelExecution);
   }
 
+  protected override getAgentTemplateVariables(
+    pipelineData: EvaluationPipelineInput,
+  ): Record<string, string> {
+    const rawText = pipelineData.extraction.rawText ?? "";
+    const marketText = pipelineData.research.market;
+    const marketData = this.tryParseResearchJson(marketText);
+    const marketSize =
+      marketData?.marketSize && typeof marketData.marketSize === "object"
+        ? (marketData.marketSize as Record<string, unknown>)
+        : null;
+    const tamObj =
+      marketData?.totalAddressableMarket &&
+      typeof marketData.totalAddressableMarket === "object"
+        ? (marketData.totalAddressableMarket as Record<string, unknown>)
+        : null;
+    const growthObj =
+      marketData?.marketGrowthRate &&
+      typeof marketData.marketGrowthRate === "object"
+        ? (marketData.marketGrowthRate as Record<string, unknown>)
+        : null;
+
+    // Try extracting a claim line, return null if not found (instead of "Not provided")
+    const tryExtract = (text: string, pattern: RegExp): string | null => {
+      const result = this.extractClaimLine(text, pattern);
+      return result !== "Not provided" ? result : null;
+    };
+
+    const tamPattern = /(tam|total addressable market|market size)/i;
+    const samPattern = /(sam|serviceable addressable market|serviceable available market)/i;
+    const growthPattern = /(cagr|growth rate|year[- ]over[- ]year|yoy|market growth)/i;
+
+    // Fallback chain: structured JSON → market research text → pitch deck rawText
+    const claimedTAM =
+      (tamObj?.value != null ? String(tamObj.value) : null) ??
+      (marketSize?.tam != null ? String(marketSize.tam) : null) ??
+      tryExtract(marketText ?? "", tamPattern) ??
+      this.extractClaimLine(rawText, tamPattern);
+
+    const claimedSAM =
+      (marketSize?.sam != null ? String(marketSize.sam) : null) ??
+      tryExtract(marketText ?? "", samPattern) ??
+      this.extractClaimLine(rawText, samPattern);
+
+    const claimedGrowthRate =
+      (growthObj?.value != null ? String(growthObj.value) : null) ??
+      tryExtract(marketText ?? "", growthPattern) ??
+      this.extractClaimLine(rawText, growthPattern);
+
+    return {
+      marketResearchOutput: pipelineData.research.market ?? "Not provided",
+      claimedTAM,
+      claimedSAM,
+      claimedGrowthRate,
+      targetMarketDescription: pipelineData.extraction.industry || "Not provided",
+    };
+  }
+
   buildContext(pipelineData: EvaluationPipelineInput) {
     const { extraction } = pipelineData;
     const claimedTAM = undefined;

@@ -250,12 +250,56 @@ export class SynthesisAgent {
 
   buildPromptVariables(
     input: SynthesisAgentInput,
-  ): Record<"synthesisBrief" | "contextJson", string> {
+  ): Record<string, string> {
     const synthesisBrief = this.buildSynthesisBrief(input);
-    return {
+
+    // Common variables
+    const vars: Record<string, string> = {
+      companyName: input.extraction.companyName || "Unknown",
+      companyDescription: input.extraction.tagline || "Not provided",
+      sector: input.extraction.industry || "Unknown",
+      stage: input.extraction.stage || "Unknown",
+      website: input.extraction.website || "Not provided",
+      location: input.extraction.location || "Not provided",
+      adminGuidance: "None",
+      stageWeights: JSON.stringify(input.stageWeights),
+      // Backward compat
       synthesisBrief: `<evaluation_data>\n${synthesisBrief}\n</evaluation_data>`,
       contextJson: `<evaluation_data>\n${JSON.stringify(input)}\n</evaluation_data>`,
     };
+
+    // Per-agent evaluation variables
+    const agentKeys = [
+      "team", "market", "product", "traction", "businessModel",
+      "gtm", "financials", "competitiveAdvantage", "legal", "dealTerms", "exitPotential",
+    ] as const;
+
+    for (const key of agentKeys) {
+      const ev = input.evaluation[key] as {
+        score?: number;
+        confidence?: number;
+        feedback?: string;
+        narrativeSummary?: string;
+        memoNarrative?: string;
+      } | undefined;
+
+      if (!ev) {
+        vars[`${key}Score`] = "Not available";
+        vars[`${key}Confidence`] = "Not available";
+        vars[`${key}Analysis`] = "Not available";
+        continue;
+      }
+
+      vars[`${key}Score`] = ev.score != null ? String(ev.score) : "Not available";
+      vars[`${key}Confidence`] = ev.confidence != null ? String(ev.confidence) : "Not available";
+      vars[`${key}Analysis`] = ev.narrativeSummary || ev.memoNarrative || ev.feedback || "Not available";
+    }
+
+    // exitScore alias (Excel uses exitScore not exitPotentialScore in some places)
+    vars.exitScore = vars.exitPotentialScore ?? "Not available";
+    vars.exitConfidence = vars.exitPotentialConfidence ?? "Not available";
+
+    return vars;
   }
 
   private normalizeExecutiveSummary(

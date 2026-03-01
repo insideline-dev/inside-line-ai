@@ -25,6 +25,14 @@ export class ProductEvaluationAgent extends BaseEvaluationAgent<ProductEvaluatio
     super(providers, aiConfig, promptService, modelExecution);
   }
 
+  protected override getAgentTemplateVariables(
+    pipelineData: EvaluationPipelineInput,
+  ): Record<string, string> {
+    return {
+      productResearchOutput: pipelineData.research.product ?? "Not provided",
+    };
+  }
+
   buildContext(pipelineData: EvaluationPipelineInput) {
     const { extraction, scraping } = pipelineData;
     const subpages = Array.isArray(scraping.website?.subpages)

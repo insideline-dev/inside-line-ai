@@ -24,6 +24,28 @@ export class DealTermsEvaluationAgent extends BaseEvaluationAgent<DealTermsEvalu
     super(providers, aiConfig, promptService, modelExecution);
   }
 
+  protected override getAgentTemplateVariables(
+    _pipelineData: EvaluationPipelineInput,
+  ): Record<string, string> {
+    const ctx = _pipelineData.extraction.startupContext;
+    return {
+      competitorResearchOutput: _pipelineData.research.competitor ?? "Not provided",
+      newsResearchOutput: _pipelineData.research.news ?? "Not provided",
+      roundSize: _pipelineData.extraction.fundingAsk?.toString() ?? "Not provided",
+      roundCurrency: ctx?.roundCurrency ?? "USD",
+      valuation: _pipelineData.extraction.valuation?.toString() ?? "Not provided",
+      valuationType: ctx?.valuationType ?? "Not provided",
+      raiseType: ctx?.raiseType ?? "Not provided",
+      leadSecured: ctx?.leadSecured != null ? String(ctx.leadSecured) : "Not provided",
+      leadInvestorName: ctx?.leadInvestorName ?? "Not provided",
+      hasPreviousFunding: ctx?.hasPreviousFunding != null ? String(ctx.hasPreviousFunding) : "Not provided",
+      previousFundingAmount: ctx?.previousFundingAmount?.toString() ?? "Not provided",
+      previousFundingCurrency: ctx?.previousFundingCurrency ?? "Not provided",
+      previousInvestors: ctx?.previousInvestors ?? "Not provided",
+      previousRoundType: ctx?.previousRoundType ?? "Not provided",
+    };
+  }
+
   readonly buildContext = (pipelineData: EvaluationPipelineInput) => {
     const { extraction, scraping } = pipelineData;
     const rawText = typeof extraction.rawText === "string" ? extraction.rawText : "";

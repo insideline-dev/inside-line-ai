@@ -868,7 +868,7 @@ describe("StartupService", () => {
           startedAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         },
-      } as any);
+      } as unknown as PipelineState);
       pipelineService.getTrackedProgress.mockResolvedValueOnce({
         pipelineRunId: "run-telemetry",
         startupId: mockStartupId,

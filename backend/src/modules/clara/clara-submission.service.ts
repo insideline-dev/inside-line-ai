@@ -10,6 +10,11 @@ import {
   PipelineService,
   PIPELINE_MISSING_FIELDS_ERROR_PREFIX,
 } from "../ai/services/pipeline.service";
+import {
+  extractWebsiteFromText,
+  extractStageFromText,
+  getMissingCriticalFields,
+} from "../ai/utils/startup-field-utils";
 import { NotificationService } from "../../notification/notification.service";
 import { NotificationType } from "../../notification/entities";
 import { ClaraAiService } from "./clara-ai.service";
@@ -105,8 +110,8 @@ export class ClaraSubmissionService {
     const deckAttachment = processedAttachments.find(
       (a) => a.isPitchDeck && a.status === "uploaded",
     );
-    const websiteFromEmail = this.extractWebsiteFromText(ctx.bodyText);
-    const stageFromEmail = this.extractStageFromText(ctx.bodyText);
+    const websiteFromEmail = extractWebsiteFromText(ctx.bodyText);
+    const stageFromEmail = extractStageFromText(ctx.bodyText);
     const location = "Unknown";
     const geography = deriveStartupGeography(location);
 
@@ -389,12 +394,12 @@ export class ClaraSubmissionService {
       return null;
     }
 
-    const missingBefore = this.getMissingCriticalFields(current);
+    const missingBefore = getMissingCriticalFields(current);
     const updates: Partial<typeof startup.$inferInsert> = {};
     const updatedFields: Array<"website" | "stage"> = [];
 
     if (missingBefore.includes("website")) {
-      const websiteCandidate = this.extractWebsiteFromText(messageText);
+      const websiteCandidate = extractWebsiteFromText(messageText);
       if (websiteCandidate) {
         updates.website = websiteCandidate;
         updatedFields.push("website");
@@ -402,7 +407,7 @@ export class ClaraSubmissionService {
     }
 
     if (missingBefore.includes("stage")) {
-      const stageCandidate = this.extractStageFromText(messageText);
+      const stageCandidate = extractStageFromText(messageText);
       if (stageCandidate) {
         updates.stage = stageCandidate;
         updatedFields.push("stage");
@@ -423,7 +428,7 @@ export class ClaraSubmissionService {
     if (!refreshed) {
       return null;
     }
-    const remainingMissing = this.getMissingCriticalFields(refreshed);
+    const remainingMissing = getMissingCriticalFields(refreshed);
 
     let pipelineStarted = false;
     if (remainingMissing.length === 0) {
@@ -499,7 +504,7 @@ export class ClaraSubmissionService {
       const parsedMissing = this.extractMissingFieldsFromStartError(message);
       const fallbackSnapshot = await this.loadCriticalStartupSnapshot(startupId);
       const fallbackMissing = fallbackSnapshot
-        ? this.getMissingCriticalFields(fallbackSnapshot)
+        ? getMissingCriticalFields(fallbackSnapshot)
         : [];
       return {
         started: false,
@@ -562,163 +567,6 @@ export class ClaraSubmissionService {
       .limit(1);
 
     return record ?? null;
-  }
-
-  private getMissingCriticalFields(
-    record: Pick<
-      CriticalStartupSnapshot,
-      "website" | "stage" | "industry" | "location" | "fundingTarget" | "teamSize"
-    >,
-  ): Array<"website" | "stage"> {
-    const missing: Array<"website" | "stage"> = [];
-    if (this.isMissingWebsiteValue(record.website)) {
-      missing.push("website");
-    }
-    if (this.isLikelyPlaceholderStage(record)) {
-      missing.push("stage");
-    }
-    return missing;
-  }
-
-  private isMissingWebsiteValue(value: string | null | undefined): boolean {
-    if (!value) return true;
-    try {
-      const host = new URL(value).hostname.toLowerCase().replace(/^www\./, "");
-      return host === "pending-extraction.com";
-    } catch {
-      return true;
-    }
-  }
-
-  private isLikelyPlaceholderStage(record: {
-    website: string;
-    stage: string;
-    industry: string;
-    location: string;
-    fundingTarget: number;
-    teamSize: number;
-  }): boolean {
-    const normalizedStage = this.mapStageToEnum(record.stage);
-    if (!normalizedStage) {
-      return true;
-    }
-    if (normalizedStage !== StartupStage.SEED) {
-      return false;
-    }
-
-    const structuralSignals = [
-      this.isMissingWebsiteValue(record.website),
-      this.isLikelyPlaceholderText(record.industry),
-      this.isLikelyPlaceholderText(record.location),
-    ];
-    const secondarySignals = [
-      record.fundingTarget <= 0,
-      record.teamSize <= 1,
-    ];
-    const totalSignals = [...structuralSignals, ...secondarySignals];
-    return (
-      structuralSignals.filter(Boolean).length >= 1 &&
-      totalSignals.filter(Boolean).length >= 2
-    );
-  }
-
-  private isLikelyPlaceholderText(value: string | null | undefined): boolean {
-    if (!value) {
-      return true;
-    }
-    const normalized = value.trim().toLowerCase();
-    if (!normalized) {
-      return true;
-    }
-    return (
-      normalized.includes("pending extraction") ||
-      normalized.includes("pending-extraction") ||
-      normalized === "unknown" ||
-      normalized === "n/a"
-    );
-  }
-
-  private mapStageToEnum(value: string | null | undefined): StartupStage | null {
-    if (!value) {
-      return null;
-    }
-
-    const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, "_");
-    const mapping: Record<string, StartupStage> = {
-      pre_seed: StartupStage.PRE_SEED,
-      preseed: StartupStage.PRE_SEED,
-      seed: StartupStage.SEED,
-      series_a: StartupStage.SERIES_A,
-      series_b: StartupStage.SERIES_B,
-      series_c: StartupStage.SERIES_C,
-      series_d: StartupStage.SERIES_D,
-      series_e: StartupStage.SERIES_E,
-      series_f: StartupStage.SERIES_F_PLUS,
-      series_f_plus: StartupStage.SERIES_F_PLUS,
-      "series_f+": StartupStage.SERIES_F_PLUS,
-    };
-    return mapping[normalized] ?? null;
-  }
-
-  private extractWebsiteFromText(text: string | null | undefined): string | null {
-    if (!text) {
-      return null;
-    }
-
-    const matches: string[] = [];
-    const explicitMatches =
-      text.match(/\bhttps?:\/\/[^\s<>()]+|\bwww\.[^\s<>()]+/gi) ?? [];
-    matches.push(...explicitMatches);
-
-    const labeledBareDomain =
-      text.match(
-        /\bwebsite\b[^a-z0-9]+([a-z0-9][a-z0-9.-]+\.[a-z]{2,}(?:\/[^\s<>()]*)?)/i,
-      )?.[1] ?? null;
-    if (labeledBareDomain) {
-      matches.push(labeledBareDomain);
-    }
-
-    if (matches.length === 0) return null;
-
-    for (const rawCandidate of matches) {
-      const normalizedCandidate = rawCandidate
-        .replace(/[),.;]+$/g, "")
-        .trim();
-      const candidate = normalizedCandidate.startsWith("http")
-        ? normalizedCandidate
-        : `https://${normalizedCandidate}`;
-      try {
-        const parsed = new URL(candidate);
-        const host = parsed.hostname.toLowerCase().replace(/^www\./, "");
-        if (!host || host === "pending-extraction.com") {
-          continue;
-        }
-        return parsed.toString();
-      } catch {
-        continue;
-      }
-    }
-
-    return null;
-  }
-
-  private extractStageFromText(text: string | null | undefined): StartupStage | null {
-    if (!text) {
-      return null;
-    }
-
-    const normalized = text.toLowerCase();
-    if (/\bpre[\s-]?seed\b/.test(normalized)) return StartupStage.PRE_SEED;
-    if (/\bseries[\s-]?a\b/.test(normalized)) return StartupStage.SERIES_A;
-    if (/\bseries[\s-]?b\b/.test(normalized)) return StartupStage.SERIES_B;
-    if (/\bseries[\s-]?c\b/.test(normalized)) return StartupStage.SERIES_C;
-    if (/\bseries[\s-]?d\b/.test(normalized)) return StartupStage.SERIES_D;
-    if (/\bseries[\s-]?e\b/.test(normalized)) return StartupStage.SERIES_E;
-    if (/\bseries[\s-]?f(?:\+|[\s-]?plus)?\b/.test(normalized)) {
-      return StartupStage.SERIES_F_PLUS;
-    }
-    if (/\bseed\b/.test(normalized)) return StartupStage.SEED;
-    return null;
   }
 
   private asMessage(error: unknown): string {

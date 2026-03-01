@@ -6,9 +6,9 @@ describe("WebsiteScraperService", () => {
 
   beforeEach(() => {
     service = new WebsiteScraperService();
-    jest.spyOn(service as any, "dnsLookupWithTimeout").mockResolvedValue([
+    jest.spyOn(service as never, "dnsLookupWithTimeout").mockResolvedValue([
       { address: "93.184.216.34", family: 4 },
-    ]);
+    ] as never);
   });
 
   it("deep scrapes homepage and selected subpages with structured extraction", async () => {
@@ -55,7 +55,7 @@ describe("WebsiteScraperService", () => {
         status: 200,
         text: async () => pages[key],
       } as Response;
-    }) as any;
+    }) as unknown as typeof fetch;
 
     const result = await service.deepScrape("https://inside-line.test", { discoveryEnabled: true });
 
@@ -81,7 +81,7 @@ describe("WebsiteScraperService", () => {
       }
 
       return { ok: false, status: 500, text: async () => "error" } as Response;
-    }) as any;
+    }) as unknown as typeof fetch;
 
     const result = await service.deepScrape("https://inside-line.test");
 
@@ -117,7 +117,7 @@ describe("WebsiteScraperService", () => {
           </html>
         `,
       } as Response;
-    }) as any;
+    }) as unknown as typeof fetch;
 
     const result = await service.deepScrape("https://inside-line.test");
 
@@ -206,7 +206,7 @@ describe("WebsiteScraperService", () => {
     });
 
     it("allows public IPv4 addresses", async () => {
-      jest.spyOn(service as any, "dnsLookupWithTimeout").mockResolvedValue([
+      jest.spyOn(service as never, "dnsLookupWithTimeout").mockResolvedValue([
         { address: "8.8.8.8", family: 4 },
       ]);
 
@@ -214,7 +214,7 @@ describe("WebsiteScraperService", () => {
         ok: true,
         status: 200,
         text: async () => "<html><head><title>Test</title></head><body>OK</body></html>",
-      } as Response) as any;
+      } as Response) as unknown as typeof fetch;
 
       const result = await service.deepScrape("http://8.8.8.8/");
       expect(result.title).toBe("Test");
@@ -227,7 +227,7 @@ describe("WebsiteScraperService", () => {
     });
 
     it("blocks ::1 loopback", async () => {
-      jest.spyOn(service as any, "dnsLookupWithTimeout").mockRejectedValue(
+      jest.spyOn(service as never, "dnsLookupWithTimeout").mockRejectedValue(
         new Error("DNS lookup failed"),
       );
 
@@ -235,7 +235,7 @@ describe("WebsiteScraperService", () => {
     });
 
     it("blocks fe80:: link-local range", async () => {
-      jest.spyOn(service as any, "dnsLookupWithTimeout").mockRejectedValue(
+      jest.spyOn(service as never, "dnsLookupWithTimeout").mockRejectedValue(
         new Error("DNS lookup failed"),
       );
 
@@ -243,7 +243,7 @@ describe("WebsiteScraperService", () => {
     });
 
     it("blocks fc00:: unique local range", async () => {
-      jest.spyOn(service as any, "dnsLookupWithTimeout").mockRejectedValue(
+      jest.spyOn(service as never, "dnsLookupWithTimeout").mockRejectedValue(
         new Error("DNS lookup failed"),
       );
 
@@ -251,7 +251,7 @@ describe("WebsiteScraperService", () => {
     });
 
     it("blocks fd00:: unique local range", async () => {
-      jest.spyOn(service as any, "dnsLookupWithTimeout").mockRejectedValue(
+      jest.spyOn(service as never, "dnsLookupWithTimeout").mockRejectedValue(
         new Error("DNS lookup failed"),
       );
 
@@ -262,13 +262,13 @@ describe("WebsiteScraperService", () => {
   describe("SSRF Protection - Non-HTTP Protocols", () => {
     beforeEach(() => {
       service = new WebsiteScraperService();
-      jest.spyOn(service as any, "dnsLookupWithTimeout").mockResolvedValue([
+      jest.spyOn(service as never, "dnsLookupWithTimeout").mockResolvedValue([
         { address: "93.184.216.34", family: 4 },
       ]);
     });
 
     it("normalizes ftp:// to https://ftp:// causing DNS failure", async () => {
-      jest.spyOn(service as any, "dnsLookupWithTimeout").mockRejectedValue(
+      jest.spyOn(service as never, "dnsLookupWithTimeout").mockRejectedValue(
         new Error("DNS lookup failed for ftp:"),
       );
 
@@ -276,7 +276,7 @@ describe("WebsiteScraperService", () => {
     });
 
     it("normalizes file:// to https://file:/// causing DNS failure", async () => {
-      jest.spyOn(service as any, "dnsLookupWithTimeout").mockRejectedValue(
+      jest.spyOn(service as never, "dnsLookupWithTimeout").mockRejectedValue(
         new Error("DNS lookup failed"),
       );
 
@@ -288,7 +288,7 @@ describe("WebsiteScraperService", () => {
         ok: true,
         status: 200,
         text: async () => "<html><head><title>Test</title></head><body>OK</body></html>",
-      } as Response) as any;
+      } as Response) as unknown as typeof fetch;
 
       const result = await service.deepScrape("http://inside-line.test/");
       expect(result.title).toBe("Test");
@@ -299,7 +299,7 @@ describe("WebsiteScraperService", () => {
         ok: true,
         status: 200,
         text: async () => "<html><head><title>Test</title></head><body>OK</body></html>",
-      } as Response) as any;
+      } as Response) as unknown as typeof fetch;
 
       const result = await service.deepScrape("https://inside-line.test/");
       expect(result.title).toBe("Test");
@@ -313,11 +313,11 @@ describe("WebsiteScraperService", () => {
         ok: true,
         status: 200,
         text: async () => "<html><head><title>Test</title></head><body>OK</body></html>",
-      } as Response) as any;
+      } as Response) as unknown as typeof fetch;
     });
 
     it("blocks DNS resolving to all private IPs", async () => {
-      jest.spyOn(service as any, "dnsLookupWithTimeout").mockResolvedValue([
+      jest.spyOn(service as never, "dnsLookupWithTimeout").mockResolvedValue([
         { address: "127.0.0.1", family: 4 },
         { address: "10.0.0.1", family: 4 },
       ]);
@@ -328,7 +328,7 @@ describe("WebsiteScraperService", () => {
     });
 
     it("allows DNS resolving to at least one public IP", async () => {
-      jest.spyOn(service as any, "dnsLookupWithTimeout").mockResolvedValue([
+      jest.spyOn(service as never, "dnsLookupWithTimeout").mockResolvedValue([
         { address: "127.0.0.1", family: 4 },
         { address: "93.184.216.34", family: 4 },
       ]);
@@ -338,7 +338,7 @@ describe("WebsiteScraperService", () => {
     });
 
     it("handles DNS timeout gracefully", async () => {
-      jest.spyOn(service as any, "dnsLookupWithTimeout").mockRejectedValue(
+      jest.spyOn(service as never, "dnsLookupWithTimeout").mockRejectedValue(
         new Error("DNS lookup timed out for slow-dns.test"),
       );
 
@@ -354,7 +354,7 @@ describe("WebsiteScraperService", () => {
     });
 
     it("fetches URL using resolved IP and sets Host header", async () => {
-      jest.spyOn(service as any, "dnsLookupWithTimeout").mockResolvedValue([
+      jest.spyOn(service as never, "dnsLookupWithTimeout").mockResolvedValue([
         { address: "93.184.216.34", family: 4 },
       ]);
 
@@ -363,7 +363,7 @@ describe("WebsiteScraperService", () => {
         status: 200,
         text: async () => "<html><head><title>Test</title></head><body>OK</body></html>",
       } as Response);
-      globalThis.fetch = fetchMock as any;
+      globalThis.fetch = fetchMock as unknown as typeof fetch;
 
       await service.deepScrape("https://example.test/path");
 
@@ -374,13 +374,13 @@ describe("WebsiteScraperService", () => {
     });
 
     it("uses literal IP directly without DNS lookup", async () => {
-      const dnsLookupSpy = jest.spyOn(service as any, "dnsLookupWithTimeout");
+      const dnsLookupSpy = jest.spyOn(service as never, "dnsLookupWithTimeout");
 
       globalThis.fetch = jest.fn().mockResolvedValue({
         ok: true,
         status: 200,
         text: async () => "<html><head><title>Test</title></head><body>OK</body></html>",
-      } as Response) as any;
+      } as Response) as unknown as typeof fetch;
 
       await service.deepScrape("http://8.8.8.8/");
 
@@ -394,21 +394,21 @@ describe("WebsiteScraperService", () => {
         ok: true,
         status: 200,
         text: async () => "<html><head><title>Test</title></head><body>OK</body></html>",
-      } as Response) as any;
+      } as Response) as unknown as typeof fetch;
     });
 
     it("processes subpages in batches with delay", async () => {
       const config = {
-        get: jest.fn().mockImplementation((key: string, defaultValue: any) => {
+        get: jest.fn().mockImplementation((key: string, defaultValue: unknown) => {
           if (key === "SCRAPING_BATCH_SIZE") return 2;
           if (key === "SCRAPING_BATCH_DELAY_MS") return 100;
           return defaultValue;
         }),
-      } as any;
+      } as never;
 
       service = new WebsiteScraperService(config);
 
-      jest.spyOn(service as any, "dnsLookupWithTimeout").mockResolvedValue([
+      jest.spyOn(service as never, "dnsLookupWithTimeout").mockResolvedValue([
         { address: "93.184.216.34", family: 4 },
       ]);
 
@@ -438,7 +438,7 @@ describe("WebsiteScraperService", () => {
           status: 200,
           text: async () => `<html><head><title>${path}</title></head><body>${path}</body></html>`,
         } as Response;
-      }) as any;
+      }) as unknown as typeof fetch;
 
       const startTime = Date.now();
       await service.deepScrape("https://inside-line.test", { discoveryEnabled: true });
@@ -449,16 +449,16 @@ describe("WebsiteScraperService", () => {
 
     it("respects batch size configuration", async () => {
       const config = {
-        get: jest.fn().mockImplementation((key: string, defaultValue: any) => {
+        get: jest.fn().mockImplementation((key: string, defaultValue: unknown) => {
           if (key === "SCRAPING_BATCH_SIZE") return 2;
           if (key === "SCRAPING_MAX_SUBPAGES") return 5;
           return defaultValue;
         }),
-      } as any;
+      } as never;
 
       service = new WebsiteScraperService(config);
 
-      jest.spyOn(service as any, "dnsLookupWithTimeout").mockResolvedValue([
+      jest.spyOn(service as never, "dnsLookupWithTimeout").mockResolvedValue([
         { address: "93.184.216.34", family: 4 },
       ]);
 
@@ -492,7 +492,7 @@ describe("WebsiteScraperService", () => {
           status: 200,
           text: async () => `<html><head><title>${path}</title></head><body>${path}</body></html>`,
         } as Response;
-      }) as any;
+      }) as unknown as typeof fetch;
 
       await service.deepScrape("https://inside-line.test");
 
@@ -510,13 +510,13 @@ describe("WebsiteScraperService", () => {
           if (key === "WEBSITE_SCRAPE_TIMEOUT_MS") return -1000;
           return undefined;
         }),
-      } as any;
+      } as never;
 
       service = new WebsiteScraperService(config);
 
-      expect((service as any).maxSubpages).toBeGreaterThanOrEqual(1);
-      expect((service as any).batchSize).toBeGreaterThanOrEqual(1);
-      expect((service as any).timeoutMs).toBeGreaterThanOrEqual(1000);
+      expect((service as unknown as Record<string, number>).maxSubpages).toBeGreaterThanOrEqual(1);
+      expect((service as unknown as Record<string, number>).batchSize).toBeGreaterThanOrEqual(1);
+      expect((service as unknown as Record<string, number>).timeoutMs).toBeGreaterThanOrEqual(1000);
     });
 
     it("clamps NaN to minimum", () => {
@@ -526,12 +526,12 @@ describe("WebsiteScraperService", () => {
           if (key === "SCRAPING_BATCH_SIZE") return Number.NaN;
           return undefined;
         }),
-      } as any;
+      } as never;
 
       service = new WebsiteScraperService(config);
 
-      expect((service as any).maxSubpages).toBeGreaterThanOrEqual(1);
-      expect((service as any).batchSize).toBeGreaterThanOrEqual(1);
+      expect((service as unknown as Record<string, number>).maxSubpages).toBeGreaterThanOrEqual(1);
+      expect((service as unknown as Record<string, number>).batchSize).toBeGreaterThanOrEqual(1);
     });
 
     it("clamps Infinity to maximum", () => {
@@ -541,12 +541,12 @@ describe("WebsiteScraperService", () => {
           if (key === "SCRAPING_BATCH_SIZE") return Number.POSITIVE_INFINITY;
           return undefined;
         }),
-      } as any;
+      } as never;
 
       service = new WebsiteScraperService(config);
 
-      expect((service as any).maxSubpages).toBeLessThanOrEqual(200);
-      expect((service as any).batchSize).toBeLessThanOrEqual(50);
+      expect((service as unknown as Record<string, number>).maxSubpages).toBeLessThanOrEqual(200);
+      expect((service as unknown as Record<string, number>).batchSize).toBeLessThanOrEqual(50);
     });
 
     it("clamps too large values to maximum", () => {
@@ -557,13 +557,13 @@ describe("WebsiteScraperService", () => {
           if (key === "WEBSITE_SCRAPE_TIMEOUT_MS") return 999999;
           return undefined;
         }),
-      } as any;
+      } as never;
 
       service = new WebsiteScraperService(config);
 
-      expect((service as any).maxSubpages).toBe(200);
-      expect((service as any).batchSize).toBe(50);
-      expect((service as any).timeoutMs).toBe(120000);
+      expect((service as unknown as Record<string, number>).maxSubpages).toBe(200);
+      expect((service as unknown as Record<string, number>).batchSize).toBe(50);
+      expect((service as unknown as Record<string, number>).timeoutMs).toBe(120000);
     });
 
     it("rounds decimal values to integers", () => {
@@ -573,19 +573,19 @@ describe("WebsiteScraperService", () => {
           if (key === "SCRAPING_BATCH_SIZE") return 3.2;
           return undefined;
         }),
-      } as any;
+      } as never;
 
       service = new WebsiteScraperService(config);
 
-      expect((service as any).maxSubpages).toBe(16);
-      expect((service as any).batchSize).toBe(3);
+      expect((service as unknown as Record<string, number>).maxSubpages).toBe(16);
+      expect((service as unknown as Record<string, number>).batchSize).toBe(3);
     });
   });
 
   describe("Fetch Timeout", () => {
     beforeEach(() => {
       service = new WebsiteScraperService();
-      jest.spyOn(service as any, "dnsLookupWithTimeout").mockResolvedValue([
+      jest.spyOn(service as never, "dnsLookupWithTimeout").mockResolvedValue([
         { address: "93.184.216.34", family: 4 },
       ]);
     });
@@ -600,7 +600,7 @@ describe("WebsiteScraperService", () => {
           status: 200,
           text: async () => "<html><head><title>Test</title></head><body>OK</body></html>",
         } as Response;
-      }) as any;
+      }) as unknown as typeof fetch;
 
       await service.deepScrape("https://test-site.test/");
 
@@ -615,7 +615,7 @@ describe("WebsiteScraperService", () => {
         ok: true,
         status: 200,
         text: async () => "<html><head><title>Test</title></head><body>OK</body></html>",
-      } as Response) as any;
+      } as Response) as unknown as typeof fetch;
 
       await service.deepScrape("https://fast-site.test/");
 
@@ -627,7 +627,7 @@ describe("WebsiteScraperService", () => {
     it("cleans up timeout on fetch error", async () => {
       const clearTimeoutSpy = jest.spyOn(globalThis, "clearTimeout");
 
-      globalThis.fetch = jest.fn().mockRejectedValue(new Error("Network error")) as any;
+      globalThis.fetch = jest.fn().mockRejectedValue(new Error("Network error")) as unknown as typeof fetch;
 
       await service.deepScrape("https://error-site.test/").catch(() => {});
 

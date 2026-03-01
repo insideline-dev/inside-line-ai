@@ -20,6 +20,7 @@ import {
   PipelineStatus,
   ModelPurpose,
   PipelinePhase,
+  PhaseStatus,
   type PipelineState,
 } from "../../ai/interfaces/pipeline.interface";
 
@@ -802,7 +803,7 @@ describe("StartupService", () => {
           },
         ],
         updatedAt: new Date().toISOString(),
-      } as any);
+      } as unknown);
 
       const result = await service.getProgress(mockStartupId, mockUserId);
       const traction = result.progress?.phases?.[PipelinePhase.EVALUATION]?.agents?.traction;
@@ -897,7 +898,7 @@ describe("StartupService", () => {
           },
         ],
         updatedAt: new Date().toISOString(),
-      } as any);
+      } as unknown);
 
       const result = await service.adminGetProgress(mockStartupId);
       const traction = result.progress?.phases?.[PipelinePhase.EVALUATION]?.agents?.traction;
@@ -925,7 +926,7 @@ describe("StartupService", () => {
       mockDb.limit.mockResolvedValueOnce([mockStartup]);
 
       const result = await service.adminRetryPhase(mockStartupId, mockUserId, {
-        phase: "evaluation" as any,
+        phase: "evaluation" as unknown as PipelinePhase,
         forceRerun: false,
         feedback: "Please verify unit economics with updated assumptions.",
       });
@@ -942,7 +943,7 @@ describe("StartupService", () => {
       mockDb.limit.mockResolvedValueOnce([mockStartup]);
 
       await service.adminRetryPhase(mockStartupId, mockUserId, {
-        phase: "research" as any,
+        phase: "research" as unknown as PipelinePhase,
         forceRerun: true,
       });
 
@@ -958,7 +959,7 @@ describe("StartupService", () => {
 
       await expect(
         service.adminRetryPhase(mockStartupId, mockUserId, {
-          phase: "evaluation" as any,
+          phase: "evaluation" as unknown as PipelinePhase,
         }),
       ).rejects.toThrow(NotFoundException);
     });
@@ -969,7 +970,7 @@ describe("StartupService", () => {
 
       await expect(
         service.adminRetryPhase(mockStartupId, mockUserId, {
-          phase: "evaluation" as any,
+          phase: "evaluation" as unknown as PipelinePhase,
         }),
       ).rejects.toThrow(BadRequestException);
     });
@@ -979,7 +980,7 @@ describe("StartupService", () => {
 
       await expect(
         service.adminRetryPhase(mockStartupId, mockUserId, {
-          phase: "invalid-phase" as any,
+          phase: "invalid-phase" as unknown as PipelinePhase,
         }),
       ).rejects.toThrow(BadRequestException);
     });
@@ -992,7 +993,7 @@ describe("StartupService", () => {
 
       await expect(
         service.adminRetryPhase(mockStartupId, mockUserId, {
-          phase: "research" as any,
+          phase: "research" as unknown as PipelinePhase,
           forceRerun: true,
         }),
       ).rejects.toThrow(ConflictException);
@@ -1009,13 +1010,13 @@ describe("StartupService", () => {
         status: PipelineStatus.COMPLETED,
         quality: "standard",
         currentPhase: PipelinePhase.SYNTHESIS,
-        phases: {} as any,
+        phases: {} as unknown as Record<PipelinePhase, never>,
         results: {},
         retryCounts: {},
         telemetry: {
           startedAt: new Date().toISOString(),
           totalTokens: { input: 0, output: 0 },
-          phases: {} as any,
+          phases: {} as unknown as Record<PipelinePhase, never>,
           agents: {},
         },
         createdAt: new Date().toISOString(),
@@ -1023,7 +1024,7 @@ describe("StartupService", () => {
       } as unknown as PipelineState);
 
       const result = await service.adminRetryAgent(mockStartupId, mockUserId, {
-        phase: "evaluation" as any,
+        phase: "evaluation" as unknown as PipelinePhase,
         agent: "market",
         feedback: "Re-check TAM assumptions using current benchmarks.",
       });
@@ -1051,7 +1052,7 @@ describe("StartupService", () => {
       pipelineService.getPipelineStatus.mockResolvedValueOnce(null);
 
       const result = await service.adminRetryAgent(mockStartupId, mockUserId, {
-        phase: "evaluation" as any,
+        phase: "evaluation" as unknown as PipelinePhase,
         agent: "market",
         feedback: "Re-check TAM assumptions using current benchmarks.",
       });
@@ -1075,19 +1076,19 @@ describe("StartupService", () => {
         quality: "standard",
         currentPhase: PipelinePhase.SYNTHESIS,
         phases: {
-          [PipelinePhase.EXTRACTION]: { status: "completed" as any },
-          [PipelinePhase.ENRICHMENT]: { status: "completed" as any },
-          [PipelinePhase.SCRAPING]: { status: "completed" as any },
-          [PipelinePhase.RESEARCH]: { status: "completed" as any },
-          [PipelinePhase.EVALUATION]: { status: "completed" as any },
-          [PipelinePhase.SYNTHESIS]: { status: "completed" as any },
-        } as any,
+          [PipelinePhase.EXTRACTION]: { status: PhaseStatus.COMPLETED },
+          [PipelinePhase.ENRICHMENT]: { status: PhaseStatus.COMPLETED },
+          [PipelinePhase.SCRAPING]: { status: PhaseStatus.COMPLETED },
+          [PipelinePhase.RESEARCH]: { status: PhaseStatus.COMPLETED },
+          [PipelinePhase.EVALUATION]: { status: PhaseStatus.COMPLETED },
+          [PipelinePhase.SYNTHESIS]: { status: PhaseStatus.COMPLETED },
+        } as unknown as Record<PipelinePhase, never>,
         results: {},
         retryCounts: {},
         telemetry: {
           startedAt: new Date().toISOString(),
           totalTokens: { input: 0, output: 0 },
-          phases: {} as any,
+          phases: {} as unknown as Record<PipelinePhase, never>,
           agents: {},
         },
         createdAt: new Date().toISOString(),
@@ -1095,7 +1096,7 @@ describe("StartupService", () => {
       } as unknown as PipelineState);
 
       const result = await service.adminRetryAgent(mockStartupId, mockUserId, {
-        phase: "research" as any,
+        phase: "research" as unknown as PipelinePhase,
         agent: "competitor",
       });
 
@@ -1115,7 +1116,7 @@ describe("StartupService", () => {
 
       await expect(
         service.adminRetryAgent(mockStartupId, mockUserId, {
-          phase: "research" as any,
+          phase: "research" as unknown as PipelinePhase,
           agent: "financials",
         }),
       ).rejects.toThrow(BadRequestException);
@@ -1127,7 +1128,7 @@ describe("StartupService", () => {
 
       await expect(
         service.adminRetryAgent(mockStartupId, mockUserId, {
-          phase: "evaluation" as any,
+          phase: "evaluation" as unknown as PipelinePhase,
           agent: "market",
         }),
       ).rejects.toThrow(BadRequestException);

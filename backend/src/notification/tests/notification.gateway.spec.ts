@@ -4,7 +4,7 @@ import { JwtService } from '@nestjs/jwt';
 import { NotificationGateway } from '../notification.gateway';
 import { NotificationService } from '../notification.service';
 import { NotificationType } from '../entities';
-import type { Socket } from 'socket.io';
+import type { Socket, Server } from 'socket.io';
 
 describe('NotificationGateway', () => {
   let gateway: NotificationGateway;
@@ -16,7 +16,7 @@ describe('NotificationGateway', () => {
     handshake: {
       auth: { token },
       headers: {},
-    } as any,
+    } as unknown as Socket['handshake'],
     data: {},
     join: jest.fn(),
     emit: jest.fn(),
@@ -51,7 +51,7 @@ describe('NotificationGateway', () => {
     jwtService = module.get<JwtService>(JwtService);
     notificationService = module.get<NotificationService>(NotificationService);
 
-    gateway.server = createMockServer() as any;
+    gateway.server = createMockServer() as unknown as Server;
   });
 
   it('should be defined', () => {
@@ -82,11 +82,11 @@ describe('NotificationGateway', () => {
         handshake: {
           auth: {},
           headers: { authorization: 'Bearer header-token' },
-        } as any,
+        } as unknown as Socket['handshake'],
         data: {},
         join: jest.fn(),
         disconnect: jest.fn(),
-      } as Socket;
+      } as unknown as Socket;
 
       const mockPayload = { sub: 'user-1', email: 'test@example.com' };
       jest.spyOn(jwtService, 'verify').mockReturnValue(mockPayload);

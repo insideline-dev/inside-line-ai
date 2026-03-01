@@ -13,7 +13,7 @@ describe("ErrorRecoveryService", () => {
   };
 
   beforeEach(() => {
-    drizzle = { db: mockDb as any } as jest.Mocked<DrizzleService>;
+    drizzle = { db: mockDb as unknown as DrizzleService["db"] } as jest.Mocked<DrizzleService>;
     service = new ErrorRecoveryService(drizzle);
   });
 

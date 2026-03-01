@@ -15,7 +15,6 @@ import {
 import { user } from '../../../auth/entities/auth.schema';
 import {
   startup,
-  StartupStage,
   startupStageEnum,
 } from '../../startup/entities/startup.schema';
 

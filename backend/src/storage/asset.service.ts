@@ -1,7 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { DrizzleService } from '../database';
 import { StorageService } from './storage.service';
-import { asset, Asset, NewAsset } from './entities/asset.schema';
+import { asset, Asset } from './entities/asset.schema';
 import { eq, and } from 'drizzle-orm';
 import { AssetType } from './storage.config';
 
@@ -45,7 +45,7 @@ export class AssetService {
         type: assetType,
         mimeType: contentType,
         size: content.length,
-        metadata: metadata ? (metadata as any) : {},
+        metadata: metadata ?? {},
       })
       .returning();
 

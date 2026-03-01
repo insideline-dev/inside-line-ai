@@ -260,7 +260,7 @@ export const agentInbox = pgTable(
       .$onUpdate(() => new Date())
       .notNull(),
   },
-  (table) => [
+  (_table) => [
   ],
 );
 

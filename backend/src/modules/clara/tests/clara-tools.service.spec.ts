@@ -294,7 +294,9 @@ describe("ClaraToolsService", () => {
     it("falls back to 'Unknown' when startupName is missing from match record", async () => {
       const matchWithoutName = { ...mockMatch };
       // Remove the property to simulate a record without startupName
-      const { startupName: _, ...rest } = matchWithoutName;
+      const rest = Object.fromEntries(
+        Object.entries(matchWithoutName).filter(([k]) => k !== 'startupName'),
+      );
       matchService.findAll.mockResolvedValueOnce({
         data: [rest as typeof mockMatch],
         total: 1,

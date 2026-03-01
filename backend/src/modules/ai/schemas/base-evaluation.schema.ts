@@ -1,8 +1,5 @@
 import { z } from "zod";
 
-const nullToUndefined = (value: unknown): unknown =>
-  value === null ? undefined : value;
-
 const nullToFallbackString = (fallback: string) => (value: unknown): unknown =>
   value == null ? fallback : value;
 

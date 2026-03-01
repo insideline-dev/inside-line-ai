@@ -9,7 +9,7 @@ import { DrizzleService } from '../../../database';
 
 describe('TeamService', () => {
   let service: TeamService;
-  let drizzleService: jest.Mocked<DrizzleService>;
+  let _drizzleService: jest.Mocked<DrizzleService>;
 
   const createMockDb = () => ({
     select: jest.fn().mockReturnThis(),
@@ -88,7 +88,7 @@ describe('TeamService', () => {
     }).compile();
 
     service = module.get<TeamService>(TeamService);
-    drizzleService = module.get(DrizzleService);
+    _drizzleService = module.get(DrizzleService);
   });
 
   afterEach(() => {

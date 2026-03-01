@@ -24,7 +24,7 @@ export const userProfile = pgTable(
       .$onUpdate(() => new Date())
       .notNull(),
   },
-  (table) => [],
+  (_table) => [],
 );
 
 export const userProfileRelations = relations(userProfile, ({ one }) => ({

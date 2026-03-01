@@ -2,7 +2,6 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { ClaraService } from '../clara.service';
 import { DrizzleService } from '../../../database';
-import { AgentMailClientService } from '../../integrations/agentmail/agentmail-client.service';
 import { ClaraConversationService } from '../clara-conversation.service';
 import { ClaraAiService } from '../clara-ai.service';
 import { ClaraSubmissionService } from '../clara-submission.service';
@@ -15,7 +14,7 @@ describe('ClaraService', () => {
   let service: ClaraService;
   let configService: { get: jest.Mock };
   let drizzleService: ReturnType<typeof createMockDrizzle>;
-  let agentMailClient: Record<string, jest.Mock>;
+  let _agentMailClient: Record<string, jest.Mock>;
   let claraChannel: Record<string, jest.Mock>;
   let conversationService: Record<string, jest.Mock>;
   let claraAi: {
@@ -87,7 +86,7 @@ describe('ClaraService', () => {
   beforeEach(async () => {
     configService = createConfigService('inbox-1', 'admin-user-1');
     drizzleService = createMockDrizzle();
-    agentMailClient = {
+    _agentMailClient = {
       getMessage: jest.fn().mockResolvedValue(mockMessage),
       replyToMessage: jest.fn().mockResolvedValue({ messageId: 'reply-1' }),
       sendMessage: jest.fn().mockResolvedValue({ messageId: 'msg-1' }),

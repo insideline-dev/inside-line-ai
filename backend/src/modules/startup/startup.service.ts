@@ -10,7 +10,7 @@ import { eq, and, or, ilike, sql, desc } from "drizzle-orm";
 import { UserRole } from "../../auth/entities/auth.schema";
 import { DrizzleService } from "../../database";
 import { QueueService, QUEUE_NAMES } from "../../queue";
-import { StorageService } from "../../storage";
+import { StorageService, AssetType } from "../../storage";
 import { AiConfigService } from "../ai/services/ai-config.service";
 import type {
   EvaluationAgentKey,
@@ -986,7 +986,7 @@ export class StartupService {
 
     const result = await this.storage.getUploadUrl(
       userId,
-      assetType as any,
+      assetType as unknown as AssetType,
       dto.fileType,
       id,
     );

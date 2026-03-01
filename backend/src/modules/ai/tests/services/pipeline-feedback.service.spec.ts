@@ -147,7 +147,7 @@ describe("PipelineFeedbackService", () => {
   it("throws BadRequestException when startupId is invalid type", async () => {
     expect(() =>
       service.record({
-        startupId: null as any,
+        startupId: null as unknown as string,
         phase: PipelinePhase.EXTRACTION,
         feedback: "Test feedback",
         createdBy: "admin-1",
@@ -159,7 +159,7 @@ describe("PipelineFeedbackService", () => {
     expect(() =>
       service.record({
         startupId: "startup-1",
-        phase: "INVALID_PHASE" as any,
+        phase: "INVALID_PHASE" as unknown as PipelinePhase,
         feedback: "Test feedback",
         createdBy: "admin-1",
       }),
@@ -205,7 +205,7 @@ describe("PipelineFeedbackService", () => {
     expect(() =>
       service.getContext({
         startupId: "startup-1",
-        phase: "BAD_PHASE" as any,
+        phase: "BAD_PHASE" as unknown as PipelinePhase,
       }),
     ).toThrow("Invalid phase");
   });

@@ -172,7 +172,7 @@ describe('PortalController', () => {
         meta: { total: 1, page: 1, limit: 10, totalPages: 1 },
       };
 
-      submissionService.findAll.mockResolvedValue(paginatedResult as any);
+      submissionService.findAll.mockResolvedValue(paginatedResult as unknown);
 
       const query = { page: 1, limit: 10 };
       const result = await controller.getSubmissions(

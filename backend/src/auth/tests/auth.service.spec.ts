@@ -13,7 +13,7 @@ describe('AuthService', () => {
   let userAuthService: jest.Mocked<UserAuthService>;
   let jwtService: jest.Mocked<JwtService>;
   let configService: jest.Mocked<ConfigService>;
-  let drizzleService: any;
+  let drizzleService: ReturnType<typeof createMockDrizzle>;
 
   const mockDbUser: DbUser = {
     id: 'user-1',

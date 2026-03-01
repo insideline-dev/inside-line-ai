@@ -6,7 +6,7 @@ import { StartupMatchingPipelineService } from '../../ai/services/startup-matchi
 
 describe('MatchService', () => {
   let service: MatchService;
-  let drizzleService: jest.Mocked<DrizzleService>;
+  let _drizzleService: jest.Mocked<DrizzleService>;
   let startupMatchingPipelineService: jest.Mocked<StartupMatchingPipelineService>;
   const createMockDb = () => ({
     select: jest.fn().mockReturnThis(),
@@ -67,7 +67,7 @@ describe('MatchService', () => {
     }).compile();
 
     service = module.get<MatchService>(MatchService);
-    drizzleService = module.get(DrizzleService);
+    _drizzleService = module.get(DrizzleService);
     startupMatchingPipelineService = module.get(StartupMatchingPipelineService);
   });
 

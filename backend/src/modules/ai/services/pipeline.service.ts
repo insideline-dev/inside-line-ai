@@ -6,8 +6,12 @@ import { DrizzleService } from "../../../database";
 import { NotificationType } from "../../../notification/entities";
 import { NotificationService } from "../../../notification/notification.service";
 import { QueueService } from "../../../queue";
-import { startup, StartupStatus } from "../../startup/entities";
+import { startup, StartupStage, StartupStatus } from "../../startup/entities";
 import { pipelineRun } from "../entities";
+import type {
+  EnrichmentResult,
+  ExtractionResult,
+} from "../interfaces/phase-results.interface";
 import type {
   EvaluationAgentKey,
   PipelineFallbackReason,
@@ -22,6 +26,7 @@ import { PipelineStateService } from "./pipeline-state.service";
 import { PipelineStateSnapshotService } from "./pipeline-state-snapshot.service";
 import { StartupMatchingPipelineService } from "./startup-matching-pipeline.service";
 import { EnrichmentService } from "./enrichment.service";
+import { ExtractionService } from "./extraction.service";
 import {
   PhaseStatus,
   PipelinePhase,
@@ -72,6 +77,8 @@ interface QueuePhaseParams {
 const MIN_RESEARCH_PHASE_TIMEOUT_MS = 3_600_000;
 const DEFAULT_RESEARCH_AGENT_STAGGER_MS = 5_000;
 const RESEARCH_PHASE_1_MAX_STAGGER_OFFSETS = 3;
+export const PIPELINE_MISSING_FIELDS_ERROR_PREFIX =
+  "Pipeline start blocked: missing critical fields";
 
 @Injectable()
 export class PipelineService {
@@ -108,6 +115,7 @@ export class PipelineService {
     private errorRecovery: ErrorRecoveryService,
     private pipelineTemplateService: PipelineTemplateService,
     private enrichmentService: EnrichmentService,
+    private extractionService: ExtractionService,
     private moduleRef: ModuleRef,
     @Optional() private pipelineAgentTrace?: PipelineAgentTraceService,
   ) {}
@@ -122,6 +130,428 @@ export class PipelineService {
     } catch {
       return null;
     }
+  }
+
+  private async getMissingCriticalFields(
+    startupId: string,
+  ): Promise<Array<"website" | "stage">> {
+    const [record] = await this.drizzle.db
+      .select({
+        website: startup.website,
+        stage: startup.stage,
+        industry: startup.industry,
+        location: startup.location,
+        fundingTarget: startup.fundingTarget,
+        teamSize: startup.teamSize,
+      })
+      .from(startup)
+      .where(eq(startup.id, startupId))
+      .limit(1);
+
+    if (!record) {
+      throw new BadRequestException(`Startup ${startupId} not found`);
+    }
+
+    const missing: Array<"website" | "stage"> = [];
+    if (this.isMissingWebsiteValue(record.website)) {
+      missing.push("website");
+    }
+    if (this.isLikelyPlaceholderStage(record)) {
+      missing.push("stage");
+    }
+    return missing;
+  }
+
+  private async notifyClaraMissingInfoForPipelineStart(
+    startupId: string,
+    missingFields: Array<"website" | "stage">,
+  ): Promise<void> {
+    const clara = this.getClaraService();
+    if (!clara?.isEnabled()) {
+      this.logger.warn(
+        `[Pipeline] Clara missing-info notification skipped for startup ${startupId}: Clara is unavailable or disabled`,
+      );
+      return;
+    }
+
+    try {
+      await clara.notifyMissingStartupInfo(startupId, missingFields);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `Unable to send Clara missing-info request for startup ${startupId}: ${message}`,
+      );
+    }
+  }
+
+  private async assertCriticalStartupFieldsPresent(
+    startupId: string,
+  ): Promise<void> {
+    const missingFields = await this.getMissingCriticalFields(startupId);
+    if (missingFields.length === 0) {
+      return;
+    }
+
+    await this.notifyClaraMissingInfoForPipelineStart(startupId, missingFields);
+    throw new BadRequestException(
+      `${PIPELINE_MISSING_FIELDS_ERROR_PREFIX} [${missingFields.join(", ")}].`,
+    );
+  }
+
+  private isMissingWebsiteValue(value: string | null | undefined): boolean {
+    if (!value) return true;
+    try {
+      const host = new URL(value).hostname.toLowerCase().replace(/^www\./, "");
+      return host === "pending-extraction.com";
+    } catch {
+      return true;
+    }
+  }
+
+  private isLikelyPlaceholderStage(record: {
+    website: string;
+    stage: string;
+    industry: string;
+    location: string;
+    fundingTarget: number;
+    teamSize: number;
+  }): boolean {
+    const normalizedStage = this.mapStageToEnum(record.stage);
+    if (!normalizedStage) {
+      return true;
+    }
+    if (normalizedStage !== StartupStage.SEED) {
+      return false;
+    }
+
+    const structuralSignals = [
+      this.isMissingWebsiteValue(record.website),
+      this.isLikelyPlaceholderText(record.industry),
+      this.isLikelyPlaceholderText(record.location),
+    ];
+    const secondarySignals = [
+      record.fundingTarget <= 0,
+      record.teamSize <= 1,
+    ];
+    const totalSignals = [...structuralSignals, ...secondarySignals];
+    return (
+      structuralSignals.filter(Boolean).length >= 1 &&
+      totalSignals.filter(Boolean).length >= 2
+    );
+  }
+
+  private mapStageToEnum(value: string | null | undefined): StartupStage | null {
+    if (!value) {
+      return null;
+    }
+
+    const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, "_");
+    const mapping: Record<string, StartupStage> = {
+      pre_seed: StartupStage.PRE_SEED,
+      preseed: StartupStage.PRE_SEED,
+      seed: StartupStage.SEED,
+      series_a: StartupStage.SERIES_A,
+      series_b: StartupStage.SERIES_B,
+      series_c: StartupStage.SERIES_C,
+      series_d: StartupStage.SERIES_D,
+      series_e: StartupStage.SERIES_E,
+      series_f: StartupStage.SERIES_F_PLUS,
+      series_f_plus: StartupStage.SERIES_F_PLUS,
+      "series_f+": StartupStage.SERIES_F_PLUS,
+    };
+    return mapping[normalized] ?? null;
+  }
+
+  private normalizeWebsiteCandidate(
+    value: string | null | undefined,
+  ): string | null {
+    if (!value || typeof value !== "string") {
+      return null;
+    }
+
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const candidate = /^https?:\/\//i.test(trimmed)
+      ? trimmed
+      : `https://${trimmed}`;
+
+    try {
+      const parsed = new URL(candidate);
+      parsed.protocol = parsed.protocol.toLowerCase();
+      parsed.hostname = parsed.hostname.toLowerCase();
+      parsed.hash = "";
+      return parsed.toString();
+    } catch {
+      return null;
+    }
+  }
+
+  private extractWebsiteFromText(text: string | null | undefined): string | null {
+    if (!text || typeof text !== "string") {
+      return null;
+    }
+
+    const explicitMatches =
+      text.match(/\bhttps?:\/\/[^\s<>()]+|\bwww\.[^\s<>()]+/gi) ?? [];
+    const labeledBareDomain =
+      text.match(
+        /\bwebsite\b[^a-z0-9]+([a-z0-9][a-z0-9.-]+\.[a-z]{2,}(?:\/[^\s<>()]*)?)/i,
+      )?.[1] ?? null;
+
+    const candidates = labeledBareDomain
+      ? [...explicitMatches, labeledBareDomain]
+      : explicitMatches;
+
+    for (const rawCandidate of candidates) {
+      const normalizedCandidate = rawCandidate
+        .replace(/[),.;]+$/g, "")
+        .trim();
+      if (!normalizedCandidate) {
+        continue;
+      }
+      const candidate = /^https?:\/\//i.test(normalizedCandidate)
+        ? normalizedCandidate
+        : `https://${normalizedCandidate}`;
+      const normalized = this.normalizeWebsiteCandidate(candidate);
+      if (!normalized || this.isMissingWebsiteValue(normalized)) {
+        continue;
+      }
+      return normalized;
+    }
+
+    return null;
+  }
+
+  private extractStageFromText(text: string | null | undefined): StartupStage | null {
+    if (!text || typeof text !== "string") {
+      return null;
+    }
+
+    const normalized = text.toLowerCase();
+    if (/\bpre[\s-]?seed\b/.test(normalized)) return StartupStage.PRE_SEED;
+    if (/\bseries[\s-]?a\b/.test(normalized)) return StartupStage.SERIES_A;
+    if (/\bseries[\s-]?b\b/.test(normalized)) return StartupStage.SERIES_B;
+    if (/\bseries[\s-]?c\b/.test(normalized)) return StartupStage.SERIES_C;
+    if (/\bseries[\s-]?d\b/.test(normalized)) return StartupStage.SERIES_D;
+    if (/\bseries[\s-]?e\b/.test(normalized)) return StartupStage.SERIES_E;
+    if (/\bseries[\s-]?f(?:\+|[\s-]?plus)?\b/.test(normalized)) {
+      return StartupStage.SERIES_F_PLUS;
+    }
+    if (/\bseed\b/.test(normalized)) return StartupStage.SEED;
+    return null;
+  }
+
+  private extractCompanyNameFromRawText(text: string | null | undefined): string | null {
+    if (!text || typeof text !== "string") {
+      return null;
+    }
+
+    const headingMatch =
+      text.match(
+        /(?:^|\n)\s*#?\s*pitch\s*deck\s*[—\-:]\s*([^\n(]{2,120}?)(?:\s*\(|\s*$)/i,
+      )?.[1] ?? null;
+    if (headingMatch) {
+      return this.sanitizeStartupName(headingMatch);
+    }
+
+    const companyLineMatch =
+      text.match(
+        /(?:^|\n)\s*(?:company|startup)\s*(?:name)?\s*[:\-]\s*([^\n]{2,120})/i,
+      )?.[1] ?? null;
+    if (companyLineMatch) {
+      return this.sanitizeStartupName(companyLineMatch);
+    }
+
+    return null;
+  }
+
+  private deriveCriticalMissingFromExtraction(
+    extraction: ExtractionResult | null,
+  ): Array<"website" | "stage"> {
+    if (!extraction) {
+      return [];
+    }
+
+    const missing: Array<"website" | "stage"> = [];
+    const websiteCandidate =
+      this.normalizeWebsiteCandidate(extraction.website) ??
+      this.extractWebsiteFromText(extraction.rawText);
+    if (this.isMissingWebsiteValue(websiteCandidate)) {
+      missing.push("website");
+    }
+
+    const stageCandidate =
+      this.mapStageToEnum(extraction.stage) ??
+      this.extractStageFromText(extraction.rawText);
+    if (!stageCandidate) {
+      missing.push("stage");
+    } else if (stageCandidate === StartupStage.SEED) {
+      const structuralPlaceholderSignals = [
+        this.isLikelyPlaceholderText(extraction.industry),
+        this.isLikelyPlaceholderText(extraction.location),
+        this.isMissingWebsiteValue(websiteCandidate),
+      ];
+      if (structuralPlaceholderSignals.some(Boolean)) {
+        missing.push("stage");
+      }
+    }
+
+    return Array.from(new Set(missing));
+  }
+
+  private isLikelyPlaceholderText(value: string | null | undefined): boolean {
+    if (!value) {
+      return true;
+    }
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) {
+      return true;
+    }
+    return (
+      normalized.includes("pending extraction") ||
+      normalized.includes("pending-extraction") ||
+      normalized === "unknown" ||
+      normalized === "n/a"
+    );
+  }
+
+  private isLikelyPlaceholderStartupName(value: string | null | undefined): boolean {
+    if (!value) {
+      return true;
+    }
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) {
+      return true;
+    }
+    return (
+      normalized === "untitled startup" ||
+      normalized === "startup example" ||
+      normalized.startsWith("startup ")
+    );
+  }
+
+  private sanitizeStartupName(value: string | null | undefined): string | null {
+    if (!value || typeof value !== "string") {
+      return null;
+    }
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+    const normalized = trimmed.toLowerCase();
+    if (
+      normalized === "unknown" ||
+      normalized === "n/a" ||
+      normalized.includes("pending extraction")
+    ) {
+      return null;
+    }
+    return trimmed;
+  }
+
+  async prefillCriticalFieldsFromDeckExtraction(startupId: string): Promise<{
+    extractionSource: ExtractionResult["source"];
+    updatedFields: Array<"website" | "stage" | "name" | "industry" | "location">;
+    missingCriticalFields: Array<"website" | "stage">;
+  }> {
+    const extraction = await this.extractionService.run(startupId);
+
+    const [record] = await this.drizzle.db
+      .select({
+        name: startup.name,
+        website: startup.website,
+        stage: startup.stage,
+        industry: startup.industry,
+        location: startup.location,
+        fundingTarget: startup.fundingTarget,
+        teamSize: startup.teamSize,
+      })
+      .from(startup)
+      .where(eq(startup.id, startupId))
+      .limit(1);
+
+    if (!record) {
+      throw new BadRequestException(`Startup ${startupId} not found`);
+    }
+
+    const updates: Partial<typeof startup.$inferInsert> = {};
+    const updatedFields: Array<
+      "website" | "stage" | "name" | "industry" | "location"
+    > = [];
+
+    const normalizedWebsite =
+      this.normalizeWebsiteCandidate(extraction.website) ??
+      this.extractWebsiteFromText(extraction.rawText);
+    if (
+      this.isMissingWebsiteValue(record.website) &&
+      normalizedWebsite &&
+      !this.isMissingWebsiteValue(normalizedWebsite)
+    ) {
+      updates.website = normalizedWebsite;
+      updatedFields.push("website");
+    }
+
+    const mappedStage =
+      this.mapStageToEnum(extraction.stage) ??
+      this.extractStageFromText(extraction.rawText);
+    if (this.isLikelyPlaceholderStage(record) && mappedStage) {
+      updates.stage = mappedStage;
+      updatedFields.push("stage");
+    }
+
+    const nameCandidate =
+      this.sanitizeStartupName(extraction.companyName) ??
+      this.extractCompanyNameFromRawText(extraction.rawText);
+    if (nameCandidate && this.isLikelyPlaceholderStartupName(record.name)) {
+      updates.name = nameCandidate;
+      updatedFields.push("name");
+    }
+
+    const industryCandidate = extraction.industry?.trim();
+    if (
+      industryCandidate &&
+      !this.isLikelyPlaceholderText(industryCandidate) &&
+      this.isLikelyPlaceholderText(record.industry)
+    ) {
+      updates.industry = industryCandidate;
+      updatedFields.push("industry");
+    }
+
+    const locationCandidate = extraction.location?.trim();
+    if (
+      locationCandidate &&
+      !this.isLikelyPlaceholderText(locationCandidate) &&
+      this.isLikelyPlaceholderText(record.location)
+    ) {
+      updates.location = locationCandidate;
+      updatedFields.push("location");
+    }
+
+    if (updatedFields.length > 0) {
+      await this.drizzle.db
+        .update(startup)
+        .set({
+          ...updates,
+          updatedAt: new Date(),
+        })
+        .where(eq(startup.id, startupId));
+      this.logger.log(
+        `[Pipeline] Pre-pipeline extraction updated ${startupId}: ${updatedFields.join(", ")}`,
+      );
+    } else {
+      this.logger.debug(
+        `[Pipeline] Pre-pipeline extraction produced no critical updates for ${startupId}`,
+      );
+    }
+
+    return {
+      extractionSource: extraction.source,
+      updatedFields,
+      missingCriticalFields: await this.getMissingCriticalFields(startupId),
+    };
   }
 
   async startPipeline(startupId: string, userId: string): Promise<string> {
@@ -357,7 +787,35 @@ export class PipelineService {
   async cancelPipeline(startupId: string): Promise<{ removedJobs: number }> {
     const state = await this.pipelineState.get(startupId);
     if (!state) {
-      throw new Error(`Pipeline state for startup ${startupId} not found`);
+      const removedJobs = await this.queue.removePipelineJobs(startupId);
+      this.errorRecovery.clearAllTimeoutsForStartup(startupId);
+
+      const trackedProgress = await this.progressTracker.getProgress(startupId);
+      const [startupRecord] = await this.drizzle.db
+        .select({ userId: startup.userId })
+        .from(startup)
+        .where(eq(startup.id, startupId))
+        .limit(1);
+      if (trackedProgress && startupRecord?.userId) {
+        await this.progressTracker.setPipelineStatus({
+          startupId,
+          userId: startupRecord.userId,
+          pipelineRunId: trackedProgress.pipelineRunId,
+          status: PipelineStatus.CANCELLED,
+          currentPhase: trackedProgress.currentPhase,
+          error: "Cancelled without active pipeline runtime state",
+        });
+      }
+
+      const startupStatus = await this.getStartupStatus(startupId);
+      if (startupStatus === StartupStatus.ANALYZING) {
+        await this.updateStartupStatus(startupId, StartupStatus.SUBMITTED);
+      }
+
+      this.logger.warn(
+        `[Pipeline] Cancel requested for ${startupId} with no live state; removed ${removedJobs} queued job(s) and marked progress as cancelled when present`,
+      );
+      return { removedJobs };
     }
     const alreadyCancelled = state.status === PipelineStatus.CANCELLED;
 
@@ -415,6 +873,17 @@ export class PipelineService {
 
     if (phase === PipelinePhase.EVALUATION) {
       await this.updatePipelineQualityFromEvaluation(state.startupId);
+    }
+    if (phase === PipelinePhase.ENRICHMENT) {
+      const criticalMissing = await this.getCriticalMissingAfterEnrichment(startupId);
+      if (criticalMissing.length > 0) {
+        await this.notifyClaraMissingInfoForPipelineStart(startupId, criticalMissing);
+        this.logger.warn(
+          `[Pipeline] Cancelling run for ${startupId}: unresolved critical fields after enrichment [${criticalMissing.join(", ")}]`,
+        );
+        await this.cancelPipeline(startupId);
+        return;
+      }
     }
 
     await this.applyTransitions(startupId);
@@ -571,6 +1040,19 @@ export class PipelineService {
     this.logger.log(
       `[Pipeline] Skipping ${phase} phase for ${startupId}: ${reason}`,
     );
+
+    if (phase === PipelinePhase.ENRICHMENT) {
+      const criticalMissing = await this.getCriticalMissingAfterEnrichment(startupId);
+      if (criticalMissing.length > 0) {
+        await this.notifyClaraMissingInfoForPipelineStart(startupId, criticalMissing);
+        this.logger.warn(
+          `[Pipeline] Cancelling run for ${startupId}: unresolved critical fields after skipped enrichment [${criticalMissing.join(", ")}]`,
+        );
+        await this.cancelPipeline(startupId);
+        return true;
+      }
+    }
+
     await this.applyTransitions(startupId);
     return true;
   }
@@ -603,10 +1085,70 @@ export class PipelineService {
       return;
     }
 
+    if (phase === PipelinePhase.SCRAPING) {
+      const missingFields = await this.getMissingCriticalFields(startupId);
+      if (missingFields.includes("website")) {
+        const enrichmentStatus = latestState.phases[PipelinePhase.ENRICHMENT]?.status;
+        if (this.isPhaseStatusTerminal(enrichmentStatus)) {
+          const criticalMissing = await this.getCriticalMissingAfterEnrichment(startupId);
+          if (criticalMissing.includes("website")) {
+            await this.notifyClaraMissingInfoForPipelineStart(
+              startupId,
+              criticalMissing,
+            );
+            this.logger.warn(
+              `[Pipeline] Cancelling run for ${startupId}: website still unresolved before scraping [${criticalMissing.join(", ")}]`,
+            );
+            await this.cancelPipeline(startupId);
+            return;
+          }
+        }
+        if (!this.isPhaseStatusTerminal(enrichmentStatus)) {
+          this.logger.log(
+            `[Pipeline] Deferring scraping queue for ${startupId}: website still missing, waiting for enrichment to finish`,
+          );
+          return;
+        }
+      }
+    }
+
     if (phase === PipelinePhase.ENRICHMENT) {
-      if (!this.aiConfig.isEnrichmentEnabled()) {
+      const criticalMissingFromStartup = await this.getMissingCriticalFields(startupId);
+      const enrichmentNeed = await this.enrichmentService.assessNeed(startupId);
+      const criticalMissingFromAssessment = this.normalizeCriticalMissingFields(
+        enrichmentNeed.missingFields,
+      );
+      const extraction = await this.pipelineState.getPhaseResult(
+        startupId,
+        PipelinePhase.EXTRACTION,
+      ) as ExtractionResult | null;
+      const criticalMissingFromExtraction =
+        this.deriveCriticalMissingFromExtraction(extraction);
+      const criticalMissing = Array.from(
+        new Set([
+          ...criticalMissingFromStartup,
+          ...criticalMissingFromAssessment,
+          ...criticalMissingFromExtraction,
+        ]),
+      );
+      const shouldRun = enrichmentNeed.shouldRun || criticalMissing.length > 0;
+
+      if (!shouldRun) {
+        this.logger.log(
+          `[Pipeline] Enrichment assessNeed() returned shouldRun=false for ${startupId}; running lightweight enrichment pass to keep phase execution explicit`,
+        );
+      }
+
+      if (!enrichmentNeed.shouldRun && criticalMissing.length > 0) {
+        this.logger.warn(
+          `[Pipeline] Enrichment assessNeed() returned shouldRun=false, but critical fields are missing for ${startupId}. Forcing enrichment run [${criticalMissing.join(", ")}]`,
+        );
+      }
+
+      if (!this.aiConfig.isEnrichmentEnabled() && criticalMissing.length === 0) {
         const skippedResult = this.enrichmentService.buildSkippedResult(
           "Enrichment temporarily disabled by configuration",
+          enrichmentNeed.missingFields,
         );
         await this.onPhaseSkipped({
           startupId,
@@ -619,21 +1161,21 @@ export class PipelineService {
         });
         return;
       }
-
-      const enrichmentNeed = await this.enrichmentService.assessNeed(startupId);
-      if (!enrichmentNeed.shouldRun) {
-        const skippedResult = this.enrichmentService.buildSkippedResult(
-          enrichmentNeed.reason,
+      if (!this.aiConfig.isEnrichmentEnabled() && criticalMissing.length > 0) {
+        this.logger.warn(
+          `[Pipeline] Enrichment is disabled by configuration but will run for ${startupId} because critical fields are missing [${criticalMissing.join(", ")}]`,
         );
-        await this.onPhaseSkipped({
-          startupId,
-          pipelineRunId,
-          userId,
-          phase,
-          reason: enrichmentNeed.reason,
-          result: skippedResult,
-          retryCount,
-        });
+      }
+    }
+
+    if (phase === PipelinePhase.RESEARCH) {
+      const criticalMissing = await this.getCriticalMissingAfterEnrichment(startupId);
+      if (criticalMissing.length > 0) {
+        await this.notifyClaraMissingInfoForPipelineStart(startupId, criticalMissing);
+        this.logger.warn(
+          `[Pipeline] Cancelling run for ${startupId}: unresolved critical fields before research [${criticalMissing.join(", ")}]`,
+        );
+        await this.cancelPipeline(startupId);
         return;
       }
     }
@@ -830,6 +1372,15 @@ export class PipelineService {
     const liveState = await this.pipelineState.get(startupId);
     if (liveState) {
       return liveState;
+    }
+
+    const startupStatus = await this.getStartupStatus(startupId);
+    if (
+      startupStatus === StartupStatus.DRAFT ||
+      startupStatus === StartupStatus.SUBMITTED ||
+      startupStatus === StartupStatus.ANALYZING
+    ) {
+      return null;
     }
 
     const snapshot = await this.pipelineStateSnapshots.getLatestReusableSnapshot(
@@ -1058,6 +1609,75 @@ export class PipelineService {
     });
   }
 
+  private async getCriticalMissingAfterEnrichment(
+    startupId: string,
+  ): Promise<Array<"website" | "stage">> {
+    let enrichment: EnrichmentResult | null = null;
+    try {
+      enrichment = await this.pipelineState.getPhaseResult(
+        startupId,
+        PipelinePhase.ENRICHMENT,
+      ) as EnrichmentResult | null;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `Unable to load enrichment result for Clara missing-info notification on ${startupId}: ${message}`,
+      );
+    }
+
+    const fromEnrichment = this.normalizeCriticalMissingFields(
+      enrichment?.fieldsStillMissing,
+    );
+    let extraction: ExtractionResult | null = null;
+    try {
+      extraction = await this.pipelineState.getPhaseResult(
+        startupId,
+        PipelinePhase.EXTRACTION,
+      ) as ExtractionResult | null;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `Unable to load extraction result for critical-field fallback on ${startupId}: ${message}`,
+      );
+    }
+
+    const fromExtraction = this.deriveCriticalMissingFromExtraction(extraction);
+    const directMissing = Array.from(new Set([...fromEnrichment, ...fromExtraction]));
+    if (directMissing.length > 0) {
+      return directMissing;
+    }
+
+    try {
+      const fromStartup = await this.getMissingCriticalFields(startupId);
+      return Array.from(new Set([...directMissing, ...fromStartup]));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `Unable to resolve critical missing fields from startup record for ${startupId}: ${message}`,
+      );
+      return [];
+    }
+  }
+
+  private normalizeCriticalMissingFields(
+    fields: unknown,
+  ): Array<"website" | "stage"> {
+    if (!Array.isArray(fields)) {
+      return [];
+    }
+    return Array.from(
+      new Set(
+        fields
+          .filter((field): field is string => typeof field === "string")
+          .map((field) => field.trim().toLowerCase())
+          .filter(
+            (field): field is "website" | "stage" =>
+              field === "website" || field === "stage",
+          ),
+      ),
+    );
+  }
+
   private async handlePhaseTimeout(
     startupId: string,
     phase: PipelinePhase,
@@ -1087,6 +1707,14 @@ export class PipelineService {
     }
 
     return orderedPhases.slice(index);
+  }
+
+  private isPhaseStatusTerminal(status: PhaseStatus | undefined): boolean {
+    return (
+      status === PhaseStatus.COMPLETED ||
+      status === PhaseStatus.FAILED ||
+      status === PhaseStatus.SKIPPED
+    );
   }
 
   private async resetPhaseForRerun(params: {

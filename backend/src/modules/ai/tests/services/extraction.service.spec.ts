@@ -300,4 +300,32 @@ describe("ExtractionService", () => {
       "Startup missing not found",
     );
   });
+
+  it("sanitizes placeholder startup defaults from extraction fallback values", async () => {
+    mockDb.limit.mockResolvedValueOnce([
+      {
+        ...startupRecord,
+        name: "Startup  Example",
+        website: "https://pending-extraction.com",
+        industry: "Pending extraction",
+        location: "Pending extraction",
+      },
+    ]);
+    pdfTextExtractor.extractText.mockResolvedValueOnce({
+      text: "# Pitch Deck — Chari (Example Startup)\n\nSeed stage",
+      pageCount: 3,
+      hasContent: true,
+      hasSparsePages: false,
+      sparsePageCount: 0,
+    });
+    fieldExtractor.extractFields.mockResolvedValueOnce({});
+
+    const result = await service.run("startup-1");
+
+    expect(result.companyName).toBe("Chari");
+    expect(result.website).toBe("");
+    expect(result.industry).toBe("Unknown");
+    expect(result.location).toBe("Unknown");
+    expect(result.stage).toBe("seed");
+  });
 });

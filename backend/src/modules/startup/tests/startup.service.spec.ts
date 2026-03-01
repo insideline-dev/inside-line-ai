@@ -47,6 +47,7 @@ describe("StartupService", () => {
     update: jest.fn().mockReturnThis(),
     set: jest.fn().mockReturnThis(),
     delete: jest.fn().mockReturnThis(),
+    transaction: jest.fn(),
   });
 
   let mockDb: ReturnType<typeof createMockDb>;
@@ -91,6 +92,9 @@ describe("StartupService", () => {
 
   beforeEach(() => {
     mockDb = createMockDb();
+    mockDb.transaction.mockImplementation(async (callback: (tx: typeof mockDb) => Promise<unknown>) => {
+      return callback(mockDb);
+    });
 
     drizzleService = {
       db: mockDb,
@@ -99,6 +103,7 @@ describe("StartupService", () => {
 
     queueService = {
       addJob: jest.fn(),
+      removePipelineJobs: jest.fn().mockResolvedValue(0),
     } as unknown as jest.Mocked<QueueService>;
 
     storageService = {
@@ -842,6 +847,26 @@ describe("StartupService", () => {
         status: StartupStatus.ANALYZING,
       };
       mockDb.limit.mockResolvedValueOnce([analyzingStartup]);
+      pipelineService.getPipelineStatus.mockResolvedValueOnce({
+        pipelineRunId: "run-telemetry",
+        startupId: mockStartupId,
+        userId: mockUserId,
+        status: PipelineStatus.RUNNING,
+        currentPhase: PipelinePhase.EVALUATION,
+        phases: {
+          [PipelinePhase.EXTRACTION]: { phase: PipelinePhase.EXTRACTION, status: "completed" as const },
+          [PipelinePhase.ENRICHMENT]: { phase: PipelinePhase.ENRICHMENT, status: "completed" as const },
+          [PipelinePhase.SCRAPING]: { phase: PipelinePhase.SCRAPING, status: "completed" as const },
+          [PipelinePhase.RESEARCH]: { phase: PipelinePhase.RESEARCH, status: "completed" as const },
+          [PipelinePhase.EVALUATION]: { phase: PipelinePhase.EVALUATION, status: "running" as const },
+          [PipelinePhase.SYNTHESIS]: { phase: PipelinePhase.SYNTHESIS, status: "pending" as const },
+        },
+        results: {},
+        metadata: {
+          startedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      } as any);
       pipelineService.getTrackedProgress.mockResolvedValueOnce({
         pipelineRunId: "run-telemetry",
         startupId: mockStartupId,

@@ -47,6 +47,15 @@ const TIER_2_SOURCE_DOMAINS = [
   "linkedin.com",
 ];
 
+const PLACEHOLDER_WEBSITE_HOSTS = new Set([
+  "pending-extraction.com",
+]);
+
+const CRITICAL_ENRICHMENT_FIELDS = new Set([
+  "website",
+  "stage",
+]);
+
 const enrichmentOutputSchema = z.object({
   companyName: z.object({ value: z.string(), confidence: z.number(), source: z.string() }).optional(),
   companyDescription: z.object({ value: z.string(), confidence: z.number(), source: z.string() }).optional(),
@@ -246,10 +255,21 @@ export class EnrichmentService {
     };
   }
 
-  buildSkippedResult(reason: string): EnrichmentResult {
+  buildSkippedResult(
+    reason: string,
+    missingFields: string[] = [],
+  ): EnrichmentResult {
     const result = this.buildEmptyResult();
     result.webSearchSkipped = true;
     result.skipReason = reason;
+    result.fieldsStillMissing = Array.from(
+      new Set(
+        missingFields
+          .filter((field): field is string => typeof field === "string")
+          .map((field) => field.trim())
+          .filter((field) => field.length > 0),
+      ),
+    );
     result.dataProvenance = {
       fromExtraction: [],
       fromWebsite: [],
@@ -317,7 +337,7 @@ export class EnrichmentService {
       options?.onStepProgress?.onStepStart("resolve_extraction", {
         inputJson: { gapsBefore: Array.from(gaps) },
       });
-      const extractionResolved = this.resolveFromExtraction(extraction, gaps);
+      const extractionResolved = this.resolveFromExtraction(extraction, gaps, record);
       dataProvenance.fromExtraction = Array.from(extractionResolved.keys());
       options?.onStepProgress?.onStepComplete("resolve_extraction", {
         summary: { resolved: dataProvenance.fromExtraction },
@@ -454,6 +474,11 @@ export class EnrichmentService {
         throw error;
       }
       enrichmentResult.dbFieldsUpdated = dbWriteResult.fieldsUpdated;
+      const refreshedRecord = await this.loadStartupRecord(startupId);
+      enrichmentResult.fieldsStillMissing = this.reconcileCriticalFieldsStillMissing(
+        enrichmentResult.fieldsStillMissing,
+        refreshedRecord,
+      );
 
       this.logger.log(
         `[Enrichment] Completed | enriched=${enrichmentResult.fieldsEnriched.length} | corrected=${enrichmentResult.fieldsCorrected.length} | stillMissing=${enrichmentResult.fieldsStillMissing.length} | dbUpdated=${dbWriteResult.fieldsUpdated.length} | webSearchSkipped=${webSearchSkipped}`,
@@ -490,12 +515,12 @@ export class EnrichmentService {
 
   private identifyMissingFields(record: StartupRecord): string[] {
     const missing: string[] = [];
-    if (!record.website) missing.push("website");
+    if (this.isMissingWebsiteValue(record.website)) missing.push("website");
     if (!record.description) missing.push("description");
     if (!record.tagline) missing.push("tagline");
     if (!record.industry) missing.push("industry");
     if (!record.location) missing.push("location");
-    if (!record.stage) missing.push("stage");
+    if (this.isMissingStageValue(record)) missing.push("stage");
     if (!record.fundingTarget) missing.push("fundingTarget");
     if (!record.contactName) missing.push("contactName");
     if (!record.contactEmail) missing.push("contactEmail");
@@ -536,6 +561,7 @@ export class EnrichmentService {
   private resolveFromExtraction(
     extraction: ExtractionResult | null,
     gaps: Set<string>,
+    record: StartupRecord,
   ): Map<string, { value: string | number; source: string; confidence: number }> {
     const resolved = new Map<string, { value: string | number; source: string; confidence: number }>();
     if (!extraction) return resolved;
@@ -573,6 +599,24 @@ export class EnrichmentService {
       if (!gaps.has(gapField)) continue;
       const strValue = typeof value === "number" ? value : String(value ?? "").trim();
       if (!strValue || strValue === "0") continue;
+
+      if (gapField === "website" && this.isMissingWebsiteValue(String(strValue))) {
+        continue;
+      }
+
+      if (gapField === "stage") {
+        const mappedStage = this.mapStageToEnum(String(strValue));
+        if (!mappedStage) {
+          continue;
+        }
+        if (this.shouldSkipExtractionStageCandidate(mappedStage, extraction, record)) {
+          continue;
+        }
+        resolved.set(gapField, { value: mappedStage, source, confidence: 0.85 });
+        gaps.delete(gapField);
+        continue;
+      }
+
       resolved.set(gapField, { value: strValue, source, confidence: 0.85 });
       gaps.delete(gapField);
     }
@@ -852,6 +896,9 @@ export class EnrichmentService {
     }
     if (remainingGaps?.has("website")) {
       queries.push({ query: `${companyName} official website`, options: { count: 3 } });
+    }
+    if (remainingGaps?.has("website") || remainingGaps?.has("stage")) {
+      queries.push({ query: `${companyName} site:linkedin.com/company`, options: { count: 5 } });
     }
     if (remainingGaps?.has("location")) {
       queries.push({ query: `${companyName} headquarters location office`, options: { count: 3 } });
@@ -1203,6 +1250,7 @@ export class EnrichmentService {
     const fieldsStillMissing = this.computeFieldsStillMissing(
       missingFields,
       normalized,
+      record,
     );
 
     return {
@@ -1311,10 +1359,11 @@ export class EnrichmentService {
   private computeFieldsStillMissing(
     missingFields: string[],
     enrichment: EnrichmentWithoutDbWrites,
+    record: StartupRecord,
   ): string[] {
     const stillMissing: string[] = [];
     for (const field of missingFields) {
-      if (!this.isMissingFieldFilled(field, enrichment)) {
+      if (!this.isMissingFieldFilled(field, enrichment, record)) {
         stillMissing.push(field);
       }
     }
@@ -1324,6 +1373,7 @@ export class EnrichmentService {
   private isMissingFieldFilled(
     field: string,
     enrichment: EnrichmentWithoutDbWrites,
+    record: StartupRecord,
   ): boolean {
     if (field === "teamMembers") {
       return enrichment.discoveredFounders.length > 0;
@@ -1333,6 +1383,17 @@ export class EnrichmentService {
     }
     if (field === "location") {
       return Boolean(this.readConfidenceFieldValue(enrichment.headquarters));
+    }
+    if (field === "website") {
+      const website = this.readConfidenceFieldValue(enrichment.website);
+      return !this.isMissingWebsiteValue(website);
+    }
+    if (field === "stage") {
+      const stage = this.readConfidenceFieldValue(enrichment.stage);
+      if (!stage) return false;
+      const mapped = this.mapStageToEnum(stage);
+      if (!mapped) return false;
+      return !this.isLikelyPlaceholderStage(mapped, record);
     }
 
     const direct = this.readConfidenceFieldValue(
@@ -2027,6 +2088,151 @@ export class EnrichmentService {
     return host === domain || host.endsWith(`.${domain}`);
   }
 
+  private isMissingWebsiteValue(value: string | null | undefined): boolean {
+    const normalized = this.normalizeSourceUrl(value ?? undefined);
+    if (!normalized) {
+      return true;
+    }
+    const host = this.hostnameFromUrl(normalized);
+    if (!host) {
+      return true;
+    }
+    return PLACEHOLDER_WEBSITE_HOSTS.has(host);
+  }
+
+  private isPlaceholderText(value: string | null | undefined): boolean {
+    if (typeof value !== "string") {
+      return true;
+    }
+    const normalized = value.trim().toLowerCase();
+    if (normalized.length === 0) {
+      return true;
+    }
+    return (
+      normalized.includes("pending extraction") ||
+      normalized.includes("pending-extraction") ||
+      normalized === "unknown" ||
+      normalized === "n/a"
+    );
+  }
+
+  private isLikelyPlaceholderStage(
+    stageValue: string | null | undefined,
+    record: StartupRecord,
+  ): boolean {
+    const mappedStage = this.mapStageToEnum(stageValue ?? "");
+    if (!mappedStage) {
+      return true;
+    }
+    if (mappedStage !== StartupStage.SEED) {
+      return false;
+    }
+
+    const structuralSignals = [
+      this.isMissingWebsiteValue(record.website),
+      this.isPlaceholderText(record.industry),
+      this.isPlaceholderText(record.location),
+    ];
+    const secondarySignals = [
+      typeof record.fundingTarget !== "number" || record.fundingTarget <= 0,
+      typeof record.teamSize !== "number" || record.teamSize <= 1,
+    ];
+    const totalSignals = [...structuralSignals, ...secondarySignals];
+    return (
+      structuralSignals.filter(Boolean).length >= 1 &&
+      totalSignals.filter(Boolean).length >= 2
+    );
+  }
+
+  private isMissingStageValue(record: StartupRecord): boolean {
+    return this.isLikelyPlaceholderStage(record.stage, record);
+  }
+
+  private shouldSkipExtractionStageCandidate(
+    candidateStage: string,
+    extraction: ExtractionResult,
+    record: StartupRecord,
+  ): boolean {
+    if (!this.isLikelyPlaceholderStage(record.stage, record)) {
+      return false;
+    }
+
+    const currentStage = this.mapStageToEnum(record.stage ?? "");
+    if (!currentStage || currentStage !== candidateStage) {
+      return false;
+    }
+
+    if (extraction.source === "startup-context") {
+      return true;
+    }
+
+    return !this.hasStageMentionInText(extraction.rawText, candidateStage);
+  }
+
+  private hasStageMentionInText(text: string | undefined, stage: string): boolean {
+    if (!text) {
+      return false;
+    }
+
+    const patternByStage: Record<string, RegExp> = {
+      [StartupStage.PRE_SEED]: /\bpre[-\s]?seed\b/i,
+      [StartupStage.SEED]: /\bseed\b/i,
+      [StartupStage.SERIES_A]: /\bseries\s+a\b/i,
+      [StartupStage.SERIES_B]: /\bseries\s+b\b/i,
+      [StartupStage.SERIES_C]: /\bseries\s+c\b/i,
+      [StartupStage.SERIES_D]: /\bseries\s+d\b/i,
+      [StartupStage.SERIES_E]: /\bseries\s+e\b/i,
+      [StartupStage.SERIES_F_PLUS]: /\bseries\s+f(?:\+|\s*plus)?\b/i,
+    };
+
+    return (patternByStage[stage] ?? /\bseries\b/i).test(text);
+  }
+
+  private identifyCriticalMissingFields(record: StartupRecord): string[] {
+    const missing: string[] = [];
+    if (this.isMissingWebsiteValue(record.website)) {
+      missing.push("website");
+    }
+    if (this.isMissingStageValue(record)) {
+      missing.push("stage");
+    }
+    return missing;
+  }
+
+  private reconcileCriticalFieldsStillMissing(
+    fieldsStillMissing: string[],
+    record: StartupRecord,
+  ): string[] {
+    const preservedNonCritical = fieldsStillMissing.filter((field) => {
+      const normalized = field.trim().toLowerCase();
+      return !CRITICAL_ENRICHMENT_FIELDS.has(normalized);
+    });
+    return Array.from(
+      new Set([
+        ...preservedNonCritical,
+        ...this.identifyCriticalMissingFields(record),
+      ]),
+    );
+  }
+
+  private isGapFillCandidateMissing(
+    record: StartupRecord,
+    dbColumn: keyof StartupRecord,
+  ): boolean {
+    const currentValue = record[dbColumn];
+    const isEmpty = currentValue === null || currentValue === undefined || currentValue === "";
+    if (isEmpty) {
+      return true;
+    }
+    if (dbColumn === "website") {
+      return this.isMissingWebsiteValue(this.readDbString(currentValue));
+    }
+    if (dbColumn === "stage") {
+      return this.isMissingStageValue(record);
+    }
+    return false;
+  }
+
   private passesCorrectionEvidenceGate(
     fieldDef: EnrichableField,
     enrichment: EnrichmentResult,
@@ -2085,14 +2291,21 @@ export class EnrichmentService {
       if (!fieldDef) continue;
 
       const currentValue = record[fieldDef.dbColumn];
-      const isEmpty = currentValue === null || currentValue === undefined || currentValue === "";
-      if (!isEmpty) continue;
+      if (!this.isGapFillCandidateMissing(record, fieldDef.dbColumn)) continue;
 
       // Special handling for stage: must map to enum
       if (fieldDef.dbColumn === "stage" && typeof data.value === "string") {
         const mapped = this.mapStageToEnum(data.value);
         if (!mapped) continue;
+        const currentStage = this.readDbString(currentValue);
+        if (currentStage && this.valuesEquivalent(currentStage, mapped, false)) continue;
         updates[fieldDef.dbColumn] = mapped;
+      } else if (fieldDef.dbColumn === "website") {
+        const websiteCandidate = this.normalizeSourceUrl(String(data.value));
+        if (!websiteCandidate || this.isMissingWebsiteValue(websiteCandidate)) continue;
+        const currentWebsite = this.readDbString(currentValue);
+        if (currentWebsite && this.valuesEquivalent(currentWebsite, websiteCandidate, true)) continue;
+        updates[fieldDef.dbColumn] = websiteCandidate;
       } else if (fieldDef.dbColumn === "fundingTarget") {
         const numValue = typeof data.value === "number" ? data.value : Number(data.value);
         if (!Number.isFinite(numValue) || numValue <= 0) continue;
@@ -2114,25 +2327,32 @@ export class EnrichmentService {
       if (!enrichedField) continue;
 
       const currentValue = record[dbColumn];
-      const isEmpty = currentValue === null || currentValue === undefined || currentValue === "";
+      if (!this.isGapFillCandidateMissing(record, dbColumn)) continue;
+      if (enrichedField.confidence < gapFillThreshold) continue;
 
-      if (isEmpty && enrichedField.confidence >= gapFillThreshold) {
-        // Special handling for stage: must map to enum
-        if (dbColumn === "stage" && typeof enrichedField.value === "string") {
-          const mapped = this.mapStageToEnum(enrichedField.value);
-          if (!mapped) continue;
-          updates[dbColumn] = mapped;
-        } else if (dbColumn === "fundingTarget") {
-          const numValue = typeof enrichedField.value === "number"
-            ? enrichedField.value
-            : Number(enrichedField.value);
-          if (!Number.isFinite(numValue) || numValue <= 0) continue;
-          updates[dbColumn] = Math.round(numValue);
-        } else {
-          updates[dbColumn] = enrichedField.value;
-        }
-        updatedFields.push(`${label} (gap fill, confidence=${enrichedField.confidence.toFixed(2)})`);
+      // Special handling for stage: must map to enum
+      if (dbColumn === "stage" && typeof enrichedField.value === "string") {
+        const mapped = this.mapStageToEnum(enrichedField.value);
+        if (!mapped) continue;
+        const currentStage = this.readDbString(currentValue);
+        if (currentStage && this.valuesEquivalent(currentStage, mapped, false)) continue;
+        updates[dbColumn] = mapped;
+      } else if (dbColumn === "website") {
+        const websiteCandidate = this.normalizeSourceUrl(String(enrichedField.value));
+        if (!websiteCandidate || this.isMissingWebsiteValue(websiteCandidate)) continue;
+        const currentWebsite = this.readDbString(currentValue);
+        if (currentWebsite && this.valuesEquivalent(currentWebsite, websiteCandidate, true)) continue;
+        updates[dbColumn] = websiteCandidate;
+      } else if (dbColumn === "fundingTarget") {
+        const numValue = typeof enrichedField.value === "number"
+          ? enrichedField.value
+          : Number(enrichedField.value);
+        if (!Number.isFinite(numValue) || numValue <= 0) continue;
+        updates[dbColumn] = Math.round(numValue);
+      } else {
+        updates[dbColumn] = enrichedField.value;
       }
+      updatedFields.push(`${label} (gap fill, confidence=${enrichedField.confidence.toFixed(2)})`);
     }
 
     // Corrections (high confidence only)

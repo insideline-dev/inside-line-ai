@@ -119,6 +119,61 @@ describe("ScrapingService", () => {
     expect(result.scrapeErrors).toHaveLength(0);
   });
 
+  it("skips website scraping when startup website is a placeholder URL", async () => {
+    mockDb.limit.mockResolvedValueOnce([
+      {
+        id: "startup-placeholder",
+        userId: "user-123",
+        website: "https://pending-extraction.com",
+        name: "Placeholder Co",
+        industry: "SaaS",
+        stage: "seed",
+        description: "Missing website",
+        teamMembers: [],
+      },
+    ]);
+
+    const result = await service.run("startup-placeholder");
+
+    expect(websiteScraper.deepScrape).not.toHaveBeenCalled();
+    expect(result.websiteUrl).toBe("https://pending-extraction.com");
+    expect(result.website).toBeNull();
+    expect(result.scrapeErrors).toEqual([]);
+  });
+
+  it("ignores placeholder enrichment website and uses persisted startup website", async () => {
+    const pipelineState = {
+      getPhaseResult: jest
+        .fn()
+        .mockImplementation((_startupId: string, phase: PipelinePhase) => {
+          if (phase === PipelinePhase.ENRICHMENT) {
+            return Promise.resolve({
+              website: { value: "https://pending-extraction.com" },
+            });
+          }
+          return Promise.resolve(null);
+        }),
+    } as unknown as jest.Mocked<PipelineStateService>;
+    const serviceWithPipelineState = new ScrapingService(
+      drizzle,
+      websiteScraper,
+      linkedin,
+      cache,
+      undefined,
+      pipelineState,
+    );
+
+    await serviceWithPipelineState.run("startup-1");
+
+    expect(websiteScraper.deepScrape).toHaveBeenCalledWith(
+      "https://inside-line.test",
+      expect.objectContaining({
+        manualPaths: [],
+        discoveryEnabled: false,
+      }),
+    );
+  });
+
   it("skips company-level LinkedIn discovery when leadership seeds are already sufficient", async () => {
     mockDb.limit.mockResolvedValueOnce([
       {

@@ -8,7 +8,7 @@ import * as bcrypt from 'bcrypt';
 
 describe('UserAuthService', () => {
   let service: UserAuthService;
-  let drizzleService: any;
+  let drizzleService: ReturnType<typeof createMockDrizzle>;
 
   const mockUser: DbUser = {
     id: 'user-1',

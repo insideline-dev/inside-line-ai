@@ -130,7 +130,7 @@ describe('AttachmentService', () => {
         'inbox-1',
         'msg-1',
         attachments,
-        mockClient as any,
+        mockClient as unknown,
       );
 
       expect(result).toEqual(['key-1']);
@@ -157,7 +157,7 @@ describe('AttachmentService', () => {
         'inbox-1',
         'msg-1',
         attachments,
-        mockClient as any,
+        mockClient as unknown,
       );
 
       expect(result).toEqual([]);
@@ -185,7 +185,7 @@ describe('AttachmentService', () => {
         'inbox-1',
         'msg-1',
         attachments,
-        mockClient as any,
+        mockClient as unknown,
       );
 
       expect(result).toEqual(['key-1']);
@@ -228,7 +228,7 @@ describe('AttachmentService', () => {
         'inbox-1',
         'msg-1',
         attachments,
-        mockClient as any,
+        mockClient as unknown,
       );
 
       expect(result).toEqual([]);

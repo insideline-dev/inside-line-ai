@@ -38,7 +38,7 @@ export class CompetitiveAdvantageEvaluationAgent extends BaseEvaluationAgent<Com
     };
   }
 
-  fallback({ extraction }: EvaluationPipelineInput): CompetitiveAdvantageEvaluation {
+  fallback({ extraction: _extraction }: EvaluationPipelineInput): CompetitiveAdvantageEvaluation {
     return CompetitiveAdvantageEvaluationSchema.parse({
       ...baseEvaluation(20, "Competitive advantage evaluation incomplete — requires manual review"),
       moats: ["Workflow integration depth", "Execution velocity"],

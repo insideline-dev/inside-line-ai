@@ -9,8 +9,8 @@ import type { Profile } from 'passport-google-oauth20';
 
 describe('GoogleStrategy', () => {
   let strategy: GoogleStrategy;
-  let authService: any;
-  let loggerSpy: any;
+  let authService: { findOrCreateOAuthUser: jest.Mock };
+  let loggerSpy: jest.SpyInstance;
 
   const mockUser: DbUser = {
     id: 'user-1',
@@ -70,7 +70,7 @@ describe('GoogleStrategy', () => {
 
     // Silence logger during tests
     loggerSpy = jest
-      .spyOn((strategy as any).logger, 'error')
+      .spyOn((strategy as unknown as { logger: { error: (...args: unknown[]) => void } }).logger, 'error')
       .mockImplementation(() => {});
   });
 

@@ -4,7 +4,7 @@ import { DrizzleService } from '../../database';
 
 describe('ProfileService', () => {
   let service: ProfileService;
-  let drizzleService: any;
+  let drizzleService: ReturnType<typeof createMockDrizzle>;
 
   const mockProfile: DbUserProfile = {
     id: 'profile-1',

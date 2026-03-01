@@ -203,7 +203,7 @@ describe("PipelineService", () => {
   };
 
   beforeEach(() => {
-    drizzle = { db: mockDb as any } as jest.Mocked<DrizzleService>;
+    drizzle = { db: mockDb as unknown as DrizzleService["db"] } as jest.Mocked<DrizzleService>;
     queue = {
       addJob: jest.fn().mockResolvedValue("job-1"),
       removePipelineJobs: jest.fn().mockResolvedValue(0),
@@ -466,7 +466,7 @@ describe("PipelineService", () => {
     aiConfig.isEnrichmentEnabled.mockReturnValueOnce(false);
     stateService.get.mockResolvedValueOnce(createState());
 
-    await (service as any).queuePhase({
+    await (service as unknown as { queuePhase: (opts: { startupId: string; pipelineRunId: string; userId: string; phase: PipelinePhase }) => Promise<void> }).queuePhase({
       startupId: "startup-1",
       pipelineRunId: "run-1",
       userId: "user-1",
@@ -546,7 +546,7 @@ describe("PipelineService", () => {
         degraded: false,
       });
 
-    await (service as any).applyTransitions("startup-1");
+    await (service as unknown as { applyTransitions: (startupId: string) => Promise<void> }).applyTransitions("startup-1");
 
     expect(queue.addJob).toHaveBeenCalledTimes(1);
     expect(queue.addJob).toHaveBeenCalledWith(
@@ -593,7 +593,7 @@ describe("PipelineService", () => {
     phaseTransition.getPhaseConfig.mockReturnValueOnce({
       ...phaseConfig[PipelinePhase.EXTRACTION],
       maxRetries: 2,
-    } as any);
+    } as never);
     errorRecovery.getRetryDelayMs.mockReturnValueOnce(1500);
 
     await service.onPhaseFailed(
@@ -623,7 +623,7 @@ describe("PipelineService", () => {
     phaseTransition.getPhaseConfig.mockReturnValue({
       ...phaseConfig[PipelinePhase.EVALUATION],
       maxRetries: 2,
-    } as any);
+    } as never);
     phaseTransition.decideNextPhases.mockReturnValue({
       queue: [],
       blockedByRequiredFailure: true,
@@ -670,7 +670,7 @@ describe("PipelineService", () => {
       ...phaseConfig[PipelinePhase.RESEARCH],
       maxRetries: 2,
       required: false,
-    } as any);
+    } as never);
     phaseTransition.decideNextPhases.mockReturnValueOnce({
       queue: [PipelinePhase.EVALUATION],
       blockedByRequiredFailure: false,
@@ -995,10 +995,10 @@ describe("PipelineService", () => {
     phaseTransition.getPhaseConfig.mockReturnValueOnce({
       ...phaseConfig[PipelinePhase.RESEARCH],
       maxRetries: 2,
-    } as any);
+    } as never);
     errorRecovery.getRetryDelayMs.mockReturnValueOnce(2000);
 
-    await (service as any).handlePhaseTimeout(
+    await (service as unknown as { handlePhaseTimeout: (startupId: string, phase: PipelinePhase) => Promise<void> }).handlePhaseTimeout(
       "startup-1",
       PipelinePhase.RESEARCH,
     );
@@ -1027,7 +1027,7 @@ describe("PipelineService", () => {
       }),
     );
 
-    await (service as any).handlePhaseTimeout(
+    await (service as unknown as { handlePhaseTimeout: (startupId: string, phase: PipelinePhase) => Promise<void> }).handlePhaseTimeout(
       "startup-1",
       PipelinePhase.RESEARCH,
     );
@@ -1072,7 +1072,7 @@ describe("PipelineService", () => {
     it("queues phase with all optional params: delayMs, retryCount, waitingError, metadata", async () => {
       stateService.get.mockResolvedValueOnce(createState());
 
-      await (service as any).queuePhase({
+      await (service as unknown as { queuePhase: (opts: Record<string, unknown>) => Promise<void> }).queuePhase({
         startupId: "startup-1",
         pipelineRunId: "run-1",
         userId: "user-1",
@@ -1114,7 +1114,7 @@ describe("PipelineService", () => {
     it("queues phase with defaults when optional params omitted", async () => {
       stateService.get.mockResolvedValueOnce(createState());
 
-      await (service as any).queuePhase({
+      await (service as unknown as { queuePhase: (opts: Record<string, unknown>) => Promise<void> }).queuePhase({
         startupId: "startup-1",
         pipelineRunId: "run-1",
         userId: "user-1",
@@ -1146,7 +1146,7 @@ describe("PipelineService", () => {
       aiConfig.getResearchAgentHardTimeoutMs = jest.fn().mockReturnValue(3_600_000);
       aiConfig.getResearchAgentStaggerMs = jest.fn().mockReturnValue(180_000);
 
-      await (service as any).queuePhase({
+      await (service as unknown as { queuePhase: (opts: Record<string, unknown>) => Promise<void> }).queuePhase({
         startupId: "startup-1",
         pipelineRunId: "run-1",
         userId: "user-1",
@@ -1165,22 +1165,22 @@ describe("PipelineService", () => {
 
   describe("isValidAgentForPhase", () => {
     it("returns true for valid research agent key", () => {
-      expect((service as any).isValidAgentForPhase(PipelinePhase.RESEARCH, "team")).toBe(true);
-      expect((service as any).isValidAgentForPhase(PipelinePhase.RESEARCH, "market")).toBe(true);
-      expect((service as any).isValidAgentForPhase(PipelinePhase.RESEARCH, "product")).toBe(true);
-      expect((service as any).isValidAgentForPhase(PipelinePhase.RESEARCH, "news")).toBe(true);
+      expect((service as unknown as { isValidAgentForPhase: (phase: PipelinePhase, key: string) => boolean }).isValidAgentForPhase(PipelinePhase.RESEARCH, "team")).toBe(true);
+      expect((service as unknown as { isValidAgentForPhase: (phase: PipelinePhase, key: string) => boolean }).isValidAgentForPhase(PipelinePhase.RESEARCH, "market")).toBe(true);
+      expect((service as unknown as { isValidAgentForPhase: (phase: PipelinePhase, key: string) => boolean }).isValidAgentForPhase(PipelinePhase.RESEARCH, "product")).toBe(true);
+      expect((service as unknown as { isValidAgentForPhase: (phase: PipelinePhase, key: string) => boolean }).isValidAgentForPhase(PipelinePhase.RESEARCH, "news")).toBe(true);
     });
 
     it("returns true for valid evaluation agent key", () => {
-      expect((service as any).isValidAgentForPhase(PipelinePhase.EVALUATION, "team")).toBe(true);
-      expect((service as any).isValidAgentForPhase(PipelinePhase.EVALUATION, "market")).toBe(true);
-      expect((service as any).isValidAgentForPhase(PipelinePhase.EVALUATION, "financials")).toBe(true);
-      expect((service as any).isValidAgentForPhase(PipelinePhase.EVALUATION, "exitPotential")).toBe(true);
+      expect((service as unknown as { isValidAgentForPhase: (phase: PipelinePhase, key: string) => boolean }).isValidAgentForPhase(PipelinePhase.EVALUATION, "team")).toBe(true);
+      expect((service as unknown as { isValidAgentForPhase: (phase: PipelinePhase, key: string) => boolean }).isValidAgentForPhase(PipelinePhase.EVALUATION, "market")).toBe(true);
+      expect((service as unknown as { isValidAgentForPhase: (phase: PipelinePhase, key: string) => boolean }).isValidAgentForPhase(PipelinePhase.EVALUATION, "financials")).toBe(true);
+      expect((service as unknown as { isValidAgentForPhase: (phase: PipelinePhase, key: string) => boolean }).isValidAgentForPhase(PipelinePhase.EVALUATION, "exitPotential")).toBe(true);
     });
 
     it("returns false for invalid agent key", () => {
-      expect((service as any).isValidAgentForPhase(PipelinePhase.RESEARCH, "invalid_agent")).toBe(false);
-      expect((service as any).isValidAgentForPhase(PipelinePhase.EVALUATION, "nonexistent")).toBe(false);
+      expect((service as unknown as { isValidAgentForPhase: (phase: PipelinePhase, key: string) => boolean }).isValidAgentForPhase(PipelinePhase.RESEARCH, "invalid_agent")).toBe(false);
+      expect((service as unknown as { isValidAgentForPhase: (phase: PipelinePhase, key: string) => boolean }).isValidAgentForPhase(PipelinePhase.EVALUATION, "nonexistent")).toBe(false);
     });
   });
 
@@ -1213,7 +1213,7 @@ describe("PipelineService", () => {
 
   describe("getClaraService", () => {
     it("returns null gracefully when Clara module not loaded", () => {
-      const clara = (service as any).getClaraService();
+      const clara = (service as unknown as { getClaraService: () => unknown }).getClaraService();
 
       expect(clara).toBeNull();
     });
@@ -1222,8 +1222,9 @@ describe("PipelineService", () => {
       const mockClaraService = { isEnabled: jest.fn().mockReturnValue(true) };
       moduleRef.get.mockReturnValueOnce(mockClaraService);
 
-      const clara1 = (service as any).getClaraService();
-      const clara2 = (service as any).getClaraService();
+      const claraService = (service as unknown as { getClaraService: () => unknown });
+      const clara1 = claraService.getClaraService();
+      const clara2 = claraService.getClaraService();
 
       expect(moduleRef.get).toHaveBeenCalledTimes(1);
       expect(clara1).toBe(mockClaraService);
@@ -1242,13 +1243,13 @@ describe("PipelineService", () => {
       await expect(
         service.retryAgent("startup-1", {
           phase: PipelinePhase.RESEARCH,
-          agentKey: "invalidAgent" as any,
+          agentKey: "invalidAgent" as unknown as string,
         }),
       ).rejects.toThrow(BadRequestException);
       await expect(
         service.retryAgent("startup-1", {
           phase: PipelinePhase.RESEARCH,
-          agentKey: "invalidAgent" as any,
+          agentKey: "invalidAgent" as unknown as string,
         }),
       ).rejects.toThrow('Agent "invalidAgent" is not valid for phase "research"');
 

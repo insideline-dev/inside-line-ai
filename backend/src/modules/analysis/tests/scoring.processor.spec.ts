@@ -1,17 +1,10 @@
-import { Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { Job } from 'bullmq';
 import {
   mock,
   describe,
   it,
   expect,
-  beforeEach,
-  afterEach,
-  spyOn,
 } from 'bun:test';
-import { AnalysisJobStatus } from '../entities';
-import type { ScoringJobData, ScoringJobResult, StartupScores } from '../interfaces';
+import type { ScoringJobData, StartupScores } from '../interfaces';
 
 // Mock bullmq
 mock.module('bullmq', () => ({
@@ -25,7 +18,7 @@ mock.module('bullmq', () => ({
 
 describe('ScoringProcessor', () => {
   const mockStartupId = '123e4567-e89b-12d3-a456-426614174000';
-  const mockJobId = '123e4567-e89b-12d3-a456-426614174001';
+  const _mockJobId = '123e4567-e89b-12d3-a456-426614174001';
   const mockAnalysisJobId = '123e4567-e89b-12d3-a456-426614174002';
   const mockUserId = '123e4567-e89b-12d3-a456-426614174003';
 
@@ -54,7 +47,7 @@ describe('ScoringProcessor', () => {
     updatedAt: new Date(),
   };
 
-  const mockJobData: ScoringJobData = {
+  const _mockJobData: ScoringJobData = {
     type: 'scoring',
     startupId: mockStartupId,
     analysisJobId: mockAnalysisJobId,
@@ -169,7 +162,7 @@ describe('ScoringProcessor', () => {
 });
 
 // Helper function that mimics the processor's scoring logic
-function calculateScores(startupData: typeof mockStartup): StartupScores {
+function calculateScores(startupData: typeof _mockStartup): StartupScores {
   return {
     marketScore: calculateMarketScore(startupData),
     teamScore: calculateTeamScore(startupData),
@@ -179,7 +172,7 @@ function calculateScores(startupData: typeof mockStartup): StartupScores {
   };
 }
 
-function calculateMarketScore(startupData: typeof mockStartup): number {
+function calculateMarketScore(startupData: typeof _mockStartup): number {
   let score = 50;
 
   const highValueIndustries = ['fintech', 'healthtech', 'ai', 'saas', 'enterprise'];
@@ -196,7 +189,7 @@ function calculateMarketScore(startupData: typeof mockStartup): number {
   return Math.min(Math.max(score, 0), 100);
 }
 
-function calculateTeamScore(startupData: typeof mockStartup): number {
+function calculateTeamScore(startupData: typeof _mockStartup): number {
   let score = 50;
 
   if (startupData.teamSize >= 3) score += 10;
@@ -209,7 +202,7 @@ function calculateTeamScore(startupData: typeof mockStartup): number {
   return Math.min(Math.max(score, 0), 100);
 }
 
-function calculateProductScore(startupData: typeof mockStartup): number {
+function calculateProductScore(startupData: typeof _mockStartup): number {
   let score = 50;
 
   if (startupData.description && startupData.description.length > 200) score += 15;
@@ -220,7 +213,7 @@ function calculateProductScore(startupData: typeof mockStartup): number {
   return Math.min(Math.max(score, 0), 100);
 }
 
-function calculateTractionScore(startupData: typeof mockStartup): number {
+function calculateTractionScore(startupData: typeof _mockStartup): number {
   let score = 40;
 
   if (startupData.stage === 'seed') score += 15;
@@ -232,7 +225,7 @@ function calculateTractionScore(startupData: typeof mockStartup): number {
   return Math.min(Math.max(score, 0), 100);
 }
 
-function calculateFinancialsScore(startupData: typeof mockStartup): number {
+function calculateFinancialsScore(startupData: typeof _mockStartup): number {
   let score = 50;
 
   if (startupData.fundingTarget > 0 && startupData.fundingTarget <= 500000) {
@@ -250,7 +243,7 @@ function calculateFinancialsScore(startupData: typeof mockStartup): number {
   return Math.min(Math.max(score, 0), 100);
 }
 
-const mockStartup = {
+const _mockStartup = {
   id: '123e4567-e89b-12d3-a456-426614174000',
   userId: '123e4567-e89b-12d3-a456-426614174003',
   name: 'Test Startup',

@@ -23,10 +23,10 @@ import { EarlyAccessService } from '../../modules/early-access';
 
 describe('AuthController User Management', () => {
   let controller: AuthController;
-  let authService: any;
-  let userAuthService: any;
-  let emailService: any;
-  let profileService: any;
+  let authService: ReturnType<typeof createMockAuthService>;
+  let userAuthService: ReturnType<typeof createMockUserAuthService>;
+  let emailService: ReturnType<typeof createMockEmailService>;
+  let profileService: ReturnType<typeof createMockProfileService>;
 
   beforeEach(async () => {
     authService = createMockAuthService();
@@ -57,7 +57,7 @@ describe('AuthController User Management', () => {
       const res = createMockResponse() as Response;
       const req = {
         cookies: { refresh_token: 'valid-refresh-token' },
-      } as any;
+      } as unknown as import('express').Request;
 
       authService.refreshTokens = mock(() =>
         Promise.resolve({ ...mockTokens, user: mockUser }),
@@ -75,7 +75,7 @@ describe('AuthController User Management', () => {
 
     it('should throw UnauthorizedException if no refresh token', async () => {
       const res = createMockResponse() as Response;
-      const req = { cookies: {} } as any;
+      const req = { cookies: {} } as unknown as import('express').Request;
 
       await expect(controller.refresh(req, res)).rejects.toThrow(
         UnauthorizedException,

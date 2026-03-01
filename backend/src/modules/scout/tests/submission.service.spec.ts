@@ -113,9 +113,9 @@ describe('SubmissionService', () => {
         createdAt: new Date(),
       };
 
-      startupService.create.mockResolvedValue(createdStartup as any);
+      startupService.create.mockResolvedValue(createdStartup as unknown);
       mockDb.returning.mockResolvedValueOnce([submission]);
-      startupService.submit.mockResolvedValue(submittedStartup as any);
+      startupService.submit.mockResolvedValue(submittedStartup as unknown);
 
       const result = await service.submit(mockScoutId, submitDto);
 
@@ -177,7 +177,7 @@ describe('SubmissionService', () => {
       jest.spyOn(Promise, 'all').mockResolvedValueOnce([
         items,
         [{ count: 1 }],
-      ] as any);
+      ] as unknown);
 
       const result = await service.findAll(mockScoutId, query);
 
@@ -201,7 +201,7 @@ describe('SubmissionService', () => {
           investorId: mockInvestorId,
         },
       ]);
-      startupService.findOne.mockResolvedValue({ id: mockStartupId } as any);
+      startupService.findOne.mockResolvedValue({ id: mockStartupId } as unknown);
 
       const result = await service.getStartupDetail(mockScoutId, mockStartupId);
 

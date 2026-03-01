@@ -11,8 +11,8 @@ import { WebhookSource } from '../../../integration/entities/integration.schema'
 describe('TwilioService', () => {
   let service: TwilioService;
   let twilioClient: jest.Mocked<TwilioApiClientService>;
-  let drizzleService: jest.Mocked<DrizzleService>;
-  let notificationService: jest.Mocked<NotificationService>;
+  let _drizzleService: jest.Mocked<DrizzleService>;
+  let _notificationService: jest.Mocked<NotificationService>;
   let storageService: jest.Mocked<StorageService>;
   let configService: jest.Mocked<ConfigService>;
 
@@ -81,8 +81,8 @@ describe('TwilioService', () => {
 
     service = module.get<TwilioService>(TwilioService);
     twilioClient = module.get(TwilioApiClientService);
-    drizzleService = module.get(DrizzleService);
-    notificationService = module.get(NotificationService);
+    _drizzleService = module.get(DrizzleService);
+    _notificationService = module.get(NotificationService);
     storageService = module.get(StorageService);
     configService = module.get(ConfigService);
   });
@@ -190,7 +190,7 @@ describe('TwilioService', () => {
       storageService.uploadGeneratedContent.mockResolvedValue({
         url: 'https://cdn.example.com/media.jpg',
         key: 'system/whatsapp-media/abc123.jpg',
-      } as any);
+      } as unknown);
 
       await service.handleWebhook(webhookWithMedia, 'valid_sig', 'https://example.com/webhook');
 
@@ -228,7 +228,7 @@ describe('TwilioService', () => {
         status: 'queued',
       };
 
-      twilioClient.sendMessage.mockResolvedValue(mockMessage as any);
+      twilioClient.sendMessage.mockResolvedValue(mockMessage as unknown);
       mockDb.returning.mockResolvedValue([{ id: mockWebhookId }]);
 
       const result = await service.sendMessage(mockUserId, sendMessageDto);
@@ -268,7 +268,7 @@ describe('TwilioService', () => {
         status: 'queued',
       };
 
-      twilioClient.sendMessage.mockResolvedValue(mockMessage as any);
+      twilioClient.sendMessage.mockResolvedValue(mockMessage as unknown);
       mockDb.returning.mockResolvedValue([{ id: mockWebhookId }]);
 
       await service.sendMessage(mockUserId, dtoWithMedia);

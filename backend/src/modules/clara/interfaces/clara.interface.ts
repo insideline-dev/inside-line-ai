@@ -69,6 +69,8 @@ export interface SubmissionResult {
   isDuplicate: boolean;
   isEnriched?: boolean;
   status: string;
+  pipelineStarted?: boolean;
+  missingFields?: Array<"website" | "stage">;
 }
 
 export interface ClaraAgentRuntimeState {

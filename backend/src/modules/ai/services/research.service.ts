@@ -24,6 +24,7 @@ import { buildResearchPromptVariables } from "./research-prompt-variables";
 import { AgentConfigService } from "./agent-config.service";
 import { AiModelExecutionService } from "./ai-model-execution.service";
 import { AiConfigService } from "./ai-config.service";
+import { validateProductResearchReportContract } from "../prompts/research/product-research.contract";
 
 type ResearchAgentOutput =
   | NonNullable<ResearchResult["team"]>
@@ -61,18 +62,6 @@ const CRITICAL_RESEARCH_AGENTS: ResearchAgentKey[] = [
   "market",
   "product",
 ];
-const PRODUCT_RESEARCH_FINDING_LABELS = [
-  "Product",
-  "Maturity",
-  "Customer",
-  "Pricing & GTM",
-  "Customer Evidence",
-  "Technical",
-  "Integrations & Stickiness",
-  "Compliance",
-  "Other Relevant Signals",
-] as const;
-
 @Injectable()
 export class ResearchService {
   private readonly logger = new Logger(ResearchService.name);
@@ -921,55 +910,7 @@ export class ResearchService {
     if (key !== "product") {
       return null;
     }
-
-    return this.validateProductResearchReport(outputText);
-  }
-
-  private validateProductResearchReport(outputText: string): string | null {
-    const normalized = outputText.replace(/\r/g, "").trim();
-    if (normalized.length === 0) {
-      return "empty report output";
-    }
-
-    const requiredHeadings: Array<{ label: string; pattern: RegExp }> = [
-      { label: "Verification", pattern: /(^|\n)\s*(?:\*\*)?\s*Verification\s*(?:\*\*)?\s*:/i },
-      {
-        label: "Product Type & Vertical",
-        pattern: /(^|\n)\s*(?:\*\*)?\s*Product Type\s*&\s*Vertical\s*(?:\*\*)?\s*:/i,
-      },
-      { label: "Research Approach", pattern: /(^|\n)\s*(?:\*\*)?\s*Research Approach\s*(?:\*\*)?\s*:/i },
-      { label: "Findings", pattern: /(^|\n)\s*(?:\*\*)?\s*Findings\s*(?:\*\*)?\s*:/i },
-      { label: "Unverified Items", pattern: /(^|\n)\s*(?:\*\*)?\s*Unverified Items\s*(?:\*\*)?\s*:/i },
-      { label: "Research Gaps", pattern: /(^|\n)\s*(?:\*\*)?\s*Research Gaps\s*(?:\*\*)?\s*:/i },
-      {
-        label: "Notably Absent / Risk Signals",
-        pattern:
-          /(^|\n)\s*(?:\*\*)?\s*Notably Absent\s*\/\s*Risk Signals\s*(?:\*\*)?\s*:/i,
-      },
-    ];
-
-    for (const heading of requiredHeadings) {
-      if (!heading.pattern.test(normalized)) {
-        return `missing heading "${heading.label}"`;
-      }
-    }
-
-    for (const [index, label] of PRODUCT_RESEARCH_FINDING_LABELS.entries()) {
-      const sectionNumber = index + 1;
-      const pattern = new RegExp(
-        `(^|\\n)\\s*${sectionNumber}[\\.)]\\s*(?:\\*\\*)?\\s*${this.escapeRegExp(label)}\\s*(?:\\*\\*)?\\s*:`,
-        "i",
-      );
-      if (!pattern.test(normalized)) {
-        return `missing findings section ${sectionNumber} (${label})`;
-      }
-    }
-
-    return null;
-  }
-
-  private escapeRegExp(value: string): string {
-    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return validateProductResearchReportContract(outputText);
   }
 
   private buildCombinedReportText(result: ResearchResult): string {

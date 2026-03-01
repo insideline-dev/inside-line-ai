@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { and, eq, isNull, or } from "drizzle-orm";
+import { and, eq, isNull, or, sql } from "drizzle-orm";
 import { generateText, Output } from "ai";
 import { z } from "zod";
 import { DrizzleService } from "../../../database";
@@ -172,6 +172,8 @@ export class InvestorMatchingService {
         } satisfies EvaluatedCandidate;
       },
     );
+
+    await this.backfillLegacyFitRationale(input.startupId);
 
     return {
       candidatesEvaluated: firstFilterPassed.length,
@@ -368,6 +370,21 @@ export class InvestorMatchingService {
       fitRationale,
       thesisFitFallback,
     });
+  }
+
+  private async backfillLegacyFitRationale(startupId: string): Promise<void> {
+    await this.drizzle.db
+      .update(startupMatch)
+      .set({
+        fitRationale: sql`coalesce(${startupMatch.matchReason}, 'Legacy match rationale unavailable. Review this match manually.')`,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(startupMatch.startupId, startupId),
+          isNull(startupMatch.fitRationale),
+        ),
+      );
   }
 
   private async mapWithConcurrency<TInput, TOutput>(

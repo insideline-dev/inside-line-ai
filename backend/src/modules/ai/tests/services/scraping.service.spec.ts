@@ -52,7 +52,7 @@ describe("ScrapingService", () => {
       },
     ]);
 
-    drizzle = { db: mockDb as any } as jest.Mocked<DrizzleService>;
+    drizzle = { db: mockDb as unknown as DrizzleService["db"] } as jest.Mocked<DrizzleService>;
 
     websiteScraper = {
       deepScrape: jest.fn().mockResolvedValue({
@@ -117,6 +117,61 @@ describe("ScrapingService", () => {
     expect(result.websiteUrl).toBe("https://inside-line.test/");
     expect(result.teamMembers[0]?.enrichmentStatus).toBe("success");
     expect(result.scrapeErrors).toHaveLength(0);
+  });
+
+  it("skips website scraping when startup website is a placeholder URL", async () => {
+    mockDb.limit.mockResolvedValueOnce([
+      {
+        id: "startup-placeholder",
+        userId: "user-123",
+        website: "https://pending-extraction.com",
+        name: "Placeholder Co",
+        industry: "SaaS",
+        stage: "seed",
+        description: "Missing website",
+        teamMembers: [],
+      },
+    ]);
+
+    const result = await service.run("startup-placeholder");
+
+    expect(websiteScraper.deepScrape).not.toHaveBeenCalled();
+    expect(result.websiteUrl).toBe("https://pending-extraction.com");
+    expect(result.website).toBeNull();
+    expect(result.scrapeErrors).toEqual([]);
+  });
+
+  it("ignores placeholder enrichment website and uses persisted startup website", async () => {
+    const pipelineState = {
+      getPhaseResult: jest
+        .fn()
+        .mockImplementation((_startupId: string, phase: PipelinePhase) => {
+          if (phase === PipelinePhase.ENRICHMENT) {
+            return Promise.resolve({
+              website: { value: "https://pending-extraction.com" },
+            });
+          }
+          return Promise.resolve(null);
+        }),
+    } as unknown as jest.Mocked<PipelineStateService>;
+    const serviceWithPipelineState = new ScrapingService(
+      drizzle,
+      websiteScraper,
+      linkedin,
+      cache,
+      undefined,
+      pipelineState,
+    );
+
+    await serviceWithPipelineState.run("startup-1");
+
+    expect(websiteScraper.deepScrape).toHaveBeenCalledWith(
+      "https://inside-line.test",
+      expect.objectContaining({
+        manualPaths: [],
+        discoveryEnabled: true,
+      }),
+    );
   });
 
   it("skips company-level LinkedIn discovery when leadership seeds are already sufficient", async () => {
@@ -209,7 +264,7 @@ describe("ScrapingService", () => {
         hasTeamPage: false,
         hasPricingPage: false,
       },
-    } as any);
+    } as never);
 
     const result = await service.run("startup-1");
 
@@ -278,7 +333,7 @@ describe("ScrapingService", () => {
         hasTeamPage: false,
         hasPricingPage: false,
       },
-    } as any);
+    } as never);
 
     linkedin.enrichTeamMembers.mockImplementationOnce(async (_, members) =>
       members.map((member) => ({
@@ -349,7 +404,7 @@ describe("ScrapingService", () => {
         hasTeamPage: false,
         hasPricingPage: false,
       },
-    } as any);
+    } as never);
 
     linkedin.enrichTeamMembers.mockResolvedValueOnce([
       {
@@ -363,7 +418,7 @@ describe("ScrapingService", () => {
         linkedinUrl: "https://www.linkedin.com/in/cyrille-jacques-a7035457",
         enrichmentStatus: "not_found",
       },
-    ] as any);
+    ] as never);
 
     const result = await service.run("startup-3");
 
@@ -426,7 +481,7 @@ describe("ScrapingService", () => {
         enrichmentStatus: "not_found",
         confidenceReason: "Current company does not match target company \"Airbnb\"",
       },
-    ] as any);
+    ] as never);
 
     const serviceWithPipelineState = new ScrapingService(
       drizzle,
@@ -649,7 +704,7 @@ describe("ScrapingService", () => {
         hasTeamPage: false,
         hasPricingPage: false,
       },
-    } as any);
+    } as never);
 
     const pipelineState = {
       getPhaseResult: jest.fn().mockImplementation(
@@ -733,7 +788,7 @@ describe("ScrapingService", () => {
         hasTeamPage: false,
         hasPricingPage: false,
       },
-    } as any);
+    } as never);
 
     const pipelineState = {
       getPhaseResult: jest.fn().mockImplementation(

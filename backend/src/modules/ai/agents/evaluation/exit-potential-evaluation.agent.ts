@@ -27,6 +27,20 @@ export class ExitPotentialEvaluationAgent extends BaseEvaluationAgent<ExitPotent
     super(providers, aiConfig, promptService, modelExecution);
   }
 
+  protected override getAgentTemplateVariables(
+    _pipelineData: EvaluationPipelineInput,
+  ): Record<string, string> {
+    return {
+      marketResearchOutput: _pipelineData.research.market ?? "Not provided",
+      competitorResearchOutput: _pipelineData.research.competitor ?? "Not provided",
+      newsResearchOutput: _pipelineData.research.news ?? "Not provided",
+      valuation: _pipelineData.extraction.valuation?.toString() ?? "Not provided",
+      valuationType: _pipelineData.extraction.startupContext?.valuationType ?? "Not provided",
+      roundSize: _pipelineData.extraction.fundingAsk?.toString() ?? "Not provided",
+      roundCurrency: _pipelineData.extraction.startupContext?.roundCurrency ?? "USD",
+    };
+  }
+
   buildContext(pipelineData: EvaluationPipelineInput) {
     const { extraction } = pipelineData;
     const competitorMandA: Array<Record<string, unknown>> = [];
@@ -41,7 +55,7 @@ export class ExitPotentialEvaluationAgent extends BaseEvaluationAgent<ExitPotent
     };
   }
 
-  fallback({ extraction }: EvaluationPipelineInput): ExitPotentialEvaluation {
+  fallback({ extraction: _extraction }: EvaluationPipelineInput): ExitPotentialEvaluation {
     return ExitPotentialEvaluationSchema.parse({
       ...baseEvaluation(20, "Exit potential evaluation incomplete — requires manual review"),
       exitScenarios: ["Strategic acquisition", "Secondary-led growth exit"],

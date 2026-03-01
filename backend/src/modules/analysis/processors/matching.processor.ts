@@ -7,7 +7,7 @@
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Job } from 'bullmq';
-import { eq, isNotNull } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { BaseProcessor, parseRedisUrl } from '../../../queue/processors/base.processor';
 import {
   ANALYSIS_QUEUE_NAME,

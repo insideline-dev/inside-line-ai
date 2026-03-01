@@ -78,7 +78,7 @@ export class TractionEvaluationAgent extends BaseEvaluationAgent<TractionEvaluat
     };
   }
 
-  fallback({ extraction }: EvaluationPipelineInput): TractionEvaluation {
+  fallback({ extraction: _extraction }: EvaluationPipelineInput): TractionEvaluation {
     return TractionEvaluationSchema.parse({
       ...baseEvaluation(20, "Traction data insufficient — requires manual review"),
       metrics: {

@@ -89,7 +89,7 @@ describe("AiPromptRuntimeService", () => {
       .mockReturnValue(supportedPipelineKeys as never);
 
     jest
-      .spyOn(service as any, "resolveVariablesForKey")
+      .spyOn(service as never, "resolveVariablesForKey")
       .mockImplementation(async (key: string, input: { startupId: string }) => {
         if (key.startsWith("research.")) {
           return {
@@ -178,7 +178,7 @@ describe("AiPromptRuntimeService", () => {
     promptService.renderTemplate.mockImplementation((template: string) => template);
 
     jest
-      .spyOn(service as any, "resolveVariablesForKey")
+      .spyOn(service as never, "resolveVariablesForKey")
       .mockResolvedValue({
         stage: "seed",
         startupId: "ed8f8dcb-4145-4af3-92ce-c8d879ec43db",

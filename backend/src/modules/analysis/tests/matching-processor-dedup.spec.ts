@@ -13,7 +13,7 @@ describe("Matching processor deduplication", () => {
     const { AnalysisModule } = await import("../analysis.module");
 
     // Grab Nest module metadata
-    const { providers = [] } = Reflect.getMetadata("imports", AnalysisModule) ?? {};
+    const { providers: _providers = [] } = Reflect.getMetadata("imports", AnalysisModule) ?? {};
     // The providers list itself isn't exposed directly from metadata via Reflect in unit tests,
     // so we inspect the module definition through its decorators.
 

@@ -37,7 +37,7 @@ export class MarketEvaluationAgent extends BaseEvaluationAgent<MarketEvaluation>
     };
   }
 
-  fallback({ extraction }: EvaluationPipelineInput): MarketEvaluation {
+  fallback({ extraction: _extraction }: EvaluationPipelineInput): MarketEvaluation {
     return MarketEvaluationSchema.parse({
       ...baseEvaluation(25, "Market evaluation incomplete — requires manual review"),
       marketSize: "TAM/SAM/SOM require stronger external benchmarks",

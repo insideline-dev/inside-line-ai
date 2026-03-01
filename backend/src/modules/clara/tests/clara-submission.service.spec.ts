@@ -108,6 +108,11 @@ describe("ClaraSubmissionService", () => {
 
     pipeline = {
       startPipeline: jest.fn().mockResolvedValue("run-1"),
+      prefillCriticalFieldsFromDeckExtraction: jest.fn().mockResolvedValue({
+        extractionSource: "startup-context",
+        updatedFields: [],
+        missingCriticalFields: [],
+      }),
     } as unknown as jest.Mocked<PipelineService>;
 
     notifications = {
@@ -158,6 +163,8 @@ describe("ClaraSubmissionService", () => {
       startupName: "Acme Corp",
       isDuplicate: false,
       status: StartupStatus.SUBMITTED,
+      pipelineStarted: true,
+      missingFields: [],
     });
 
     expect(mockDb.insert).toHaveBeenCalled();
@@ -218,6 +225,8 @@ describe("ClaraSubmissionService", () => {
       isDuplicate: true,
       isEnriched: true,
       status: StartupStatus.SUBMITTED,
+      pipelineStarted: true,
+      missingFields: [],
     });
 
     expect(mockDb.insert).not.toHaveBeenCalled();
@@ -251,9 +260,11 @@ describe("ClaraSubmissionService", () => {
       isDuplicate: true,
       isEnriched: true,
       status: StartupStatus.SUBMITTED,
+      pipelineStarted: true,
+      missingFields: [],
     });
 
-    expect(mockDb.limit).toHaveBeenCalledTimes(2);
+    expect(mockDb.limit).toHaveBeenCalledTimes(3);
     expect(mockDb.insert).not.toHaveBeenCalled();
     expect(pipeline.startPipeline).toHaveBeenCalledWith("existing-startup", "admin-1");
   });

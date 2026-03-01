@@ -136,7 +136,10 @@ export class ScrapingService {
     // Load enrichment result to use corrected/discovered data
     const enrichment = await this.loadEnrichmentResult(startupId);
     const extraction = await this.loadExtractionResult(startupId);
-    const effectiveWebsite = enrichment?.website?.value ?? record.website;
+    const effectiveWebsite = this.selectEffectiveWebsite(
+      enrichment?.website?.value ?? null,
+      record.website,
+    );
 
     const scrapeErrors: ScrapeError[] = [];
     const submittedTeamMembers = this.mapTeamMembers(record.teamMembers ?? []).map((m) => ({
@@ -964,6 +967,26 @@ export class ScrapingService {
       return null;
     }
 
+    if (this.isMissingWebsiteValue(websiteUrl)) {
+      this.logger.debug(
+        `[Scraping] Website URL is placeholder/non-scrapeable (${websiteUrl}); skipping website scrape`,
+      );
+      progress?.onStepComplete("cache_check", {
+        summary: {
+          hit: false,
+          skipped: true,
+          reason: "Website URL is placeholder",
+        },
+        outputJson: {
+          hit: false,
+          skipped: true,
+          url: websiteUrl,
+          reason: "Website URL is placeholder",
+        },
+      });
+      return null;
+    }
+
     let cached: WebsiteScrapedData | null = null;
     try {
       cached = await this.scrapingCache.getWebsiteCache(
@@ -1538,6 +1561,31 @@ Return each person with their full name, their role/title, and optionally their 
         outputJson: { error: message },
       });
       return [];
+    }
+  }
+
+  private selectEffectiveWebsite(
+    preferredWebsite: string | null | undefined,
+    fallbackWebsite: string | null | undefined,
+  ): string | null {
+    const preferred = preferredWebsite?.trim() ?? null;
+    if (preferred && !this.isMissingWebsiteValue(preferred)) {
+      return preferred;
+    }
+    const fallback = fallbackWebsite?.trim() ?? null;
+    if (fallback && !this.isMissingWebsiteValue(fallback)) {
+      return fallback;
+    }
+    return null;
+  }
+
+  private isMissingWebsiteValue(value: string | null | undefined): boolean {
+    if (!value) return true;
+    try {
+      const host = new URL(value).hostname.toLowerCase().replace(/^www\./, "");
+      return host === "pending-extraction.com";
+    } catch {
+      return true;
     }
   }
 

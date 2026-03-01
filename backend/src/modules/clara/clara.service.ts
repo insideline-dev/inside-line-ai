@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import type { AgentMail } from "agentmail";
 import { DrizzleService } from "../../database";
 import { user } from "../../auth/entities/auth.schema";
-import { startup } from "../startup/entities/startup.schema";
+import { startup, StartupStage } from "../startup/entities/startup.schema";
 import { PdfService } from "../startup/pdf.service";
 import { ClaraConversationService } from "./clara-conversation.service";
 import { ClaraAiService } from "./clara-ai.service";
@@ -229,15 +229,57 @@ export class ClaraService {
         };
 
         if (result.isDuplicate) {
-          replyText = result.isEnriched
-            ? `We already have ${result.startupName} in our system. I've updated it with the new pitch deck you sent and re-triggered the analysis. You'll receive an updated report when it's ready.`
-            : `We already have ${result.startupName} in our system (status: ${result.status}). I've linked this conversation to the existing record.`;
+          if (result.isEnriched && result.pipelineStarted === false) {
+            const missingLabels = this.formatMissingFieldLabels(
+              result.missingFields ?? [],
+            );
+            replyText = [
+              `We already have ${result.startupName} in our system and I’ve updated it with your latest deck.`,
+              "",
+              "Before I can restart analysis, I still need:",
+              ...missingLabels.map((label) => `- ${label}`),
+              "",
+              "Please reply with the missing details and I’ll start the pipeline immediately.",
+            ].join("\n");
+            await this.conversationService.updateStatus(
+              conversation.id,
+              ConversationStatus.AWAITING_INFO,
+            );
+          } else {
+            replyText = result.isEnriched
+              ? `We already have ${result.startupName} in our system. I've updated it with the new pitch deck you sent and re-triggered the analysis. You'll receive an updated report when it's ready.`
+              : `We already have ${result.startupName} in our system (status: ${result.status}). I've linked this conversation to the existing record.`;
+          }
         } else {
-          replyText = await this.claraAi.generateResponse(
-            ClaraIntent.SUBMISSION,
-            ctx,
-            extra,
-          );
+          if (result.pipelineStarted === false) {
+            const missingLabels = this.formatMissingFieldLabels(
+              result.missingFields ?? [],
+            );
+            replyText = [
+              `Subject: Pitch Deck Received: ${result.startupName}`,
+              "",
+              `Hi ${fromName ?? "there"},`,
+              "",
+              "Thanks, I received your pitch deck.",
+              "I still need the following details before I can start the analysis:",
+              ...missingLabels.map((label) => `- ${label}`),
+              "",
+              "Please reply with those details and I’ll start the pipeline right away.",
+              "",
+              "Best regards,",
+              "Clara",
+            ].join("\n");
+            await this.conversationService.updateStatus(
+              conversation.id,
+              ConversationStatus.AWAITING_INFO,
+            );
+          } else {
+            replyText = await this.claraAi.generateResponse(
+              ClaraIntent.SUBMISSION,
+              ctx,
+              extra,
+            );
+          }
         }
       } else {
         intent = intentClassification.intent;
@@ -257,19 +299,83 @@ export class ClaraService {
 
         await this.conversationService.updateLastIntent(conversation.id, intent);
 
-        const tools = this.toolsService.buildTools({
-          actorUserId,
-          actorRole,
-          linkedStartupId: conversation.startupId,
-          channel: "email",
-          inboxId: ctx.inboxId,
-          inReplyToMessageId: ctx.messageId,
-          runtime: agentRuntime,
-        });
-        replyText = await this.claraAi.runAgentLoop(ctx, tools, {
-          actorRole,
-          conversationMemory: ctx.conversationMemory,
-        });
+        const shouldResolveMissingInfo =
+          conversation.status === ConversationStatus.AWAITING_INFO &&
+          Boolean(conversation.startupId);
+
+        if (shouldResolveMissingInfo && conversation.startupId) {
+          const resolution = await this.submissionService.resolveMissingInfoFromReply(
+            conversation.startupId,
+            ctx.bodyText,
+            investorUserId ?? this.adminUserId,
+          );
+
+          if (resolution) {
+            const missingLabels = this.formatMissingFieldLabels(
+              resolution.remainingMissing,
+            );
+            if (resolution.pipelineStarted) {
+              replyText = [
+                `Thanks ${fromName ?? "there"} — I’ve updated ${resolution.startupName} with the missing details and started the analysis pipeline.`,
+                "",
+                "I’ll email you again as soon as the analysis is complete.",
+              ].join("\n");
+              await this.conversationService.updateStatus(
+                conversation.id,
+                ConversationStatus.PROCESSING,
+              );
+            } else {
+              const acknowledgement =
+                resolution.updatedFields.length > 0
+                  ? `Thanks — I captured ${resolution.updatedFields
+                      .map((field) =>
+                        field === "website" ? "the website" : "the funding stage",
+                      )
+                      .join(" and ")}.`
+                  : "Thanks for the follow-up.";
+              replyText = [
+                acknowledgement,
+                "",
+                "I still need:",
+                ...missingLabels.map((label) => `- ${label}`),
+                "",
+                "Reply with the missing details and I’ll start the analysis immediately.",
+              ].join("\n");
+              await this.conversationService.updateStatus(
+                conversation.id,
+                ConversationStatus.AWAITING_INFO,
+              );
+            }
+          } else {
+            const tools = this.toolsService.buildTools({
+              actorUserId,
+              actorRole,
+              linkedStartupId: conversation.startupId,
+              channel: "email",
+              inboxId: ctx.inboxId,
+              inReplyToMessageId: ctx.messageId,
+              runtime: agentRuntime,
+            });
+            replyText = await this.claraAi.runAgentLoop(ctx, tools, {
+              actorRole,
+              conversationMemory: ctx.conversationMemory,
+            });
+          }
+        } else {
+          const tools = this.toolsService.buildTools({
+            actorUserId,
+            actorRole,
+            linkedStartupId: conversation.startupId,
+            channel: "email",
+            inboxId: ctx.inboxId,
+            inReplyToMessageId: ctx.messageId,
+            runtime: agentRuntime,
+          });
+          replyText = await this.claraAi.runAgentLoop(ctx, tools, {
+            actorRole,
+            conversationMemory: ctx.conversationMemory,
+          });
+        }
       }
 
       if (!agentRuntime.replyHandled) {
@@ -424,6 +530,279 @@ export class ClaraService {
     this.logger.log(
       `Sent pipeline completion notification for startup ${startupId} to ${conversation.investorEmail}`,
     );
+  }
+
+  async notifyMissingStartupInfo(
+    startupId: string,
+    missingFields: string[],
+  ): Promise<void> {
+    if (!this.claraInboxId) return;
+
+    const normalizedMissing = this.normalizeMissingStartupFields(missingFields);
+    if (normalizedMissing.length === 0) return;
+
+    const [startupRecord] = await this.drizzle.db
+      .select({
+        id: startup.id,
+        userId: startup.userId,
+        name: startup.name,
+        website: startup.website,
+        stage: startup.stage,
+        industry: startup.industry,
+        location: startup.location,
+        fundingTarget: startup.fundingTarget,
+        teamSize: startup.teamSize,
+        contactEmail: startup.contactEmail,
+        contactName: startup.contactName,
+      })
+      .from(startup)
+      .where(eq(startup.id, startupId))
+      .limit(1);
+    if (!startupRecord) return;
+
+    const unresolvedMissing = normalizedMissing.filter((field) =>
+      this.isStartupFieldMissing(field, startupRecord),
+    );
+    if (unresolvedMissing.length === 0) return;
+
+    const recipient = await this.resolveMissingInfoRecipient({
+      userId: startupRecord.userId,
+      contactEmail: startupRecord.contactEmail,
+      contactName: startupRecord.contactName,
+    });
+    if (!recipient) {
+      this.logger.warn(
+        `Unable to send Clara missing-info request for startup ${startupId}: no valid recipient`,
+      );
+      return;
+    }
+
+    const conversation = await this.conversationService.findByStartupId(startupId);
+    const messageId = `missing-info-${startupId}-${unresolvedMissing.join("-")}`;
+    if (conversation) {
+      const alreadySent = await this.conversationService.hasMessage(
+        conversation.id,
+        messageId,
+        MessageDirection.OUTBOUND,
+      );
+      if (alreadySent) {
+        return;
+      }
+    }
+
+    const labels = unresolvedMissing.map((field) =>
+      field === "website"
+        ? "Company website URL"
+        : "Current funding stage (pre-seed, seed, series A, etc.)",
+    );
+    const greetingName = recipient.name ?? "there";
+    const replyText = [
+      `Hi ${greetingName},`,
+      "",
+      `I'm finalizing the startup profile for ${startupRecord.name}, but I still need the following information:`,
+      ...labels.map((label) => `- ${label}`),
+      "",
+      "Please reply with the missing details so we can complete the analysis accurately.",
+      "",
+      "Best,",
+      "Clara",
+    ].join("\n");
+
+    await this.claraChannel.send({
+      channel: "email",
+      email: {
+        inboxId: this.claraInboxId,
+        to: [recipient.email],
+        subject: `Action Needed: Missing startup details for ${startupRecord.name}`,
+      },
+      text: replyText,
+    });
+
+    this.logger.log(
+      `Sent Clara missing-info request for startup ${startupId} to ${recipient.email} (fields=${unresolvedMissing.join(",")})`,
+    );
+
+    if (conversation) {
+      await this.conversationService.logMessage({
+        conversationId: conversation.id,
+        messageId,
+        direction: MessageDirection.OUTBOUND,
+        fromEmail: "clara@agentmail.to",
+        subject: `Action Needed: Missing startup details for ${startupRecord.name}`,
+        bodyText: replyText,
+        processed: true,
+      });
+      await this.conversationService.updateStatus(
+        conversation.id,
+        ConversationStatus.AWAITING_INFO,
+      );
+    }
+  }
+
+  private normalizeMissingStartupFields(
+    fields: string[],
+  ): Array<"website" | "stage"> {
+    return Array.from(
+      new Set(
+        fields
+          .map((field) => field.trim().toLowerCase())
+          .filter(
+            (field): field is "website" | "stage" =>
+              field === "website" || field === "stage",
+          ),
+      ),
+    );
+  }
+
+  private formatMissingFieldLabels(
+    fields: Array<"website" | "stage">,
+  ): string[] {
+    const normalized = this.normalizeMissingStartupFields(fields);
+    return normalized.map((field) =>
+      field === "website"
+        ? "Company website URL"
+        : "Current funding stage (pre-seed, seed, series A, etc.)",
+    );
+  }
+
+  private async resolveMissingInfoRecipient(params: {
+    userId: string;
+    contactEmail: string | null;
+    contactName: string | null;
+  }): Promise<{ email: string; name: string | null } | null> {
+    const contactEmail = params.contactEmail?.trim().toLowerCase() ?? null;
+    if (contactEmail && this.isValidEmail(contactEmail)) {
+      const displayName =
+        params.contactName?.trim() ||
+        this.parseNameFromEmail(contactEmail);
+      return {
+        email: contactEmail,
+        name: displayName ?? null,
+      };
+    }
+
+    const [owner] = await this.drizzle.db
+      .select({
+        email: user.email,
+        name: user.name,
+      })
+      .from(user)
+      .where(eq(user.id, params.userId))
+      .limit(1);
+    if (!owner?.email) {
+      return null;
+    }
+
+    const ownerEmail = owner.email.trim().toLowerCase();
+    if (!this.isValidEmail(ownerEmail)) {
+      return null;
+    }
+
+    return {
+      email: ownerEmail,
+      name: owner.name ?? null,
+    };
+  }
+
+  private isValidEmail(value: string): boolean {
+    return /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(value);
+  }
+
+  private isStartupFieldMissing(
+    field: "website" | "stage",
+    startupRecord: {
+      website: string;
+      stage: string;
+      industry: string;
+      location: string;
+      fundingTarget: number;
+      teamSize: number;
+    },
+  ): boolean {
+    if (field === "website") {
+      return this.isMissingWebsiteValue(startupRecord.website);
+    }
+    return this.isLikelyPlaceholderStage(startupRecord);
+  }
+
+  private isMissingWebsiteValue(value: string | null | undefined): boolean {
+    if (!value) return true;
+    try {
+      const host = new URL(value).hostname.toLowerCase().replace(/^www\./, "");
+      return host === "pending-extraction.com";
+    } catch {
+      return true;
+    }
+  }
+
+  private isLikelyPlaceholderStage(startupRecord: {
+    website: string;
+    stage: string;
+    industry: string;
+    location: string;
+    fundingTarget: number;
+    teamSize: number;
+  }): boolean {
+    const normalizedStage = this.mapStageToEnum(startupRecord.stage);
+    if (!normalizedStage) {
+      return true;
+    }
+    if (normalizedStage !== StartupStage.SEED) {
+      return false;
+    }
+
+    const structuralSignals = [
+      this.isMissingWebsiteValue(startupRecord.website),
+      this.isLikelyPlaceholderText(startupRecord.industry),
+      this.isLikelyPlaceholderText(startupRecord.location),
+    ];
+    const secondarySignals = [
+      startupRecord.fundingTarget <= 0,
+      startupRecord.teamSize <= 1,
+    ];
+    const totalSignals = [...structuralSignals, ...secondarySignals];
+    return (
+      structuralSignals.filter(Boolean).length >= 1 &&
+      totalSignals.filter(Boolean).length >= 2
+    );
+  }
+
+  private isLikelyPlaceholderText(value: string | null | undefined): boolean {
+    if (!value) {
+      return true;
+    }
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) {
+      return true;
+    }
+    return (
+      normalized.includes("pending extraction") ||
+      normalized.includes("pending-extraction") ||
+      normalized === "unknown" ||
+      normalized === "n/a"
+    );
+  }
+
+  private mapStageToEnum(value: string | null | undefined): StartupStage | null {
+    if (!value) {
+      return null;
+    }
+
+    const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, "_");
+    const mapping: Record<string, StartupStage> = {
+      pre_seed: StartupStage.PRE_SEED,
+      preseed: StartupStage.PRE_SEED,
+      seed: StartupStage.SEED,
+      series_a: StartupStage.SERIES_A,
+      series_b: StartupStage.SERIES_B,
+      series_c: StartupStage.SERIES_C,
+      series_d: StartupStage.SERIES_D,
+      series_e: StartupStage.SERIES_E,
+      series_f: StartupStage.SERIES_F_PLUS,
+      series_f_plus: StartupStage.SERIES_F_PLUS,
+      "series_f+": StartupStage.SERIES_F_PLUS,
+    };
+    return mapping[normalized] ?? null;
   }
 
   private async findUserByEmail(

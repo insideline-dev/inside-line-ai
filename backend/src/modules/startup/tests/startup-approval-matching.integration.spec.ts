@@ -16,9 +16,11 @@ import { PipelineTemplateService } from "../../ai/services/pipeline-template.ser
 import { NotificationService } from "../../../notification/notification.service";
 import { InvestorMatchingService } from "../../ai/services/investor-matching.service";
 import { PipelineStateService } from "../../ai/services/pipeline-state.service";
+import { PipelineStateSnapshotService } from "../../ai/services/pipeline-state-snapshot.service";
 import { PhaseTransitionService } from "../../ai/orchestrator/phase-transition.service";
 import { ProgressTrackerService } from "../../ai/orchestrator/progress-tracker.service";
 import { ErrorRecoveryService } from "../../ai/orchestrator/error-recovery.service";
+import { ExtractionService } from "../../ai/services/extraction.service";
 import {
   AnalysisJobPriority,
   AnalysisJobStatus,
@@ -428,6 +430,11 @@ describe("Startup lifecycle integration: submit -> pipeline complete -> approve 
       getRuntimeSnapshot: jest.fn().mockResolvedValue(null),
     } as unknown as jest.Mocked<PipelineTemplateService>;
 
+    const pipelineStateSnapshots = {
+      getLatestReusableSnapshot: jest.fn().mockResolvedValue(null),
+      saveCompletedSnapshot: jest.fn().mockResolvedValue(undefined),
+    } as unknown as jest.Mocked<PipelineStateSnapshotService>;
+
     const enrichmentService = {
       assessNeed: jest.fn().mockResolvedValue({
         shouldRun: true,
@@ -440,6 +447,12 @@ describe("Startup lifecycle integration: submit -> pipeline complete -> approve 
     const pipelineStateSnapshots = {
       snapshot: jest.fn().mockResolvedValue(undefined),
     } as unknown as jest.Mocked<PipelineStateSnapshotService>;
+
+    const extractionService = {
+      run: jest.fn().mockResolvedValue({
+        source: "startup-context",
+      }),
+    } as unknown as jest.Mocked<ExtractionService>;
 
     lifecyclePipelineService = new PipelineService(
       drizzle,
@@ -455,6 +468,7 @@ describe("Startup lifecycle integration: submit -> pipeline complete -> approve 
       errorRecovery,
       pipelineTemplateService,
       enrichmentService,
+      extractionService,
       moduleRef,
     );
   });

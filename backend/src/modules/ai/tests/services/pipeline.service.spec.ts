@@ -19,6 +19,7 @@ import { PipelineFeedbackService } from "../../services/pipeline-feedback.servic
 import { StartupMatchingPipelineService } from "../../services/startup-matching-pipeline.service";
 import { PipelineTemplateService } from "../../services/pipeline-template.service";
 import { EnrichmentService } from "../../services/enrichment.service";
+import { ExtractionService } from "../../services/extraction.service";
 import { ModuleRef } from "@nestjs/core";
 import { NotificationService } from "../../../../notification/notification.service";
 import { StorageService } from "../../../../storage";
@@ -119,6 +120,7 @@ describe("PipelineService", () => {
   let startupMatching: jest.Mocked<StartupMatchingPipelineService>;
   let pipelineTemplateService: jest.Mocked<PipelineTemplateService>;
   let enrichmentService: jest.Mocked<EnrichmentService>;
+  let extractionService: jest.Mocked<ExtractionService>;
   let moduleRef: jest.Mocked<ModuleRef>;
   let notifications: jest.Mocked<NotificationService>;
   let storage: jest.Mocked<StorageService>;
@@ -132,7 +134,18 @@ describe("PipelineService", () => {
     from: jest.fn().mockReturnThis(),
     limit: jest.fn().mockImplementation(function (this: { mode: string }) {
       if (this.mode === "select") {
-        return Promise.resolve([{ status: "analyzing", name: "Test Startup" }]);
+        return Promise.resolve([
+          {
+            status: "analyzing",
+            name: "Test Startup",
+            website: "https://test-startup.com",
+            stage: "seed",
+            industry: "SaaS",
+            location: "San Francisco, CA",
+            fundingTarget: 500000,
+            teamSize: 5,
+          },
+        ]);
       }
       return Promise.resolve(undefined);
     }),
@@ -155,6 +168,15 @@ describe("PipelineService", () => {
   };
 
   const phaseConfig = {
+    [PipelinePhase.ENRICHMENT]: {
+      phase: PipelinePhase.ENRICHMENT,
+      queue: "ai-enrichment",
+      timeoutMs: 1000,
+      maxRetries: 2,
+      dependsOn: [PipelinePhase.EXTRACTION],
+      canRunParallelWith: [PipelinePhase.SCRAPING],
+      required: false,
+    },
     [PipelinePhase.EXTRACTION]: {
       phase: PipelinePhase.EXTRACTION,
       queue: "ai-extraction",
@@ -203,6 +225,48 @@ describe("PipelineService", () => {
   };
 
   beforeEach(() => {
+    let currentPipelineRunId = "run-1";
+
+    mockDb.mode = "none";
+    mockDb.select.mockImplementation(function (this: { mode: string }) {
+      this.mode = "select";
+      return this;
+    });
+    mockDb.from.mockReturnThis();
+    mockDb.limit.mockImplementation(function (this: { mode: string }) {
+      if (this.mode === "select") {
+        return Promise.resolve([
+          {
+            status: "analyzing",
+            name: "Test Startup",
+            website: "https://test-startup.com",
+            stage: "seed",
+            industry: "SaaS",
+            location: "San Francisco, CA",
+            fundingTarget: 500000,
+            teamSize: 5,
+          },
+        ]);
+      }
+      return Promise.resolve(undefined);
+    });
+    mockDb.update.mockImplementation(function (this: { mode: string }) {
+      this.mode = "update";
+      return this;
+    });
+    mockDb.set.mockReturnThis();
+    mockDb.where.mockImplementation(function (this: { mode: string }) {
+      if (this.mode === "select") {
+        return this;
+      }
+      return Promise.resolve(undefined);
+    });
+    mockDb.insert.mockImplementation(function (this: { mode: string }) {
+      this.mode = "insert";
+      return this;
+    });
+    mockDb.values.mockResolvedValue(undefined);
+
     drizzle = { db: mockDb as unknown as DrizzleService["db"] } as jest.Mocked<DrizzleService>;
     queue = {
       addJob: jest.fn().mockResolvedValue("job-1"),
@@ -211,7 +275,13 @@ describe("PipelineService", () => {
 
     let _trackedState: PipelineState = createState();
     stateService = {
-      get: jest.fn().mockImplementation(() => Promise.resolve({ ..._trackedState, phases: { ..._trackedState.phases } })),
+      get: jest
+        .fn()
+        .mockImplementation(() =>
+          Promise.resolve(
+            createState({ pipelineRunId: currentPipelineRunId }),
+          ),
+        ),
       init: jest.fn().mockResolvedValue(createState()),
       updatePhase: jest.fn().mockImplementation((_startupId: string, phase: PipelinePhase, status: PhaseStatus) => {
         _trackedState = {
@@ -241,10 +311,11 @@ describe("PipelineService", () => {
         return Promise.resolve(undefined);
       }),
       resetPhaseStatus: jest.fn().mockResolvedValue(undefined),
-      setPipelineRunId: jest.fn().mockImplementation((_startupId: string, runId: string) => {
-        _trackedState = { ..._trackedState, pipelineRunId: runId };
-        return Promise.resolve(undefined);
-      }),
+      setPipelineRunId: jest
+        .fn()
+        .mockImplementation(async (_startupId: string, pipelineRunId: string) => {
+          currentPipelineRunId = pipelineRunId;
+        }),
       incrementRetryCount: jest.fn().mockResolvedValue(1),
       setQuality: jest.fn().mockResolvedValue(undefined),
       getPhaseResult: jest.fn().mockResolvedValue(null),
@@ -321,8 +392,9 @@ describe("PipelineService", () => {
     enrichmentService = {
       assessNeed: jest.fn().mockResolvedValue({
         shouldRun: true,
-        missing: [],
-        suspicious: [],
+        missingFields: [],
+        suspiciousFields: [],
+        reason: "Missing fields (0) or suspicious fields (0) require enrichment",
       }),
       buildSkippedResult: jest.fn().mockReturnValue({
         reviews: [],
@@ -338,6 +410,12 @@ describe("PipelineService", () => {
         dataProvenance: { fromWebsite: [] },
       }),
     } as unknown as jest.Mocked<EnrichmentService>;
+
+    extractionService = {
+      run: jest.fn().mockResolvedValue({
+        source: "startup-context",
+      }),
+    } as unknown as jest.Mocked<ExtractionService>;
 
     moduleRef = {
       get: jest.fn().mockReturnValue(null),
@@ -366,6 +444,7 @@ describe("PipelineService", () => {
       pipelineTemplateService,
       enrichmentService,
       storage,
+      extractionService,
       moduleRef,
     );
   });
@@ -462,9 +541,176 @@ describe("PipelineService", () => {
     );
   });
 
-  it("skips enrichment phase entirely when enrichment is disabled", async () => {
+  it("asks Clara for missing website/stage details after enrichment completes with unresolved critical gaps", async () => {
+    stateService.get.mockResolvedValue(createState());
+    stateService.getPhaseResult.mockResolvedValueOnce({
+      fieldsStillMissing: ["website", "stage", "description"],
+    });
+
+    const clara = {
+      isEnabled: jest.fn().mockReturnValue(true),
+      notifyMissingStartupInfo: jest.fn().mockResolvedValue(undefined),
+      notifyPipelineComplete: jest.fn(),
+    };
+    moduleRef.get.mockReturnValueOnce(clara as any);
+
+    await service.onPhaseCompleted("startup-1", PipelinePhase.ENRICHMENT);
+
+    expect(clara.notifyMissingStartupInfo).toHaveBeenCalledWith(
+      "startup-1",
+      ["website", "stage"],
+    );
+    expect(queue.removePipelineJobs).toHaveBeenCalledWith("startup-1");
+    expect(stateService.setStatus).toHaveBeenCalledWith(
+      "startup-1",
+      PipelineStatus.CANCELLED,
+    );
+    expect(phaseTransition.decideNextPhases).not.toHaveBeenCalled();
+  });
+
+  it("cancels before research when critical fields remain unresolved", async () => {
+    const runningState = createState(
+      {},
+      {
+        [PipelinePhase.ENRICHMENT]: PhaseStatus.SKIPPED,
+        [PipelinePhase.RESEARCH]: PhaseStatus.PENDING,
+      },
+    );
+    stateService.get
+      .mockResolvedValueOnce(runningState) // queuePhase preflight
+      .mockResolvedValueOnce(runningState); // cancelPipeline state fetch
+    stateService.getPhaseResult.mockResolvedValueOnce({
+      fieldsStillMissing: ["website", "stage"],
+    });
+
+    const clara = {
+      isEnabled: jest.fn().mockReturnValue(true),
+      notifyMissingStartupInfo: jest.fn().mockResolvedValue(undefined),
+      notifyPipelineComplete: jest.fn(),
+    };
+    moduleRef.get.mockReturnValueOnce(clara as any);
+
+    await (service as any).queuePhase({
+      startupId: "startup-1",
+      pipelineRunId: "run-1",
+      userId: "user-1",
+      phase: PipelinePhase.RESEARCH,
+    });
+
+    expect(clara.notifyMissingStartupInfo).toHaveBeenCalledWith(
+      "startup-1",
+      ["website", "stage"],
+    );
+    expect(queue.addJob).not.toHaveBeenCalled();
+    expect(queue.removePipelineJobs).toHaveBeenCalledWith("startup-1");
+    expect(stateService.setStatus).toHaveBeenCalledWith(
+      "startup-1",
+      PipelineStatus.CANCELLED,
+    );
+  });
+
+  it("cancels scraping when enrichment is terminal but website is still missing", async () => {
+    const runningState = createState(
+      {},
+      {
+        [PipelinePhase.ENRICHMENT]: PhaseStatus.SKIPPED,
+        [PipelinePhase.SCRAPING]: PhaseStatus.PENDING,
+      },
+    );
+    stateService.get
+      .mockResolvedValueOnce(runningState) // queuePhase preflight
+      .mockResolvedValueOnce(runningState); // cancelPipeline state fetch
+    stateService.getPhaseResult.mockResolvedValueOnce({
+      fieldsStillMissing: ["website"],
+    });
+    mockDb.limit.mockImplementationOnce(function (this: { mode: string }) {
+      if (this.mode === "select") {
+        return Promise.resolve([
+          {
+            website: "https://pending-extraction.com",
+            stage: "seed",
+            industry: "Pending extraction",
+            location: "Pending extraction",
+            fundingTarget: 0,
+            teamSize: 1,
+          },
+        ]);
+      }
+      return Promise.resolve(undefined);
+    });
+
+    const clara = {
+      isEnabled: jest.fn().mockReturnValue(true),
+      notifyMissingStartupInfo: jest.fn().mockResolvedValue(undefined),
+      notifyPipelineComplete: jest.fn(),
+    };
+    moduleRef.get.mockReturnValueOnce(clara as any);
+
+    await (service as any).queuePhase({
+      startupId: "startup-1",
+      pipelineRunId: "run-1",
+      userId: "user-1",
+      phase: PipelinePhase.SCRAPING,
+    });
+
+    expect(clara.notifyMissingStartupInfo).toHaveBeenCalledWith(
+      "startup-1",
+      ["website"],
+    );
+    expect(queue.addJob).not.toHaveBeenCalled();
+    expect(queue.removePipelineJobs).toHaveBeenCalledWith("startup-1");
+    expect(stateService.setStatus).toHaveBeenCalledWith(
+      "startup-1",
+      PipelineStatus.CANCELLED,
+    );
+  });
+
+  it("defers scraping queue while website is missing and enrichment is still running", async () => {
+    stateService.get.mockResolvedValueOnce(
+      createState(
+        {},
+        {
+          [PipelinePhase.ENRICHMENT]: PhaseStatus.RUNNING,
+          [PipelinePhase.SCRAPING]: PhaseStatus.PENDING,
+        },
+      ),
+    );
+    mockDb.limit.mockImplementationOnce(function (this: { mode: string }) {
+      if (this.mode === "select") {
+        return Promise.resolve([
+          {
+            website: "https://pending-extraction.com",
+            stage: "seed",
+            industry: "Pending extraction",
+            location: "Pending extraction",
+            fundingTarget: 0,
+            teamSize: 1,
+          },
+        ]);
+      }
+      return Promise.resolve(undefined);
+    });
+
+    await (service as any).queuePhase({
+      startupId: "startup-1",
+      pipelineRunId: "run-1",
+      userId: "user-1",
+      phase: PipelinePhase.SCRAPING,
+    });
+
+    expect(queue.addJob).not.toHaveBeenCalled();
+    expect(stateService.updatePhase).not.toHaveBeenCalled();
+  });
+
+  it("skips enrichment phase when enrichment is disabled and no enrichment work is needed", async () => {
     aiConfig.isEnrichmentEnabled.mockReturnValueOnce(false);
     stateService.get.mockResolvedValueOnce(createState());
+    enrichmentService.assessNeed.mockResolvedValueOnce({
+      shouldRun: false,
+      missingFields: [],
+      suspiciousFields: [],
+      reason: "No missing or suspicious fields after internal checks",
+    } as any);
 
     await (service as unknown as { queuePhase: (opts: { startupId: string; pipelineRunId: string; userId: string; phase: PipelinePhase }) => Promise<void> }).queuePhase({
       startupId: "startup-1",
@@ -473,9 +719,10 @@ describe("PipelineService", () => {
       phase: PipelinePhase.ENRICHMENT,
     });
 
-    expect(enrichmentService.assessNeed).not.toHaveBeenCalled();
+    expect(enrichmentService.assessNeed).toHaveBeenCalledWith("startup-1");
     expect(enrichmentService.buildSkippedResult).toHaveBeenCalledWith(
       "Enrichment temporarily disabled by configuration",
+      [],
     );
     expect(stateService.setPhaseResult).toHaveBeenCalledWith(
       "startup-1",
@@ -496,8 +743,141 @@ describe("PipelineService", () => {
     expect(queue.addJob).not.toHaveBeenCalled();
   });
 
+  it("runs enrichment when assessNeed says skip but enrichment is enabled", async () => {
+    aiConfig.isEnrichmentEnabled.mockReturnValueOnce(true);
+    stateService.get.mockResolvedValueOnce(createState());
+    enrichmentService.assessNeed.mockResolvedValueOnce({
+      shouldRun: false,
+      missingFields: [],
+      suspiciousFields: [],
+      reason: "No missing or suspicious fields after internal checks",
+    } as any);
+
+    await (service as any).queuePhase({
+      startupId: "startup-1",
+      pipelineRunId: "run-1",
+      userId: "user-1",
+      phase: PipelinePhase.ENRICHMENT,
+    });
+
+    expect(enrichmentService.assessNeed).toHaveBeenCalledWith("startup-1");
+    expect(stateService.updatePhase).toHaveBeenCalledWith(
+      "startup-1",
+      PipelinePhase.ENRICHMENT,
+      PhaseStatus.WAITING,
+      undefined,
+    );
+    expect(stateService.updatePhase).not.toHaveBeenCalledWith(
+      "startup-1",
+      PipelinePhase.ENRICHMENT,
+      PhaseStatus.SKIPPED,
+    );
+    expect(queue.addJob).toHaveBeenCalledWith(
+      "ai-enrichment",
+      expect.objectContaining({
+        type: "ai_enrichment",
+        startupId: "startup-1",
+      }),
+      expect.any(Object),
+    );
+  });
+
+  it("runs enrichment when critical fields are missing even if enrichment is disabled", async () => {
+    aiConfig.isEnrichmentEnabled.mockReturnValueOnce(false);
+    stateService.get.mockResolvedValueOnce(createState());
+    enrichmentService.assessNeed.mockResolvedValueOnce({
+      shouldRun: true,
+      missingFields: ["website"],
+      suspiciousFields: [],
+      reason: "Missing fields (1) or suspicious fields (0) require enrichment",
+    } as any);
+
+    await (service as any).queuePhase({
+      startupId: "startup-1",
+      pipelineRunId: "run-1",
+      userId: "user-1",
+      phase: PipelinePhase.ENRICHMENT,
+    });
+
+    expect(enrichmentService.assessNeed).toHaveBeenCalledWith("startup-1");
+    expect(enrichmentService.buildSkippedResult).not.toHaveBeenCalledWith(
+      "Enrichment temporarily disabled by configuration",
+    );
+    expect(stateService.updatePhase).toHaveBeenCalledWith(
+      "startup-1",
+      PipelinePhase.ENRICHMENT,
+      PhaseStatus.WAITING,
+      undefined,
+    );
+    expect(queue.addJob).toHaveBeenCalledWith(
+      "ai-enrichment",
+      expect.objectContaining({
+        type: "ai_enrichment",
+        startupId: "startup-1",
+      }),
+      expect.any(Object),
+    );
+  });
+
+  it("forces enrichment when startup still has critical gaps even if assessNeed says skip", async () => {
+    aiConfig.isEnrichmentEnabled.mockReturnValueOnce(false);
+    stateService.get.mockResolvedValueOnce(createState());
+    enrichmentService.assessNeed.mockResolvedValueOnce({
+      shouldRun: false,
+      missingFields: [],
+      suspiciousFields: [],
+      reason: "No missing or suspicious fields after internal checks",
+    } as any);
+    mockDb.limit.mockImplementationOnce(function (this: { mode: string }) {
+      if (this.mode === "select") {
+        return Promise.resolve([
+          {
+            website: "https://pending-extraction.com",
+            stage: "seed",
+            industry: "Pending extraction",
+            location: "Pending extraction",
+            fundingTarget: 0,
+            teamSize: 1,
+          },
+        ]);
+      }
+      return Promise.resolve(undefined);
+    });
+
+    await (service as any).queuePhase({
+      startupId: "startup-1",
+      pipelineRunId: "run-1",
+      userId: "user-1",
+      phase: PipelinePhase.ENRICHMENT,
+    });
+
+    expect(enrichmentService.buildSkippedResult).not.toHaveBeenCalledWith(
+      "No missing or suspicious fields after internal checks",
+    );
+    expect(stateService.updatePhase).toHaveBeenCalledWith(
+      "startup-1",
+      PipelinePhase.ENRICHMENT,
+      PhaseStatus.WAITING,
+      undefined,
+    );
+    expect(queue.addJob).toHaveBeenCalledWith(
+      "ai-enrichment",
+      expect.objectContaining({
+        type: "ai_enrichment",
+        startupId: "startup-1",
+      }),
+      expect.any(Object),
+    );
+  });
+
   it("does not queue scraping twice when enrichment is skipped during transitions", async () => {
     aiConfig.isEnrichmentEnabled.mockReturnValue(false);
+    enrichmentService.assessNeed.mockResolvedValue({
+      shouldRun: false,
+      missingFields: [],
+      suspiciousFields: [],
+      reason: "No missing or suspicious fields after internal checks",
+    } as any);
 
     const beforeSkip = createState(
       {},
@@ -564,6 +944,49 @@ describe("PipelineService", () => {
         call[2] === PhaseStatus.WAITING,
     );
     expect(scrapingWaitingCalls).toHaveLength(1);
+  });
+
+  it("cancels pipeline and asks Clara when enrichment is skipped with unresolved critical fields", async () => {
+    const runningState = createState(
+      {},
+      {
+        [PipelinePhase.ENRICHMENT]: PhaseStatus.PENDING,
+      },
+    );
+    stateService.get
+      .mockResolvedValueOnce(runningState) // onPhaseSkipped preflight
+      .mockResolvedValueOnce(runningState); // cancelPipeline state fetch
+    stateService.getPhaseResult.mockResolvedValueOnce({
+      fieldsStillMissing: ["website", "description"],
+    });
+
+    const clara = {
+      isEnabled: jest.fn().mockReturnValue(true),
+      notifyMissingStartupInfo: jest.fn().mockResolvedValue(undefined),
+      notifyPipelineComplete: jest.fn(),
+    };
+    moduleRef.get.mockReturnValueOnce(clara as any);
+
+    const applied = await service.onPhaseSkipped({
+      startupId: "startup-1",
+      pipelineRunId: "run-1",
+      userId: "user-1",
+      phase: PipelinePhase.ENRICHMENT,
+      reason: "Enrichment temporarily disabled by configuration",
+      result: enrichmentService.buildSkippedResult("Enrichment temporarily disabled"),
+    });
+
+    expect(applied).toBe(true);
+    expect(clara.notifyMissingStartupInfo).toHaveBeenCalledWith(
+      "startup-1",
+      ["website"],
+    );
+    expect(queue.removePipelineJobs).toHaveBeenCalledWith("startup-1");
+    expect(stateService.setStatus).toHaveBeenCalledWith(
+      "startup-1",
+      PipelineStatus.CANCELLED,
+    );
+    expect(phaseTransition.decideNextPhases).not.toHaveBeenCalled();
   });
 
   it("ignores stale phase skip requests from older pipeline runs", async () => {
@@ -988,9 +1411,23 @@ describe("PipelineService", () => {
   });
 
   it("marks active phase failed and retries when timeout handler fires", async () => {
-    stateService.get.mockResolvedValueOnce(createState({}, {
-      [PipelinePhase.RESEARCH]: PhaseStatus.WAITING,
-    }));
+    stateService.get
+      .mockResolvedValueOnce(
+        createState(
+          {},
+          {
+            [PipelinePhase.RESEARCH]: PhaseStatus.WAITING,
+          },
+        ),
+      )
+      .mockResolvedValueOnce(
+        createState(
+          {},
+          {
+            [PipelinePhase.RESEARCH]: PhaseStatus.PENDING,
+          },
+        ),
+      );
     stateService.incrementRetryCount.mockResolvedValueOnce(1);
     phaseTransition.getPhaseConfig.mockReturnValueOnce({
       ...phaseConfig[PipelinePhase.RESEARCH],

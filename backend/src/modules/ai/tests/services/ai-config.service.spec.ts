@@ -64,12 +64,12 @@ describe("AiConfigService", () => {
     expect(service.isPipelineEnabled()).toBe(true);
   });
 
-  it("disables enrichment by default while feature is paused", () => {
+  it("enables enrichment by default", () => {
     config.get.mockImplementation(
       (_: string, fallback?: unknown) => fallback as boolean,
     );
 
-    expect(service.isEnrichmentEnabled()).toBe(false);
+    expect(service.isEnrichmentEnabled()).toBe(true);
   });
 
   it("enables source sanitization by default", () => {

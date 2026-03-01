@@ -1,7 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ilike } from 'drizzle-orm';
+import { eq, ilike } from 'drizzle-orm';
 import { DrizzleService } from '../../database';
-import { PipelineService } from '../ai/services/pipeline.service';
+import {
+  PipelineService,
+  PIPELINE_MISSING_FIELDS_ERROR_PREFIX,
+} from '../ai/services/pipeline.service';
 import { NotificationService } from '../../notification/notification.service';
 import { NotificationType } from '../../notification/entities';
 import { startup, StartupStatus, StartupStage } from './entities/startup.schema';
@@ -62,7 +65,7 @@ export class StartupIntakeService {
       };
     }
 
-    const location = 'Pending extraction';
+    const location = 'Unknown';
     const geography = deriveStartupGeography(location);
     const slug = this.generateSlug(companyName);
 
@@ -74,7 +77,7 @@ export class StartupIntakeService {
         slug,
         tagline: `Submitted via ${source} by ${fromEmail}`,
         description: bodyText?.slice(0, 5000) || `Submitted via ${source}. Details will be extracted from the pitch deck.`,
-        website: 'https://pending-extraction.com',
+        website: '',
         location,
         normalizedRegion: geography.normalizedRegion,
         geoCountryCode: geography.countryCode,
@@ -82,7 +85,7 @@ export class StartupIntakeService {
         geoLevel2: geography.level2,
         geoLevel3: geography.level3,
         geoPath: geography.path,
-        industry: 'Pending extraction',
+        industry: 'Unknown',
         stage: StartupStage.SEED,
         fundingTarget: 0,
         teamSize: 1,
@@ -94,9 +97,36 @@ export class StartupIntakeService {
       })
       .returning();
 
+    await this.normalizeLegacyPlaceholderDefaults(created.id);
     this.logger.log(`Created startup ${created.id} (${companyName}) from ${source} by ${fromEmail}`);
 
-    await this.pipeline.startPipeline(created.id, adminUserId);
+    if (created.pitchDeckPath || created.pitchDeckUrl) {
+      try {
+        const prefill = await this.pipeline.prefillCriticalFieldsFromDeckExtraction(
+          created.id,
+        );
+        this.logger.log(
+          `[Intake] Pre-pipeline extraction for ${created.id} | source=${prefill.extractionSource} | updated=${prefill.updatedFields.join(",") || "none"} | missingCritical=${prefill.missingCriticalFields.join(",") || "none"}`,
+        );
+      } catch (error) {
+        const message = this.getErrorMessage(error);
+        this.logger.warn(
+          `[Intake] Pre-pipeline extraction failed for ${created.id}: ${message}`,
+        );
+      }
+    }
+
+    try {
+      await this.pipeline.startPipeline(created.id, adminUserId);
+    } catch (error) {
+      const message = this.getErrorMessage(error);
+      if (!message.includes(PIPELINE_MISSING_FIELDS_ERROR_PREFIX)) {
+        throw error;
+      }
+      this.logger.warn(
+        `[Intake] Pipeline start deferred for ${created.id}: ${message}`,
+      );
+    }
 
     await this.notifications.createAndBroadcast(
       adminUserId,
@@ -182,12 +212,26 @@ export class StartupIntakeService {
       `[QuickCreate] Persisted startup ${created.id} | pitchDeckPath=${Boolean(created.pitchDeckPath)} | pitchDeckUrl=${Boolean(created.pitchDeckUrl)} | roundCurrency=${created.roundCurrency ?? "null"} | valuationKnown=${created.valuationKnown === null ? "null" : String(created.valuationKnown)} | valuationType=${created.valuationType ?? "null"} | raiseType=${created.raiseType ?? "null"} | contactEmail=${Boolean(created.contactEmail)} | productDescription=${Boolean(created.productDescription)}`,
     );
 
-    await this.pipeline.startPipeline(created.id, params.adminUserId);
+    let pipelineStarted = true;
+    try {
+      await this.pipeline.startPipeline(created.id, params.adminUserId);
+    } catch (error) {
+      const message = this.getErrorMessage(error);
+      if (!message.includes(PIPELINE_MISSING_FIELDS_ERROR_PREFIX)) {
+        throw error;
+      }
+      pipelineStarted = false;
+      this.logger.warn(
+        `[QuickCreate] Pipeline start deferred for ${created.id}: ${message}`,
+      );
+    }
 
     await this.notifications.createAndBroadcast(
       params.adminUserId,
       'Startup quick-created',
-      `${params.name} was quick-created and pipeline started`,
+      pipelineStarted
+        ? `${params.name} was quick-created and pipeline started`
+        : `${params.name} was quick-created; pipeline is waiting for missing critical fields`,
       NotificationType.INFO,
       `/admin/startup/${created.id}`,
     );
@@ -235,5 +279,89 @@ export class StartupIntakeService {
       .replace(/^-+|-+$/g, '');
     const suffix = Math.random().toString(36).slice(2, 6);
     return `${base}-${suffix}`;
+  }
+
+  private getErrorMessage(error: unknown): string {
+    if (error && typeof error === 'object') {
+      const maybeResponse = (error as { response?: unknown }).response;
+      if (maybeResponse && typeof maybeResponse === 'object') {
+        const message = (maybeResponse as { message?: unknown }).message;
+        if (typeof message === 'string') {
+          return message;
+        }
+        if (Array.isArray(message)) {
+          return message
+            .filter((value): value is string => typeof value === 'string')
+            .join(' | ');
+        }
+      }
+    }
+    return error instanceof Error ? error.message : String(error);
+  }
+
+  private async normalizeLegacyPlaceholderDefaults(startupId: string): Promise<void> {
+    const [record] = await this.drizzle.db
+      .select({
+        website: startup.website,
+        industry: startup.industry,
+        location: startup.location,
+      })
+      .from(startup)
+      .where(eq(startup.id, startupId))
+      .limit(1);
+
+    if (!record) {
+      return;
+    }
+
+    const updates: Partial<typeof startup.$inferInsert> = {};
+    if (this.isExplicitPendingPlaceholderWebsite(record.website)) {
+      updates.website = '';
+    }
+    if (this.isExplicitPendingPlaceholderText(record.industry)) {
+      updates.industry = 'Unknown';
+    }
+    if (this.isExplicitPendingPlaceholderText(record.location)) {
+      updates.location = 'Unknown';
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return;
+    }
+
+    await this.drizzle.db
+      .update(startup)
+      .set({
+        ...updates,
+        updatedAt: new Date(),
+      })
+      .where(eq(startup.id, startupId));
+
+    this.logger.warn(
+      `[Intake] Normalized legacy placeholder defaults for ${startupId}: ${Object.keys(updates).join(', ')}`,
+    );
+  }
+
+  private isExplicitPendingPlaceholderWebsite(value: string | null | undefined): boolean {
+    if (!value) {
+      return false;
+    }
+    try {
+      const host = new URL(value).hostname.toLowerCase().replace(/^www\./, '');
+      return host === 'pending-extraction.com';
+    } catch {
+      return false;
+    }
+  }
+
+  private isExplicitPendingPlaceholderText(value: string | null | undefined): boolean {
+    if (!value) {
+      return false;
+    }
+    const normalized = value.trim().toLowerCase();
+    return (
+      normalized.includes('pending extraction') ||
+      normalized.includes('pending-extraction')
+    );
   }
 }

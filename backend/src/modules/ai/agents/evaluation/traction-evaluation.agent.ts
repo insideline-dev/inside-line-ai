@@ -40,6 +40,17 @@ export class TractionEvaluationAgent extends BaseEvaluationAgent<TractionEvaluat
     };
   }
 
+  protected override getAgentTemplateVariables(
+    pipelineData: EvaluationPipelineInput,
+  ): Record<string, string> {
+    const claims = Array.isArray(pipelineData.scraping.notableClaims)
+      ? pipelineData.scraping.notableClaims
+      : [];
+    return {
+      deckTractionData: claims.length > 0 ? claims.join("\n") : "Not provided",
+    };
+  }
+
   buildContext(pipelineData: EvaluationPipelineInput) {
     const { extraction, scraping } = pipelineData;
     const notableClaims = Array.isArray(scraping.notableClaims)

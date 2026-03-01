@@ -287,6 +287,7 @@ describe("Startup lifecycle integration: submit -> pipeline complete -> approve 
 
     storage = {
       getUploadUrl: jest.fn(),
+      exists: jest.fn().mockResolvedValue(true),
     } as unknown as jest.Mocked<StorageService>;
 
     aiConfig = {
@@ -444,10 +445,6 @@ describe("Startup lifecycle integration: submit -> pipeline complete -> approve 
       buildSkippedResult: jest.fn(),
     } as unknown as jest.Mocked<EnrichmentService>;
 
-    const pipelineStateSnapshots = {
-      snapshot: jest.fn().mockResolvedValue(undefined),
-    } as unknown as jest.Mocked<PipelineStateSnapshotService>;
-
     const extractionService = {
       run: jest.fn().mockResolvedValue({
         source: "startup-context",
@@ -468,6 +465,7 @@ describe("Startup lifecycle integration: submit -> pipeline complete -> approve 
       errorRecovery,
       pipelineTemplateService,
       enrichmentService,
+      storage,
       extractionService,
       moduleRef,
     );

@@ -18,11 +18,12 @@ import { ErrorRecoveryService } from "../../orchestrator/error-recovery.service"
 import { PipelineFeedbackService } from "../../services/pipeline-feedback.service";
 import { StartupMatchingPipelineService } from "../../services/startup-matching-pipeline.service";
 import { PipelineTemplateService } from "../../services/pipeline-template.service";
-import { EnrichmentService } from "../../services/enrichment.service";
+import { EnrichmentService, type EnrichmentNeedAssessment } from "../../services/enrichment.service";
 import { ExtractionService } from "../../services/extraction.service";
 import { ModuleRef } from "@nestjs/core";
 import { NotificationService } from "../../../../notification/notification.service";
 import { StorageService } from "../../../../storage";
+import { ClaraService } from "../../../clara/clara.service";
 
 function createState(
   overrides: Partial<PipelineState> = {},
@@ -552,7 +553,7 @@ describe("PipelineService", () => {
       notifyMissingStartupInfo: jest.fn().mockResolvedValue(undefined),
       notifyPipelineComplete: jest.fn(),
     };
-    moduleRef.get.mockReturnValueOnce(clara as any);
+    moduleRef.get.mockReturnValueOnce(clara as unknown as ClaraService);
 
     await service.onPhaseCompleted("startup-1", PipelinePhase.ENRICHMENT);
 
@@ -588,9 +589,9 @@ describe("PipelineService", () => {
       notifyMissingStartupInfo: jest.fn().mockResolvedValue(undefined),
       notifyPipelineComplete: jest.fn(),
     };
-    moduleRef.get.mockReturnValueOnce(clara as any);
+    moduleRef.get.mockReturnValueOnce(clara as unknown as ClaraService);
 
-    await (service as any).queuePhase({
+    await (service as unknown as { queuePhase: (opts: { startupId: string; pipelineRunId: string; userId: string; phase: PipelinePhase }) => Promise<void> }).queuePhase({
       startupId: "startup-1",
       pipelineRunId: "run-1",
       userId: "user-1",
@@ -644,9 +645,9 @@ describe("PipelineService", () => {
       notifyMissingStartupInfo: jest.fn().mockResolvedValue(undefined),
       notifyPipelineComplete: jest.fn(),
     };
-    moduleRef.get.mockReturnValueOnce(clara as any);
+    moduleRef.get.mockReturnValueOnce(clara as unknown as ClaraService);
 
-    await (service as any).queuePhase({
+    await (service as unknown as { queuePhase: (opts: { startupId: string; pipelineRunId: string; userId: string; phase: PipelinePhase }) => Promise<void> }).queuePhase({
       startupId: "startup-1",
       pipelineRunId: "run-1",
       userId: "user-1",
@@ -691,7 +692,7 @@ describe("PipelineService", () => {
       return Promise.resolve(undefined);
     });
 
-    await (service as any).queuePhase({
+    await (service as unknown as { queuePhase: (opts: { startupId: string; pipelineRunId: string; userId: string; phase: PipelinePhase }) => Promise<void> }).queuePhase({
       startupId: "startup-1",
       pipelineRunId: "run-1",
       userId: "user-1",
@@ -710,7 +711,7 @@ describe("PipelineService", () => {
       missingFields: [],
       suspiciousFields: [],
       reason: "No missing or suspicious fields after internal checks",
-    } as any);
+    } as EnrichmentNeedAssessment);
 
     await (service as unknown as { queuePhase: (opts: { startupId: string; pipelineRunId: string; userId: string; phase: PipelinePhase }) => Promise<void> }).queuePhase({
       startupId: "startup-1",
@@ -751,9 +752,9 @@ describe("PipelineService", () => {
       missingFields: [],
       suspiciousFields: [],
       reason: "No missing or suspicious fields after internal checks",
-    } as any);
+    } as EnrichmentNeedAssessment);
 
-    await (service as any).queuePhase({
+    await (service as unknown as { queuePhase: (opts: { startupId: string; pipelineRunId: string; userId: string; phase: PipelinePhase }) => Promise<void> }).queuePhase({
       startupId: "startup-1",
       pipelineRunId: "run-1",
       userId: "user-1",
@@ -790,9 +791,9 @@ describe("PipelineService", () => {
       missingFields: ["website"],
       suspiciousFields: [],
       reason: "Missing fields (1) or suspicious fields (0) require enrichment",
-    } as any);
+    } as EnrichmentNeedAssessment);
 
-    await (service as any).queuePhase({
+    await (service as unknown as { queuePhase: (opts: { startupId: string; pipelineRunId: string; userId: string; phase: PipelinePhase }) => Promise<void> }).queuePhase({
       startupId: "startup-1",
       pipelineRunId: "run-1",
       userId: "user-1",
@@ -827,7 +828,7 @@ describe("PipelineService", () => {
       missingFields: [],
       suspiciousFields: [],
       reason: "No missing or suspicious fields after internal checks",
-    } as any);
+    } as EnrichmentNeedAssessment);
     mockDb.limit.mockImplementationOnce(function (this: { mode: string }) {
       if (this.mode === "select") {
         return Promise.resolve([
@@ -844,7 +845,7 @@ describe("PipelineService", () => {
       return Promise.resolve(undefined);
     });
 
-    await (service as any).queuePhase({
+    await (service as unknown as { queuePhase: (opts: { startupId: string; pipelineRunId: string; userId: string; phase: PipelinePhase }) => Promise<void> }).queuePhase({
       startupId: "startup-1",
       pipelineRunId: "run-1",
       userId: "user-1",
@@ -877,7 +878,7 @@ describe("PipelineService", () => {
       missingFields: [],
       suspiciousFields: [],
       reason: "No missing or suspicious fields after internal checks",
-    } as any);
+    } as EnrichmentNeedAssessment);
 
     const beforeSkip = createState(
       {},
@@ -965,7 +966,7 @@ describe("PipelineService", () => {
       notifyMissingStartupInfo: jest.fn().mockResolvedValue(undefined),
       notifyPipelineComplete: jest.fn(),
     };
-    moduleRef.get.mockReturnValueOnce(clara as any);
+    moduleRef.get.mockReturnValueOnce(clara as unknown as ClaraService);
 
     const applied = await service.onPhaseSkipped({
       startupId: "startup-1",

@@ -361,7 +361,7 @@ export class PipelineService {
 
     const companyLineMatch =
       text.match(
-        /(?:^|\n)\s*(?:company|startup)\s*(?:name)?\s*[:\-]\s*([^\n]{2,120})/i,
+        /(?:^|\n)\s*(?:company|startup)\s*(?:name)?\s*[:-]\s*([^\n]{2,120})/i,
       )?.[1] ?? null;
     if (companyLineMatch) {
       return this.sanitizeStartupName(companyLineMatch);

@@ -169,7 +169,7 @@ describe("ScrapingService", () => {
       "https://inside-line.test",
       expect.objectContaining({
         manualPaths: [],
-        discoveryEnabled: false,
+        discoveryEnabled: true,
       }),
     );
   });

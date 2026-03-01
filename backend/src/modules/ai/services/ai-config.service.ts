@@ -306,7 +306,7 @@ export class AiConfigService {
   }
 
   isEnrichmentEnabled(): boolean {
-    return this.config.get<boolean>("AI_ENRICHMENT_ENABLED", false);
+    return this.config.get<boolean>("AI_ENRICHMENT_ENABLED", true);
   }
 
   isSourceSanitizationEnabled(): boolean {

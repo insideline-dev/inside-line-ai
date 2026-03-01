@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { eq, and, or, ilike, sql, count, desc } from 'drizzle-orm';
+import { eq, and, or, ilike, count, desc } from 'drizzle-orm';
 import { DrizzleService } from '../../database';
 import { user, refreshToken, UserRole } from '../../auth/entities/auth.schema';
 import { GetUsersQuery, UpdateUser } from './dto';

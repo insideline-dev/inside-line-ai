@@ -4,6 +4,7 @@ import {
   PRODUCT_RESEARCH_HUMAN_PROMPT,
   PRODUCT_RESEARCH_SYSTEM_PROMPT,
 } from "../../prompts/research/product-research.prompt";
+import { validateProductResearchReportContract } from "../../prompts/research/product-research.contract";
 import { toValidUrl } from "./url.util";
 
 const tryPathname = (url: string): string => {
@@ -19,7 +20,16 @@ export const ProductResearchAgent: ResearchAgentConfig<string> = {
   name: "Product Research",
   systemPrompt: PRODUCT_RESEARCH_SYSTEM_PROMPT,
   humanPromptTemplate: PRODUCT_RESEARCH_HUMAN_PROMPT,
-  schema: z.string(),
+  schema: z.string().superRefine((value, ctx) => {
+    const validationError = validateProductResearchReportContract(value);
+    if (!validationError) {
+      return;
+    }
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `Product research output failed report contract: ${validationError}`,
+    });
+  }),
   contextBuilder: ({ extraction, scraping, researchParameters }) => ({
     productDescription:
       researchParameters?.productDescription?.trim() ||

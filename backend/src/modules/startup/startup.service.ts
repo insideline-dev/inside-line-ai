@@ -5,22 +5,36 @@ import {
   ForbiddenException,
   BadRequestException,
   ConflictException,
+  Optional,
 } from "@nestjs/common";
 import { eq, and, or, ilike, sql, desc } from "drizzle-orm";
 import { UserRole } from "../../auth/entities/auth.schema";
 import { DrizzleService } from "../../database";
 import { QueueService, QUEUE_NAMES } from "../../queue";
-import { StorageService } from "../../storage";
+import { StorageService, AssetType } from "../../storage";
 import { AiConfigService } from "../ai/services/ai-config.service";
 import type {
   EvaluationAgentKey,
   ResearchAgentKey,
 } from "../ai/interfaces/agent.interface";
-import { PipelineService } from "../ai/services/pipeline.service";
-import { ModelPurpose, PipelinePhase } from "../ai/interfaces/pipeline.interface";
+import {
+  PipelineService,
+  PIPELINE_MISSING_FIELDS_ERROR_PREFIX,
+} from "../ai/services/pipeline.service";
+import {
+  ModelPurpose,
+  PipelinePhase,
+  PipelineStatus,
+} from "../ai/interfaces/pipeline.interface";
 import { PipelineFeedbackService } from "../ai/services/pipeline-feedback.service";
 import { StartupMatchingPipelineService } from "../ai/services/startup-matching-pipeline.service";
-import { pipelineAgentRun } from "../ai/entities";
+import { PipelineStateService } from "../ai/services/pipeline-state.service";
+import {
+  pipelineAgentRun,
+  pipelineFailure,
+  pipelineRun,
+  pipelineStateSnapshot,
+} from "../ai/entities";
 import { startup, StartupStatus } from "./entities/startup.schema";
 import { agentConversation } from "../agent/entities/agent.schema";
 import { investorInboxSubmission } from "../integrations/agentmail/entities/investor-inbox-submission.schema";
@@ -187,7 +201,53 @@ export class StartupService {
     private aiPipeline: PipelineService,
     private pipelineFeedback: PipelineFeedbackService,
     private startupMatching: StartupMatchingPipelineService,
+    @Optional() private pipelineState?: PipelineStateService,
   ) {}
+
+  private async cleanupStartupRuntimeState(startupId: string): Promise<void> {
+    const cleanupTasks: Array<Promise<unknown>> = [
+      this.queue.removePipelineJobs(startupId),
+      this.cleanupStartupPersistentPipelineData(startupId),
+    ];
+    if (this.pipelineState) {
+      cleanupTasks.push(this.pipelineState.clear(startupId));
+    }
+
+    const results = await Promise.allSettled(cleanupTasks);
+    const failures = results.filter(
+      (result): result is PromiseRejectedResult => result.status === "rejected",
+    );
+    if (failures.length > 0) {
+      this.logger.warn(
+        `[StartupDelete] Runtime cleanup had ${failures.length} issue(s) for ${startupId}: ${failures
+          .map((failure) =>
+            failure.reason instanceof Error
+              ? failure.reason.message
+              : String(failure.reason),
+          )
+          .join(" | ")}`,
+      );
+    }
+  }
+
+  private async cleanupStartupPersistentPipelineData(
+    startupId: string,
+  ): Promise<void> {
+    await this.drizzle.db.transaction(async (tx) => {
+      await tx
+        .delete(pipelineAgentRun)
+        .where(eq(pipelineAgentRun.startupId, startupId));
+      await tx
+        .delete(pipelineFailure)
+        .where(eq(pipelineFailure.startupId, startupId));
+      await tx
+        .delete(pipelineStateSnapshot)
+        .where(eq(pipelineStateSnapshot.startupId, startupId));
+      await tx
+        .delete(pipelineRun)
+        .where(eq(pipelineRun.startupId, startupId));
+    });
+  }
 
   private generateSlug(name: string): string {
     return name
@@ -381,6 +441,7 @@ export class StartupService {
         throw new ForbiddenException("Can only delete draft startups");
       }
 
+      await this.cleanupStartupRuntimeState(id);
       await db.delete(startup).where(eq(startup.id, id));
 
       this.logger.log(`Deleted startup ${id}`);
@@ -489,6 +550,7 @@ export class StartupService {
         startupId: id,
         requestedBy: actorId,
         triggerSource: "approval",
+        requireApproved: false,
       });
       this.logger.log(
         `Queued startup matching for ${id} (analysisJobId=${queued.analysisJobId}, queueJobId=${queued.queueJobId})`,
@@ -798,6 +860,8 @@ export class StartupService {
       throw new NotFoundException(`Startup with ID ${id} not found`);
     }
 
+    await this.cleanupStartupRuntimeState(id);
+
     await this.drizzle.db.transaction(async (tx) => {
       // Non-cascading references: clear these before deleting startup.
       await tx
@@ -985,7 +1049,7 @@ export class StartupService {
 
     const result = await this.storage.getUploadUrl(
       userId,
-      assetType as any,
+      assetType as unknown as AssetType,
       dto.fileType,
       id,
     );
@@ -1070,7 +1134,18 @@ export class StartupService {
     userId: string,
   ): Promise<void> {
     if (this.aiConfig.isPipelineEnabled()) {
-      await this.aiPipeline.startPipeline(startupId, userId);
+      try {
+        await this.aiPipeline.startPipeline(startupId, userId);
+      } catch (error) {
+        const message = this.getErrorMessage(error);
+        if (message.includes(PIPELINE_MISSING_FIELDS_ERROR_PREFIX)) {
+          this.logger.warn(
+            `Skipped pipeline start for startup ${startupId}: ${message}`,
+          );
+          return;
+        }
+        throw error;
+      }
       return;
     }
 
@@ -1133,6 +1208,24 @@ export class StartupService {
       ...startupRecord,
       evaluation: this.withModelSources(evaluation),
     };
+  }
+
+  private getErrorMessage(error: unknown): string {
+    if (error && typeof error === "object") {
+      const maybeResponse = (error as { response?: unknown }).response;
+      if (maybeResponse && typeof maybeResponse === "object") {
+        const message = (maybeResponse as { message?: unknown }).message;
+        if (typeof message === "string") {
+          return message;
+        }
+        if (Array.isArray(message)) {
+          return message
+            .filter((value): value is string => typeof value === "string")
+            .join(" | ");
+        }
+      }
+    }
+    return error instanceof Error ? error.message : String(error);
   }
 
   private withModelSources(evaluation: StartupEvaluation): StartupEvaluation {
@@ -1498,7 +1591,19 @@ export class StartupService {
       this.aiPipeline.getTrackedProgress(startupId),
     ]);
 
-    if (trackedProgress) {
+    const orphanTrackedProgress =
+      status === StartupStatus.ANALYZING &&
+      trackedProgress !== null &&
+      trackedProgress.status === PipelineStatus.RUNNING &&
+      !pipelineState;
+
+    if (orphanTrackedProgress) {
+      this.logger.warn(
+        `[Progress] Ignoring orphan tracked progress for startup ${startupId}: startup is analyzing but live pipeline state is missing`,
+      );
+    }
+
+    if (trackedProgress && !orphanTrackedProgress) {
       const phaseResults = pipelineState?.results ?? {};
       const agentTraces = includeAdminDetails
         ? await this.loadAgentTraces(startupId, trackedProgress.pipelineRunId)

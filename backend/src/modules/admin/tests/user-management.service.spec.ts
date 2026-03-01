@@ -8,7 +8,7 @@ import { UserRole } from '../../../auth/entities/auth.schema';
 
 describe('UserManagementService', () => {
   let service: UserManagementService;
-  let drizzleService: jest.Mocked<DrizzleService>;
+  let _drizzleService: jest.Mocked<DrizzleService>;
   let jwtService: jest.Mocked<JwtService>;
 
   const createMockDb = () => ({
@@ -82,7 +82,7 @@ describe('UserManagementService', () => {
     }).compile();
 
     service = module.get<UserManagementService>(UserManagementService);
-    drizzleService = module.get(DrizzleService);
+    _drizzleService = module.get(DrizzleService);
     jwtService = module.get(JwtService);
   });
 

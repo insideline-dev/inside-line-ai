@@ -46,7 +46,7 @@ describe("ProgressTrackerService", () => {
       })),
     };
 
-    drizzle = { db: mockDb as any } as jest.Mocked<DrizzleService>;
+    drizzle = { db: mockDb as unknown as DrizzleService["db"] } as jest.Mocked<DrizzleService>;
     notifications = {
       sendPipelineEvent: jest.fn(),
     } as unknown as jest.Mocked<NotificationGateway>;

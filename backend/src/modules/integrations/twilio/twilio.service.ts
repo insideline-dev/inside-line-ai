@@ -1,17 +1,16 @@
 import {
   Injectable,
   Logger,
-  NotFoundException,
   BadRequestException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { eq, and, or, desc, sql } from 'drizzle-orm';
+import { eq, and, or, desc } from 'drizzle-orm';
 import { DrizzleService } from '../../../database';
 import { NotificationService } from '../../../notification/notification.service';
 import { StorageService } from '../../../storage';
+import type { AssetType } from '../../../storage/storage.config';
 import { integrationWebhook, WebhookSource } from '../../integration/entities/integration.schema';
-import { NotificationType } from '../../../notification/entities';
 import { TwilioApiClientService } from './twilio-api-client.service';
 import type { TwilioWebhookDto, SendMessageDto, GetMessagesQueryDto } from './dto';
 
@@ -79,7 +78,7 @@ export class TwilioService {
 
       const result = await this.storage.uploadGeneratedContent(
         userId,
-        'whatsapp-media' as any,
+        'documents' as AssetType,
         buffer,
         contentType,
       );
@@ -92,7 +91,7 @@ export class TwilioService {
   }
 
   async handleWebhook(payload: TwilioWebhookDto, signature: string, url: string) {
-    const isValid = this.twilioClient.validateWebhook(signature, url, payload as any);
+    const isValid = this.twilioClient.validateWebhook(signature, url, payload as unknown as Record<string, string>);
 
     if (!isValid) {
       this.logger.warn('Invalid Twilio webhook signature');
@@ -115,7 +114,7 @@ export class TwilioService {
         .values({
           source: WebhookSource.TWILIO,
           eventType: 'message.received',
-          payload: webhookPayload as any,
+          payload: webhookPayload as unknown as Record<string, unknown>,
           processed: false,
         })
         .returning();
@@ -123,23 +122,15 @@ export class TwilioService {
       this.logger.log(`Logged webhook: ${webhook.id}`);
 
       // Download media if attached
-      let storedMediaUrl: string | null = null;
       if (webhookPayload.MediaUrl) {
-        storedMediaUrl = await this.downloadMedia(webhookPayload.MediaUrl, 'system');
+        await this.downloadMedia(webhookPayload.MediaUrl, 'system');
       }
 
-      // Create notification for recipient
-      const recipient = this.normalizePhoneNumber(webhookPayload.To);
-      const sender = this.normalizePhoneNumber(webhookPayload.From);
-
-      const title = storedMediaUrl
-        ? `New WhatsApp with attachment from ${sender}`
-        : `New WhatsApp from ${sender}`;
-
-      const message = webhookPayload.Body || '[Media]';
-
-      // Note: In production, map phone number to userId
-      // For now, we'll skip notification since we don't have user mapping
+      // Note: In production, map phone number to userId for notifications
+      // const recipient = this.normalizePhoneNumber(webhookPayload.To);
+      // const sender = this.normalizePhoneNumber(webhookPayload.From);
+      // const title = storedMediaUrl ? `New WhatsApp with attachment from ${sender}` : `New WhatsApp from ${sender}`;
+      // const message = webhookPayload.Body || '[Media]';
       // await this.notification.create(recipientUserId, title, message, NotificationType.INFO);
 
       await this.drizzle.db
@@ -156,7 +147,7 @@ export class TwilioService {
         .values({
           source: WebhookSource.TWILIO,
           eventType: 'message.received',
-          payload: webhookPayload as any,
+          payload: webhookPayload as unknown as Record<string, unknown>,
           processed: false,
           errorMessage: error instanceof Error ? error.message : 'Unknown error',
         });
@@ -194,7 +185,7 @@ export class TwilioService {
     await this.drizzle.db.insert(integrationWebhook).values({
       source: WebhookSource.TWILIO,
       eventType: 'message.sent',
-      payload: webhookPayload as any,
+      payload: webhookPayload as unknown as Record<string, unknown>,
       processed: true,
     });
 
@@ -221,8 +212,6 @@ export class TwilioService {
       throw new BadRequestException('Twilio WhatsApp number not configured');
     }
 
-    const normalizedNumber = this.normalizePhoneNumber(whatsappNumber);
-
     const webhooks = await this.drizzle.db
       .select()
       .from(integrationWebhook)
@@ -240,7 +229,7 @@ export class TwilioService {
     const conversationsMap = new Map<string, Conversation>();
 
     for (const webhook of webhooks) {
-      const payload = webhook.payload as any as WebhookPayload;
+      const payload = webhook.payload as unknown as WebhookPayload;
       const convId = this.getConversationId(payload.From, payload.To);
 
       if (!conversationsMap.has(convId)) {
@@ -277,8 +266,6 @@ export class TwilioService {
 
   async getConversation(userId: string, conversationId: string, page = 1, limit = 50) {
     const offset = (page - 1) * limit;
-    const [fromPhone, toPhone] = conversationId.split(':');
-
     const webhooks = await this.drizzle.db
       .select()
       .from(integrationWebhook)
@@ -300,12 +287,12 @@ export class TwilioService {
 
     const messages: ConversationMessage[] = webhooks
       .filter((webhook) => {
-        const payload = webhook.payload as any as WebhookPayload;
+        const payload = webhook.payload as unknown as WebhookPayload;
         const convId = this.getConversationId(payload.From, payload.To);
         return convId === conversationId;
       })
       .map((webhook) => {
-        const payload = webhook.payload as any as WebhookPayload;
+        const payload = webhook.payload as unknown as WebhookPayload;
         const isOutgoing =
           this.normalizePhoneNumber(payload.From) === normalizedWhatsappNumber;
 
@@ -337,7 +324,7 @@ export class TwilioService {
     };
   }
 
-  async getConfig(userId: string) {
+  async getConfig(_userId: string) {
     // In production, fetch from user-specific config table
     // For now, return global config (masked)
     const whatsappNumber = this.config.get<string>('TWILIO_WHATSAPP_NUMBER');
@@ -348,7 +335,7 @@ export class TwilioService {
     };
   }
 
-  async saveConfig(userId: string, config: { accountSid: string; authToken: string; whatsappNumber: string }) {
+  async saveConfig(_userId: string, _config: { accountSid: string; authToken: string; whatsappNumber: string }) {
     // In production, save to user-specific config table
     // For now, this is a no-op since we use global env vars
     this.logger.warn('saveConfig called but not implemented (using global env config)');

@@ -24,6 +24,35 @@ export class TeamEvaluationAgent extends BaseEvaluationAgent<TeamEvaluation> {
     super(providers, aiConfig, promptService, modelExecution);
   }
 
+  protected override getAgentTemplateVariables(
+    pipelineData: EvaluationPipelineInput,
+  ): Record<string, string> {
+    const teamMembers = Array.isArray(pipelineData.scraping.teamMembers)
+      ? pipelineData.scraping.teamMembers
+      : [];
+
+    const teamMembersData =
+      teamMembers.length > 0
+        ? teamMembers
+            .map((member) => {
+              const parts = [`Name: ${member.name}`];
+              if (member.role) parts.push(`Role: ${member.role}`);
+              if (member.linkedinUrl) parts.push(`LinkedIn: ${member.linkedinUrl}`);
+              if (member.linkedinProfile?.headline)
+                parts.push(`Headline: ${member.linkedinProfile.headline}`);
+              if (member.linkedinProfile?.summary)
+                parts.push(`Summary: ${member.linkedinProfile.summary}`);
+              return parts.join("\n");
+            })
+            .join("\n\n")
+        : "Not provided";
+
+    return {
+      teamMembersData,
+      teamResearchOutput: pipelineData.research.team ?? "Not provided",
+    };
+  }
+
   buildContext(pipelineData: EvaluationPipelineInput) {
     const { extraction, scraping } = pipelineData;
     const teamMembers = Array.isArray(scraping.teamMembers)

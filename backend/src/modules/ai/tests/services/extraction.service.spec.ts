@@ -80,7 +80,7 @@ describe("ExtractionService", () => {
       }),
     } as unknown as jest.Mocked<ConfigService>;
 
-    drizzle = { db: mockDb as any } as jest.Mocked<DrizzleService>;
+    drizzle = { db: mockDb as unknown as DrizzleService["db"] } as jest.Mocked<DrizzleService>;
     storage = {
       getDownloadUrl: jest.fn().mockResolvedValue("https://storage.test/deck.pdf"),
     } as unknown as jest.Mocked<StorageService>;
@@ -120,7 +120,7 @@ describe("ExtractionService", () => {
       status: 200,
       headers: { get: jest.fn().mockReturnValue("1024") },
       arrayBuffer: jest.fn().mockResolvedValue(new Uint8Array([1, 2, 3, 4]).buffer),
-    }) as any;
+    }) as unknown as typeof fetch;
 
     service = new ExtractionService(
       config,
@@ -268,7 +268,7 @@ describe("ExtractionService", () => {
       status: 200,
       headers: { get: jest.fn().mockReturnValue(String(120 * 1024 * 1024)) },
       arrayBuffer: jest.fn().mockResolvedValue(new Uint8Array([1, 2, 3]).buffer),
-    }) as any;
+    }) as unknown as typeof fetch;
     fieldExtractor.extractFields.mockResolvedValueOnce({});
 
     const result = await service.run("startup-1");
@@ -288,7 +288,7 @@ describe("ExtractionService", () => {
       status: 200,
       headers: { get: jest.fn().mockReturnValue("0") },
       arrayBuffer: jest.fn().mockResolvedValue(new Uint8Array().buffer),
-    }) as any;
+    }) as unknown as typeof fetch;
     fieldExtractor.extractFields.mockResolvedValueOnce({});
 
     const result = await service.run("startup-1");
@@ -305,5 +305,33 @@ describe("ExtractionService", () => {
     await expect(service.run("missing")).rejects.toThrow(
       "Startup missing not found",
     );
+  });
+
+  it("sanitizes placeholder startup defaults from extraction fallback values", async () => {
+    mockDb.limit.mockResolvedValueOnce([
+      {
+        ...startupRecord,
+        name: "Startup  Example",
+        website: "https://pending-extraction.com",
+        industry: "Pending extraction",
+        location: "Pending extraction",
+      },
+    ]);
+    pdfTextExtractor.extractText.mockResolvedValueOnce({
+      text: "# Pitch Deck — Chari (Example Startup)\n\nSeed stage",
+      pageCount: 3,
+      hasContent: true,
+      hasSparsePages: false,
+      sparsePageCount: 0,
+    });
+    fieldExtractor.extractFields.mockResolvedValueOnce({});
+
+    const result = await service.run("startup-1");
+
+    expect(result.companyName).toBe("Chari");
+    expect(result.website).toBe("");
+    expect(result.industry).toBe("Unknown");
+    expect(result.location).toBe("Unknown");
+    expect(result.stage).toBe("seed");
   });
 });

@@ -5,6 +5,7 @@ import type {
   EvaluationAgent,
   EvaluationAgentKey,
   EvaluationFallbackReason,
+  EvaluationFeedbackNote,
   EvaluationAgentResult,
   EvaluationPipelineInput,
   EvaluationAgentRunOptions,
@@ -100,6 +101,105 @@ export abstract class BaseEvaluationAgent<TOutput>
     return this.safeStringify(value).trim();
   }
 
+  /**
+   * Build common template variables shared across all evaluation agents.
+   * Subclasses extend via `getAgentTemplateVariables()`.
+   */
+  protected buildCommonTemplateVariables(
+    pipelineData: EvaluationPipelineInput,
+    feedbackNotes: EvaluationFeedbackNote[],
+  ): Record<string, string> {
+    const snapshot = buildEvaluationCommonBaseline({
+      extraction: pipelineData.extraction,
+      adminFeedback: feedbackNotes,
+    });
+
+    const adminGuidance =
+      feedbackNotes.length > 0
+        ? feedbackNotes
+            .map((n) => `[${n.scope}] ${n.feedback}`)
+            .join("\n")
+        : "None";
+
+    return {
+      companyName: snapshot.companyName,
+      companyDescription:
+        pipelineData.extraction.tagline || pipelineData.extraction.rawText?.slice(0, 2000) || "Not provided",
+      sector: snapshot.industry,
+      stage: snapshot.stage,
+      website: snapshot.website,
+      location: snapshot.location,
+      deckContext: pipelineData.extraction.rawText || "Not provided",
+      adminGuidance,
+      webResearch: this.buildResearchReportText(pipelineData),
+      websiteContent: pipelineData.scraping.website?.fullText ?? "Not provided",
+    };
+  }
+
+  /**
+   * Override in subclasses to provide agent-specific template variables.
+   * Called alongside `buildCommonTemplateVariables()` and merged into the template variable map.
+   */
+  protected getAgentTemplateVariables(
+    _pipelineData: EvaluationPipelineInput,
+  ): Record<string, string> {
+    return {};
+  }
+
+  /**
+   * Safely parse a JSON-stringified research branch back to an object.
+   * Research branches are coerced to strings by normalizeResearchResult(),
+   * but may contain structured JSON data we can extract fields from.
+   */
+  protected tryParseResearchJson(
+    text: string | null | undefined,
+  ): Record<string, unknown> | null {
+    if (typeof text !== "string" || text.trim().length === 0) {
+      return null;
+    }
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Extract the first line from rawText matching a regex pattern.
+   * Used to pull claimed metrics (TAM, revenue, growth) from pitch deck text.
+   */
+  protected extractClaimLine(rawText: string, matcher: RegExp): string {
+    const lines = rawText
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0 && !line.startsWith("#"));
+    return lines.find((line) => matcher.test(line)) ?? "Not provided";
+  }
+
+  /**
+   * Extract all lines from text matching a regex pattern (up to maxLines).
+   * Used to pull contextual evidence from raw text research reports.
+   */
+  protected extractMatchingLines(
+    text: string | null | undefined,
+    matcher: RegExp,
+    maxLines = 10,
+  ): string {
+    if (!text || typeof text !== "string") {
+      return "";
+    }
+    return text
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0 && !line.startsWith("#") && matcher.test(line))
+      .slice(0, maxLines)
+      .join("\n");
+  }
+
   async run(
     pipelineData: EvaluationPipelineInput,
     options?: EvaluationAgentRunOptions,
@@ -139,9 +239,13 @@ export abstract class BaseEvaluationAgent<TOutput>
           })
         : null;
       const contextSections = this.formatContext(promptContext);
+      const commonVars = this.buildCommonTemplateVariables(pipelineData, feedbackNotes);
+      const agentVars = this.getAgentTemplateVariables(pipelineData);
       renderedPrompt = this.promptService.renderTemplate(
         promptConfig.userPrompt,
         {
+          ...commonVars,
+          ...agentVars,
           contextSections,
           contextJson: JSON.stringify(promptContext),
         },

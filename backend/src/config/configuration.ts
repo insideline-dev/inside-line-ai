@@ -1,5 +1,4 @@
 import { envSchema } from './env.schema';
-import { z } from 'zod';
 
 export const configuration = () => {
   const parsed = envSchema.safeParse(process.env);

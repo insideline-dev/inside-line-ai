@@ -25,7 +25,6 @@ import {
   EnrichmentService,
 } from "../services/enrichment.service";
 import { PipelineAgentTraceService } from "../services/pipeline-agent-trace.service";
-import { AiConfigService } from "../services/ai-config.service";
 import { runPipelinePhase } from "./run-phase.util";
 
 @Injectable()
@@ -37,7 +36,6 @@ export class EnrichmentProcessor
 
   constructor(
     config: ConfigService,
-    private aiConfig: AiConfigService,
     private enrichmentService: EnrichmentService,
     private pipelineState: PipelineStateService,
     private pipelineService: PipelineService,
@@ -76,35 +74,6 @@ export class EnrichmentProcessor
 
     if (job.data.type !== "ai_enrichment") {
       throw new Error("Invalid job type for enrichment processor");
-    }
-
-    if (!this.aiConfig.isEnrichmentEnabled()) {
-      const reason = "Enrichment temporarily disabled by configuration";
-      const skippedResult = this.enrichmentService.buildSkippedResult(reason);
-      const phaseSkipped = await this.pipelineService.onPhaseSkipped({
-        startupId,
-        pipelineRunId,
-        userId,
-        phase: PipelinePhase.ENRICHMENT,
-        reason,
-        result: skippedResult,
-      });
-      if (phaseSkipped) {
-        this.notificationGateway.sendJobStatus(userId, {
-          jobId: String(job.id),
-          jobType: "ai_enrichment",
-          status: "completed",
-          startupId,
-          pipelineRunId,
-          result: skippedResult,
-        });
-      }
-      return {
-        type: "ai_enrichment",
-        startupId,
-        pipelineRunId,
-        data: skippedResult,
-      };
     }
 
     const recordStepTrace = (

@@ -73,7 +73,7 @@ describe('TaskProcessor', () => {
   let processor: TestTaskProcessor;
 
   beforeEach(() => {
-    (Worker as any).mockClear();
+    (Worker as unknown as { mockClear: () => void }).mockClear();
     mockRedisClient.quit.mockClear();
     mockRedisClient.disconnect.mockClear();
     mockRedisClient.duplicate.mockClear();
@@ -113,7 +113,7 @@ describe('TaskProcessor', () => {
         } as TaskJobData,
       } as Job<TaskJobData>;
 
-      const result = await (processor as any).processJob(mockJob);
+      const result = await (processor as unknown as { processJob: (job: Job<TaskJobData>) => Promise<TaskJobResult> }).processJob(mockJob);
 
       expect(result.success).toBe(true);
       expect(result.jobId).toBe('job_123');
@@ -128,7 +128,7 @@ describe('TaskProcessor', () => {
 
     it('should log task processing', async () => {
       const loggerSpy = spyOn(
-        (processor as any).logger,
+        (processor as unknown as { logger: { log: (...args: unknown[]) => void } }).logger,
         'log',
       ).mockImplementation(() => {});
 
@@ -142,7 +142,7 @@ describe('TaskProcessor', () => {
         } as TaskJobData,
       } as Job<TaskJobData>;
 
-      await (processor as any).processJob(mockJob);
+      await (processor as unknown as { processJob: (job: Job<TaskJobData>) => Promise<TaskJobResult> }).processJob(mockJob);
 
       expect(loggerSpy).toHaveBeenCalledWith(
         expect.stringContaining(

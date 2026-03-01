@@ -3,7 +3,7 @@ import { sql, eq, gte, count, and, isNull, isNotNull, desc } from 'drizzle-orm';
 import { z } from 'zod';
 import { DrizzleService } from '../../database';
 import { CacheService } from './cache.service';
-import { user, UserRole } from '../../auth/entities/auth.schema';
+import { user } from '../../auth/entities/auth.schema';
 import { startup, StartupStatus } from '../startup/entities/startup.schema';
 import { startupMatch } from '../investor/entities/investor.schema';
 import { portal, portalSubmission } from '../portal/entities/portal.schema';

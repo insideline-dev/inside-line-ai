@@ -63,7 +63,7 @@ describe('MatchingProcessor', () => {
         financialsScore: null,
       };
 
-      const result = calculateOverallScore(partialScores as any, mockWeights);
+      const result = calculateOverallScore(partialScores as unknown as Parameters<typeof calculateOverallScore>[0], mockWeights);
 
       // (90*30 + 0*25 + 0*20 + 0*15 + 0*10) / 100 = 27
       expect(result).toBe(27);

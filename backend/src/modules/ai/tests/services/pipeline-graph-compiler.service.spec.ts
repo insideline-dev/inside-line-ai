@@ -117,6 +117,24 @@ describe("PipelineGraphCompilerService", () => {
     });
   });
 
+  it("defaults scrape discovery to enabled when discoveryEnabled is omitted", () => {
+    const parsed = service.parseFlowDefinition({
+      ...createFlowDefinition(),
+      nodeConfigs: {
+        scrape_website: {
+          scraping: {
+            manualPaths: ["/about"],
+          },
+        },
+      },
+    });
+
+    expect(parsed.nodeConfigs?.scrape_website?.scraping).toEqual({
+      manualPaths: ["/about"],
+      discoveryEnabled: true,
+    });
+  });
+
   it("rejects absolute URLs in scrape_website manual paths", () => {
     expect(() =>
       service.parseFlowDefinition({

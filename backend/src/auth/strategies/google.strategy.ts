@@ -27,7 +27,7 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
       clientSecret: clientSecret || 'placeholder',
       callbackURL: `${config.get<string>('APP_URL')}/auth/google/callback`,
       scope: ['email', 'profile'],
-    } as any);
+    } as ConstructorParameters<typeof Strategy>[0]);
 
     if (!clientID) {
       this.logger.warn('Google OAuth not configured - GOOGLE_CLIENT_ID is missing');
@@ -80,7 +80,7 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
           error:
             'You have been added to the waitlist as Founder. We will contact you once approved.',
         };
-        return done(null, rejected as any);
+        return done(null, rejected as unknown as Express.User);
       }
 
       this.logger.error('Google OAuth validation failed', error);

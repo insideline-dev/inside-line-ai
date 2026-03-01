@@ -43,7 +43,12 @@ export class TwilioApiClientService {
   async sendMessage(params: TwilioMessageParams) {
     const client = this.getClient();
 
-    const messageParams: any = {
+    const messageParams: {
+      from: string;
+      to: string;
+      body: string;
+      mediaUrl?: string[];
+    } = {
       from: params.from,
       to: params.to,
       body: params.body,

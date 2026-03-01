@@ -7,7 +7,7 @@ import { StartupStatus } from '../../startup/entities/startup.schema';
 
 describe('DataImportService', () => {
   let service: DataImportService;
-  let drizzleService: jest.Mocked<DrizzleService>;
+  let _drizzleService: jest.Mocked<DrizzleService>;
 
   const createMockDb = () => ({
     select: jest.fn().mockReturnThis(),
@@ -37,7 +37,7 @@ describe('DataImportService', () => {
     }).compile();
 
     service = module.get<DataImportService>(DataImportService);
-    drizzleService = module.get(DrizzleService);
+    _drizzleService = module.get(DrizzleService);
   });
 
   afterEach(() => {

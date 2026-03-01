@@ -15,10 +15,16 @@ export function createEvaluationPipelineInput(): EvaluationPipelineInput {
       rawText: [
         "Clipaf provides workflow copilots for industrial operations teams.",
         "The product automates compliance reviews and quality workflows.",
+        "Total addressable market (TAM) estimated at $18B globally for industrial compliance software.",
+        "Serviceable addressable market (SAM) of $3.2B focused on mid-market manufacturing.",
+        "Market growth rate estimated at 22% CAGR driven by regulatory tailwinds.",
+        "Current ARR of $480K with 35% month-over-month revenue growth.",
+        "Burn rate approximately $120K/month with 18-month runway post-raise.",
+        "Gross margin of 82% on SaaS revenue.",
         "Current round is being raised on a SAFE with an expected lead investor.",
         "Go-to-market combines founder-led sales, channel partners, and inbound content.",
         "Platform includes SOC 2 controls and audit-ready reporting.",
-      ].join(" "),
+      ].join("\n"),
     },
     scraping: {
       websiteUrl: "https://clipaf.com",
@@ -149,6 +155,8 @@ export function createEvaluationPipelineInput(): EvaluationPipelineInput {
         "SOC 2 ready platform",
         "Founder-led GTM with channel partners",
         "Seeking lead investor for current SAFE round",
+        "Current ARR of $480K with strong revenue trajectory",
+        "Previously raised $500K pre-seed funding round",
       ],
       scrapeErrors: [],
     },
@@ -160,8 +168,25 @@ export function createEvaluationPipelineInput(): EvaluationPipelineInput {
         "Product report text: AI copilots automate compliance workflows and reporting for operations teams.",
       news:
         "News report text: company launched partner ecosystem and received positive trade publication coverage.",
-      competitor:
-        "Competitor report text: fragmented market with horizontal incumbents and vertical niche challengers.",
+      competitor: JSON.stringify({
+        competitors: [
+          {
+            name: "ComplianceBot",
+            keyFeatures: ["Automated audits", "Real-time monitoring", "API integrations"],
+            productFeatures: ["Automated audits", "Real-time monitoring"],
+          },
+          {
+            name: "QualityForce",
+            keyFeatures: ["Workflow builder", "ISO compliance", "Mobile inspections"],
+          },
+        ],
+        indirectCompetitors: [
+          { name: "GenericERP", description: "Horizontal ERP with compliance module" },
+        ],
+        competitiveLandscapeSummary:
+          "Mapped 2 direct competitor profiles. Mapped 1 indirect or emerging threats. Dynamics evidence captured across marketShareSignals:2, barriersToEntry:1.",
+        marketPositioning: "Primary competitive set includes ComplianceBot, QualityForce.",
+      }),
       combinedReportText: [
         "## Team Research Report",
         "Team report text: founders have industrial SaaS background and execution history.",
@@ -176,7 +201,7 @@ export function createEvaluationPipelineInput(): EvaluationPipelineInput {
         "News report text: company launched partner ecosystem and received positive trade publication coverage.",
         "",
         "## Competitor Research Report",
-        "Competitor report text: fragmented market with horizontal incumbents and vertical niche challengers.",
+        "Mapped 2 direct competitor profiles. Primary competitive set includes ComplianceBot, QualityForce.",
       ].join("\n"),
       sources: [
         {

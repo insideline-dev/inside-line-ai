@@ -486,15 +486,31 @@ export class ExtractionService {
             .map((member) => member.name?.trim())
             .filter((name): name is string => Boolean(name));
 
+    const companyName = this.resolveCompanyName(
+      aiFields.companyName,
+      startupRecord.name,
+      rawText,
+    );
     const website = this.resolveWebsite(aiFields.website, startupRecord.website);
+    const industry = this.resolveDisplayText(
+      aiFields.industry,
+      startupRecord.industry,
+      "Unknown",
+    );
+    const location = this.resolveDisplayText(
+      aiFields.location,
+      startupRecord.location,
+      "Unknown",
+    );
+    const stage = this.resolveStage(aiFields.stage, startupRecord.stage, rawText);
 
     return ExtractionSchema.parse({
-      companyName: aiFields.companyName ?? startupRecord.name,
+      companyName,
       tagline: aiFields.tagline ?? startupRecord.tagline ?? "",
       founderNames,
-      industry: aiFields.industry ?? startupRecord.industry,
-      stage: aiFields.stage ?? startupRecord.stage,
-      location: aiFields.location ?? startupRecord.location,
+      industry,
+      stage,
+      location,
       website,
       fundingAsk: aiFields.fundingAsk ?? startupRecord.fundingTarget,
       valuation: aiFields.valuation ?? startupRecord.valuation ?? undefined,
@@ -513,13 +529,137 @@ export class ExtractionService {
       }
 
       try {
-        return new URL(candidate).toString();
+        const parsed = new URL(candidate);
+        const host = parsed.hostname.toLowerCase().replace(/^www\./, "");
+        if (!host || host === "pending-extraction.com") {
+          continue;
+        }
+        return parsed.toString();
       } catch {
         continue;
       }
     }
 
     return "";
+  }
+
+  private resolveDisplayText(
+    primary: string | null | undefined,
+    fallback: string | null | undefined,
+    emptyFallback: string,
+  ): string {
+    const preferred = this.normalizeNonPlaceholderText(primary);
+    if (preferred) {
+      return preferred;
+    }
+    const fromFallback = this.normalizeNonPlaceholderText(fallback);
+    if (fromFallback) {
+      return fromFallback;
+    }
+    return emptyFallback;
+  }
+
+  private resolveCompanyName(
+    aiCompanyName: string | null | undefined,
+    startupName: string,
+    rawText: string,
+  ): string {
+    const aiCandidate = this.normalizeNonPlaceholderText(aiCompanyName);
+    if (aiCandidate) {
+      return aiCandidate;
+    }
+
+    const startupCandidate = this.normalizeNonPlaceholderText(startupName);
+    if (startupCandidate && !this.isLikelyPlaceholderCompanyName(startupCandidate)) {
+      return startupCandidate;
+    }
+
+    const inferredFromDeck = this.inferCompanyNameFromRawText(rawText);
+    if (inferredFromDeck) {
+      return inferredFromDeck;
+    }
+
+    return startupCandidate ?? "Untitled Startup";
+  }
+
+  private resolveStage(
+    aiStage: string | null | undefined,
+    startupStage: string | null | undefined,
+    rawText: string,
+  ): string {
+    const aiCandidate = this.normalizeNonPlaceholderText(aiStage);
+    if (aiCandidate) {
+      return aiCandidate;
+    }
+
+    const inferredFromDeck = this.inferStageFromRawText(rawText);
+    if (inferredFromDeck) {
+      return inferredFromDeck;
+    }
+
+    return this.normalizeNonPlaceholderText(startupStage) ?? "seed";
+  }
+
+  private inferCompanyNameFromRawText(text: string): string | null {
+    const headingMatch =
+      text.match(
+        /(?:^|\n)\s*#?\s*pitch\s*deck\s*[—\-:]\s*([^\n(]{2,120}?)(?:\s*\(|\s*$)/i,
+      )?.[1] ?? null;
+    if (headingMatch) {
+      return this.normalizeNonPlaceholderText(headingMatch);
+    }
+
+    const companyLineMatch =
+      text.match(
+        /(?:^|\n)\s*(?:company|startup)\s*(?:name)?\s*[:-]\s*([^\n]{2,120})/i,
+      )?.[1] ?? null;
+    if (companyLineMatch) {
+      return this.normalizeNonPlaceholderText(companyLineMatch);
+    }
+
+    return null;
+  }
+
+  private inferStageFromRawText(text: string): string | null {
+    const normalized = text.toLowerCase();
+    if (/\bpre[\s-]?seed\b/.test(normalized)) return "pre_seed";
+    if (/\bseries[\s-]?a\b/.test(normalized)) return "series_a";
+    if (/\bseries[\s-]?b\b/.test(normalized)) return "series_b";
+    if (/\bseries[\s-]?c\b/.test(normalized)) return "series_c";
+    if (/\bseries[\s-]?d\b/.test(normalized)) return "series_d";
+    if (/\bseries[\s-]?e\b/.test(normalized)) return "series_e";
+    if (/\bseries[\s-]?f(?:\+|[\s-]?plus)?\b/.test(normalized)) return "series_f_plus";
+    if (/\bseed\b/.test(normalized)) return "seed";
+    return null;
+  }
+
+  private normalizeNonPlaceholderText(value: string | null | undefined): string | null {
+    if (!value || typeof value !== "string") {
+      return null;
+    }
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+    const normalized = trimmed.toLowerCase();
+    if (
+      normalized.includes("pending extraction") ||
+      normalized.includes("pending-extraction") ||
+      normalized === "unknown" ||
+      normalized === "n/a"
+    ) {
+      return null;
+    }
+    return trimmed;
+  }
+
+  private isLikelyPlaceholderCompanyName(value: string): boolean {
+    const normalized = value.trim().toLowerCase();
+    return (
+      normalized === "untitled startup" ||
+      normalized === "startup example" ||
+      normalized.startsWith("startup ")
+    );
   }
 
   private buildSummary(startupRecord: Startup, startupContext: StartupFormContext): string {

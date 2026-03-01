@@ -15,12 +15,13 @@ import { AiConfigService } from '../../ai/services/ai-config.service';
 
 describe('SubmissionService', () => {
   let service: SubmissionService;
-  let drizzleService: jest.Mocked<DrizzleService>;
+  let _drizzleService: jest.Mocked<DrizzleService>;
   let notificationService: jest.Mocked<NotificationService>;
   let userAuthService: jest.Mocked<UserAuthService>;
 
-  const createMockDb = (): any => {
-    const mockChain: any = {
+  type MockDb = Record<string, jest.Mock>;
+  const createMockDb = (): MockDb => {
+    const mockChain: MockDb = {
       select: jest.fn().mockReturnThis(),
       from: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
@@ -34,7 +35,7 @@ describe('SubmissionService', () => {
       set: jest.fn().mockReturnThis(),
       delete: jest.fn().mockReturnThis(),
       leftJoin: jest.fn().mockReturnThis(),
-      transaction: jest.fn((callback) => callback(createMockDb())),
+      transaction: jest.fn((callback: (db: MockDb) => unknown) => callback(createMockDb())),
     };
     return mockChain;
   };
@@ -152,7 +153,7 @@ describe('SubmissionService', () => {
     }).compile();
 
     service = module.get<SubmissionService>(SubmissionService);
-    drizzleService = module.get(DrizzleService);
+    _drizzleService = module.get(DrizzleService);
     notificationService = module.get(NotificationService);
     userAuthService = module.get(UserAuthService);
   });

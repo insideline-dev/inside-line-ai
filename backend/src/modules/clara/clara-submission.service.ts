@@ -6,7 +6,15 @@ import { ASSET_TYPES } from "../../storage/storage.config";
 import { UserRole } from "../../auth/entities/auth.schema";
 import { AgentMailClientService } from "../integrations/agentmail/agentmail-client.service";
 import { startup, StartupStatus, StartupStage } from "../startup/entities/startup.schema";
-import { PipelineService } from "../ai/services/pipeline.service";
+import {
+  PipelineService,
+  PIPELINE_MISSING_FIELDS_ERROR_PREFIX,
+} from "../ai/services/pipeline.service";
+import {
+  extractWebsiteFromText,
+  extractStageFromText,
+  getMissingCriticalFields,
+} from "../ai/utils/startup-field-utils";
 import { NotificationService } from "../../notification/notification.service";
 import { NotificationType } from "../../notification/entities";
 import { ClaraAiService } from "./clara-ai.service";
@@ -17,6 +25,32 @@ const PDF_MAGIC_BYTES = Buffer.from("%PDF-");
 const MAX_RETRIES = 3;
 const RETRY_DELAYS = [1000, 2000, 4000];
 const FUZZY_THRESHOLD = 0.4;
+
+interface PipelineStartResult {
+  started: boolean;
+  missingFields: Array<"website" | "stage">;
+}
+
+interface MissingInfoReplyResolution {
+  startupId: string;
+  startupName: string;
+  updatedFields: Array<"website" | "stage">;
+  remainingMissing: Array<"website" | "stage">;
+  pipelineStarted: boolean;
+}
+
+type CriticalStartupSnapshot = {
+  id: string;
+  userId: string;
+  name: string;
+  website: string;
+  stage: string;
+  industry: string;
+  location: string;
+  fundingTarget: number;
+  teamSize: number;
+  status: StartupStatus;
+};
 
 @Injectable()
 export class ClaraSubmissionService {
@@ -56,7 +90,7 @@ export class ClaraSubmissionService {
 
     const duplicate = await this.findFuzzyDuplicate(companyName, ownerUserId);
     if (duplicate) {
-      const enriched = await this.enrichExistingStartup(
+      const enrichmentResult = await this.enrichExistingStartup(
         duplicate.id,
         ownerUserId,
         processedAttachments,
@@ -66,15 +100,19 @@ export class ClaraSubmissionService {
         startupId: duplicate.id,
         startupName: duplicate.name,
         isDuplicate: true,
-        isEnriched: enriched,
+        isEnriched: enrichmentResult.enriched,
         status: duplicate.status,
+        pipelineStarted: enrichmentResult.pipelineStarted,
+        missingFields: enrichmentResult.missingFields,
       };
     }
 
     const deckAttachment = processedAttachments.find(
       (a) => a.isPitchDeck && a.status === "uploaded",
     );
-    const location = "Pending extraction";
+    const websiteFromEmail = extractWebsiteFromText(ctx.bodyText);
+    const stageFromEmail = extractStageFromText(ctx.bodyText);
+    const location = "Unknown";
     const geography = deriveStartupGeography(location);
 
     const slug = this.generateSlug(companyName);
@@ -88,7 +126,7 @@ export class ClaraSubmissionService {
         slug,
         tagline: `Submitted via email by ${ctx.fromEmail}`,
         description: ctx.bodyText?.slice(0, 5000) || "Submitted via Clara email assistant. Details will be extracted from the pitch deck.",
-        website: "https://pending-extraction.com",
+        website: websiteFromEmail ?? "",
         location,
         normalizedRegion: geography.normalizedRegion,
         geoCountryCode: geography.countryCode,
@@ -96,8 +134,8 @@ export class ClaraSubmissionService {
         geoLevel2: geography.level2,
         geoLevel3: geography.level3,
         geoPath: geography.path,
-        industry: "Pending extraction",
-        stage: StartupStage.SEED,
+        industry: "Unknown",
+        stage: stageFromEmail ?? StartupStage.SEED,
         fundingTarget: 0,
         teamSize: 1,
         contactEmail: ctx.fromEmail,
@@ -108,11 +146,13 @@ export class ClaraSubmissionService {
       })
       .returning();
 
+    await this.normalizeLegacyPlaceholderDefaults(created.id);
     this.logger.log(
       `Created startup ${created.id} (${companyName}) from email by ${ctx.fromEmail}`,
     );
 
-    await this.pipeline.startPipeline(created.id, ownerUserId);
+    await this.runPrePipelineExtraction(created.id);
+    const pipelineStart = await this.startPipelineIfReady(created.id, ownerUserId);
 
     await this.notifications.create(
       ownerUserId,
@@ -129,6 +169,8 @@ export class ClaraSubmissionService {
       startupName: companyName,
       isDuplicate: false,
       status: StartupStatus.SUBMITTED,
+      pipelineStarted: pipelineStart.started,
+      missingFields: pipelineStart.missingFields,
     };
   }
 
@@ -342,30 +384,207 @@ export class ClaraSubmissionService {
       .replaceAll("_", "\\_");
   }
 
+  async resolveMissingInfoFromReply(
+    startupId: string,
+    messageText: string | null,
+    fallbackUserId?: string | null,
+  ): Promise<MissingInfoReplyResolution | null> {
+    const current = await this.loadCriticalStartupSnapshot(startupId);
+    if (!current) {
+      return null;
+    }
+
+    const missingBefore = getMissingCriticalFields(current);
+    const updates: Partial<typeof startup.$inferInsert> = {};
+    const updatedFields: Array<"website" | "stage"> = [];
+
+    if (missingBefore.includes("website")) {
+      const websiteCandidate = extractWebsiteFromText(messageText);
+      if (websiteCandidate) {
+        updates.website = websiteCandidate;
+        updatedFields.push("website");
+      }
+    }
+
+    if (missingBefore.includes("stage")) {
+      const stageCandidate = extractStageFromText(messageText);
+      if (stageCandidate) {
+        updates.stage = stageCandidate;
+        updatedFields.push("stage");
+      }
+    }
+
+    if (updatedFields.length > 0) {
+      await this.drizzle.db
+        .update(startup)
+        .set({
+          ...updates,
+          updatedAt: new Date(),
+        })
+        .where(eq(startup.id, startupId));
+    }
+
+    const refreshed = await this.loadCriticalStartupSnapshot(startupId);
+    if (!refreshed) {
+      return null;
+    }
+    const remainingMissing = getMissingCriticalFields(refreshed);
+
+    let pipelineStarted = false;
+    if (remainingMissing.length === 0) {
+      const startResult = await this.startPipelineIfReady(
+        startupId,
+        fallbackUserId ?? refreshed.userId,
+      );
+      pipelineStarted = startResult.started;
+    }
+
+    return {
+      startupId,
+      startupName: refreshed.name,
+      updatedFields,
+      remainingMissing,
+      pipelineStarted,
+    };
+  }
+
   private async enrichExistingStartup(
     startupId: string,
     ownerUserId: string,
     attachments: AttachmentMeta[],
     _bodyText: string | null,
-  ): Promise<boolean> {
+  ): Promise<{
+    enriched: boolean;
+    pipelineStarted: boolean;
+    missingFields: Array<"website" | "stage">;
+  }> {
     const newDeck = attachments.find(
       (a) => a.isPitchDeck && a.status === "uploaded" && a.storagePath,
     );
 
-    if (!newDeck) return false;
+    if (!newDeck) {
+      return { enriched: false, pipelineStarted: false, missingFields: [] };
+    }
 
     await this.drizzle.db
       .update(startup)
       .set({ pitchDeckPath: newDeck.storagePath })
       .where(eq(startup.id, startupId));
 
-    await this.pipeline.startPipeline(startupId, ownerUserId);
+    await this.normalizeLegacyPlaceholderDefaults(startupId);
+    await this.runPrePipelineExtraction(startupId);
+    const pipelineStart = await this.startPipelineIfReady(startupId, ownerUserId);
 
     this.logger.log(
       `Enriched startup ${startupId} with new pitch deck, re-triggered pipeline`,
     );
 
-    return true;
+    return {
+      enriched: true,
+      pipelineStarted: pipelineStart.started,
+      missingFields: pipelineStart.missingFields,
+    };
+  }
+
+  private async startPipelineIfReady(
+    startupId: string,
+    userId: string,
+  ): Promise<PipelineStartResult> {
+    try {
+      await this.pipeline.startPipeline(startupId, userId);
+      return { started: true, missingFields: [] };
+    } catch (error) {
+      const message = this.asMessage(error);
+      if (message.includes("Pipeline already running")) {
+        return { started: true, missingFields: [] };
+      }
+      if (!message.includes(PIPELINE_MISSING_FIELDS_ERROR_PREFIX)) {
+        throw error;
+      }
+      const parsedMissing = this.extractMissingFieldsFromStartError(message);
+      const fallbackSnapshot = await this.loadCriticalStartupSnapshot(startupId);
+      const fallbackMissing = fallbackSnapshot
+        ? getMissingCriticalFields(fallbackSnapshot)
+        : [];
+      return {
+        started: false,
+        missingFields: parsedMissing.length > 0 ? parsedMissing : fallbackMissing,
+      };
+    }
+  }
+
+  private async runPrePipelineExtraction(startupId: string): Promise<void> {
+    try {
+      const prefill = await this.pipeline.prefillCriticalFieldsFromDeckExtraction(
+        startupId,
+      );
+      this.logger.log(
+        `[ClaraSubmission] Pre-pipeline extraction for ${startupId} | source=${prefill.extractionSource} | updated=${prefill.updatedFields.join(",") || "none"} | missingCritical=${prefill.missingCriticalFields.join(",") || "none"}`,
+      );
+    } catch (error) {
+      const message = this.asMessage(error);
+      this.logger.warn(
+        `[ClaraSubmission] Pre-pipeline extraction failed for ${startupId}: ${message}`,
+      );
+    }
+  }
+
+  private extractMissingFieldsFromStartError(
+    message: string,
+  ): Array<"website" | "stage"> {
+    const matches = message.match(/\[([^\]]+)\]/);
+    if (!matches?.[1]) {
+      return [];
+    }
+    const parsed = matches[1]
+      .split(",")
+      .map((value) => value.trim().toLowerCase())
+      .filter(
+        (value): value is "website" | "stage" =>
+          value === "website" || value === "stage",
+      );
+    return Array.from(new Set(parsed));
+  }
+
+  private async loadCriticalStartupSnapshot(
+    startupId: string,
+  ): Promise<CriticalStartupSnapshot | null> {
+    const [record] = await this.drizzle.db
+      .select({
+        id: startup.id,
+        userId: startup.userId,
+        name: startup.name,
+        website: startup.website,
+        stage: startup.stage,
+        industry: startup.industry,
+        location: startup.location,
+        fundingTarget: startup.fundingTarget,
+        teamSize: startup.teamSize,
+        status: startup.status,
+      })
+      .from(startup)
+      .where(eq(startup.id, startupId))
+      .limit(1);
+
+    return record ?? null;
+  }
+
+  private asMessage(error: unknown): string {
+    if (error && typeof error === "object") {
+      const maybeResponse = (error as { response?: unknown }).response;
+      if (maybeResponse && typeof maybeResponse === "object") {
+        const message = (maybeResponse as { message?: unknown }).message;
+        if (typeof message === "string") {
+          return message;
+        }
+        if (Array.isArray(message)) {
+          return message
+            .filter((value): value is string => typeof value === "string")
+            .join(" | ");
+        }
+      }
+    }
+    return error instanceof Error ? error.message : String(error);
   }
 
   private extractCompanyFromBody(body: string | null): string | null {
@@ -387,5 +606,73 @@ export class ClaraSubmissionService {
 
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private async normalizeLegacyPlaceholderDefaults(startupId: string): Promise<void> {
+    const [record] = await this.drizzle.db
+      .select({
+        website: startup.website,
+        industry: startup.industry,
+        location: startup.location,
+      })
+      .from(startup)
+      .where(eq(startup.id, startupId))
+      .limit(1);
+
+    if (!record) {
+      return;
+    }
+
+    const updates: Partial<typeof startup.$inferInsert> = {};
+    if (this.isExplicitPendingPlaceholderWebsite(record.website)) {
+      updates.website = "";
+    }
+    if (this.isExplicitPendingPlaceholderText(record.industry)) {
+      updates.industry = "Unknown";
+    }
+    if (this.isExplicitPendingPlaceholderText(record.location)) {
+      updates.location = "Unknown";
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return;
+    }
+
+    await this.drizzle.db
+      .update(startup)
+      .set({
+        ...updates,
+        updatedAt: new Date(),
+      })
+      .where(eq(startup.id, startupId));
+
+    this.logger.warn(
+      `[ClaraSubmission] Normalized legacy placeholder defaults for ${startupId}: ${Object.keys(
+        updates,
+      ).join(", ")}`,
+    );
+  }
+
+  private isExplicitPendingPlaceholderWebsite(value: string | null | undefined): boolean {
+    if (!value) {
+      return false;
+    }
+    try {
+      const host = new URL(value).hostname.toLowerCase().replace(/^www\./, "");
+      return host === "pending-extraction.com";
+    } catch {
+      return false;
+    }
+  }
+
+  private isExplicitPendingPlaceholderText(value: string | null | undefined): boolean {
+    if (!value) {
+      return false;
+    }
+    const normalized = value.trim().toLowerCase();
+    return (
+      normalized.includes("pending extraction") ||
+      normalized.includes("pending-extraction")
+    );
   }
 }

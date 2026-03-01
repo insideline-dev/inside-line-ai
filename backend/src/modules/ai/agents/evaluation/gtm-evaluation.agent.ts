@@ -69,7 +69,7 @@ export class GtmEvaluationAgent extends BaseEvaluationAgent<GtmEvaluation> {
     };
   }
 
-  fallback({ extraction }: EvaluationPipelineInput): GtmEvaluation {
+  fallback({ extraction: _extraction }: EvaluationPipelineInput): GtmEvaluation {
     return GtmEvaluationSchema.parse({
       ...baseEvaluation(22, "GTM evaluation incomplete — requires manual review"),
       customerSegments: ["SMB", "Mid-market"],

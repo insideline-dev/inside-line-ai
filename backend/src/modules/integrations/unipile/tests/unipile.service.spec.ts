@@ -7,8 +7,8 @@ import type { LinkedInProfile } from '../entities';
 
 describe('UnipileService', () => {
   let service: UnipileService;
-  let configService: any;
-  let cacheService: any;
+  let configService: { get: jest.Mock };
+  let cacheService: { getCached: jest.Mock; setCache: jest.Mock; clearExpired: jest.Mock };
 
   const mockProfile: LinkedInProfile = {
     id: 'profile-123',
@@ -42,7 +42,7 @@ describe('UnipileService', () => {
         fieldOfStudy: 'Computer Science',
         startYear: 2012,
         endYear: 2016,
-        startDate: null,
+        startDate: undefined,
         endDate: null,
         description: '',
         schoolPictureUrl: null,

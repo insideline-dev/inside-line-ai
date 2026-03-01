@@ -11,7 +11,7 @@ import { ScoutApplicationStatus } from '../entities/scout.schema';
 
 describe('ScoutService', () => {
   let service: ScoutService;
-  let drizzleService: jest.Mocked<DrizzleService>;
+  let _drizzleService: jest.Mocked<DrizzleService>;
   let notificationService: jest.Mocked<NotificationService>;
 
   const createMockDb = () => ({
@@ -74,7 +74,7 @@ describe('ScoutService', () => {
     }).compile();
 
     service = module.get<ScoutService>(ScoutService);
-    drizzleService = module.get(DrizzleService);
+    _drizzleService = module.get(DrizzleService);
     notificationService = module.get(NotificationService);
   });
 
@@ -182,14 +182,14 @@ describe('ScoutService', () => {
 
     it('should handle optional portfolio array', async () => {
       const dtoWithoutPortfolio = { ...applyDto };
-      delete (dtoWithoutPortfolio as any).portfolio;
+      delete (dtoWithoutPortfolio as Record<string, unknown>).portfolio;
 
       mockDb.limit.mockResolvedValueOnce([]);
       mockDb.returning.mockResolvedValueOnce([
         { ...mockApplication, portfolio: [] },
       ]);
 
-      const result = await service.apply(mockUserId, dtoWithoutPortfolio);
+      await service.apply(mockUserId, dtoWithoutPortfolio);
 
       expect(mockDb.values).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -235,7 +235,7 @@ describe('ScoutService', () => {
       jest.spyOn(Promise, 'all').mockResolvedValueOnce([
         mockApplications,
         [{ count: 1 }],
-      ] as any);
+      ] as unknown);
 
       const result = await service.findApplications(mockUserId, query);
 
@@ -258,7 +258,7 @@ describe('ScoutService', () => {
       jest.spyOn(Promise, 'all').mockResolvedValueOnce([
         [mockApplication],
         [{ count: 1 }],
-      ] as any);
+      ] as unknown);
 
       await service.findApplications(mockUserId, query);
 
@@ -273,7 +273,7 @@ describe('ScoutService', () => {
       jest.spyOn(Promise, 'all').mockResolvedValueOnce([
         [mockApplication],
         [{ count: 1 }],
-      ] as any);
+      ] as unknown);
 
       const result = await service.findApplicationsForInvestor(
         mockInvestorId,

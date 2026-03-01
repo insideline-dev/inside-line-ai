@@ -40,6 +40,17 @@ export class TractionEvaluationAgent extends BaseEvaluationAgent<TractionEvaluat
     };
   }
 
+  protected override getAgentTemplateVariables(
+    pipelineData: EvaluationPipelineInput,
+  ): Record<string, string> {
+    const claims = Array.isArray(pipelineData.scraping.notableClaims)
+      ? pipelineData.scraping.notableClaims
+      : [];
+    return {
+      deckTractionData: claims.length > 0 ? claims.join("\n") : "Not provided",
+    };
+  }
+
   buildContext(pipelineData: EvaluationPipelineInput) {
     const { extraction, scraping } = pipelineData;
     const notableClaims = Array.isArray(scraping.notableClaims)
@@ -78,7 +89,7 @@ export class TractionEvaluationAgent extends BaseEvaluationAgent<TractionEvaluat
     };
   }
 
-  fallback({ extraction }: EvaluationPipelineInput): TractionEvaluation {
+  fallback({ extraction: _extraction }: EvaluationPipelineInput): TractionEvaluation {
     return TractionEvaluationSchema.parse({
       ...baseEvaluation(20, "Traction data insufficient — requires manual review"),
       metrics: {

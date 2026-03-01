@@ -266,6 +266,13 @@ export const EVALUATION_PROMPT_KEY_BY_AGENT: Record<EvaluationAgentKey, AiPrompt
 
 const SHARED_EVALUATION_USER_PROMPT = "{{contextSections}}";
 
+const COMMON_EVAL_VARIABLES = [
+  "contextSections", "contextJson",
+  "companyName", "companyDescription", "sector", "stage",
+  "website", "location", "deckContext", "adminGuidance",
+  "webResearch", "websiteContent",
+];
+
 export const AI_PROMPT_CATALOG: Record<AiPromptKey, PromptCatalogEntry> = {
   "extraction.fields": {
     key: "extraction.fields",
@@ -469,8 +476,8 @@ export const AI_PROMPT_CATALOG: Record<AiPromptKey, PromptCatalogEntry> = {
       "These are separate structured fields displayed as badges in the UI. Narratives must contain only qualitative analysis.",
     ].join("\n"),
     defaultUserPrompt: SHARED_EVALUATION_USER_PROMPT,
-    allowedVariables: ["contextSections", "contextJson"],
-    requiredVariables: ["contextSections"],
+    allowedVariables: [...COMMON_EVAL_VARIABLES, "teamMembersData", "teamResearchOutput"],
+    requiredVariables: [],
   },
   "evaluation.market": {
     key: "evaluation.market",
@@ -540,8 +547,8 @@ export const AI_PROMPT_CATALOG: Record<AiPromptKey, PromptCatalogEntry> = {
       "These are separate structured fields displayed as badges in the UI. Narratives must contain only qualitative analysis.",
     ].join("\n"),
     defaultUserPrompt: SHARED_EVALUATION_USER_PROMPT,
-    allowedVariables: ["contextSections", "contextJson"],
-    requiredVariables: ["contextSections"],
+    allowedVariables: [...COMMON_EVAL_VARIABLES, "marketResearchOutput", "claimedTAM", "claimedSAM", "claimedGrowthRate", "targetMarketDescription"],
+    requiredVariables: [],
   },
   "evaluation.product": {
     key: "evaluation.product",
@@ -605,8 +612,8 @@ export const AI_PROMPT_CATALOG: Record<AiPromptKey, PromptCatalogEntry> = {
       "These are separate structured fields displayed as badges in the UI. Narratives must contain only qualitative analysis.",
     ].join("\n"),
     defaultUserPrompt: SHARED_EVALUATION_USER_PROMPT,
-    allowedVariables: ["contextSections", "contextJson"],
-    requiredVariables: ["contextSections"],
+    allowedVariables: [...COMMON_EVAL_VARIABLES, "productResearchOutput"],
+    requiredVariables: [],
   },
   "evaluation.traction": {
     key: "evaluation.traction",
@@ -665,8 +672,8 @@ export const AI_PROMPT_CATALOG: Record<AiPromptKey, PromptCatalogEntry> = {
       "These are separate structured fields displayed as badges in the UI. Narratives must contain only qualitative analysis.",
     ].join("\n"),
     defaultUserPrompt: SHARED_EVALUATION_USER_PROMPT,
-    allowedVariables: ["contextSections", "contextJson"],
-    requiredVariables: ["contextSections"],
+    allowedVariables: [...COMMON_EVAL_VARIABLES, "deckTractionData"],
+    requiredVariables: [],
   },
   "evaluation.businessModel": {
     key: "evaluation.businessModel",
@@ -724,8 +731,8 @@ export const AI_PROMPT_CATALOG: Record<AiPromptKey, PromptCatalogEntry> = {
       "These are separate structured fields displayed as badges in the UI. Narratives must contain only qualitative analysis.",
     ].join("\n"),
     defaultUserPrompt: SHARED_EVALUATION_USER_PROMPT,
-    allowedVariables: ["contextSections", "contextJson"],
-    requiredVariables: ["contextSections"],
+    allowedVariables: [...COMMON_EVAL_VARIABLES],
+    requiredVariables: [],
   },
   "evaluation.gtm": {
     key: "evaluation.gtm",
@@ -783,8 +790,8 @@ export const AI_PROMPT_CATALOG: Record<AiPromptKey, PromptCatalogEntry> = {
       "These are separate structured fields displayed as badges in the UI. Narratives must contain only qualitative analysis.",
     ].join("\n"),
     defaultUserPrompt: SHARED_EVALUATION_USER_PROMPT,
-    allowedVariables: ["contextSections", "contextJson"],
-    requiredVariables: ["contextSections"],
+    allowedVariables: [...COMMON_EVAL_VARIABLES],
+    requiredVariables: [],
   },
   "evaluation.financials": {
     key: "evaluation.financials",
@@ -842,8 +849,8 @@ export const AI_PROMPT_CATALOG: Record<AiPromptKey, PromptCatalogEntry> = {
       "These are separate structured fields displayed as badges in the UI. Narratives must contain only qualitative analysis.",
     ].join("\n"),
     defaultUserPrompt: SHARED_EVALUATION_USER_PROMPT,
-    allowedVariables: ["contextSections", "contextJson"],
-    requiredVariables: ["contextSections"],
+    allowedVariables: [...COMMON_EVAL_VARIABLES, "valuation", "valuationType", "roundSize", "roundCurrency", "financialModel"],
+    requiredVariables: [],
   },
   "evaluation.competitiveAdvantage": {
     key: "evaluation.competitiveAdvantage",
@@ -904,8 +911,8 @@ export const AI_PROMPT_CATALOG: Record<AiPromptKey, PromptCatalogEntry> = {
       "These are separate structured fields displayed as badges in the UI. Narratives must contain only qualitative analysis.",
     ].join("\n"),
     defaultUserPrompt: SHARED_EVALUATION_USER_PROMPT,
-    allowedVariables: ["contextSections", "contextJson"],
-    requiredVariables: ["contextSections"],
+    allowedVariables: [...COMMON_EVAL_VARIABLES, "marketResearchOutput", "productResearchOutput", "competitorProfiles", "featureMatrix", "competitiveDynamicsEvidence"],
+    requiredVariables: [],
   },
   "evaluation.legal": {
     key: "evaluation.legal",
@@ -962,8 +969,8 @@ export const AI_PROMPT_CATALOG: Record<AiPromptKey, PromptCatalogEntry> = {
       "These are separate structured fields displayed as badges in the UI. Narratives must contain only qualitative analysis.",
     ].join("\n"),
     defaultUserPrompt: SHARED_EVALUATION_USER_PROMPT,
-    allowedVariables: ["contextSections", "contextJson"],
-    requiredVariables: ["contextSections"],
+    allowedVariables: [...COMMON_EVAL_VARIABLES, "teamResearchOutput", "productResearchOutput", "newsResearchOutput"],
+    requiredVariables: [],
   },
   "evaluation.dealTerms": {
     key: "evaluation.dealTerms",
@@ -1021,8 +1028,8 @@ export const AI_PROMPT_CATALOG: Record<AiPromptKey, PromptCatalogEntry> = {
       "These are separate structured fields displayed as badges in the UI. Narratives must contain only qualitative analysis.",
     ].join("\n"),
     defaultUserPrompt: SHARED_EVALUATION_USER_PROMPT,
-    allowedVariables: ["contextSections", "contextJson"],
-    requiredVariables: ["contextSections"],
+    allowedVariables: [...COMMON_EVAL_VARIABLES, "competitorResearchOutput", "newsResearchOutput", "roundSize", "roundCurrency", "valuation", "valuationType", "raiseType", "leadSecured", "leadInvestorName", "hasPreviousFunding", "previousFundingAmount", "previousFundingCurrency", "previousInvestors", "previousRoundType"],
+    requiredVariables: [],
   },
   "evaluation.exitPotential": {
     key: "evaluation.exitPotential",
@@ -1080,8 +1087,8 @@ export const AI_PROMPT_CATALOG: Record<AiPromptKey, PromptCatalogEntry> = {
       "These are separate structured fields displayed as badges in the UI. Narratives must contain only qualitative analysis.",
     ].join("\n"),
     defaultUserPrompt: SHARED_EVALUATION_USER_PROMPT,
-    allowedVariables: ["contextSections", "contextJson"],
-    requiredVariables: ["contextSections"],
+    allowedVariables: [...COMMON_EVAL_VARIABLES, "marketResearchOutput", "competitorResearchOutput", "newsResearchOutput", "valuation", "valuationType", "roundSize", "roundCurrency"],
+    requiredVariables: [],
   },
   "synthesis.final": {
     key: "synthesis.final",
@@ -1154,8 +1161,8 @@ export const AI_PROMPT_CATALOG: Record<AiPromptKey, PromptCatalogEntry> = {
       "Keep prose qualitative. Quantitative values belong only in dedicated structured numeric fields.",
     ].join("\n"),
     defaultUserPrompt: "{{synthesisBrief}}",
-    allowedVariables: ["synthesisBrief", "contextJson"],
-    requiredVariables: ["synthesisBrief"],
+    allowedVariables: ["synthesisBrief", "contextJson", "companyName", "companyDescription", "sector", "stage", "website", "location", "adminGuidance", "stageWeights", "teamAnalysis", "teamScore", "teamConfidence", "marketAnalysis", "marketScore", "marketConfidence", "productAnalysis", "productScore", "productConfidence", "tractionAnalysis", "tractionScore", "tractionConfidence", "businessModelAnalysis", "businessModelScore", "businessModelConfidence", "gtmAnalysis", "gtmScore", "gtmConfidence", "financialsAnalysis", "financialsScore", "financialsConfidence", "competitiveAdvantageAnalysis", "competitiveAdvantageScore", "competitiveAdvantageConfidence", "legalAnalysis", "legalScore", "legalConfidence", "dealTermsAnalysis", "dealTermsScore", "dealTermsConfidence", "exitPotentialAnalysis", "exitPotentialScore", "exitPotentialConfidence", "exitScore", "exitConfidence"],
+    requiredVariables: [],
   },
   "matching.thesis": {
     key: "matching.thesis",

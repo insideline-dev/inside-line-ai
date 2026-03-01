@@ -21,13 +21,14 @@ export const mockTokens = {
 };
 
 export const createMockResponse = (): Partial<Response> => {
-  const res: any = {
+  const res = {} as Partial<Response>;
+  Object.assign(res, {
     cookie: mock(() => res),
     clearCookie: mock(() => res),
     status: mock(() => res),
     json: mock(() => res),
     redirect: mock(() => res),
-  };
+  });
   return res;
 };
 

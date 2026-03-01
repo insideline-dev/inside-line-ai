@@ -392,7 +392,9 @@ export class UnipileService {
   /**
    * Map Unipile API response to our LinkedInProfile interface
    */
-  private mapUnipileProfileToLinkedInProfile(data: Record<string, any>): LinkedInProfile {
+  private mapUnipileProfileToLinkedInProfile(data: Record<string, unknown>): LinkedInProfile {
+    // Use string helper for loose API field access on unknown 3rd party response shape
+    const d = data as Record<string, string>;
     const fullName =
       typeof data.name === 'string'
         ? data.name.trim()
@@ -401,68 +403,71 @@ export class UnipileService {
           : '';
     const [derivedFirstName, ...rest] = fullName ? fullName.split(/\s+/) : [];
     const derivedLastName = rest.join(' ');
-    const experienceEntries =
-      data.work_experience || data.experience || data.experiences || data.positions || [];
-    const educationEntries = data.education || data.educations || [];
+    const experienceEntries = (
+      data.work_experience || data.experience || data.experiences || data.positions || []
+    ) as Record<string, unknown>[];
+    const educationEntries = (data.education || data.educations || []) as Record<string, unknown>[];
 
     const extractedProfileImage = this.extractProfileImageUrl(data);
 
     return {
-      id: data.id || data.profile_id || '',
-      firstName: data.first_name || data.firstName || derivedFirstName || '',
-      lastName: data.last_name || data.lastName || derivedLastName || '',
-      headline: data.headline || data.title || '',
-      location: data.location || '',
-      profileUrl: data.profile_url || data.profileUrl || data.url || '',
+      id: (d.id || d.profile_id || '') as string,
+      firstName: (d.first_name || d.firstName || derivedFirstName || '') as string,
+      lastName: (d.last_name || d.lastName || derivedLastName || '') as string,
+      headline: (d.headline || d.title || '') as string,
+      location: (d.location || '') as string,
+      profileUrl: (d.profile_url || d.profileUrl || d.url || '') as string,
       profileImageUrl: extractedProfileImage,
-      summary: data.summary || null,
+      summary: (d.summary || null) as string | null,
       currentCompany: data.current_company
         ? {
-            name: data.current_company.name || '',
-            title: data.current_company.title || '',
+            name: ((data.current_company as Record<string, unknown>).name || '') as string,
+            title: ((data.current_company as Record<string, unknown>).title || '') as string,
           }
         : data.company
           ? {
-              name: data.company,
-              title: data.title || '',
+              name: d.company as string,
+              title: (d.title || '') as string,
             }
         : null,
-      experience: experienceEntries.map((exp: any) => ({
-        company: exp.company || '',
-        title: exp.title || exp.position || '',
-        startDate: exp.start_date || exp.startDate || exp.start || '',
-        endDate: exp.end_date || exp.endDate || exp.end || null,
+      experience: experienceEntries.map((exp) => ({
+        company: (exp.company || '') as string,
+        title: (exp.title || exp.position || '') as string,
+        startDate: (exp.start_date || exp.startDate || exp.start || '') as string,
+        endDate: (exp.end_date || exp.endDate || exp.end || null) as string | null,
         current:
           typeof exp.current === 'boolean'
             ? exp.current
             : !(exp.end_date || exp.endDate || exp.end),
-        location: exp.location || '',
-        description: exp.description || '',
-        companyPictureUrl: exp.company_picture_url || exp.companyPictureUrl || null,
+        location: (exp.location || '') as string,
+        description: (exp.description || '') as string,
+        companyPictureUrl: (exp.company_picture_url || exp.companyPictureUrl || null) as string | null | undefined,
       })),
-      education: educationEntries.map((edu: any) => ({
-        school: edu.school || '',
-        degree: edu.degree || '',
-        fieldOfStudy: edu.field_of_study || edu.fieldOfStudy || '',
-        startYear:
+      education: educationEntries.map((edu) => ({
+        school: (edu.school || '') as string,
+        degree: (edu.degree || '') as string,
+        fieldOfStudy: (edu.field_of_study || edu.fieldOfStudy || '') as string,
+        startYear: (
           edu.start_year ||
           edu.startYear ||
           this.extractYear(edu.start || edu.startDate) ||
-          0,
-        endYear:
+          0
+        ) as number,
+        endYear: (
           edu.end_year ||
           edu.endYear ||
           this.extractYear(edu.end || edu.endDate) ||
-          null,
-        startDate: edu.start || edu.startDate || null,
-        endDate: edu.end || edu.endDate || null,
-        description: edu.description || '',
-        schoolPictureUrl: edu.school_picture_url || edu.schoolPictureUrl || null,
+          null
+        ) as number | null,
+        startDate: (edu.start || edu.startDate || undefined) as string | undefined,
+        endDate: (edu.end || edu.endDate || null) as string | null,
+        description: (edu.description || '') as string,
+        schoolPictureUrl: (edu.school_picture_url || edu.schoolPictureUrl || null) as string | null | undefined,
       })),
     };
   }
 
-  private extractProfileImageUrl(data: Record<string, any>): string | null {
+  private extractProfileImageUrl(data: Record<string, unknown>): string | null {
     const directCandidates = [
       data.profile_image_url,
       data.profileImageUrl,
@@ -494,10 +499,11 @@ export class UnipileService {
       if (
         candidate &&
         typeof candidate === 'object' &&
-        typeof candidate.url === 'string' &&
-        candidate.url.trim()
+        'url' in candidate &&
+        typeof (candidate as Record<string, unknown>).url === 'string' &&
+        ((candidate as Record<string, unknown>).url as string).trim()
       ) {
-        return this.normalizeImageUrl(candidate.url);
+        return this.normalizeImageUrl((candidate as Record<string, unknown>).url as string);
       }
     }
 

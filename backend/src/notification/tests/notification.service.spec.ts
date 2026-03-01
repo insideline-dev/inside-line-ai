@@ -7,7 +7,7 @@ import { notification, NotificationType } from '../entities';
 
 describe('NotificationService', () => {
   let service: NotificationService;
-  let drizzleService: any;
+  let drizzleService: ReturnType<typeof createMockDrizzle>;
   let gateway: { sendNotification: ReturnType<typeof jest.fn>; sendUnreadCount: ReturnType<typeof jest.fn> };
 
   const mockNotification = {

@@ -281,7 +281,7 @@ describe('StartupController', () => {
         role: UserRole.ADMIN,
       } as User;
 
-      startupService.adminGetJobs.mockResolvedValueOnce(jobs as any);
+      startupService.adminGetJobs.mockResolvedValueOnce(jobs as unknown);
 
       const result = await controller.getJobs(adminUser, mockStartup.id);
 
@@ -388,7 +388,7 @@ describe('StartupController', () => {
           phases: {},
         },
       };
-      startupService.adminGetProgress.mockResolvedValueOnce(progressResponse as any);
+      startupService.adminGetProgress.mockResolvedValueOnce(progressResponse as unknown);
 
       const result = await controller.getProgress(adminUser, mockStartup.id);
 

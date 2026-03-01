@@ -28,7 +28,6 @@ import { ScoringPreferencesService } from './scoring-preferences.service';
 import { ScoringConfigService } from '../admin/scoring-config.service';
 import {
   CreateThesisDto,
-  UpdateThesisDto,
   GetMatchesQueryDto,
   CreateTeamInviteDto,
   CreateNoteDto,

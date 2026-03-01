@@ -30,6 +30,8 @@ import {
 } from "./ai-runtime-config.schema";
 import { AiConfigService } from "./ai-config.service";
 import type { ModelPurpose } from "../interfaces/pipeline.interface";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import type * as schema from "../../../database/schema";
 
 export interface CreateModelConfigDraftInput {
   stage?: StartupStage | null;
@@ -816,7 +818,7 @@ export class AiModelConfigService {
   }
 
   private async getOrCreateDefinitionWithDb(
-    db: any,
+    db: PostgresJsDatabase<typeof schema>,
     key: string,
   ): Promise<AiPromptDefinition> {
     if (!isAiPromptKey(key)) {

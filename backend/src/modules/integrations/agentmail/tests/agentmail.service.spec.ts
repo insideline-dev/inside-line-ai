@@ -6,7 +6,6 @@ import { AgentMailClientService } from '../agentmail-client.service';
 import { InvestorInboxBridgeService } from '../investor-inbox-bridge.service';
 import { DrizzleService } from '../../../../database';
 import { NotificationService } from '../../../../notification/notification.service';
-import { WebhookSource } from '../../../integration/entities';
 import { NotificationType } from '../../../../notification/entities';
 import { ClaraService } from '../../../clara/clara.service';
 
@@ -183,7 +182,7 @@ describe('AgentMailService', () => {
         .mockResolvedValueOnce([mockConfig]) // findUserByInbox
         .mockResolvedValueOnce([]); // no existing thread
 
-      await service.handleWebhook(mockWebhookEnvelopePayload as any);
+      await service.handleWebhook(mockWebhookEnvelopePayload as unknown);
 
       expect(agentMailClient.getMessage).not.toHaveBeenCalled();
       expect(notificationService.create).toHaveBeenCalled();
@@ -252,7 +251,7 @@ describe('AgentMailService', () => {
 
       drizzleService.db.limit.mockResolvedValueOnce([]);
 
-      await service.handleWebhook(invalidPayload as any);
+      await service.handleWebhook(invalidPayload as unknown);
 
       expect(agentMailClient.getMessage).not.toHaveBeenCalled();
     });
@@ -267,7 +266,7 @@ describe('AgentMailService', () => {
 
       drizzleService.db.limit.mockResolvedValueOnce([mockConfig]);
 
-      await expect(service.handleWebhook(invalidPayload as any)).rejects.toThrow(
+      await expect(service.handleWebhook(invalidPayload as unknown)).rejects.toThrow(
         'SDK getMessage failed: missing message_id in webhook payload',
       );
       expect(agentMailClient.getMessage).not.toHaveBeenCalled();

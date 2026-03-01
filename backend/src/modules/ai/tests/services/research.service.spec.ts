@@ -7,6 +7,7 @@ import { ResearchParametersService } from "../../services/research-parameters.se
 import { AiPromptService } from "../../services/ai-prompt.service";
 import { PipelinePhase } from "../../interfaces/pipeline.interface";
 import { AiConfigService } from "../../services/ai-config.service";
+import { StartupStage } from "../../../startup/entities/startup.schema";
 import { AiModelExecutionService } from "../../services/ai-model-execution.service";
 import type {
   ExtractionResult,
@@ -295,7 +296,7 @@ describe("ResearchService", () => {
       if (key === "research.orchestrator") {
         return {
           key,
-          stage: (stage ?? "seed") as any,
+          stage: (stage ?? "seed") as unknown as StartupStage,
           systemPrompt: "orchestrator-system",
           userPrompt: "ORCH for {{companyName}}",
           source: "code" as const,
@@ -305,7 +306,7 @@ describe("ResearchService", () => {
 
       return {
         key,
-        stage: (stage ?? "seed") as any,
+        stage: (stage ?? "seed") as unknown as StartupStage,
         systemPrompt: "test-system",
         userPrompt: "{{contextJson}}",
         source: "code" as const,
@@ -434,7 +435,7 @@ describe("ResearchService", () => {
       if (key === "research.orchestrator") {
         return {
           key,
-          stage: (stage ?? "seed") as any,
+          stage: (stage ?? "seed") as unknown as StartupStage,
           systemPrompt: "orchestrator-system",
           userPrompt: "ORCH for {{companyName}}",
           source: "code" as const,
@@ -444,7 +445,7 @@ describe("ResearchService", () => {
 
       return {
         key,
-        stage: (stage ?? "seed") as any,
+        stage: (stage ?? "seed") as unknown as StartupStage,
         systemPrompt: "test-system",
         userPrompt: "{{contextJson}}\nGUIDANCE={{orchestratorGuidance}}",
         source: "code" as const,
@@ -516,7 +517,7 @@ describe("ResearchService", () => {
 
     const result = await service.run("startup-1");
 
-    expect((result as any).researchFallbackSummary).toEqual(
+    expect((result as unknown as { researchFallbackSummary: unknown }).researchFallbackSummary).toEqual(
       expect.objectContaining({
         attemptedAgents: 5,
         fallbackAgents: 3,
@@ -562,7 +563,7 @@ describe("ResearchService", () => {
         }),
       ]),
     );
-    expect((result as any).researchFallbackSummary).toEqual(
+    expect((result as unknown as { researchFallbackSummary: unknown }).researchFallbackSummary).toEqual(
       expect.objectContaining({
         attemptedAgents: 5,
         fallbackAgents: 1,

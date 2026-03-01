@@ -310,10 +310,12 @@ export class QueueService implements OnModuleDestroy {
   async removePipelineJobs(startupId: string): Promise<number> {
     const aiQueues: QueueName[] = [
       QUEUE_NAMES.AI_EXTRACTION,
+      QUEUE_NAMES.AI_ENRICHMENT,
       QUEUE_NAMES.AI_SCRAPING,
       QUEUE_NAMES.AI_RESEARCH,
       QUEUE_NAMES.AI_EVALUATION,
       QUEUE_NAMES.AI_SYNTHESIS,
+      QUEUE_NAMES.AI_MATCHING,
     ];
 
     let removed = 0;

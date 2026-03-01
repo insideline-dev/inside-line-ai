@@ -392,6 +392,29 @@ describe("EnrichmentService", () => {
       // AI returned none still missing
       expect(result.fieldsStillMissing).toHaveLength(0);
     });
+
+    it("treats placeholder website + default seed as still missing after gap-fill", async () => {
+      const aiJson = makeEnrichmentJson({
+        website: { value: "https://pending-extraction.com", confidence: 0.9, source: "internal" },
+        stage: { value: "seed", confidence: 0.9, source: "internal" },
+      });
+      generateTextMock.mockResolvedValue({ text: aiJson });
+
+      const { service } = buildService({
+        record: makeStartupRecord({
+          website: "https://pending-extraction.com",
+          industry: "Pending extraction",
+          location: "Pending extraction",
+          fundingTarget: 0,
+          teamSize: 1,
+          stage: "seed",
+        }),
+      });
+      const result = await service.run(STARTUP_ID);
+
+      expect(result.fieldsStillMissing).toContain("website");
+      expect(result.fieldsStillMissing).toContain("stage");
+    });
   });
 
   describe("applyDbWrites — gap fills", () => {
@@ -605,7 +628,7 @@ describe("EnrichmentService", () => {
       expect(braveSearch.search).toHaveBeenCalled();
     });
 
-    it("does not run LinkedIn-specific founder search queries in gap-fill stage", async () => {
+    it("runs LinkedIn company search queries when website or stage is still missing", async () => {
       const aiJson = makeEnrichmentJson();
       generateTextMock.mockResolvedValue({ text: aiJson });
 
@@ -615,10 +638,9 @@ describe("EnrichmentService", () => {
       const queries = braveSearch.search.mock.calls.map(
         (call) => String(call[0]).toLowerCase(),
       );
-      expect(queries.some((query) => query.includes("site:linkedin.com"))).toBe(
-        false,
+      expect(queries.some((query) => query.includes("site:linkedin.com/company"))).toBe(
+        true,
       );
-      expect(queries.some((query) => query.includes(" linkedin "))).toBe(false);
     });
   });
 

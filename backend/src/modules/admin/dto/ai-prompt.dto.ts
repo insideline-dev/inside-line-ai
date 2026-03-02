@@ -403,11 +403,35 @@ export type CreateAiModelConfigDraft = z.infer<typeof CreateAiModelConfigDraftSc
 export type UpdateAiModelConfigDraft = z.infer<typeof UpdateAiModelConfigDraftSchema>;
 export type BulkApplyAiModelConfig = z.infer<typeof BulkApplyAiModelConfigSchema>;
 
+export const BulkAppendPromptSectionScopeSchema = z.enum([
+  "research_agents",
+  "evaluation_agents",
+]);
+
+export const BulkAppendPromptSectionSchema = z.object({
+  scope: BulkAppendPromptSectionScopeSchema,
+  section: z.string().min(1).max(10000),
+});
+
+export const BulkAppendPromptSectionResponseSchema = z.object({
+  scope: BulkAppendPromptSectionScopeSchema,
+  section: z.string(),
+  appliedKeys: z.array(PromptKeySchema),
+  publishedRevisionIds: z.array(z.string().uuid()),
+  affectedRevisionCount: z.number().int(),
+});
+
+export type BulkAppendPromptSection = z.infer<typeof BulkAppendPromptSectionSchema>;
+
 export class CreateAiPromptRevisionDto extends createZodDto(CreateAiPromptRevisionSchema) {}
 export class UpdateAiPromptRevisionDto extends createZodDto(UpdateAiPromptRevisionSchema) {}
 export class CreateAiModelConfigDraftDto extends createZodDto(CreateAiModelConfigDraftSchema) {}
 export class UpdateAiModelConfigDraftDto extends createZodDto(UpdateAiModelConfigDraftSchema) {}
 export class BulkApplyAiModelConfigDto extends createZodDto(BulkApplyAiModelConfigSchema) {}
+export class BulkAppendPromptSectionDto extends createZodDto(BulkAppendPromptSectionSchema) {}
+export class BulkAppendPromptSectionResponseDto extends createZodDto(
+  BulkAppendPromptSectionResponseSchema,
+) {}
 export class AiPromptDefinitionsResponseDto extends createZodDto(AiPromptDefinitionsResponseSchema) {}
 export class AiPromptRevisionsResponseDto extends createZodDto(AiPromptRevisionsResponseSchema) {}
 export class AiPromptRevisionResponseDto extends createZodDto(AiPromptRevisionSchema) {}

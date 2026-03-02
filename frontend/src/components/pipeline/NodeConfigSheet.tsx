@@ -23,6 +23,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Bot, Cog, ArrowRight } from "lucide-react";
+import { BulkPromptAppendSection } from "./dialogs/BulkPromptAppendSection";
 import type { AiPromptFlowResponseDtoFlowsItemNodesItem } from "@/api/generated/model";
 import {
   adminControllerGetAiPromptOutputSchema,
@@ -832,6 +833,9 @@ export function NodeConfigSheet({
           {/* ── Prompts ── */}
           {!isSystem ? (
             <TabsContent value="prompts" className="space-y-4 mt-4">
+              {node.id.includes("orchestrator") && (
+                <BulkPromptAppendSection orchestratorId={node.id} />
+              )}
               {node.promptKeys.length > 0 ? (
                 <div className="space-y-4">
                   {node.promptKeys.length > 1 && (

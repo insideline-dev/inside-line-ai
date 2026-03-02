@@ -197,11 +197,7 @@ describe('AdminController', () => {
         {
           provide: AgentSchemaRegistryService,
           useValue: {
-            listRevisionsByKey: jest.fn(),
             resolveDescriptorWithSource: jest.fn(),
-            createDraft: jest.fn(),
-            updateDraft: jest.fn(),
-            publishRevision: jest.fn(),
             resolveDescriptor: jest.fn(),
           },
         },
@@ -889,20 +885,6 @@ describe('AdminController', () => {
       expect(aiPromptRuntimeService.previewPipelineContexts).toHaveBeenCalledWith(body);
     });
 
-    it('should list schema revisions', async () => {
-      const payload = {
-        definition: { key: 'evaluation.legal' },
-        revisions: [],
-      };
-
-      agentSchemaRegistryService.listRevisionsByKey.mockResolvedValueOnce(payload as unknown);
-
-      const result = await controller.getAiSchemaRevisions('evaluation.legal');
-
-      expect(result).toEqual(payload);
-      expect(agentSchemaRegistryService.listRevisionsByKey).toHaveBeenCalledWith('evaluation.legal');
-    });
-
     it('should resolve runtime schema for prompt key with stage', async () => {
       const payload = {
         promptKey: 'evaluation.legal',
@@ -924,72 +906,6 @@ describe('AdminController', () => {
       expect(agentSchemaRegistryService.resolveDescriptorWithSource).toHaveBeenCalledWith(
         'evaluation.legal',
         'seed',
-      );
-    });
-
-    it('should create schema revision draft', async () => {
-      const dto = {
-        schemaJson: {
-          type: 'object',
-          fields: {
-            score: { type: 'number', min: 0, max: 100 },
-          },
-        },
-      };
-      const payload = { id: 'rev-1', status: 'draft' };
-
-      agentSchemaRegistryService.createDraft.mockResolvedValueOnce(payload as unknown);
-
-      const result = await controller.createAiSchemaRevision(
-        mockAdmin as unknown,
-        'evaluation.legal',
-        dto as unknown,
-      );
-
-      expect(result).toEqual(payload);
-      expect(agentSchemaRegistryService.createDraft).toHaveBeenCalledWith(
-        'evaluation.legal',
-        mockAdmin.id,
-        dto,
-      );
-    });
-
-    it('should update schema revision draft', async () => {
-      const dto = { notes: 'updated' };
-      const payload = { id: 'rev-1', notes: 'updated' };
-
-      agentSchemaRegistryService.updateDraft.mockResolvedValueOnce(payload as unknown);
-
-      const result = await controller.updateAiSchemaRevision(
-        'evaluation.legal',
-        'rev-1',
-        dto as unknown,
-      );
-
-      expect(result).toEqual(payload);
-      expect(agentSchemaRegistryService.updateDraft).toHaveBeenCalledWith(
-        'evaluation.legal',
-        'rev-1',
-        dto,
-      );
-    });
-
-    it('should publish schema revision draft', async () => {
-      const payload = { id: 'rev-1', status: 'published' };
-
-      agentSchemaRegistryService.publishRevision.mockResolvedValueOnce(payload as unknown);
-
-      const result = await controller.publishAiSchemaRevision(
-        mockAdmin as unknown,
-        'evaluation.legal',
-        'rev-1',
-      );
-
-      expect(result).toEqual(payload);
-      expect(agentSchemaRegistryService.publishRevision).toHaveBeenCalledWith(
-        'evaluation.legal',
-        'rev-1',
-        mockAdmin.id,
       );
     });
 

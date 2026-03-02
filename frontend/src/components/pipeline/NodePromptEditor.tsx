@@ -28,7 +28,7 @@ import {
   VariablePicker,
   type VariablePickerOption,
 } from "./prompt-editor/VariablePicker";
-import { SchemaRevisionEditor } from "./prompt-editor/SchemaRevisionEditor";
+import { OutputSchemaViewer } from "./prompt-editor/OutputSchemaViewer";
 
 interface NodePromptEditorProps {
   promptKey: string;
@@ -374,7 +374,7 @@ export function NodePromptEditor({ promptKey, upstreamPaths = [] }: NodePromptEd
 
       <Separator />
 
-      <SchemaRevisionEditor promptKey={promptKey} />
+      <OutputSchemaViewer promptKey={promptKey} />
 
       <Separator />
 

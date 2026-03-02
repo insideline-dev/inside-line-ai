@@ -82,11 +82,7 @@ import {
   PreviewAiPromptRequestDto,
   AiPromptPreviewResponseDto,
   AiPromptOutputSchemaResponseDto,
-  CreateAiSchemaRevisionDto,
-  UpdateAiSchemaRevisionDto,
-   AiSchemaRevisionsResponseDto,
-   AiSchemaRevisionResponseDto,
-   AiResolvedSchemaResponseDto,
+  AiResolvedSchemaResponseDto,
   CreateAiAgentConfigDto,
   UpdateAiAgentConfigDto,
   AiAgentConfigResponseDto,
@@ -469,20 +465,6 @@ export class AdminController {
     return this.buildAiModelConfigResponse(key, stage);
   }
 
-  @Get('ai-prompts/:key/schema-revisions')
-  @ApiOperation({ summary: "List schema revisions for a prompt key" })
-  @ApiResponse({ status: 200, type: AiSchemaRevisionsResponseDto })
-  async getAiSchemaRevisions(@Param('key') key: string) {
-    return this.agentSchemaRegistryService.listRevisionsByKey(key);
-  }
-
-  @Get('ai/schemas/:promptKey')
-  @ApiOperation({ summary: "Alias: list schema revisions for prompt key" })
-  @ApiResponse({ status: 200, type: AiSchemaRevisionsResponseDto })
-  async getAiSchemaRevisionsAlias(@Param('promptKey') promptKey: string) {
-    return this.agentSchemaRegistryService.listRevisionsByKey(promptKey);
-  }
-
   @Get('ai-prompts/:key/schema-resolved')
   @ApiOperation({ summary: "Resolve runtime schema descriptor for prompt key" })
   @ApiQuery({
@@ -513,72 +495,6 @@ export class AdminController {
     @Query('stage') stage?: string,
   ) {
     return this.agentSchemaRegistryService.resolveDescriptorWithSource(promptKey, stage);
-  }
-
-  @Post('ai-prompts/:key/schema-revisions')
-  @ApiOperation({ summary: "Create schema draft revision" })
-  @ApiResponse({ status: 201, type: AiSchemaRevisionResponseDto })
-  async createAiSchemaRevision(
-    @CurrentUser() admin: User,
-    @Param('key') key: string,
-    @Body() dto: CreateAiSchemaRevisionDto,
-  ) {
-    return this.agentSchemaRegistryService.createDraft(key, admin.id, dto);
-  }
-
-  @Post('ai/schemas/:promptKey')
-  @ApiOperation({ summary: "Alias: create schema draft revision" })
-  @ApiResponse({ status: 201, type: AiSchemaRevisionResponseDto })
-  async createAiSchemaRevisionAlias(
-    @CurrentUser() admin: User,
-    @Param('promptKey') promptKey: string,
-    @Body() dto: CreateAiSchemaRevisionDto,
-  ) {
-    return this.agentSchemaRegistryService.createDraft(promptKey, admin.id, dto);
-  }
-
-  @Patch('ai-prompts/:key/schema-revisions/:revisionId')
-  @ApiOperation({ summary: "Update schema draft revision" })
-  @ApiResponse({ status: 200, type: AiSchemaRevisionResponseDto })
-  async updateAiSchemaRevision(
-    @Param('key') key: string,
-    @Param('revisionId', ParseUUIDPipe) revisionId: string,
-    @Body() dto: UpdateAiSchemaRevisionDto,
-  ) {
-    return this.agentSchemaRegistryService.updateDraft(key, revisionId, dto);
-  }
-
-  @Patch('ai/schemas/:promptKey/:revisionId')
-  @ApiOperation({ summary: "Alias: update schema draft revision" })
-  @ApiResponse({ status: 200, type: AiSchemaRevisionResponseDto })
-  async updateAiSchemaRevisionAlias(
-    @Param('promptKey') promptKey: string,
-    @Param('revisionId', ParseUUIDPipe) revisionId: string,
-    @Body() dto: UpdateAiSchemaRevisionDto,
-  ) {
-    return this.agentSchemaRegistryService.updateDraft(promptKey, revisionId, dto);
-  }
-
-  @Post('ai-prompts/:key/schema-revisions/:revisionId/publish')
-  @ApiOperation({ summary: "Publish schema draft revision" })
-  @ApiResponse({ status: 201, type: AiSchemaRevisionResponseDto })
-  async publishAiSchemaRevision(
-    @CurrentUser() admin: User,
-    @Param('key') key: string,
-    @Param('revisionId', ParseUUIDPipe) revisionId: string,
-  ) {
-    return this.agentSchemaRegistryService.publishRevision(key, revisionId, admin.id);
-  }
-
-  @Post('ai/schemas/:promptKey/:revisionId/publish')
-  @ApiOperation({ summary: "Alias: publish schema draft revision" })
-  @ApiResponse({ status: 201, type: AiSchemaRevisionResponseDto })
-  async publishAiSchemaRevisionAlias(
-    @CurrentUser() admin: User,
-    @Param('promptKey') promptKey: string,
-    @Param('revisionId', ParseUUIDPipe) revisionId: string,
-  ) {
-    return this.agentSchemaRegistryService.publishRevision(promptKey, revisionId, admin.id);
   }
 
   @Get('ai/agent-configs')

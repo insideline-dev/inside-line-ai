@@ -444,6 +444,148 @@ export class AiPromptService {
     return published;
   }
 
+  async bulkAppendSection(
+    adminId: string,
+    input: { scope: "research_agents" | "evaluation_agents"; section: string },
+  ) {
+    const keys = this.resolveBulkTargetPromptKeys(input.scope);
+
+    if (keys.length === 0) {
+      throw new BadRequestException(
+        `No prompt keys found for scope ${input.scope}`,
+      );
+    }
+
+    const publishedRevisionIds: string[] = [];
+    const appliedKeys: AiPromptKey[] = [];
+
+    await this.drizzle.db.transaction(async (tx) => {
+      for (const key of keys) {
+        const definition = await this.getOrCreateDefinition(key);
+        const catalogEntry = AI_PROMPT_CATALOG[key];
+
+        // Find ALL published revisions (global + every stage variant)
+        const publishedRevisions = await tx
+          .select()
+          .from(aiPromptRevision)
+          .where(
+            and(
+              eq(aiPromptRevision.definitionId, definition.id),
+              eq(aiPromptRevision.status, "published"),
+            ),
+          );
+
+        // If no published revisions, create one from code fallback (global only)
+        const targets =
+          publishedRevisions.length > 0
+            ? publishedRevisions
+            : [
+                {
+                  stage: null as StartupStage | null,
+                  systemPrompt: catalogEntry.defaultSystemPrompt,
+                  userPrompt: catalogEntry.defaultUserPrompt,
+                },
+              ];
+
+        for (const target of targets) {
+          const stageCondition =
+            target.stage === null
+              ? isNull(aiPromptRevision.stage)
+              : eq(aiPromptRevision.stage, target.stage);
+
+          // Get next version
+          const [maxRow] = await tx
+            .select({ value: max(aiPromptRevision.version) })
+            .from(aiPromptRevision)
+            .where(
+              and(
+                eq(aiPromptRevision.definitionId, definition.id),
+                stageCondition,
+              ),
+            );
+
+          // Archive existing published for this stage
+          await tx
+            .update(aiPromptRevision)
+            .set({ status: "archived", updatedAt: new Date() })
+            .where(
+              and(
+                eq(aiPromptRevision.definitionId, definition.id),
+                eq(aiPromptRevision.status, "published"),
+                stageCondition,
+              ),
+            );
+
+          // Insert new revision with section appended
+          const [created] = await tx
+            .insert(aiPromptRevision)
+            .values({
+              definitionId: definition.id,
+              stage: target.stage,
+              status: "published",
+              systemPrompt: target.systemPrompt + "\n\n" + input.section,
+              userPrompt: target.userPrompt,
+              notes: `Bulk append (${input.scope})`,
+              version: (maxRow?.value ?? 0) + 1,
+              createdBy: adminId,
+              publishedBy: adminId,
+              publishedAt: new Date(),
+            })
+            .returning();
+
+          publishedRevisionIds.push(created.id);
+        }
+
+        appliedKeys.push(key);
+      }
+    });
+
+    // Invalidate cache for all affected keys
+    for (const key of appliedKeys) {
+      this.invalidateKeyCache(key);
+    }
+
+    return {
+      scope: input.scope,
+      section: input.section,
+      appliedKeys,
+      publishedRevisionIds,
+      affectedRevisionCount: publishedRevisionIds.length,
+    };
+  }
+
+  private resolveBulkTargetPromptKeys(
+    scope: "research_agents" | "evaluation_agents",
+  ): AiPromptKey[] {
+    const pipelineFlow = AI_FLOW_DEFINITIONS.find(
+      (flow) => flow.id === "pipeline",
+    );
+    if (!pipelineFlow) {
+      return [];
+    }
+
+    const keys = new Set<AiPromptKey>();
+    for (const node of pipelineFlow.nodes) {
+      for (const promptKey of node.promptKeys) {
+        if (!isAiPromptKey(promptKey)) {
+          continue;
+        }
+        if (scope === "research_agents" && !promptKey.startsWith("research.")) {
+          continue;
+        }
+        if (
+          scope === "evaluation_agents" &&
+          !promptKey.startsWith("evaluation.")
+        ) {
+          continue;
+        }
+        keys.add(promptKey);
+      }
+    }
+
+    return Array.from(keys).sort();
+  }
+
   async seedFromCode(adminId: string) {
     const stages = Object.values(StartupStage) as StartupStage[];
     const stageTargets: Array<StartupStage | null> = [null, ...stages];

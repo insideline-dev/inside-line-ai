@@ -70,6 +70,8 @@ import {
   UpdateAiModelConfigDraftDto,
   BulkApplyAiModelConfigDto,
   BulkApplyAiModelConfigResponseDto,
+  BulkAppendPromptSectionDto,
+  BulkAppendPromptSectionResponseDto,
   AiPromptDefinitionsResponseDto,
   AiPromptRevisionsResponseDto,
   AiPromptRevisionResponseDto,
@@ -803,6 +805,19 @@ export class AdminController {
     @Body() dto: BulkApplyAiModelConfigDto,
   ) {
     return this.aiModelConfigService.bulkApplyAndPublish(admin.id, dto);
+  }
+
+  @Post('ai-prompts/bulk-append-section')
+  @ApiOperation({
+    summary:
+      "Append a text section to the system prompts of all agents in a scope (research or evaluation), across all stages",
+  })
+  @ApiResponse({ status: 201, type: BulkAppendPromptSectionResponseDto })
+  async bulkAppendPromptSection(
+    @CurrentUser() admin: User,
+    @Body() dto: BulkAppendPromptSectionDto,
+  ) {
+    return this.aiPromptService.bulkAppendSection(admin.id, dto);
   }
 
   @Patch('ai-prompts/:key/model-config/:revisionId')

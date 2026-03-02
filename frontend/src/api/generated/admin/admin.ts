@@ -52,6 +52,8 @@ import type {
   AiResolvedSchemaResponseDto,
   AiSchemaRevisionResponseDto,
   AiSchemaRevisionsResponseDto,
+  BulkAppendPromptSectionDto,
+  BulkAppendPromptSectionResponseDto,
   BulkApplyAiModelConfigDto,
   BulkApplyAiModelConfigResponseDto,
   CreateAiAgentConfigDto,
@@ -5915,6 +5917,88 @@ export const useAdminControllerBulkApplyAiModelConfig = <TError = ErrorType<unkn
         TContext
       > => {
       return useMutation(getAdminControllerBulkApplyAiModelConfigMutationOptions(options), queryClient);
+    }
+    /**
+ * @summary Append a text section to the system prompts of all agents in a scope (research or evaluation), across all stages
+ */
+export type adminControllerBulkAppendPromptSectionResponse201 = {
+  data: BulkAppendPromptSectionResponseDto
+  status: 201
+}
+    
+export type adminControllerBulkAppendPromptSectionResponseSuccess = (adminControllerBulkAppendPromptSectionResponse201) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerBulkAppendPromptSectionResponse = (adminControllerBulkAppendPromptSectionResponseSuccess)
+
+export const getAdminControllerBulkAppendPromptSectionUrl = () => {
+
+
+  
+
+  return `/admin/ai-prompts/bulk-append-section`
+}
+
+export const adminControllerBulkAppendPromptSection = async (bulkAppendPromptSectionDto: BulkAppendPromptSectionDto, options?: RequestInit): Promise<adminControllerBulkAppendPromptSectionResponse> => {
+  
+  return customFetch<adminControllerBulkAppendPromptSectionResponse>(getAdminControllerBulkAppendPromptSectionUrl(),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      bulkAppendPromptSectionDto,)
+  }
+);}
+
+
+
+
+export const getAdminControllerBulkAppendPromptSectionMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerBulkAppendPromptSection>>, TError,{data: BodyType<BulkAppendPromptSectionDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminControllerBulkAppendPromptSection>>, TError,{data: BodyType<BulkAppendPromptSectionDto>}, TContext> => {
+
+const mutationKey = ['adminControllerBulkAppendPromptSection'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminControllerBulkAppendPromptSection>>, {data: BodyType<BulkAppendPromptSectionDto>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  adminControllerBulkAppendPromptSection(data,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminControllerBulkAppendPromptSectionMutationResult = NonNullable<Awaited<ReturnType<typeof adminControllerBulkAppendPromptSection>>>
+    export type AdminControllerBulkAppendPromptSectionMutationBody = BodyType<BulkAppendPromptSectionDto>
+    export type AdminControllerBulkAppendPromptSectionMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Append a text section to the system prompts of all agents in a scope (research or evaluation), across all stages
+ */
+export const useAdminControllerBulkAppendPromptSection = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerBulkAppendPromptSection>>, TError,{data: BodyType<BulkAppendPromptSectionDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof adminControllerBulkAppendPromptSection>>,
+        TError,
+        {data: BodyType<BulkAppendPromptSectionDto>},
+        TContext
+      > => {
+      return useMutation(getAdminControllerBulkAppendPromptSectionMutationOptions(options), queryClient);
     }
     /**
  * @summary Update model config draft revision

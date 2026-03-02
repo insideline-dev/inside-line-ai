@@ -5044,6 +5044,38 @@
         ]
       }
     },
+    "/admin/ai-prompts/bulk-append-section": {
+      "post": {
+        "operationId": "AdminController_bulkAppendPromptSection",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkAppendPromptSectionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkAppendPromptSectionResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Append a text section to the system prompts of all agents in a scope (research or evaluation), across all stages",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
     "/admin/ai-prompts/{key}/model-config/{revisionId}": {
       "patch": {
         "operationId": "AdminController_updateAiModelConfigDraft",
@@ -12409,6 +12441,65 @@
           "provider",
           "appliedKeys",
           "publishedRevisionIds"
+        ]
+      },
+      "BulkAppendPromptSectionDto": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "enum": [
+              "research_agents",
+              "evaluation_agents"
+            ]
+          },
+          "section": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 10000
+          }
+        },
+        "required": [
+          "scope",
+          "section"
+        ]
+      },
+      "BulkAppendPromptSectionResponseDto": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "enum": [
+              "research_agents",
+              "evaluation_agents"
+            ]
+          },
+          "section": {
+            "type": "string"
+          },
+          "appliedKeys": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "publishedRevisionIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "affectedRevisionCount": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "scope",
+          "section",
+          "appliedKeys",
+          "publishedRevisionIds",
+          "affectedRevisionCount"
         ]
       },
       "UpdateAiModelConfigDraftDto": {

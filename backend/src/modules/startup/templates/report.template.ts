@@ -453,17 +453,54 @@ function renderTeamTab(
     ensureSpace(doc, 600, userEmail);
     addSubsectionHeader(doc, 'Team Composition');
 
+    const isCovered = (value: unknown): boolean =>
+      Boolean(
+        value === true ||
+          (value &&
+            typeof value === 'object' &&
+            (value as Record<string, unknown>).covered === true),
+      );
     const roleY = doc.y;
-    addRoleIndicator(doc, 'Business/CEO Leader', !!teamComposition.hasBusinessLeader, MARGIN + 5, roleY);
-    addRoleIndicator(doc, 'Technical/CTO Leader', !!teamComposition.hasTechnicalLeader, MARGIN + 250, roleY);
-    addRoleIndicator(doc, 'Industry Expert', !!teamComposition.hasIndustryExpert, MARGIN + 5, roleY + 40);
-    addRoleIndicator(doc, 'Operations Leader', !!(teamComposition.hasOperationsLeader ?? teamComposition.hasOperationsLead), MARGIN + 250, roleY + 40);
+    addRoleIndicator(
+      doc,
+      'Business/CEO Leader',
+      Boolean(teamComposition.hasBusinessLeader) || isCovered(teamComposition.businessLeadership),
+      MARGIN + 5,
+      roleY,
+    );
+    addRoleIndicator(
+      doc,
+      'Technical/CTO Leader',
+      Boolean(teamComposition.hasTechnicalLeader) || isCovered(teamComposition.technicalCapability),
+      MARGIN + 250,
+      roleY,
+    );
+    addRoleIndicator(
+      doc,
+      'Industry Expert',
+      Boolean(teamComposition.hasIndustryExpert) || isCovered(teamComposition.domainExpertise),
+      MARGIN + 5,
+      roleY + 40,
+    );
+    addRoleIndicator(
+      doc,
+      'Operations Leader',
+      Boolean(teamComposition.hasOperationsLeader ?? teamComposition.hasOperationsLead) ||
+        isCovered(teamComposition.gtmCapability),
+      MARGIN + 250,
+      roleY + 40,
+    );
 
     doc.y = roleY + 85;
 
-    if (teamComposition.teamBalance) {
+    const teamBalance =
+      (typeof teamComposition.teamBalance === 'string' && teamComposition.teamBalance) ||
+      (typeof teamComposition.sentence === 'string' && teamComposition.sentence) ||
+      (typeof teamComposition.reason === 'string' && teamComposition.reason) ||
+      null;
+    if (teamBalance) {
       doc.fontSize(9).font('Helvetica').fillColor(TEXT_SECONDARY)
-        .text(teamComposition.teamBalance as string, MARGIN + 5, doc.y, { width: CONTENT_WIDTH - 10 });
+        .text(teamBalance, MARGIN + 5, doc.y, { width: CONTENT_WIDTH - 10 });
       doc.moveDown(0.5);
     }
   }

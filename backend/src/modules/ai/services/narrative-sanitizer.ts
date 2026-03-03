@@ -5,7 +5,7 @@ const SCORE_WITH_CONFIDENCE_LINE_REGEX =
 const SCORE_SENTENCE_REGEX =
   /(^|[.!?]\s+)([^.!?\n]*\b\d{1,3}\s*\/\s*100\b[^.!?\n]*[.!?]?)/gim;
 const CONFIDENCE_PHRASE_REGEX =
-  /\s*,?\s*(?:with\s+)?(?:high|medium|low|\d{1,3}%?)\s+confidence\b/gi;
+  /\s*,?\s*(?:with\s+)?(?:high|mid|medium|low|\d{1,3}%?)\s+confidence\b/gi;
 const SCORE_DIMENSION_LABEL_REGEX =
   /\b(?:highest|lowest)[-\s]scor(?:ed|ing)\s+dimensions?\s+are\b[^.!?\n]*[.!?]?/gi;
 

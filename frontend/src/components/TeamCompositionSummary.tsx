@@ -129,7 +129,7 @@ export function TeamCompositionSummary({
               icon={Building2}
             />
             <RoleIndicator
-              label="Operations Leader"
+              label="GTM Capability"
               hasRole={teamComposition?.hasOperationsLeader}
               icon={Settings}
             />

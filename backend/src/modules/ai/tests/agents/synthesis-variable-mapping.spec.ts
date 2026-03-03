@@ -25,13 +25,11 @@ const promptService = {
 /*  Fixtures                                                           */
 /* ------------------------------------------------------------------ */
 
-function makeEvalOutput(score: number, confidence: number, analysis: string) {
+function makeEvalOutput(score: number, _confidence: number, analysis: string) {
   return {
     score,
-    confidence,
-    feedback: `Feedback for score ${score}`,
+    confidence: "medium" as const,
     narrativeSummary: analysis,
-    memoNarrative: `Memo: ${analysis}`,
     keyFindings: ["Finding 1"],
     risks: ["Risk 1"],
     dataGaps: ["Gap 1"],
@@ -151,7 +149,6 @@ describe("Synthesis variable mapping", () => {
 
   it("DB prompt template resolves all {{xxx}} with zero unresolved", () => {
     const vars = agent.buildPromptVariables(input);
-    const catalog = AI_PROMPT_CATALOG["synthesis.final"];
 
     // Use the seed/default prompt from catalog (matches what's in DB now)
     // Simulate the DB prompt structure
@@ -179,7 +176,7 @@ describe("Synthesis variable mapping", () => {
     }
   });
 
-  it("evaluation confidences are numbers converted to strings", () => {
+  it("evaluation confidences are non-empty strings", () => {
     const vars = agent.buildPromptVariables(input);
     const confKeys = [
       "teamConfidence", "marketConfidence", "productConfidence", "tractionConfidence",
@@ -189,8 +186,8 @@ describe("Synthesis variable mapping", () => {
     ];
     for (const key of confKeys) {
       expect(vars[key]).toBeDefined();
-      const num = Number(vars[key]);
-      expect(Number.isFinite(num)).toBe(true);
+      expect(typeof vars[key]).toBe("string");
+      expect(vars[key].length).toBeGreaterThan(0);
     }
   });
 

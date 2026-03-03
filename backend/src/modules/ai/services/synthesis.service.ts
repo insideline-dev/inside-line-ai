@@ -196,39 +196,43 @@ export class SynthesisService {
     const { overallScore, sectionScores } = synthesis;
     const percentileRank =
       await this.scoreComputation.computePercentileRank(overallScore);
+    const evaluationWithMemoNarratives = this.applyMemoNarrativesFromSynthesis(
+      evaluation,
+      synthesis.investorMemo,
+    );
     const persistedSources = this.buildPersistedSources(
       research.sources,
-      evaluation,
+      evaluationWithMemoNarratives,
       synthesis,
     );
 
     const evaluationValues = {
-      teamData: evaluation.team,
+      teamData: evaluationWithMemoNarratives.team,
       teamMemberEvaluations: this.buildTeamMemberEvaluations(
-        evaluation.team.teamMembers,
+        evaluationWithMemoNarratives.team.teamMembers,
         scraping.teamMembers,
       ),
-      marketData: evaluation.market,
-      productData: evaluation.product,
-      tractionData: evaluation.traction,
-      businessModelData: evaluation.businessModel,
-      gtmData: evaluation.gtm,
-      financialsData: evaluation.financials,
-      competitiveAdvantageData: evaluation.competitiveAdvantage,
-      legalData: evaluation.legal,
-      dealTermsData: evaluation.dealTerms,
-      exitPotentialData: evaluation.exitPotential,
-      teamScore: evaluation.team.score,
-      marketScore: evaluation.market.score,
-      productScore: evaluation.product.score,
-      tractionScore: evaluation.traction.score,
-      businessModelScore: evaluation.businessModel.score,
-      gtmScore: evaluation.gtm.score,
-      financialsScore: evaluation.financials.score,
-      competitiveAdvantageScore: evaluation.competitiveAdvantage.score,
-      legalScore: evaluation.legal.score,
-      dealTermsScore: evaluation.dealTerms.score,
-      exitPotentialScore: evaluation.exitPotential.score,
+      marketData: evaluationWithMemoNarratives.market,
+      productData: evaluationWithMemoNarratives.product,
+      tractionData: evaluationWithMemoNarratives.traction,
+      businessModelData: evaluationWithMemoNarratives.businessModel,
+      gtmData: evaluationWithMemoNarratives.gtm,
+      financialsData: evaluationWithMemoNarratives.financials,
+      competitiveAdvantageData: evaluationWithMemoNarratives.competitiveAdvantage,
+      legalData: evaluationWithMemoNarratives.legal,
+      dealTermsData: evaluationWithMemoNarratives.dealTerms,
+      exitPotentialData: evaluationWithMemoNarratives.exitPotential,
+      teamScore: evaluationWithMemoNarratives.team.score,
+      marketScore: evaluationWithMemoNarratives.market.score,
+      productScore: evaluationWithMemoNarratives.product.score,
+      tractionScore: evaluationWithMemoNarratives.traction.score,
+      businessModelScore: evaluationWithMemoNarratives.businessModel.score,
+      gtmScore: evaluationWithMemoNarratives.gtm.score,
+      financialsScore: evaluationWithMemoNarratives.financials.score,
+      competitiveAdvantageScore: evaluationWithMemoNarratives.competitiveAdvantage.score,
+      legalScore: evaluationWithMemoNarratives.legal.score,
+      dealTermsScore: evaluationWithMemoNarratives.dealTerms.score,
+      exitPotentialScore: evaluationWithMemoNarratives.exitPotential.score,
       sectionScores,
       overallScore,
       percentileRank,
@@ -256,6 +260,105 @@ export class SynthesisService {
         .set({ overallScore, percentileRank })
         .where(eq(startup.id, startupId));
     });
+  }
+
+  private applyMemoNarrativesFromSynthesis(
+    evaluation: EvaluationResult,
+    investorMemo: InvestorMemo | null | undefined,
+  ): EvaluationResult {
+    if (!investorMemo || !Array.isArray(investorMemo.sections)) {
+      return evaluation;
+    }
+
+    const narrativeByKey = this.buildMemoNarrativeMap(investorMemo.sections);
+    if (Object.keys(narrativeByKey).length === 0) {
+      return evaluation;
+    }
+
+    const withNarrative = <T extends Record<string, unknown>>(
+      sectionKey: keyof EvaluationResult,
+      value: T,
+    ): T => {
+      const refined = narrativeByKey[sectionKey];
+      if (!refined) {
+        return value;
+      }
+      return {
+        ...value,
+        narrativeSummary: refined,
+        memoNarrative: refined,
+      };
+    };
+
+    return {
+      ...evaluation,
+      team: withNarrative("team", evaluation.team),
+      market: withNarrative("market", evaluation.market),
+      product: withNarrative("product", evaluation.product),
+      traction: withNarrative("traction", evaluation.traction),
+      businessModel: withNarrative("businessModel", evaluation.businessModel),
+      gtm: withNarrative("gtm", evaluation.gtm),
+      financials: withNarrative("financials", evaluation.financials),
+      competitiveAdvantage: withNarrative(
+        "competitiveAdvantage",
+        evaluation.competitiveAdvantage,
+      ),
+      legal: withNarrative("legal", evaluation.legal),
+      dealTerms: withNarrative("dealTerms", evaluation.dealTerms),
+      exitPotential: withNarrative("exitPotential", evaluation.exitPotential),
+    };
+  }
+
+  private buildMemoNarrativeMap(
+    sections: Array<{ title?: string; content?: string }>,
+  ): Partial<Record<keyof EvaluationResult, string>> {
+    const map: Partial<Record<keyof EvaluationResult, string>> = {};
+
+    const normalizedToKey: Record<string, keyof EvaluationResult> = {
+      team: "team",
+      market: "market",
+      marketopportunity: "market",
+      product: "product",
+      producttechnology: "product",
+      productandtechnology: "product",
+      traction: "traction",
+      tractionmetrics: "traction",
+      tractionandmetrics: "traction",
+      businessmodel: "businessModel",
+      gotomarket: "gtm",
+      gotomarketstrategy: "gtm",
+      gtm: "gtm",
+      financials: "financials",
+      competitiveadvantage: "competitiveAdvantage",
+      competitivelandscape: "competitiveAdvantage",
+      legal: "legal",
+      legalregulatory: "legal",
+      legalandregulatory: "legal",
+      dealterms: "dealTerms",
+      exitpotential: "exitPotential",
+    };
+
+    for (const section of sections) {
+      const title =
+        typeof section.title === "string" ? section.title.trim().toLowerCase() : "";
+      const content =
+        typeof section.content === "string"
+          ? sanitizeNarrativeText(section.content).trim()
+          : "";
+      if (!title || !content) {
+        continue;
+      }
+
+      const normalized = title.replace(/[^a-z]/g, "");
+      const key = normalizedToKey[normalized];
+      if (!key) {
+        continue;
+      }
+
+      map[key] = content;
+    }
+
+    return map;
   }
 
   private buildTeamMemberEvaluations(

@@ -386,7 +386,7 @@ function StartupDetail() {
         </div>
 
         <aside className="hidden lg:block">
-          <div className="sticky top-20">
+          <div className="sticky top-6">
             <Card className="border-border/70 bg-background/80 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/65">
               <CardContent className="p-3">
                 <p className="mb-2 px-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">

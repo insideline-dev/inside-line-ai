@@ -23,6 +23,15 @@ const FounderReportSchema = z.object({
   actionItems: z.array(z.string()).default([]),
 });
 
+export const SynthesisSectionRewriteSchema = z.object({
+  sectionKey: z.string().min(1),
+  title: z.string().min(1),
+  memoNarrative: z.string().min(1),
+  highlights: z.array(z.string()).default([]),
+  concerns: z.array(z.string()).default([]),
+  diligenceItems: z.array(z.string()).default([]),
+});
+
 export const SynthesisSchema = z.object({
   overallScore: z.number().min(0).max(100),
   recommendation: z.enum(["Pass", "Consider", "Decline"]),
@@ -38,6 +47,9 @@ export const SynthesisSchema = z.object({
   dataConfidenceNotes: z.string().min(1),
 });
 
+export const SynthesisFinalCombineSchema = SynthesisSchema;
+
 export type Synthesis = z.infer<typeof SynthesisSchema>;
 export type InvestorMemo = z.infer<typeof InvestorMemoSchema>;
 export type FounderReport = z.infer<typeof FounderReportSchema>;
+export type SynthesisSectionRewrite = z.infer<typeof SynthesisSectionRewriteSchema>;

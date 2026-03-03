@@ -20,20 +20,13 @@ export function baseEvaluation(
   source = INTERNAL_PIPELINE_SOURCE,
 ): BaseEvaluation {
   const normalized = clampScore(score);
-  const fallbackFeedback = `${finding}. Automated evaluation could not be completed — this section requires manual review by the investment team.`;
 
   return {
     score: normalized,
-    confidence: 0.1,
-    feedback: fallbackFeedback,
+    confidence: "low" as const,
     narrativeSummary: [
       `Current signal quality is limited. This dimension is provisionally scored at ${normalized}/100 with low confidence because automated analysis did not complete successfully.`,
-      fallbackFeedback,
-      "The investment team should review primary materials manually before using this dimension in an IC decision, and should resolve the listed data gaps to restore confidence in this section.",
-    ].join("\n\n"),
-    memoNarrative: [
-      `Current signal quality is limited. This dimension is provisionally scored at ${normalized}/100 with low confidence because automated analysis did not complete successfully.`,
-      fallbackFeedback,
+      `${finding}. Automated evaluation could not be completed — this section requires manual review by the investment team.`,
       "The investment team should review primary materials manually before using this dimension in an IC decision, and should resolve the listed data gaps to restore confidence in this section.",
     ].join("\n\n"),
     keyFindings: [finding, "Automated evaluation failed — requires manual review"],

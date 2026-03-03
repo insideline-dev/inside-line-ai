@@ -102,9 +102,8 @@ export class CompetitiveAdvantageEvaluationAgent extends BaseEvaluationAgent<Com
   fallback({ extraction: _extraction }: EvaluationPipelineInput): CompetitiveAdvantageEvaluation {
     return CompetitiveAdvantageEvaluationSchema.parse({
       ...baseEvaluation(20, "Competitive advantage evaluation incomplete — requires manual review"),
-      moats: ["Workflow integration depth", "Execution velocity"],
-      competitivePosition: "Positioned as an early category challenger",
-      barriers: ["Domain expertise", "Accumulating operational know-how"],
+      strengths: [],
+      founderPitchRecommendations: [],
     });
   }
 }

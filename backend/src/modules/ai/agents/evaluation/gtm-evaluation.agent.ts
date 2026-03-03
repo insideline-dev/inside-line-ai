@@ -72,10 +72,7 @@ export class GtmEvaluationAgent extends BaseEvaluationAgent<GtmEvaluation> {
   fallback({ extraction: _extraction }: EvaluationPipelineInput): GtmEvaluation {
     return GtmEvaluationSchema.parse({
       ...baseEvaluation(22, "GTM evaluation incomplete — requires manual review"),
-      customerSegments: ["SMB", "Mid-market"],
-      acquisitionChannels: ["Founder-led sales", "Partnerships", "Inbound content"],
-      salesStrategy: "Hybrid founder-led and inbound-assisted sales motion",
-      pricingStrategy: "Tiered usage-based pricing with annual commitments",
+      founderPitchRecommendations: [],
     });
   }
 }

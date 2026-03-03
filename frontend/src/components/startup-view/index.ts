@@ -4,6 +4,8 @@ export { MemoTabContent } from "./MemoTabContent";
 export { TeamTabContent } from "./TeamTabContent";
 export { CompetitorsTabContent } from "./CompetitorsTabContent";
 export { ProductTabContent } from "./ProductTabContent";
+export { MarketTabContent } from "./MarketTabContent";
 export { FounderInsightCard } from "./FounderInsightCard";
 export { InsightsTabContent } from "./InsightsTabContent";
 export { SourcesTabContent } from "./SourcesTabContent";
+export { FounderRecommendationsTab } from "./FounderRecommendationsTab";

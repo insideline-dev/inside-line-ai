@@ -63,6 +63,12 @@ interface TeamCompositionShape {
   hasIndustryExpert?: boolean;
   hasOperationsLeader?: boolean;
   teamBalance?: string;
+  functionalCoverage?: string;
+}
+
+interface FounderRecommendationItem {
+  type: "hire" | "reframe" | "recommendation";
+  bullet: string;
 }
 
 function normalizeKey(value?: string) {
@@ -104,10 +110,13 @@ function extractTeamStrengths(evaluation: Evaluation | null): string[] {
   const teamData = (evaluation.teamData as Record<string, unknown>) || {};
   const memberEvals = (evaluation.teamMemberEvaluations as unknown as any[]) || [];
 
+  // New schema: strengths > keyStrengths > keyFindings (backward compat)
   const explicit =
-    toStringArray((teamData as any).keyStrengths).length > 0
-      ? toStringArray((teamData as any).keyStrengths)
-      : toStringArray((teamData as any).keyFindings);
+    toStringArray((teamData as any).strengths).length > 0
+      ? toStringArray((teamData as any).strengths)
+      : toStringArray((teamData as any).keyStrengths).length > 0
+        ? toStringArray((teamData as any).keyStrengths)
+        : toStringArray((teamData as any).keyFindings);
   if (explicit.length > 0) {
     return dedupeStrings(explicit).slice(0, 5);
   }
@@ -174,10 +183,20 @@ function resolveTeamComposition(
   const teamData = (evaluation.teamData as Record<string, unknown>) || {};
   const raw =
     (teamData as any).teamComposition ||
+    (teamData as any).functionalCoverage ||
     (evaluation.teamComposition as Record<string, unknown> | undefined);
+
+  const getCovered = (candidate: unknown): boolean | undefined => {
+    if (candidate && typeof candidate === "object") {
+      return normalizeBoolean((candidate as Record<string, unknown>).covered);
+    }
+    return normalizeBoolean(candidate);
+  };
 
   const inferred = inferRoleCoverage(members);
   const teamBalance =
+    (typeof (raw as any)?.sentence === "string" && (raw as any).sentence.trim()) ||
+    (typeof (raw as any)?.reason === "string" && (raw as any).reason.trim()) ||
     (typeof (raw as any)?.teamBalance === "string" && (raw as any).teamBalance.trim()) ||
     (typeof (teamData as any).executionCapability === "string" &&
       (teamData as any).executionCapability.trim()) ||
@@ -187,14 +206,23 @@ function resolveTeamComposition(
 
   return {
     hasBusinessLeader:
-      normalizeBoolean((raw as any)?.hasBusinessLeader) ?? inferred.hasBusinessLeader,
+      getCovered((raw as any)?.businessLeadership) ??
+      normalizeBoolean((raw as any)?.hasBusinessLeader) ??
+      inferred.hasBusinessLeader,
     hasTechnicalLeader:
-      normalizeBoolean((raw as any)?.hasTechnicalLeader) ?? inferred.hasTechnicalLeader,
+      getCovered((raw as any)?.technicalCapability) ??
+      normalizeBoolean((raw as any)?.hasTechnicalLeader) ??
+      inferred.hasTechnicalLeader,
     hasIndustryExpert:
-      normalizeBoolean((raw as any)?.hasIndustryExpert) ?? inferred.hasIndustryExpert,
+      getCovered((raw as any)?.domainExpertise) ??
+      normalizeBoolean((raw as any)?.hasIndustryExpert) ??
+      inferred.hasIndustryExpert,
     hasOperationsLeader:
-      normalizeBoolean((raw as any)?.hasOperationsLeader) ?? inferred.hasOperationsLeader,
+      getCovered((raw as any)?.gtmCapability) ??
+      normalizeBoolean((raw as any)?.hasOperationsLeader) ??
+      inferred.hasOperationsLeader,
     teamBalance,
+    functionalCoverage: extractFunctionalCoverage(teamData),
   };
 }
 
@@ -255,6 +283,71 @@ function getTeamDataField<T>(teamData: Record<string, unknown> | undefined, ...k
   if (!teamData) return undefined;
   for (const key of keys) {
     if (teamData[key] !== undefined) return teamData[key] as T;
+  }
+  return undefined;
+}
+
+/** Extract founder-market fit score: new founderMarketFit.score > legacy founderMarketFitScore */
+function extractFounderMarketFitScore(teamData: Record<string, unknown> | undefined): number | undefined {
+  if (!teamData) return undefined;
+  const fmf = teamData.founderMarketFit as Record<string, unknown> | undefined;
+  if (fmf && typeof fmf.score === "number") return fmf.score;
+  const legacy = teamData.founderMarketFitScore;
+  if (typeof legacy === "number") return legacy;
+  return undefined;
+}
+
+/** Extract founder-market fit rationale: new founderMarketFit.why > legacy fields */
+function extractFounderMarketFitWhy(teamData: Record<string, unknown> | undefined): string | undefined {
+  if (!teamData) return undefined;
+  const fmf = teamData.founderMarketFit as Record<string, unknown> | undefined;
+  if (fmf && typeof fmf.why === "string" && fmf.why.trim()) return fmf.why.trim();
+  const legacy = teamData.founderMarketFitRationale ?? teamData.founderMarketFitReason;
+  if (typeof legacy === "string" && legacy.trim()) return legacy.trim();
+  return undefined;
+}
+
+/** Extract founderRecommendations array (new schema field). */
+function extractFounderRecommendations(teamData: Record<string, unknown> | undefined): FounderRecommendationItem[] {
+  if (!teamData) return [];
+  const raw = teamData.founderRecommendations;
+  if (!Array.isArray(raw)) return [];
+
+  return raw
+    .map((item): FounderRecommendationItem | null => {
+      if (typeof item === "string") {
+        const bullet = item.trim();
+        return bullet.length > 0 ? { type: "recommendation", bullet } : null;
+      }
+      if (!item || typeof item !== "object") return null;
+
+      const record = item as Record<string, unknown>;
+      const bullet = typeof record.bullet === "string" ? record.bullet.trim() : "";
+      if (!bullet) return null;
+
+      const rawType = typeof record.type === "string" ? record.type.toLowerCase().trim() : "";
+      const type: FounderRecommendationItem["type"] =
+        rawType === "hire" || rawType === "reframe" ? rawType : "recommendation";
+      return { type, bullet };
+    })
+    .filter((item): item is FounderRecommendationItem => item !== null);
+}
+
+/** Extract functionalCoverage string/object from teamData. */
+function extractFunctionalCoverage(teamData: Record<string, unknown> | undefined): string | undefined {
+  if (!teamData) return undefined;
+  const raw = teamData.teamComposition ?? teamData.functionalCoverage;
+  if (typeof raw === "string" && raw.trim()) return raw.trim();
+  if (raw && typeof raw === "object") {
+    // If it's a structured object, pull a summary key or stringify the keys
+    const obj = raw as Record<string, unknown>;
+    const summary =
+      obj.sentence ??
+      obj.reason ??
+      obj.summary ??
+      obj.assessment ??
+      obj.overview;
+    if (typeof summary === "string" && summary.trim()) return summary.trim();
   }
   return undefined;
 }
@@ -472,6 +565,13 @@ export function TeamTabContent({
   );
   const teamStrengths = useMemo(() => extractTeamStrengths(evaluation), [evaluation]);
   const teamRisks = useMemo(() => extractTeamRisks(evaluation), [evaluation]);
+  const teamData = useMemo(
+    () => (evaluation?.teamData as Record<string, unknown> | undefined) ?? undefined,
+    [evaluation],
+  );
+  const founderMarketFitScore = useMemo(() => extractFounderMarketFitScore(teamData), [teamData]);
+  const founderMarketFitWhy = useMemo(() => extractFounderMarketFitWhy(teamData), [teamData]);
+  const founderRecommendations = useMemo(() => extractFounderRecommendations(teamData), [teamData]);
 
   return (
     <div className="space-y-6" data-testid="container-team-tab">
@@ -483,6 +583,49 @@ export function TeamTabContent({
           keyRisks={teamRisks}
           weight={teamWeight}
         />
+      )}
+
+      {(founderMarketFitScore !== undefined || founderMarketFitWhy || founderRecommendations.length > 0) && (
+        <Card className="border-primary/20" data-testid="card-founder-market-fit">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Users className="w-5 h-5" />
+              <span data-testid="text-fmf-title">Founder-Market Fit</span>
+            </CardTitle>
+            {founderMarketFitScore !== undefined && (
+              <CardDescription data-testid="text-fmf-score">
+                Score: {founderMarketFitScore}/100
+              </CardDescription>
+            )}
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {founderMarketFitWhy && (
+              <p className="text-sm text-muted-foreground leading-relaxed" data-testid="text-fmf-why">
+                {founderMarketFitWhy}
+              </p>
+            )}
+            {founderRecommendations.length > 0 && (
+              <div data-testid="container-founder-recommendations">
+                <h4 className="text-sm font-medium mb-2">Recommendations for Founders</h4>
+                <ul className="space-y-2">
+                  {founderRecommendations.map((rec, i) => (
+                    <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground" data-testid={`item-founder-rec-${i}`}>
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary mt-2 shrink-0" />
+                      <span>
+                        {rec.type === "hire"
+                          ? "Hire: "
+                          : rec.type === "reframe"
+                            ? "Reframe: "
+                            : ""}
+                        {rec.bullet}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       <Card className="border-primary/20" data-testid="card-team-profiles">

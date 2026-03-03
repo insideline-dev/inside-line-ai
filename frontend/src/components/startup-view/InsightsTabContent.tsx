@@ -21,6 +21,29 @@ interface InsightsTabContentProps {
   evaluation: Evaluation | null;
 }
 
+function toInsightText(value: unknown): string {
+  if (typeof value === "string") return value.trim();
+  if (!value || typeof value !== "object") return "";
+
+  const record = value as Record<string, unknown>;
+  if (typeof record.bullet === "string" && record.bullet.trim()) {
+    return record.bullet.trim();
+  }
+  if (typeof record.recommendation === "string" && record.recommendation.trim()) {
+    const missing =
+      typeof record.deckMissingElement === "string" &&
+      record.deckMissingElement.trim().length > 0
+        ? `${record.deckMissingElement.trim()}: `
+        : "";
+    return `${missing}${record.recommendation.trim()}`;
+  }
+  if (typeof record.deckMissingElement === "string" && record.deckMissingElement.trim()) {
+    return record.deckMissingElement.trim();
+  }
+
+  return "";
+}
+
 function extractInsights(data: any): { 
   strengths: string[]; 
   improvements: string[]; 
@@ -40,17 +63,22 @@ function extractInsights(data: any): {
   // Extract actionable improvements - prioritize recommendations over risks
   // These are things founders can actually do something about
   const actionableFields = [
+    'founderRecommendations',
+    'founderPitchRecommendations',
     'recommendations',
-    'pitchRecommendations', 
+    'pitchRecommendations',
     'improvements',
     'actionItems',
     'suggestedActions',
-    'founderActions'
+    'founderActions',
   ];
   
   for (const field of actionableFields) {
     if (Array.isArray(data[field]) && improvements.length < 3) {
-      improvements.push(...data[field].slice(0, 3 - improvements.length));
+      const actionable = (data[field] as unknown[])
+        .map((item) => toInsightText(item))
+        .filter((item) => item.length > 0);
+      improvements.push(...actionable.slice(0, 3 - improvements.length));
     }
   }
   
@@ -97,6 +125,23 @@ export function InsightsTabContent({ evaluation }: InsightsTabContentProps) {
   const competitiveInsights = extractInsights(evaluation.competitiveAdvantageData);
   const legalInsights = extractInsights(evaluation.legalData);
   const dealInsights = extractInsights(evaluation.dealTermsData);
+  const insightSections = [
+    { title: "Team", icon: Users, data: teamInsights },
+    { title: "Market Opportunity", icon: Target, data: marketInsights },
+    { title: "Product & Technology", icon: Cpu, data: productInsights },
+    { title: "Traction & Metrics", icon: TrendingUp, data: tractionInsights },
+    { title: "Business Model", icon: Building2, data: businessModelInsights },
+    { title: "Go-to-Market", icon: Megaphone, data: gtmInsights },
+    { title: "Financials", icon: PiggyBank, data: financialsInsights },
+    { title: "Competitive Position", icon: Shield, data: competitiveInsights },
+    { title: "Legal & Regulatory", icon: Scale, data: legalInsights },
+    { title: "Deal Terms", icon: Handshake, data: dealInsights },
+  ].filter(
+    ({ data }) =>
+      data.strengths.length > 0 ||
+      data.improvements.length > 0 ||
+      data.unclearItems.length > 0,
+  );
 
   return (
     <div className="space-y-6" data-testid="container-insights-tab">
@@ -150,78 +195,20 @@ export function InsightsTabContent({ evaluation }: InsightsTabContentProps) {
         </CardContent>
       </Card>
 
-      <div className="grid md:grid-cols-2 gap-4">
-        <FounderInsightCard
-          title="Team"
-          icon={Users}
-          strengths={teamInsights.strengths}
-          improvements={teamInsights.improvements}
-          unclearItems={teamInsights.unclearItems}
-        />
-        <FounderInsightCard
-          title="Market Opportunity"
-          icon={Target}
-          strengths={marketInsights.strengths}
-          improvements={marketInsights.improvements}
-          unclearItems={marketInsights.unclearItems}
-        />
-        <FounderInsightCard
-          title="Product & Technology"
-          icon={Cpu}
-          strengths={productInsights.strengths}
-          improvements={productInsights.improvements}
-          unclearItems={productInsights.unclearItems}
-        />
-        <FounderInsightCard
-          title="Traction & Metrics"
-          icon={TrendingUp}
-          strengths={tractionInsights.strengths}
-          improvements={tractionInsights.improvements}
-          unclearItems={tractionInsights.unclearItems}
-        />
-        <FounderInsightCard
-          title="Business Model"
-          icon={Building2}
-          strengths={businessModelInsights.strengths}
-          improvements={businessModelInsights.improvements}
-          unclearItems={businessModelInsights.unclearItems}
-        />
-        <FounderInsightCard
-          title="Go-to-Market"
-          icon={Megaphone}
-          strengths={gtmInsights.strengths}
-          improvements={gtmInsights.improvements}
-          unclearItems={gtmInsights.unclearItems}
-        />
-        <FounderInsightCard
-          title="Financials"
-          icon={PiggyBank}
-          strengths={financialsInsights.strengths}
-          improvements={financialsInsights.improvements}
-          unclearItems={financialsInsights.unclearItems}
-        />
-        <FounderInsightCard
-          title="Competitive Position"
-          icon={Shield}
-          strengths={competitiveInsights.strengths}
-          improvements={competitiveInsights.improvements}
-          unclearItems={competitiveInsights.unclearItems}
-        />
-        <FounderInsightCard
-          title="Legal & Regulatory"
-          icon={Scale}
-          strengths={legalInsights.strengths}
-          improvements={legalInsights.improvements}
-          unclearItems={legalInsights.unclearItems}
-        />
-        <FounderInsightCard
-          title="Deal Terms"
-          icon={Handshake}
-          strengths={dealInsights.strengths}
-          improvements={dealInsights.improvements}
-          unclearItems={dealInsights.unclearItems}
-        />
-      </div>
+      {insightSections.length > 0 && (
+        <div className="grid gap-4 md:grid-cols-2">
+          {insightSections.map((section) => (
+            <FounderInsightCard
+              key={section.title}
+              title={section.title}
+              icon={section.icon}
+              strengths={section.data.strengths}
+              improvements={section.data.improvements}
+              unclearItems={section.data.unclearItems}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

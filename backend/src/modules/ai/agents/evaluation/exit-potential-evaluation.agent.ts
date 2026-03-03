@@ -58,10 +58,6 @@ export class ExitPotentialEvaluationAgent extends BaseEvaluationAgent<ExitPotent
   fallback({ extraction: _extraction }: EvaluationPipelineInput): ExitPotentialEvaluation {
     return ExitPotentialEvaluationSchema.parse({
       ...baseEvaluation(20, "Exit potential evaluation incomplete — requires manual review"),
-      exitScenarios: ["Strategic acquisition", "Secondary-led growth exit"],
-      acquirers: ["Category incumbent", "Platform consolidator"],
-      exitTimeline: "5-8 years",
-      returnPotential: "Potential venture-scale return with strong execution",
     });
   }
 }

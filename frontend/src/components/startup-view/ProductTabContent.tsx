@@ -31,6 +31,36 @@ function dedupeStrings(values: string[]): string[] {
   return output;
 }
 
+interface PitchRecommendationItem {
+  deckMissingElement: string;
+  whyItMatters: string;
+  recommendation: string;
+}
+
+function toPitchRecommendations(value: unknown): PitchRecommendationItem[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item): PitchRecommendationItem | null => {
+      if (!item || typeof item !== "object") return null;
+      const record = item as Record<string, unknown>;
+      const deckMissingElement =
+        typeof record.deckMissingElement === "string"
+          ? record.deckMissingElement.trim()
+          : "";
+      const whyItMatters =
+        typeof record.whyItMatters === "string"
+          ? record.whyItMatters.trim()
+          : "";
+      const recommendation =
+        typeof record.recommendation === "string"
+          ? record.recommendation.trim()
+          : "";
+      if (!deckMissingElement && !recommendation) return null;
+      return { deckMissingElement, whyItMatters, recommendation };
+    })
+    .filter((item): item is PitchRecommendationItem => item !== null);
+}
+
 function normalizeTrlStage(value?: string): string | undefined {
   if (!value) return undefined;
   const normalized = value.trim().toLowerCase();
@@ -48,7 +78,10 @@ export function ProductTabContent({ startup, evaluation, showScores = true, prod
   const trlStage = normalizeTrlStage(
     startup.technologyReadinessLevel ||
       productData?.technologyReadiness?.stage ||
+      // new schema: productSummary.techStage
+      productData?.productSummary?.techStage ||
       productData?.technologyStage ||
+      // legacy: productMaturity
       productData?.productMaturity,
   );
   const moatType =
@@ -61,22 +94,34 @@ export function ProductTabContent({ startup, evaluation, showScores = true, prod
     productData?.competitiveMoat?.strength ??
     productData?.moatStrength ??
     null;
+  // New schema: strengths field > keyStrengths > keyFindings (backward compat)
   const productStrengths = dedupeStrings(
     [
+      ...toStringArray(productData?.productStrengthsAndRisks?.strengths),
+      ...toStringArray(productData?.strengths),
       ...toStringArray(productData?.keyStrengths),
       ...toStringArray(productData?.keyFindings),
     ].filter(Boolean),
   );
   const productRisks = dedupeStrings(
     [
+      ...toStringArray(productData?.productStrengthsAndRisks?.risks),
       ...toStringArray(productData?.keyRisks),
       ...toStringArray(productData?.risks),
       ...toStringArray(productData?.dataGaps),
     ].filter(Boolean),
   );
-  const productSummary = evaluation?.productSummary || productData?.productDescription || productData?.narrativeSummary;
+  // New schema: productSummary.description > legacy productDescription
+  const productSummary =
+    evaluation?.productSummary ||
+    productData?.productSummary?.description ||
+    productData?.productDescription;
+  // New schema: productOverview fields
+  const productOverview = productData?.productOverview as Record<string, unknown> | undefined;
   const keyFeatures = toStringArray(productData?.keyFeatures);
   const technologyStack = toStringArray(productData?.technologyStack);
+  // New schema: founderPitchRecommendations
+  const founderPitchRecommendations = toPitchRecommendations(productData?.founderPitchRecommendations);
 
   const hasContent =
     founderScreenshots.length > 0 ||
@@ -132,7 +177,7 @@ export function ProductTabContent({ startup, evaluation, showScores = true, prod
         </Card>
       )}
 
-      {(productData?.productDescription || productData?.uniqueValue) && (
+      {(productData?.productDescription || productData?.uniqueValue || productOverview?.whatItDoes || productOverview?.coreValueProp) && (
         <Card className="border-primary/20" data-testid="card-product-overview">
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
@@ -141,16 +186,36 @@ export function ProductTabContent({ startup, evaluation, showScores = true, prod
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {productData?.productDescription && (
+            {/* New schema: productOverview.whatItDoes > legacy productDescription */}
+            {(productOverview?.whatItDoes || productData?.productDescription) && (
               <div>
                 <h4 className="text-sm font-medium mb-1">Description</h4>
-                <p className="text-sm text-muted-foreground leading-relaxed">{productData.productDescription}</p>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  {(productOverview?.whatItDoes as string) || productData.productDescription}
+                </p>
               </div>
             )}
-            {productData?.uniqueValue && (
+            {/* New schema: productOverview.targetUser */}
+            {productOverview?.targetUser && (
+              <div>
+                <h4 className="text-sm font-medium mb-1">Target User</h4>
+                <p className="text-sm text-muted-foreground leading-relaxed">{productOverview.targetUser as string}</p>
+              </div>
+            )}
+            {/* New schema: productOverview.productCategory */}
+            {productOverview?.productCategory && (
+              <div>
+                <h4 className="text-sm font-medium mb-1">Category</h4>
+                <p className="text-sm text-muted-foreground leading-relaxed">{productOverview.productCategory as string}</p>
+              </div>
+            )}
+            {/* New schema: productOverview.coreValueProp > legacy uniqueValue */}
+            {(productOverview?.coreValueProp || productData?.uniqueValue) && (
               <div>
                 <h4 className="text-sm font-medium mb-1">Unique Value</h4>
-                <p className="text-sm text-muted-foreground leading-relaxed">{productData.uniqueValue}</p>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  {(productOverview?.coreValueProp as string) || productData.uniqueValue}
+                </p>
               </div>
             )}
           </CardContent>
@@ -224,6 +289,35 @@ export function ProductTabContent({ startup, evaluation, showScores = true, prod
                 </Badge>
               ))}
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {founderPitchRecommendations.length > 0 && (
+        <Card data-testid="card-pitch-recommendations">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Layers className="w-5 h-5" />
+              <span>Pitch Recommendations</span>
+            </CardTitle>
+            <CardDescription>Actionable suggestions to strengthen the product narrative</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-2">
+              {founderPitchRecommendations.map((rec, idx) => (
+                <li key={idx} className="rounded-md border border-border/60 p-3 text-sm" data-testid={`item-pitch-rec-${idx}`}>
+                  {rec.deckMissingElement ? (
+                    <p className="font-medium">{rec.deckMissingElement}</p>
+                  ) : null}
+                  {rec.whyItMatters ? (
+                    <p className="mt-1 text-muted-foreground">{rec.whyItMatters}</p>
+                  ) : null}
+                  {rec.recommendation ? (
+                    <p className="mt-2">{rec.recommendation}</p>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
           </CardContent>
         </Card>
       )}

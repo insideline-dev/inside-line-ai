@@ -1,9 +1,9 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { generateText, Output } from "ai";
 import { z } from "zod";
-import { SynthesisSchema } from "../../schemas";
+import { SynthesisSchema, SynthesisSectionRewriteSchema } from "../../schemas";
 import { ModelPurpose } from "../../interfaces/pipeline.interface";
-import type { EvaluationFallbackReason } from "../../interfaces/agent.interface";
+import type { EvaluationAgentKey, EvaluationFallbackReason } from "../../interfaces/agent.interface";
 import type {
   EvaluationResult,
   ExtractionResult,
@@ -43,6 +43,32 @@ export interface SynthesisAgentRunResult {
   retryCount: number;
 }
 
+interface RewrittenMemoSection {
+  sectionKey: EvaluationAgentKey;
+  title: string;
+  memoNarrative: string;
+  highlights: string[];
+  concerns: string[];
+  diligenceItems: string[];
+}
+
+const SYNTHESIS_SECTION_ORDER: Array<{
+  key: EvaluationAgentKey;
+  title: string;
+}> = [
+  { key: "team", title: "Team" },
+  { key: "market", title: "Market Opportunity" },
+  { key: "product", title: "Product and Technology" },
+  { key: "businessModel", title: "Business Model" },
+  { key: "traction", title: "Traction and Metrics" },
+  { key: "gtm", title: "Go-to-Market Strategy" },
+  { key: "competitiveAdvantage", title: "Competitive Advantage" },
+  { key: "financials", title: "Financials" },
+  { key: "legal", title: "Legal and Regulatory" },
+  { key: "dealTerms", title: "Deal Terms" },
+  { key: "exitPotential", title: "Exit Potential" },
+];
+
 @Injectable()
 export class SynthesisAgent {
   private readonly logger = new Logger(SynthesisAgent.name);
@@ -76,7 +102,17 @@ export class SynthesisAgent {
             stage: input.extraction.stage,
           })
         : null;
-      const promptVariables = this.buildPromptVariables(input);
+      const model =
+        execution?.generateTextOptions.model ??
+        this.providers.resolveModelForPurpose(ModelPurpose.SYNTHESIS);
+      const rewrittenSections = await this.rewriteEvaluationSections({
+        input,
+        model,
+        providerOptions: execution?.generateTextOptions.providerOptions,
+        startedAtMs,
+        hardTimeoutMs,
+      });
+      const promptVariables = this.buildPromptVariables(input, rewrittenSections);
       renderedPrompt = this.promptService.renderTemplate(
         promptConfig.userPrompt,
         promptVariables,
@@ -104,9 +140,7 @@ export class SynthesisAgent {
           const response = await this.withTimeout(
             (abortSignal) =>
               generateText({
-                model:
-                  execution?.generateTextOptions.model ??
-                  this.providers.resolveModelForPurpose(ModelPurpose.SYNTHESIS),
+                model: model as Parameters<typeof generateText>[0]["model"],
                 output: Output.object({ schema: SynthesisSchema }),
                 temperature: this.aiConfig.getSynthesisTemperature(),
                 maxOutputTokens: this.aiConfig.getSynthesisMaxOutputTokens(),
@@ -126,13 +160,31 @@ export class SynthesisAgent {
             "Synthesis agent timed out",
           );
           const output = SynthesisSchema.parse(response.output);
+          const composedSections = this.composeInvestorMemoSections(
+            output.investorMemo.sections,
+            rewrittenSections,
+          );
+          const dueDiligenceFromSections = this.buildDueDiligenceAreasFromRewrites(
+            rewrittenSections,
+          );
+          const mergedOutput = {
+            ...output,
+            investorMemo: {
+              ...output.investorMemo,
+              sections: composedSections,
+              keyDueDiligenceAreas:
+                output.investorMemo.keyDueDiligenceAreas.length > 0
+                  ? output.investorMemo.keyDueDiligenceAreas
+                  : dueDiligenceFromSections,
+            },
+          };
 
           this.logger.debug(
             `[Synthesis] Raw AI output | Keys: ${Object.keys(output).join(", ")} | ${JSON.stringify(output).substring(0, 200)}...`,
           );
 
           const parsed = this.sanitizeNarrativeOutput(
-            this.normalizeExecutiveSummary(output, input),
+            this.normalizeExecutiveSummary(mergedOutput, input),
           );
           this.logger.log(
             `[Synthesis] ✅ Synthesis completed | Strengths: ${parsed.strengths.length} | Concerns: ${parsed.concerns.length} | Score: ${parsed.overallScore}`,
@@ -250,8 +302,12 @@ export class SynthesisAgent {
 
   buildPromptVariables(
     input: SynthesisAgentInput,
+    rewrittenSections: RewrittenMemoSection[] = [],
   ): Record<string, string> {
-    const synthesisBrief = this.buildSynthesisBrief(input);
+    const rewrittenByKey = new Map<EvaluationAgentKey, RewrittenMemoSection>(
+      rewrittenSections.map((section) => [section.sectionKey, section] as const),
+    );
+    const synthesisBrief = this.buildSynthesisBrief(input, rewrittenSections);
 
     // Common variables
     const vars: Record<string, string> = {
@@ -277,10 +333,8 @@ export class SynthesisAgent {
     for (const key of agentKeys) {
       const ev = input.evaluation[key] as {
         score?: number;
-        confidence?: number;
-        feedback?: string;
+        confidence?: string;
         narrativeSummary?: string;
-        memoNarrative?: string;
       } | undefined;
 
       if (!ev) {
@@ -291,8 +345,11 @@ export class SynthesisAgent {
       }
 
       vars[`${key}Score`] = ev.score != null ? String(ev.score) : "Not available";
-      vars[`${key}Confidence`] = ev.confidence != null ? String(ev.confidence) : "Not available";
-      vars[`${key}Analysis`] = ev.narrativeSummary || ev.memoNarrative || ev.feedback || "Not available";
+      vars[`${key}Confidence`] = ev.confidence ?? "Not available";
+      vars[`${key}Analysis`] =
+        rewrittenByKey.get(key)?.memoNarrative ??
+        ev.narrativeSummary ??
+        "Not available";
     }
 
     // exitScore alias (Excel uses exitScore not exitPotentialScore in some places)
@@ -302,20 +359,267 @@ export class SynthesisAgent {
     return vars;
   }
 
+  private async rewriteEvaluationSections(params: {
+    input: SynthesisAgentInput;
+    model: unknown;
+    providerOptions: unknown;
+    startedAtMs: number;
+    hardTimeoutMs: number;
+  }): Promise<RewrittenMemoSection[]> {
+    const { input, model, providerOptions, startedAtMs, hardTimeoutMs } = params;
+    const output: RewrittenMemoSection[] = [];
+    const concurrency = 1;
+
+    for (let index = 0; index < SYNTHESIS_SECTION_ORDER.length; index += concurrency) {
+      const batch = SYNTHESIS_SECTION_ORDER.slice(index, index + concurrency);
+      const batchResults = await Promise.all(
+        batch.map((section) =>
+          this.rewriteSingleSection({
+            section,
+            input,
+            model,
+            providerOptions,
+            startedAtMs,
+            hardTimeoutMs,
+          }),
+        ),
+      );
+      output.push(...batchResults);
+    }
+
+    return output.sort(
+      (a, b) =>
+        SYNTHESIS_SECTION_ORDER.findIndex((item) => item.key === a.sectionKey) -
+        SYNTHESIS_SECTION_ORDER.findIndex((item) => item.key === b.sectionKey),
+    );
+  }
+
+  private async rewriteSingleSection(params: {
+    section: { key: EvaluationAgentKey; title: string };
+    input: SynthesisAgentInput;
+    model: unknown;
+    providerOptions: unknown;
+    startedAtMs: number;
+    hardTimeoutMs: number;
+  }): Promise<RewrittenMemoSection> {
+    const { section, input, model, providerOptions, startedAtMs, hardTimeoutMs } = params;
+    const evaluationSection = input.evaluation[section.key] as Record<string, unknown> | undefined;
+    if (!evaluationSection) {
+      return this.buildSectionRewriteFallback(section, input);
+    }
+
+    const remainingBudgetMs = this.getRemainingBudgetMs(startedAtMs, hardTimeoutMs);
+    if (remainingBudgetMs <= 0) {
+      return this.buildSectionRewriteFallback(section, input);
+    }
+    const timeoutMs = Math.min(remainingBudgetMs, this.getSynthesisAttemptTimeoutMs(remainingBudgetMs));
+
+    const prompt = this.buildSectionRewritePrompt(section, input);
+
+    try {
+      const response = await this.withTimeout(
+        (abortSignal) =>
+          generateText({
+            model: model as Parameters<typeof generateText>[0]["model"],
+            output: Output.object({ schema: SynthesisSectionRewriteSchema }),
+            temperature: Math.min(0.2, this.aiConfig.getSynthesisTemperature()),
+            maxOutputTokens: this.getSectionRewriteMaxOutputTokens(),
+            system: [
+              "You are a VC memo editor. Rewrite one evaluation section narrative.",
+              "Use keyFindings, risks, and dataGaps as hard constraints.",
+              "Preserve factual meaning from the source narrative. Improve coherence and readability only.",
+              "Do not invent new facts. Do not include score/confidence phrasing in prose.",
+              "Return only valid JSON matching the schema.",
+            ].join("\n"),
+            prompt,
+            providerOptions:
+              providerOptions as Parameters<typeof generateText>[0]["providerOptions"],
+            abortSignal,
+          }),
+        timeoutMs,
+        `Synthesis section rewrite timed out for ${section.key}`,
+      );
+
+      const parsed = SynthesisSectionRewriteSchema.parse(response.output);
+      return {
+        sectionKey: section.key,
+        title: section.title,
+        memoNarrative: sanitizeNarrativeText(parsed.memoNarrative),
+        highlights: this.sanitizeStringArray(parsed.highlights),
+        concerns: this.sanitizeStringArray(parsed.concerns),
+        diligenceItems: this.sanitizeStringArray(parsed.diligenceItems),
+      };
+    } catch (error) {
+      this.logger.warn(
+        `[Synthesis] Section rewrite fallback | section=${section.key} | reason=${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return this.buildSectionRewriteFallback(section, input);
+    }
+  }
+
+  private buildSectionRewritePrompt(
+    section: { key: EvaluationAgentKey; title: string },
+    input: SynthesisAgentInput,
+  ): string {
+    const evalSection = input.evaluation[section.key] as Record<string, unknown>;
+    const sourceNarrative =
+      (typeof evalSection.memoNarrative === "string" && evalSection.memoNarrative.trim()) ||
+      (typeof evalSection.narrativeSummary === "string" && evalSection.narrativeSummary.trim()) ||
+      "Narrative unavailable.";
+    const keyFindings = this.cleanStringArray(evalSection.keyFindings);
+    const risks = this.cleanStringArray(evalSection.risks);
+    const dataGaps = this.cleanStringArray(evalSection.dataGaps);
+
+    const payload = {
+      sectionKey: section.key,
+      title: section.title,
+      company: input.extraction.companyName,
+      stage: input.extraction.stage,
+      industry: input.extraction.industry,
+      score:
+        typeof evalSection.score === "number" ? evalSection.score : input.evaluation[section.key].score,
+      confidence:
+        typeof evalSection.confidence === "string"
+          ? evalSection.confidence
+          : input.evaluation[section.key].confidence,
+      sourceNarrative,
+      keyFindings,
+      risks,
+      dataGaps,
+      sources: this.cleanStringArray(evalSection.sources),
+      sectionData: evalSection,
+    };
+
+    return [
+      `Rewrite section narrative for: ${section.title}`,
+      "Return JSON only.",
+      "Source payload:",
+      `<evaluation_data>${JSON.stringify(payload)}</evaluation_data>`,
+    ].join("\n");
+  }
+
+  private buildSectionRewriteFallback(
+    section: { key: EvaluationAgentKey; title: string },
+    input: SynthesisAgentInput,
+  ): RewrittenMemoSection {
+    const evalSection = input.evaluation[section.key] as Record<string, unknown> | undefined;
+    const narrative =
+      (typeof evalSection?.memoNarrative === "string" && evalSection.memoNarrative.trim()) ||
+      (typeof evalSection?.narrativeSummary === "string" && evalSection.narrativeSummary.trim()) ||
+      "Narrative unavailable.";
+    return {
+      sectionKey: section.key,
+      title: section.title,
+      memoNarrative: sanitizeNarrativeText(narrative),
+      highlights: this.cleanStringArray(evalSection?.keyFindings),
+      concerns: this.cleanStringArray(evalSection?.risks),
+      diligenceItems: this.cleanStringArray(evalSection?.dataGaps),
+    };
+  }
+
+  private composeInvestorMemoSections(
+    existing: Array<{
+      title: string;
+      content: string;
+      highlights?: string[];
+      concerns?: string[];
+    }>,
+    rewritten: RewrittenMemoSection[],
+  ): Array<{
+    title: string;
+    content: string;
+    highlights?: string[];
+    concerns?: string[];
+  }> {
+    const rewrittenByKey = new Map(
+      rewritten.map((section) => [section.sectionKey, section] as const),
+    );
+
+    const ordered = SYNTHESIS_SECTION_ORDER.flatMap((item) => {
+      const section = rewrittenByKey.get(item.key);
+      if (!section) return [];
+      return [
+        {
+          title: section.title,
+          content: section.memoNarrative,
+          highlights: section.highlights.length > 0 ? section.highlights : undefined,
+          concerns: section.concerns.length > 0 ? section.concerns : undefined,
+        },
+      ];
+    });
+
+    const knownTitles = new Set(
+      ordered.map((item) => item.title.toLowerCase().replace(/[^a-z0-9]/g, "")),
+    );
+    const passthrough = existing.filter((section) => {
+      const normalized = section.title.toLowerCase().replace(/[^a-z0-9]/g, "");
+      return !knownTitles.has(normalized);
+    });
+
+    return [...ordered, ...passthrough];
+  }
+
+  private buildDueDiligenceAreasFromRewrites(
+    rewritten: RewrittenMemoSection[],
+  ): string[] {
+    const deduped = new Set<string>();
+    const output: string[] = [];
+
+    for (const section of rewritten) {
+      for (const item of section.diligenceItems) {
+        const normalized = this.normalizeWhitespace(item);
+        if (normalized.length === 0) {
+          continue;
+        }
+        const key = normalized.toLowerCase();
+        if (deduped.has(key)) {
+          continue;
+        }
+        deduped.add(key);
+        output.push(normalized);
+      }
+    }
+
+    return output;
+  }
+
   private normalizeExecutiveSummary(
     output: SynthesisAgentOutput,
     input: SynthesisAgentInput,
   ): SynthesisAgentOutput {
+    const investorMemoSummary = this.normalizeWhitespace(
+      output.investorMemo.executiveSummary,
+    );
+    const needsInvestorMemoExpansion =
+      investorMemoSummary.length === 0 ||
+      !this.hasDetailedExecutiveSummary(investorMemoSummary);
+
     if (this.hasDetailedExecutiveSummary(output.executiveSummary)) {
-      return output;
+      if (!needsInvestorMemoExpansion) {
+        return output;
+      }
+      return {
+        ...output,
+        investorMemo: {
+          ...output.investorMemo,
+          executiveSummary: output.executiveSummary,
+        },
+      };
     }
 
     this.logger.warn(
       "[Synthesis] Executive summary too short; expanding to structured multi-paragraph narrative",
     );
+    const expandedSummary = this.buildExecutiveSummaryFromSignals(output, input);
     return {
       ...output,
-      executiveSummary: this.buildExecutiveSummaryFromSignals(output, input),
+      executiveSummary: expandedSummary,
+      investorMemo: {
+        ...output.investorMemo,
+        executiveSummary: expandedSummary,
+      },
     };
   }
 
@@ -433,17 +737,8 @@ export class SynthesisAgent {
       ...Object.entries(input.evaluation)
         .filter(([key]) => key !== "summary")
         .map(([, value]) => {
-          const dimension = value as {
-            narrativeSummary?: string;
-            memoNarrative?: string;
-            feedback?: string;
-          };
-          return this.normalizeWhitespace(
-            dimension.narrativeSummary ||
-              dimension.memoNarrative ||
-              dimension.feedback ||
-              "",
-          );
+          const dimension = value as { narrativeSummary?: string };
+          return this.normalizeWhitespace(dimension.narrativeSummary || "");
         }),
     ]
       .join(" ")
@@ -545,6 +840,12 @@ export class SynthesisAgent {
       remainingBudgetMs,
     );
     return Math.max(1, boundedTimeout);
+  }
+
+  private getSectionRewriteMaxOutputTokens(): number {
+    const overall = this.aiConfig.getSynthesisMaxOutputTokens();
+    const derived = Math.floor(overall / 6);
+    return Math.max(900, Math.min(2400, derived));
   }
 
   private getRemainingBudgetMs(startedAt: number, hardTimeoutMs: number): number {
@@ -723,9 +1024,15 @@ export class SynthesisAgent {
       .replace(/^\w/, (char) => char.toUpperCase());
   }
 
-  private buildSynthesisBrief(input: SynthesisAgentInput): string {
+  private buildSynthesisBrief(
+    input: SynthesisAgentInput,
+    rewrittenSections: RewrittenMemoSection[] = [],
+  ): string {
     const { extraction, research, evaluation, stageWeights } = input;
     const sections: string[] = [];
+    const rewrittenByKey = new Map<EvaluationAgentKey, RewrittenMemoSection>(
+      rewrittenSections.map((section) => [section.sectionKey, section] as const),
+    );
 
     sections.push(
       [
@@ -792,12 +1099,11 @@ export class SynthesisAgent {
       const evalLines = evalEntries.map(([key, val]) => {
         const ev = val as {
           score: number;
-          confidence: number;
-          feedback?: string;
+          confidence: string;
           narrativeSummary?: string;
-          memoNarrative?: string;
           keyFindings?: string[];
           risks?: string[];
+          dataGaps?: string[];
         };
         const weight = stageWeights[key];
         const weightLabel = weight
@@ -813,11 +1119,13 @@ export class SynthesisAgent {
         const risks = ev.risks?.length
           ? ` | Risks: ${ev.risks.join("; ")}`
           : "";
-        const scoreLine = `- ${key}${weightLabel}: Score ${ev.score}/100 (confidence ${ev.confidence})${findings}${risks}`;
+        const dataGaps = ev.dataGaps?.length
+          ? ` | Data Gaps: ${ev.dataGaps.join("; ")}`
+          : "";
+        const scoreLine = `- ${key}${weightLabel}: Score ${ev.score}/100 (confidence ${ev.confidence})${findings}${risks}${dataGaps}`;
         const sectionNarrative =
-          ev.narrativeSummary?.trim() ||
-          ev.memoNarrative?.trim() ||
-          ev.feedback?.trim();
+          rewrittenByKey.get(key as EvaluationAgentKey)?.memoNarrative ??
+          ev.narrativeSummary?.trim();
         const feedbackBlock = sectionNarrative
           ? `\n  ### ${key} — Section Narrative\n  ${sectionNarrative}`
           : "";

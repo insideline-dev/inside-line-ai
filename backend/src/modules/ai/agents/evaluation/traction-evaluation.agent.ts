@@ -1,10 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { CONTENT_PATTERNS } from "../../constants";
-import type {
-  EvaluationAgentResult,
-  EvaluationAgentRunOptions,
-  EvaluationPipelineInput,
-} from "../../interfaces/agent.interface";
+import type { EvaluationPipelineInput } from "../../interfaces/agent.interface";
 import { TractionEvaluationSchema, type TractionEvaluation } from "../../schemas";
 import { AiConfigService } from "../../services/ai-config.service";
 import { AiPromptService } from "../../services/ai-prompt.service";
@@ -27,17 +23,6 @@ export class TractionEvaluationAgent extends BaseEvaluationAgent<TractionEvaluat
     modelExecution?: AiModelExecutionService,
   ) {
     super(providers, aiConfig, promptService, modelExecution);
-  }
-
-  async run(
-    pipelineData: EvaluationPipelineInput,
-    options?: EvaluationAgentRunOptions,
-  ): Promise<EvaluationAgentResult<TractionEvaluation>> {
-    const result = await super.run(pipelineData, options);
-    return {
-      ...result,
-      output: this.sanitizeTractionMetrics(result.output, pipelineData),
-    };
   }
 
   protected override getAgentTemplateVariables(
@@ -92,14 +77,6 @@ export class TractionEvaluationAgent extends BaseEvaluationAgent<TractionEvaluat
   fallback({ extraction: _extraction }: EvaluationPipelineInput): TractionEvaluation {
     return TractionEvaluationSchema.parse({
       ...baseEvaluation(20, "Traction data insufficient — requires manual review"),
-      metrics: {
-        users: undefined,
-        revenue: undefined,
-        growthRatePct: undefined,
-      },
-      customerValidation: "Initial customer validation exists but is limited",
-      growthTrajectory: "Trajectory is promising but lacks audited evidence",
-      revenueModel: "Revenue model needs expanded detail",
     });
   }
 
@@ -108,53 +85,5 @@ export class TractionEvaluationAgent extends BaseEvaluationAgent<TractionEvaluat
       return value;
     }
     return `${value.slice(0, max - 3)}...`;
-  }
-
-  private sanitizeTractionMetrics(
-    output: TractionEvaluation,
-    pipelineData: EvaluationPipelineInput,
-  ): TractionEvaluation {
-    const revenue = output.metrics.revenue;
-    if (revenue == null) {
-      return output;
-    }
-
-    const stage = typeof pipelineData.extraction.stage === "string"
-      ? pipelineData.extraction.stage.toLowerCase()
-      : "";
-    const earlyStagePattern = /\b(idea|pre[ _-]?seed|seed|pre[ _-]?series[ _-]?a)\b/;
-    const isEarlyStage = earlyStagePattern.test(stage);
-
-    const evidenceCorpus = [
-      ...(Array.isArray(pipelineData.scraping.notableClaims)
-        ? pipelineData.scraping.notableClaims
-        : []),
-      pipelineData.research.combinedReportText ?? "",
-    ]
-      .join(" ")
-      .toLowerCase();
-
-    const hasVolumeSignal =
-      /\b(tpv|gpv|gmv|payment volume|transaction volume|gross merchandise volume)\b/.test(
-        evidenceCorpus,
-      );
-    const hasExplicitRevenueSignal = /\b(revenue|arr|mrr|sales)\b/.test(
-      evidenceCorpus,
-    );
-    const looksLikeVolumeMisclassification =
-      hasVolumeSignal && !hasExplicitRevenueSignal;
-    const implausibleForEarlyStage = isEarlyStage && revenue >= 100_000_000;
-
-    if (!looksLikeVolumeMisclassification && !implausibleForEarlyStage) {
-      return output;
-    }
-
-    return {
-      ...output,
-      metrics: {
-        ...output.metrics,
-        revenue: undefined,
-      },
-    };
   }
 }

@@ -96,15 +96,10 @@ export class FinancialsEvaluationAgent extends BaseEvaluationAgent<FinancialsEva
     };
   }
 
-  fallback({ extraction }: EvaluationPipelineInput): FinancialsEvaluation {
-    const ask = extraction.fundingAsk ?? 0;
-
+  fallback({ extraction: _extraction }: EvaluationPipelineInput): FinancialsEvaluation {
     return FinancialsEvaluationSchema.parse({
       ...baseEvaluation(20, "Financial evaluation incomplete — requires manual review"),
-      burnRate: Math.max(0, ask / 18),
-      runway: 18,
-      fundingHistory: [],
-      financialHealth: "Financial health is acceptable at current stage",
+      founderPitchRecommendations: [],
     });
   }
 }

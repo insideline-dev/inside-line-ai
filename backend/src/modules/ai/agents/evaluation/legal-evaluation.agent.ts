@@ -93,9 +93,7 @@ export class LegalEvaluationAgent extends BaseEvaluationAgent<LegalEvaluation> {
   fallback(): LegalEvaluation {
     return LegalEvaluationSchema.parse({
       ...baseEvaluation(25, "Legal evaluation incomplete — requires manual review"),
-      ipStatus: "No material IP blockers identified",
-      regulatoryRisks: ["Regulatory exposure depends on target geography"],
-      legalStructure: "Standard venture-friendly entity assumptions",
+      founderPitchRecommendations: [],
     });
   }
 }

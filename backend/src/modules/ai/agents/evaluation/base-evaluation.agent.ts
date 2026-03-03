@@ -24,13 +24,11 @@ const NARRATIVE_MIN_LENGTH = 420;
 
 interface BaseEvaluationLike {
   score: number;
-  confidence: number;
-  feedback: string;
+  confidence: string;
+  narrativeSummary: string;
   keyFindings?: string[];
   risks?: string[];
   dataGaps?: string[];
-  narrativeSummary?: string;
-  memoNarrative?: string;
 }
 
 @Injectable()
@@ -144,6 +142,14 @@ export abstract class BaseEvaluationAgent<TOutput>
     _pipelineData: EvaluationPipelineInput,
   ): Record<string, string> {
     return {};
+  }
+
+  /**
+   * Hook for agent-specific output compatibility mapping before schema validation.
+   * Subclasses can override to normalize legacy model payloads.
+   */
+  protected normalizeOutputCandidate(candidate: unknown): unknown {
+    return candidate;
   }
 
   /**
@@ -265,12 +271,10 @@ export abstract class BaseEvaluationAgent<TOutput>
         "Most startups should score 50-80. Scores above 85 are RARE.",
         "When in doubt, score conservatively.",
         "",
-        "## Confidence Score (0.0 - 1.0)",
-        "- 0.8-1.0: All key data points available with third-party validation",
-        "- 0.6-0.8: Most data available, some self-reported metrics",
-        "- 0.4-0.6: Partial data, significant gaps",
-        "- 0.2-0.4: Minimal data, heavy inference required",
-        "- 0.0-0.2: Critical data missing, evaluation is speculative",
+        '## Confidence Level ("high" | "mid" | "low")',
+        '- "high": All key data points available with third-party validation',
+        '- "mid": Most data available, some self-reported or partially verified',
+        '- "low": Minimal data, heavy inference required, or critical data missing',
         "",
         "## Rules",
         "- Evaluate using ONLY the provided context. Do not invent facts.",
@@ -282,9 +286,11 @@ export abstract class BaseEvaluationAgent<TOutput>
         "",
         "## Narrative Output Contract",
         "- Prioritize valid structured JSON object output over prose length.",
-        "- Keep `feedback` concise and evidence-based; include explicit data gaps.",
-        "- `narrativeSummary` and `memoNarrative` are optional and may be short.",
-        "- Never include score/confidence phrasing in narrative text (for example `88/100` or `85% confidence`).",
+        "- `narrativeSummary` is required and should be 450-650 words of analytical VC prose.",
+        "- `narrativeSummary` must be 4-5 paragraphs with explicit evidence, risks, and unresolved data gaps.",
+        "- Keep narrative claims strictly aligned with provided evidence (no invented facts).",
+        "- Prefer concise analytical writing over marketing language.",
+        "- Never include score/confidence phrasing in narrative text (for example `88/100` or `high confidence`).",
       ].join("\n");
     } catch (setupError) {
       const msg = setupError instanceof Error ? setupError.message : String(setupError);
@@ -329,7 +335,7 @@ export abstract class BaseEvaluationAgent<TOutput>
         );
 
         const normalizedOutput = this.normalizeNarrativeFields(
-          this.schema.parse(response.output),
+          this.schema.parse(this.normalizeOutputCandidate(response.output)),
         );
 
         this.emitTraceEvent(options, {
@@ -653,7 +659,9 @@ export abstract class BaseEvaluationAgent<TOutput>
       );
       const responseOutput = (response as { output?: unknown }).output;
       if (responseOutput !== undefined) {
-        const direct = this.schema.safeParse(responseOutput);
+        const direct = this.schema.safeParse(
+          this.normalizeOutputCandidate(responseOutput),
+        );
         if (direct.success) {
           return {
             success: true,
@@ -671,7 +679,9 @@ export abstract class BaseEvaluationAgent<TOutput>
           outputText,
         };
       }
-      const parsed = this.schema.safeParse(candidate);
+      const parsed = this.schema.safeParse(
+        this.normalizeOutputCandidate(candidate),
+      );
       if (!parsed.success) {
         const issues = parsed.error.issues
           .slice(0, 4)
@@ -832,23 +842,17 @@ export abstract class BaseEvaluationAgent<TOutput>
       return output;
     }
 
-    const narrativeCandidate = this.sanitizeNarrative(this.pickExistingNarrative(output));
+    const narrativeCandidate = this.sanitizeNarrative(output.narrativeSummary);
     const generatedNarrative = this.sanitizeNarrative(
       this.buildNarrativeFromStructuredSignals(output),
     );
     const narrative = this.hasDetailedNarrative(narrativeCandidate)
       ? narrativeCandidate
       : generatedNarrative;
-    const sanitizedFeedback = this.sanitizeNarrative(output.feedback);
-    const feedback = this.hasDetailedNarrative(sanitizedFeedback)
-      ? sanitizedFeedback
-      : narrative;
 
     return {
       ...output,
-      feedback,
       narrativeSummary: narrative,
-      memoNarrative: narrative,
     };
   }
 
@@ -885,26 +889,16 @@ export abstract class BaseEvaluationAgent<TOutput>
     const record = value as Record<string, unknown>;
     return (
       typeof record.score === "number" &&
-      typeof record.confidence === "number" &&
-      typeof record.feedback === "string"
+      typeof record.confidence === "string" &&
+      typeof record.narrativeSummary === "string"
     );
-  }
-
-  private pickExistingNarrative(value: BaseEvaluationLike): string | null {
-    const candidates = [value.narrativeSummary, value.memoNarrative, value.feedback];
-    for (const candidate of candidates) {
-      if (typeof candidate === "string" && candidate.trim().length > 0) {
-        return candidate.trim();
-      }
-    }
-    return null;
   }
 
   private buildNarrativeFromStructuredSignals(value: BaseEvaluationLike): string {
     const findings = this.cleanStringArray(value.keyFindings).slice(0, 4);
     const risks = this.cleanStringArray(value.risks).slice(0, 3);
     const dataGaps = this.cleanStringArray(value.dataGaps).slice(0, 3);
-    const intro = this.normalizeWhitespace(value.feedback);
+    const intro = this.normalizeWhitespace(value.narrativeSummary);
 
     const paragraphOne = [
       intro.length > 0

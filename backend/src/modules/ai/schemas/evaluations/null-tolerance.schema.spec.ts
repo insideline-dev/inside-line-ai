@@ -7,8 +7,8 @@ import { FinancialsEvaluationSchema } from "./financials.schema";
 
 const base = {
   score: 80,
-  confidence: 0.7,
-  feedback: "Solid assessment with minor gaps.",
+  confidence: "mid",
+  narrativeSummary: "Solid assessment with minor gaps.",
   keyFindings: [],
   risks: [],
   dataGaps: [],
@@ -30,106 +30,112 @@ describe("evaluation schema null tolerance", () => {
     expect(parsed.equity).toBeUndefined();
   });
 
-  it("accepts null optional values in market details", () => {
+  it("accepts minimal market evaluation and applies top-level defaults", () => {
+    const parsed = MarketEvaluationSchema.parse({ ...base });
+
+    // New schema uses marketSizing, marketGrowthAndTiming, marketStructure
+    expect(parsed.marketSizing).toBeDefined();
+    expect(parsed.marketGrowthAndTiming).toBeDefined();
+    expect(parsed.marketStructure).toBeDefined();
+    expect(parsed.diligenceItems).toEqual([]);
+    expect(parsed.founderPitchRecommendations).toEqual([]);
+  });
+
+  it("market schema accepts null/missing nested objects and falls back to defaults", () => {
     const parsed = MarketEvaluationSchema.parse({
       ...base,
-      marketSize: "Large global market",
-      marketGrowth: "Growing steadily",
-      tamEstimate: null,
-      marketTiming: "Strong tailwinds",
-      credibilityScore: 70,
-      directCompetitorsDetailed: [
-        {
-          name: "Competitor A",
-          description: "Direct competitor",
-          url: null,
-          fundingRaised: null,
-        },
-      ],
-      indirectCompetitorsDetailed: [
-        {
-          name: "Alternative B",
-          description: "Indirect competitor",
-          whyIndirect: null,
-          url: null,
-          threatLevel: null,
-        },
-      ],
+      marketSizing: null,
+      marketGrowthAndTiming: null,
+      marketStructure: null,
     });
 
-    expect(parsed.tamEstimate).toBeUndefined();
-    expect(parsed.directCompetitorsDetailed[0]?.url).toBeUndefined();
-    expect(parsed.directCompetitorsDetailed[0]?.fundingRaised).toBeUndefined();
-    expect(parsed.indirectCompetitorsDetailed[0]?.whyIndirect).toBeUndefined();
-    expect(parsed.indirectCompetitorsDetailed[0]?.url).toBeUndefined();
-    expect(parsed.indirectCompetitorsDetailed[0]?.threatLevel).toBeUndefined();
+    expect(parsed.marketSizing.tam.value).toBeDefined();
+    expect(parsed.marketGrowthAndTiming.timingAssessment).toBeDefined();
+    expect(parsed.marketStructure.structureType).toBeDefined();
   });
 
-  it("accepts null metrics in traction", () => {
-    const parsed = TractionEvaluationSchema.parse({
-      ...base,
-      metrics: {
-        users: null,
-        revenue: null,
-        growthRatePct: null,
-      },
-      customerValidation: "Early customer interviews completed.",
-      growthTrajectory: "Early but improving.",
-      revenueModel: "Subscription.",
-    });
+  it("traction schema is SimpleEvaluationSchema with no metrics field", () => {
+    const parsed = TractionEvaluationSchema.parse({ ...base });
 
-    expect(parsed.metrics.users).toBeUndefined();
-    expect(parsed.metrics.revenue).toBeUndefined();
-    expect(parsed.metrics.growthRatePct).toBeUndefined();
+    // Traction is now SimpleEvaluationSchema — no metrics, customerValidation, etc.
+    expect(parsed.score).toBe(80);
+    expect(parsed.confidence).toBe("mid");
+    expect(parsed.narrativeSummary).toBeTruthy();
+    expect("metrics" in parsed).toBe(false);
   });
 
-  it("accepts null optional values in competitive advantage details", () => {
+  it("traction schema rejects invalid score", () => {
+    expect(() =>
+      TractionEvaluationSchema.parse({ ...base, score: 999 }),
+    ).toThrow();
+  });
+
+  it("competitive advantage accepts minimal data and defaults all sub-schemas", () => {
+    const parsed = CompetitiveAdvantageEvaluationSchema.parse({ ...base });
+
+    expect(parsed.strategicPositioning).toBeDefined();
+    expect(parsed.moatAssessment).toBeDefined();
+    expect(parsed.barriersToEntry).toBeDefined();
+    expect(parsed.competitivePosition).toBeDefined();
+    expect(parsed.competitors).toBeDefined();
+    expect(parsed.competitors.direct).toEqual([]);
+    expect(parsed.competitors.indirect).toEqual([]);
+  });
+
+  it("competitive advantage accepts null optional values in competitors", () => {
     const parsed = CompetitiveAdvantageEvaluationSchema.parse({
       ...base,
-      competitivePosition: "Differentiated via workflow automation.",
-      directCompetitorsDetailed: [
-        {
-          name: "Competitor C",
-          description: "Direct competitor",
-          url: null,
-          fundingRaised: null,
-        },
-      ],
-      indirectCompetitorsDetailed: [
-        {
-          name: "Alternative D",
-          description: "Indirect competitor",
-          whyIndirect: null,
-          url: null,
-          threatLevel: null,
-        },
-      ],
+      competitors: {
+        direct: [
+          {
+            name: "Competitor C",
+            description: "Direct competitor",
+            url: null,
+            fundingRaised: null,
+          },
+        ],
+        indirect: [
+          {
+            name: "Alternative D",
+            description: "Indirect competitor",
+            whyIndirect: null,
+            url: null,
+            threatLevel: null,
+          },
+        ],
+      },
     });
 
-    expect(parsed.directCompetitorsDetailed[0]?.url).toBeUndefined();
-    expect(parsed.directCompetitorsDetailed[0]?.fundingRaised).toBeUndefined();
-    expect(parsed.indirectCompetitorsDetailed[0]?.whyIndirect).toBeUndefined();
-    expect(parsed.indirectCompetitorsDetailed[0]?.url).toBeUndefined();
-    expect(parsed.indirectCompetitorsDetailed[0]?.threatLevel).toBeUndefined();
+    expect(parsed.competitors.direct[0]?.url).toBeUndefined();
+    expect(parsed.competitors.direct[0]?.fundingRaised).toBeUndefined();
+    expect(parsed.competitors.indirect[0]?.whyIndirect).toBeUndefined();
+    expect(parsed.competitors.indirect[0]?.url).toBeUndefined();
+    expect(parsed.competitors.indirect[0]?.threatLevel).toBeUndefined();
   });
 
-  it("accepts null optional values in financials", () => {
+  it("financials schema is SimpleEvaluationWithRecs — no burnRate/runway/fundingHistory", () => {
+    const parsed = FinancialsEvaluationSchema.parse({ ...base });
+
+    expect(parsed.score).toBe(80);
+    expect(parsed.confidence).toBe("mid");
+    expect("burnRate" in parsed).toBe(false);
+    expect("runway" in parsed).toBe(false);
+    expect("fundingHistory" in parsed).toBe(false);
+  });
+
+  it("financials schema accepts founderPitchRecommendations", () => {
     const parsed = FinancialsEvaluationSchema.parse({
       ...base,
-      burnRate: null,
-      runway: null,
-      fundingHistory: [
+      founderPitchRecommendations: [
         {
-          round: "Seed",
-          amount: 1000000,
-          date: null,
+          deckMissingElement: "Financial projections",
+          whyItMatters: "Investors need to see unit economics",
+          recommendation: "Add a 3-year P&L projection slide",
         },
       ],
-      financialHealth: "No major concerns at this stage.",
     });
 
-    expect(parsed.burnRate).toBeUndefined();
-    expect(parsed.runway).toBeUndefined();
-    expect(parsed.fundingHistory[0]?.date).toBeUndefined();
+    expect(parsed.founderPitchRecommendations).toHaveLength(1);
+    expect(parsed.founderPitchRecommendations[0]?.deckMissingElement).toBe("Financial projections");
   });
 });

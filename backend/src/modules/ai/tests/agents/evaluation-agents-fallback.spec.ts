@@ -109,7 +109,7 @@ describe("Evaluation agent fallbacks", () => {
     }
   });
 
-  it("fallback returns confidence <= 0.15 for all agents", () => {
+  it("fallback returns confidence === 'low' for all agents", () => {
     const agents = [
       new TeamEvaluationAgent(providers, aiConfig, promptService),
       new MarketEvaluationAgent(providers, aiConfig, promptService),
@@ -126,9 +126,9 @@ describe("Evaluation agent fallbacks", () => {
 
     for (const agent of agents) {
       const output = agent.fallback(pipelineData);
-      const parsed = output as { confidence: number };
+      const parsed = output as { confidence: string };
 
-      expect(parsed.confidence).toBeLessThanOrEqual(0.15);
+      expect(parsed.confidence).toBe("low");
     }
   });
 

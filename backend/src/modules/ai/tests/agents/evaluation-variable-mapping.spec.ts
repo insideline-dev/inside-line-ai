@@ -13,6 +13,7 @@ import { ExitPotentialEvaluationAgent } from "../../agents/evaluation/exit-poten
 import type { AiProviderService } from "../../providers/ai-provider.service";
 import type { AiConfigService } from "../../services/ai-config.service";
 import type { AiPromptService } from "../../services/ai-prompt.service";
+import { MarketEvaluationSchema } from "../../schemas";
 import {
   EVALUATION_PROMPT_KEY_BY_AGENT,
   AI_PROMPT_CATALOG,
@@ -195,7 +196,7 @@ describe("Evaluation variable mapping", () => {
 
       it(`${agent.key}: all variable values are strings (not undefined/null)`, () => {
         const vars = agent.getAgentTemplateVariables(pipelineData);
-        for (const [key, value] of Object.entries(vars)) {
+        for (const [, value] of Object.entries(vars)) {
           expect(typeof value).toBe("string");
           expect(value).not.toBe("");
           // Ensure no leftover {{}} in values
@@ -399,6 +400,140 @@ describe("Evaluation variable mapping", () => {
       const vars = agent.getAgentTemplateVariables(pipelineData);
       expect(vars.claimedGrowthRate).toContain("CAGR");
       expect(vars.claimedGrowthRate).not.toBe("Not provided");
+    });
+
+    it("market: normalizes legacy payload shape into current schema", () => {
+      const agent = makeAgent(MarketEvaluationAgent) as unknown as {
+        normalizeOutputCandidate: (value: unknown) => unknown;
+      };
+
+      const legacyPayload = {
+        marketSizeValidation: {
+          score: 92,
+          confidence: "high",
+          rationale: "TAM is strongly validated against multiple external sources.",
+        },
+        marketSizeGrowth: {
+          score: 88,
+          confidence: "high",
+          rationale: "Growth claims align to independent CAGR ranges.",
+        },
+        marketStructureDynamics: {
+          score: 84,
+          confidence: "medium",
+          rationale: "Competition is increasing and well-funded.",
+        },
+        marketMomentum: {
+          score: 90,
+          confidence: "high",
+          rationale: "Category momentum is strong with clear tailwinds.",
+        },
+        narrativeSummary: "Legacy market summary.",
+        researchGaps: [
+          {
+            gap: "30x Cost Efficiency Validation",
+            impact: "High",
+            description: "Independent benchmark data is limited.",
+          },
+        ],
+        tier1Sources: ["IDC"],
+        tier2Sources: ["Kings Research"],
+      };
+
+      const normalized = agent.normalizeOutputCandidate(legacyPayload);
+      const parsed = MarketEvaluationSchema.parse(normalized);
+
+      expect(parsed.score).toBe(89);
+      expect(parsed.confidence).toBe("high");
+      expect(parsed.keyFindings.length).toBeGreaterThan(0);
+      expect(parsed.risks.length).toBeGreaterThan(0);
+      expect(parsed.dataGaps[0]).toContain("30x Cost Efficiency Validation");
+      expect(parsed.sources).toEqual(expect.arrayContaining(["IDC", "Kings Research"]));
+      expect(parsed.scoring.overallScore).toBe(89);
+      expect(parsed.scoring.confidence).toBe("high");
+    });
+
+    it("market: repairs placeholder structured fields using legacy rationale content", () => {
+      const agent = makeAgent(MarketEvaluationAgent) as unknown as {
+        normalizeOutputCandidate: (value: unknown) => unknown;
+      };
+
+      const mixedPayload = {
+        score: 89,
+        confidence: "high",
+        narrativeSummary:
+          "Validated TAM is approximately $378B by 2032 and SAM for orchestration reaches $20B by 2033.",
+        marketSizeValidation: {
+          score: 92,
+          confidence: "high",
+          rationale:
+            "Independent sources validate TAM at $378B and SAM around $20B for this segment.",
+        },
+        marketSizeGrowth: {
+          score: 88,
+          confidence: "high",
+          rationale:
+            "Growth claims align with independent CAGR estimates between 17.9% and 18.9%.",
+        },
+        marketStructureDynamics: {
+          score: 84,
+          confidence: "medium",
+          rationale:
+            "The market remains fragmented with favorable entry conditions for orchestration.",
+        },
+        marketMomentum: {
+          score: 90,
+          confidence: "high",
+          rationale:
+            "Why now is driven by the shift to production inference and rising agentic workloads.",
+        },
+        marketSizing: {
+          tam: { value: "Unknown", methodology: "top-down", sources: [], confidence: "low" },
+          sam: { value: "Unknown", methodology: "Unknown", filters: [], sources: [], confidence: "low" },
+          som: { value: "Unknown", methodology: "Unknown", assumptions: "Unknown", confidence: "low" },
+          bottomUpSanityCheck: { calculation: "Not performed", plausible: false, notes: "No notes" },
+          deckVsResearch: {
+            tamClaimed: "Unknown",
+            tamResearched: "Unknown",
+            discrepancyFlag: false,
+            discrepancyNotes: "No discrepancy noted",
+          },
+        },
+        marketGrowthAndTiming: {
+          growthRate: {
+            cagr: "Unknown",
+            period: "Unknown",
+            source: "Unknown",
+            deckClaimed: "Unknown",
+            discrepancyFlag: false,
+          },
+          whyNow: { thesis: "Unknown", supportedByResearch: false, evidence: [] },
+          timingAssessment: "right_time",
+          timingRationale: "Timing assessment pending",
+          marketLifecycle: { position: "emerging", evidence: "Unknown" },
+        },
+        marketStructure: {
+          structureType: "emerging",
+          concentrationTrend: { direction: "stable", evidence: "Unknown" },
+          entryConditions: { assessment: "neutral", rationale: "Unknown" },
+          tailwinds: [],
+          headwinds: [],
+        },
+      };
+
+      const normalized = agent.normalizeOutputCandidate(mixedPayload);
+      const parsed = MarketEvaluationSchema.parse(normalized);
+
+      expect(parsed.marketSizing.tam.value).toContain("$");
+      expect(parsed.marketSizing.tam.value).not.toBe("Unknown");
+      expect(parsed.marketSizing.sam.value).toContain("$");
+      expect(parsed.marketSizing.sam.value).not.toBe("Unknown");
+      expect(parsed.marketGrowthAndTiming.growthRate.cagr).toContain("%");
+      expect(parsed.marketGrowthAndTiming.whyNow.thesis).not.toBe("Unknown");
+      expect(parsed.marketGrowthAndTiming.timingRationale).not.toBe(
+        "Timing assessment pending",
+      );
+      expect(parsed.marketStructure.entryConditions.rationale).not.toBe("Unknown");
     });
 
     it("competitive-advantage: featureMatrix built from competitor research JSON", () => {

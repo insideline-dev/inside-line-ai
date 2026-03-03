@@ -29,14 +29,38 @@ export function CompetitorsTabContent({
   const marketData = toRecord(evaluation.marketData);
   const competitiveData = toRecord(evaluation.competitiveAdvantageData);
 
+  // New schema: competitors.direct / competitors.indirect (object with nested arrays)
+  const competitorsObj = toRecord(competitiveData.competitors ?? marketData.competitors);
+  const competitorsDirectArr = toArrayOfRecords(competitorsObj.direct);
+  const competitorsIndirectArr = toArrayOfRecords(competitorsObj.indirect);
+  const competitorsAdvantages = toStringArray(competitorsObj.advantages);
+  const competitorsRisks = toStringArray(competitorsObj.risks);
+  const competitorsDetails = toStringArray(competitorsObj.details);
+
+  const keyFindings = uniqueStrings([
+    ...toStringArray(competitiveData.keyFindings ?? marketData.keyFindings),
+    ...competitorsAdvantages,
+    ...competitorsDetails,
+  ]);
+  const risks = uniqueStrings([
+    ...toStringArray(competitiveData.risks),
+    ...competitorsRisks,
+  ]);
+
   const directCompetitors = toDirectCompetitors(
     toArrayOfRecords(
-      marketData.directCompetitorsDetailed ??
-        competitiveData.directCompetitorsDetailed ??
-        marketData.competitors ??
-        competitiveData.competitors,
+      // new schema: competitors.direct
+      competitorsDirectArr.length > 0
+        ? competitorsDirectArr
+        : // legacy: directCompetitorsDetailed
+          (marketData.directCompetitorsDetailed ??
+          competitiveData.directCompetitorsDetailed ??
+          // legacy flat competitors (if not an object with .direct)
+          (competitorsObj.direct === undefined ? (competitiveData.competitors ?? marketData.competitors) : undefined)),
     ),
     toStringArray(marketData.sources),
+    keyFindings,
+    risks,
   );
 
   const directCompetitorNames = uniqueStrings([
@@ -50,19 +74,36 @@ export function CompetitorsTabContent({
   ]);
   const indirectCompetitors = toIndirectCompetitors(
     toArrayOfRecords(
-      marketData.indirectCompetitorsDetailed ??
-        competitiveData.indirectCompetitorsDetailed,
+      // new schema: competitors.indirect
+      competitorsIndirectArr.length > 0
+        ? competitorsIndirectArr
+        : // legacy: indirectCompetitorsDetailed
+          (marketData.indirectCompetitorsDetailed ??
+          competitiveData.indirectCompetitorsDetailed),
     ),
     indirectCompetitorNames,
     toStringArray(marketData.sources),
   );
 
-  const keyFindings = toStringArray(
-    competitiveData.keyFindings ?? marketData.keyFindings,
+  // New schema: barriersToEntry object > legacy barriers string[]
+  const barriers = toBarrierStrings(
+    competitiveData.barriersToEntry ?? competitiveData.barriers,
   );
-  const risks = toStringArray(competitiveData.risks);
-  const barriers = toStringArray(competitiveData.barriers);
-  const competitivePosition = toString(competitiveData.competitivePosition);
+  const strategicPositioning = toRecord(competitiveData.strategicPositioning);
+  const competitivePositionObj = toRecord(competitiveData.competitivePosition);
+  const moatAssessment = toRecord(competitiveData.moatAssessment);
+  // New schema: competitivePosition + strategicPositioning + moatAssessment
+  const competitivePosition =
+    toString(competitiveData.competitivePosition) ??
+    [
+      toString(strategicPositioning.differentiation),
+      toString(strategicPositioning.uniqueValueProposition),
+      toString(competitivePositionObj.gapEvidence),
+      toString(competitivePositionObj.defensibilityRationale),
+      toString(moatAssessment.timeToReplicate),
+    ]
+      .filter((value): value is string => Boolean(value))
+      .join(". ");
   const narrativeCompetitorNames = extractCompetitorNamesFromNarrative(
     [
       ...toStringArray(marketData.keyFindings),
@@ -184,6 +225,20 @@ function toStringArray(value: unknown): string[] {
     .filter((item) => item.length > 0);
 }
 
+function toBarrierStrings(value: unknown): string[] {
+  if (!value) return [];
+  if (Array.isArray(value)) return toStringArray(value);
+  if (typeof value !== "object") return [];
+
+  const record = value as Record<string, unknown>;
+  const output: string[] = [];
+  if (record.technical === true) output.push("Technical barriers to entry");
+  if (record.capital === true) output.push("Capital intensity barriers");
+  if (record.network === true) output.push("Network effects and switching barriers");
+  if (record.regulatory === true) output.push("Regulatory barriers to entry");
+  return output;
+}
+
 function uniqueStrings(values: string[]): string[] {
   const seen = new Set<string>();
   const list: string[] = [];
@@ -207,6 +262,8 @@ function formatFundingValue(value: unknown): string | null {
 function toDirectCompetitors(
   records: GenericRecord[],
   fallbackSources: string[],
+  defaultStrengths: string[],
+  defaultWeaknesses: string[],
 ): DirectCompetitorView[] {
   const mapped: Array<DirectCompetitorView | null> = records.map((record) => {
       const name = toString(record.name);
@@ -215,6 +272,9 @@ function toDirectCompetitors(
       const website = toString(record.url) || "";
       const description = toString(record.description) || "No description available";
       const fundingRaised = formatFundingValue(record.fundingRaised);
+      const competitorStrengths = toStringArray(record.strengths);
+      const competitorWeaknesses = toStringArray(record.weaknesses);
+      const competitorSources = toStringArray(record.sources);
 
       const competitor: DirectCompetitorView = {
         name,
@@ -230,7 +290,7 @@ function toDirectCompetitors(
           keyInvestors: [],
         },
         product: {
-          keyFeatures: [],
+          keyFeatures: toStringArray(record.keyFeatures),
           pricingTiers: null,
           targetSegment: "Not specified",
         },
@@ -240,9 +300,18 @@ function toDirectCompetitors(
           marketShare: null,
         },
         recentActivity: [],
-        strengths: [],
-        weaknesses: [],
-        sources: fallbackSources,
+        strengths:
+          competitorStrengths.length > 0
+            ? competitorStrengths
+            : defaultStrengths.slice(0, 3),
+        weaknesses:
+          competitorWeaknesses.length > 0
+            ? competitorWeaknesses
+            : defaultWeaknesses.slice(0, 3),
+        sources:
+          competitorSources.length > 0
+            ? competitorSources
+            : fallbackSources,
       };
       return competitor;
     });

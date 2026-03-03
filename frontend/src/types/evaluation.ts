@@ -54,9 +54,12 @@ export interface MemoSection {
 
 export interface InvestorMemo {
   executiveSummary: string;
+  summary?: string;
   sections: MemoSection[];
   recommendation: string;
   riskLevel: "low" | "medium" | "high";
+  dealHighlights?: string[];
+  keyDueDiligenceAreas?: string[];
 }
 
 export interface FounderReport {
@@ -167,4 +170,173 @@ export interface Evaluation {
 
   createdAt: string;
   updatedAt?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Typed evaluation agent output interfaces
+// ---------------------------------------------------------------------------
+
+export type EvaluationConfidence = "high" | "mid" | "medium" | "low";
+
+// Team-specific
+
+export interface FounderRecommendation {
+  type: "hire" | "reframe";
+  bullet: string;
+}
+
+export interface TeamComposition {
+  businessLeadership: boolean;
+  technicalCapability: boolean;
+  domainExpertise: boolean;
+  gtmCapability: boolean;
+  sentence: string;
+  reason: string;
+}
+
+export interface FounderMarketFit {
+  score: number;
+  why: string;
+}
+
+export interface EvaluationTeamMember {
+  name: string;
+  role: string;
+  background: string;
+  strengths: string[];
+  concerns: string[];
+}
+
+export interface FounderPitchRecommendation {
+  deckMissingElement: string;
+  whyItMatters: string;
+  recommendation: string;
+}
+
+export interface TeamEvaluationData {
+  score: number;
+  confidence: EvaluationConfidence;
+  founderMarketFit: FounderMarketFit;
+  teamComposition: TeamComposition;
+  strengths: string[];
+  risks: string[];
+  narrativeSummary: string;
+  teamMembers: EvaluationTeamMember[];
+  founderRecommendations: FounderRecommendation[];
+  founderPitchRecommendations: FounderPitchRecommendation[];
+  keyFindings?: string[];
+  dataGaps?: string[];
+}
+
+// Market types
+
+export interface MarketSource {
+  name: string;
+  tier: number;
+  date: string;
+  value: string;
+  url?: string;
+}
+
+export interface MarketSizing {
+  tam: { value: string; methodology: string; sources: MarketSource[]; confidence: EvaluationConfidence };
+  sam: { value: string; methodology: string; filters: string[]; sources: MarketSource[]; confidence: EvaluationConfidence };
+  som: { value: string; methodology: string; assumptions: string; confidence: EvaluationConfidence };
+  bottomUpSanityCheck: { calculation: string; plausible: boolean; notes: string };
+  deckVsResearch: { tamClaimed: string; tamResearched: string; discrepancyFlag: boolean; discrepancyNotes: string };
+}
+
+export interface MarketGrowthAndTiming {
+  growthRate: { cagr: string; period: string; source: string; deckClaimed: string; discrepancyFlag: boolean };
+  whyNow: { thesis: string; supportedByResearch: boolean; evidence: string[] };
+  timingAssessment: string;
+  timingRationale: string;
+  marketLifecycle: { position: string; evidence: string };
+}
+
+export interface MarketStructure {
+  structureType: string;
+  concentrationTrend: { direction: string; evidence: string };
+  entryConditions: { assessment: string; rationale: string };
+  tailwinds: Array<{ factor: string; source: string; impact: string }>;
+  headwinds: Array<{ factor: string; source: string; impact: string }>;
+}
+
+export interface MarketEvaluationData {
+  score: number;
+  confidence: EvaluationConfidence;
+  marketSizing: MarketSizing;
+  marketGrowthAndTiming: MarketGrowthAndTiming;
+  marketStructure: MarketStructure;
+  scoring?: {
+    overallScore: number;
+    confidence: EvaluationConfidence;
+    scoringBasis: string;
+  };
+  narrativeSummary: string;
+  dataGaps: string[];
+  diligenceItems: string[];
+  founderPitchRecommendations: FounderPitchRecommendation[];
+  keyFindings?: string[];
+  risks?: string[];
+}
+
+// Product types
+
+export interface ProductEvaluationData {
+  score: number;
+  confidence: EvaluationConfidence;
+  productSummary: { description: string; techStage: "mature" | "mvp" | "idea" | "scaling" };
+  productOverview: { whatItDoes: string; targetUser: string; productCategory: string; coreValueProp: string };
+  productStrengthsAndRisks?: { strengths: string[]; risks: string[] };
+  strengths: string[];
+  risks: string[];
+  keyFeatures: string[];
+  technologyStack: string[];
+  narrativeSummary: string;
+  founderPitchRecommendations: FounderPitchRecommendation[];
+  keyFindings?: string[];
+  dataGaps?: string[];
+}
+
+// Competitive Advantage types
+
+export interface CompetitiveAdvantageEvaluationData {
+  score: number;
+  confidence: EvaluationConfidence;
+  strategicPositioning: { differentiation: string; uniqueValueProposition: string; differentiationType: string; durability: string };
+  moatAssessment: { moatType: string; moatStage: string; moatEvidence: string[]; selfReinforcing: boolean; timeToReplicate: string };
+  barriersToEntry: { technical: boolean; capital: boolean; network: boolean; regulatory: boolean };
+  competitivePosition: { currentGap: string; gapEvidence: string; vulnerabilities: string[]; defensibleAgainstFunded: boolean; defensibilityRationale: string };
+  competitors: {
+    direct: Array<{ name: string; description: string; url?: string; fundingRaised?: number }>;
+    indirect: Array<{ name: string; description: string; whyIndirect?: string; url?: string; threatLevel?: string }>;
+    advantages?: string[];
+    risks?: string[];
+    details?: string[];
+  };
+  strengths: string[];
+  risks: string[];
+  narrativeSummary: string;
+  founderPitchRecommendations: FounderPitchRecommendation[];
+  keyFindings?: string[];
+  dataGaps?: string[];
+}
+
+// Simple evaluation data (traction, deal-terms, exit-potential — no recs)
+
+export interface SimpleEvaluationData {
+  score: number;
+  confidence: EvaluationConfidence;
+  narrativeSummary: string;
+  keyFindings?: string[];
+  risks?: string[];
+  dataGaps?: string[];
+  sources?: string[];
+}
+
+// Simple + recs (business-model, gtm, financials, legal)
+
+export interface SimpleEvaluationWithRecsData extends SimpleEvaluationData {
+  founderPitchRecommendations: FounderPitchRecommendation[];
 }

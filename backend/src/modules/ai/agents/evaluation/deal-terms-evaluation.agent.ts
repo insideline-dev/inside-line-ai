@@ -111,15 +111,9 @@ export class DealTermsEvaluationAgent extends BaseEvaluationAgent<DealTermsEvalu
     };
   };
 
-  fallback({ extraction }: EvaluationPipelineInput): DealTermsEvaluation {
-    const ask = extraction.fundingAsk ?? 0;
-
+  fallback({ extraction: _extraction }: EvaluationPipelineInput): DealTermsEvaluation {
     return DealTermsEvaluationSchema.parse({
       ...baseEvaluation(20, "Deal terms evaluation incomplete — requires manual review"),
-      valuation: extraction.valuation ?? Math.max(5_000_000, ask * 5),
-      askAmount: ask,
-      equity: 12,
-      termsQuality: "Terms appear within market range for current stage",
     });
   }
 }

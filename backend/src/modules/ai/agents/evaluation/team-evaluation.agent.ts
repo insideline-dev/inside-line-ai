@@ -86,12 +86,22 @@ export class TeamEvaluationAgent extends BaseEvaluationAgent<TeamEvaluation> {
     const teamMembers = Array.isArray(scraping.teamMembers)
       ? scraping.teamMembers
       : [];
+    const founderFitScore = 25 + stageMultiplier(extraction.stage);
     return TeamEvaluationSchema.parse({
       ...baseEvaluation(25, "Team evaluation incomplete — requires manual review"),
-      founderQuality: "Founding team has domain-relevant background",
-      teamCompletion: clampScore(25 + teamMembers.length * 5),
-      executionCapability: "Execution capability appears moderate to strong",
-      founderMarketFitScore: clampScore(25 + stageMultiplier(extraction.stage)),
+      founderMarketFit: {
+        score: clampScore(founderFitScore),
+        why: "Founder-market fit assessment pending — insufficient data for automated evaluation",
+      },
+      teamComposition: {
+        businessLeadership: false,
+        technicalCapability: false,
+        domainExpertise: false,
+        gtmCapability: false,
+        sentence: "Team composition assessment pending — automated evaluation did not complete",
+        reason: "Team composition assessment pending — automated evaluation did not complete",
+      },
+      strengths: [],
       teamMembers: teamMembers.length
         ? teamMembers.map((member) => ({
             name: member.name,
@@ -109,6 +119,8 @@ export class TeamEvaluationAgent extends BaseEvaluationAgent<TeamEvaluation> {
               concerns: ["Limited public profile data"],
             },
           ],
+      founderRecommendations: [],
+      founderPitchRecommendations: [],
     });
   }
 }

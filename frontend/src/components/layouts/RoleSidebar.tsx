@@ -259,7 +259,7 @@ export function RoleSidebar({ role, children }: RoleSidebarProps) {
   return (
     <SidebarProvider>
       <AppSidebar role={role} />
-      <SidebarInset>
+      <SidebarInset className="overflow-auto">
         <header className="sticky top-0 z-40 flex h-14 items-center gap-2 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4">
           <SidebarTrigger className="-ml-1" />
           <div className="flex-1" />
@@ -268,7 +268,7 @@ export function RoleSidebar({ role, children }: RoleSidebarProps) {
             <ThemeToggle />
           </div>
         </header>
-        <main className="flex-1 overflow-auto p-6">{children}</main>
+        <main className="flex-1 p-6">{children}</main>
       </SidebarInset>
     </SidebarProvider>
   );

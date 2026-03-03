@@ -20,11 +20,13 @@ import { AdminSummaryTab } from "@/components/startup-view/AdminSummaryTab";
 import { AdminReviewSidebar } from "@/components/startup-view/AdminReviewSidebar";
 import { TeamTabContent } from "@/components/startup-view/TeamTabContent";
 import { ProductTabContent } from "@/components/startup-view/ProductTabContent";
+import { MarketTabContent } from "@/components/startup-view/MarketTabContent";
 import { MemoTabContent } from "@/components/startup-view/MemoTabContent";
 import { CompetitorsTabContent } from "@/components/startup-view/CompetitorsTabContent";
 import { SourcesTabContent } from "@/components/startup-view/SourcesTabContent";
 import { AdminEditTab } from "@/components/startup-view/AdminEditTab";
 import { AdminPipelineLivePanel } from "@/components/startup-view/AdminPipelineLivePanel";
+import { FounderRecommendationsTab } from "@/components/startup-view/FounderRecommendationsTab";
 import {
   RefreshCw,
   Download,
@@ -97,10 +99,12 @@ type AdminStartupTab =
   | "pipeline-live"
   | "summary"
   | "memo"
+  | "market"
   | "product"
   | "team"
   | "competitors"
   | "sources"
+  | "recommendations"
   | "edit"
   | "raw";
 
@@ -725,10 +729,12 @@ function AdminReviewPage() {
               <>
                 <TabsTrigger value="summary" className="w-full sm:w-auto">Summary</TabsTrigger>
                 <TabsTrigger value="memo" className="w-full sm:w-auto">Memo</TabsTrigger>
+                <TabsTrigger value="market" className="w-full sm:w-auto">Market</TabsTrigger>
                 <TabsTrigger value="product" className="w-full sm:w-auto">Product</TabsTrigger>
                 <TabsTrigger value="team" className="w-full sm:w-auto">Team</TabsTrigger>
                 <TabsTrigger value="competitors" className="w-full sm:w-auto">Competitors</TabsTrigger>
                 <TabsTrigger value="sources" className="w-full sm:w-auto">Sources</TabsTrigger>
+                <TabsTrigger value="recommendations" className="w-full sm:w-auto">Recommendations</TabsTrigger>
                 <TabsTrigger value="edit" className="w-full sm:w-auto">Edit</TabsTrigger>
                 <TabsTrigger value="raw" className="w-full sm:w-auto">Raw</TabsTrigger>
               </>
@@ -773,6 +779,13 @@ function AdminReviewPage() {
                 />
               </TabsContent>
 
+              <TabsContent value="market" className="mt-6">
+                <MarketTabContent
+                  evaluation={evaluation}
+                  marketWeight={stageWeights?.market}
+                />
+              </TabsContent>
+
               <TabsContent value="product" className="mt-6">
                 <ProductTabContent
                   startup={startup}
@@ -806,6 +819,10 @@ function AdminReviewPage() {
                   evaluation={evaluation}
                   dataRoomDocuments={dataRoomDocuments}
                 />
+              </TabsContent>
+
+              <TabsContent value="recommendations" className="mt-6">
+                <FounderRecommendationsTab evaluation={evaluation} />
               </TabsContent>
 
               <TabsContent value="edit" className="mt-6">

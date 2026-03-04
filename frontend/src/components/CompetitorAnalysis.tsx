@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { ConfidenceBadge } from "@/components/ConfidenceBadge";
 import {
   Building2,
   Globe,
@@ -164,6 +165,7 @@ interface CompetitorAnalysisProps {
   keyRisks?: string[];
   competitiveAdvantageScore?: number | null;
   competitiveAdvantageWeight?: number;
+  competitiveAdvantageConfidence?: string;
 }
 
 function getThreatBadgeVariant(
@@ -932,6 +934,7 @@ function BasicCompetitorLandscapeCard({
   keyRisks = [],
   score,
   weight,
+  confidence,
 }: {
   landscape: BasicCompetitorLandscape;
   positioning?: {
@@ -945,6 +948,7 @@ function BasicCompetitorLandscapeCard({
   keyRisks?: string[];
   score?: number | null;
   weight?: number;
+  confidence?: string;
 }) {
   const directNames = landscape?.directCompetitors || [];
   const indirectNames = landscape?.indirectCompetitors || [];
@@ -1007,6 +1011,11 @@ function BasicCompetitorLandscapeCard({
                     {weight !== undefined ? `${weight}%` : ""} weight in overall
                     evaluation
                   </p>
+                  <ConfidenceBadge
+                    confidence={confidence ?? "unknown"}
+                    className="mt-2"
+                    dataTestId="badge-competitive-confidence"
+                  />
                 </div>
               </div>
               <div className="text-right">
@@ -1301,6 +1310,7 @@ export function CompetitorAnalysis({
   keyRisks = [],
   competitiveAdvantageScore,
   competitiveAdvantageWeight,
+  competitiveAdvantageConfidence = "unknown",
 }: CompetitorAnalysisProps) {
   const hasDetailedCompetitorData =
     directCompetitors.length > 0 ||
@@ -1370,6 +1380,7 @@ export function CompetitorAnalysis({
           keyRisks={keyRisks}
           score={competitiveAdvantageScore ?? undefined}
           weight={competitiveAdvantageWeight}
+          confidence={competitiveAdvantageConfidence}
         />
       )}
 

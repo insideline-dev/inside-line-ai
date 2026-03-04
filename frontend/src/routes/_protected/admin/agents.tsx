@@ -2,12 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  getAdminControllerGetAiPromptFlowQueryKey,
   getAdminControllerGetAiModelConfigQueryKey,
-  getAdminControllerGetAiPromptRevisionsQueryKey,
-  getAdminControllerGetAiPromptsQueryKey,
   useAdminControllerCreateAiModelConfigDraft,
-  useAdminControllerCreateAiPromptRevision,
   useAdminControllerGetAiModelConfig,
   useAdminControllerGetAiPromptContextSchema,
   useAdminControllerGetAiPromptFlow,
@@ -15,12 +11,9 @@ import {
   useAdminControllerGetAiPromptRevisions,
   useAdminControllerGetAiPrompts,
   useAdminControllerPublishAiModelConfigDraft,
-  useAdminControllerPublishAiPromptRevision,
   useAdminControllerPreviewAiPrompt,
   useAdminControllerPreviewAiPipelineContext,
-  useAdminControllerSeedAiPrompts,
   useAdminControllerUpdateAiModelConfigDraft,
-  useAdminControllerUpdateAiPromptRevision,
 } from "@/api/generated/admin/admin";
 import type {
   AiModelConfigResponseDto,
@@ -36,7 +29,6 @@ import type {
   AiPipelineContextPreviewResponseDto,
   AiPromptFlowResponseDtoFlowsItemNodesItemPromptKeysItem,
   AiPromptRevisionsResponseDto,
-  AiPromptSeedResultDto,
   CreateAiModelConfigDraftDto,
   PreviewAiPromptRequestDto,
 } from "@/api/generated/model";
@@ -66,7 +58,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import {
   Bot,
-  CheckCircle2,
   Clock,
   FileSearch,
   Globe,
@@ -76,9 +67,6 @@ import {
   Newspaper,
   Eye,
   RefreshCw,
-  Rocket,
-  RotateCcw,
-  Save,
   Search,
   Target,
   Workflow,
@@ -771,7 +759,7 @@ function AdminAgentsPage() {
     if (activePublished) {
       setSystemPrompt(activePublished.systemPrompt);
       setUserPrompt(activePublished.userPrompt);
-      setNotes("");
+      setNotes(activePublished.notes ?? "");
       return;
     }
 
@@ -805,51 +793,6 @@ function AdminAgentsPage() {
     }
   }, [currentPromptKey, modelConfigPayload]);
 
-  const seedMutation = useAdminControllerSeedAiPrompts({
-    mutation: {
-      onSuccess: (result) => {
-        const payload = extractResponseData<AiPromptSeedResultDto>(result);
-        queryClient.invalidateQueries({ queryKey: getAdminControllerGetAiPromptsQueryKey() });
-        queryClient.invalidateQueries({ queryKey: getAdminControllerGetAiPromptFlowQueryKey() });
-        if (currentPromptKey) {
-          queryClient.invalidateQueries({
-            queryKey: getAdminControllerGetAiPromptRevisionsQueryKey(currentPromptKey),
-          });
-        }
-
-        if (!payload) {
-          toast.success("Seed completed");
-          return;
-        }
-
-        const stageInsertCount = Object.values(payload.insertedByStage ?? {}).reduce(
-          (acc, count) => acc + Number(count),
-          0,
-        );
-
-        toast.success(
-          `Seeded ${payload.insertedTotal} revisions (${payload.insertedGlobal} global + ${stageInsertCount} stage-specific, ${payload.skippedExisting} skipped)`,
-        );
-      },
-      onError: (error) => {
-        const message = (error as Error).message || "Failed to seed prompts";
-        toast.error(message);
-      },
-    },
-  });
-
-  const createDraftMutation = useAdminControllerCreateAiPromptRevision({
-    mutation: {
-      onSuccess: () => {
-        if (currentPromptKey) {
-          queryClient.invalidateQueries({ queryKey: getAdminControllerGetAiPromptRevisionsQueryKey(currentPromptKey) });
-        }
-        queryClient.invalidateQueries({ queryKey: getAdminControllerGetAiPromptsQueryKey() });
-        toast.success("Draft created");
-      },
-      onError: (error) => toast.error((error as Error).message || "Failed to create draft"),
-    },
-  });
   const createModelConfigMutation = useAdminControllerCreateAiModelConfigDraft({
     mutation: {
       onSuccess: () => {
@@ -893,31 +836,6 @@ function AdminAgentsPage() {
     },
   });
 
-  const updateDraftMutation = useAdminControllerUpdateAiPromptRevision({
-    mutation: {
-      onSuccess: () => {
-        if (currentPromptKey) {
-          queryClient.invalidateQueries({ queryKey: getAdminControllerGetAiPromptRevisionsQueryKey(currentPromptKey) });
-        }
-        queryClient.invalidateQueries({ queryKey: getAdminControllerGetAiPromptsQueryKey() });
-        toast.success("Draft updated");
-      },
-      onError: (error) => toast.error((error as Error).message || "Failed to update draft"),
-    },
-  });
-
-  const publishMutation = useAdminControllerPublishAiPromptRevision({
-    mutation: {
-      onSuccess: () => {
-        if (currentPromptKey) {
-          queryClient.invalidateQueries({ queryKey: getAdminControllerGetAiPromptRevisionsQueryKey(currentPromptKey) });
-        }
-        queryClient.invalidateQueries({ queryKey: getAdminControllerGetAiPromptsQueryKey() });
-        toast.success("Prompt revision published");
-      },
-      onError: (error) => toast.error((error as Error).message || "Failed to publish revision"),
-    },
-  });
   const previewMutation = useAdminControllerPreviewAiPrompt({
     mutation: {
       onSuccess: (result) => {
@@ -944,44 +862,6 @@ function AdminAgentsPage() {
       },
     });
 
-  const isSaving =
-    createDraftMutation.isPending || updateDraftMutation.isPending || publishMutation.isPending;
-
-  const handleSaveDraft = () => {
-    if (!currentPromptKey) return;
-
-    if (!systemPrompt.trim() && !userPrompt.trim()) {
-      toast.error("System and user prompts cannot both be empty");
-      return;
-    }
-
-    const payload = {
-      stage: stageValue,
-      systemPrompt,
-      userPrompt,
-      notes: notes || undefined,
-    };
-
-    if (activeDraft) {
-      updateDraftMutation.mutate({
-        key: currentPromptKey,
-        revisionId: activeDraft.id,
-        data: payload,
-      });
-      return;
-    }
-
-    createDraftMutation.mutate({
-      key: currentPromptKey,
-      data: payload,
-    });
-  };
-
-  const handlePublish = (revisionId: string) => {
-    if (!currentPromptKey) return;
-    publishMutation.mutate({ key: currentPromptKey, revisionId });
-  };
-
   const handleLoadRevision = (revision: PromptRevision) => {
     setSystemPrompt(revision.systemPrompt);
     setUserPrompt(revision.userPrompt);
@@ -989,19 +869,6 @@ function AdminAgentsPage() {
     setEditorStage(revision.stage ?? "global");
     setActiveEditorTab("prompts");
     toast.success(`Loaded v${revision.version} (${formatStage(revision.stage)}) into editor`);
-  };
-
-  const handleRestoreAsDraft = (revision: PromptRevision) => {
-    if (!currentPromptKey) return;
-    createDraftMutation.mutate({
-      key: currentPromptKey,
-      data: {
-        stage: revision.stage,
-        systemPrompt: revision.systemPrompt,
-        userPrompt: revision.userPrompt,
-        notes: revision.notes ?? undefined,
-      },
-    });
   };
 
   const handleSaveModelConfigDraft = () => {
@@ -1115,7 +982,7 @@ function AdminAgentsPage() {
         <div>
           <h1 className="text-2xl font-bold">AI Agent Prompt Console</h1>
           <p className="text-muted-foreground">
-            Visualize the data flow, click any agent, and manage stage-aware prompt revisions.
+            Visualize the data flow, click any agent, and preview stage-aware prompt templates.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -1135,10 +1002,6 @@ function AdminAgentsPage() {
             <RefreshCw className="mr-2 h-4 w-4" />
             Refresh
           </Button>
-          <Button onClick={() => seedMutation.mutate()} disabled={seedMutation.isPending}>
-            <Rocket className="mr-2 h-4 w-4" />
-            {seedMutation.isPending ? "Seeding..." : "Seed From Code"}
-          </Button>
         </div>
       </div>
 
@@ -1146,7 +1009,7 @@ function AdminAgentsPage() {
         Primary model and search configuration now lives in
         {" "}
         <span className="font-semibold">/admin/flow</span>
-        . This page remains available as an advanced fallback editor.
+        . Prompt templates are file-backed and preview-only in the app.
       </div>
 
       <Tabs
@@ -1302,9 +1165,9 @@ function AdminAgentsPage() {
 
                       <Card>
                         <CardHeader>
-                          <CardTitle className="text-base">Prompt Editor</CardTitle>
+                          <CardTitle className="text-base">Prompt Preview</CardTitle>
                           <CardDescription>
-                            {selectedDefinition?.description ?? "Create, update, and publish stage-aware prompt revisions."}
+                            {selectedDefinition?.description ?? "Preview stage-aware prompt templates from local files."}
                           </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
@@ -1329,11 +1192,11 @@ function AdminAgentsPage() {
                               </Select>
                             </div>
                             <div className="space-y-2">
-                              <Label>Notes (optional)</Label>
+                              <Label>Notes</Label>
                               <Input
                                 value={notes}
-                                onChange={(event) => setNotes(event.target.value)}
-                                placeholder="What changed in this draft?"
+                                readOnly
+                                placeholder="No notes"
                               />
                             </div>
                           </div>
@@ -1342,8 +1205,8 @@ function AdminAgentsPage() {
                             <Label>System Prompt</Label>
                             <Textarea
                               value={systemPrompt}
-                              onChange={(event) => setSystemPrompt(event.target.value)}
-                              className="min-h-[160px] font-mono text-xs"
+                              readOnly
+                              className="min-h-[160px] font-mono text-xs bg-muted/20"
                               placeholder="System prompt"
                             />
                           </div>
@@ -1352,8 +1215,8 @@ function AdminAgentsPage() {
                             <Label>User Prompt</Label>
                             <Textarea
                               value={userPrompt}
-                              onChange={(event) => setUserPrompt(event.target.value)}
-                              className="min-h-[240px] font-mono text-xs"
+                              readOnly
+                              className="min-h-[240px] font-mono text-xs bg-muted/20"
                               placeholder="User prompt template"
                             />
                           </div>
@@ -1387,20 +1250,12 @@ function AdminAgentsPage() {
                           ) : null}
 
                           <div className="flex flex-wrap items-center gap-2">
-                            <Button onClick={handleSaveDraft} disabled={!currentPromptKey || isSaving}>
-                              <Save className="mr-2 h-4 w-4" />
-                              {activeDraft ? "Update Draft" : "Create Draft"}
-                            </Button>
-                            {activeDraft ? (
-                              <Button
-                                variant="secondary"
-                                onClick={() => handlePublish(activeDraft.id)}
-                                disabled={publishMutation.isPending}
-                              >
-                                <CheckCircle2 className="mr-2 h-4 w-4" />
-                                Publish Draft
-                              </Button>
-                            ) : null}
+                            <Badge variant="secondary">Preview Only</Badge>
+                            <span className="text-xs text-muted-foreground">
+                              Prompt templates are managed from files in
+                              {" "}
+                              <code>backend/src/modules/ai/prompts/library</code>.
+                            </span>
                             {activePublished ? (
                               <Badge variant="outline" className="ml-auto">
                                 Using {activePublished.stage ? formatStage(activePublished.stage) : "Global"} v{activePublished.version}
@@ -1605,26 +1460,6 @@ function AdminAgentsPage() {
                                       <Eye className="mr-1 h-3 w-3" />
                                       Load
                                     </Button>
-                                    {revision.status === "draft" ? (
-                                      <Button
-                                        size="sm"
-                                        variant="secondary"
-                                        onClick={() => handlePublish(revision.id)}
-                                      >
-                                        Publish
-                                      </Button>
-                                    ) : null}
-                                    {revision.status === "archived" ? (
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => handleRestoreAsDraft(revision)}
-                                        disabled={createDraftMutation.isPending}
-                                      >
-                                        <RotateCcw className="mr-1 h-3 w-3" />
-                                        Restore
-                                      </Button>
-                                    ) : null}
                                   </div>
                                 </div>
                                 {revision.userPrompt ? (

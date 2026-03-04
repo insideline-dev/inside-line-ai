@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { ConfidenceBadge } from "@/components/ConfidenceBadge";
 import { ChartNoAxesColumn } from "lucide-react";
 import type { Evaluation } from "@/types/evaluation";
 
@@ -192,9 +192,11 @@ export function MarketTabContent({ evaluation, marketWeight }: MarketTabContentP
                 <p className="text-sm text-muted-foreground">
                   {typeof marketWeight === "number" ? `${marketWeight}%` : ""} weight in overall evaluation
                 </p>
-                <Badge variant="secondary" className="mt-1 capitalize">
-                  {confidence} confidence
-                </Badge>
+                <ConfidenceBadge
+                  confidence={confidence}
+                  className="mt-2"
+                  dataTestId="badge-market-confidence"
+                />
               </div>
             </div>
             {typeof evaluation?.marketScore === "number" && (

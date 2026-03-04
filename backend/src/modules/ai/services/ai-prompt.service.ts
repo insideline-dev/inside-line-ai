@@ -6,14 +6,16 @@ import {
   Optional,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { and, asc, desc, eq, inArray, isNull, max, or } from "drizzle-orm";
+import { and, desc, eq, isNull, max, or } from "drizzle-orm";
+import { existsSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { createHash } from "node:crypto";
 import { DrizzleService } from "../../../database";
 import {
   aiPromptDefinition,
   aiPromptRevision,
   type AiPromptDefinition,
 } from "../entities/ai-prompt.schema";
-import { aiAgentSchemaRevision } from "../entities/ai-agent-schema-revision.schema";
 import { StartupStage } from "../../startup/entities/startup.schema";
 import {
   AI_PROMPT_CATALOG,
@@ -24,27 +26,6 @@ import {
   type PromptVariableDefinition,
 } from "./ai-prompt-catalog";
 import { AI_FLOW_DEFINITIONS } from "./ai-flow-catalog";
-import {
-  CompetitorResearchObjectSchema,
-  DealTermsEvaluationSchema,
-  ExitPotentialEvaluationSchema,
-  FinancialsEvaluationSchema,
-  GtmEvaluationSchema,
-  LegalEvaluationSchema,
-  MarketEvaluationSchema,
-  MarketResearchSchema,
-  NewsResearchSchema,
-  ProductEvaluationSchema,
-  ProductResearchSchema,
-  SynthesisSchema,
-  TeamEvaluationSchema,
-  TeamResearchSchema,
-  TractionEvaluationSchema,
-  BusinessModelEvaluationSchema,
-  CompetitiveAdvantageEvaluationSchema,
-} from "../schemas";
-import { SchemaCompilerService } from "./schema-compiler.service";
-import { z } from "zod";
 
 interface ResolvePromptParams {
   key: string;
@@ -78,7 +59,11 @@ export class AiPromptService {
   private readonly logger = new Logger(AiPromptService.name);
   private readonly cache = new Map<string, { expiresAt: number; value: ResolvedPrompt }>();
   private readonly cacheTtlMs = 60_000;
-  private readonly schemaCompiler = new SchemaCompilerService();
+  private readonly promptLibraryRoot = resolve(
+    process.cwd(),
+    "backend/src/modules/ai/prompts/library",
+  );
+  private readonly stageList = Object.values(StartupStage) as StartupStage[];
   private readonly narrativePurityGuardrail = [
     "## Internal Narrative Guardrail",
     "For all narrative prose fields (feedback, narrativeSummary, memoNarrative, investorMemo sections, founderReport sections):",
@@ -101,101 +86,78 @@ export class AiPromptService {
       return cached.value;
     }
 
-    const fallback = isAiPromptKey(params.key)
-      ? this.toCodePrompt(params.key, normalizedStage)
-      : null;
-    try {
-      const [definition] = await this.drizzle.db
-        .select({ id: aiPromptDefinition.id })
-        .from(aiPromptDefinition)
-        .where(eq(aiPromptDefinition.key, params.key))
-        .limit(1);
-
-      if (!definition) {
-        if (fallback) {
-          const guardedFallback = this.resolveCodeFallback({
-            key: params.key,
-            stage: normalizedStage,
-            reason: `Prompt definition not found for key ${params.key}`,
-            fallback,
-          });
-          this.setCache(cacheKey, guardedFallback);
-          return guardedFallback;
-        }
-        throw new NotFoundException(`Prompt definition not found for key ${params.key}`);
-      }
-
-      const candidates = await this.drizzle.db
-        .select({
-          id: aiPromptRevision.id,
-          stage: aiPromptRevision.stage,
-          systemPrompt: aiPromptRevision.systemPrompt,
-          userPrompt: aiPromptRevision.userPrompt,
-        })
-        .from(aiPromptRevision)
-        .where(
-          and(
-            eq(aiPromptRevision.definitionId, definition.id),
-            eq(aiPromptRevision.status, "published"),
-            normalizedStage
-              ? or(eq(aiPromptRevision.stage, normalizedStage), isNull(aiPromptRevision.stage))
-              : isNull(aiPromptRevision.stage),
-          ),
-        )
-        .orderBy(
-          desc(aiPromptRevision.stage),
-          desc(aiPromptRevision.publishedAt),
-          desc(aiPromptRevision.createdAt),
-        );
-
-      const stageMatch = normalizedStage
-        ? candidates.find((item) => item.stage === normalizedStage)
-        : null;
-      const globalMatch = candidates.find((item) => item.stage === null);
-      const selected = stageMatch ?? globalMatch;
-
-      if (!selected) {
-        if (fallback) {
-          const guardedFallback = this.resolveCodeFallback({
-            key: params.key,
-            stage: normalizedStage,
-            reason: `No published prompt revision found for key ${params.key}`,
-            fallback,
-          });
-          this.setCache(cacheKey, guardedFallback);
-          return guardedFallback;
-        }
-        throw new NotFoundException(
-          `No published prompt revision found for key ${params.key}`,
-        );
-      }
-
+    if (isAiPromptKey(params.key)) {
+      const prompt = this.resolvePromptFromFiles(params.key, normalizedStage);
       const resolved: ResolvedPrompt = {
         key: params.key,
         stage: normalizedStage,
-        systemPrompt: selected.systemPrompt,
-        userPrompt: selected.userPrompt,
-        source: "db",
-        revisionId: selected.id,
+        systemPrompt: prompt.systemPrompt,
+        userPrompt: prompt.userPrompt,
+        source: "code",
+        revisionId: null,
       };
-
       const guardedResolved = this.injectNarrativeGuardrails(resolved);
       this.setCache(cacheKey, guardedResolved);
       return guardedResolved;
-    } catch (error) {
-      if (!fallback) {
-        throw error;
-      }
-      const message = error instanceof Error ? error.message : String(error);
-      const guardedFallback = this.resolveCodeFallback({
-        key: params.key,
-        stage: normalizedStage,
-        reason: message,
-        fallback,
-      });
-      this.setCache(cacheKey, guardedFallback);
-      return guardedFallback;
     }
+
+    const [definition] = await this.drizzle.db
+      .select({ id: aiPromptDefinition.id })
+      .from(aiPromptDefinition)
+      .where(eq(aiPromptDefinition.key, params.key))
+      .limit(1);
+
+    if (!definition) {
+      throw new NotFoundException(`Prompt definition not found for key ${params.key}`);
+    }
+
+    const candidates = await this.drizzle.db
+      .select({
+        id: aiPromptRevision.id,
+        stage: aiPromptRevision.stage,
+        systemPrompt: aiPromptRevision.systemPrompt,
+        userPrompt: aiPromptRevision.userPrompt,
+      })
+      .from(aiPromptRevision)
+      .where(
+        and(
+          eq(aiPromptRevision.definitionId, definition.id),
+          eq(aiPromptRevision.status, "published"),
+          normalizedStage
+            ? or(eq(aiPromptRevision.stage, normalizedStage), isNull(aiPromptRevision.stage))
+            : isNull(aiPromptRevision.stage),
+        ),
+      )
+      .orderBy(
+        desc(aiPromptRevision.stage),
+        desc(aiPromptRevision.publishedAt),
+        desc(aiPromptRevision.createdAt),
+      );
+
+    const stageMatch = normalizedStage
+      ? candidates.find((item) => item.stage === normalizedStage)
+      : null;
+    const globalMatch = candidates.find((item) => item.stage === null);
+    const selected = stageMatch ?? globalMatch;
+
+    if (!selected) {
+      throw new NotFoundException(
+        `No published prompt revision found for key ${params.key}`,
+      );
+    }
+
+    const resolved: ResolvedPrompt = {
+      key: params.key,
+      stage: normalizedStage,
+      systemPrompt: selected.systemPrompt,
+      userPrompt: selected.userPrompt,
+      source: "db",
+      revisionId: selected.id,
+    };
+
+    const guardedResolved = this.injectNarrativeGuardrails(resolved);
+    this.setCache(cacheKey, guardedResolved);
+    return guardedResolved;
   }
 
   async getPromptCoverageAudit(stage?: string | null) {
@@ -232,75 +194,121 @@ export class AiPromptService {
     template: string,
     variables: Record<string, string | number | null | undefined>,
   ): string {
-    return template.replace(/{{\s*([a-zA-Z0-9_]+)\s*}}/g, (_, variableName: string) => {
+    const resolveVariable = (_: string, variableName: string) => {
       const value = variables[variableName];
       if (value === null || value === undefined) {
         return "";
       }
       return String(value);
-    });
+    };
+
+    const doubleBraceRendered = template.replace(
+      /{{\s*([a-zA-Z0-9_]+)\s*}}/g,
+      resolveVariable,
+    );
+
+    return doubleBraceRendered.replace(
+      /(?<!{){\s*([a-zA-Z0-9_]+)\s*}(?!})/g,
+      resolveVariable,
+    );
   }
 
   async listPromptDefinitions() {
-    await this.ensureDefinitionsExist();
-
-    const definitions = await this.drizzle.db
-      .select()
-      .from(aiPromptDefinition)
-      .orderBy(asc(aiPromptDefinition.key));
-
-    const published = await this.drizzle.db
-      .select({
-        definitionId: aiPromptRevision.definitionId,
-        id: aiPromptRevision.id,
-        stage: aiPromptRevision.stage,
-        version: aiPromptRevision.version,
-        publishedAt: aiPromptRevision.publishedAt,
-      })
-      .from(aiPromptRevision)
-      .where(eq(aiPromptRevision.status, "published"))
-      .orderBy(asc(aiPromptRevision.definitionId), asc(aiPromptRevision.stage));
-
-    const publishedByDefinition = new Map<string, typeof published>();
-    for (const row of published) {
-      const list = publishedByDefinition.get(row.definitionId) ?? [];
-      list.push(row);
-      publishedByDefinition.set(row.definitionId, list);
-    }
-
-    return definitions.map((definition) => {
-      const rows = publishedByDefinition.get(definition.id) ?? [];
-      const global = rows.find((row) => row.stage === null) ?? null;
-      const stages = rows.filter((row) => row.stage !== null);
-      const catalog = AI_PROMPT_CATALOG[definition.key as AiPromptKey];
+    return AI_PROMPT_KEYS.map((key) => {
+      const definitionId = this.createDeterministicUuid(`prompt-definition:${key}`);
+      const catalog = AI_PROMPT_CATALOG[key];
 
       return {
-        ...definition,
-        publishedGlobal: global,
-        publishedStages: stages,
-        allowedVariables: catalog?.allowedVariables ?? [],
-        requiredVariables: catalog?.requiredVariables ?? [],
-        variableDefinitions: this.getVariableDefinitions(catalog?.allowedVariables ?? []),
+        id: definitionId,
+        key,
+        displayName: catalog.displayName,
+        description: catalog.description,
+        surface: catalog.surface,
+        createdAt: new Date(0),
+        updatedAt: new Date(0),
+        publishedGlobal: this.buildPublishedMeta(key, definitionId, null),
+        publishedStages: this.stageList
+          .filter((stage) => this.hasStageOverride(key, stage))
+          .map((stage) => this.buildPublishedMeta(key, definitionId, stage))
+          .filter((item): item is NonNullable<typeof item> => item !== null),
+        allowedVariables: catalog.allowedVariables,
+        requiredVariables: catalog.requiredVariables,
+        variableDefinitions: this.getVariableDefinitions(catalog.allowedVariables),
       };
     });
   }
 
   async getRevisionsByKey(key: string) {
-    const definition = await this.getDefinitionOrThrow(key);
+    if (isAiPromptKey(key)) {
+      const definitionId = this.createDeterministicUuid(`prompt-definition:${key}`);
+      const catalog = AI_PROMPT_CATALOG[key];
+      const definition = {
+        id: definitionId,
+        key,
+        displayName: catalog.displayName,
+        description: catalog.description,
+        surface: catalog.surface,
+        createdAt: new Date(0),
+        updatedAt: new Date(0),
+        publishedGlobal: this.buildPublishedMeta(key, definitionId, null),
+        publishedStages: this.stageList
+          .filter((stage) => this.hasStageOverride(key, stage))
+          .map((stage) => this.buildPublishedMeta(key, definitionId, stage))
+          .filter((item): item is NonNullable<typeof item> => item !== null),
+      };
 
+      const revisions = [null, ...this.stageList].map((stage, index) => {
+        const resolved = this.resolvePromptFromFiles(key, stage);
+        const revisionSeed = [
+          key,
+          stage ?? "global",
+          resolved.systemPrompt,
+          resolved.userPrompt,
+        ].join("::");
+        return {
+          id: this.createDeterministicUuid(`prompt-revision:${revisionSeed}`),
+          definitionId,
+          stage,
+          status: "published" as const,
+          systemPrompt: resolved.systemPrompt,
+          userPrompt: resolved.userPrompt,
+          notes:
+            stage === null
+              ? "Resolved from local prompt library (global)."
+              : resolved.effectiveStage === stage
+                ? `Resolved from local prompt library (${stage}).`
+                : `Resolved from local prompt library (fallback to global for ${stage}).`,
+          version: index + 1,
+          createdBy: null,
+          publishedBy: null,
+          publishedAt: new Date(0),
+          createdAt: new Date(0),
+          updatedAt: new Date(0),
+        };
+      });
+
+      return {
+        definition,
+        revisions,
+        allowedVariables: catalog.allowedVariables,
+        requiredVariables: catalog.requiredVariables,
+        variableDefinitions: this.getVariableDefinitions(catalog.allowedVariables),
+      };
+    }
+
+    const definition = await this.getDefinitionOrThrow(key);
     const revisions = await this.drizzle.db
       .select()
       .from(aiPromptRevision)
       .where(eq(aiPromptRevision.definitionId, definition.id))
       .orderBy(desc(aiPromptRevision.createdAt));
-    const catalog = AI_PROMPT_CATALOG[definition.key as AiPromptKey];
 
     return {
       definition,
       revisions,
-      allowedVariables: catalog?.allowedVariables ?? [],
-      requiredVariables: catalog?.requiredVariables ?? [],
-      variableDefinitions: this.getVariableDefinitions(catalog?.allowedVariables ?? []),
+      allowedVariables: [],
+      requiredVariables: [],
+      variableDefinitions: {},
     };
   }
 
@@ -311,6 +319,12 @@ export class AiPromptService {
   }
 
   async createDraft(key: string, adminId: string, input: CreatePromptDraftInput) {
+    if (isAiPromptKey(key)) {
+      throw new BadRequestException(
+        "Prompt templates are file-backed and read-only. Edit files under backend/src/modules/ai/prompts/library instead.",
+      );
+    }
+
     const definition = await this.getOrCreateDefinition(key);
 
     const stage = this.normalizeStage(input.stage);
@@ -351,6 +365,12 @@ export class AiPromptService {
     revisionId: string,
     input: UpdatePromptDraftInput,
   ) {
+    if (isAiPromptKey(key)) {
+      throw new BadRequestException(
+        "Prompt templates are file-backed and read-only. Edit files under backend/src/modules/ai/prompts/library instead.",
+      );
+    }
+
     const definition = await this.getDefinitionOrThrow(key);
     const [existing] = await this.drizzle.db
       .select()
@@ -391,6 +411,12 @@ export class AiPromptService {
   }
 
   async publishRevision(key: string, revisionId: string, adminId: string) {
+    if (isAiPromptKey(key)) {
+      throw new BadRequestException(
+        "Prompt templates are file-backed and read-only. Edit files under backend/src/modules/ai/prompts/library instead.",
+      );
+    }
+
     const definition = await this.getDefinitionOrThrow(key);
 
     const published = await this.drizzle.db.transaction(async (tx) => {
@@ -445,315 +471,18 @@ export class AiPromptService {
   }
 
   async bulkAppendSection(
-    adminId: string,
-    input: { scope: "research_agents" | "evaluation_agents"; section: string },
+    _adminId: string,
+    _input: { scope: "research_agents" | "evaluation_agents"; section: string },
   ) {
-    const keys = this.resolveBulkTargetPromptKeys(input.scope);
-
-    if (keys.length === 0) {
-      throw new BadRequestException(
-        `No prompt keys found for scope ${input.scope}`,
-      );
-    }
-
-    const publishedRevisionIds: string[] = [];
-    const appliedKeys: AiPromptKey[] = [];
-
-    await this.drizzle.db.transaction(async (tx) => {
-      for (const key of keys) {
-        const definition = await this.getOrCreateDefinition(key);
-        const catalogEntry = AI_PROMPT_CATALOG[key];
-
-        // Find ALL published revisions (global + every stage variant)
-        const publishedRevisions = await tx
-          .select()
-          .from(aiPromptRevision)
-          .where(
-            and(
-              eq(aiPromptRevision.definitionId, definition.id),
-              eq(aiPromptRevision.status, "published"),
-            ),
-          );
-
-        // If no published revisions, create one from code fallback (global only)
-        const targets =
-          publishedRevisions.length > 0
-            ? publishedRevisions
-            : [
-                {
-                  stage: null as StartupStage | null,
-                  systemPrompt: catalogEntry.defaultSystemPrompt,
-                  userPrompt: catalogEntry.defaultUserPrompt,
-                },
-              ];
-
-        for (const target of targets) {
-          const stageCondition =
-            target.stage === null
-              ? isNull(aiPromptRevision.stage)
-              : eq(aiPromptRevision.stage, target.stage);
-
-          // Get next version
-          const [maxRow] = await tx
-            .select({ value: max(aiPromptRevision.version) })
-            .from(aiPromptRevision)
-            .where(
-              and(
-                eq(aiPromptRevision.definitionId, definition.id),
-                stageCondition,
-              ),
-            );
-
-          // Archive existing published for this stage
-          await tx
-            .update(aiPromptRevision)
-            .set({ status: "archived", updatedAt: new Date() })
-            .where(
-              and(
-                eq(aiPromptRevision.definitionId, definition.id),
-                eq(aiPromptRevision.status, "published"),
-                stageCondition,
-              ),
-            );
-
-          // Insert new revision with section appended
-          const [created] = await tx
-            .insert(aiPromptRevision)
-            .values({
-              definitionId: definition.id,
-              stage: target.stage,
-              status: "published",
-              systemPrompt: target.systemPrompt + "\n\n" + input.section,
-              userPrompt: target.userPrompt,
-              notes: `Bulk append (${input.scope})`,
-              version: (maxRow?.value ?? 0) + 1,
-              createdBy: adminId,
-              publishedBy: adminId,
-              publishedAt: new Date(),
-            })
-            .returning();
-
-          publishedRevisionIds.push(created.id);
-        }
-
-        appliedKeys.push(key);
-      }
-    });
-
-    // Invalidate cache for all affected keys
-    for (const key of appliedKeys) {
-      this.invalidateKeyCache(key);
-    }
-
-    return {
-      scope: input.scope,
-      section: input.section,
-      appliedKeys,
-      publishedRevisionIds,
-      affectedRevisionCount: publishedRevisionIds.length,
-    };
-  }
-
-  private resolveBulkTargetPromptKeys(
-    scope: "research_agents" | "evaluation_agents",
-  ): AiPromptKey[] {
-    const pipelineFlow = AI_FLOW_DEFINITIONS.find(
-      (flow) => flow.id === "pipeline",
+    throw new BadRequestException(
+      "Bulk prompt append is disabled. Prompt templates are file-backed and read-only under backend/src/modules/ai/prompts/library.",
     );
-    if (!pipelineFlow) {
-      return [];
-    }
-
-    const keys = new Set<AiPromptKey>();
-    for (const node of pipelineFlow.nodes) {
-      for (const promptKey of node.promptKeys) {
-        if (!isAiPromptKey(promptKey)) {
-          continue;
-        }
-        if (scope === "research_agents" && !promptKey.startsWith("research.")) {
-          continue;
-        }
-        if (
-          scope === "evaluation_agents" &&
-          !promptKey.startsWith("evaluation.")
-        ) {
-          continue;
-        }
-        keys.add(promptKey);
-      }
-    }
-
-    return Array.from(keys).sort();
   }
 
-  async seedFromCode(adminId: string) {
-    const stages = Object.values(StartupStage) as StartupStage[];
-    const stageTargets: Array<StartupStage | null> = [null, ...stages];
-    const insertedByStage = Object.fromEntries(
-      stages.map((stage) => [stage, 0]),
-    ) as Record<StartupStage, number>;
-
-    let insertedTotal = 0;
-    let insertedGlobal = 0;
-    let skippedExisting = 0;
-    let seededSchemaRevisions = 0;
-    let skippedSchemaRevisions = 0;
-
-    try {
-      await this.ensureDefinitionsExist();
-
-      for (const key of AI_PROMPT_KEYS) {
-        const definition = await this.getOrCreateDefinition(key);
-        const catalogEntry = AI_PROMPT_CATALOG[key];
-
-        for (const stage of stageTargets) {
-          const [existingPublished] = await this.drizzle.db
-            .select({ id: aiPromptRevision.id })
-            .from(aiPromptRevision)
-            .where(
-              and(
-                eq(aiPromptRevision.definitionId, definition.id),
-                eq(aiPromptRevision.status, "published"),
-                stage === null
-                  ? isNull(aiPromptRevision.stage)
-                  : eq(aiPromptRevision.stage, stage),
-              ),
-            )
-            .limit(1);
-
-          if (existingPublished) {
-            skippedExisting += 1;
-            continue;
-          }
-
-          const [maxRow] = await this.drizzle.db
-            .select({ value: max(aiPromptRevision.version) })
-            .from(aiPromptRevision)
-            .where(
-              and(
-                eq(aiPromptRevision.definitionId, definition.id),
-                stage === null
-                  ? isNull(aiPromptRevision.stage)
-                  : eq(aiPromptRevision.stage, stage),
-              ),
-            );
-
-          await this.drizzle.db.insert(aiPromptRevision).values({
-            definitionId: definition.id,
-            stage,
-            status: "published",
-            systemPrompt: catalogEntry.defaultSystemPrompt,
-            userPrompt: catalogEntry.defaultUserPrompt,
-            notes:
-              stage === null
-                ? "Seeded from code defaults (global)"
-                : `Seeded from code defaults (${stage})`,
-            version: (maxRow?.value ?? 0) + 1,
-            createdBy: adminId,
-            publishedBy: adminId,
-            publishedAt: new Date(),
-          });
-
-          insertedTotal += 1;
-          if (stage === null) {
-            insertedGlobal += 1;
-          } else {
-            insertedByStage[stage] += 1;
-          }
-        }
-      }
-
-      const agentSchemaEntries: Array<{
-        key: AiPromptKey;
-        schema: z.ZodObject<z.ZodRawShape>;
-      }> = [
-        { key: "research.team", schema: TeamResearchSchema },
-        { key: "research.market", schema: MarketResearchSchema },
-        { key: "research.product", schema: ProductResearchSchema },
-        { key: "research.news", schema: NewsResearchSchema },
-        { key: "research.competitor", schema: CompetitorResearchObjectSchema },
-        { key: "evaluation.team", schema: TeamEvaluationSchema },
-        { key: "evaluation.market", schema: MarketEvaluationSchema },
-        { key: "evaluation.product", schema: ProductEvaluationSchema },
-        { key: "evaluation.traction", schema: TractionEvaluationSchema },
-        { key: "evaluation.businessModel", schema: BusinessModelEvaluationSchema },
-        { key: "evaluation.gtm", schema: GtmEvaluationSchema },
-        { key: "evaluation.financials", schema: FinancialsEvaluationSchema },
-        {
-          key: "evaluation.competitiveAdvantage",
-          schema: CompetitiveAdvantageEvaluationSchema,
-        },
-        { key: "evaluation.legal", schema: LegalEvaluationSchema },
-        { key: "evaluation.dealTerms", schema: DealTermsEvaluationSchema },
-        { key: "evaluation.exitPotential", schema: ExitPotentialEvaluationSchema },
-        { key: "synthesis.final", schema: SynthesisSchema },
-      ];
-
-      for (const entry of agentSchemaEntries) {
-        const definition = await this.getOrCreateDefinition(entry.key);
-
-        const [existingPublished] = await this.drizzle.db
-          .select({ id: aiAgentSchemaRevision.id })
-          .from(aiAgentSchemaRevision)
-          .where(
-            and(
-              eq(aiAgentSchemaRevision.definitionId, definition.id),
-              eq(aiAgentSchemaRevision.status, "published"),
-              isNull(aiAgentSchemaRevision.stage),
-            ),
-          )
-          .limit(1);
-
-        if (existingPublished) {
-          skippedSchemaRevisions += 1;
-          continue;
-        }
-
-        const serializedDescriptor = this.schemaCompiler.serialize(entry.schema);
-        const compiledFromDescriptor = this.schemaCompiler.compile(serializedDescriptor);
-        const roundtripDescriptor = this.schemaCompiler.serialize(compiledFromDescriptor);
-        const roundtripValidation = this.schemaCompiler.validate(roundtripDescriptor);
-
-        if (!roundtripValidation.valid) {
-          throw new BadRequestException(
-            `Schema roundtrip validation failed for ${entry.key}: ${roundtripValidation.errors.join(", ")}`,
-          );
-        }
-
-        await this.drizzle.db.insert(aiAgentSchemaRevision).values({
-          definitionId: definition.id,
-          stage: null,
-          status: "published",
-          schemaJson: serializedDescriptor,
-          notes: "Seeded from code defaults (global)",
-          version: 1,
-          createdBy: adminId,
-          publishedBy: adminId,
-          publishedAt: new Date(),
-        });
-
-        seededSchemaRevisions += 1;
-      }
-    } catch (error) {
-      if (this.isPromptTablesMissingError(error)) {
-        throw new BadRequestException(
-          "AI prompt tables are missing. Run `cd backend && bun run db:push` and try again.",
-        );
-      }
-      throw error;
-    }
-
-    this.cache.clear();
-    return {
-      insertedTotal,
-      insertedGlobal,
-      insertedByStage,
-      skippedExisting,
-      seededSchemaRevisions,
-      skippedSchemaRevisions,
-      totalPromptKeys: AI_PROMPT_KEYS.length,
-      totalTargetSlots: AI_PROMPT_KEYS.length * stageTargets.length,
-    };
+  async seedFromCode(_adminId: string) {
+    throw new BadRequestException(
+      "Seeding prompts in DB is disabled. Prompt templates are file-backed under backend/src/modules/ai/prompts/library.",
+    );
   }
 
   /**
@@ -761,116 +490,12 @@ export class AiPromptService {
    * (or all keys if none specified), then seeds fresh from the code catalog.
    */
   async reseedFromCode(
-    adminId: string,
-    keys?: AiPromptKey[],
+    _adminId: string,
+    _keys?: AiPromptKey[],
   ) {
-    const targetKeys = keys ?? [...AI_PROMPT_KEYS];
-    const stages = Object.values(StartupStage) as StartupStage[];
-    const stageTargets: Array<StartupStage | null> = [null, ...stages];
-
-    let archived = 0;
-    let inserted = 0;
-
-    try {
-      await this.ensureDefinitionsExist();
-
-      for (const key of targetKeys) {
-        const definition = await this.getOrCreateDefinition(key);
-        const catalogEntry = AI_PROMPT_CATALOG[key];
-
-        for (const stage of stageTargets) {
-          const stageCondition =
-            stage === null
-              ? isNull(aiPromptRevision.stage)
-              : eq(aiPromptRevision.stage, stage);
-
-          // Archive existing published revisions
-          const archivedRows = await this.drizzle.db
-            .update(aiPromptRevision)
-            .set({ status: "archived", updatedAt: new Date() })
-            .where(
-              and(
-                eq(aiPromptRevision.definitionId, definition.id),
-                eq(aiPromptRevision.status, "published"),
-                stageCondition,
-              ),
-            )
-            .returning({ id: aiPromptRevision.id });
-
-          archived += archivedRows.length;
-
-          // Get next version number
-          const [maxRow] = await this.drizzle.db
-            .select({ value: max(aiPromptRevision.version) })
-            .from(aiPromptRevision)
-            .where(
-              and(
-                eq(aiPromptRevision.definitionId, definition.id),
-                stageCondition,
-              ),
-            );
-
-          await this.drizzle.db.insert(aiPromptRevision).values({
-            definitionId: definition.id,
-            stage,
-            status: "published",
-            systemPrompt: catalogEntry.defaultSystemPrompt,
-            userPrompt: catalogEntry.defaultUserPrompt,
-            notes:
-              stage === null
-                ? "Re-seeded from code catalog (global)"
-                : `Re-seeded from code catalog (${stage})`,
-            version: (maxRow?.value ?? 0) + 1,
-            createdBy: adminId,
-            publishedBy: adminId,
-            publishedAt: new Date(),
-          });
-
-          inserted += 1;
-        }
-      }
-    } catch (error) {
-      if (this.isPromptTablesMissingError(error)) {
-        throw new BadRequestException(
-          "AI prompt tables are missing. Run `cd backend && bun run db:push` and try again.",
-        );
-      }
-      throw error;
-    }
-
-    this.cache.clear();
-    return {
-      archived,
-      inserted,
-      keys: targetKeys,
-      stagesPerKey: stageTargets.length,
-    };
-  }
-
-  private async ensureDefinitionsExist(): Promise<void> {
-    const keys = AI_PROMPT_KEYS as unknown as string[];
-    const existing = await this.drizzle.db
-      .select({ key: aiPromptDefinition.key })
-      .from(aiPromptDefinition)
-      .where(inArray(aiPromptDefinition.key, keys));
-
-    const existingKeys = new Set(existing.map((row) => row.key));
-    const missing = keys.filter((key) => !existingKeys.has(key));
-    if (missing.length === 0) {
-      return;
-    }
-
-    await this.drizzle.db.insert(aiPromptDefinition).values(
-      missing.map((key) => {
-        const catalog = AI_PROMPT_CATALOG[key as AiPromptKey];
-        return {
-          key,
-          displayName: catalog.displayName,
-          description: catalog.description,
-          surface: catalog.surface,
-        };
-      }),
-    ).onConflictDoNothing();
+    throw new BadRequestException(
+      "Re-seeding prompts in DB is disabled. Prompt templates are file-backed under backend/src/modules/ai/prompts/library.",
+    );
   }
 
   private async getDefinitionOrThrow(key: string): Promise<AiPromptDefinition> {
@@ -917,19 +542,110 @@ export class AiPromptService {
     return created;
   }
 
-  private toCodePrompt(
+  private keyToLibrarySegments(key: AiPromptKey): string[] {
+    return key
+      .split(".")
+      .map((segment) =>
+        segment
+          .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
+          .replace(/_/g, "-")
+          .toLowerCase(),
+      );
+  }
+
+  private buildPromptFilePath(
+    key: AiPromptKey,
+    type: "system" | "user",
+    stage: StartupStage | null,
+  ): string {
+    const stagePath = stage === null ? "global" : join("stages", stage);
+    return join(
+      this.promptLibraryRoot,
+      stagePath,
+      ...this.keyToLibrarySegments(key),
+      `${type}.md`,
+    );
+  }
+
+  private readPromptFile(path: string): string | null {
+    if (!existsSync(path)) {
+      return null;
+    }
+    return readFileSync(path, "utf8").replace(/\s+$/, "");
+  }
+
+  private resolvePromptFromFiles(
     key: AiPromptKey,
     stage: StartupStage | null,
-  ): ResolvedPrompt {
+  ): { systemPrompt: string; userPrompt: string; effectiveStage: StartupStage | null } {
     const catalog = AI_PROMPT_CATALOG[key];
+    const globalSystem =
+      this.readPromptFile(this.buildPromptFilePath(key, "system", null)) ??
+      catalog.defaultSystemPrompt;
+    const globalUser =
+      this.readPromptFile(this.buildPromptFilePath(key, "user", null)) ??
+      catalog.defaultUserPrompt;
+
+    if (!stage) {
+      return {
+        systemPrompt: globalSystem,
+        userPrompt: globalUser,
+        effectiveStage: null,
+      };
+    }
+
+    const stageSystem = this.readPromptFile(this.buildPromptFilePath(key, "system", stage));
+    const stageUser = this.readPromptFile(this.buildPromptFilePath(key, "user", stage));
+    const hasStageOverride = Boolean(stageSystem || stageUser);
+
     return {
-      key,
-      stage,
-      systemPrompt: catalog.defaultSystemPrompt,
-      userPrompt: catalog.defaultUserPrompt,
-      source: "code",
-      revisionId: null,
+      systemPrompt: stageSystem ?? globalSystem,
+      userPrompt: stageUser ?? globalUser,
+      effectiveStage: hasStageOverride ? stage : null,
     };
+  }
+
+  private hasStageOverride(key: AiPromptKey, stage: StartupStage): boolean {
+    return (
+      existsSync(this.buildPromptFilePath(key, "system", stage)) ||
+      existsSync(this.buildPromptFilePath(key, "user", stage))
+    );
+  }
+
+  private buildPublishedMeta(
+    key: AiPromptKey,
+    definitionId: string,
+    stage: StartupStage | null,
+  ) {
+    if (stage !== null && !this.hasStageOverride(key, stage)) {
+      return null;
+    }
+
+    const resolved = this.resolvePromptFromFiles(key, stage);
+    const seed = [key, stage ?? "global", resolved.systemPrompt, resolved.userPrompt].join(
+      "::",
+    );
+
+    return {
+      id: this.createDeterministicUuid(`prompt-meta:${seed}`),
+      definitionId,
+      stage,
+      version: 1,
+      publishedAt: new Date(0),
+    };
+  }
+
+  private createDeterministicUuid(seed: string): string {
+    const hex = createHash("sha256").update(seed).digest("hex");
+    const v = "5";
+    const variant = ((parseInt(hex[16], 16) & 0x3) | 0x8).toString(16);
+    return [
+      hex.slice(0, 8),
+      hex.slice(8, 12),
+      `${v}${hex.slice(13, 16)}`,
+      `${variant}${hex.slice(17, 20)}`,
+      hex.slice(20, 32),
+    ].join("-");
   }
 
   private normalizeStage(stage?: string | null): StartupStage | null {
@@ -956,30 +672,6 @@ export class AiPromptService {
       key.startsWith("evaluation.") ||
       key.startsWith("research.")
     );
-  }
-
-  private resolveCodeFallback(input: {
-    key: string;
-    stage: StartupStage | null;
-    reason: string;
-    fallback: ResolvedPrompt;
-  }): ResolvedPrompt {
-    const strictModeEnabled = this.isStrictDbModeEnabled();
-    const isCritical = this.isCriticalPipelinePrompt(input.key);
-    if (strictModeEnabled && isCritical) {
-      throw new NotFoundException(
-        `Missing published prompt revision for critical key ${input.key} (${input.stage ?? "global"}) while AI_PROMPT_STRICT_DB_REQUIRED=true`,
-      );
-    }
-
-    const message =
-      `Prompt resolution falling back to code for ${input.key} (${input.stage ?? "global"}): ${input.reason}`;
-    if (isCritical) {
-      this.logger.error(message);
-    } else {
-      this.logger.warn(message);
-    }
-    return this.injectNarrativeGuardrails(input.fallback);
   }
 
   private validatePromptTemplate(
@@ -1020,12 +712,15 @@ export class AiPromptService {
   }
 
   private extractTemplateVariables(input: string): Set<string> {
-    const matches = input.matchAll(/{{\s*([a-zA-Z0-9_]+)\s*}}/g);
+    const matches = input.matchAll(
+      /{{\s*([a-zA-Z0-9_]+)\s*}}|(?<!{){\s*([a-zA-Z0-9_]+)\s*}(?!})/g,
+    );
     const variables = new Set<string>();
 
     for (const match of matches) {
-      if (match[1]) {
-        variables.add(match[1]);
+      const variable = match[1] ?? match[2];
+      if (variable) {
+        variables.add(variable);
       }
     }
 
@@ -1084,18 +779,5 @@ export class AiPromptService {
       value,
       expiresAt: Date.now() + this.cacheTtlMs,
     });
-  }
-
-  private isPromptTablesMissingError(error: unknown): boolean {
-    const code = (error as { code?: string } | undefined)?.code;
-    const message = error instanceof Error ? error.message : String(error);
-
-    if (code === "42P01") {
-      return true;
-    }
-
-    return /ai_prompt_definitions|ai_prompt_revisions|ai_agent_schema_revisions|relation .* does not exist/i.test(
-      message,
-    );
   }
 }

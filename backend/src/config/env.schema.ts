@@ -12,6 +12,11 @@ export const envSchema = z.object({
     .string()
     .url("DATABASE_URL must be a valid PostgreSQL connection string"),
   PROD_DATABASE_URL: z.string().optional(),
+  DB_POOL_MAX: z.coerce.number().int().positive().default(20),
+  DB_CONNECT_TIMEOUT_SECONDS: z.coerce.number().positive().default(10),
+  DB_IDLE_TIMEOUT_SECONDS: z.coerce.number().positive().default(30),
+  DB_MAX_LIFETIME_SECONDS: z.coerce.number().positive().default(1800),
+  DB_DISABLE_PREPARE_FOR_POOLER: z.coerce.boolean().default(true),
 
   // Redis Configuration (use REDIS_URL, or fallback to individual vars)
   REDIS_URL: z.string().default("redis://localhost:6379"),

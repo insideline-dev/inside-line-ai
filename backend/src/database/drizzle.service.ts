@@ -11,7 +11,35 @@ export class DrizzleService implements OnModuleDestroy {
 
   constructor(private configService: ConfigService) {
     const databaseUrl = this.configService.get<string>('DATABASE_URL')!;
-    this.client = postgres(databaseUrl);
+    const max = this.configService.get<number>('DB_POOL_MAX', 20);
+    const connectTimeout = this.configService.get<number>(
+      'DB_CONNECT_TIMEOUT_SECONDS',
+      10,
+    );
+    const idleTimeout = this.configService.get<number>(
+      'DB_IDLE_TIMEOUT_SECONDS',
+      30,
+    );
+    const maxLifetime = this.configService.get<number>(
+      'DB_MAX_LIFETIME_SECONDS',
+      1800,
+    );
+    const disablePrepareForPooler = this.configService.get<boolean>(
+      'DB_DISABLE_PREPARE_FOR_POOLER',
+      true,
+    );
+    const looksLikePooler =
+      /-pooler\./i.test(databaseUrl) || /pgbouncer=true/i.test(databaseUrl);
+
+    this.client = postgres(databaseUrl, {
+      max,
+      connect_timeout: connectTimeout,
+      idle_timeout: idleTimeout,
+      max_lifetime: maxLifetime,
+      // Neon/pgBouncer transaction poolers can intermittently fail with prepared statements.
+      prepare: disablePrepareForPooler && looksLikePooler ? false : undefined,
+      onnotice: () => undefined,
+    });
     this.db = drizzle(this.client, { schema });
   }
 

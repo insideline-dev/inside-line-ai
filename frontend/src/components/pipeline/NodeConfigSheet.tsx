@@ -23,7 +23,6 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Bot, Cog, ArrowRight } from "lucide-react";
-import { BulkPromptAppendSection } from "./dialogs/BulkPromptAppendSection";
 import type { AiPromptFlowResponseDtoFlowsItemNodesItem } from "@/api/generated/model";
 import {
   adminControllerGetAiPromptOutputSchema,
@@ -824,7 +823,11 @@ export function NodeConfigSheet({
 
               {upstreamPaths.length > 0 && (
                 <div className="rounded-md border border-blue-500/20 bg-blue-500/5 p-3 text-xs text-blue-700">
-                  Open the Prompts tab and use Insert Variable to include upstream fields.
+                  Use these upstream fields in prompt templates with
+                  {" "}
+                  <code>{"{{variable}}"}</code>
+                  {" "}
+                  tokens.
                 </div>
               )}
             </div>
@@ -834,7 +837,10 @@ export function NodeConfigSheet({
           {!isSystem ? (
             <TabsContent value="prompts" className="space-y-4 mt-4">
               {node.id.includes("orchestrator") && (
-                <BulkPromptAppendSection orchestratorId={node.id} />
+                <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+                  Prompt templates are file-backed. Edit files in
+                  `backend/src/modules/ai/prompts/library`.
+                </div>
               )}
               {node.promptKeys.length > 0 ? (
                 <div className="space-y-4">

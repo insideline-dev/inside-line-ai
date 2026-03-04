@@ -15,6 +15,8 @@ import {
   XCircle,
   AlertTriangle,
 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { ConfidenceBadge } from "@/components/ConfidenceBadge";
 
 interface TeamComposition {
   hasBusinessLeader?: boolean;
@@ -30,6 +32,11 @@ interface TeamCompositionSummaryProps {
   keyStrengths?: string[];
   keyRisks?: string[];
   weight?: number;
+  confidence?: string;
+  founderMarketFit?: {
+    score?: number;
+    why?: string;
+  };
 }
 
 function RoleIndicator({
@@ -66,7 +73,13 @@ export function TeamCompositionSummary({
   keyStrengths,
   keyRisks,
   weight,
+  confidence = "unknown",
+  founderMarketFit,
 }: TeamCompositionSummaryProps) {
+  const founderMarketFitScore =
+    typeof founderMarketFit?.score === "number" ? Math.round(founderMarketFit.score) : null;
+  const founderMarketFitWhy = founderMarketFit?.why?.trim() || "";
+
   return (
     <div className="space-y-6">
       <Card data-testid="card-team-score">
@@ -82,6 +95,11 @@ export function TeamCompositionSummary({
                   {weight !== undefined ? `${weight}%` : ""} weight in overall
                   evaluation
                 </p>
+                <ConfidenceBadge
+                  confidence={confidence}
+                  className="mt-2"
+                  dataTestId="badge-team-confidence"
+                />
               </div>
             </div>
             <div className="text-right">
@@ -139,6 +157,27 @@ export function TeamCompositionSummary({
             <p className="text-sm text-muted-foreground mt-2">
               {teamComposition.teamBalance}
             </p>
+          )}
+
+          {(founderMarketFitScore !== null || founderMarketFitWhy) && (
+            <div
+              className="rounded-lg border bg-muted/30 p-4 space-y-2"
+              data-testid="card-founder-market-fit-inline"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold">Founder-Market Fit</p>
+                {founderMarketFitScore !== null && (
+                  <Badge variant="secondary" data-testid="text-fmf-score">
+                    {founderMarketFitScore}/100
+                  </Badge>
+                )}
+              </div>
+              {founderMarketFitWhy && (
+                <p className="text-sm text-muted-foreground leading-relaxed" data-testid="text-fmf-why">
+                  {founderMarketFitWhy}
+                </p>
+              )}
+            </div>
           )}
         </CardContent>
       </Card>

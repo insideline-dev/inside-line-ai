@@ -129,6 +129,11 @@ export function CompetitorsTabContent({
 
   const positioning = buildPositioning(competitivePosition);
   const barriersToEntry = buildBarriersToEntry(barriers);
+  const competitiveConfidence =
+    (typeof competitiveData.confidence === "string" && competitiveData.confidence) ||
+    (typeof toRecord(competitiveData.scoring).confidence === "string" &&
+      (toRecord(competitiveData.scoring).confidence as string)) ||
+    "unknown";
 
   return (
     <div data-testid="container-competitor-analysis">
@@ -155,6 +160,7 @@ export function CompetitorsTabContent({
         competitiveAdvantageScore={
           showScores ? evaluation.competitiveAdvantageScore : undefined
         }
+        competitiveAdvantageConfidence={competitiveConfidence}
       />
     </div>
   );

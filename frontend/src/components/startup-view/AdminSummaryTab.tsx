@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScoreRing } from "@/components/analysis/ScoreRing";
+import { ConfidenceBadge } from "@/components/ConfidenceBadge";
 import { CheckCircle2, AlertTriangle, ChevronRight, Sparkles } from "lucide-react";
 import type { Startup } from "@/types/startup";
 import type { Evaluation } from "@/types/evaluation";
@@ -109,6 +110,15 @@ export function AdminSummaryTab({
   const strengths = getDisplayStrengths(evaluation);
   const risks = getDisplayRisks(evaluation);
   const sectionRows = evaluation ? getSectionRows(evaluation, weights) : [];
+  const evaluationRecord = (evaluation ?? null) as Record<string, unknown> | null;
+  const overallConfidence =
+    (evaluationRecord && typeof evaluationRecord.confidenceLevel === "string"
+      ? evaluationRecord.confidenceLevel
+      : null) ??
+    (evaluationRecord && typeof evaluationRecord.confidence === "string"
+      ? evaluationRecord.confidence
+      : null) ??
+    "unknown";
   const executiveSummary =
     evaluation?.executiveSummary ||
     evaluation?.investorMemo?.executiveSummary ||
@@ -122,6 +132,11 @@ export function AdminSummaryTab({
             <div className="grid gap-5 md:grid-cols-[220px_minmax(0,1fr)]">
               <div className="flex flex-col items-center justify-center rounded-xl border bg-muted/15 px-4 py-6">
                 <ScoreRing score={score} size="lg" showLabel={false} variant="secondary" />
+                <ConfidenceBadge
+                  confidence={overallConfidence}
+                  className="mt-3"
+                  dataTestId="badge-overall-confidence"
+                />
                 <div className="mt-3 rounded-xl border bg-background px-3 py-1">
                   <p className="text-[13px] font-semibold">{percentile}</p>
                 </div>

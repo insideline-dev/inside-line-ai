@@ -29,6 +29,46 @@ interface ErrorResponse {
 export class HttpExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(HttpExceptionFilter.name);
 
+  private buildCauseChain(error: Error): string {
+    const parts: string[] = [];
+    const seen = new Set<unknown>();
+    let current: unknown = error;
+
+    while (current && !seen.has(current) && parts.length < 4) {
+      seen.add(current);
+      if (current instanceof Error) {
+        const record = current as Error & { code?: string; errno?: string };
+        const codePart =
+          typeof record.code === 'string' ? ` code=${record.code}` : '';
+        const errnoPart =
+          typeof record.errno === 'string' ? ` errno=${record.errno}` : '';
+        parts.push(`[${record.name}] ${record.message}${codePart}${errnoPart}`);
+        current = (record as { cause?: unknown }).cause;
+        continue;
+      }
+
+      if (typeof current === 'object' && current !== null) {
+        const record = current as Record<string, unknown>;
+        const name =
+          typeof record.name === 'string' ? record.name : 'ErrorLike';
+        const message =
+          typeof record.message === 'string'
+            ? record.message
+            : JSON.stringify(record);
+        const codePart =
+          typeof record.code === 'string' ? ` code=${record.code}` : '';
+        parts.push(`[${name}] ${message}${codePart}`);
+        current = record.cause;
+        continue;
+      }
+
+      parts.push(String(current));
+      break;
+    }
+
+    return parts.join(' <= ');
+  }
+
   private inferStatusFromError(error: Error): {
     status: number;
     errorType: string;
@@ -122,11 +162,9 @@ export class HttpExceptionFilter implements ExceptionFilter {
     if (status >= 500) {
       let sanitizedError = '';
       if (exception instanceof Error) {
-        sanitizedError = `[${exception.name}] ${exception.message}`;
+        sanitizedError = this.buildCauseChain(exception);
       } else if (typeof exception === 'object' && exception !== null) {
-        sanitizedError = String(
-          (exception as Record<string, unknown>).message || exception,
-        );
+        sanitizedError = String((exception as Record<string, unknown>).message || exception);
       } else {
         sanitizedError = String(exception);
       }

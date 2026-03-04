@@ -125,6 +125,11 @@ Notes: [Any discrepancies]
 **Notably Absent / Risk Signals:**
 [Expected signals missing given product type and stage, negative patterns observed]
 
+=== OUTPUT CONTRACT ===
+Return ONLY plain text report output.
+Do NOT return JSON.
+Ensure the report is at least 2500 characters.
+
 `;
 
 export const PRODUCT_RESEARCH_HUMAN_PROMPT = `Conduct deep product intelligence research for:

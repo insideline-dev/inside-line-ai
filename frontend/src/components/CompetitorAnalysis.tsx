@@ -114,6 +114,14 @@ interface CompetitivePositioning {
   startupDisadvantages?: string[];
   differentiationStrength?: "strong" | "moderate" | "weak";
   positioningRecommendation?: string;
+  currentGap?: string;
+  vulnerabilities?: string[];
+  defensibleAgainstFunded?: boolean | null;
+  differentiationType?: string;
+  differentiationDurability?: string;
+  moatStage?: string;
+  moatEvidence?: string[];
+  moatSelfReinforcing?: boolean | null;
 }
 
 interface BarriersToEntry {
@@ -925,6 +933,36 @@ function CompetitorLink({ name, index }: { name: string; index: number }) {
   );
 }
 
+function renderTextValue(value?: string | null): string {
+  if (!value || value.trim().length === 0) return "Not provided";
+  return value;
+}
+
+function renderBooleanBadge(
+  value: boolean | null | undefined,
+  labels: { trueLabel: string; falseLabel: string; unknownLabel?: string },
+) {
+  if (value === true) {
+    return (
+      <Badge variant="default" className="text-xs">
+        {labels.trueLabel}
+      </Badge>
+    );
+  }
+  if (value === false) {
+    return (
+      <Badge variant="secondary" className="text-xs">
+        {labels.falseLabel}
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className="text-xs">
+      {labels.unknownLabel ?? "Not provided"}
+    </Badge>
+  );
+}
+
 function BasicCompetitorLandscapeCard({
   landscape,
   positioning,
@@ -960,6 +998,8 @@ function BasicCompetitorLandscapeCard({
     competitivePositioning?.startupDisadvantages ||
     landscape?.competitiveDisadvantages ||
     [];
+  const vulnerabilities = competitivePositioning?.vulnerabilities || [];
+  const moatEvidence = competitivePositioning?.moatEvidence || [];
 
   const getScoreColor = (s: number) => {
     if (s >= 80) return "text-green-600";
@@ -996,7 +1036,10 @@ function BasicCompetitorLandscapeCard({
   return (
     <div className="space-y-6" data-testid="section-basic-landscape">
       {score !== null && score !== undefined && (
-        <Card data-testid="card-competitive-score">
+        <Card
+          className="border-primary/20 bg-gradient-to-br from-primary/10 via-background to-background"
+          data-testid="card-competitive-score"
+        >
           <CardContent className="py-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -1128,6 +1171,128 @@ function BasicCompetitorLandscapeCard({
           </CardContent>
         </Card>
       )}
+
+      <Card
+        className="border-primary/15"
+        data-testid="card-competitive-signals"
+      >
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base text-balance">
+            <Shield className="h-5 w-5 text-primary" />
+            Competitive Signals
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Detailed moat and positioning indicators from competitive evaluation
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="rounded-lg border bg-muted/30 p-3">
+              <p className="text-xs font-medium text-muted-foreground mb-1">
+                Differentiation Type
+              </p>
+              <p
+                className="text-sm capitalize text-pretty"
+                data-testid="text-differentiation-type"
+              >
+                {renderTextValue(competitivePositioning?.differentiationType)}
+              </p>
+            </div>
+            <div className="rounded-lg border bg-muted/30 p-3">
+              <p className="text-xs font-medium text-muted-foreground mb-1">
+                Differentiation Durability
+              </p>
+              <p
+                className="text-sm text-pretty"
+                data-testid="text-differentiation-durability"
+              >
+                {renderTextValue(
+                  competitivePositioning?.differentiationDurability,
+                )}
+              </p>
+            </div>
+            <div className="rounded-lg border bg-muted/30 p-3">
+              <p className="text-xs font-medium text-muted-foreground mb-1">
+                Moat Stage
+              </p>
+              <p className="text-sm text-pretty" data-testid="text-moat-stage">
+                {renderTextValue(competitivePositioning?.moatStage)}
+              </p>
+            </div>
+            <div className="rounded-lg border bg-muted/30 p-3">
+              <p className="text-xs font-medium text-muted-foreground mb-2">
+                Self-Reinforcing Moat
+              </p>
+              {renderBooleanBadge(competitivePositioning?.moatSelfReinforcing, {
+                trueLabel: "Yes",
+                falseLabel: "No",
+              })}
+            </div>
+            <div className="rounded-lg border bg-muted/30 p-3 md:col-span-2">
+              <p className="text-xs font-medium text-muted-foreground mb-1">
+                Current Competitive Gap
+              </p>
+              <p className="text-sm text-pretty" data-testid="text-current-gap">
+                {renderTextValue(competitivePositioning?.currentGap)}
+              </p>
+            </div>
+            <div className="rounded-lg border bg-muted/30 p-3">
+              <p className="text-xs font-medium text-muted-foreground mb-2">
+                Defensible Against Funded Competitors
+              </p>
+              {renderBooleanBadge(
+                competitivePositioning?.defensibleAgainstFunded,
+                {
+                  trueLabel: "Defensible",
+                  falseLabel: "Not defensible",
+                },
+              )}
+            </div>
+            <div className="rounded-lg border bg-muted/30 p-3">
+              <p className="text-xs font-medium text-muted-foreground mb-2">
+                Vulnerabilities
+              </p>
+              {vulnerabilities.length > 0 ? (
+                <ul className="space-y-1 text-sm text-muted-foreground">
+                  {vulnerabilities.slice(0, 4).map((item, index) => (
+                    <li
+                      key={`${item}-${index}`}
+                      className="flex items-start gap-2 text-pretty"
+                    >
+                      <AlertTriangle className="h-3.5 w-3.5 mt-0.5 text-amber-500 shrink-0" />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground">Not provided</p>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-lg border bg-muted/20 p-3">
+            <p className="text-xs font-medium text-muted-foreground mb-2">
+              Moat Evidence
+            </p>
+            {moatEvidence.length > 0 ? (
+              <ul className="space-y-1 text-sm text-muted-foreground">
+                {moatEvidence.slice(0, 5).map((item, index) => (
+                  <li
+                    key={`${item}-${index}`}
+                    className="flex items-start gap-2 text-pretty"
+                    data-testid={`text-moat-evidence-${index}`}
+                  >
+                    <CheckCircle className="h-3.5 w-3.5 mt-0.5 text-green-600 shrink-0" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-muted-foreground">No moat evidence provided</p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       {barriersToEntry &&
         (barriersToEntry.technical ||
@@ -1320,7 +1485,11 @@ export function CompetitorAnalysis({
     (basicLandscape?.directCompetitors?.length || 0) > 0 ||
     (basicLandscape?.indirectCompetitors?.length || 0) > 0;
   const hasAnyData =
-    hasDetailedCompetitorData || hasBasicCompetitorData || marketLandscape || positioning;
+    hasDetailedCompetitorData ||
+    hasBasicCompetitorData ||
+    marketLandscape ||
+    positioning ||
+    competitivePositioning;
 
   if (!hasAnyData) {
     return (

@@ -99,6 +99,11 @@ Provide structured research output:
 **Data Gaps**
 - [List any areas where research was inconclusive or unavailable]
 
+=== OUTPUT CONTRACT ===
+Return ONLY plain text report output.
+Do NOT return JSON.
+Ensure the report is at least 2500 characters.
+
 `;
 
 export const MARKET_RESEARCH_HUMAN_PROMPT = `Deep market research for:

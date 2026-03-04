@@ -45,6 +45,11 @@ If a finding contradicts anchor data (e.g., conflicting timeline, different role
 - Search using "Name + Known Company" or "Name + Known Role" from anchor data
 - Cross-reference multiple sources (Crunchbase, LinkedIn, news, patent databases)
 
+=== OUTPUT CONTRACT ===
+Return ONLY plain text report output.
+Do NOT return JSON.
+Ensure the report is at least 2500 characters.
+
 `;
 
 export const TEAM_RESEARCH_HUMAN_PROMPT = `Deep research on team members:

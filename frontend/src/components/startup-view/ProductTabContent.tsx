@@ -166,7 +166,7 @@ export function ProductTabContent({ startup, evaluation, showScores = true, prod
       )}
 
       {!showScores && productSummary && (
-        <Card className="border-primary/20" data-testid="card-product-summary">
+        <Card className="border-primary/20 bg-gradient-to-br from-primary/5 via-background to-background" data-testid="card-product-summary">
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <Package className="w-5 h-5" />
@@ -183,7 +183,7 @@ export function ProductTabContent({ startup, evaluation, showScores = true, prod
       )}
 
       {(productData?.productDescription || productData?.uniqueValue || productOverview?.whatItDoes || productOverview?.coreValueProp) && (
-        <Card className="border-primary/20" data-testid="card-product-overview">
+        <Card className="border-primary/15" data-testid="card-product-overview">
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <Package className="w-5 h-5" />
@@ -228,7 +228,7 @@ export function ProductTabContent({ startup, evaluation, showScores = true, prod
       )}
 
       {founderScreenshots.length > 0 && (
-        <Card className="border-primary/20" data-testid="card-product-showcase">
+        <Card className="border-primary/15" data-testid="card-product-showcase">
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <Image className="w-5 h-5" />
@@ -256,7 +256,7 @@ export function ProductTabContent({ startup, evaluation, showScores = true, prod
       )}
 
       {keyFeatures.length > 0 && (
-        <Card data-testid="card-key-features">
+        <Card className="border-primary/15" data-testid="card-key-features">
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <Layers className="w-5 h-5" />
@@ -278,7 +278,7 @@ export function ProductTabContent({ startup, evaluation, showScores = true, prod
       )}
 
       {technologyStack.length > 0 && (
-        <Card data-testid="card-tech-stack">
+        <Card className="border-primary/15" data-testid="card-tech-stack">
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <Code className="w-5 h-5" />
@@ -299,7 +299,7 @@ export function ProductTabContent({ startup, evaluation, showScores = true, prod
       )}
 
       {founderPitchRecommendations.length > 0 && (
-        <Card data-testid="card-pitch-recommendations">
+        <Card className="border-primary/15" data-testid="card-pitch-recommendations">
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <Layers className="w-5 h-5" />

@@ -1,4 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { ConfidenceBadge } from "@/components/ConfidenceBadge";
 import { ChartNoAxesColumn } from "lucide-react";
 import type { Evaluation } from "@/types/evaluation";
@@ -33,6 +34,34 @@ function toStructuredGapStrings(value: unknown): string[] {
       return impact ? [`${text} (${impact} impact)`] : [text];
     })
     .filter((item) => item.length > 0);
+}
+
+interface MarketSourceView {
+  name: string;
+  date: string;
+  value: string;
+  url?: string;
+}
+
+function toMarketSources(value: unknown): MarketSourceView[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item): MarketSourceView | null => {
+      if (!item || typeof item !== "object") return null;
+      const record = item as Record<string, unknown>;
+      const name = typeof record.name === "string" && record.name.trim() ? record.name.trim() : "Unknown source";
+      const date = typeof record.date === "string" && record.date.trim() ? record.date.trim() : "Unknown date";
+      const sourceValue =
+        typeof record.value === "string" && record.value.trim() ? record.value.trim() : "Unknown value";
+      const url = typeof record.url === "string" && record.url.trim() ? record.url.trim() : undefined;
+      return { name, date, value: sourceValue, url };
+    })
+    .filter((item): item is MarketSourceView => item !== null);
+}
+
+function toBoolean(value: unknown): boolean | null {
+  if (typeof value === "boolean") return value;
+  return null;
 }
 
 function isPlaceholder(value: string | undefined): boolean {
@@ -88,13 +117,34 @@ function inferStructureType(text: string): string {
 }
 
 export function MarketTabContent({ evaluation, marketWeight }: MarketTabContentProps) {
+  if (!evaluation) {
+    return (
+      <Card className="border-dashed" data-testid="card-market-empty">
+        <CardContent className="p-12 text-center">
+          <ChartNoAxesColumn className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+          <h3 className="font-semibold mb-2" data-testid="text-no-market-title">No market data</h3>
+          <p className="text-muted-foreground" data-testid="text-no-market-message">
+            Market evaluation data has not been generated yet.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
   const marketData = toRecord(evaluation?.marketData);
   const marketSizing = toRecord(marketData.marketSizing);
   const tam = toRecord(marketSizing.tam);
   const sam = toRecord(marketSizing.sam);
   const som = toRecord(marketSizing.som);
+  const bottomUpSanityCheck = toRecord(marketSizing.bottomUpSanityCheck);
+  const deckVsResearch = toRecord(marketSizing.deckVsResearch);
   const growthTiming = toRecord(marketData.marketGrowthAndTiming);
+  const growthRate = toRecord(growthTiming.growthRate);
+  const whyNow = toRecord(growthTiming.whyNow);
+  const marketLifecycle = toRecord(growthTiming.marketLifecycle);
   const marketStructure = toRecord(marketData.marketStructure);
+  const concentrationTrend = toRecord(marketStructure.concentrationTrend);
+  const entryConditions = toRecord(marketStructure.entryConditions);
   const scoring = toRecord(marketData.scoring);
 
   const confidence =
@@ -136,11 +186,27 @@ export function MarketTabContent({ evaluation, marketWeight }: MarketTabContentP
   const tamMethodology = getMeaningful(tam.methodology) || "derived";
   const samMethodology = getMeaningful(sam.methodology) || "derived";
   const somMethodology = getMeaningful(som.methodology) || "derived";
+  const tamConfidence = typeof tam.confidence === "string" ? tam.confidence : "unknown";
+  const samConfidence = typeof sam.confidence === "string" ? sam.confidence : "unknown";
+  const somConfidence = typeof som.confidence === "string" ? som.confidence : "unknown";
+  const tamSources = toMarketSources(tam.sources);
+  const samSources = toMarketSources(sam.sources);
+
+  const bottomUpCalculation = getMeaningful(bottomUpSanityCheck.calculation) || "Not provided";
+  const bottomUpPlausible = toBoolean(bottomUpSanityCheck.plausible);
+  const bottomUpNotes = getMeaningful(bottomUpSanityCheck.notes) || "Not provided";
+
+  const deckTamClaimed = getMeaningful(deckVsResearch.tamClaimed) || "Not provided";
+  const deckTamResearched = getMeaningful(deckVsResearch.tamResearched) || "Not provided";
+  const deckDiscrepancyFlag = toBoolean(deckVsResearch.discrepancyFlag);
+  const deckDiscrepancyNotes = getMeaningful(deckVsResearch.discrepancyNotes) || "Not provided";
 
   const whyNowThesis =
-    getMeaningful(toRecord(growthTiming.whyNow).thesis) ||
+    getMeaningful(whyNow.thesis) ||
     getMeaningful(legacyMomentum.rationale) ||
     "Not provided";
+  const whyNowSupportedByResearch = toBoolean(whyNow.supportedByResearch);
+  const whyNowEvidence = toStringArray(whyNow.evidence);
   const timingAssessment =
     getMeaningful(growthTiming.timingAssessment) ||
     (typeof evaluation?.marketScore === "number" && evaluation.marketScore >= 75
@@ -150,15 +216,28 @@ export function MarketTabContent({ evaluation, marketWeight }: MarketTabContentP
     getMeaningful(growthTiming.timingRationale) ||
     getMeaningful(legacySizeGrowth.rationale) ||
     "Not provided";
+  const growthRateCagr = getMeaningful(growthRate.cagr) || "Not provided";
+  const growthRatePeriod = getMeaningful(growthRate.period) || "Not provided";
+  const growthRateSource = getMeaningful(growthRate.source) || "Not provided";
+  const growthRateDeckClaimed = getMeaningful(growthRate.deckClaimed) || "Not provided";
+  const growthRateDiscrepancyFlag = toBoolean(growthRate.discrepancyFlag);
+  const lifecyclePosition = getMeaningful(marketLifecycle.position) || "Not provided";
+  const lifecycleEvidence = getMeaningful(marketLifecycle.evidence) || "Not provided";
 
   const structureType =
     getMeaningful(marketStructure.structureType) ||
     inferStructureType(getMeaningful(legacyStructure.rationale) || "");
   const entryAssessment =
-    getMeaningful(toRecord(marketStructure.entryConditions).assessment) ||
+    getMeaningful(entryConditions.assessment) ||
     (typeof evaluation?.marketScore === "number" && evaluation.marketScore >= 75
       ? "favorable"
       : "neutral");
+  const entryRationale =
+    getMeaningful(entryConditions.rationale) ||
+    getMeaningful(legacyStructure.rationale) ||
+    "Not provided";
+  const concentrationDirection = getMeaningful(concentrationTrend.direction) || "Not provided";
+  const concentrationEvidence = getMeaningful(concentrationTrend.evidence) || "Not provided";
 
   const dataGaps = [
     ...toStringArray(marketData.dataGaps),
@@ -180,7 +259,10 @@ export function MarketTabContent({ evaluation, marketWeight }: MarketTabContentP
 
   return (
     <div className="space-y-6">
-      <Card data-testid="card-market-score">
+      <Card
+        className="border-primary/20 bg-gradient-to-br from-primary/10 via-background to-background"
+        data-testid="card-market-score"
+      >
         <CardContent className="py-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -219,50 +301,190 @@ export function MarketTabContent({ evaluation, marketWeight }: MarketTabContentP
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="border-primary/15">
         <CardHeader>
           <CardTitle className="text-base">Market Sizing</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2 text-sm">
-          <p>TAM: {tamValue}</p>
-          <p>SAM: {samValue}</p>
-          <p>SOM: {somValue}</p>
-          <p>
-            Methodologies: TAM {tamMethodology} · SAM {samMethodology} · SOM {somMethodology}
-          </p>
+        <CardContent className="space-y-4">
+          <div className="grid gap-3 md:grid-cols-3">
+            {[
+              { label: "TAM", value: tamValue, methodology: tamMethodology, confidence: tamConfidence, sources: tamSources },
+              { label: "SAM", value: samValue, methodology: samMethodology, confidence: samConfidence, sources: samSources },
+              { label: "SOM", value: somValue, methodology: somMethodology, confidence: somConfidence, sources: [] as MarketSourceView[] },
+            ].map((item) => (
+              <div key={item.label} className="rounded-lg border border-primary/10 bg-muted/20 p-3 space-y-2">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-xs font-semibold tracking-wide text-muted-foreground">{item.label}</p>
+                  <ConfidenceBadge confidence={item.confidence} dataTestId={`badge-market-${item.label.toLowerCase()}-confidence`} />
+                </div>
+                <p className="text-sm font-medium break-words">{item.value}</p>
+                <p className="text-xs text-muted-foreground">Methodology: {item.methodology}</p>
+                {item.sources.length > 0 ? (
+                  <ul className="space-y-1">
+                    {item.sources.slice(0, 3).map((source, index) => (
+                      <li key={`${source.name}-${index}`} className="text-xs text-muted-foreground">
+                        {source.url ? (
+                          <a
+                            href={source.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="underline decoration-dotted underline-offset-2"
+                          >
+                            {source.name}
+                          </a>
+                        ) : (
+                          source.name
+                        )}{" "}
+                        · {source.date}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-xs text-muted-foreground">No sources provided</p>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
+              <p className="text-sm font-medium">Bottom-Up Sanity Check</p>
+              <p className="text-xs text-muted-foreground">Calculation: {bottomUpCalculation}</p>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Plausible:</span>
+                <Badge variant={bottomUpPlausible === true ? "default" : bottomUpPlausible === false ? "secondary" : "outline"}>
+                  {bottomUpPlausible === null ? "Not provided" : bottomUpPlausible ? "Yes" : "No"}
+                </Badge>
+              </div>
+              <p className="text-xs text-muted-foreground">Notes: {bottomUpNotes}</p>
+            </div>
+
+            <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
+              <p className="text-sm font-medium">Deck vs Research</p>
+              <p className="text-xs text-muted-foreground">TAM Claimed: {deckTamClaimed}</p>
+              <p className="text-xs text-muted-foreground">TAM Researched: {deckTamResearched}</p>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Discrepancy:</span>
+                <Badge variant={deckDiscrepancyFlag === true ? "destructive" : deckDiscrepancyFlag === false ? "secondary" : "outline"}>
+                  {deckDiscrepancyFlag === null ? "Not provided" : deckDiscrepancyFlag ? "Yes" : "No"}
+                </Badge>
+              </div>
+              <p className="text-xs text-muted-foreground">Notes: {deckDiscrepancyNotes}</p>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="border-primary/15">
         <CardHeader>
-          <CardTitle className="text-base">Timing & Structure</CardTitle>
+          <CardTitle className="text-base">Growth & Timing</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3 text-sm text-muted-foreground">
-          <p>
-            Timing: {timingAssessment} — {timingRationale}
-          </p>
-          <p>
-            Why now: {whyNowThesis}
-          </p>
-          <p>
-            Structure: {structureType} · Entry Conditions: {entryAssessment}
-          </p>
-          {tailwinds.length > 0 && (
+        <CardContent className="space-y-4 text-sm">
+          <div className="rounded-lg border bg-muted/20 p-3 space-y-1">
             <p>
-              Tailwinds:{" "}
-              {tailwinds
-                .map((item) => `${String(item.factor || "Unknown")} (${String(item.impact || "n/a")})`)
-                .join(", ")}
+              <span className="font-medium">Timing:</span> {timingAssessment}
             </p>
-          )}
-          {headwinds.length > 0 && (
+            <p className="text-muted-foreground">{timingRationale}</p>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
+              <p className="text-sm font-medium">Growth Rate</p>
+              <p className="text-xs text-muted-foreground">CAGR: {growthRateCagr}</p>
+              <p className="text-xs text-muted-foreground">Period: {growthRatePeriod}</p>
+              <p className="text-xs text-muted-foreground">Source: {growthRateSource}</p>
+              <p className="text-xs text-muted-foreground">Deck Claimed: {growthRateDeckClaimed}</p>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Discrepancy:</span>
+                <Badge variant={growthRateDiscrepancyFlag === true ? "destructive" : growthRateDiscrepancyFlag === false ? "secondary" : "outline"}>
+                  {growthRateDiscrepancyFlag === null ? "Not provided" : growthRateDiscrepancyFlag ? "Yes" : "No"}
+                </Badge>
+              </div>
+            </div>
+
+            <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
+              <p className="text-sm font-medium">Why Now</p>
+              <p className="text-xs text-muted-foreground">{whyNowThesis}</p>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Supported by research:</span>
+                <Badge variant={whyNowSupportedByResearch === true ? "default" : whyNowSupportedByResearch === false ? "secondary" : "outline"}>
+                  {whyNowSupportedByResearch === null ? "Not provided" : whyNowSupportedByResearch ? "Yes" : "No"}
+                </Badge>
+              </div>
+              {whyNowEvidence.length > 0 ? (
+                <ul className="list-disc pl-5 space-y-1">
+                  {whyNowEvidence.slice(0, 4).map((item) => (
+                    <li key={item} className="text-xs text-muted-foreground">{item}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-muted-foreground">No evidence provided</p>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-lg border bg-muted/20 p-3 space-y-1">
+            <p className="text-sm font-medium">Market Lifecycle</p>
+            <p className="text-xs text-muted-foreground">Position: {lifecyclePosition}</p>
+            <p className="text-xs text-muted-foreground">Evidence: {lifecycleEvidence}</p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-primary/15">
+        <CardHeader>
+          <CardTitle className="text-base">Market Structure</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4 text-sm">
+          <div className="rounded-lg border bg-muted/20 p-3 space-y-1">
             <p>
-              Headwinds:{" "}
-              {headwinds
-                .map((item) => `${String(item.factor || "Unknown")} (${String(item.impact || "n/a")})`)
-                .join(", ")}
+              <span className="font-medium">Structure:</span> {structureType}
             </p>
-          )}
+            <p>
+              <span className="font-medium">Entry Conditions:</span> {entryAssessment}
+            </p>
+            <p className="text-muted-foreground">{entryRationale}</p>
+          </div>
+
+          <div className="rounded-lg border bg-muted/20 p-3 space-y-1">
+            <p className="text-sm font-medium">Concentration Trend</p>
+            <p className="text-xs text-muted-foreground">Direction: {concentrationDirection}</p>
+            <p className="text-xs text-muted-foreground">Evidence: {concentrationEvidence}</p>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="rounded-lg border bg-muted/20 p-3">
+              <p className="text-sm font-medium mb-2">Tailwinds</p>
+              {tailwinds.length > 0 ? (
+                <ul className="space-y-1">
+                  {tailwinds.slice(0, 4).map((item, index) => (
+                    <li key={`${String(item.factor)}-${index}`} className="text-xs text-muted-foreground">
+                      {String(item.factor || "Unknown")} ({String(item.impact || "n/a")})
+                      {typeof item.source === "string" && item.source.trim().length > 0 ? ` · ${item.source}` : ""}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-muted-foreground">No tailwinds provided</p>
+              )}
+            </div>
+
+            <div className="rounded-lg border bg-muted/20 p-3">
+              <p className="text-sm font-medium mb-2">Headwinds</p>
+              {headwinds.length > 0 ? (
+                <ul className="space-y-1">
+                  {headwinds.slice(0, 4).map((item, index) => (
+                    <li key={`${String(item.factor)}-${index}`} className="text-xs text-muted-foreground">
+                      {String(item.factor || "Unknown")} ({String(item.impact || "n/a")})
+                      {typeof item.source === "string" && item.source.trim().length > 0 ? ` · ${item.source}` : ""}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-muted-foreground">No headwinds provided</p>
+              )}
+            </div>
+          </div>
         </CardContent>
       </Card>
 

@@ -611,7 +611,7 @@ export function TeamTabContent({
       )}
 
       {founderRecommendations.length > 0 && (
-        <Card className="border-primary/20" data-testid="card-founder-recommendations">
+        <Card className="border-primary/20 bg-gradient-to-br from-primary/5 via-background to-background" data-testid="card-founder-recommendations">
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <Users className="w-5 h-5" />
@@ -639,7 +639,7 @@ export function TeamTabContent({
         </Card>
       )}
 
-      <Card className="border-primary/20" data-testid="card-team-profiles">
+      <Card className="border-primary/15" data-testid="card-team-profiles">
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
             <Users className="w-5 h-5" />

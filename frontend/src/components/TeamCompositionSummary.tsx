@@ -52,14 +52,14 @@ function RoleIndicator({
     <div
       className={`flex items-center gap-2 p-3 rounded-lg border ${
         hasRole
-          ? "bg-violet-500/10 border-violet-400/35"
+          ? "bg-emerald-500/10 border-emerald-400/35"
           : "bg-rose-500/10 border-rose-400/35"
       }`}
     >
-      <Icon className={`w-5 h-5 ${hasRole ? "text-violet-500" : "text-rose-500"}`} />
+      <Icon className={`w-5 h-5 ${hasRole ? "text-emerald-600" : "text-rose-500"}`} />
       <span className="text-sm font-medium flex-1">{label}</span>
       {hasRole ? (
-        <CheckCircle2 className="w-4 h-4 text-violet-500" />
+        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
       ) : (
         <XCircle className="w-4 h-4 text-rose-500" />
       )}
@@ -82,7 +82,10 @@ export function TeamCompositionSummary({
 
   return (
     <div className="space-y-6">
-      <Card data-testid="card-team-score">
+      <Card
+        className="border-primary/20 bg-gradient-to-br from-primary/10 via-background to-background"
+        data-testid="card-team-score"
+      >
         <CardContent className="py-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -121,7 +124,7 @@ export function TeamCompositionSummary({
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="border-primary/15">
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <Users className="w-5 h-5 text-primary" />
@@ -161,7 +164,7 @@ export function TeamCompositionSummary({
 
           {(founderMarketFitScore !== null || founderMarketFitWhy) && (
             <div
-              className="rounded-lg border bg-muted/30 p-4 space-y-2"
+              className="rounded-lg border border-primary/20 bg-primary/5 p-4 space-y-2"
               data-testid="card-founder-market-fit-inline"
             >
               <div className="flex items-center justify-between gap-3">
@@ -183,29 +186,30 @@ export function TeamCompositionSummary({
       </Card>
 
       <div className="grid gap-6 md:grid-cols-2">
-        {keyStrengths && keyStrengths.length > 0 && (
-          <Card>
+        <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
-                <CheckCircle2 className="w-5 h-5 text-violet-500" />
+                <CheckCircle2 className="w-5 h-5 text-emerald-600" />
                 Team Strengths
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <ul className="space-y-2">
-                {keyStrengths.slice(0, 5).map((strength, idx) => (
-                  <li key={idx} className="flex items-start gap-2 text-sm">
-                    <CheckCircle2 className="w-4 h-4 mt-0.5 text-violet-500 shrink-0" />
-                    <span>{strength}</span>
-                  </li>
-                ))}
-              </ul>
+              {keyStrengths && keyStrengths.length > 0 ? (
+                <ul className="space-y-2">
+                  {keyStrengths.slice(0, 5).map((strength, idx) => (
+                    <li key={idx} className="flex items-start gap-2 text-sm">
+                      <CheckCircle2 className="w-4 h-4 mt-0.5 text-emerald-600 shrink-0" />
+                      <span>{strength}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground">No team strengths were identified in this run.</p>
+              )}
             </CardContent>
           </Card>
-        )}
 
-        {keyRisks && keyRisks.length > 0 && (
-          <Card>
+        <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <AlertTriangle className="w-5 h-5 text-rose-500" />
@@ -213,17 +217,20 @@ export function TeamCompositionSummary({
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <ul className="space-y-2">
-                {keyRisks.slice(0, 5).map((risk, idx) => (
-                  <li key={idx} className="flex items-start gap-2 text-sm">
-                    <AlertTriangle className="w-4 h-4 mt-0.5 text-rose-500 shrink-0" />
-                    <span>{risk}</span>
-                  </li>
-                ))}
-              </ul>
+              {keyRisks && keyRisks.length > 0 ? (
+                <ul className="space-y-2">
+                  {keyRisks.slice(0, 5).map((risk, idx) => (
+                    <li key={idx} className="flex items-start gap-2 text-sm">
+                      <AlertTriangle className="w-4 h-4 mt-0.5 text-rose-500 shrink-0" />
+                      <span>{risk}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground">No explicit team risks were identified in this run.</p>
+              )}
             </CardContent>
           </Card>
-        )}
       </div>
     </div>
   );

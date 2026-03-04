@@ -1,5 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { ConfidenceBadge } from "@/components/ConfidenceBadge";
 import { MemoSection } from "@/components/MemoSection";
 import {
   FileText,
@@ -23,18 +25,24 @@ import type { Evaluation } from "@/types/evaluation";
 interface InvestorMemoSection {
   title: string;
   content: string;
+  highlights?: string[];
+  concerns?: string[];
 }
 
 interface InvestorMemo {
   executiveSummary?: string;
   summary?: string;
   sections?: InvestorMemoSection[];
+  recommendation?: string;
+  riskLevel?: string;
   dealHighlights?: string[];
   keyDueDiligenceAreas?: string[];
 }
 
 interface FounderReport {
   summary?: string;
+  sections?: InvestorMemoSection[];
+  actionItems?: string[];
 }
 
 interface AdminFeedbackHandler {
@@ -262,6 +270,8 @@ function toMemoSections(value: unknown): InvestorMemoSection[] {
       return {
         title,
         content,
+        highlights: toStringArray(record.highlights),
+        concerns: toStringArray(record.concerns),
       };
     })
     .filter((item): item is InvestorMemoSection => item !== null);
@@ -283,6 +293,8 @@ export function MemoTabContent({
   animateOnMount = false,
 }: MemoTabContentProps) {
   const memo = (investorMemo ?? (evaluation.investorMemo as InvestorMemo | null | undefined)) ?? null;
+  const founderReportData =
+    (founderReport ?? (evaluation.founderReport as FounderReport | null | undefined)) ?? null;
   const memoSections = toMemoSections(memo?.sections);
   const sectionByKey = new Map<string, InvestorMemoSection>();
 
@@ -294,6 +306,14 @@ export function MemoTabContent({
   }
 
   const dueDiligenceAreas = toStringArray(memo?.keyDueDiligenceAreas);
+  const founderActionItems = toStringArray(founderReportData?.actionItems);
+  const founderSections = toMemoSections(founderReportData?.sections);
+  const evaluationRecord = evaluation as unknown as Record<string, unknown>;
+  const synthesisConfidence =
+    (typeof evaluationRecord.confidenceLevel === "string" &&
+      evaluationRecord.confidenceLevel) ||
+    (typeof evaluationRecord.confidence === "string" && evaluationRecord.confidence) ||
+    "unknown";
 
   const getAdminFeedbackProps = (sectionKey: string) => {
     if (!adminFeedback) return undefined;
@@ -348,6 +368,35 @@ export function MemoTabContent({
         </div>
       </CardHeader>
       <CardContent className="space-y-6" data-testid="container-memo-sections">
+        <Card
+          className="border-primary/20 bg-gradient-to-br from-primary/10 via-background to-background"
+          data-testid="card-synthesis-verdict"
+        >
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Synthesis Verdict</CardTitle>
+            <CardDescription>
+              Final synthesis recommendation, confidence, and data-quality notes
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="outline" data-testid="badge-synthesis-recommendation">
+                Recommendation: {memo?.recommendation || "Not provided"}
+              </Badge>
+              <Badge variant="secondary" className="capitalize" data-testid="badge-synthesis-risk-level">
+                Risk: {memo?.riskLevel || "Not provided"}
+              </Badge>
+              <ConfidenceBadge
+                confidence={synthesisConfidence}
+                dataTestId="badge-synthesis-confidence"
+              />
+            </div>
+            <p className="text-sm text-muted-foreground leading-relaxed" data-testid="text-synthesis-confidence-notes">
+              {evaluation.dataConfidenceNotes || "No data confidence notes were provided by synthesis."}
+            </p>
+          </CardContent>
+        </Card>
+
         <MemoSection
           title="Executive Summary"
           icon={FileText}
@@ -375,6 +424,33 @@ export function MemoTabContent({
 
         {SECTION_CONFIG.map((config) => {
           const section = sectionByKey.get(config.key);
+          const sectionHighlights = toStringArray(section?.highlights);
+          const sectionConcerns = toStringArray(section?.concerns);
+          const sectionDetails =
+            sectionHighlights.length > 0 || sectionConcerns.length > 0 ? (
+              <div className="space-y-3">
+                {sectionHighlights.length > 0 && (
+                  <div>
+                    <h4 className="mb-1 text-sm font-medium">Highlights</h4>
+                    <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+                      {sectionHighlights.slice(0, 4).map((item, index) => (
+                        <li key={`${item}-${index}`}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {sectionConcerns.length > 0 && (
+                  <div>
+                    <h4 className="mb-1 text-sm font-medium">Concerns</h4>
+                    <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+                      {sectionConcerns.slice(0, 4).map((item, index) => (
+                        <li key={`${item}-${index}`}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            ) : undefined;
 
           return (
             <MemoSection
@@ -385,6 +461,7 @@ export function MemoTabContent({
               score={showScores ? getScore(evaluation, config.scoreKey) : undefined}
               weight={`${weights?.[config.weightKey] ?? 0}%`}
               summary={section?.content || "Synthesis section is not available yet for this dimension."}
+              details={sectionDetails}
               evaluationNote={config.evaluationNote}
               adminFeedback={getAdminFeedbackProps(config.key)}
             />
@@ -409,6 +486,45 @@ export function MemoTabContent({
             <p className="text-sm text-muted-foreground">
               Synthesis due-diligence areas are not available yet.
             </p>
+          )}
+        </div>
+
+        <div className="rounded-lg border bg-muted/20 p-4 space-y-3" data-testid="section-founder-report">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="font-semibold text-base">Founder Report Action Plan</h3>
+            <Badge variant="outline" data-testid="badge-founder-actions-count">
+              {founderActionItems.length} action{founderActionItems.length === 1 ? "" : "s"}
+            </Badge>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            {founderReportData?.summary || "Founder report summary is not available yet."}
+          </p>
+          {founderActionItems.length > 0 ? (
+            <ul className="space-y-2">
+              {founderActionItems.map((item, index) => (
+                <li
+                  key={`${item}-${index}`}
+                  className="flex items-start gap-2 text-sm text-muted-foreground"
+                >
+                  <span className="mt-2 h-1.5 w-1.5 rounded-full bg-primary shrink-0" />
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              No founder action items were generated by synthesis.
+            </p>
+          )}
+          {founderSections.length > 0 && (
+            <div className="space-y-2 border-t pt-3">
+              {founderSections.slice(0, 2).map((section, index) => (
+                <div key={`${section.title}-${index}`} className="rounded-md border bg-background p-3">
+                  <p className="text-sm font-medium">{section.title}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">{section.content}</p>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       </CardContent>

@@ -429,7 +429,6 @@ export class SynthesisAgent {
               "Use keyFindings, risks, and dataGaps as hard constraints.",
               "Preserve factual meaning from the source narrative. Improve coherence and readability only.",
               "Do not invent new facts. Do not include score/confidence phrasing in prose.",
-              "Return only valid JSON matching the schema.",
             ].join("\n"),
             prompt,
             providerOptions:
@@ -494,7 +493,6 @@ export class SynthesisAgent {
 
     return [
       `Rewrite section narrative for: ${section.title}`,
-      "Return JSON only.",
       "Source payload:",
       `<evaluation_data>${JSON.stringify(payload)}</evaluation_data>`,
     ].join("\n");

@@ -292,8 +292,16 @@ function extractFounderMarketFitScore(teamData: Record<string, unknown> | undefi
   if (!teamData) return undefined;
   const fmf = teamData.founderMarketFit as Record<string, unknown> | undefined;
   if (fmf && typeof fmf.score === "number") return fmf.score;
+  if (fmf && typeof fmf.score === "string" && fmf.score.trim()) {
+    const parsed = Number(fmf.score);
+    if (Number.isFinite(parsed)) return parsed;
+  }
   const legacy = teamData.founderMarketFitScore;
   if (typeof legacy === "number") return legacy;
+  if (typeof legacy === "string" && legacy.trim()) {
+    const parsed = Number(legacy);
+    if (Number.isFinite(parsed)) return parsed;
+  }
   return undefined;
 }
 
@@ -572,6 +580,18 @@ export function TeamTabContent({
   const founderMarketFitScore = useMemo(() => extractFounderMarketFitScore(teamData), [teamData]);
   const founderMarketFitWhy = useMemo(() => extractFounderMarketFitWhy(teamData), [teamData]);
   const founderRecommendations = useMemo(() => extractFounderRecommendations(teamData), [teamData]);
+  const teamConfidence = useMemo(() => {
+    const directConfidence = teamData?.confidence;
+    if (typeof directConfidence === "string") return directConfidence;
+
+    const scoring = teamData?.scoring;
+    if (scoring && typeof scoring === "object") {
+      const scoringConfidence = (scoring as Record<string, unknown>).confidence;
+      if (typeof scoringConfidence === "string") return scoringConfidence;
+    }
+
+    return "unknown";
+  }, [teamData]);
 
   return (
     <div className="space-y-6" data-testid="container-team-tab">
@@ -582,48 +602,39 @@ export function TeamTabContent({
           keyStrengths={teamStrengths}
           keyRisks={teamRisks}
           weight={teamWeight}
+          confidence={teamConfidence}
+          founderMarketFit={{
+            score: founderMarketFitScore,
+            why: founderMarketFitWhy,
+          }}
         />
       )}
 
-      {(founderMarketFitScore !== undefined || founderMarketFitWhy || founderRecommendations.length > 0) && (
-        <Card className="border-primary/20" data-testid="card-founder-market-fit">
+      {founderRecommendations.length > 0 && (
+        <Card className="border-primary/20" data-testid="card-founder-recommendations">
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <Users className="w-5 h-5" />
-              <span data-testid="text-fmf-title">Founder-Market Fit</span>
+              <span data-testid="text-founder-recommendations-title">Recommendations for Founders</span>
             </CardTitle>
-            {founderMarketFitScore !== undefined && (
-              <CardDescription data-testid="text-fmf-score">
-                Score: {founderMarketFitScore}/100
-              </CardDescription>
-            )}
+            <CardDescription>Actionable guidance from the team evaluation</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {founderMarketFitWhy && (
-              <p className="text-sm text-muted-foreground leading-relaxed" data-testid="text-fmf-why">
-                {founderMarketFitWhy}
-              </p>
-            )}
-            {founderRecommendations.length > 0 && (
-              <div data-testid="container-founder-recommendations">
-                <h4 className="text-sm font-medium mb-2">Recommendations for Founders</h4>
-                <ul className="space-y-2">
-                  {founderRecommendations.map((rec, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground" data-testid={`item-founder-rec-${i}`}>
-                      <span className="w-1.5 h-1.5 rounded-full bg-primary mt-2 shrink-0" />
-                      <span>
-                        {rec.type === "hire"
-                          ? "Hire: "
-                          : rec.type === "reframe"
-                            ? "Reframe: "
-                            : ""}
-                        {rec.bullet}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+            <ul className="space-y-2" data-testid="container-founder-recommendations">
+              {founderRecommendations.map((rec, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground" data-testid={`item-founder-rec-${i}`}>
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary mt-2 shrink-0" />
+                  <span>
+                    {rec.type === "hire"
+                      ? "Hire: "
+                      : rec.type === "reframe"
+                        ? "Reframe: "
+                        : ""}
+                    {rec.bullet}
+                  </span>
+                </li>
+              ))}
+            </ul>
           </CardContent>
         </Card>
       )}

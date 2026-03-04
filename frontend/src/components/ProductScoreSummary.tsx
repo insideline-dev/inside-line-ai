@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { ConfidenceBadge } from "@/components/ConfidenceBadge";
 import {
   Package,
   CheckCircle2,
@@ -18,6 +19,7 @@ interface ProductScoreSummaryProps {
   keyStrengths?: string[];
   keyRisks?: string[];
   weight?: number;
+  confidence?: string;
 }
 
 function getTRLLabel(trl: string | null | undefined): { label: string; color: string } {
@@ -44,6 +46,7 @@ export function ProductScoreSummary({
   keyStrengths,
   keyRisks,
   weight,
+  confidence = "unknown",
 }: ProductScoreSummaryProps) {
   const trlInfo = getTRLLabel(trlStage);
   const normalizedMoatType = moatType && moatType.trim().length > 0 ? moatType : "none";
@@ -62,6 +65,11 @@ export function ProductScoreSummary({
               <div>
                 <h3 className="text-lg font-semibold">Product Score</h3>
                 <p className="text-sm text-muted-foreground">{weight !== undefined ? `${weight}%` : ''} weight in overall evaluation</p>
+                <ConfidenceBadge
+                  confidence={confidence}
+                  className="mt-2"
+                  dataTestId="badge-product-confidence"
+                />
               </div>
             </div>
             <div className="text-right">

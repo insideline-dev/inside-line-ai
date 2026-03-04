@@ -94,6 +94,10 @@ export function ProductTabContent({ startup, evaluation, showScores = true, prod
     productData?.competitiveMoat?.strength ??
     productData?.moatStrength ??
     null;
+  const productConfidence =
+    (typeof productData?.confidence === "string" && productData.confidence) ||
+    (typeof productData?.scoring?.confidence === "string" && productData.scoring.confidence) ||
+    "unknown";
   // New schema: strengths field > keyStrengths > keyFindings (backward compat)
   const productStrengths = dedupeStrings(
     [
@@ -157,6 +161,7 @@ export function ProductTabContent({ startup, evaluation, showScores = true, prod
           keyStrengths={productStrengths}
           keyRisks={productRisks}
           weight={productWeight}
+          confidence={productConfidence}
         />
       )}
 

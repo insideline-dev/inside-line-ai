@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { ConfidenceBadge } from "@/components/ConfidenceBadge";
 import { ScoreRing } from "@/components/analysis/ScoreRing";
 import {
   CheckCircle,
@@ -91,6 +92,15 @@ export function SummaryCard({
   const percentileRank = getDisplayPercentileRank(evaluation, startup.percentileRank);
   const strengths = getDisplayStrengths(evaluation);
   const risks = getDisplayRisks(evaluation);
+  const evaluationRecord = (evaluation ?? null) as Record<string, unknown> | null;
+  const overallConfidence =
+    (evaluationRecord && typeof evaluationRecord.confidenceLevel === "string"
+      ? evaluationRecord.confidenceLevel
+      : null) ??
+    (evaluationRecord && typeof evaluationRecord.confidence === "string"
+      ? evaluationRecord.confidence
+      : null) ??
+    "unknown";
 
   useEffect(() => {
     setAnimateBars(false);
@@ -116,6 +126,11 @@ export function SummaryCard({
             {showScores && (
               <div className="flex flex-col items-center text-center" data-testid="container-score">
                 <ScoreRing score={overallScore} size="lg" />
+                <ConfidenceBadge
+                  confidence={overallConfidence}
+                  className="mt-2"
+                  dataTestId="badge-overall-confidence"
+                />
                 {percentileRank != null && (
                   <Badge variant="outline" className="mt-2" data-testid="badge-percentile">
                     Top {Math.round(100 - percentileRank)}%

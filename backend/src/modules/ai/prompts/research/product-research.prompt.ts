@@ -88,10 +88,6 @@ Absence is data:
 - No public changelog
 - Pricing not published
 
-=== OUTPUT FORMAT ===
-
-**Verification:**
-Target: [Name] | Domain: [URL] | Confidence: [High/Medium/Low]
 Notes: [Any discrepancies]
 
 **Product Type & Vertical:**
@@ -129,12 +125,7 @@ Notes: [Any discrepancies]
 **Notably Absent / Risk Signals:**
 [Expected signals missing given product type and stage, negative patterns observed]
 
-=== RESPONSE CONTRACT (CRITICAL) ===
-- Return ONLY plain text report output.
-- Do NOT return JSON.
-- Do NOT wrap output in markdown code fences.
-- Do NOT include commentary before or after the report.
-- Report must be comprehensive, evidence-driven, and at least 2500 characters.`;
+`;
 
 export const PRODUCT_RESEARCH_HUMAN_PROMPT = `Conduct deep product intelligence research for:
 

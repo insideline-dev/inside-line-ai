@@ -80,7 +80,7 @@ describe("TractionEvaluationAgent", () => {
 
     expect(result.usedFallback).toBe(false);
     expect(result.output.score).toBe(72);
-    expect(result.output.confidence).toBe("medium");
+    expect(result.output.confidence).toBe("mid");
     expect("metrics" in result.output).toBe(false);
   });
 

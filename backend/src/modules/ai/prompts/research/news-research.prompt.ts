@@ -31,6 +31,11 @@ Find all relevant news and public information about the company:
 - **Tier 2**: Industry-specific publications, reputable tech blogs, major regional outlets
 - **Tier 3** (lowest weight): Social media mentions, minor blogs, forums — include but flag as low-confidence
 
+=== OUTPUT CONTRACT ===
+Return ONLY plain text report output.
+Do NOT return JSON.
+Ensure the report is at least 2500 characters.
+
 `;
 
 export const NEWS_RESEARCH_HUMAN_PROMPT = `Search news and public mentions for:

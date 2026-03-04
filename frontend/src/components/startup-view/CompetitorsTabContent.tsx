@@ -92,6 +92,18 @@ export function CompetitorsTabContent({
   const strategicPositioning = toRecord(competitiveData.strategicPositioning);
   const competitivePositionObj = toRecord(competitiveData.competitivePosition);
   const moatAssessment = toRecord(competitiveData.moatAssessment);
+  const competitiveCurrentGap = toString(competitivePositionObj.currentGap);
+  const competitiveVulnerabilities = toStringArray(
+    competitivePositionObj.vulnerabilities,
+  );
+  const defensibleAgainstFunded = toNullableBoolean(
+    competitivePositionObj.defensibleAgainstFunded,
+  );
+  const differentiationType = toString(strategicPositioning.differentiationType);
+  const differentiationDurability = toString(strategicPositioning.durability);
+  const moatStage = toString(moatAssessment.moatStage);
+  const moatEvidence = toStringArray(moatAssessment.moatEvidence);
+  const moatSelfReinforcing = toNullableBoolean(moatAssessment.selfReinforcing);
   // New schema: competitivePosition + strategicPositioning + moatAssessment
   const competitivePosition =
     toString(competitiveData.competitivePosition) ??
@@ -153,6 +165,14 @@ export function CompetitorsTabContent({
             evaluation.competitiveAdvantageScore,
           ),
           positioningRecommendation: toStringArray(evaluation.recommendations)[0],
+          currentGap: competitiveCurrentGap,
+          vulnerabilities: competitiveVulnerabilities,
+          defensibleAgainstFunded,
+          differentiationType,
+          differentiationDurability,
+          moatStage,
+          moatEvidence,
+          moatSelfReinforcing,
         }}
         barriersToEntry={barriersToEntry}
         keyStrengths={keyFindings}
@@ -222,6 +242,10 @@ function toArrayOfRecords(value: unknown): GenericRecord[] {
 
 function toString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function toNullableBoolean(value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : null;
 }
 
 function toStringArray(value: unknown): string[] {

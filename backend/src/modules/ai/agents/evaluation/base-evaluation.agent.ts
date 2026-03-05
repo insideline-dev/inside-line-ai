@@ -9,6 +9,7 @@ import type {
   EvaluationPipelineInput,
   EvaluationAgentRunOptions,
   EvaluationAgentTraceEvent,
+  EvaluationFeedbackNote,
 } from "../../interfaces/agent.interface";
 import { ModelPurpose } from "../../interfaces/pipeline.interface";
 import { AiProviderService } from "../../providers/ai-provider.service";
@@ -20,6 +21,8 @@ import { AiModelExecutionService } from "../../services/ai-model-execution.servi
 import { sanitizeNarrativeText } from "../../services/narrative-sanitizer";
 
 const NARRATIVE_MIN_LENGTH = 420;
+const LEGACY_PROMPT_TEXT_MAX_CHARS = 18_000;
+const LEGACY_PROMPT_JSON_MAX_CHARS = 14_000;
 
 interface BaseEvaluationLike {
   score: number;
@@ -139,12 +142,16 @@ export abstract class BaseEvaluationAgent<TOutput>
           })
         : null;
       const contextSections = this.formatContext(promptContext);
+      const contextJson = JSON.stringify(promptContext);
       renderedPrompt = this.promptService.renderTemplate(
         promptConfig.userPrompt,
-        {
+        this.buildPromptTemplateVariables({
+          pipelineData,
+          promptContext,
           contextSections,
-          contextJson: JSON.stringify(promptContext),
-        },
+          contextJson,
+          feedbackNotes,
+        }),
       );
       composedSystemPrompt = [
         promptConfig.systemPrompt || this.systemPrompt,
@@ -1077,5 +1084,186 @@ export abstract class BaseEvaluationAgent<TOutput>
       }
     }
     return sections.join("\n\n");
+  }
+
+  private buildPromptTemplateVariables(input: {
+    pipelineData: EvaluationPipelineInput;
+    promptContext: Record<string, unknown>;
+    contextSections: string;
+    contextJson: string;
+    feedbackNotes: EvaluationFeedbackNote[];
+  }): Record<string, string | number | null | undefined> {
+    const { pipelineData, contextSections, contextJson, feedbackNotes } = input;
+    const extraction = pipelineData.extraction;
+    const scraping = pipelineData.scraping;
+    const research = pipelineData.research;
+    const startupContext = extraction.startupContext ?? {};
+    const notableClaims = Array.isArray(scraping.notableClaims)
+      ? scraping.notableClaims
+      : [];
+    const teamMembers = Array.isArray(scraping.teamMembers)
+      ? scraping.teamMembers
+      : [];
+    const websiteUrl = this.firstNonEmptyString(
+      extraction.website,
+      scraping.websiteUrl,
+      scraping.website?.url,
+    );
+    const websiteContent = this.firstNonEmptyString(
+      scraping.website?.fullText,
+      scraping.website?.description,
+      scraping.websiteSummary,
+    );
+    const companyDescription = this.firstNonEmptyString(
+      startupContext.productDescription,
+      extraction.tagline,
+      scraping.website?.description,
+      extraction.rawText.slice(0, 2_500),
+    );
+    const researchReportText = this.buildResearchReportText(pipelineData);
+    const adminGuidance = feedbackNotes
+      .map((note) => note.feedback?.trim())
+      .filter((entry): entry is string => Boolean(entry))
+      .join("\n\n");
+
+    const claimedTam = notableClaims.find((claim) =>
+      /\b(tam|total addressable market|market size)\b/i.test(claim),
+    );
+    const claimedSam = notableClaims.find((claim) =>
+      /\b(sam|serviceable available market)\b/i.test(claim),
+    );
+    const claimedGrowthRate = notableClaims.find((claim) =>
+      /\b(cagr|growth|year[- ]over[- ]year|yoy)\b/i.test(claim),
+    );
+    const deckTractionData = notableClaims
+      .filter((claim) => /\b(user|customer|revenue|arr|mrr|growth|traction|pilot|loi)\b/i.test(claim))
+      .slice(0, 25)
+      .join("\n");
+
+    return {
+      contextSections,
+      contextJson: this.truncatePromptText(contextJson, LEGACY_PROMPT_JSON_MAX_CHARS),
+      companyName: this.normalizePromptText(extraction.companyName),
+      companyDescription: this.normalizePromptText(companyDescription),
+      companyDesc: this.normalizePromptText(companyDescription),
+      website: this.normalizePromptText(websiteUrl),
+      sector: this.normalizePromptText(
+        this.firstNonEmptyString(
+          extraction.industry,
+          startupContext.sectorIndustry,
+          startupContext.sectorIndustryGroup,
+        ),
+      ),
+      stage: this.normalizePromptText(extraction.stage),
+      location: this.normalizePromptText(extraction.location),
+      deckContext: this.truncatePromptText(
+        this.normalizePromptText(extraction.rawText),
+      ),
+      webResearch: this.truncatePromptText(researchReportText),
+      websiteContent: this.truncatePromptText(
+        this.normalizePromptText(websiteContent),
+      ),
+      teamMembersData: this.truncatePromptText(this.safeStringify(teamMembers)),
+      teamResearchOutput: this.truncatePromptText(
+        this.normalizePromptText(research.team),
+      ),
+      marketResearchOutput: this.truncatePromptText(
+        this.normalizePromptText(research.market),
+      ),
+      productResearchOutput: this.truncatePromptText(
+        this.normalizePromptText(research.product),
+      ),
+      newsResearchOutput: this.truncatePromptText(
+        this.normalizePromptText(research.news),
+      ),
+      competitorResearchOutput: this.truncatePromptText(
+        this.normalizePromptText(research.competitor),
+      ),
+      competitorProfiles: this.truncatePromptText(
+        this.normalizePromptText(research.competitor),
+      ),
+      competitiveDynamicsEvidence: this.truncatePromptText(
+        this.normalizePromptText(research.competitor),
+      ),
+      featureMatrix: this.truncatePromptText(
+        this.safeStringify(scraping.website?.links ?? []),
+      ),
+      targetMarketDescription: this.normalizePromptText(
+        this.firstNonEmptyString(startupContext.productDescription, extraction.tagline),
+      ),
+      claimedTAM: this.normalizePromptText(claimedTam),
+      claimedSAM: this.normalizePromptText(claimedSam),
+      claimedGrowthRate: this.normalizePromptText(claimedGrowthRate),
+      deckTractionData: this.truncatePromptText(deckTractionData),
+      financialModel: this.truncatePromptText(
+        this.normalizePromptText(researchReportText),
+      ),
+      roundSize: extraction.fundingAsk ?? undefined,
+      roundCurrency: this.normalizePromptText(startupContext.roundCurrency),
+      valuation: extraction.valuation ?? undefined,
+      valuationType: this.normalizePromptText(startupContext.valuationType),
+      raiseType: this.normalizePromptText(startupContext.raiseType),
+      hasPreviousFunding:
+        startupContext.hasPreviousFunding == null
+          ? undefined
+          : String(startupContext.hasPreviousFunding),
+      previousFundingAmount: startupContext.previousFundingAmount ?? undefined,
+      previousFundingCurrency: this.normalizePromptText(
+        startupContext.previousFundingCurrency,
+      ),
+      previousInvestors: this.normalizePromptText(startupContext.previousInvestors),
+      previousRoundType: this.normalizePromptText(startupContext.previousRoundType),
+      leadSecured:
+        startupContext.leadSecured == null
+          ? undefined
+          : String(startupContext.leadSecured),
+      leadInvestorName: this.normalizePromptText(startupContext.leadInvestorName),
+      adminGuidance: this.truncatePromptText(adminGuidance, 8_000),
+    };
+  }
+
+  private firstNonEmptyString(
+    ...values: Array<string | null | undefined>
+  ): string {
+    for (const value of values) {
+      if (typeof value !== "string") {
+        continue;
+      }
+      const trimmed = value.trim();
+      if (trimmed.length > 0) {
+        return trimmed;
+      }
+    }
+    return "";
+  }
+
+  private normalizePromptText(value: unknown): string {
+    if (typeof value === "string") {
+      return value.trim();
+    }
+    if (typeof value === "number") {
+      return Number.isFinite(value) ? String(value) : "";
+    }
+    if (typeof value === "boolean") {
+      return value ? "true" : "false";
+    }
+    if (value == null) {
+      return "";
+    }
+    return this.safeStringify(value).trim();
+  }
+
+  private truncatePromptText(
+    value: string,
+    maxChars: number = LEGACY_PROMPT_TEXT_MAX_CHARS,
+  ): string {
+    const normalized = value.trim();
+    if (normalized.length <= maxChars) {
+      return normalized;
+    }
+
+    const head = Math.max(200, Math.floor(maxChars * 0.7));
+    const tail = Math.max(120, maxChars - head);
+    return `${normalized.slice(0, head)}\n\n...[truncated ${normalized.length - maxChars} chars]...\n\n${normalized.slice(-tail)}`;
   }
 }

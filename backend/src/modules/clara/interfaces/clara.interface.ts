@@ -71,6 +71,7 @@ export interface SubmissionResult {
   status: string;
   pipelineStarted?: boolean;
   missingFields?: Array<"website" | "stage">;
+  noPitchDeck?: boolean;
 }
 
 export interface ClaraAgentRuntimeState {

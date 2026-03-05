@@ -112,6 +112,13 @@ export class AgentMailService {
   }
 
   private async processWebhookEvent(payload: AgentMailWebhook): Promise<void> {
+    const rawPayload = payload as unknown as Record<string, unknown>;
+    const eventType = this.asNonEmptyString(rawPayload.event_type)?.toLowerCase() ?? null;
+    if (eventType && eventType !== 'message.received') {
+      this.logger.debug(`Ignoring AgentMail webhook event type: ${eventType}`);
+      return;
+    }
+
     const refs = this.extractWebhookReferences(payload);
     const { inboxId, threadId, messageId, messageSnapshot } = refs;
 
@@ -273,17 +280,25 @@ export class AgentMailService {
     const inboxId =
       this.asNonEmptyString(raw.inbox_id)
       ?? this.asNonEmptyString(message?.inbox_id)
-      ?? this.asNonEmptyString(thread?.inbox_id);
+      ?? this.asNonEmptyString(thread?.inbox_id)
+      ?? this.asNonEmptyString((raw as any).inboxId) // fallback to camelCase
+      ?? this.asNonEmptyString((message as any)?.inboxId)
+      ?? this.asNonEmptyString((thread as any)?.inboxId);
     const threadId =
       this.asNonEmptyString(raw.thread_id)
       ?? this.asNonEmptyString(message?.thread_id)
       ?? this.asNonEmptyString(thread?.thread_id)
-      ?? this.asNonEmptyString(thread?.id);
+      ?? this.asNonEmptyString(thread?.id)
+      ?? this.asNonEmptyString((raw as any).threadId) // fallback to camelCase
+      ?? this.asNonEmptyString((message as any)?.threadId)
+      ?? this.asNonEmptyString((thread as any)?.threadId);
     const messageId =
       this.asNonEmptyString(raw.message_id)
       ?? this.asNonEmptyString(message?.id)
       ?? this.asNonEmptyString(message?.message_id)
-      ?? this.asNonEmptyString(message?.smtp_id);
+      ?? this.asNonEmptyString(message?.smtp_id)
+      ?? this.asNonEmptyString((raw as any).messageId) // fallback to camelCase
+      ?? this.asNonEmptyString((message as any)?.messageId);
 
     return {
       inboxId,

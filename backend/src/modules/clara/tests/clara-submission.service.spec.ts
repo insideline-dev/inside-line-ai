@@ -7,6 +7,7 @@ import { NotificationService } from "../../../notification/notification.service"
 import { ClaraAiService } from "../clara-ai.service";
 import { ClaraSubmissionService } from "../clara-submission.service";
 import { StartupStatus } from "../../startup/entities/startup.schema";
+import { PipelinePhase } from "../../ai/interfaces/pipeline.interface";
 import type { MessageContext, AttachmentMeta } from "../interfaces/clara.interface";
 
 const createMessageContext = (
@@ -42,6 +43,7 @@ describe("ClaraSubmissionService", () => {
 
   const mockDbChain = {
     insert: jest.fn().mockReturnThis(),
+    delete: jest.fn().mockReturnThis(),
     values: jest.fn().mockReturnThis(),
     returning: jest.fn().mockResolvedValue([
       {
@@ -72,6 +74,7 @@ describe("ClaraSubmissionService", () => {
 
     // Reset chainable methods to return this
     mockDbChain.insert.mockReturnThis();
+    mockDbChain.delete.mockReturnThis();
     mockDbChain.values.mockReturnThis();
     mockDbChain.update.mockReturnThis();
     mockDbChain.set.mockReturnThis();
@@ -108,6 +111,8 @@ describe("ClaraSubmissionService", () => {
 
     pipeline = {
       startPipeline: jest.fn().mockResolvedValue("run-1"),
+      rerunFromPhase: jest.fn().mockResolvedValue(undefined),
+      cancelPipeline: jest.fn().mockResolvedValue({ removedJobs: 0 }),
       prefillCriticalFieldsFromDeckExtraction: jest.fn().mockResolvedValue({
         extractionSource: "startup-context",
         updatedFields: [],
@@ -169,7 +174,9 @@ describe("ClaraSubmissionService", () => {
 
     expect(mockDb.insert).toHaveBeenCalled();
     expect(mockDb.update).not.toHaveBeenCalled();
-    expect(pipeline.startPipeline).toHaveBeenCalledWith("startup-1", "admin-1");
+    expect(pipeline.startPipeline).toHaveBeenCalledWith("startup-1", "admin-1", {
+      skipExtraction: true,
+    });
     expect(notifications.create).toHaveBeenCalledWith(
       "admin-1",
       "Clara: New startup submitted",
@@ -182,6 +189,7 @@ describe("ClaraSubmissionService", () => {
   it("creates investor-owned private startup when investor user is linked", async () => {
     const ctx = createMessageContext({
       investorUserId: "investor-1",
+      bodyText: "No company here",
       attachments: [createAttachment()],
     });
 
@@ -194,7 +202,13 @@ describe("ClaraSubmissionService", () => {
         isPrivate: true,
       }),
     );
-    expect(pipeline.startPipeline).toHaveBeenCalledWith("startup-1", "investor-1");
+    expect(pipeline.startPipeline).toHaveBeenCalledWith(
+      "startup-1",
+      "investor-1",
+      {
+        skipExtraction: true,
+      },
+    );
     expect(notifications.create).toHaveBeenCalledWith(
       "investor-1",
       "Clara: New startup submitted",
@@ -231,7 +245,70 @@ describe("ClaraSubmissionService", () => {
 
     expect(mockDb.insert).not.toHaveBeenCalled();
     // startPipeline is called because the attachment was enriched (isEnriched: true)
-    expect(pipeline.startPipeline).toHaveBeenCalledWith("existing-startup", "admin-1");
+    expect(pipeline.startPipeline).toHaveBeenCalledWith(
+      "existing-startup",
+      "admin-1",
+      {
+        skipExtraction: true,
+      },
+    );
+  });
+
+  it("restarts pipeline for duplicate startup when reply provides missing website and stage", async () => {
+    mockDb.limit
+      .mockResolvedValueOnce([
+        {
+          id: "existing-startup",
+          name: "Acme Corp",
+          status: StartupStatus.SUBMITTED,
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: "existing-startup",
+          userId: "admin-1",
+          name: "Acme Corp",
+          website: "",
+          stage: "seed",
+          industry: "Unknown",
+          location: "Unknown",
+          fundingTarget: 0,
+          teamSize: 1,
+          status: StartupStatus.SUBMITTED,
+        },
+      ]);
+
+    const ctx = createMessageContext({
+      bodyText: "Company website is https://acme.com and current stage is Series A.",
+      attachments: [],
+    });
+
+    const result = await service.handleSubmission(ctx, "admin-1", "Acme Corp");
+
+    expect(result).toEqual({
+      startupId: "existing-startup",
+      startupName: "Acme Corp",
+      isDuplicate: true,
+      isEnriched: true,
+      status: StartupStatus.SUBMITTED,
+      pipelineStarted: true,
+      missingFields: [],
+    });
+
+    expect(mockDb.update).toHaveBeenCalled();
+    expect(mockDb.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        website: "https://acme.com/",
+        stage: "series_a",
+      }),
+    );
+    expect(pipeline.startPipeline).toHaveBeenCalledWith(
+      "existing-startup",
+      "admin-1",
+      {
+        skipExtraction: true,
+      },
+    );
   });
 
   it("falls back when similarity() is unavailable and still detects duplicates", async () => {
@@ -264,9 +341,180 @@ describe("ClaraSubmissionService", () => {
       missingFields: [],
     });
 
-    expect(mockDb.limit).toHaveBeenCalledTimes(3);
+    expect(mockDb.limit.mock.calls.length).toBeGreaterThanOrEqual(5);
     expect(mockDb.insert).not.toHaveBeenCalled();
-    expect(pipeline.startPipeline).toHaveBeenCalledWith("existing-startup", "admin-1");
+    expect(pipeline.startPipeline).toHaveBeenCalledWith(
+      "existing-startup",
+      "admin-1",
+      {
+        skipExtraction: true,
+      },
+    );
+  });
+
+  it("resets stale running lock and restarts pipeline for duplicate missing-info reply", async () => {
+    mockDb.limit
+      .mockResolvedValueOnce([
+        {
+          id: "existing-startup",
+          name: "Acme Corp",
+          status: StartupStatus.SUBMITTED,
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: "existing-startup",
+          userId: "admin-1",
+          name: "Acme Corp",
+          website: "",
+          stage: "seed",
+          industry: "Unknown",
+          location: "Unknown",
+          fundingTarget: 0,
+          teamSize: 1,
+          status: StartupStatus.SUBMITTED,
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: "existing-startup",
+          userId: "admin-1",
+          name: "Acme Corp",
+          website: "https://acme.com/",
+          stage: "series_a",
+          industry: "Unknown",
+          location: "Unknown",
+          fundingTarget: 0,
+          teamSize: 1,
+          status: StartupStatus.SUBMITTED,
+        },
+      ]);
+
+    pipeline.startPipeline
+      .mockRejectedValueOnce(
+        new Error("Pipeline already running for startup existing-startup"),
+      )
+      .mockResolvedValueOnce("run-2");
+
+    const ctx = createMessageContext({
+      bodyText: "Website is https://acme.com and stage is Series A.",
+      attachments: [],
+    });
+
+    const result = await service.handleSubmission(ctx, "admin-1", "Acme Corp");
+
+    expect(result.pipelineStarted).toBe(true);
+    expect(pipeline.cancelPipeline).toHaveBeenCalledWith("existing-startup", {
+      reason:
+        "Reset stale running lock before restart from Clara missing-info reply.",
+    });
+    expect(pipeline.startPipeline).toHaveBeenLastCalledWith(
+      "existing-startup",
+      "admin-1",
+      {
+        skipExtraction: true,
+      },
+    );
+  });
+
+  it("restarts pipeline for duplicate startup with complete critical fields even when no new updates are parsed", async () => {
+    mockDb.limit
+      .mockResolvedValueOnce([
+        {
+          id: "existing-startup",
+          name: "Acme Corp",
+          status: StartupStatus.SUBMITTED,
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: "existing-startup",
+          userId: "admin-1",
+          name: "Acme Corp",
+          website: "https://acme.com/",
+          stage: "series_a",
+          industry: "Unknown",
+          location: "Unknown",
+          fundingTarget: 0,
+          teamSize: 1,
+          status: StartupStatus.SUBMITTED,
+        },
+      ]);
+
+    const ctx = createMessageContext({
+      bodyText: "Please proceed with analysis.",
+      attachments: [],
+    });
+
+    const result = await service.handleSubmission(ctx, "admin-1", "Acme Corp");
+
+    expect(result).toEqual({
+      startupId: "existing-startup",
+      startupName: "Acme Corp",
+      isDuplicate: true,
+      isEnriched: false,
+      status: StartupStatus.SUBMITTED,
+      pipelineStarted: true,
+      missingFields: [],
+    });
+    expect(pipeline.startPipeline).toHaveBeenCalledWith(
+      "existing-startup",
+      "admin-1",
+      {
+        skipExtraction: true,
+      },
+    );
+  });
+
+  it("restarts the same startup from enrichment when missing-info reply is complete", async () => {
+    mockDb.limit
+      .mockResolvedValueOnce([
+        {
+          id: "existing-startup",
+          userId: "admin-1",
+          name: "Acme Corp",
+          website: "",
+          stage: "seed",
+          industry: "Unknown",
+          location: "Unknown",
+          fundingTarget: 0,
+          teamSize: 1,
+          status: StartupStatus.SUBMITTED,
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: "existing-startup",
+          userId: "admin-1",
+          name: "Acme Corp",
+          website: "https://acme.com",
+          stage: "series_a",
+          industry: "Unknown",
+          location: "Unknown",
+          fundingTarget: 0,
+          teamSize: 1,
+          status: StartupStatus.SUBMITTED,
+        },
+      ]);
+
+    const resolution = await service.resolveMissingInfoFromReply(
+      "existing-startup",
+      "Website: https://acme.com and we are now Series A",
+      "admin-1",
+    );
+
+    expect(resolution).toEqual({
+      startupId: "existing-startup",
+      startupName: "Acme Corp",
+      updatedFields: ["website", "stage"],
+      remainingMissing: [],
+      pipelineStarted: true,
+    });
+    expect(pipeline.rerunFromPhase).toHaveBeenCalledWith(
+      "existing-startup",
+      PipelinePhase.ENRICHMENT,
+    );
+    expect(pipeline.startPipeline).not.toHaveBeenCalled();
   });
 
 
@@ -395,9 +643,7 @@ describe("ClaraSubmissionService", () => {
     );
   });
 
-  it("falls back to filename extraction when body has no company name", async () => {
-    claraAi.extractCompanyFromFilename.mockReturnValueOnce("DataFlow AI");
-
+  it("does not use filename-derived company names when body has no company name", async () => {
     const ctx = createMessageContext({
       bodyText: "Please review our deck.",
       attachments: [
@@ -409,7 +655,7 @@ describe("ClaraSubmissionService", () => {
 
     expect(mockDb.values).toHaveBeenCalledWith(
       expect.objectContaining({
-        name: "DataFlow AI",
+        name: "Untitled Startup",
       }),
     );
   });
@@ -425,6 +671,53 @@ describe("ClaraSubmissionService", () => {
     expect(mockDb.values).toHaveBeenCalledWith(
       expect.objectContaining({
         name: "Correct Company",
+      }),
+    );
+  });
+
+  it("ignores non-company signature website on initial submission", async () => {
+    const ctx = createMessageContext({
+      bodyText:
+        "Please review our pitch deck.\n\nBest,\nBrainfast Team\nhttps://brainfast.ai",
+      attachments: [],
+    });
+
+    await service.handleSubmission(ctx, "admin-1", "Uber");
+
+    expect(mockDb.values).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "Uber",
+        website: "",
+      }),
+    );
+  });
+
+  it("rejects filename-style extractedCompanyName values on deck submissions", async () => {
+    const ctx = createMessageContext({
+      bodyText: "Please review.",
+      attachments: [createAttachment({ filename: "uber2.pdf" })],
+    });
+
+    await service.handleSubmission(ctx, "admin-1", "uber2");
+
+    expect(mockDb.values).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "Untitled Startup",
+      }),
+    );
+  });
+
+  it("rejects report-style extractedCompanyName values on deck submissions", async () => {
+    const ctx = createMessageContext({
+      bodyText: "Please review.",
+      attachments: [createAttachment({ filename: "deck.pdf" })],
+    });
+
+    await service.handleSubmission(ctx, "admin-1", "2023 Annual Report");
+
+    expect(mockDb.values).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "Untitled Startup",
       }),
     );
   });
@@ -454,6 +747,102 @@ describe("ClaraSubmissionService", () => {
 
     const call = mockDb.values.mock.calls[0][0];
     expect(call.slug).toMatch(/^test-co-inc-[a-z0-9]{4}$/);
+  });
+
+  it("stores all uploaded attachments in startup files metadata", async () => {
+    storage.uploadGeneratedContent
+      .mockResolvedValueOnce({
+        key: "startups/admin-1/documents/deck.pdf",
+        url: "https://storage.com/deck.pdf",
+      })
+      .mockResolvedValueOnce({
+        key: "startups/admin-1/documents/financials.pdf",
+        url: "https://storage.com/financials.pdf",
+      });
+
+    const ctx = createMessageContext({
+      attachments: [
+        createAttachment({
+          filename: "deck.pdf",
+          attachmentId: "att-deck",
+        }),
+        createAttachment({
+          filename: "financials.pdf",
+          attachmentId: "att-financials",
+        }),
+      ],
+    });
+
+    await service.handleSubmission(ctx, "admin-1");
+
+    expect(mockDb.values).toHaveBeenCalledWith(
+      expect.objectContaining({
+        files: [
+          {
+            path: "startups/admin-1/documents/deck.pdf",
+            name: "deck.pdf",
+            type: "application/pdf",
+          },
+          {
+            path: "startups/admin-1/documents/financials.pdf",
+            name: "financials.pdf",
+            type: "application/pdf",
+          },
+        ],
+      }),
+    );
+  });
+
+  it("does not promote financial pdf attachments as pitch deck", async () => {
+    storage.uploadGeneratedContent.mockResolvedValueOnce({
+      key: "startups/admin-1/documents/financials.pdf",
+      url: "https://storage.com/financials.pdf",
+    });
+
+    const ctx = createMessageContext({
+      attachments: [
+        createAttachment({
+          filename: "financials.pdf",
+          attachmentId: "att-financials",
+        }),
+      ],
+    });
+
+    const result = await service.handleSubmission(ctx, "admin-1");
+
+    expect(result.noPitchDeck).toBe(true);
+    expect(mockDb.values).not.toHaveBeenCalled();
+  });
+
+  it("does not promote annual/earnings documents as pitch deck", async () => {
+    storage.uploadGeneratedContent
+      .mockResolvedValueOnce({
+        key: "startups/admin-1/documents/annual-report.pdf",
+        url: "https://storage.com/annual-report.pdf",
+      })
+      .mockResolvedValueOnce({
+        key: "startups/admin-1/documents/q3-earnings.pdf",
+        url: "https://storage.com/q3-earnings.pdf",
+      });
+
+    const ctx = createMessageContext({
+      bodyText: "Please review the attached docs.",
+      attachments: [
+        createAttachment({
+          filename: "2023 Annual Report.pdf",
+          attachmentId: "att-annual",
+        }),
+        createAttachment({
+          filename: "Uber Q3 2025 Earnings Supplemental Data.pdf",
+          attachmentId: "att-q3",
+        }),
+      ],
+    });
+
+    const result = await service.handleSubmission(ctx, "admin-1");
+
+    expect(result.noPitchDeck).toBe(true);
+    expect(mockDb.values).not.toHaveBeenCalled();
   });
 
   it("stores pitch deck path when upload succeeds", async () => {

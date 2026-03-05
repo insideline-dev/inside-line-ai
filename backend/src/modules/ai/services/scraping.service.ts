@@ -3,8 +3,9 @@ import { ConfigService } from "@nestjs/config";
 import { generateText, Output } from "ai";
 import { eq } from "drizzle-orm";
 import { appendFile, mkdir } from "fs/promises";
-import { dirname, resolve } from "path";
+import { dirname } from "path";
 import { z } from "zod";
+import { resolveBackendLogPath } from "../../../common/logging/resolve-log-path";
 import { rotateIfNeeded } from "../../../common/logging/rotate-log";
 import { DrizzleService } from "../../../database";
 import { startup } from "../../startup/entities";
@@ -17,7 +18,11 @@ import type {
   WebsiteScrapedData,
 } from "../interfaces/phase-results.interface";
 import type { PhaseProgressCallback } from "../interfaces/progress-callback.interface";
-import { ModelPurpose, PipelinePhase } from "../interfaces/pipeline.interface";
+import {
+  ModelPurpose,
+  PhaseStatus,
+  PipelinePhase,
+} from "../interfaces/pipeline.interface";
 import {
   LinkedinEnrichmentService,
   type LinkedinEnrichmentTraceEvent,
@@ -86,6 +91,7 @@ export class ScrapingService {
   private readonly logger = new Logger(ScrapingService.name);
   private readonly debugLogEnabled: boolean;
   private readonly debugLogPath: string;
+  private readonly linkedinTraceLogPath: string;
   private readonly executiveLeadershipPattern =
     /\b(founder|co[\s-]?founder|chairman|chief|ceo|cto|coo|cfo|cmo|cpo|president)\b/i;
   private readonly minLeadershipSeedCountForDiscoverySkip = 2;
@@ -108,6 +114,11 @@ export class ScrapingService {
         "AI_SCRAPING_DEBUG_LOG_PATH",
         "logs/ai-scraping-debug.jsonl",
       ) ?? "logs/ai-scraping-debug.jsonl";
+    this.linkedinTraceLogPath =
+      this.config?.get<string>(
+        "AI_LINKEDIN_TRACE_LOG_PATH",
+        "logs/ai-linkedin-trace.jsonl",
+      ) ?? "logs/ai-linkedin-trace.jsonl";
   }
 
   async run(
@@ -131,9 +142,9 @@ export class ScrapingService {
     }
 
     // Load enrichment result to use corrected/discovered data
-    const enrichment = await this.loadEnrichmentResult(startupId);
+    let enrichment = await this.loadEnrichmentResult(startupId);
     const extraction = await this.loadExtractionResult(startupId);
-    const effectiveWebsite = this.selectEffectiveWebsite(
+    let effectiveWebsite = this.selectEffectiveWebsite(
       enrichment?.website?.value ?? null,
       record.website,
     );
@@ -188,15 +199,44 @@ export class ScrapingService {
     let discoveredLinkedinLeaders: TeamMemberInput[] = [];
     let discoveredWebsiteLeaders: TeamMemberInput[] = [];
     let discoveredWebsiteLinkedinMembers: TeamMemberInput[] = [];
-    const enrichmentFounderMembers: TeamMemberInput[] =
-      (enrichment?.discoveredFounders ?? [])
-        .filter((founder) => founder.confidence >= 0.5)
-        .map((founder) => ({
-          name: founder.name,
-          role: founder.role,
-          linkedinUrl: founder.linkedinUrl,
-          teamMemberSource: "enrichment" as const,
-        }));
+    let enrichmentFounderMembers = this.mapEnrichmentFounders(enrichment);
+    if (
+      submittedTeamMembers.length === 0 &&
+      extractionFounderMembers.length === 0 &&
+      enrichmentFounderMembers.length === 0
+    ) {
+      this.logger.debug(
+        "[Scraping] Waiting briefly for enrichment-discovered founders before LinkedIn seed build",
+      );
+      const waitStart = Date.now();
+      const refreshedEnrichment = await this.awaitEnrichmentForTeamSeed(startupId);
+      const waitMs = Date.now() - waitStart;
+      if (refreshedEnrichment) {
+        enrichment = refreshedEnrichment;
+        if (!effectiveWebsite) {
+          effectiveWebsite = this.selectEffectiveWebsite(
+            refreshedEnrichment.website?.value ?? null,
+            record.website,
+          );
+        }
+        enrichmentFounderMembers = this.mapEnrichmentFounders(refreshedEnrichment);
+        if (enrichmentFounderMembers.length > 0) {
+          this.logger.log(
+            `[Scraping] Loaded ${enrichmentFounderMembers.length} founder seed member(s) from enrichment`,
+          );
+        }
+      }
+      void this.writeLinkedinTraceLog({
+        event: "enrichment_seed_wait",
+        startupId,
+        startupName: record.name,
+        waitMs,
+        enrichmentFoundersFound: enrichmentFounderMembers.length,
+        enrichmentFounders: enrichmentFounderMembers.map((m) => ({ name: m.name, role: m.role, linkedinUrl: m.linkedinUrl })),
+        enrichmentWebsite: enrichment?.website?.value ?? null,
+        effectiveWebsite,
+      });
+    }
 
     progress?.onStepStart(SCRAPING_STEP_TEAM_DISCOVERY, {
       inputJson: {
@@ -222,6 +262,21 @@ export class ScrapingService {
         ...discoveredWebsiteLinkedinMembers,
       ];
       const leadershipSeedCount = this.countLeadershipSeeds(discoverySeedMembers);
+      void this.writeLinkedinTraceLog({
+        event: "linkedin_discovery_seed_summary",
+        startupId,
+        startupName: record.name,
+        effectiveWebsite,
+        leadershipSeedCount,
+        willSkipDiscovery: leadershipSeedCount >= this.minLeadershipSeedCountForDiscoverySkip,
+        seeds: {
+          submitted: submittedTeamMembers.map((m) => ({ name: m.name, role: m.role, hasLinkedin: !!m.linkedinUrl })),
+          extractionFounders: extractionFounderMembers.map((m) => ({ name: m.name, role: m.role })),
+          enrichmentFounders: enrichmentFounderMembers.map((m) => ({ name: m.name, role: m.role, hasLinkedin: !!m.linkedinUrl })),
+          websiteLeaders: discoveredWebsiteLeaders.map((m) => ({ name: m.name, role: m.role })),
+          websiteLinkedin: discoveredWebsiteLinkedinMembers.map((m) => ({ name: m.name, linkedinUrl: m.linkedinUrl })),
+        },
+      });
       if (leadershipSeedCount >= this.minLeadershipSeedCountForDiscoverySkip) {
         this.logger.log(
           `[Scraping] Skipping LinkedIn company leadership discovery for ${record.name}: already have ${leadershipSeedCount} founder/executive seed members`,
@@ -1416,6 +1471,98 @@ export class ScrapingService {
     return claims;
   }
 
+  private mapEnrichmentFounders(
+    enrichment: EnrichmentResult | null | undefined,
+  ): TeamMemberInput[] {
+    const minFounderConfidence = 0.8;
+    return (enrichment?.discoveredFounders ?? [])
+      .filter((founder) => {
+        if (founder.confidence < minFounderConfidence) {
+          return false;
+        }
+
+        const name = founder.name?.trim() ?? "";
+        if (!this.isLikelyPersonName(name)) {
+          return false;
+        }
+
+        const role = founder.role?.trim();
+        if (!role) {
+          return true;
+        }
+
+        return this.executiveLeadershipPattern.test(role);
+      })
+      .map((founder) => ({
+        name: founder.name,
+        role: founder.role,
+        linkedinUrl: founder.linkedinUrl,
+        teamMemberSource: "enrichment" as const,
+      }));
+  }
+
+  private isLikelyPersonName(value: string): boolean {
+    const normalized = value.replace(/\s+/g, " ").trim();
+    if (normalized.length < 3) {
+      return false;
+    }
+
+    const tokens = normalized
+      .split(" ")
+      .map((token) => this.normalizeNameToken(token))
+      .filter((token) => token.length > 1);
+
+    return tokens.length >= 2;
+  }
+
+  private async awaitEnrichmentForTeamSeed(
+    startupId: string,
+    timeoutMs = 12_000,
+    pollIntervalMs = 750,
+  ): Promise<EnrichmentResult | null> {
+    let latest = await this.loadEnrichmentResult(startupId);
+    if (this.mapEnrichmentFounders(latest).length > 0) {
+      return latest;
+    }
+    if (!this.pipelineState) {
+      return latest;
+    }
+
+    const phaseStatus = await this.getEnrichmentPhaseStatus(startupId);
+    if (
+      phaseStatus !== PhaseStatus.PENDING &&
+      phaseStatus !== PhaseStatus.WAITING &&
+      phaseStatus !== PhaseStatus.RUNNING
+    ) {
+      return latest;
+    }
+
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+      latest = await this.loadEnrichmentResult(startupId);
+      if (this.mapEnrichmentFounders(latest).length > 0) {
+        return latest;
+      }
+    }
+
+    return latest;
+  }
+
+  private async getEnrichmentPhaseStatus(
+    startupId: string,
+  ): Promise<PhaseStatus | null> {
+    if (!this.pipelineState) {
+      return null;
+    }
+    try {
+      const state = await this.pipelineState.get(startupId);
+      return state?.phases?.[PipelinePhase.ENRICHMENT]?.status ?? null;
+    } catch {
+      return null;
+    }
+  }
+
   private emitLinkedinTrace(
     progress: PhaseProgressCallback | undefined,
     event: LinkedinEnrichmentTraceEvent,
@@ -1431,6 +1578,33 @@ export class ScrapingService {
         ...(event.meta ?? {}),
       },
     });
+    void this.writeLinkedinTraceLog({
+      event: event.operation,
+      status: event.status,
+      input: event.inputJson,
+      output: event.outputJson,
+      error: event.error ?? null,
+      meta: event.meta ?? null,
+    });
+  }
+
+  private async writeLinkedinTraceLog(payload: Record<string, unknown>): Promise<void> {
+    if (!this.debugLogEnabled) {
+      return;
+    }
+
+    try {
+      const resolvedPath = this.resolveLogPath(this.linkedinTraceLogPath);
+      await mkdir(dirname(resolvedPath), { recursive: true });
+      await rotateIfNeeded(resolvedPath);
+      await appendFile(
+        resolvedPath,
+        `${JSON.stringify({ timestamp: new Date().toISOString(), ...payload })}\n`,
+        "utf8",
+      );
+    } catch (error) {
+      this.logger.warn(`[Scraping] Failed to write LinkedIn trace log: ${this.asMessage(error)}`);
+    }
   }
 
   private asMessage(error: unknown): string {
@@ -1462,11 +1636,7 @@ export class ScrapingService {
   }
 
   private resolveLogPath(filePath: string): string {
-    if (filePath.startsWith("/")) {
-      return filePath;
-    }
-
-    return resolve(process.cwd(), filePath);
+    return resolveBackendLogPath(filePath);
   }
 
   private async discoverTeamMembersFromDeck(

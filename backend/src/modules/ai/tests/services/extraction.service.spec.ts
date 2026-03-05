@@ -47,13 +47,7 @@ describe("ExtractionService", () => {
     demoVideoUrl: "https://inside-line.test/demo-video",
     productDescription: "Workflow copilot for startup diligence.",
     productScreenshots: ["https://inside-line.test/image-1.png"],
-    files: [
-      {
-        path: "user/startup/files/product-one-pager.pdf",
-        name: "Product One Pager",
-        type: "application/pdf",
-      },
-    ],
+    files: [],
     teamMembers: [
       { name: "Alex Founder", role: "CEO", linkedinUrl: "https://linkedin.com/in/alex" },
     ],
@@ -139,6 +133,7 @@ describe("ExtractionService", () => {
         ...startupRecord,
         pitchDeckPath: null,
         pitchDeckUrl: null,
+        files: [],
       },
     ]);
 
@@ -153,6 +148,44 @@ describe("ExtractionService", () => {
     expect(result.startupContext?.raiseType).toBe("safe");
     expect(result.rawText).toContain("Raise type: safe");
     expect(fieldExtractor.extractFields).not.toHaveBeenCalled();
+  });
+
+  it("extracts from supporting files when deck is missing", async () => {
+    mockDb.limit.mockResolvedValueOnce([
+      {
+        ...startupRecord,
+        pitchDeckPath: null,
+        pitchDeckUrl: null,
+        files: [
+          {
+            path: "user/startup/files/financials.pdf",
+            name: "financials.pdf",
+            type: "application/pdf",
+          },
+        ],
+      },
+    ]);
+    storage.getDownloadUrl.mockImplementation((path: string) =>
+      Promise.resolve(`https://storage.test/${path.split("/").pop()}`),
+    );
+    pdfTextExtractor.extractText.mockResolvedValueOnce({
+      text: "Financial model shows Series A trajectory.",
+      pageCount: 4,
+      hasContent: true,
+      hasSparsePages: false,
+      sparsePageCount: 0,
+    });
+    fieldExtractor.extractFields.mockResolvedValueOnce({
+      stage: "series_a",
+    });
+
+    const result = await service.run("startup-1");
+
+    expect(result.source).toBe("startup-context");
+    expect(result.rawText).toContain("Supporting file: financials.pdf");
+    expect(result.rawText).toContain("Financial model shows Series A trajectory.");
+    expect(result.stage).toBe("series_a");
+    expect(fieldExtractor.extractFields).toHaveBeenCalledTimes(1);
   });
 
   it("uses pdf-parse result when text content exists", async () => {
@@ -327,5 +360,26 @@ describe("ExtractionService", () => {
     expect(result.industry).toBe("Unknown");
     expect(result.location).toBe("Unknown");
     expect(result.stage).toBe("seed");
+  });
+
+  it("prefers website-derived company name when extracted name is report-style", async () => {
+    pdfTextExtractor.extractText.mockResolvedValueOnce({
+      text: "2023 Annual Report\nUber\nForm 10-K\nSeries A",
+      pageCount: 4,
+      hasContent: true,
+      hasSparsePages: false,
+      sparsePageCount: 0,
+    });
+    fieldExtractor.extractFields.mockResolvedValueOnce({
+      companyName: "2023 Annual Report",
+      website: "https://www.uber.com/",
+      stage: "series_a",
+    });
+
+    const result = await service.run("startup-1");
+
+    expect(result.companyName).toBe("Uber");
+    expect(result.website).toBe("https://www.uber.com/");
+    expect(result.stage).toBe("series_a");
   });
 });

@@ -7,7 +7,7 @@ import {
   ConflictException,
   Optional,
 } from "@nestjs/common";
-import { eq, and, or, ilike, sql, desc } from "drizzle-orm";
+import { eq, and, or, ilike, sql, desc, inArray } from "drizzle-orm";
 import { UserRole } from "../../auth/entities/auth.schema";
 import { DrizzleService } from "../../database";
 import { QueueService, QUEUE_NAMES } from "../../queue";
@@ -797,7 +797,9 @@ export class StartupService {
       throw new BadRequestException("AI pipeline is disabled");
     }
 
-    const result = await this.aiPipeline.cancelPipeline(id);
+    const result = await this.aiPipeline.cancelPipeline(id, {
+      reason: "Cancelled by admin request.",
+    });
 
     this.logger.log(
       `Admin ${adminId} cancelled pipeline for startup ${id}, removed ${result.removedJobs} jobs`,
@@ -885,7 +887,17 @@ export class StartupService {
     const conditions = [];
 
     if (status) {
-      conditions.push(eq(startup.status, status));
+      if (status === StartupStatus.PENDING_REVIEW) {
+        // Admin "Pending Review" UI groups both submitted (awaiting info) and pending_review.
+        conditions.push(
+          inArray(startup.status, [
+            StartupStatus.PENDING_REVIEW,
+            StartupStatus.SUBMITTED,
+          ]),
+        );
+      } else {
+        conditions.push(eq(startup.status, status));
+      }
     }
     if (industry) {
       conditions.push(eq(startup.industry, industry));
@@ -934,7 +946,7 @@ export class StartupService {
   async adminFindPending(query: GetStartupsQuery) {
     return this.adminFindAll({
       ...query,
-      status: StartupStatus.SUBMITTED,
+      status: StartupStatus.PENDING_REVIEW,
     });
   }
 
@@ -1596,28 +1608,36 @@ export class StartupService {
       trackedProgress.status === PipelineStatus.RUNNING &&
       !pipelineState;
 
+    const orphanProgressWarning = orphanTrackedProgress
+      ? "Live pipeline runtime state missing; showing last tracked progress snapshot."
+      : undefined;
+
     if (orphanTrackedProgress) {
       this.logger.warn(
-        `[Progress] Ignoring orphan tracked progress for startup ${startupId}: startup is analyzing but live pipeline state is missing`,
+        `[Progress] Exposing orphan tracked progress for startup ${startupId}: startup is analyzing but live pipeline state is missing`,
       );
     }
 
-    if (trackedProgress && !orphanTrackedProgress) {
+    if (trackedProgress) {
       const phaseResults = pipelineState?.results ?? {};
       const agentTraces = includeAdminDetails
         ? await this.loadAgentTraces(startupId, trackedProgress.pipelineRunId)
         : [];
 
+      // For orphaned progress, treat as failed so frontend stops polling
+      const effectiveStatus = orphanTrackedProgress ? "failed" : trackedProgress.status;
+
       response.progress = {
         overallProgress: this.normalizePercent(trackedProgress.overallProgress),
         currentPhase: trackedProgress.currentPhase,
-        pipelineStatus: trackedProgress.status,
+        pipelineStatus: effectiveStatus,
         pipelineRunId: trackedProgress.pipelineRunId,
         estimatedTimeRemaining: trackedProgress.estimatedTimeRemaining,
         updatedAt: trackedProgress.updatedAt,
         error:
           trackedProgress.error ??
-          (trackedProgress.status === "failed"
+          orphanProgressWarning ??
+          (effectiveStatus === "failed"
             ? "Pipeline failed"
             : undefined),
         phasesCompleted: trackedProgress.phasesCompleted,

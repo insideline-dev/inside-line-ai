@@ -163,12 +163,23 @@ export class PipelineStateService implements OnModuleDestroy {
       };
 
       await this.persist(state);
+      const rc = this.redisClient as unknown as { useMemory: boolean; redis: unknown };
+      this.logger.log(
+        `[PipelineState] init(${startupId}) complete | runId=${state.pipelineRunId} | useMemory=${rc.useMemory} hasRedis=${rc.redis !== null}`,
+      );
       return state;
     });
   }
 
   async get(startupId: string): Promise<PipelineState | null> {
-    return this.read(startupId);
+    const state = await this.read(startupId);
+    if (!state) {
+      const rc = this.redisClient as unknown as { useMemory: boolean; redis: unknown };
+      this.logger.debug(
+        `[PipelineState] get(${startupId}) → null | useMemory=${rc.useMemory} hasRedis=${rc.redis !== null}`,
+      );
+    }
+    return state;
   }
 
   async restoreFromSnapshot(
@@ -447,7 +458,10 @@ export class PipelineStateService implements OnModuleDestroy {
   private async read(startupId: string): Promise<PipelineState | null> {
     const key = this.getKey(startupId);
     const json = await this.redisClient.get(key);
-    if (!json) return null;
+    if (!json) {
+      this.logger.debug(`[PipelineState] read(${key}) → no data in redis/memory`);
+      return null;
+    }
 
     const raw = JSON.parse(json);
 

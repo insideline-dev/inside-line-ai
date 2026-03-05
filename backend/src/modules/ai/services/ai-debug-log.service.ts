@@ -1,8 +1,9 @@
 import { Injectable, Logger, Optional } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { appendFile, mkdir } from "fs/promises";
-import { dirname, resolve } from "path";
+import { dirname } from "path";
 import { rotateIfNeeded } from "../../../common/logging/rotate-log";
+import { resolveBackendLogPath } from "../../../common/logging/resolve-log-path";
 import { PipelinePhase } from "../interfaces/pipeline.interface";
 
 type DebugLogKind =
@@ -109,10 +110,7 @@ export class AiDebugLogService {
   }
 
   private resolvePath(filePath: string): string {
-    if (filePath.startsWith("/")) {
-      return filePath;
-    }
-    return resolve(process.cwd(), filePath);
+    return resolveBackendLogPath(filePath);
   }
 
   private jsonReplacer(_key: string, value: unknown): unknown {

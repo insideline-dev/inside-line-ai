@@ -170,7 +170,7 @@ function AdminDashboard() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       refetchInterval: (query: any) => {
         const data = query.state.data as PlatformStats | undefined;
-        return (data?.startups?.byStatus?.analyzing ?? 0) > 0 ? 5000 : false;
+        return (data?.startups?.byStatus?.analyzing ?? 0) > 0 ? 5000 : 15000;
       },
     },
   });
@@ -184,7 +184,7 @@ function AdminDashboard() {
         refetchInterval: (query: any) => {
           const data = query.state.data as { data: StartupItem[] } | undefined;
           const hasAnalyzing = data?.data?.some((s) => s.status === "analyzing");
-          return hasAnalyzing ? 5000 : false;
+          return hasAnalyzing ? 5000 : 15000;
         },
       },
     }
@@ -259,7 +259,11 @@ function AdminDashboard() {
   ];
 
   const tabs = [
-    { value: "pending_review", label: "Pending Review", count: byStatus?.pending_review },
+    {
+      value: "pending_review",
+      label: "Pending Review",
+      count: (byStatus?.pending_review ?? 0) + (byStatus?.submitted ?? 0),
+    },
     { value: "analyzing", label: "Analyzing", count: byStatus?.analyzing },
     { value: "approved", label: "Approved", count: 0 },
     { value: "rejected", label: "Rejected", count: 0 },

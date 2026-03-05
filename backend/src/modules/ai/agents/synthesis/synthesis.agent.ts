@@ -248,14 +248,137 @@ export class SynthesisAgent {
     };
   }
 
-  buildPromptVariables(
-    input: SynthesisAgentInput,
-  ): Record<"synthesisBrief" | "contextJson", string> {
+  buildPromptVariables(input: SynthesisAgentInput): Record<string, string> {
     const synthesisBrief = this.buildSynthesisBrief(input);
+    const legacyVariables = this.buildLegacyPromptVariables(input);
     return {
+      ...legacyVariables,
       synthesisBrief: `<evaluation_data>\n${synthesisBrief}\n</evaluation_data>`,
       contextJson: `<evaluation_data>\n${JSON.stringify(input)}\n</evaluation_data>`,
     };
+  }
+
+  private buildLegacyPromptVariables(
+    input: SynthesisAgentInput,
+  ): Record<string, string> {
+    const { extraction, evaluation, stageWeights } = input;
+    const variables: Record<string, string> = {
+      companyName: extraction.companyName ?? "",
+      stage: extraction.stage ?? "",
+      sector: extraction.industry ?? "",
+      location: extraction.location ?? "",
+      website: extraction.website ?? "",
+      companyDescription: extraction.tagline ?? "",
+      stageWeights: this.formatStageWeightsForLegacyPrompt(stageWeights),
+      recommendation: "",
+      overallScore: "",
+    };
+
+    this.assignLegacyDimensionVariables(variables, evaluation, "team", "team");
+    this.assignLegacyDimensionVariables(variables, evaluation, "market", "market");
+    this.assignLegacyDimensionVariables(variables, evaluation, "product", "product");
+    this.assignLegacyDimensionVariables(
+      variables,
+      evaluation,
+      "traction",
+      "traction",
+    );
+    this.assignLegacyDimensionVariables(
+      variables,
+      evaluation,
+      "businessModel",
+      "businessModel",
+    );
+    this.assignLegacyDimensionVariables(variables, evaluation, "gtm", "gtm");
+    this.assignLegacyDimensionVariables(
+      variables,
+      evaluation,
+      "financials",
+      "financials",
+    );
+    this.assignLegacyDimensionVariables(
+      variables,
+      evaluation,
+      "competitiveAdvantage",
+      "competitiveAdvantage",
+    );
+    this.assignLegacyDimensionVariables(variables, evaluation, "legal", "legal");
+    this.assignLegacyDimensionVariables(
+      variables,
+      evaluation,
+      "dealTerms",
+      "dealTerms",
+    );
+    this.assignLegacyDimensionVariables(
+      variables,
+      evaluation,
+      "exitPotential",
+      "exitPotential",
+    );
+
+    return variables;
+  }
+
+  private assignLegacyDimensionVariables(
+    target: Record<string, string>,
+    evaluation: EvaluationResult,
+    key: Exclude<keyof EvaluationResult, "summary">,
+    placeholderPrefix: string,
+  ): void {
+    const dimension = evaluation[key] as {
+      score?: number;
+      confidence?: number;
+      feedback?: string;
+      narrativeSummary?: string;
+      memoNarrative?: string;
+    };
+    target[`${placeholderPrefix}Score`] =
+      typeof dimension.score === "number"
+        ? this.formatLegacyScore(dimension.score)
+        : "";
+    target[`${placeholderPrefix}Confidence`] = this.formatLegacyConfidence(
+      dimension.confidence,
+    );
+    target[`${placeholderPrefix}Analysis`] =
+      dimension.memoNarrative?.trim() ||
+      dimension.narrativeSummary?.trim() ||
+      dimension.feedback?.trim() ||
+      "";
+  }
+
+  private formatLegacyScore(score: number): string {
+    if (!Number.isFinite(score)) {
+      return "";
+    }
+    return (score / 10).toFixed(1);
+  }
+
+  private formatLegacyConfidence(confidence: number | undefined): string {
+    if (typeof confidence !== "number" || !Number.isFinite(confidence)) {
+      return "";
+    }
+    if (confidence <= 1) {
+      return `${Math.round(confidence * 100)}%`;
+    }
+    return `${Math.round(confidence)}%`;
+  }
+
+  private formatStageWeightsForLegacyPrompt(
+    stageWeights: Record<string, number>,
+  ): string {
+    const entries = Object.entries(stageWeights).filter(
+      ([, value]) => Number.isFinite(value) && value > 0,
+    );
+    if (entries.length === 0) {
+      return "";
+    }
+    return entries
+      .sort((a, b) => b[1] - a[1])
+      .map(
+        ([key, value]) =>
+          `${this.formatDimensionLabel(key)}: ${Math.round(value * 100)}%`,
+      )
+      .join("\n");
   }
 
   private normalizeExecutiveSummary(

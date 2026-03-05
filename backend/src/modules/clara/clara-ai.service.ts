@@ -74,16 +74,17 @@ export class ClaraAiService {
     const isNewConversation = ctx.conversationHistory.length === 0;
 
     if (hasPdfAttachment && isNewConversation) {
+      const deckAttachment = ctx.attachments.find(
+        (a) =>
+          a.contentType === "application/pdf" ||
+          /deck|pitch/i.test(a.filename),
+      );
       return {
         intent: ClaraIntent.SUBMISSION,
         confidence: 0.95,
         reasoning: "New conversation with PDF attachment",
         extractedCompanyName: this.extractCompanyFromFilename(
-          ctx.attachments.find(
-            (a) =>
-              a.contentType === "application/pdf" ||
-              /deck|pitch/i.test(a.filename),
-          )?.filename,
+          deckAttachment?.filename,
         ),
       };
     }
@@ -248,13 +249,9 @@ export class ClaraAiService {
   }
 
   isLikelySubmission(ctx: MessageContext): boolean {
-    const hasPdf = ctx.attachments.some(
-      (a) =>
-        a.contentType === "application/pdf" ||
-        /deck|pitch/i.test(a.filename),
-    );
+    const hasPitchDeck = ctx.attachments.some((a) => a.isPitchDeck);
     const isNew = ctx.conversationHistory.length === 0;
-    return hasPdf && (isNew || !ctx.startupId);
+    return hasPitchDeck && (isNew || !ctx.startupId);
   }
 
   async runAgentLoop(
@@ -347,6 +344,9 @@ export class ClaraAiService {
       .replace(/\.(pdf|pptx?|docx?)$/i, "")
       .replace(/[-_]/g, " ")
       .replace(/\b(pitch\s*deck|deck|presentation|slides?)\b/gi, "")
+      .replace(/\b(19|20)\d{2}\b/g, "")
+      .replace(/\b(v|ver|version)\s*\d+\b/gi, "")
+      .replace(/\s+/g, " ")
       .trim();
     return name || undefined;
   }

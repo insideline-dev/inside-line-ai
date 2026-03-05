@@ -112,6 +112,67 @@ describe("LinkedinEnrichmentService", () => {
     expect(result[0]?.confidenceReason).toContain("currently employed");
   });
 
+  it("falls back to global profile search when company-scoped search has no hits", async () => {
+    unipile.searchProfiles
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          id: "travis-fallback",
+          firstName: "Travis",
+          lastName: "Kalanick",
+          headline: "Founder at CloudKitchens",
+          location: "Los Angeles",
+          profileUrl: "https://linkedin.com/in/traviskalanick",
+          profileImageUrl: null,
+          summary: null,
+          currentCompany: { name: "CloudKitchens", title: "Founder" },
+          experience: [],
+          education: [],
+        },
+      ]);
+    unipile.getProfile.mockResolvedValueOnce({
+      id: "travis-fallback",
+      firstName: "Travis",
+      lastName: "Kalanick",
+      headline: "Founder at CloudKitchens",
+      location: "Los Angeles",
+      profileUrl: "https://linkedin.com/in/traviskalanick",
+      profileImageUrl: null,
+      summary: "Founded Uber and led it through global expansion.",
+      currentCompany: { name: "CloudKitchens", title: "Founder" },
+      experience: [
+        {
+          company: "CloudKitchens",
+          title: "Founder",
+          startDate: "2018",
+          endDate: null,
+          current: true,
+        },
+        {
+          company: "Uber",
+          title: "Founder & CEO",
+          startDate: "2009",
+          endDate: "2017",
+          current: false,
+        },
+      ],
+      education: [],
+    });
+
+    const result = await service.enrichTeamMembers(
+      "user-1",
+      [{ name: "Travis Kalanick", role: "Founder" }],
+      { companyName: "Uber" },
+    );
+
+    expect(unipile.searchProfiles).toHaveBeenNthCalledWith(1, "Travis Kalanick", "Uber");
+    expect(unipile.searchProfiles).toHaveBeenNthCalledWith(2, "Travis Kalanick");
+    expect(result[0]?.enrichmentStatus).toBe("success");
+    expect(result[0]?.confidenceReason).toContain(
+      "historical founder/executive association",
+    );
+  });
+
   it("rejects profiles without a current target-company signal", async () => {
     unipile.searchProfiles.mockResolvedValueOnce([
       {

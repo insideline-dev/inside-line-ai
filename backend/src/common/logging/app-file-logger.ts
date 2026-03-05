@@ -1,13 +1,13 @@
 import { ConsoleLogger, LogLevel } from "@nestjs/common";
 import {
   createWriteStream,
-  existsSync,
   mkdirSync,
   statSync,
   type WriteStream,
 } from "node:fs";
-import { dirname, isAbsolute, resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { rotateIfNeeded } from "./rotate-log";
+import { resolveBackendLogPath } from "./resolve-log-path";
 
 type LogEntry = {
   timestamp: string;
@@ -19,18 +19,35 @@ type LogEntry = {
   meta?: unknown[];
 };
 
+type ContextFileState = {
+  filePath: string;
+  stream: WriteStream;
+  bytesWritten: number;
+  rotationPending: boolean;
+};
+
 export class AppFileLogger extends ConsoleLogger {
   private readonly fileLoggingEnabled: boolean;
   private readonly filePath: string;
+  private readonly contextFileLoggingEnabled: boolean;
+  private readonly contextFilesDir: string;
+  private readonly runFileLoggingEnabled: boolean;
+  private readonly runFilesDir: string;
   private readonly maxFileBytes: number;
   private stream: WriteStream | null = null;
   private bytesWritten = 0;
   private rotationPending = false;
+  private readonly contextStreams = new Map<string, ContextFileState>();
+  private readonly runStreams = new Map<string, ContextFileState>();
 
   constructor(context = "AppLogger") {
     super(context, { timestamp: true });
     this.fileLoggingEnabled = this.readFileLoggingEnabled();
     this.filePath = this.resolveLogFilePath();
+    this.contextFileLoggingEnabled = this.readContextFileLoggingEnabled();
+    this.contextFilesDir = this.resolveContextFilesDir();
+    this.runFileLoggingEnabled = this.readRunFileLoggingEnabled();
+    this.runFilesDir = this.resolveRunFilesDir();
     this.maxFileBytes = this.readMaxFileBytes();
 
     if (!this.fileLoggingEnabled) {
@@ -87,17 +104,19 @@ export class AppFileLogger extends ConsoleLogger {
   private resolveLogFilePath(): string {
     const rawPath = process.env.LOG_FILE_PATH?.trim();
     const configured = rawPath && rawPath.length > 0 ? rawPath : "logs/backend.jsonl";
-    if (isAbsolute(configured)) {
-      return configured;
-    }
+    return resolveBackendLogPath(configured);
+  }
 
-    const cwd = process.cwd();
-    const backendDir = resolve(cwd, "backend");
-    if (existsSync(resolve(backendDir, "package.json"))) {
-      return resolve(backendDir, configured);
-    }
+  private resolveContextFilesDir(): string {
+    const raw = process.env.LOG_CONTEXT_FILES_DIR?.trim();
+    const configured = raw && raw.length > 0 ? raw : "logs/contexts";
+    return resolveBackendLogPath(configured);
+  }
 
-    return resolve(cwd, configured);
+  private resolveRunFilesDir(): string {
+    const raw = process.env.LOG_RUN_FILES_DIR?.trim();
+    const configured = raw && raw.length > 0 ? raw : "logs/runs";
+    return resolveBackendLogPath(configured);
   }
 
   private readMaxFileBytes(): number {
@@ -111,6 +130,22 @@ export class AppFileLogger extends ConsoleLogger {
 
   private readFileLoggingEnabled(): boolean {
     const value = process.env.LOG_TO_FILE?.trim().toLowerCase();
+    if (!value) {
+      return true;
+    }
+    return !["false", "0", "no", "off"].includes(value);
+  }
+
+  private readContextFileLoggingEnabled(): boolean {
+    const value = process.env.LOG_CONTEXT_FILES_ENABLED?.trim().toLowerCase();
+    if (!value) {
+      return true;
+    }
+    return !["false", "0", "no", "off"].includes(value);
+  }
+
+  private readRunFileLoggingEnabled(): boolean {
+    const value = process.env.LOG_RUN_FILES_ENABLED?.trim().toLowerCase();
     if (!value) {
       return true;
     }
@@ -142,6 +177,8 @@ export class AppFileLogger extends ConsoleLogger {
       this.stream.write(line);
       this.bytesWritten += Buffer.byteLength(line, "utf8");
       this.scheduleRotationCheck();
+      this.writeToContextFile(entry, line);
+      this.writeToRunFiles(entry, line);
     } catch (error) {
       super.error(`Failed to append log entry: ${String(error)}`);
     }
@@ -165,6 +202,337 @@ export class AppFileLogger extends ConsoleLogger {
       .finally(() => {
         this.rotationPending = false;
       });
+  }
+
+  private writeToContextFile(entry: LogEntry, line: string): void {
+    if (!this.contextFileLoggingEnabled || !this.fileLoggingEnabled) {
+      return;
+    }
+
+    const contextKey = this.sanitizeContextForFilename(entry.context ?? "global");
+    const state = this.getOrCreateContextStream(contextKey);
+    if (!state) {
+      return;
+    }
+
+    try {
+      state.stream.write(line);
+      state.bytesWritten += Buffer.byteLength(line, "utf8");
+      this.scheduleContextRotationCheck(contextKey, state);
+    } catch (error) {
+      super.error(
+        `Failed to append context log entry (${contextKey}): ${String(error)}`,
+      );
+    }
+  }
+
+  private getOrCreateContextStream(contextKey: string): ContextFileState | null {
+    const filePath = resolve(this.contextFilesDir, `${contextKey}.jsonl`);
+    return this.getOrCreateScopedStream(
+      this.contextStreams,
+      contextKey,
+      filePath,
+      "context log stream",
+    );
+  }
+
+  private scheduleContextRotationCheck(
+    contextKey: string,
+    state: ContextFileState,
+  ): void {
+    if (state.rotationPending || state.bytesWritten < this.maxFileBytes) {
+      return;
+    }
+    state.rotationPending = true;
+
+    rotateIfNeeded(state.filePath, this.maxFileBytes)
+      .then((rotated) => {
+        if (rotated) {
+          state.stream.end();
+          state.stream = this.createStream(state.filePath, "context log file");
+          state.bytesWritten = 0;
+          this.contextStreams.set(contextKey, state);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        state.rotationPending = false;
+      });
+  }
+
+  private sanitizeContextForFilename(context: string): string {
+    const normalized = context
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9._-]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+    return normalized.length > 0 ? normalized : "global";
+  }
+
+  private writeToRunFiles(entry: LogEntry, line: string): void {
+    if (!this.runFileLoggingEnabled || !this.fileLoggingEnabled) {
+      return;
+    }
+
+    const identifiers = this.extractPipelineIdentifiers(entry);
+
+    if (identifiers.startupIds.size === 0 && identifiers.pipelineRunIds.size === 0) {
+      return;
+    }
+
+    for (const startupId of identifiers.startupIds) {
+      const safeId = this.sanitizeIdentifierForFilename(startupId);
+      if (!safeId) {
+        continue;
+      }
+      const filePath = resolve(this.runFilesDir, "startups", `${safeId}.jsonl`);
+      this.appendToScopedStream(
+        this.runStreams,
+        `startup:${safeId}`,
+        filePath,
+        line,
+        "startup run log stream",
+      );
+    }
+
+    for (const pipelineRunId of identifiers.pipelineRunIds) {
+      const safeId = this.sanitizeIdentifierForFilename(pipelineRunId);
+      if (!safeId) {
+        continue;
+      }
+      const filePath = resolve(this.runFilesDir, "pipelines", `${safeId}.jsonl`);
+      this.appendToScopedStream(
+        this.runStreams,
+        `pipeline:${safeId}`,
+        filePath,
+        line,
+        "pipeline run log stream",
+      );
+    }
+  }
+
+  private appendToScopedStream(
+    streamMap: Map<string, ContextFileState>,
+    key: string,
+    filePath: string,
+    line: string,
+    streamLabel: string,
+  ): void {
+    const state = this.getOrCreateScopedStream(streamMap, key, filePath, streamLabel);
+    if (!state) {
+      return;
+    }
+
+    try {
+      state.stream.write(line);
+      state.bytesWritten += Buffer.byteLength(line, "utf8");
+      this.scheduleScopedRotationCheck(streamMap, key, state, streamLabel);
+    } catch (error) {
+      super.error(`Failed to append scoped log entry (${key}): ${String(error)}`);
+    }
+  }
+
+  private getOrCreateScopedStream(
+    streamMap: Map<string, ContextFileState>,
+    key: string,
+    filePath: string,
+    streamLabel: string,
+  ): ContextFileState | null {
+    const existing = streamMap.get(key);
+    if (existing) {
+      return existing;
+    }
+
+    try {
+      mkdirSync(dirname(filePath), { recursive: true });
+      const stream = this.createStream(filePath, streamLabel);
+      const bytesWritten = this.getFileSize(filePath);
+      const state: ContextFileState = {
+        filePath,
+        stream,
+        bytesWritten,
+        rotationPending: false,
+      };
+      streamMap.set(key, state);
+      return state;
+    } catch (error) {
+      super.error(`Failed to initialize ${streamLabel} (${key}): ${String(error)}`);
+      return null;
+    }
+  }
+
+  private scheduleScopedRotationCheck(
+    streamMap: Map<string, ContextFileState>,
+    key: string,
+    state: ContextFileState,
+    streamLabel: string,
+  ): void {
+    if (state.rotationPending || state.bytesWritten < this.maxFileBytes) {
+      return;
+    }
+    state.rotationPending = true;
+
+    rotateIfNeeded(state.filePath, this.maxFileBytes)
+      .then((rotated) => {
+        if (rotated) {
+          state.stream.end();
+          state.stream = this.createStream(state.filePath, streamLabel);
+          state.bytesWritten = 0;
+          streamMap.set(key, state);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        state.rotationPending = false;
+      });
+  }
+
+  private createStream(filePath: string, streamLabel: string): WriteStream {
+    const stream = createWriteStream(filePath, { flags: "a" });
+    stream.on("error", (error) => {
+      super.error(`Failed writing ${streamLabel} ${filePath}: ${String(error)}`);
+    });
+    return stream;
+  }
+
+  private getFileSize(filePath: string): number {
+    try {
+      return statSync(filePath).size;
+    } catch {
+      return 0;
+    }
+  }
+
+  private extractPipelineIdentifiers(entry: LogEntry): {
+    startupIds: Set<string>;
+    pipelineRunIds: Set<string>;
+  } {
+    const startupIds = new Set<string>();
+    const pipelineRunIds = new Set<string>();
+
+    this.collectIdentifiersFromValue(entry.message, startupIds, pipelineRunIds);
+
+    for (const item of entry.meta ?? []) {
+      this.collectIdentifiersFromValue(item, startupIds, pipelineRunIds);
+    }
+
+    return { startupIds, pipelineRunIds };
+  }
+
+  private collectIdentifiersFromValue(
+    value: unknown,
+    startupIds: Set<string>,
+    pipelineRunIds: Set<string>,
+    depth = 0,
+  ): void {
+    if (depth > 6 || value == null) {
+      return;
+    }
+
+    if (typeof value === "string") {
+      this.collectIdentifiersFromText(value, startupIds, pipelineRunIds);
+      return;
+    }
+
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        this.collectIdentifiersFromValue(item, startupIds, pipelineRunIds, depth + 1);
+      }
+      return;
+    }
+
+    if (typeof value === "object") {
+      for (const [rawKey, rawVal] of Object.entries(value as Record<string, unknown>)) {
+        const key = rawKey.toLowerCase();
+        if (typeof rawVal === "string") {
+          if (key === "startupid" || key === "startup_id") {
+            const normalized = this.normalizeUuid(rawVal);
+            if (normalized) {
+              startupIds.add(normalized);
+            }
+          } else if (
+            key === "pipelinerunid" ||
+            key === "pipeline_run_id" ||
+            key === "runid" ||
+            key === "run_id"
+          ) {
+            const normalized = this.normalizeRunId(rawVal);
+            if (normalized) {
+              pipelineRunIds.add(normalized);
+            }
+          }
+        }
+        this.collectIdentifiersFromValue(rawVal, startupIds, pipelineRunIds, depth + 1);
+      }
+    }
+  }
+
+  private collectIdentifiersFromText(
+    text: string,
+    startupIds: Set<string>,
+    pipelineRunIds: Set<string>,
+  ): void {
+    const startupPatterns = [
+      /startup(?:\s+id)?\s*[:=]\s*([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi,
+      /startup\s+([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi,
+    ];
+
+    for (const pattern of startupPatterns) {
+      let match: RegExpExecArray | null;
+      do {
+        match = pattern.exec(text);
+        if (match?.[1]) {
+          const normalized = this.normalizeUuid(match[1]);
+          if (normalized) {
+            startupIds.add(normalized);
+          }
+        }
+      } while (match);
+    }
+
+    const runPatterns = [
+      /pipelinerunid\s*[:=]\s*([a-z0-9._-]{6,80})/gi,
+      /runid\s*[:=]\s*([a-z0-9._-]{6,80})/gi,
+      /run\s*[:=]\s*([a-z0-9._-]{6,80})/gi,
+      /pipeline\s+([a-z0-9._-]{6,80})\s+for\s+startup/gi,
+    ];
+
+    for (const pattern of runPatterns) {
+      let match: RegExpExecArray | null;
+      do {
+        match = pattern.exec(text);
+        if (match?.[1]) {
+          const normalized = this.normalizeRunId(match[1]);
+          if (normalized) {
+            pipelineRunIds.add(normalized);
+          }
+        }
+      } while (match);
+    }
+  }
+
+  private normalizeUuid(value: string): string | null {
+    const trimmed = value.trim().toLowerCase();
+    const match = trimmed.match(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+    );
+    return match ? match[0] : null;
+  }
+
+  private normalizeRunId(value: string): string | null {
+    const trimmed = value.trim();
+    if (!/^[a-z0-9._-]{6,80}$/i.test(trimmed)) {
+      return null;
+    }
+    return trimmed.toLowerCase();
+  }
+
+  private sanitizeIdentifierForFilename(value: string): string {
+    return value
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9._-]+/g, "-")
+      .replace(/^-+|-+$/g, "");
   }
 
   private reopenStream(): void {

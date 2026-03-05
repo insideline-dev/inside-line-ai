@@ -17,12 +17,44 @@ import { MistralOcrService } from "./mistral-ocr.service";
 import { PdfTextExtractorService } from "./pdf-text-extractor.service";
 import { PptxTextExtractorService } from "./pptx-text-extractor.service";
 
+type SupportingDocumentExtraction = {
+  combinedText: string;
+  candidateCount: number;
+  parsedCount: number;
+  warnings: string[];
+};
+
 @Injectable()
 export class ExtractionService {
   private readonly logger = new Logger(ExtractionService.name);
   private readonly maxTextChars: number;
   private readonly maxPdfBytes: number;
   private readonly fetchTimeoutMs: number;
+  private readonly extractionCache = new Map<
+    string,
+    { result: ExtractionResult; ts: number }
+  >();
+  private static readonly CACHE_TTL_MS = 5 * 60 * 1000;
+
+  cacheResult(startupId: string, result: ExtractionResult): void {
+    this.extractionCache.set(startupId, { result, ts: Date.now() });
+  }
+
+  getCachedResult(startupId: string): ExtractionResult | null {
+    const cached = this.extractionCache.get(startupId);
+    if (!cached) {
+      return null;
+    }
+    if (Date.now() - cached.ts >= ExtractionService.CACHE_TTL_MS) {
+      this.extractionCache.delete(startupId);
+      return null;
+    }
+    return cached.result;
+  }
+
+  clearExtractionCache(startupId: string): void {
+    this.extractionCache.delete(startupId);
+  }
 
   constructor(
     private config: ConfigService,
@@ -51,6 +83,18 @@ export class ExtractionService {
     startupId: string,
     progress?: PhaseProgressCallback,
   ): Promise<ExtractionResult> {
+    const cached = this.extractionCache.get(startupId);
+    if (cached && Date.now() - cached.ts < ExtractionService.CACHE_TTL_MS) {
+      this.logger.log(
+        `[Extraction] Using cached extraction for startup ${startupId} (age=${Math.round((Date.now() - cached.ts) / 1000)}s)`,
+      );
+      progress?.onStepStart?.("extraction-cached", {});
+      progress?.onStepComplete?.("extraction-cached", {
+        summary: { cached: true, source: "pre-pipeline" },
+      });
+      return cached.result;
+    }
+
     this.logger.log(`[Extraction] Starting extraction phase for startup ${startupId}`);
 
     const [record] = await this.drizzle.db
@@ -63,6 +107,8 @@ export class ExtractionService {
       throw new Error(`Startup ${startupId} not found`);
     }
 
+    await this.classifyAndSetPitchDeck(record);
+
     const warnings: string[] = [];
     const startupContext = this.mapStartupContext(record);
     const fallbackText = this.buildSummary(record, startupContext);
@@ -73,12 +119,45 @@ export class ExtractionService {
     this.logger.debug(
       `[Extraction] Startup context coverage | present=${startupContextCoverage.presentCount}/${startupContextCoverage.totalCount} | missing=${startupContextCoverage.missingCount} | missingKeys=${startupContextCoverage.missingKeys.length > 0 ? startupContextCoverage.missingKeys.join(",") : "none"}`,
     );
+    const supportingDocs = await this.extractSupportingDocuments(record, progress);
+    warnings.push(...supportingDocs.warnings);
+    if (supportingDocs.candidateCount > 0) {
+      this.logger.log(
+        `[Extraction] Supporting docs parsed | candidates=${supportingDocs.candidateCount} | parsed=${supportingDocs.parsedCount} | chars=${supportingDocs.combinedText.length}`,
+      );
+    }
 
     if (!record.pitchDeckPath && !record.pitchDeckUrl) {
       warnings.push("No pitch deck found; using startup form data only");
       this.logger.warn(
         `[Extraction] No deck source found for startup ${startupId}; using startup context fallback`,
       );
+      if (supportingDocs.combinedText) {
+        const enrichedFallbackText = this.mergeExtractionTexts(
+          supportingDocs.combinedText,
+          fallbackText,
+        );
+        this.logger.warn(
+          `[Extraction] No deck source for startup ${startupId}; using supporting documents + startup context fallback`,
+        );
+        const fallbackFields = await this.fieldExtractor.extractFields(
+          enrichedFallbackText,
+          record,
+        );
+        const fallbackResult = this.buildResult(
+          record,
+          fallbackFields,
+          enrichedFallbackText,
+          startupContext,
+          "startup-context",
+          0,
+          warnings,
+        );
+        this.logger.log(
+          `[Extraction] Completed extraction phase for startup ${startupId} | source=startup-context | pageCount=0 | warnings=${fallbackResult.warnings?.length ?? 0}`,
+        );
+        return fallbackResult;
+      }
       this.logger.warn(
         `[Extraction] Startup-context fallback detail | startup=${startupId} | fallbackSummaryChars=${fallbackText.length} | missingStartupContextKeys=${startupContextCoverage.missingKeys.length > 0 ? startupContextCoverage.missingKeys.join(",") : "none"}`,
       );
@@ -164,6 +243,32 @@ export class ExtractionService {
       this.logger.warn(
         `[Extraction] Deck unavailable after all fetch attempts for startup ${startupId}; using startup context fallback`,
       );
+      if (supportingDocs.combinedText) {
+        const enrichedFallbackText = this.mergeExtractionTexts(
+          supportingDocs.combinedText,
+          fallbackText,
+        );
+        this.logger.warn(
+          `[Extraction] Deck unavailable for startup ${startupId}; using supporting documents + startup context fallback`,
+        );
+        const fallbackFields = await this.fieldExtractor.extractFields(
+          enrichedFallbackText,
+          record,
+        );
+        const fallbackResult = this.buildResult(
+          record,
+          fallbackFields,
+          enrichedFallbackText,
+          startupContext,
+          "startup-context",
+          0,
+          warnings,
+        );
+        this.logger.log(
+          `[Extraction] Completed extraction phase for startup ${startupId} | source=startup-context | pageCount=0 | warnings=${fallbackResult.warnings?.length ?? 0}`,
+        );
+        return fallbackResult;
+      }
       const fallbackResult = this.buildResult(
         record,
         {},
@@ -415,6 +520,10 @@ export class ExtractionService {
         `[Extraction] No extractable text found for startup ${startupId}; using startup context fallback`,
       );
     }
+    extractedText = this.mergeExtractionTexts(
+      extractedText,
+      supportingDocs.combinedText,
+    );
 
     this.logger.debug(
       `[Extraction] Running field extraction | source=${source} | rawChars=${extractedText.length} | pageCount=${pageCount}`,
@@ -482,12 +591,13 @@ export class ExtractionService {
             .map((member) => member.name?.trim())
             .filter((name): name is string => Boolean(name));
 
+    const website = this.resolveWebsite(aiFields.website, startupRecord.website);
     const companyName = this.resolveCompanyName(
       aiFields.companyName,
       startupRecord.name,
       rawText,
+      website,
     );
-    const website = this.resolveWebsite(aiFields.website, startupRecord.website);
     const industry = this.resolveDisplayText(
       aiFields.industry,
       startupRecord.industry,
@@ -559,15 +669,11 @@ export class ExtractionService {
     aiCompanyName: string | null | undefined,
     startupName: string,
     rawText: string,
+    websiteCandidate?: string | null,
   ): string {
     const aiCandidate = this.normalizeNonPlaceholderText(aiCompanyName);
-    if (aiCandidate) {
+    if (aiCandidate && !this.isLikelyFilenameStyleCompanyName(aiCandidate)) {
       return aiCandidate;
-    }
-
-    const startupCandidate = this.normalizeNonPlaceholderText(startupName);
-    if (startupCandidate && !this.isLikelyPlaceholderCompanyName(startupCandidate)) {
-      return startupCandidate;
     }
 
     const inferredFromDeck = this.inferCompanyNameFromRawText(rawText);
@@ -575,7 +681,21 @@ export class ExtractionService {
       return inferredFromDeck;
     }
 
-    return startupCandidate ?? "Untitled Startup";
+    const websiteDerivedName = this.extractCompanyNameFromWebsite(websiteCandidate);
+    if (websiteDerivedName) {
+      return websiteDerivedName;
+    }
+
+    const startupCandidate = this.normalizeNonPlaceholderText(startupName);
+    if (
+      startupCandidate &&
+      !this.isLikelyPlaceholderCompanyName(startupCandidate) &&
+      !this.isLikelyFilenameStyleCompanyName(startupCandidate)
+    ) {
+      return startupCandidate;
+    }
+
+    return "Untitled Startup";
   }
 
   private resolveStage(
@@ -583,8 +703,8 @@ export class ExtractionService {
     startupStage: string | null | undefined,
     rawText: string,
   ): string {
-    const aiCandidate = this.normalizeNonPlaceholderText(aiStage);
-    if (aiCandidate) {
+    const aiCandidate = this.normalizeStageValue(aiStage);
+    if (aiCandidate && this.hasExplicitStageSignal(rawText, aiCandidate)) {
       return aiCandidate;
     }
 
@@ -593,27 +713,145 @@ export class ExtractionService {
       return inferredFromDeck;
     }
 
-    return this.normalizeNonPlaceholderText(startupStage) ?? "seed";
+    return this.normalizeStageValue(startupStage) ?? "seed";
   }
 
   private inferCompanyNameFromRawText(text: string): string | null {
+    const inlineTitleMatch =
+      text.match(
+        /(?:^|\n)\s*([A-Z][A-Za-z0-9&.,'’\- ]{1,80}?)\s*(?:[—\-:|]\s*)?\bpitch\s*deck\b/i,
+      )?.[1] ?? null;
+    if (inlineTitleMatch) {
+      return this.normalizePotentialCompanyName(inlineTitleMatch);
+    }
+
     const headingMatch =
       text.match(
         /(?:^|\n)\s*#?\s*pitch\s*deck\s*[—\-:]\s*([^\n(]{2,120}?)(?:\s*\(|\s*$)/i,
       )?.[1] ?? null;
     if (headingMatch) {
-      return this.normalizeNonPlaceholderText(headingMatch);
+      return this.normalizePotentialCompanyName(headingMatch);
     }
 
     const companyLineMatch =
       text.match(
-        /(?:^|\n)\s*(?:company|startup)\s*(?:name)?\s*[:\-]\s*([^\n]{2,120})/i,
+        /(?:^|\n)\s*(?:company|startup)\s*(?:name)?\s*[:-]\s*([^\n]{2,120})/i,
       )?.[1] ?? null;
     if (companyLineMatch) {
-      return this.normalizeNonPlaceholderText(companyLineMatch);
+      return this.normalizePotentialCompanyName(companyLineMatch);
+    }
+
+    const lines = text
+      .split(/\r?\n/)
+      .map((line) => line.replace(/\u2022/g, " ").trim())
+      .filter((line) => line.length > 0)
+      .slice(0, 40);
+
+    for (let index = 1; index < Math.min(lines.length, 15); index += 1) {
+      if (!/\bpitch\s*deck\b/i.test(lines[index])) {
+        continue;
+      }
+      const candidate = this.normalizePotentialCompanyName(lines[index - 1]);
+      if (candidate) {
+        return candidate;
+      }
+    }
+
+    if (lines.length >= 2 && /\bpitch\s*deck\b/i.test(lines[1])) {
+      const candidate = this.normalizePotentialCompanyName(lines[0]);
+      if (candidate) {
+        return candidate;
+      }
+    }
+
+    if (lines.length > 0 && /^[A-Z0-9&.,'’\- ]{2,80}$/.test(lines[0])) {
+      const candidate = this.normalizePotentialCompanyName(lines[0]);
+      if (candidate) {
+        return candidate;
+      }
     }
 
     return null;
+  }
+
+  private normalizePotentialCompanyName(
+    value: string | null | undefined,
+  ): string | null {
+    if (!value) {
+      return null;
+    }
+
+    let candidate = value
+      .replace(/^[#>*\-\u2022]+\s*/, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!candidate) {
+      return null;
+    }
+
+    if (/^--\s*\d+\s+of\s+\d+\s*--$/i.test(candidate)) {
+      return null;
+    }
+
+    candidate = candidate
+      .replace(/\b(pitch\s*deck|presentation|slides?|confidential)\b/gi, "")
+      .replace(/[:|/\-–—]+$/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    if (candidate.length < 2 || candidate.length > 80) {
+      return null;
+    }
+
+    const normalized = this.normalizeNonPlaceholderText(candidate);
+    if (!normalized) {
+      return null;
+    }
+
+    if (this.isLikelyDeckSectionHeading(normalized)) {
+      return null;
+    }
+
+    if (this.isLikelyReportDocumentTitle(normalized)) {
+      return null;
+    }
+
+    if (this.isLikelyFilenameStyleCompanyName(normalized)) {
+      return null;
+    }
+
+    if (/\b(page|slide)\s*\d+\b/i.test(normalized)) {
+      return null;
+    }
+
+    return normalized;
+  }
+
+  private isLikelyDeckSectionHeading(value: string): boolean {
+    const normalized = value
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const headings = new Set([
+      "problem",
+      "solution",
+      "product",
+      "market opportunity",
+      "business model",
+      "go to market",
+      "go-to-market",
+      "traction",
+      "competitive advantage",
+      "vision",
+      "team",
+      "financials",
+      "ask",
+      "overview",
+      "introduction",
+      "summary",
+    ]);
+    return headings.has(normalized);
   }
 
   private inferStageFromRawText(text: string): string | null {
@@ -627,6 +865,50 @@ export class ExtractionService {
     if (/\bseries[\s-]?f(?:\+|[\s-]?plus)?\b/.test(normalized)) return "series_f_plus";
     if (/\bseed\b/.test(normalized)) return "seed";
     return null;
+  }
+
+  private normalizeStageValue(value: string | null | undefined): string | null {
+    const normalized = this.normalizeNonPlaceholderText(value);
+    if (!normalized) {
+      return null;
+    }
+
+    const token = normalized.toLowerCase().replace(/[\s-]+/g, "_");
+    const mapping: Record<string, string> = {
+      pre_seed: "pre_seed",
+      preseed: "pre_seed",
+      seed: "seed",
+      series_a: "series_a",
+      series_b: "series_b",
+      series_c: "series_c",
+      series_d: "series_d",
+      series_e: "series_e",
+      series_f: "series_f_plus",
+      series_f_plus: "series_f_plus",
+      "series_f+": "series_f_plus",
+    };
+    return mapping[token] ?? null;
+  }
+
+  private hasExplicitStageSignal(text: string, stage: string): boolean {
+    const normalized = text.toLowerCase();
+    const patternByStage: Record<string, RegExp> = {
+      pre_seed: /\bpre[\s-]?seed\b/i,
+      seed: /\bseed\b/i,
+      series_a: /\bseries[\s-]?a\b/i,
+      series_b: /\bseries[\s-]?b\b/i,
+      series_c: /\bseries[\s-]?c\b/i,
+      series_d: /\bseries[\s-]?d\b/i,
+      series_e: /\bseries[\s-]?e\b/i,
+      series_f_plus: /\bseries[\s-]?f(?:\+|[\s-]?plus)?\b/i,
+    };
+
+    const pattern = patternByStage[stage];
+    if (!pattern) {
+      return false;
+    }
+
+    return pattern.test(normalized);
   }
 
   private normalizeNonPlaceholderText(value: string | null | undefined): string | null {
@@ -656,6 +938,115 @@ export class ExtractionService {
       normalized === "startup example" ||
       normalized.startsWith("startup ")
     );
+  }
+
+  private isLikelyFilenameStyleCompanyName(value: string): boolean {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) {
+      return false;
+    }
+
+    if (/\.(pdf|pptx?|docx?)$/i.test(normalized)) {
+      return true;
+    }
+    if (
+      /\b(pitch\s*deck|deck|presentation|slides?|draft|final|version|copy)\b/i.test(
+        normalized,
+      )
+    ) {
+      return true;
+    }
+    if ((normalized.includes("_") || normalized.includes("-")) && /\d/.test(normalized)) {
+      return true;
+    }
+    if (/^[a-z]{3,}\d{1,4}$/i.test(normalized)) {
+      return true;
+    }
+    if (this.isLikelyReportDocumentTitle(normalized)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  private isLikelyReportDocumentTitle(value: string): boolean {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) {
+      return false;
+    }
+
+    if (/^\d{4}\s+annual\s+report$/.test(normalized)) {
+      return true;
+    }
+    if (/\bannual\s+report\b/.test(normalized)) {
+      return true;
+    }
+    if (
+      /\b(quarterly|q[1-4]|earnings?|supplemental|financial|shareholder)\b/.test(
+        normalized,
+      ) &&
+      /\b(report|results?|data|statement|update)\b/.test(normalized)
+    ) {
+      return true;
+    }
+    if (/\bform\s*10[-\s]?[kq]\b/.test(normalized)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  private extractCompanyNameFromWebsite(
+    website: string | null | undefined,
+  ): string | null {
+    if (!website) {
+      return null;
+    }
+
+    try {
+      const hostname = new URL(website).hostname.toLowerCase().replace(/^www\./, "");
+      const segments = hostname.split(".").filter(Boolean);
+      if (segments.length === 0) {
+        return null;
+      }
+
+      let root = segments.length >= 2 ? segments[segments.length - 2] : segments[0];
+      const broadSuffixes = new Set(["co", "com", "org", "net", "gov", "edu", "ac"]);
+      if (broadSuffixes.has(root) && segments.length >= 3) {
+        root = segments[segments.length - 3];
+      }
+
+      const genericLabels = new Set([
+        "www",
+        "app",
+        "api",
+        "docs",
+        "mail",
+        "admin",
+        "portal",
+        "staging",
+        "dev",
+        "beta",
+      ]);
+      if (!root || genericLabels.has(root)) {
+        return null;
+      }
+
+      const candidate = root
+        .replace(/[-_]+/g, " ")
+        .trim()
+        .split(/\s+/)
+        .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
+        .join(" ");
+
+      if (!candidate || this.isLikelyFilenameStyleCompanyName(candidate)) {
+        return null;
+      }
+
+      return candidate;
+    } catch {
+      return null;
+    }
   }
 
   private buildSummary(startupRecord: Startup, startupContext: StartupFormContext): string {
@@ -724,6 +1115,157 @@ export class ExtractionService {
     return this.limitText(composed);
   }
 
+  private async extractSupportingDocuments(
+    startupRecord: Startup,
+    progress?: PhaseProgressCallback,
+  ): Promise<SupportingDocumentExtraction> {
+    const files = startupRecord.files ?? [];
+    const candidates = files.filter((file) =>
+      this.isSupportingDocumentCandidate(file, startupRecord),
+    );
+    if (candidates.length === 0) {
+      return {
+        combinedText: "",
+        candidateCount: 0,
+        parsedCount: 0,
+        warnings: [],
+      };
+    }
+
+    progress?.onStepStart("supporting_docs_extraction", {
+      inputJson: {
+        files: candidates.map((file) => ({
+          path: file.path,
+          name: file.name,
+          type: file.type,
+        })),
+      },
+    });
+
+    const warnings: string[] = [];
+    const textBlocks: string[] = [];
+    for (const file of candidates) {
+      try {
+        const extractedText = await this.extractTextFromSupportingFile(file);
+        if (!extractedText) {
+          warnings.push(`No extractable text found in supporting file "${file.name}"`);
+          continue;
+        }
+
+        textBlocks.push(
+          [
+            `Supporting file: ${file.name}`,
+            `Content type: ${file.type}`,
+            extractedText,
+          ].join("\n"),
+        );
+      } catch (error) {
+        const message = this.asMessage(error);
+        warnings.push(`Failed to process supporting file "${file.name}": ${message}`);
+      }
+    }
+
+    const combinedText = textBlocks.join("\n\n---\n\n");
+    progress?.onStepComplete("supporting_docs_extraction", {
+      summary: {
+        candidateFiles: candidates.length,
+        parsedFiles: textBlocks.length,
+      },
+      outputJson: {
+        candidateFiles: candidates.map((file) => file.name),
+        parsedFiles: textBlocks.length,
+        warnings,
+      },
+    });
+
+    return {
+      combinedText: this.limitText(combinedText),
+      candidateCount: candidates.length,
+      parsedCount: textBlocks.length,
+      warnings,
+    };
+  }
+
+  private isSupportingDocumentCandidate(
+    file: StartupFileReference,
+    startupRecord: Pick<Startup, "pitchDeckPath">,
+  ): boolean {
+    if (!file?.path) {
+      return false;
+    }
+    if (startupRecord.pitchDeckPath && file.path === startupRecord.pitchDeckPath) {
+      return false;
+    }
+    return this.isExtractableDocument(file);
+  }
+
+  private isExtractableDocument(file: StartupFileReference): boolean {
+    const contentType = (file.type ?? "").toLowerCase();
+    const filename = (file.name ?? "").toLowerCase();
+    if (
+      contentType === "application/pdf" ||
+      contentType.includes("presentation") ||
+      contentType.includes("powerpoint") ||
+      contentType.startsWith("text/") ||
+      contentType === "application/json" ||
+      contentType === "text/csv" ||
+      contentType === "application/csv"
+    ) {
+      return true;
+    }
+
+    return /\.(pdf|pptx?|pps|txt|md|csv|json)$/i.test(filename);
+  }
+
+  private async extractTextFromSupportingFile(
+    file: StartupFileReference,
+  ): Promise<string> {
+    const downloadUrl = await this.storage.getDownloadUrl(file.path, 900);
+    const buffer = await this.fetchDocumentBuffer(downloadUrl, `supporting file ${file.name}`);
+    const contentType = (file.type ?? "").toLowerCase();
+    const filename = (file.name ?? "").toLowerCase();
+
+    if (contentType === "application/pdf" || /\.pdf$/i.test(filename)) {
+      const pdfResult = await this.pdfTextExtractor.extractText(buffer);
+      if (pdfResult.hasContent) {
+        return pdfResult.text;
+      }
+
+      const ocrResult = await this.mistralOcr.extractFromPdf(downloadUrl);
+      return ocrResult.text;
+    }
+
+    if (
+      contentType.includes("presentation") ||
+      contentType.includes("powerpoint") ||
+      /\.(pptx?|pps)$/i.test(filename)
+    ) {
+      const pptxResult = await this.pptxTextExtractor.extractText(buffer);
+      return pptxResult.text;
+    }
+
+    if (
+      contentType.startsWith("text/") ||
+      contentType === "application/json" ||
+      contentType === "application/csv" ||
+      /\.((txt|md|csv|json))$/i.test(filename)
+    ) {
+      return buffer.toString("utf-8");
+    }
+
+    return "";
+  }
+
+  private mergeExtractionTexts(...parts: Array<string | null | undefined>): string {
+    const normalized = parts
+      .map((value) => value?.trim() ?? "")
+      .filter((value) => value.length > 0);
+    if (normalized.length === 0) {
+      return "";
+    }
+    return this.limitText(normalized.join("\n\n---\n\n"));
+  }
+
   private limitText(text: string): string {
     const maxLength = this.maxTextChars;
     if (text.length <= maxLength) {
@@ -734,25 +1276,33 @@ export class ExtractionService {
   }
 
   private async fetchPdfBuffer(url: string): Promise<Buffer> {
+    return this.fetchDocumentBuffer(url, "deck PDF");
+  }
+
+  private async fetchDocumentBuffer(url: string, descriptor: string): Promise<Buffer> {
     const response = await fetch(url, {
       method: "GET",
       signal: AbortSignal.timeout(this.fetchTimeoutMs),
     });
 
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status} while downloading deck PDF`);
+      throw new Error(`HTTP ${response.status} while downloading ${descriptor}`);
     }
 
     const contentLength = Number(response.headers.get("content-length") ?? "0");
     if (Number.isFinite(contentLength) && contentLength > this.maxPdfBytes) {
+      const descriptorSentenceCase =
+        descriptor.length > 0
+          ? `${descriptor.charAt(0).toUpperCase()}${descriptor.slice(1)}`
+          : descriptor;
       throw new Error(
-        `Deck PDF exceeds maximum supported size (${Math.round(this.maxPdfBytes / (1024 * 1024))}MB)`,
+        `${descriptorSentenceCase} exceeds maximum supported size (${Math.round(this.maxPdfBytes / (1024 * 1024))}MB)`,
       );
     }
 
     const body = await response.arrayBuffer();
     if (!body || body.byteLength === 0) {
-      throw new Error("Downloaded deck PDF is empty");
+      throw new Error(`Downloaded ${descriptor} is empty`);
     }
 
     return Buffer.from(body);
@@ -771,6 +1321,73 @@ export class ExtractionService {
       return `${parsed.origin}${parsed.pathname}`;
     } catch {
       return url;
+    }
+  }
+
+  private async classifyAndSetPitchDeck(record: Startup): Promise<void> {
+    const files = record.files ?? [];
+    const pdfFiles = files.filter(
+      (f) => (f.type ?? "").toLowerCase().includes("pdf") && f.path,
+    );
+    if (pdfFiles.length < 2) return;
+
+    try {
+      const snippets: Array<{ name: string; snippet: string; path: string }> =
+        [];
+      for (const file of pdfFiles) {
+        try {
+          const url = await this.storage.getDownloadUrl(file.path, 300);
+          const buffer = await this.fetchPdfBuffer(url);
+          const textResult =
+            await this.pdfTextExtractor.extractText(buffer);
+          snippets.push({
+            name: file.name,
+            snippet: textResult.text.slice(0, 1000),
+            path: file.path,
+          });
+        } catch {
+          this.logger.warn(
+            `[Extraction] Failed to read snippet from ${file.name} for classification`,
+          );
+        }
+      }
+
+      if (snippets.length === 0) return;
+
+      const classification =
+        await this.fieldExtractor.classifyBestPitchDeck(
+          snippets.map((s) => ({ name: s.name, snippet: s.snippet })),
+        );
+      if (
+        classification &&
+        classification.deckIndex >= 0 &&
+        classification.deckIndex < snippets.length &&
+        classification.confidence >= 0.5
+      ) {
+        const bestDeck = snippets[classification.deckIndex];
+        if (bestDeck.path !== record.pitchDeckPath) {
+          this.logger.log(
+            `[Extraction] AI reclassified pitch deck → "${bestDeck.name}" (confidence=${classification.confidence}, was: ${record.pitchDeckPath ?? "none"})`,
+          );
+          await this.drizzle.db
+            .update(startup)
+            .set({ pitchDeckPath: bestDeck.path })
+            .where(eq(startup.id, record.id));
+          record.pitchDeckPath = bestDeck.path;
+        } else {
+          this.logger.debug(
+            `[Extraction] AI confirmed pitch deck: "${bestDeck.name}" (confidence=${classification.confidence})`,
+          );
+        }
+      } else if (classification && classification.deckIndex === -1) {
+        this.logger.warn(
+          `[Extraction] AI found no pitch deck among ${snippets.length} file(s)`,
+        );
+      }
+    } catch (error) {
+      this.logger.warn(
+        `[Extraction] Deck classification failed, using existing pitchDeckPath: ${this.asMessage(error)}`,
+      );
     }
   }
 

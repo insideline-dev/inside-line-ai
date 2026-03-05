@@ -391,6 +391,8 @@ describe("PipelineService", () => {
       run: jest.fn().mockResolvedValue({
         source: "startup-context",
       }),
+      getCachedResult: jest.fn().mockReturnValue(null),
+      clearExtractionCache: jest.fn(),
     } as unknown as jest.Mocked<ExtractionService>;
 
     moduleRef = {
@@ -420,7 +422,7 @@ describe("PipelineService", () => {
     );
   });
 
-  it("starts pipeline and enqueues extraction + scraping", async () => {
+  it("starts pipeline and enqueues extraction while deferring scraping until enrichment completes", async () => {
     stateService.get.mockResolvedValueOnce(null);
     stateService.init.mockResolvedValueOnce(createState());
 
@@ -428,14 +430,14 @@ describe("PipelineService", () => {
 
     expect(runId).toBe("run-1");
     expect(progressTracker.initProgress).toHaveBeenCalledTimes(1);
-    expect(queue.addJob).toHaveBeenCalledTimes(2);
+    expect(queue.addJob).toHaveBeenCalledTimes(1);
     expect(stateService.updatePhase).toHaveBeenCalledWith(
       "startup-1",
       PipelinePhase.EXTRACTION,
       PhaseStatus.WAITING,
       undefined,
     );
-    expect(stateService.updatePhase).toHaveBeenCalledWith(
+    expect(stateService.updatePhase).not.toHaveBeenCalledWith(
       "startup-1",
       PipelinePhase.SCRAPING,
       PhaseStatus.WAITING,
@@ -447,6 +449,128 @@ describe("PipelineService", () => {
       "AI pipeline analysis has started.",
       expect.any(String),
       "/admin/startup/startup-1",
+    );
+  });
+
+  it("starts pipeline from prefilled extraction cache without re-queueing extraction", async () => {
+    stateService.get.mockResolvedValueOnce(null);
+    stateService.init.mockResolvedValueOnce(createState());
+    extractionService.getCachedResult.mockReturnValueOnce({
+      source: "startup-context",
+      companyName: "Acme",
+      stage: "series_a",
+      website: "https://acme.com",
+      rawText: "Acme Pitch Deck",
+      warnings: [],
+      startupContext: {},
+      pageCount: 1,
+      founderNames: [],
+      industry: "SaaS",
+      location: "NYC",
+      fundingAsk: 0,
+      valuation: 0,
+    } as any);
+    phaseTransition.decideNextPhases.mockReturnValueOnce({
+      queue: [PipelinePhase.ENRICHMENT, PipelinePhase.SCRAPING],
+      blockedByRequiredFailure: false,
+      pipelineComplete: false,
+      degraded: false,
+    });
+
+    await service.startPipeline("startup-1", "user-1", { skipExtraction: true });
+
+    expect(stateService.setPhaseResult).toHaveBeenCalledWith(
+      "startup-1",
+      PipelinePhase.EXTRACTION,
+      expect.objectContaining({ source: "startup-context" }),
+    );
+    expect(stateService.updatePhase.mock.calls).toContainEqual([
+      "startup-1",
+      PipelinePhase.EXTRACTION,
+      PhaseStatus.COMPLETED,
+    ]);
+    expect(progressTracker.updatePhaseProgress).toHaveBeenCalledWith(
+      expect.objectContaining({
+        startupId: "startup-1",
+        phase: PipelinePhase.EXTRACTION,
+        status: PhaseStatus.COMPLETED,
+      }),
+    );
+    expect(queue.addJob).toHaveBeenCalledWith(
+      "ai-enrichment",
+      expect.objectContaining({
+        type: "ai_enrichment",
+        startupId: "startup-1",
+      }),
+      expect.any(Object),
+    );
+    expect(queue.addJob).not.toHaveBeenCalledWith(
+      "ai-scraping",
+      expect.anything(),
+      expect.anything(),
+    );
+    expect(queue.addJob).not.toHaveBeenCalledWith(
+      "ai-extraction",
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it("starts pipeline from prior pipeline-state extraction when cache is unavailable", async () => {
+    const priorExtraction = {
+      source: "startup-context",
+      companyName: "Acme",
+      stage: "series_a",
+      website: "https://acme.com",
+      rawText: "Acme Pitch Deck",
+      warnings: [],
+      startupContext: {},
+      pageCount: 1,
+      founderNames: [],
+      industry: "SaaS",
+      location: "NYC",
+      fundingAsk: 0,
+      valuation: 0,
+    } as any;
+    const priorState = createState({
+      status: PipelineStatus.CANCELLED,
+      results: {
+        [PipelinePhase.EXTRACTION]: priorExtraction,
+      },
+    });
+
+    stateService.get
+      .mockResolvedValueOnce(priorState) // existing-state running check
+      .mockResolvedValueOnce(priorState) // skipExtraction fallback lookup
+      .mockResolvedValue(createState()); // refreshed + queue preflight
+    stateService.init.mockResolvedValueOnce(createState());
+    extractionService.getCachedResult.mockReturnValueOnce(null);
+    phaseTransition.decideNextPhases.mockReturnValueOnce({
+      queue: [PipelinePhase.ENRICHMENT],
+      blockedByRequiredFailure: false,
+      pipelineComplete: false,
+      degraded: false,
+    });
+
+    await service.startPipeline("startup-1", "user-1", { skipExtraction: true });
+
+    expect(stateService.setPhaseResult).toHaveBeenCalledWith(
+      "startup-1",
+      PipelinePhase.EXTRACTION,
+      expect.objectContaining({ companyName: "Acme" }),
+    );
+    expect(queue.addJob).toHaveBeenCalledWith(
+      "ai-enrichment",
+      expect.objectContaining({
+        type: "ai_enrichment",
+        startupId: "startup-1",
+      }),
+      expect.any(Object),
+    );
+    expect(queue.addJob).not.toHaveBeenCalledWith(
+      "ai-extraction",
+      expect.anything(),
+      expect.anything(),
     );
   });
 
@@ -515,6 +639,7 @@ describe("PipelineService", () => {
     expect(clara.notifyMissingStartupInfo).toHaveBeenCalledWith(
       "startup-1",
       ["website", "stage"],
+      { pipelineRunId: "run-1" },
     );
     expect(queue.removePipelineJobs).toHaveBeenCalledWith("startup-1");
     expect(stateService.setStatus).toHaveBeenCalledWith(
@@ -556,6 +681,7 @@ describe("PipelineService", () => {
     expect(clara.notifyMissingStartupInfo).toHaveBeenCalledWith(
       "startup-1",
       ["website", "stage"],
+      { pipelineRunId: "run-1" },
     );
     expect(queue.addJob).not.toHaveBeenCalled();
     expect(queue.removePipelineJobs).toHaveBeenCalledWith("startup-1");
@@ -611,7 +737,8 @@ describe("PipelineService", () => {
 
     expect(clara.notifyMissingStartupInfo).toHaveBeenCalledWith(
       "startup-1",
-      ["website"],
+      expect.arrayContaining(["website"]),
+      { pipelineRunId: "run-1" },
     );
     expect(queue.addJob).not.toHaveBeenCalled();
     expect(queue.removePipelineJobs).toHaveBeenCalledWith("startup-1");
@@ -658,7 +785,7 @@ describe("PipelineService", () => {
     expect(stateService.updatePhase).not.toHaveBeenCalled();
   });
 
-  it("skips enrichment phase when enrichment is disabled and no enrichment work is needed", async () => {
+  it("runs enrichment phase when enrichment is disabled and no enrichment work is needed", async () => {
     aiConfig.isEnrichmentEnabled.mockReturnValueOnce(false);
     stateService.get.mockResolvedValueOnce(createState());
     enrichmentService.assessNeed.mockResolvedValueOnce({
@@ -676,27 +803,25 @@ describe("PipelineService", () => {
     });
 
     expect(enrichmentService.assessNeed).toHaveBeenCalledWith("startup-1");
-    expect(enrichmentService.buildSkippedResult).toHaveBeenCalledWith(
-      "Enrichment temporarily disabled by configuration",
-      [],
-    );
-    expect(stateService.setPhaseResult).toHaveBeenCalledWith(
+    expect(stateService.updatePhase).toHaveBeenCalledWith(
       "startup-1",
       PipelinePhase.ENRICHMENT,
-      expect.any(Object),
+      PhaseStatus.WAITING,
+      undefined,
     );
-    expect(stateService.updatePhase).toHaveBeenCalledWith(
+    expect(stateService.updatePhase).not.toHaveBeenCalledWith(
       "startup-1",
       PipelinePhase.ENRICHMENT,
       PhaseStatus.SKIPPED,
     );
-    expect(progressTracker.updatePhaseProgress).toHaveBeenCalledWith(
+    expect(queue.addJob).toHaveBeenCalledWith(
+      "ai-enrichment",
       expect.objectContaining({
-        phase: PipelinePhase.ENRICHMENT,
-        status: PhaseStatus.SKIPPED,
+        type: "ai_enrichment",
+        startupId: "startup-1",
       }),
+      expect.any(Object),
     );
-    expect(queue.addJob).not.toHaveBeenCalled();
   });
 
   it("runs enrichment when assessNeed says skip but enrichment is enabled", async () => {
@@ -826,7 +951,7 @@ describe("PipelineService", () => {
     );
   });
 
-  it("does not queue scraping twice when enrichment is skipped during transitions", async () => {
+  it("queues enrichment and defers scraping while enrichment is still pending in transitions", async () => {
     aiConfig.isEnrichmentEnabled.mockReturnValue(false);
     enrichmentService.assessNeed.mockResolvedValue({
       shouldRun: false,
@@ -835,7 +960,7 @@ describe("PipelineService", () => {
       reason: "No missing or suspicious fields after internal checks",
     } as any);
 
-    const beforeSkip = createState(
+    const pipelineState = createState(
       {},
       {
         [PipelinePhase.EXTRACTION]: PhaseStatus.COMPLETED,
@@ -843,40 +968,15 @@ describe("PipelineService", () => {
         [PipelinePhase.SCRAPING]: PhaseStatus.PENDING,
       },
     );
-    const afterSkip = createState(
-      {},
-      {
-        [PipelinePhase.EXTRACTION]: PhaseStatus.COMPLETED,
-        [PipelinePhase.ENRICHMENT]: PhaseStatus.SKIPPED,
-        [PipelinePhase.SCRAPING]: PhaseStatus.PENDING,
-      },
-    );
-    const scrapingAlreadyWaiting = createState(
-      {},
-      {
-        [PipelinePhase.EXTRACTION]: PhaseStatus.COMPLETED,
-        [PipelinePhase.ENRICHMENT]: PhaseStatus.SKIPPED,
-        [PipelinePhase.SCRAPING]: PhaseStatus.WAITING,
-      },
-    );
 
     stateService.get
-      .mockResolvedValueOnce(beforeSkip) // applyTransitions outer refresh
-      .mockResolvedValueOnce(beforeSkip) // queuePhase(enrichment) preflight
-      .mockResolvedValueOnce(beforeSkip) // onPhaseSkipped state check
-      .mockResolvedValueOnce(afterSkip) // applyTransitions recursive refresh
-      .mockResolvedValueOnce(afterSkip) // queuePhase(scraping) from recursive applyTransitions
-      .mockResolvedValueOnce(scrapingAlreadyWaiting); // duplicate queue attempt from outer loop
+      .mockResolvedValueOnce(pipelineState) // applyTransitions outer refresh
+      .mockResolvedValueOnce(pipelineState) // queuePhase(enrichment) preflight
+      .mockResolvedValueOnce(pipelineState); // queuePhase(scraping) preflight
 
     phaseTransition.decideNextPhases
       .mockReturnValueOnce({
         queue: [PipelinePhase.ENRICHMENT, PipelinePhase.SCRAPING],
-        blockedByRequiredFailure: false,
-        pipelineComplete: false,
-        degraded: false,
-      })
-      .mockReturnValueOnce({
-        queue: [PipelinePhase.SCRAPING],
         blockedByRequiredFailure: false,
         pipelineComplete: false,
         degraded: false,
@@ -886,20 +986,26 @@ describe("PipelineService", () => {
 
     expect(queue.addJob).toHaveBeenCalledTimes(1);
     expect(queue.addJob).toHaveBeenCalledWith(
-      "ai-scraping",
+      "ai-enrichment",
       expect.objectContaining({
-        type: "ai_scraping",
+        type: "ai_enrichment",
         startupId: "startup-1",
       }),
       expect.any(Object),
     );
-
     const scrapingWaitingCalls = stateService.updatePhase.mock.calls.filter(
       (call) =>
         call[1] === PipelinePhase.SCRAPING &&
         call[2] === PhaseStatus.WAITING,
     );
-    expect(scrapingWaitingCalls).toHaveLength(1);
+    expect(scrapingWaitingCalls).toHaveLength(0);
+
+    const enrichmentWaitingCalls = stateService.updatePhase.mock.calls.filter(
+      (call) =>
+        call[1] === PipelinePhase.ENRICHMENT &&
+        call[2] === PhaseStatus.WAITING,
+    );
+    expect(enrichmentWaitingCalls).toHaveLength(1);
   });
 
   it("cancels pipeline and asks Clara when enrichment is skipped with unresolved critical fields", async () => {
@@ -936,6 +1042,7 @@ describe("PipelineService", () => {
     expect(clara.notifyMissingStartupInfo).toHaveBeenCalledWith(
       "startup-1",
       ["website"],
+      { pipelineRunId: "run-1" },
     );
     expect(queue.removePipelineJobs).toHaveBeenCalledWith("startup-1");
     expect(stateService.setStatus).toHaveBeenCalledWith(
@@ -1173,8 +1280,9 @@ describe("PipelineService", () => {
   it("cancels pipeline and removes queued jobs", async () => {
     stateService.get.mockResolvedValueOnce(createState());
     queue.removePipelineJobs.mockResolvedValueOnce(4);
+    const reason = "Awaiting founder info: missing website.";
 
-    const result = await service.cancelPipeline("startup-1");
+    const result = await service.cancelPipeline("startup-1", { reason });
 
     expect(result).toEqual({ removedJobs: 4 });
     expect(stateService.setStatus).toHaveBeenCalledWith(
@@ -1184,6 +1292,7 @@ describe("PipelineService", () => {
     expect(progressTracker.setPipelineStatus).toHaveBeenCalledWith(
       expect.objectContaining({
         status: PipelineStatus.CANCELLED,
+        error: reason,
       }),
     );
     expect(errorRecovery.clearAllTimeoutsForStartup).toHaveBeenCalledWith(
@@ -1192,7 +1301,7 @@ describe("PipelineService", () => {
     expect(notifications.createAndBroadcast).toHaveBeenCalledWith(
       "user-1",
       expect.stringContaining("Analysis cancelled"),
-      "AI pipeline analysis was cancelled.",
+      expect.stringContaining(reason),
       expect.any(String),
       "/admin/startup/startup-1",
     );
@@ -1505,7 +1614,14 @@ describe("PipelineService", () => {
     });
 
     it("queues phase with defaults when optional params omitted", async () => {
-      stateService.get.mockResolvedValueOnce(createState());
+      stateService.get.mockResolvedValueOnce(
+        createState(
+          {},
+          {
+            [PipelinePhase.ENRICHMENT]: PhaseStatus.COMPLETED,
+          },
+        ),
+      );
 
       await (service as any).queuePhase({
         startupId: "startup-1",

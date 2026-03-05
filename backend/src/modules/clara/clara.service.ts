@@ -26,6 +26,7 @@ export class ClaraService {
   private readonly logger = new Logger(ClaraService.name);
   private readonly claraInboxId: string | null;
   private readonly adminUserId: string | null;
+  private readonly inboundMessageLocks = new Set<string>();
 
   constructor(
     private config: ConfigService,
@@ -53,7 +54,24 @@ export class ClaraService {
   }
 
   isClaraInbox(inboxId: string): boolean {
-    return this.claraInboxId === inboxId;
+    if (!this.claraInboxId) {
+      return false;
+    }
+
+    const configured = this.normalizeInboxId(this.claraInboxId);
+    const incoming = this.normalizeInboxId(inboxId);
+    return configured.length > 0 && configured === incoming;
+  }
+
+  private normalizeInboxId(value: string | null | undefined): string {
+    if (!value) {
+      return "";
+    }
+
+    return value
+      .trim()
+      .toLowerCase()
+      .replace(/:[a-z0-9_-]+$/i, "");
   }
 
   async handleIncomingMessage(
@@ -66,6 +84,15 @@ export class ClaraService {
       return;
     }
 
+    const lockKey = `${this.normalizeInboxId(inboxId)}:${threadId}:${messageId || "(empty)"}`;
+    if (this.inboundMessageLocks.has(lockKey)) {
+      this.logger.warn(
+        `[Clara] Skipping concurrent duplicate webhook processing for thread ${threadId}, message ${messageId || "(empty)"}`,
+      );
+      return;
+    }
+    this.inboundMessageLocks.add(lockKey);
+
     try {
       const message = await this.claraChannel.getEmailMessage(
         inboxId,
@@ -74,18 +101,78 @@ export class ClaraService {
 
       const rawFrom = message.from;
       const fromEmail = this.extractEmailAddress(rawFrom);
+      if (this.isClaraOriginatedMessage(fromEmail)) {
+        this.logger.debug(
+          `[Clara] Ignoring self-originated webhook message ${messageId} on thread ${threadId} from ${fromEmail}`,
+        );
+        return;
+      }
+
+      const hasPitchDeckAttachment = (message.attachments ?? []).some(
+        (attachment) =>
+          this.isPitchDeckAttachment(attachment.filename, attachment.contentType),
+      );
       const fromName = this.parseNameFromEmail(rawFrom);
       const senderUser = await this.findUserByEmail(fromEmail);
       const actorUserId = senderUser?.id ?? null;
       const actorRole = senderUser?.role ?? null;
       const investorUserId = actorRole === "investor" ? actorUserId : null;
 
-      const conversation = await this.conversationService.findOrCreate(
+      let conversation = await this.conversationService.findOrCreate(
         threadId,
         fromEmail,
         fromName,
         investorUserId,
       );
+
+      if (!conversation.startupId && !hasPitchDeckAttachment) {
+        const awaitingInfoConversation =
+          await this.conversationService.findLatestAwaitingInfoByInvestorEmail(
+            fromEmail,
+            conversation.id,
+          );
+        let linkCandidate = awaitingInfoConversation;
+
+        if (!linkCandidate) {
+          const latestLinkedConversation =
+            await this.conversationService.findLatestByInvestorEmailWithStartup(
+              fromEmail,
+              conversation.id,
+            );
+          if (latestLinkedConversation?.startupId) {
+            const stillMissingCriticalFields =
+              await this.submissionService.hasMissingCriticalFields(
+                latestLinkedConversation.startupId,
+              );
+            if (stillMissingCriticalFields) {
+              linkCandidate = latestLinkedConversation;
+            }
+          }
+        }
+
+        if (linkCandidate?.startupId) {
+          await this.conversationService.linkStartup(
+            conversation.id,
+            linkCandidate.startupId,
+          );
+          await this.conversationService.updateStatus(
+            conversation.id,
+            ConversationStatus.AWAITING_INFO,
+          );
+          conversation = {
+            ...conversation,
+            startupId: linkCandidate.startupId,
+            status: ConversationStatus.AWAITING_INFO,
+          };
+          this.logger.warn(
+            `[Clara] Linked detached thread ${threadId} to startup ${linkCandidate.startupId} via conversation ${linkCandidate.id} for missing-info resolution`,
+          );
+        }
+      } else if (!conversation.startupId && hasPitchDeckAttachment) {
+        this.logger.debug(
+          `[Clara] Skipping detached-thread relink for thread ${threadId}: pitch deck attachment indicates fresh submission intent`,
+        );
+      }
 
       const alreadyRepliedToMessage =
         typeof (this.conversationService as ClaraConversationService & {
@@ -115,6 +202,33 @@ export class ClaraService {
         return;
       }
 
+      const alreadyProcessedInbound =
+        typeof (this.conversationService as ClaraConversationService & {
+          hasMessage?: (
+            conversationId: string,
+            messageId: string,
+            direction: MessageDirection,
+          ) => Promise<boolean>;
+        }).hasMessage === "function"
+          ? await (this.conversationService as ClaraConversationService & {
+              hasMessage: (
+                conversationId: string,
+                messageId: string,
+                direction: MessageDirection,
+              ) => Promise<boolean>;
+            }).hasMessage(
+              conversation.id,
+              messageId,
+              MessageDirection.INBOUND,
+            )
+          : false;
+      if (alreadyProcessedInbound) {
+        this.logger.warn(
+          `Skipping duplicate inbound Clara webhook message ${messageId} for thread ${threadId}`,
+        );
+        return;
+      }
+
       const history =
         await this.conversationService.getRecentMessages(conversation.id);
       const startupContext = await this.getStartupExtra(conversation.startupId);
@@ -124,9 +238,7 @@ export class ClaraService {
           filename: a.filename ?? "attachment",
           contentType: a.contentType ?? "application/octet-stream",
           attachmentId: a.attachmentId,
-          isPitchDeck:
-            (a.contentType ?? "") === "application/pdf" ||
-            /deck|pitch/i.test(a.filename ?? ""),
+          isPitchDeck: this.isPitchDeckAttachment(a.filename, a.contentType),
           status: "pending" as const,
         }),
       );
@@ -154,7 +266,7 @@ export class ClaraService {
             : null,
       };
 
-      let replyText: string;
+      let replyText = "Thanks for the update.";
       let intent: ClaraIntent;
       let intentClassification: IntentClassification;
       let finalStartupId: string | null = conversation.startupId;
@@ -179,11 +291,39 @@ export class ClaraService {
           reasoning: "Legacy ClaraAi mock fallback",
         };
       }
+      const unresolvedCriticalFields = conversation.startupId
+        ? await this.submissionService.getMissingCriticalFieldsForStartup(
+            conversation.startupId,
+          )
+        : [];
+      const shouldResolveMissingInfo =
+        Boolean(conversation.startupId) &&
+        (conversation.status === ConversationStatus.AWAITING_INFO ||
+          unresolvedCriticalFields.length > 0);
+      const hasSubmissionAttachment = attachments.some((attachment) =>
+        Boolean(attachment.isPitchDeck),
+      );
 
-      if (
+      const isSubmissionIntent =
+        hasSubmissionAttachment ||
         intentClassification.intent === ClaraIntent.SUBMISSION ||
-        this.claraAi.isLikelySubmission(ctx)
-      ) {
+        this.claraAi.isLikelySubmission(ctx);
+      const shouldPreferMissingInfoResolution =
+        shouldResolveMissingInfo &&
+        Boolean(conversation.startupId) &&
+        !hasSubmissionAttachment;
+      const submissionAllowedByContext =
+        !conversation.startupId || hasSubmissionAttachment;
+      const shouldProcessAsSubmission =
+        isSubmissionIntent &&
+        submissionAllowedByContext &&
+        !shouldPreferMissingInfoResolution;
+
+      this.logger.debug(
+        `[Clara] Intent routing for thread ${threadId}: intent=${intentClassification.intent} submissionIntent=${isSubmissionIntent} hasDeckAttachment=${hasSubmissionAttachment} shouldResolveMissing=${shouldResolveMissingInfo} startupLinked=${Boolean(conversation.startupId)} route=${shouldProcessAsSubmission ? "submission" : "missing-info/follow-up"}`,
+      );
+
+      if (shouldProcessAsSubmission) {
         intent = ClaraIntent.SUBMISSION;
 
         await this.conversationService.logMessage({
@@ -201,22 +341,38 @@ export class ClaraService {
 
         await this.conversationService.updateLastIntent(conversation.id, intent);
 
-        const extractedName = this.claraAi.extractCompanyFromFilename(
-          attachments.find((a) => a.isPitchDeck)?.filename,
-        ) ?? intentClassification.extractedCompanyName;
+        const extractedName = intentClassification.extractedCompanyName;
 
         const result = await this.submissionService.handleSubmission(
           ctx,
           this.adminUserId,
           extractedName,
         );
+        if (result.noPitchDeck) {
+          this.logger.warn(
+            `[Clara] No pitch deck detected for thread ${threadId} — requesting resend from ${fromEmail}`,
+          );
+          await this.conversationService.updateStatus(
+            conversation.id,
+            ConversationStatus.AWAITING_INFO,
+          );
+          replyText = [
+            `Hi ${fromName ?? "there"},`,
+            "",
+            "Thanks for reaching out! I received your email but wasn't able to identify a pitch deck among the attached files.",
+            "",
+            "Please resend with your pitch deck (PDF or PowerPoint presentation) and I'll get the analysis started right away.",
+            "",
+            "Best regards,",
+            "Clara",
+          ].join("\n");
+        } else {
+        this.logger.log(
+          `[Clara] Submission handling for thread ${threadId} -> startup=${result.startupId} duplicate=${result.isDuplicate} enriched=${Boolean(result.isEnriched)} pipelineStarted=${Boolean(result.pipelineStarted)} missing=${(result.missingFields ?? []).join(",") || "none"}`,
+        );
 
         await this.conversationService.linkStartup(conversation.id, result.startupId);
         finalStartupId = result.startupId;
-        await this.conversationService.updateStatus(
-          conversation.id,
-          ConversationStatus.PROCESSING,
-        );
 
         const extra = {
           startupName: result.startupName,
@@ -229,12 +385,15 @@ export class ClaraService {
         };
 
         if (result.isDuplicate) {
-          if (result.isEnriched && result.pipelineStarted === false) {
+          if (
+            result.pipelineStarted === false &&
+            (result.missingFields?.length ?? 0) > 0
+          ) {
             const missingLabels = this.formatMissingFieldLabels(
               result.missingFields ?? [],
             );
             replyText = [
-              `We already have ${result.startupName} in our system and I’ve updated it with your latest deck.`,
+              `We already have ${result.startupName} in our system and I’ve updated it with the details you sent.`,
               "",
               "Before I can restart analysis, I still need:",
               ...missingLabels.map((label) => `- ${label}`),
@@ -245,9 +404,17 @@ export class ClaraService {
               conversation.id,
               ConversationStatus.AWAITING_INFO,
             );
+          } else if (result.pipelineStarted) {
+            await this.conversationService.updateStatus(
+              conversation.id,
+              ConversationStatus.PROCESSING,
+            );
+            replyText = result.isEnriched
+              ? `We already have ${result.startupName} in our system. I've updated it with the new information you sent and re-triggered the analysis. You'll receive an updated report when it's ready.`
+              : `We already have ${result.startupName} in our system (status: ${result.status}). I've linked this conversation to the existing record and started the analysis pipeline.`;
           } else {
             replyText = result.isEnriched
-              ? `We already have ${result.startupName} in our system. I've updated it with the new pitch deck you sent and re-triggered the analysis. You'll receive an updated report when it's ready.`
+              ? `We already have ${result.startupName} in our system. I've updated it with the new information you sent and re-triggered the analysis. You'll receive an updated report when it's ready.`
               : `We already have ${result.startupName} in our system (status: ${result.status}). I've linked this conversation to the existing record.`;
           }
         } else {
@@ -274,6 +441,10 @@ export class ClaraService {
               ConversationStatus.AWAITING_INFO,
             );
           } else {
+            await this.conversationService.updateStatus(
+              conversation.id,
+              ConversationStatus.PROCESSING,
+            );
             replyText = await this.claraAi.generateResponse(
               ClaraIntent.SUBMISSION,
               ctx,
@@ -281,6 +452,7 @@ export class ClaraService {
             );
           }
         }
+        } // end else (noPitchDeck check)
       } else {
         intent = intentClassification.intent;
 
@@ -299,16 +471,31 @@ export class ClaraService {
 
         await this.conversationService.updateLastIntent(conversation.id, intent);
 
-        const shouldResolveMissingInfo =
-          conversation.status === ConversationStatus.AWAITING_INFO &&
-          Boolean(conversation.startupId);
-
         if (shouldResolveMissingInfo && conversation.startupId) {
+          const replyContent = [ctx.subject, ctx.bodyText]
+            .filter((value): value is string => Boolean(value && value.trim()))
+            .join("\n\n");
           const resolution = await this.submissionService.resolveMissingInfoFromReply(
             conversation.startupId,
-            ctx.bodyText,
+            replyContent || null,
             investorUserId ?? this.adminUserId,
           );
+          if (resolution) {
+            if (conversation.startupId !== resolution.startupId) {
+              await this.conversationService.linkStartup(
+                conversation.id,
+                resolution.startupId,
+              );
+            }
+            finalStartupId = resolution.startupId;
+            finalStartupExtra = {
+              ...finalStartupExtra,
+              startupName: resolution.startupName,
+            };
+            this.logger.log(
+              `[Clara] Missing-info reply for thread ${threadId} -> startup=${resolution.startupId} updated=${resolution.updatedFields.join(",") || "none"} remaining=${resolution.remainingMissing.join(",") || "none"} pipelineStarted=${resolution.pipelineStarted}`,
+            );
+          }
 
           if (resolution) {
             const missingLabels = this.formatMissingFieldLabels(
@@ -316,7 +503,7 @@ export class ClaraService {
             );
             if (resolution.pipelineStarted) {
               replyText = [
-                `Thanks ${fromName ?? "there"} — I’ve updated ${resolution.startupName} with the missing details and started the analysis pipeline.`,
+                `Thanks ${fromName ?? "there"} — I’ve updated ${resolution.startupName} with the missing details and restarted the analysis.`,
                 "",
                 "I’ll email you again as soon as the analysis is complete.",
               ].join("\n");
@@ -437,6 +624,8 @@ export class ClaraService {
         error instanceof Error ? error.stack : undefined,
       );
       throw error;
+    } finally {
+      this.inboundMessageLocks.delete(lockKey);
     }
   }
 
@@ -535,6 +724,9 @@ export class ClaraService {
   async notifyMissingStartupInfo(
     startupId: string,
     missingFields: string[],
+    options?: {
+      pipelineRunId?: string | null;
+    },
   ): Promise<void> {
     if (!this.claraInboxId) return;
 
@@ -578,7 +770,9 @@ export class ClaraService {
     }
 
     const conversation = await this.conversationService.findByStartupId(startupId);
-    const messageId = `missing-info-${startupId}-${unresolvedMissing.join("-")}`;
+    const dedupeScope =
+      options?.pipelineRunId?.trim() || `adhoc-${new Date().toISOString().slice(0, 10)}`;
+    const messageId = `missing-info-${startupId}-${dedupeScope}-${unresolvedMissing.join("-")}`;
     if (conversation) {
       const alreadySent = await this.conversationService.hasMessage(
         conversation.id,
@@ -586,6 +780,9 @@ export class ClaraService {
         MessageDirection.OUTBOUND,
       );
       if (alreadySent) {
+        this.logger.debug(
+          `Skipping duplicate Clara missing-info request for startup ${startupId} (scope=${dedupeScope}, fields=${unresolvedMissing.join(",")})`,
+        );
         return;
       }
     }
@@ -619,7 +816,7 @@ export class ClaraService {
     });
 
     this.logger.log(
-      `Sent Clara missing-info request for startup ${startupId} to ${recipient.email} (fields=${unresolvedMissing.join(",")})`,
+      `Sent Clara missing-info request for startup ${startupId} to ${recipient.email} (fields=${unresolvedMissing.join(",")}, scope=${dedupeScope})`,
     );
 
     if (conversation) {
@@ -825,6 +1022,63 @@ export class ClaraService {
     }
 
     return from.trim().toLowerCase();
+  }
+
+  private isPitchDeckAttachment(
+    filename: string | null | undefined,
+    contentType: string | null | undefined,
+  ): boolean {
+    const normalizedType = (contentType ?? "").toLowerCase();
+    const normalizedName = (filename ?? "").toLowerCase();
+    if (/deck|pitch|teaser|presentation|slides?/.test(normalizedName)) {
+      return true;
+    }
+    if (
+      normalizedType.includes("presentation") ||
+      normalizedType.includes("powerpoint")
+    ) {
+      return true;
+    }
+    if (normalizedType === "application/pdf") {
+      return !this.isLikelySupportingDocumentAttachment(normalizedName);
+    }
+
+    return false;
+  }
+
+  private isLikelySupportingDocumentAttachment(filename: string): boolean {
+    return /\b(financials?|cap[\s_-]?table|statement|balance[\s_-]?sheet|cash[\s_-]?flow|p&l|profit[\s_-]?and[\s_-]?loss|budget|forecast|model|invoice|contract|nda|tax|compliance|report|annual|quarterly|earnings?|supplemental|shareholder|10[\s_-]?[kq]|sec[\s_-]?filing|filing)\b/i.test(
+      filename,
+    );
+  }
+
+  private isClaraOriginatedMessage(fromEmail: string): boolean {
+    const normalized = fromEmail.trim().toLowerCase();
+    if (!normalized) {
+      return false;
+    }
+
+    const configuredInbox = (this.claraInboxId ?? "").trim().toLowerCase();
+    if (configuredInbox.includes("@") && normalized === configuredInbox) {
+      return true;
+    }
+
+    const aliasPatterns = [
+      "clara@agentmail.to",
+      "clara@insideline.ai",
+    ];
+    if (aliasPatterns.includes(normalized)) {
+      return true;
+    }
+
+    if (normalized.endsWith("@agentmail.to")) {
+      const localPart = normalized.split("@")[0] ?? "";
+      if (localPart.startsWith("clara")) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   private parseNameFromEmail(email: string): string | null {

@@ -114,6 +114,7 @@ const STATUS_BADGE_CLASS: Record<string, string> = {
   completed: "bg-emerald-500/10 text-emerald-700 border-emerald-500/30 dark:text-emerald-300",
   running: "bg-sky-500/10 text-sky-700 border-sky-500/30 dark:text-sky-300",
   waiting: "bg-amber-500/10 text-amber-700 border-amber-500/30 dark:text-amber-300",
+  cancelled: "bg-amber-500/10 text-amber-700 border-amber-500/30 dark:text-amber-300",
   failed: "bg-destructive/10 text-destructive border-destructive/30",
   skipped: "bg-muted text-muted-foreground border-border",
   pending: "bg-muted text-muted-foreground border-border",
@@ -1016,10 +1017,21 @@ export function AdminPipelineLivePanel({
     (agent) => agent.data.status === "completed",
   ).length;
   const isCompletedSnapshot = progress?.pipelineStatus === "completed";
+  const isCancelledPipeline = progress?.pipelineStatus === "cancelled";
+  const progressErrorText = String(progress?.error ?? "");
+  const normalizedProgressError = progressErrorText.toLowerCase();
+  const isAwaitingFounderInfoState =
+    normalizedProgressError.includes("awaiting founder info");
+  const isOrphanRuntimeWarningState =
+    normalizedProgressError.includes("live pipeline runtime state missing");
   const runTone: SignalTone =
     progress?.pipelineStatus === "failed" ||
-    Boolean(progress?.error)
+    (Boolean(progress?.error) &&
+      !isAwaitingFounderInfoState &&
+      !isOrphanRuntimeWarningState)
       ? "danger"
+      : isCancelledPipeline || isAwaitingFounderInfoState || isOrphanRuntimeWarningState
+        ? "warning"
       : isLive && (activeFailedAgentsCount > 0 || activePhaseErrorCount > 0)
         ? "danger"
       : problematicAgentsCount > 0 || fallbackCount > 0 || (isLive && activeRetriesCount > 0)
@@ -1090,6 +1102,19 @@ export function AdminPipelineLivePanel({
   const selectedTraceRuntimeSummary = selectedTrace
     ? readTraceRuntimeSummary(selectedTrace)
     : undefined;
+  const emptyTelemetryMessage =
+    startupStatus === "submitted"
+      ? "Awaiting founder info. Clara has requested missing required details (website and funding stage). Pipeline will resume after the startup is updated."
+      : startupStatus === "analyzing"
+        ? "Pipeline telemetry is temporarily unavailable. Refresh in a few seconds."
+        : "No pipeline telemetry is available for this startup yet.";
+  const showAwaitingFounderInfoBanner =
+    startupStatus === "submitted" &&
+    (isAwaitingFounderInfoState || isCancelledPipeline);
+  const awaitingFounderInfoMessage =
+    isAwaitingFounderInfoState && progress?.error
+      ? progress.error
+      : "Action required: missing required founder details. Clara sent an email to the submitter, and the pipeline is paused until the startup is updated.";
 
   if (!progress && !isLoading) {
     return (
@@ -1102,7 +1127,7 @@ export function AdminPipelineLivePanel({
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
-            No pipeline telemetry is available for this startup yet.
+            {emptyTelemetryMessage}
           </p>
         </CardContent>
       </Card>
@@ -1170,7 +1195,22 @@ export function AdminPipelineLivePanel({
           </div>
         )}
 
-        {(progress?.error || totalIssueSignals > 0 || latestAttentionEvent) && (
+        {showAwaitingFounderInfoBanner && (
+          <div className={`rounded-lg border px-3 py-2 ${SURFACE_TONE_CLASS.warning}`}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <AlertTriangle className="h-4 w-4 text-amber-500" />
+                Action required: waiting for founder info
+              </div>
+              <Badge variant="outline" className={statusClass(String(progress?.pipelineStatus ?? "submitted"))}>
+                {progress?.pipelineStatus ?? startupStatus}
+              </Badge>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">{awaitingFounderInfoMessage}</p>
+          </div>
+        )}
+
+        {(progress?.error || isCancelledPipeline || totalIssueSignals > 0 || latestAttentionEvent) && (
           <div className={`rounded-lg border px-3 py-2 ${SURFACE_TONE_CLASS[runTone]}`}>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2 text-sm font-medium">
@@ -1190,6 +1230,8 @@ export function AdminPipelineLivePanel({
             <p className="mt-1 text-xs text-muted-foreground">
               {progress?.error
                 ? progress.error
+                : isCancelledPipeline
+                  ? "Pipeline paused and cancelled. Waiting for founder-provided required details before a new run can start."
                 : isCompletedSnapshot && problematicAgentsCount > 0
                   ? `Completed with ${problematicAgentsCount} flagged agent result(s) that need manual review.`
                 : latestAttentionEvent

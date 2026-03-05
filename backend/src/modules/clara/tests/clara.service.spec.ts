@@ -7,6 +7,8 @@ import { ClaraConversationService } from '../clara-conversation.service';
 import { ClaraAiService } from '../clara-ai.service';
 import { ClaraSubmissionService } from '../clara-submission.service';
 import { ClaraToolsService } from '../clara-tools.service';
+import { ClaraChannelService } from '../clara-channel.service';
+import { PdfService } from '../../startup/pdf.service';
 import { ConversationStatus, MessageDirection } from '../interfaces/clara.interface';
 
 describe('ClaraService', () => {
@@ -15,14 +17,24 @@ describe('ClaraService', () => {
   let drizzleService: ReturnType<typeof createMockDrizzle>;
   let agentMailClient: Record<string, jest.Mock>;
   let conversationService: Record<string, jest.Mock>;
+  let claraChannel: Record<string, jest.Mock>;
   let claraAi: {
     isLikelySubmission: jest.Mock;
     runAgentLoop: jest.Mock;
     generateResponse: jest.Mock;
     extractCompanyFromFilename: jest.Mock;
   };
-  let submissionService: { handleSubmission: jest.Mock };
+  let submissionService: {
+    handleSubmission: jest.Mock;
+    getMissingCriticalFieldsForStartup: jest.Mock;
+    resolveMissingInfoFromReply: jest.Mock;
+    hasMissingCriticalFields: jest.Mock;
+  };
   let toolsService: { buildTools: jest.Mock };
+  let pdfService: {
+    generateMemo: jest.Mock;
+    generateReport: jest.Mock;
+  };
 
   const mockConversation = {
     id: 'conv-1',
@@ -91,12 +103,42 @@ describe('ClaraService', () => {
     };
     conversationService = {
       findOrCreate: jest.fn().mockResolvedValue(mockConversation),
+      findLatestAwaitingInfoByInvestorEmail: jest.fn().mockResolvedValue(null),
+      findLatestByInvestorEmailWithStartup: jest.fn().mockResolvedValue(null),
       getRecentMessages: jest.fn().mockResolvedValue([]),
       logMessage: jest.fn().mockResolvedValue({}),
       updateLastIntent: jest.fn().mockResolvedValue({}),
       updateStatus: jest.fn().mockResolvedValue({}),
       linkStartup: jest.fn().mockResolvedValue({}),
       findByStartupId: jest.fn().mockResolvedValue(null),
+      hasMessage: jest.fn().mockResolvedValue(false),
+    };
+    claraChannel = {
+      getEmailMessage: jest
+        .fn()
+        .mockImplementation((inboxId: string, messageId: string) =>
+          agentMailClient.getMessage(inboxId, messageId),
+        ),
+      reply: jest
+        .fn()
+        .mockImplementation((params: { email: { inboxId: string; inReplyToMessageId: string }; text?: string; html?: string; attachments?: unknown[] }) =>
+          agentMailClient.replyToMessage(params.email.inboxId, params.email.inReplyToMessageId, {
+            text: params.text,
+            html: params.html,
+            attachments: params.attachments,
+          }),
+        ),
+      send: jest
+        .fn()
+        .mockImplementation((params: { email: { inboxId: string; to: string[]; subject?: string }; text?: string; html?: string; attachments?: unknown[] }) =>
+          agentMailClient.sendMessage(params.email.inboxId, {
+            to: params.email.to,
+            subject: params.email.subject,
+            text: params.text,
+            html: params.html,
+            attachments: params.attachments,
+          }),
+        ),
     };
     claraAi = {
       isLikelySubmission: jest.fn().mockReturnValue(false),
@@ -111,9 +153,16 @@ describe('ClaraService', () => {
         status: 'draft',
         isDuplicate: false,
       }),
+      getMissingCriticalFieldsForStartup: jest.fn().mockResolvedValue([]),
+      resolveMissingInfoFromReply: jest.fn().mockResolvedValue(null),
+      hasMissingCriticalFields: jest.fn().mockResolvedValue(false),
     };
     toolsService = {
       buildTools: jest.fn().mockReturnValue({}),
+    };
+    pdfService = {
+      generateMemo: jest.fn().mockResolvedValue({ url: 'https://example.com/memo.pdf' }),
+      generateReport: jest.fn().mockResolvedValue({ url: 'https://example.com/report.pdf' }),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -126,6 +175,8 @@ describe('ClaraService', () => {
         { provide: ClaraAiService, useValue: claraAi },
         { provide: ClaraSubmissionService, useValue: submissionService },
         { provide: ClaraToolsService, useValue: toolsService },
+        { provide: ClaraChannelService, useValue: claraChannel },
+        { provide: PdfService, useValue: pdfService },
       ],
     }).compile();
 
@@ -156,6 +207,8 @@ describe('ClaraService', () => {
           { provide: ClaraAiService, useValue: claraAi },
           { provide: ClaraSubmissionService, useValue: submissionService },
           { provide: ClaraToolsService, useValue: toolsService },
+        { provide: ClaraChannelService, useValue: claraChannel },
+        { provide: PdfService, useValue: pdfService },
         ],
       }).compile();
 
@@ -176,6 +229,8 @@ describe('ClaraService', () => {
           { provide: ClaraAiService, useValue: claraAi },
           { provide: ClaraSubmissionService, useValue: submissionService },
           { provide: ClaraToolsService, useValue: toolsService },
+        { provide: ClaraChannelService, useValue: claraChannel },
+        { provide: PdfService, useValue: pdfService },
         ],
       }).compile();
 
@@ -196,6 +251,8 @@ describe('ClaraService', () => {
           { provide: ClaraAiService, useValue: claraAi },
           { provide: ClaraSubmissionService, useValue: submissionService },
           { provide: ClaraToolsService, useValue: toolsService },
+        { provide: ClaraChannelService, useValue: claraChannel },
+        { provide: PdfService, useValue: pdfService },
         ],
       }).compile();
 
@@ -233,7 +290,6 @@ describe('ClaraService', () => {
 
       agentMailClient.getMessage.mockResolvedValueOnce(messageWithAttachment);
       claraAi.isLikelySubmission.mockReturnValueOnce(true);
-      claraAi.extractCompanyFromFilename.mockReturnValueOnce('TestCo');
 
       drizzleService.db.limit.mockResolvedValueOnce([]); // no investor user
 
@@ -259,7 +315,7 @@ describe('ClaraService', () => {
           ]),
         }),
         'admin-user-1',
-        'TestCo',
+        undefined,
       );
       expect(conversationService.linkStartup).toHaveBeenCalledWith('conv-1', 'startup-1');
       expect(conversationService.updateStatus).toHaveBeenCalledWith(
@@ -341,6 +397,8 @@ describe('ClaraService', () => {
           { provide: ClaraAiService, useValue: claraAi },
           { provide: ClaraSubmissionService, useValue: submissionService },
           { provide: ClaraToolsService, useValue: toolsService },
+        { provide: ClaraChannelService, useValue: claraChannel },
+        { provide: PdfService, useValue: pdfService },
         ],
       }).compile();
 
@@ -442,6 +500,8 @@ describe('ClaraService', () => {
           { provide: ClaraAiService, useValue: claraAi },
           { provide: ClaraSubmissionService, useValue: submissionService },
           { provide: ClaraToolsService, useValue: toolsService },
+        { provide: ClaraChannelService, useValue: claraChannel },
+        { provide: PdfService, useValue: pdfService },
         ],
       }).compile();
 

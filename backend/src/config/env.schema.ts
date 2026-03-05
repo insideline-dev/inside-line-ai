@@ -73,6 +73,10 @@ export const envSchema = z.object({
   DEV_EXPOSE_TOKENS: z.coerce.boolean().default(false),
   LOG_TO_FILE: z.coerce.boolean().default(true),
   LOG_FILE_PATH: z.string().default("logs/backend.jsonl"),
+  LOG_CONTEXT_FILES_ENABLED: z.coerce.boolean().default(true),
+  LOG_CONTEXT_FILES_DIR: z.string().default("logs/contexts"),
+  LOG_RUN_FILES_ENABLED: z.coerce.boolean().default(true),
+  LOG_RUN_FILES_DIR: z.string().default("logs/runs"),
   LOG_MAX_FILE_SIZE: z.coerce.number().default(52428800), // 50 MB
 
   // Storage Configuration (R2/S3)
@@ -113,7 +117,9 @@ export const envSchema = z.object({
   WEBSITE_CACHE_TTL_HOURS: z.coerce.number().default(24),
   LINKEDIN_CACHE_TTL_DAYS: z.coerce.number().default(7),
   AI_SCRAPING_DEBUG_LOG_ENABLED: z.coerce.boolean().default(true),
-  AI_SCRAPING_DEBUG_LOG_PATH: z.string().default("logs/ai-scraping-debug.jsonl"),
+  AI_SCRAPING_DEBUG_LOG_PATH: z
+    .string()
+    .default("logs/ai-scraping-debug.jsonl"),
   AI_AGENT_DEBUG_LOG_ENABLED: z.coerce.boolean().default(true),
   AI_AGENT_DEBUG_LOG_PATH: z.string().default("logs/ai-agent-debug.jsonl"),
   AI_AGENT_TRACE_RETENTION_DAYS: z.coerce.number().default(30),

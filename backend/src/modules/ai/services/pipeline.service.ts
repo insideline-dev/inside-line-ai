@@ -793,6 +793,11 @@ export class PipelineService {
       return false;
     }
 
+    // Reject candidate names that look like filenames or report titles
+    if (this.isLikelyFilenameDerivedStartupName(extractedName)) {
+      return false;
+    }
+
     const normalizedCurrent = this.normalizeStartupNameForComparison(currentName);
     if (!normalizedCurrent) {
       return true;

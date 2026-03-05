@@ -2,10 +2,12 @@ import { Injectable, Logger } from "@nestjs/common";
 import { and, desc, eq, ilike, sql } from "drizzle-orm";
 import { DrizzleService } from "../../database";
 import { StorageService } from "../../storage";
+import { AssetService } from "../../storage/asset.service";
 import { ASSET_TYPES } from "../../storage/storage.config";
 import { UserRole } from "../../auth/entities/auth.schema";
 import { AgentMailClientService } from "../integrations/agentmail/agentmail-client.service";
 import { startup, StartupStatus, StartupStage } from "../startup/entities/startup.schema";
+import { DataRoomService } from "../startup/data-room.service";
 import { PipelineService } from "../ai/services/pipeline.service";
 import { PipelinePhase } from "../ai/interfaces/pipeline.interface";
 import { NotificationService } from "../../notification/notification.service";
@@ -52,6 +54,8 @@ export class ClaraSubmissionService {
   constructor(
     private drizzle: DrizzleService,
     private storage: StorageService,
+    private assetService: AssetService,
+    private dataRoomService: DataRoomService,
     private agentMailClient: AgentMailClientService,
     private pipeline: PipelineService,
     private notifications: NotificationService,
@@ -172,6 +176,7 @@ export class ClaraSubmissionService {
     if (uploadedFiles.length > 0) {
       await this.mergeUploadedFilesIntoStartup(created.id, uploadedFiles);
     }
+    await this.persistToDataRoom(created.id, processedAttachments);
     this.logger.log(
       `Created startup ${created.id} (${companyName}) from email by ${ctx.fromEmail}`,
     );
@@ -316,16 +321,19 @@ export class ClaraSubmissionService {
       }
     }
 
-    const { key } = await this.storage.uploadGeneratedContent(
+    const assetRecord = await this.assetService.uploadAndTrack(
       adminUserId,
       ASSET_TYPES.DOCUMENT,
       buffer,
       att.contentType,
+      undefined,
+      { originalName: att.filename },
     );
 
     return {
       ...att,
-      storagePath: key,
+      storagePath: assetRecord.key,
+      assetId: assetRecord.id,
       isPitchDeck: this.isLikelyPitchDeckAttachment(att),
       status: "uploaded" as const,
     };
@@ -345,6 +353,30 @@ export class ClaraSubmissionService {
         name: attachment.filename,
         type: attachment.contentType,
       }));
+  }
+
+  private async persistToDataRoom(
+    startupId: string,
+    attachments: AttachmentMeta[],
+  ): Promise<void> {
+    const uploaded = attachments.filter(
+      (a) => a.status === "uploaded" && a.assetId,
+    );
+    for (const att of uploaded) {
+      const category = att.isPitchDeck ? "pitch_deck" : "supporting_document";
+      try {
+        await this.dataRoomService.uploadDocument(startupId, att.assetId!, category);
+      } catch (error) {
+        this.logger.warn(
+          `[ClaraSubmission] Failed to add ${att.filename} to data room: ${error}`,
+        );
+      }
+    }
+    if (uploaded.length > 0) {
+      this.logger.log(
+        `[ClaraSubmission] Added ${uploaded.length} file(s) to data room for startup ${startupId}`,
+      );
+    }
   }
 
   private selectPrimaryDeckAttachment(

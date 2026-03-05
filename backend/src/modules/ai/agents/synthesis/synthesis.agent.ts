@@ -11,6 +11,8 @@ import type {
   ScrapingResult,
   SynthesisResult,
 } from "../../interfaces/phase-results.interface";
+import type { FounderPitchRecommendation } from "../../schemas/simple-evaluation.schema";
+import type { FounderRecommendation } from "../../schemas/evaluations/team.schema";
 import { AiProviderService } from "../../providers/ai-provider.service";
 import { AiConfigService } from "../../services/ai-config.service";
 import { AiPromptService } from "../../services/ai-prompt.service";
@@ -356,7 +358,107 @@ export class SynthesisAgent {
     vars.exitScore = vars.exitPotentialScore ?? "Not available";
     vars.exitConfidence = vars.exitPotentialConfidence ?? "Not available";
 
+    // Collect and deduplicate recommendations from evaluation agents
+    vars.evaluationRecommendations = this.buildEvaluationRecommendations(input.evaluation);
+
     return vars;
+  }
+
+  private buildEvaluationRecommendations(evaluation: EvaluationResult): string {
+    const AGENTS_WITH_PITCH_RECS: Array<{
+      key: keyof EvaluationResult;
+      label: string;
+    }> = [
+      { key: "team", label: "Team" },
+      { key: "businessModel", label: "Business Model" },
+      { key: "gtm", label: "Go-to-Market" },
+      { key: "financials", label: "Financials" },
+      { key: "legal", label: "Legal" },
+    ];
+
+    // Collect all recommendations with source agent
+    const tagged: Array<{
+      source: string;
+      rec: FounderPitchRecommendation;
+    }> = [];
+
+    for (const { key, label } of AGENTS_WITH_PITCH_RECS) {
+      const ev = evaluation[key] as { founderPitchRecommendations?: FounderPitchRecommendation[] } | undefined;
+      if (ev?.founderPitchRecommendations?.length) {
+        for (const rec of ev.founderPitchRecommendations) {
+          tagged.push({ source: label, rec });
+        }
+      }
+    }
+
+    // Collect team-specific founderRecommendations (hire/reframe)
+    const teamEv = evaluation.team as { founderRecommendations?: FounderRecommendation[] } | undefined;
+    const founderRecs = teamEv?.founderRecommendations ?? [];
+
+    if (tagged.length === 0 && founderRecs.length === 0) {
+      return "No specific recommendations from evaluation agents.";
+    }
+
+    // Deduplicate pitch recommendations by normalized deckMissingElement
+    const seen = new Map<string, { sources: string[]; rec: FounderPitchRecommendation }>();
+    for (const { source, rec } of tagged) {
+      const normalizedKey = rec.deckMissingElement.toLowerCase().trim();
+      const existing = seen.get(normalizedKey);
+      if (existing) {
+        if (!existing.sources.includes(source)) {
+          existing.sources.push(source);
+        }
+      } else {
+        seen.set(normalizedKey, { sources: [source], rec });
+      }
+    }
+
+    // Format output
+    const lines: string[] = [];
+
+    // Cross-agent recommendations (raised by 2+ agents)
+    const crossAgent = [...seen.values()].filter((entry) => entry.sources.length > 1);
+    if (crossAgent.length > 0) {
+      lines.push("CROSS-AGENT RECOMMENDATIONS (raised by multiple agents):");
+      for (const { sources, rec } of crossAgent) {
+        lines.push(`- Missing: ${rec.deckMissingElement} (flagged by: ${sources.join(", ")})`);
+        lines.push(`  Why: ${rec.whyItMatters}`);
+        lines.push(`  Action: ${rec.recommendation}`);
+      }
+      lines.push("");
+    }
+
+    // Per-agent unique recommendations
+    const singleAgent = [...seen.values()].filter((entry) => entry.sources.length === 1);
+    if (singleAgent.length > 0) {
+      // Group by source
+      const bySource = new Map<string, Array<{ rec: FounderPitchRecommendation }>>();
+      for (const entry of singleAgent) {
+        const source = entry.sources[0];
+        if (!bySource.has(source)) bySource.set(source, []);
+        bySource.get(source)!.push({ rec: entry.rec });
+      }
+      for (const [source, entries] of bySource) {
+        lines.push(`${source.toUpperCase()} AGENT RECOMMENDATIONS:`);
+        for (const { rec } of entries) {
+          lines.push(`- Missing: ${rec.deckMissingElement}`);
+          lines.push(`  Why: ${rec.whyItMatters}`);
+          lines.push(`  Action: ${rec.recommendation}`);
+        }
+        lines.push("");
+      }
+    }
+
+    // Team-specific founder recommendations (hire/reframe)
+    if (founderRecs.length > 0) {
+      lines.push("TEAM AGENT — FOUNDER RECOMMENDATIONS:");
+      for (const rec of founderRecs) {
+        lines.push(`- [${rec.type.toUpperCase()}] ${rec.bullet}`);
+      }
+      lines.push("");
+    }
+
+    return lines.join("\n");
   }
 
   private async rewriteEvaluationSections(params: {

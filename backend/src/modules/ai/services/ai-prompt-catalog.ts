@@ -264,6 +264,7 @@ export const EVALUATION_PROMPT_KEY_BY_AGENT: Record<EvaluationAgentKey, AiPrompt
   exitPotential: "evaluation.exitPotential",
 };
 
+// Code fallback — real prompts live in prompts/library/global/evaluation/*/user.md
 const SHARED_EVALUATION_USER_PROMPT = "{{contextSections}}";
 
 const COMMON_EVAL_VARIABLES = [
@@ -1185,8 +1186,9 @@ export const AI_PROMPT_CATALOG: Record<AiPromptKey, PromptCatalogEntry> = {
       "Do NOT mention numeric score, confidence level, percentages, or any 'X/100' notation in executiveSummary, investorMemo.section content, or founderReport.section content.",
       "Keep prose qualitative. Quantitative values belong only in dedicated structured numeric fields.",
     ].join("\n"),
+    // Code fallback — real prompt lives in prompts/library/global/synthesis/final/user.md
     defaultUserPrompt: "{{synthesisBrief}}",
-    allowedVariables: ["synthesisBrief", "contextJson", "companyName", "companyDescription", "sector", "stage", "website", "location", "adminGuidance", "stageWeights", "teamAnalysis", "teamScore", "teamConfidence", "marketAnalysis", "marketScore", "marketConfidence", "productAnalysis", "productScore", "productConfidence", "tractionAnalysis", "tractionScore", "tractionConfidence", "businessModelAnalysis", "businessModelScore", "businessModelConfidence", "gtmAnalysis", "gtmScore", "gtmConfidence", "financialsAnalysis", "financialsScore", "financialsConfidence", "competitiveAdvantageAnalysis", "competitiveAdvantageScore", "competitiveAdvantageConfidence", "legalAnalysis", "legalScore", "legalConfidence", "dealTermsAnalysis", "dealTermsScore", "dealTermsConfidence", "exitPotentialAnalysis", "exitPotentialScore", "exitPotentialConfidence", "exitScore", "exitConfidence"],
+    allowedVariables: ["synthesisBrief", "contextJson", "companyName", "companyDescription", "sector", "stage", "website", "location", "adminGuidance", "stageWeights", "evaluationRecommendations", "teamAnalysis", "teamScore", "teamConfidence", "marketAnalysis", "marketScore", "marketConfidence", "productAnalysis", "productScore", "productConfidence", "tractionAnalysis", "tractionScore", "tractionConfidence", "businessModelAnalysis", "businessModelScore", "businessModelConfidence", "gtmAnalysis", "gtmScore", "gtmConfidence", "financialsAnalysis", "financialsScore", "financialsConfidence", "competitiveAdvantageAnalysis", "competitiveAdvantageScore", "competitiveAdvantageConfidence", "legalAnalysis", "legalScore", "legalConfidence", "dealTermsAnalysis", "dealTermsScore", "dealTermsConfidence", "exitPotentialAnalysis", "exitPotentialScore", "exitPotentialConfidence", "exitScore", "exitConfidence"],
     requiredVariables: [],
   },
   "matching.thesis": {

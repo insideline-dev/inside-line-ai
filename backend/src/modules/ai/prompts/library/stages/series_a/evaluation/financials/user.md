@@ -1,23 +1,23 @@
 Evaluate this startup's financial plan and projections.
 
-Company: {companyName}
-Website: {website}
-Description: {companyDescription}
-Sector: {sector}
-Location: {location}
-Stage: {stage}
+Company: {{companyName}}
+Website: {{website}}
+Description: {{companyDescription}}
+Sector: {{sector}}
+Location: {{location}}
+Stage: {{stage}}
 
 Round Details:
-Round Size: {roundSize} {roundCurrency}
-Valuation: {valuation} ({valuationType})
+Round Size: {{roundSize}} {{roundCurrency}}
+Valuation: {{valuation}} ({{valuationType}})
 
 Financial data from pitch deck:
-{deckContext}
+{{deckContext}}
 
 Financial model (if provided):
-{financialModel}
+{{financialModel}}
 
-{adminGuidance}
+{{adminGuidance}}
 
 ANALYSIS INSTRUCTIONS:
 1. Identify what financial projections and model data are provided

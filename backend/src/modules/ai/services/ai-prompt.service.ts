@@ -59,10 +59,13 @@ export class AiPromptService {
   private readonly logger = new Logger(AiPromptService.name);
   private readonly cache = new Map<string, { expiresAt: number; value: ResolvedPrompt }>();
   private readonly cacheTtlMs = 60_000;
-  private readonly promptLibraryRoot = resolve(
-    process.cwd(),
-    "backend/src/modules/ai/prompts/library",
-  );
+  private readonly promptLibraryRoot = (() => {
+    // Backend runs from backend/ dir (cd backend && bun run dev)
+    const fromBackendCwd = resolve(process.cwd(), "src/modules/ai/prompts/library");
+    if (existsSync(fromBackendCwd)) return fromBackendCwd;
+    // Fallback: running from project root
+    return resolve(process.cwd(), "backend/src/modules/ai/prompts/library");
+  })();
   private readonly stageList = Object.values(StartupStage) as StartupStage[];
   private readonly narrativePurityGuardrail = [
     "## Internal Narrative Guardrail",

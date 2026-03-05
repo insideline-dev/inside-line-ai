@@ -1,35 +1,35 @@
 Analyze competitive advantage for:
 
-Company: {companyName}
-Website: {website}
-Description: {companyDescription}
-Sector: {sector}
-Stage: {stage}
-Location: {location}
+Company: {{companyName}}
+Website: {{website}}
+Description: {{companyDescription}}
+Sector: {{sector}}
+Stage: {{stage}}
+Location: {{location}}
 
 STARTUP'S CLAIMED DIFFERENTIATION:
-{deckContext}
+{{deckContext}}
 
 COMPETITION RESEARCH AGENT OUTPUT:
 This is your PRIMARY source for competitive analysis. Use it directly — do not re-research competitors.
 
 Competitor Profiles:
-{competitorProfiles}
+{{competitorProfiles}}
 
 Feature Comparison Matrix:
-{featureMatrix}
+{{featureMatrix}}
 
 Competitive Dynamics Evidence:
-{competitiveDynamicsEvidence}
+{{competitiveDynamicsEvidence}}
 
 PRODUCT RESEARCH AGENT OUTPUT (Startup's Product):
 Use this to understand the startup's actual capabilities for comparison against competitors:
-{productResearchOutput}
+{{productResearchOutput}}
 
 MARKET RESEARCH (context only — do NOT assess market structure, that's the Market Agent's job):
-{marketResearchOutput}
+{{marketResearchOutput}}
 
-{adminGuidance}
+{{adminGuidance}}
 
 ANALYSIS INSTRUCTIONS:
 1. Use competition research as your primary source

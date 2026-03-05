@@ -1,22 +1,22 @@
 Evaluate this startup's go-to-market strategy based on the pitch deck, website, and available research.
 
-Company: {companyName}
-Website: {website}
-Description: {companyDescription}
-Sector: {sector}
-Stage: {stage}
-Location: {location}
+Company: {{companyName}}
+Website: {{website}}
+Description: {{companyDescription}}
+Sector: {{sector}}
+Stage: {{stage}}
+Location: {{location}}
 
 GTM strategy from pitch deck:
-{deckContext}
+{{deckContext}}
 
 === SCRAPED WEBSITE CONTENT ===
-{websiteContent}
+{{websiteContent}}
 
 Web research:
-{webResearch}
+{{webResearch}}
 
-{adminGuidance}
+{{adminGuidance}}
 
 ANALYSIS INSTRUCTIONS:
 1. Identify the GTM approach described in the deck (self-serve, sales-led, PLG, partnerships, community, etc.)

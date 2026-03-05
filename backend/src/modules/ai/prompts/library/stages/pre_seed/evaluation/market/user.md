@@ -1,28 +1,28 @@
 Analyze the market opportunity for:
 
-Company: {companyName}
-Website: {website}
-Description: {companyDescription}
-Sector: {sector}
-Location: {location}
-Stage: {stage}
+Company: {{companyName}}
+Website: {{website}}
+Description: {{companyDescription}}
+Sector: {{sector}}
+Location: {{location}}
+Stage: {{stage}}
 
 === COMPANY MARKET CLAIMS (from pitch deck) ===
-Claimed TAM: {claimedTAM}
-Claimed SAM: {claimedSAM}
-Claimed Growth Rate: {claimedGrowthRate}
-Target Market Description: {targetMarketDescription}
+Claimed TAM: {{claimedTAM}}
+Claimed SAM: {{claimedSAM}}
+Claimed Growth Rate: {{claimedGrowthRate}}
+Target Market Description: {{targetMarketDescription}}
 
 Additional context from pitch materials:
-{deckContext}
+{{deckContext}}
 
 === MARKET DEEP RESEARCH AGENT OUTPUT ===
-{marketResearchOutput}
+{{marketResearchOutput}}
 
 === ADDITIONAL WEB RESEARCH ===
-{webResearch}
+{{webResearch}}
 
-{adminGuidance}
+{{adminGuidance}}
 
 === ANALYSIS INSTRUCTIONS ===
 1. Use the Market Deep Research Agent output as your primary source

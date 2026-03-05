@@ -1,29 +1,29 @@
 Price this deal:
 
-Company: {companyName}
-Website: {website}
-Description: {companyDescription}
-Sector: {sector}
-Location: {location}
-Stage: {stage}
+Company: {{companyName}}
+Website: {{website}}
+Description: {{companyDescription}}
+Sector: {{sector}}
+Location: {{location}}
+Stage: {{stage}}
 
 ROUND DETAILS:
-Round Size: {roundSize} {roundCurrency}
-Valuation: {valuation} ({valuationType})
-Raise Type: {raiseType}
-Lead Investor: {leadSecured} {leadInvestorName}
-Previous Funding: {hasPreviousFunding} - {previousFundingAmount} {previousFundingCurrency} from {previousInvestors} ({previousRoundType})
+Round Size: {{roundSize}} {{roundCurrency}}
+Valuation: {{valuation}} ({{valuationType}})
+Raise Type: {{raiseType}}
+Lead Investor: {{leadSecured}} {{leadInvestorName}}
+Previous Funding: {{hasPreviousFunding}} - {{previousFundingAmount}} {{previousFundingCurrency}} from {{previousInvestors}} ({{previousRoundType}})
 
 DECK CONTEXT (traction data, revenue, cap table if shown):
-{deckContext}
+{{deckContext}}
 
 NEWS RESEARCH (comparable deals, funding validation):
-{newsResearchOutput}
+{{newsResearchOutput}}
 
 COMPETITION RESEARCH (competitor funding rounds — use as direct comparables):
-{competitorResearchOutput}
+{{competitorResearchOutput}}
 
-{adminGuidance}
+{{adminGuidance}}
 
 INSTRUCTIONS:
 1. IF valuation is provided: sanity-check it against comparable rounds and traction data. Calculate implied revenue multiple if revenue is in the deck.

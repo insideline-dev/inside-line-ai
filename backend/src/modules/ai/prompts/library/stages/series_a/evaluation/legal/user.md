@@ -1,25 +1,25 @@
 Scan for legal and regulatory risks for:
 
-Company: {companyName}
-Website: {website}
-Description: {companyDescription}
-Sector: {sector}
-Location: {location}
-Stage: {stage}
+Company: {{companyName}}
+Website: {{website}}
+Description: {{companyDescription}}
+Sector: {{sector}}
+Location: {{location}}
+Stage: {{stage}}
 
 DECK LEGAL/IP REFERENCES:
-{deckContext}
+{{deckContext}}
 
 TEAM RESEARCH (scan for founder legal red flags, patent verification):
-{teamResearchOutput}
+{{teamResearchOutput}}
 
 NEWS RESEARCH (scan for regulatory news, lawsuits, legal issues):
-{newsResearchOutput}
+{{newsResearchOutput}}
 
 PRODUCT RESEARCH (scan for compliance certifications — SOC 2, HIPAA, ISO, GDPR):
-{productResearchOutput}
+{{productResearchOutput}}
 
-{adminGuidance}
+{{adminGuidance}}
 
 INSTRUCTIONS:
 1. Scan team research for founder red flags (lawsuits, fraud, regulatory actions)

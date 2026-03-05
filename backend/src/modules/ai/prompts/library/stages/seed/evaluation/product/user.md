@@ -1,25 +1,25 @@
 Evaluate this startup's product based on the pitch deck, product research, and website content.
 
-Company: {companyName}
-Website: {website}
-Description: {companyDescription}
-Sector: {sector}
-Location: {location}
-Stage: {stage}
+Company: {{companyName}}
+Website: {{website}}
+Description: {{companyDescription}}
+Sector: {{sector}}
+Location: {{location}}
+Stage: {{stage}}
 
 === PITCH DECK CONTEXT ===
-{deckContext}
+{{deckContext}}
 
 === PRODUCT RESEARCH AGENT OUTPUT ===
-{productResearchOutput}
+{{productResearchOutput}}
 
 === SCRAPED WEBSITE CONTENT ===
-{websiteContent}
+{{websiteContent}}
 
 === ADDITIONAL WEB RESEARCH ===
-{webResearch}
+{{webResearch}}
 
-{adminGuidance}
+{{adminGuidance}}
 
 === ANALYSIS INSTRUCTIONS ===
 1. Compare what the deck claims about the product to what you can observe from research and website

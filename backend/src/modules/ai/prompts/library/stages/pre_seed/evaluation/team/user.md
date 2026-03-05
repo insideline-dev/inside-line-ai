@@ -1,30 +1,30 @@
 Analyze this startup's founding team with VC-level rigor:
 
 === COMPANY CONTEXT ===
-Company: {companyName}
-Sector: {sector}
-Stage: {stage}
-Website: {website}
-Location: {location}
+Company: {{companyName}}
+Sector: {{sector}}
+Stage: {{stage}}
+Website: {{website}}
+Location: {{location}}
 
 Company Description:
-{companyDescription}
+{{companyDescription}}
 
 === PITCH DECK / BUSINESS CONTEXT ===
-{deckContext}
+{{deckContext}}
 
 === TEAM DEEP RESEARCH AGENT OUTPUT ===
 The following research was conducted by the Team Deep Research Agent. This contains VERIFIED information about each team member including exits, patents, red flags, and credibility scores. Use this as your primary source of truth for track record claims.
 
-{teamResearchOutput}
+{{teamResearchOutput}}
 
 === TEAM MEMBERS WITH LINKEDIN DATA ===
-{teamMembersData}
+{{teamMembersData}}
 
 === ADDITIONAL WEB RESEARCH ===
-{webResearch}
+{{webResearch}}
 
-{adminGuidance}
+{{adminGuidance}}
 
 === CRITICAL INSTRUCTIONS ===
 1. You MUST evaluate EVERY SINGLE PERSON listed in the team data above
@@ -36,7 +36,7 @@ The following research was conducted by the Team Deep Research Agent. This conta
 === EVALUATION INSTRUCTIONS ===
 1. For each founder, assess their SPECIFIC relevance to this company's problem and market
 2. Use Team Deep Research Agent credibility scores to weight your confidence in each person's track record
-3. Consider what skills/experience are CRITICAL for success in {sector} at {stage} stage
+3. Consider what skills/experience are CRITICAL for success in {{sector}} at {{stage}} stage
 4. Identify gaps that could derail execution
 5. Be rigorous — most startups fail due to team issues
 6. Synthesize LinkedIn + Research + Deck claims, noting any discrepancies

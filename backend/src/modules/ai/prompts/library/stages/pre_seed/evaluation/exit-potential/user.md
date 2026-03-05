@@ -1,28 +1,28 @@
 Build a structured exit analysis for:
 
-Company: {companyName}
-Website: {website}
-Description: {companyDescription}
-Sector: {sector}
-Stage: {stage}
-Location: {location}
+Company: {{companyName}}
+Website: {{website}}
+Description: {{companyDescription}}
+Sector: {{sector}}
+Stage: {{stage}}
+Location: {{location}}
 
 ENTRY VALUATION (your cost basis):
-Valuation: {valuation} ({valuationType})
+Valuation: {{valuation}} ({{valuationType}})
 
 DECK CONTEXT (revenue/ARR, growth rate, any exit strategy):
-{deckContext}
+{{deckContext}}
 
 COMPETITION RESEARCH (M&A activity, acquirers, comparable company funding):
-{competitorResearchOutput}
+{{competitorResearchOutput}}
 
 NEWS RESEARCH (recent exits, acquisitions, IPOs with transaction values):
-{newsResearchOutput}
+{{newsResearchOutput}}
 
 MARKET RESEARCH (TAM, comparable public companies and their revenue multiples):
-{marketResearchOutput}
+{{marketResearchOutput}}
 
-{adminGuidance}
+{{adminGuidance}}
 
 INSTRUCTIONS:
 1. Map the exit landscape: comparable exits, acquirers, public comparables from research

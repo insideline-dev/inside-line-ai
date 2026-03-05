@@ -1189,5 +1189,41 @@ describe("StartupService", () => {
 
       expect(result.progress?.overallProgress).toBe(0);
     });
+
+    it("returns failed status for orphaned progress (no live pipeline state)", async () => {
+      const analyzingStartup = {
+        ...mockStartup,
+        status: StartupStatus.ANALYZING,
+      };
+      mockDb.limit.mockResolvedValueOnce([analyzingStartup]);
+
+      // No live pipeline state (orphaned)
+      pipelineService.getPipelineStatus.mockResolvedValueOnce(null);
+
+      // But tracked progress still exists with status=running
+      pipelineService.getTrackedProgress.mockResolvedValueOnce({
+        pipelineRunId: "dead-run-id",
+        status: PipelineStatus.RUNNING,
+        currentPhase: PipelinePhase.ENRICHMENT,
+        overallProgress: 45,
+        phasesCompleted: [PipelinePhase.EXTRACTION],
+        phases: {
+          extraction: { status: "completed", progress: 100 },
+          enrichment: { status: "running", progress: 30 },
+          scraping: { status: "pending", progress: 0 },
+          research: { status: "pending", progress: 0 },
+          evaluation: { status: "pending", progress: 0 },
+          synthesis: { status: "pending", progress: 0 },
+        },
+        updatedAt: new Date().toISOString(),
+      });
+
+      const result = await service.getProgress(mockStartupId, mockUserId);
+
+      // Should return failed status so frontend stops polling
+      expect(result.progress?.pipelineStatus).toBe("failed");
+      expect(result.progress?.error).toContain("missing");
+      expect(result.progress?.pipelineRunId).toBe("dead-run-id");
+    });
   });
 });

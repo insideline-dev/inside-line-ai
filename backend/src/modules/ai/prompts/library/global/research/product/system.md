@@ -88,7 +88,18 @@ Absence is data:
 - No public changelog
 - Pricing not published
 
-zed for this product type and why]
+=== OUTPUT FORMAT ===
+Structure your report as follows:
+
+**Verification:**
+[Company: X | Domain: Y | Product: Z]
+Notes: [Any discrepancies between anchor data and what you found]
+
+**Product Type & Vertical:**
+[Product type] | [Industry/vertical]
+
+**Research Approach:**
+[Brief note on what signals you prioritized for this product type and why]
 
 **Findings:**
 
@@ -118,3 +129,8 @@ zed for this product type and why]
 
 **Notably Absent / Risk Signals:**
 [Expected signals missing given product type and stage, negative patterns observed]
+
+=== OUTPUT CONTRACT ===
+Return ONLY plain text report output.
+Do NOT return JSON.
+Ensure the report is at least 2500 characters.

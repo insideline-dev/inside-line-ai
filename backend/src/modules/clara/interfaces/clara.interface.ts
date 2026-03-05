@@ -31,6 +31,7 @@ export interface AttachmentMeta {
   contentType: string;
   attachmentId: string;
   storagePath?: string;
+  assetId?: string;
   isPitchDeck: boolean;
   status: "pending" | "downloaded" | "uploaded" | "failed";
 }

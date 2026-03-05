@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, jest } from "bun:test";
 import { DrizzleService } from "../../../database";
 import { StorageService } from "../../../storage";
+import { AssetService } from "../../../storage/asset.service";
 import { AgentMailClientService } from "../../integrations/agentmail/agentmail-client.service";
+import { DataRoomService } from "../../startup/data-room.service";
 import { PipelineService } from "../../ai/services/pipeline.service";
 import { NotificationService } from "../../../notification/notification.service";
 import { ClaraAiService } from "../clara-ai.service";
@@ -36,6 +38,8 @@ describe("ClaraSubmissionService", () => {
   let service: ClaraSubmissionService;
   let drizzle: jest.Mocked<DrizzleService>;
   let storage: jest.Mocked<StorageService>;
+  let assetService: jest.Mocked<AssetService>;
+  let dataRoomService: jest.Mocked<DataRoomService>;
   let agentMailClient: jest.Mocked<AgentMailClientService>;
   let pipeline: jest.Mocked<PipelineService>;
   let notifications: jest.Mocked<NotificationService>;
@@ -128,6 +132,18 @@ describe("ClaraSubmissionService", () => {
       extractCompanyFromFilename: jest.fn().mockReturnValue(null),
     } as unknown as jest.Mocked<ClaraAiService>;
 
+    assetService = {
+      uploadAndTrack: jest.fn().mockResolvedValue({
+        id: "asset-1",
+        key: "startups/admin-1/documents/deck.pdf",
+        url: "https://storage.com/deck.pdf",
+      }),
+    } as unknown as jest.Mocked<AssetService>;
+
+    dataRoomService = {
+      uploadDocument: jest.fn().mockResolvedValue({ id: "doc-1" }),
+    } as unknown as jest.Mocked<DataRoomService>;
+
     // Mock global fetch for attachment downloads
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
@@ -139,6 +155,8 @@ describe("ClaraSubmissionService", () => {
     service = new ClaraSubmissionService(
       drizzle,
       storage,
+      assetService,
+      dataRoomService,
       agentMailClient,
       pipeline,
       notifications,
@@ -750,15 +768,17 @@ describe("ClaraSubmissionService", () => {
   });
 
   it("stores all uploaded attachments in startup files metadata", async () => {
-    storage.uploadGeneratedContent
+    assetService.uploadAndTrack
       .mockResolvedValueOnce({
+        id: "asset-deck",
         key: "startups/admin-1/documents/deck.pdf",
         url: "https://storage.com/deck.pdf",
-      })
+      } as any)
       .mockResolvedValueOnce({
+        id: "asset-financials",
         key: "startups/admin-1/documents/financials.pdf",
         url: "https://storage.com/financials.pdf",
-      });
+      } as any);
 
     const ctx = createMessageContext({
       attachments: [

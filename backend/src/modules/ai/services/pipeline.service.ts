@@ -1,13 +1,13 @@
 import { BadRequestException, Injectable, Logger, Optional } from "@nestjs/common";
 import { ModuleRef } from "@nestjs/core";
 import { randomUUID } from "crypto";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { DrizzleService } from "../../../database";
 import { NotificationType } from "../../../notification/entities";
 import { NotificationService } from "../../../notification/notification.service";
 import { QueueService } from "../../../queue";
 import { startup, StartupStage, StartupStatus } from "../../startup/entities";
-import { pipelineRun } from "../entities";
+import { pipelineRun, pipelineAgentRun } from "../entities";
 import type {
   EnrichmentResult,
   ExtractionResult,
@@ -165,6 +165,9 @@ export class PipelineService {
   private async notifyClaraMissingInfoForPipelineStart(
     startupId: string,
     missingFields: Array<"website" | "stage">,
+    options?: {
+      pipelineRunId?: string | null;
+    },
   ): Promise<void> {
     const clara = this.getClaraService();
     if (!clara?.isEnabled()) {
@@ -175,13 +178,37 @@ export class PipelineService {
     }
 
     try {
-      await clara.notifyMissingStartupInfo(startupId, missingFields);
+      await clara.notifyMissingStartupInfo(startupId, missingFields, {
+        pipelineRunId: options?.pipelineRunId ?? null,
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.warn(
         `Unable to send Clara missing-info request for startup ${startupId}: ${message}`,
       );
     }
+  }
+
+  private buildAwaitingFounderInfoReason(
+    missingFields: Array<"website" | "stage">,
+    context:
+      | "after enrichment"
+      | "after skipped enrichment"
+      | "before scraping"
+      | "before research",
+  ): string {
+    const labels = Array.from(
+      new Set(
+        missingFields.map((field) =>
+          field === "stage" ? "funding stage" : "website",
+        ),
+      ),
+    );
+    const missingLabel =
+      labels.length <= 1
+        ? (labels[0] ?? "required fields")
+        : `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}`;
+    return `Awaiting founder info: missing ${missingLabel}. Clara emailed the submitter to provide this information. Pipeline paused ${context}.`;
   }
 
   private async assertCriticalStartupFieldsPresent(
@@ -289,6 +316,119 @@ export class PipelineService {
     }
   }
 
+  private isSuspiciousInvestorSubmitterWebsite(params: {
+    website: string | null | undefined;
+    submittedByRole: string | null | undefined;
+    contactEmail: string | null | undefined;
+    startupName: string | null | undefined;
+  }): boolean {
+    if (!params.website) {
+      return false;
+    }
+    const submittedByRole = (params.submittedByRole ?? "").toLowerCase().trim();
+    if (!submittedByRole || submittedByRole === "founder") {
+      return false;
+    }
+
+    const submitterDomain = this.extractEmailDomain(params.contactEmail);
+    const websiteDomain = this.extractWebsiteDomain(params.website);
+    if (!submitterDomain || !websiteDomain) {
+      return false;
+    }
+    if (submitterDomain !== websiteDomain) {
+      return false;
+    }
+
+    const startupToken = this.normalizeStartupToken(params.startupName);
+    if (!startupToken) {
+      return true;
+    }
+    return !websiteDomain.includes(startupToken);
+  }
+
+  private extractEmailDomain(email: string | null | undefined): string | null {
+    if (!email) {
+      return null;
+    }
+    const normalized = email.trim().toLowerCase();
+    const atIndex = normalized.lastIndexOf("@");
+    if (atIndex <= 0 || atIndex === normalized.length - 1) {
+      return null;
+    }
+    return normalized.slice(atIndex + 1);
+  }
+
+  private extractWebsiteDomain(website: string | null | undefined): string | null {
+    if (!website) {
+      return null;
+    }
+    try {
+      return new URL(website).hostname.toLowerCase().replace(/^www\./, "");
+    } catch {
+      return null;
+    }
+  }
+
+  private extractCompanyNameFromWebsite(
+    website: string | null | undefined,
+  ): string | null {
+    const domain = this.extractWebsiteDomain(website);
+    if (!domain) {
+      return null;
+    }
+
+    const parts = domain.split(".").filter(Boolean);
+    if (parts.length === 0) {
+      return null;
+    }
+
+    let root = parts.length >= 2 ? parts[parts.length - 2] : parts[0];
+    const broadSuffixes = new Set(["co", "com", "org", "net", "gov", "edu", "ac"]);
+    if (broadSuffixes.has(root) && parts.length >= 3) {
+      root = parts[parts.length - 3];
+    }
+
+    const genericLabels = new Set([
+      "www",
+      "app",
+      "api",
+      "docs",
+      "mail",
+      "admin",
+      "portal",
+      "staging",
+      "dev",
+      "beta",
+    ]);
+    if (genericLabels.has(root) || root.length < 2) {
+      return null;
+    }
+
+    const normalized = root.replace(/[-_]+/g, " ").trim();
+    if (!normalized) {
+      return null;
+    }
+
+    return normalized
+      .split(/\s+/)
+      .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
+      .join(" ");
+  }
+
+  private normalizeStartupToken(value: string | null | undefined): string | null {
+    if (!value) {
+      return null;
+    }
+    const token = value
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "")
+      .trim();
+    if (token.length < 3) {
+      return null;
+    }
+    return token;
+  }
+
   private extractWebsiteFromText(text: string | null | undefined): string | null {
     if (!text || typeof text !== "string") {
       return null;
@@ -349,23 +489,133 @@ export class PipelineService {
       return null;
     }
 
+    const inlineTitleMatch =
+      text.match(
+        /(?:^|\n)\s*([A-Z][A-Za-z0-9&.,'’\- ]{1,80}?)\s*(?:[—\-:|]\s*)?\bpitch\s*deck\b/i,
+      )?.[1] ?? null;
+    if (inlineTitleMatch) {
+      return this.normalizePotentialCompanyName(inlineTitleMatch);
+    }
+
     const headingMatch =
       text.match(
         /(?:^|\n)\s*#?\s*pitch\s*deck\s*[—\-:]\s*([^\n(]{2,120}?)(?:\s*\(|\s*$)/i,
       )?.[1] ?? null;
     if (headingMatch) {
-      return this.sanitizeStartupName(headingMatch);
+      return this.normalizePotentialCompanyName(headingMatch);
     }
 
     const companyLineMatch =
       text.match(
-        /(?:^|\n)\s*(?:company|startup)\s*(?:name)?\s*[:\-]\s*([^\n]{2,120})/i,
+        /(?:^|\n)\s*(?:company|startup)\s*(?:name)?\s*[:-]\s*([^\n]{2,120})/i,
       )?.[1] ?? null;
     if (companyLineMatch) {
-      return this.sanitizeStartupName(companyLineMatch);
+      return this.normalizePotentialCompanyName(companyLineMatch);
+    }
+
+    const lines = text
+      .split(/\r?\n/)
+      .map((line) => line.replace(/\u2022/g, " ").trim())
+      .filter((line) => line.length > 0)
+      .slice(0, 40);
+
+    for (let index = 1; index < Math.min(lines.length, 15); index += 1) {
+      if (!/\bpitch\s*deck\b/i.test(lines[index])) {
+        continue;
+      }
+      const candidate = this.normalizePotentialCompanyName(lines[index - 1]);
+      if (candidate) {
+        return candidate;
+      }
+    }
+
+    if (lines.length >= 2 && /\bpitch\s*deck\b/i.test(lines[1])) {
+      const candidate = this.normalizePotentialCompanyName(lines[0]);
+      if (candidate) {
+        return candidate;
+      }
+    }
+
+    if (lines.length > 0 && /^[A-Z0-9&.,'’\- ]{2,80}$/.test(lines[0])) {
+      const candidate = this.normalizePotentialCompanyName(lines[0]);
+      if (candidate) {
+        return candidate;
+      }
     }
 
     return null;
+  }
+
+  private normalizePotentialCompanyName(
+    value: string | null | undefined,
+  ): string | null {
+    if (!value) {
+      return null;
+    }
+
+    let candidate = value
+      .replace(/^[#>*\-\u2022]+\s*/, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!candidate) {
+      return null;
+    }
+
+    if (/^--\s*\d+\s+of\s+\d+\s*--$/i.test(candidate)) {
+      return null;
+    }
+
+    candidate = candidate
+      .replace(/\b(pitch\s*deck|presentation|slides?|confidential)\b/gi, "")
+      .replace(/[:|/\-–—]+$/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    if (candidate.length < 2 || candidate.length > 80) {
+      return null;
+    }
+
+    const normalized = this.sanitizeStartupName(candidate);
+    if (!normalized) {
+      return null;
+    }
+
+    if (this.isLikelyDeckSectionHeading(normalized)) {
+      return null;
+    }
+
+    if (/\b(page|slide)\s*\d+\b/i.test(normalized)) {
+      return null;
+    }
+
+    return normalized;
+  }
+
+  private isLikelyDeckSectionHeading(value: string): boolean {
+    const normalized = value
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const headings = new Set([
+      "problem",
+      "solution",
+      "product",
+      "market opportunity",
+      "business model",
+      "go to market",
+      "go-to-market",
+      "traction",
+      "competitive advantage",
+      "vision",
+      "team",
+      "financials",
+      "ask",
+      "overview",
+      "introduction",
+      "summary",
+    ]);
+    return headings.has(normalized);
   }
 
   private deriveCriticalMissingFromExtraction(
@@ -384,7 +634,6 @@ export class PipelineService {
     }
 
     const stageCandidate =
-      this.mapStageToEnum(extraction.stage) ??
       this.extractStageFromText(extraction.rawText);
     if (!stageCandidate) {
       missing.push("stage");
@@ -445,20 +694,124 @@ export class PipelineService {
     if (
       normalized === "unknown" ||
       normalized === "n/a" ||
-      normalized.includes("pending extraction")
+      normalized.includes("pending extraction") ||
+      normalized === "untitled startup" ||
+      normalized === "startup example" ||
+      normalized.startsWith("startup ") ||
+      this.isLikelyReportStyleStartupName(trimmed)
     ) {
       return null;
     }
     return trimmed;
   }
 
-  async prefillCriticalFieldsFromDeckExtraction(startupId: string): Promise<{
-    extractionSource: ExtractionResult["source"];
-    updatedFields: Array<"website" | "stage" | "name" | "industry" | "location">;
-    missingCriticalFields: Array<"website" | "stage">;
-  }> {
-    const extraction = await this.extractionService.run(startupId);
+  private normalizeStartupNameForComparison(
+    value: string | null | undefined,
+  ): string | null {
+    const sanitized = this.sanitizeStartupName(value);
+    if (!sanitized) {
+      return null;
+    }
+    return sanitized
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "")
+      .trim();
+  }
 
+  private isLikelyFilenameDerivedStartupName(
+    value: string | null | undefined,
+  ): boolean {
+    if (!value) {
+      return false;
+    }
+    const trimmed = value.trim().toLowerCase();
+    if (!trimmed) {
+      return false;
+    }
+
+    if (/\.(pdf|pptx?|docx?)$/i.test(trimmed)) {
+      return true;
+    }
+
+    if (/\b(pitch\s*deck|deck|presentation|slides?|draft|final|version|v\d+)\b/i.test(trimmed)) {
+      return true;
+    }
+
+    if ((trimmed.includes("_") || trimmed.includes("-")) && /\d/.test(trimmed)) {
+      return true;
+    }
+
+    if (/^[a-z0-9_-]{3,40}$/.test(trimmed) && /\d/.test(trimmed)) {
+      return true;
+    }
+    if (/^[a-z0-9&.'\s-]+\s(19|20)\d{2}$/i.test(trimmed)) {
+      return true;
+    }
+
+    if (this.isLikelyReportStyleStartupName(trimmed)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  private isLikelyReportStyleStartupName(value: string): boolean {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) {
+      return false;
+    }
+
+    if (/^\d{4}\s+annual\s+report$/.test(normalized)) {
+      return true;
+    }
+    if (/\bannual\s+report\b/.test(normalized)) {
+      return true;
+    }
+    if (
+      /\b(quarterly|q[1-4]|earnings?|supplemental|financial|shareholder)\b/.test(
+        normalized,
+      ) &&
+      /\b(report|results?|data|statement|update)\b/.test(normalized)
+    ) {
+      return true;
+    }
+    if (/\bform\s*10[-\s]?[kq]\b/.test(normalized)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  private shouldUseExtractedStartupNameForPrefill(
+    currentName: string | null | undefined,
+    extractedName: string,
+  ): boolean {
+    const normalizedExtracted = this.normalizeStartupNameForComparison(extractedName);
+    if (!normalizedExtracted) {
+      return false;
+    }
+
+    const normalizedCurrent = this.normalizeStartupNameForComparison(currentName);
+    if (!normalizedCurrent) {
+      return true;
+    }
+
+    if (normalizedCurrent === normalizedExtracted) {
+      return false;
+    }
+
+    if (this.isLikelyPlaceholderStartupName(currentName)) {
+      return true;
+    }
+
+    return this.isLikelyFilenameDerivedStartupName(currentName);
+  }
+
+  private async syncStartupFieldsFromExtractionResult(
+    startupId: string,
+    extraction: ExtractionResult,
+    source: "pre-pipeline" | "phase-extraction",
+  ): Promise<Array<"website" | "stage" | "name" | "industry" | "location">> {
     const [record] = await this.drizzle.db
       .select({
         name: startup.name,
@@ -468,6 +821,8 @@ export class PipelineService {
         location: startup.location,
         fundingTarget: startup.fundingTarget,
         teamSize: startup.teamSize,
+        submittedByRole: startup.submittedByRole,
+        contactEmail: startup.contactEmail,
       })
       .from(startup)
       .where(eq(startup.id, startupId))
@@ -485,9 +840,22 @@ export class PipelineService {
     const normalizedWebsite =
       this.normalizeWebsiteCandidate(extraction.website) ??
       this.extractWebsiteFromText(extraction.rawText);
+    const shouldRejectSubmitterDomainWebsite =
+      this.isSuspiciousInvestorSubmitterWebsite({
+        website: normalizedWebsite,
+        submittedByRole: record.submittedByRole,
+        contactEmail: record.contactEmail,
+        startupName: record.name,
+      });
+    if (shouldRejectSubmitterDomainWebsite && normalizedWebsite) {
+      this.logger.warn(
+        `[Pipeline] Ignoring submitter-domain website candidate for ${startupId}: ${normalizedWebsite}`,
+      );
+    }
     if (
       this.isMissingWebsiteValue(record.website) &&
       normalizedWebsite &&
+      !shouldRejectSubmitterDomainWebsite &&
       !this.isMissingWebsiteValue(normalizedWebsite)
     ) {
       updates.website = normalizedWebsite;
@@ -495,17 +863,37 @@ export class PipelineService {
     }
 
     const mappedStage =
-      this.mapStageToEnum(extraction.stage) ??
       this.extractStageFromText(extraction.rawText);
     if (this.isLikelyPlaceholderStage(record) && mappedStage) {
       updates.stage = mappedStage;
       updatedFields.push("stage");
     }
 
-    const nameCandidate =
+    const extractedNameCandidate =
       this.sanitizeStartupName(extraction.companyName) ??
       this.extractCompanyNameFromRawText(extraction.rawText);
-    if (nameCandidate && this.isLikelyPlaceholderStartupName(record.name)) {
+    const websiteDerivedName = this.sanitizeStartupName(
+      this.extractCompanyNameFromWebsite(normalizedWebsite),
+    );
+    const shouldPreferWebsiteDerivedName =
+      Boolean(websiteDerivedName) &&
+      (!extractedNameCandidate ||
+        this.isLikelyFilenameDerivedStartupName(extractedNameCandidate) ||
+        (this.isLikelyFilenameDerivedStartupName(record.name) &&
+          this.normalizeStartupNameForComparison(extractedNameCandidate) ===
+            this.normalizeStartupNameForComparison(record.name)));
+    const nameCandidate = shouldPreferWebsiteDerivedName
+      ? websiteDerivedName
+      : extractedNameCandidate;
+    if (shouldPreferWebsiteDerivedName && nameCandidate) {
+      this.logger.debug(
+        `[Pipeline] Prefill using website-derived startup name for ${startupId}: ${record.name} -> ${nameCandidate}`,
+      );
+    }
+    if (
+      nameCandidate &&
+      this.shouldUseExtractedStartupNameForPrefill(record.name, nameCandidate)
+    ) {
       updates.name = nameCandidate;
       updatedFields.push("name");
     }
@@ -539,13 +927,29 @@ export class PipelineService {
         })
         .where(eq(startup.id, startupId));
       this.logger.log(
-        `[Pipeline] Pre-pipeline extraction updated ${startupId}: ${updatedFields.join(", ")}`,
+        `[Pipeline] ${source === "pre-pipeline" ? "Pre-pipeline" : "Extraction-phase"} startup sync updated ${startupId}: ${updatedFields.join(", ")}`,
       );
     } else {
       this.logger.debug(
-        `[Pipeline] Pre-pipeline extraction produced no critical updates for ${startupId}`,
+        `[Pipeline] ${source === "pre-pipeline" ? "Pre-pipeline" : "Extraction-phase"} startup sync produced no updates for ${startupId}`,
       );
     }
+
+    return updatedFields;
+  }
+
+  async prefillCriticalFieldsFromDeckExtraction(startupId: string): Promise<{
+    extractionSource: ExtractionResult["source"];
+    updatedFields: Array<"website" | "stage" | "name" | "industry" | "location">;
+    missingCriticalFields: Array<"website" | "stage">;
+  }> {
+    const extraction = await this.extractionService.run(startupId);
+    this.extractionService.cacheResult(startupId, extraction);
+    const updatedFields = await this.syncStartupFieldsFromExtractionResult(
+      startupId,
+      extraction,
+      "pre-pipeline",
+    );
 
     return {
       extractionSource: extraction.source,
@@ -554,7 +958,13 @@ export class PipelineService {
     };
   }
 
-  async startPipeline(startupId: string, userId: string): Promise<string> {
+  async startPipeline(
+    startupId: string,
+    userId: string,
+    options?: {
+      skipExtraction?: boolean;
+    },
+  ): Promise<string> {
     if (!this.aiConfig.isPipelineEnabled()) {
       throw new BadRequestException("AI pipeline is disabled");
     }
@@ -565,6 +975,13 @@ export class PipelineService {
         `Pipeline already running for startup ${startupId}`,
       );
     }
+
+    const usePrefilledExtraction = options?.skipExtraction === true;
+    const prefilledExtractionFromState = usePrefilledExtraction
+      ? this.readExtractionResultFromState(
+          await this.getPipelineStateWithSnapshotFallback(startupId),
+        )
+      : null;
 
     const state = await this.pipelineState.init(startupId, userId);
     await this.pipelineAgentTrace?.cleanupExpired().catch((error) => {
@@ -580,8 +997,59 @@ export class PipelineService {
       phases: this.phaseTransition.getConfig().phases.map((phase) => phase.phase),
     });
 
-    for (const phase of this.phaseTransition.getInitialPhases()) {
-      await this.queuePhase({ startupId, pipelineRunId: state.pipelineRunId, userId, phase });
+    const cachedExtraction = usePrefilledExtraction
+      ? this.extractionService.getCachedResult(startupId)
+      : null;
+    const prefilledExtraction = cachedExtraction ?? prefilledExtractionFromState;
+    if (usePrefilledExtraction && prefilledExtraction) {
+      await this.pipelineState.setPhaseResult(
+        startupId,
+        PipelinePhase.EXTRACTION,
+        prefilledExtraction,
+      );
+      await this.pipelineState.updatePhase(
+        startupId,
+        PipelinePhase.EXTRACTION,
+        PhaseStatus.COMPLETED,
+      );
+      await this.progressTracker.updatePhaseProgress({
+        startupId,
+        userId,
+        pipelineRunId: state.pipelineRunId,
+        phase: PipelinePhase.EXTRACTION,
+        status: PhaseStatus.COMPLETED,
+      });
+      this.logger.log(
+        `[Pipeline] Using prefilled extraction for startup ${startupId}; extraction phase marked completed (source=${cachedExtraction ? "cache" : "pipeline-state"})`,
+      );
+    } else if (usePrefilledExtraction) {
+      this.logger.warn(
+        `[Pipeline] skipExtraction requested for startup ${startupId} but no reusable extraction result was found; queuing extraction phase normally`,
+      );
+    }
+
+    if (usePrefilledExtraction && prefilledExtraction) {
+      const refreshed = await this.pipelineState.get(startupId);
+      if (refreshed) {
+        const decision = this.phaseTransition.decideNextPhases(refreshed);
+        for (const phase of decision.queue) {
+          await this.queuePhase({
+            startupId,
+            pipelineRunId: state.pipelineRunId,
+            userId,
+            phase,
+          });
+        }
+      }
+    } else {
+      for (const phase of this.phaseTransition.getInitialPhases()) {
+        await this.queuePhase({
+          startupId,
+          pipelineRunId: state.pipelineRunId,
+          userId,
+          phase,
+        });
+      }
     }
 
     await this.notifyPipelineLifecycle({
@@ -598,6 +1066,23 @@ export class PipelineService {
     return state.pipelineRunId;
   }
 
+  private readExtractionResultFromState(
+    state: PipelineState | null,
+  ): ExtractionResult | null {
+    if (!state) {
+      return null;
+    }
+    const result = state.results?.[PipelinePhase.EXTRACTION];
+    if (!result || typeof result !== "object") {
+      return null;
+    }
+    const rawText = (result as { rawText?: unknown }).rawText;
+    if (typeof rawText !== "string" || rawText.trim().length === 0) {
+      return null;
+    }
+    return result as ExtractionResult;
+  }
+
   async getPipelineStatus(startupId: string): Promise<PipelineState | null> {
     return this.getPipelineStateWithSnapshotFallback(startupId);
   }
@@ -607,6 +1092,9 @@ export class PipelineService {
   }
 
   async retryPhase(startupId: string, phase: PipelinePhase): Promise<void> {
+    if (phase === PipelinePhase.EXTRACTION) {
+      this.extractionService.clearExtractionCache(startupId);
+    }
     const state = await this.pipelineState.get(startupId);
     if (!state) {
       throw new Error(`Pipeline state for startup ${startupId} not found`);
@@ -784,11 +1272,26 @@ export class PipelineService {
     });
   }
 
-  async cancelPipeline(startupId: string): Promise<{ removedJobs: number }> {
+  async cancelPipeline(
+    startupId: string,
+    options?: { reason?: string },
+  ): Promise<{ removedJobs: number }> {
+    const cancellationReason = options?.reason?.trim() || undefined;
     const state = await this.pipelineState.get(startupId);
     if (!state) {
       const removedJobs = await this.queue.removePipelineJobs(startupId);
       this.errorRecovery.clearAllTimeoutsForStartup(startupId);
+
+      // Mark any running agents as failed
+      await this.drizzle.db
+        .update(pipelineAgentRun)
+        .set({ status: "failed", completedAt: new Date() })
+        .where(
+          and(
+            eq(pipelineAgentRun.startupId, startupId),
+            eq(pipelineAgentRun.status, "running"),
+          ),
+        );
 
       const trackedProgress = await this.progressTracker.getProgress(startupId);
       const [startupRecord] = await this.drizzle.db
@@ -803,7 +1306,9 @@ export class PipelineService {
           pipelineRunId: trackedProgress.pipelineRunId,
           status: PipelineStatus.CANCELLED,
           currentPhase: trackedProgress.currentPhase,
-          error: "Cancelled without active pipeline runtime state",
+          error:
+            cancellationReason ??
+            "Cancelled without active pipeline runtime state",
         });
       }
 
@@ -813,7 +1318,7 @@ export class PipelineService {
       }
 
       this.logger.warn(
-        `[Pipeline] Cancel requested for ${startupId} with no live state; removed ${removedJobs} queued job(s) and marked progress as cancelled when present`,
+        `[Pipeline] Cancel requested for ${startupId} with no live state; removed ${removedJobs} queued job(s) and marked progress as cancelled when present${cancellationReason ? ` | reason: ${cancellationReason}` : ""}`,
       );
       return { removedJobs };
     }
@@ -821,14 +1326,31 @@ export class PipelineService {
 
     const removedJobs = await this.queue.removePipelineJobs(startupId);
     this.errorRecovery.clearAllTimeoutsForStartup(startupId);
+
+    // Mark any running agents as failed
+    await this.drizzle.db
+      .update(pipelineAgentRun)
+      .set({ status: "failed", completedAt: new Date() })
+      .where(
+        and(
+          eq(pipelineAgentRun.startupId, startupId),
+          eq(pipelineAgentRun.status, "running"),
+        ),
+      );
+
     await this.pipelineState.setStatus(startupId, PipelineStatus.CANCELLED);
-    await this.updatePipelineRunStatus(state.pipelineRunId, PipelineStatus.CANCELLED);
+    await this.updatePipelineRunStatus(
+      state.pipelineRunId,
+      PipelineStatus.CANCELLED,
+      cancellationReason,
+    );
     await this.progressTracker.setPipelineStatus({
       startupId,
       userId: state.userId,
       pipelineRunId: state.pipelineRunId,
       status: PipelineStatus.CANCELLED,
       currentPhase: state.currentPhase,
+      error: cancellationReason,
     });
     await this.updateStartupStatus(startupId, StartupStatus.SUBMITTED);
     if (!alreadyCancelled) {
@@ -837,7 +1359,9 @@ export class PipelineService {
         startupId,
         type: NotificationType.WARNING,
         title: "Analysis cancelled",
-        message: "AI pipeline analysis was cancelled.",
+        message: cancellationReason
+          ? `AI pipeline analysis was cancelled. ${cancellationReason}`
+          : "AI pipeline analysis was cancelled.",
       });
     }
 
@@ -871,17 +1395,44 @@ export class PipelineService {
     }
     await this.consumePhaseFeedbackSafely(startupId, phase);
 
+    if (phase === PipelinePhase.EXTRACTION) {
+      const extraction = (await this.pipelineState.getPhaseResult(
+        startupId,
+        PipelinePhase.EXTRACTION,
+      )) as ExtractionResult | null;
+      if (extraction) {
+        try {
+          await this.syncStartupFieldsFromExtractionResult(
+            startupId,
+            extraction,
+            "phase-extraction",
+          );
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          this.logger.warn(
+            `[Pipeline] Failed to sync startup fields from extraction phase output for ${startupId}: ${message}`,
+          );
+        }
+      }
+    }
+
     if (phase === PipelinePhase.EVALUATION) {
       await this.updatePipelineQualityFromEvaluation(state.startupId);
     }
     if (phase === PipelinePhase.ENRICHMENT) {
       const criticalMissing = await this.getCriticalMissingAfterEnrichment(startupId);
       if (criticalMissing.length > 0) {
-        await this.notifyClaraMissingInfoForPipelineStart(startupId, criticalMissing);
+        await this.notifyClaraMissingInfoForPipelineStart(startupId, criticalMissing, {
+          pipelineRunId: state.pipelineRunId,
+        });
+        const reason = this.buildAwaitingFounderInfoReason(
+          criticalMissing,
+          "after enrichment",
+        );
         this.logger.warn(
           `[Pipeline] Cancelling run for ${startupId}: unresolved critical fields after enrichment [${criticalMissing.join(", ")}]`,
         );
-        await this.cancelPipeline(startupId);
+        await this.cancelPipeline(startupId, { reason });
         return;
       }
     }
@@ -1044,11 +1595,17 @@ export class PipelineService {
     if (phase === PipelinePhase.ENRICHMENT) {
       const criticalMissing = await this.getCriticalMissingAfterEnrichment(startupId);
       if (criticalMissing.length > 0) {
-        await this.notifyClaraMissingInfoForPipelineStart(startupId, criticalMissing);
+        await this.notifyClaraMissingInfoForPipelineStart(startupId, criticalMissing, {
+          pipelineRunId,
+        });
+        const reason = this.buildAwaitingFounderInfoReason(
+          criticalMissing,
+          "after skipped enrichment",
+        );
         this.logger.warn(
           `[Pipeline] Cancelling run for ${startupId}: unresolved critical fields after skipped enrichment [${criticalMissing.join(", ")}]`,
         );
-        await this.cancelPipeline(startupId);
+        await this.cancelPipeline(startupId, { reason });
         return true;
       }
     }
@@ -1086,29 +1643,32 @@ export class PipelineService {
     }
 
     if (phase === PipelinePhase.SCRAPING) {
-      const missingFields = await this.getMissingCriticalFields(startupId);
-      if (missingFields.includes("website")) {
-        const enrichmentStatus = latestState.phases[PipelinePhase.ENRICHMENT]?.status;
-        if (this.isPhaseStatusTerminal(enrichmentStatus)) {
-          const criticalMissing = await this.getCriticalMissingAfterEnrichment(startupId);
-          if (criticalMissing.includes("website")) {
-            await this.notifyClaraMissingInfoForPipelineStart(
-              startupId,
-              criticalMissing,
-            );
-            this.logger.warn(
-              `[Pipeline] Cancelling run for ${startupId}: website still unresolved before scraping [${criticalMissing.join(", ")}]`,
-            );
-            await this.cancelPipeline(startupId);
-            return;
-          }
-        }
-        if (!this.isPhaseStatusTerminal(enrichmentStatus)) {
-          this.logger.log(
-            `[Pipeline] Deferring scraping queue for ${startupId}: website still missing, waiting for enrichment to finish`,
-          );
-          return;
-        }
+      const enrichmentStatus = latestState.phases[PipelinePhase.ENRICHMENT]?.status;
+      if (!this.isPhaseStatusTerminal(enrichmentStatus)) {
+        this.logger.log(
+          `[Pipeline] Deferring scraping queue for ${startupId}: waiting for enrichment to finish`,
+        );
+        return;
+      }
+
+      const criticalMissing = await this.getCriticalMissingAfterEnrichment(startupId);
+      if (criticalMissing.includes("website")) {
+        await this.notifyClaraMissingInfoForPipelineStart(
+          startupId,
+          criticalMissing,
+          {
+            pipelineRunId,
+          },
+        );
+        const reason = this.buildAwaitingFounderInfoReason(
+          criticalMissing,
+          "before scraping",
+        );
+        this.logger.warn(
+          `[Pipeline] Cancelling run for ${startupId}: website still unresolved before scraping [${criticalMissing.join(", ")}]`,
+        );
+        await this.cancelPipeline(startupId, { reason });
+        return;
       }
     }
 
@@ -1145,25 +1705,9 @@ export class PipelineService {
         );
       }
 
-      if (!this.aiConfig.isEnrichmentEnabled() && criticalMissing.length === 0) {
-        const skippedResult = this.enrichmentService.buildSkippedResult(
-          "Enrichment temporarily disabled by configuration",
-          enrichmentNeed.missingFields,
-        );
-        await this.onPhaseSkipped({
-          startupId,
-          pipelineRunId,
-          userId,
-          phase,
-          reason: "Enrichment temporarily disabled by configuration",
-          result: skippedResult,
-          retryCount,
-        });
-        return;
-      }
-      if (!this.aiConfig.isEnrichmentEnabled() && criticalMissing.length > 0) {
+      if (!this.aiConfig.isEnrichmentEnabled()) {
         this.logger.warn(
-          `[Pipeline] Enrichment is disabled by configuration but will run for ${startupId} because critical fields are missing [${criticalMissing.join(", ")}]`,
+          `[Pipeline] AI_ENRICHMENT_ENABLED=false is ignored for ${startupId}; enrichment/gap-fill remains mandatory to prevent placeholder data from propagating`,
         );
       }
     }
@@ -1171,11 +1715,17 @@ export class PipelineService {
     if (phase === PipelinePhase.RESEARCH) {
       const criticalMissing = await this.getCriticalMissingAfterEnrichment(startupId);
       if (criticalMissing.length > 0) {
-        await this.notifyClaraMissingInfoForPipelineStart(startupId, criticalMissing);
+        await this.notifyClaraMissingInfoForPipelineStart(startupId, criticalMissing, {
+          pipelineRunId,
+        });
+        const reason = this.buildAwaitingFounderInfoReason(
+          criticalMissing,
+          "before research",
+        );
         this.logger.warn(
           `[Pipeline] Cancelling run for ${startupId}: unresolved critical fields before research [${criticalMissing.join(", ")}]`,
         );
-        await this.cancelPipeline(startupId);
+        await this.cancelPipeline(startupId, { reason });
         return;
       }
     }
@@ -1641,21 +2191,22 @@ export class PipelineService {
       );
     }
 
+    // Extraction raw-text heuristics are only a fallback signal.
+    // After enrichment/replies, startup DB state is authoritative for stage/website.
     const fromExtraction = this.deriveCriticalMissingFromExtraction(extraction);
-    const directMissing = Array.from(new Set([...fromEnrichment, ...fromExtraction]));
-    if (directMissing.length > 0) {
-      return directMissing;
-    }
+    const fallbackMissing = Array.from(
+      new Set([...fromEnrichment, ...fromExtraction]),
+    );
 
     try {
       const fromStartup = await this.getMissingCriticalFields(startupId);
-      return Array.from(new Set([...directMissing, ...fromStartup]));
+      return Array.from(new Set([...fromEnrichment, ...fromStartup]));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.warn(
         `Unable to resolve critical missing fields from startup record for ${startupId}: ${message}`,
       );
-      return [];
+      return fallbackMissing;
     }
   }
 

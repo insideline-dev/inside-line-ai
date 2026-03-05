@@ -141,6 +141,7 @@ interface EnrichableField {
 }
 
 const ENRICHABLE_FIELDS: EnrichableField[] = [
+  { dbColumn: "name", enrichmentKey: "companyName", label: "Company Name", correctable: true },
   { dbColumn: "website", enrichmentKey: "website", label: "Website", correctable: true },
   { dbColumn: "description", enrichmentKey: "companyDescription", label: "Description", correctable: true },
   { dbColumn: "tagline", enrichmentKey: "tagline", label: "Tagline", correctable: true },
@@ -365,7 +366,7 @@ export class EnrichmentService {
       } catch (error) {
         this.logger.warn(`[Enrichment] Failed to load email context: ${this.errorMessage(error)}`);
       }
-      const emailResolved = this.resolveFromEmailContext(emailContext, gaps);
+      const emailResolved = this.resolveFromEmailContext(emailContext, gaps, record);
       dataProvenance.fromEmail = Array.from(emailResolved.keys());
       options?.onStepProgress?.onStepComplete("resolve_email", {
         summary: { hasEmailContext: emailContext !== null, resolved: dataProvenance.fromEmail },
@@ -627,6 +628,7 @@ export class EnrichmentService {
   private resolveFromEmailContext(
     emailContext: ClaraEmailContext | null,
     gaps: Set<string>,
+    record: StartupRecord,
   ): Map<string, { value: string | number; source: string; confidence: number }> {
     const resolved = new Map<string, { value: string | number; source: string; confidence: number }>();
     if (!emailContext) {
@@ -636,6 +638,11 @@ export class EnrichmentService {
     const investorEmails = new Set(
       emailContext.conversations
         .map((conv) => conv.investorEmail?.trim().toLowerCase())
+        .filter((value): value is string => Boolean(value)),
+    );
+    const investorDomains = new Set(
+      Array.from(investorEmails)
+        .map((email) => this.extractDomainFromEmail(email))
         .filter((value): value is string => Boolean(value)),
     );
 
@@ -649,7 +656,10 @@ export class EnrichmentService {
     const corpus = corpusParts.join("\n");
 
     if (gaps.has("website")) {
-      const website = this.extractFirstUrlFromText(corpus);
+      const website = this.extractWebsiteFromEmailContext(corpus, {
+        expectedCompanyName: record.name,
+        blockedDomains: investorDomains,
+      });
       if (website) {
         resolved.set("website", {
           value: website,
@@ -808,9 +818,139 @@ export class EnrichmentService {
     };
   }
 
-  private extractFirstUrlFromText(text: string): string | null {
-    const match = text.match(/https?:\/\/[^\s)]+/i);
-    return match?.[0]?.trim() ?? null;
+  private extractWebsiteFromEmailContext(
+    text: string,
+    options: {
+      expectedCompanyName?: string | null;
+      blockedDomains?: Set<string>;
+    },
+  ): string | null {
+    const candidates = Array.from(
+      text.matchAll(/https?:\/\/[^\s<>()]+|\bwww\.[^\s<>()]+/gi),
+    );
+    if (candidates.length === 0) {
+      return null;
+    }
+
+    const expectedCompanyName = options.expectedCompanyName?.trim() ?? null;
+    let labeledCandidate: string | null = null;
+
+    for (const match of candidates) {
+      const rawCandidate = match[0];
+      if (!rawCandidate) {
+        continue;
+      }
+
+      const normalizedCandidate = rawCandidate
+        .replace(/[),.;]+$/g, "")
+        .trim();
+      const candidate = /^https?:\/\//i.test(normalizedCandidate)
+        ? normalizedCandidate
+        : `https://${normalizedCandidate}`;
+      const normalized = this.normalizeSourceUrl(candidate);
+      if (!normalized || this.isMissingWebsiteValue(normalized)) {
+        continue;
+      }
+
+      const host = this.hostnameFromUrl(normalized);
+      if (!host) {
+        continue;
+      }
+
+      const matchIndex = typeof match.index === "number" ? match.index : -1;
+      const contextWindow =
+        matchIndex >= 0
+          ? text.slice(Math.max(0, matchIndex - 32), matchIndex).toLowerCase()
+          : "";
+      const isLabeled = /\b(website|site|url)\b/.test(contextWindow);
+
+      if (
+        expectedCompanyName &&
+        this.isWebsiteLikelyForCompany(normalized, expectedCompanyName)
+      ) {
+        return normalized;
+      }
+
+      if (options.blockedDomains?.has(host)) {
+        continue;
+      }
+
+      if (isLabeled && !labeledCandidate) {
+        labeledCandidate = normalized;
+      }
+    }
+
+    return labeledCandidate;
+  }
+
+  private extractDomainFromEmail(value: string | null | undefined): string | null {
+    if (!value) {
+      return null;
+    }
+    const normalized = value.trim().toLowerCase();
+    const atIndex = normalized.lastIndexOf("@");
+    if (atIndex <= 0 || atIndex >= normalized.length - 1) {
+      return null;
+    }
+    return normalized.slice(atIndex + 1);
+  }
+
+  private isWebsiteLikelyForCompany(
+    website: string,
+    companyName: string,
+  ): boolean {
+    const companyToken = this.normalizeCompanyToken(companyName);
+    const hostToken = this.extractWebsiteRootToken(website);
+    if (!hostToken) {
+      return false;
+    }
+    if (!companyToken || companyToken.length < 3) {
+      return true;
+    }
+
+    if (hostToken.includes(companyToken) || companyToken.includes(hostToken)) {
+      return true;
+    }
+
+    const significantCompanyTokens = companyName
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ")
+      .split(/\s+/)
+      .map((token) => token.trim())
+      .filter((token) => token.length >= 4);
+
+    return significantCompanyTokens.some((token) => hostToken.includes(token));
+  }
+
+  private extractWebsiteRootToken(website: string): string | null {
+    const host = this.hostnameFromUrl(website);
+    if (!host) {
+      return null;
+    }
+    const parts = host.split(".").filter(Boolean);
+    if (parts.length === 0) {
+      return null;
+    }
+    let root = parts.length >= 2 ? parts[parts.length - 2] : parts[0];
+    const broadSuffixes = new Set(["co", "com", "org", "net", "gov", "edu", "ac"]);
+    if (broadSuffixes.has(root) && parts.length >= 3) {
+      root = parts[parts.length - 3];
+    }
+    return root.replace(/[^a-z0-9]/g, "");
+  }
+
+  private normalizeCompanyToken(value: string | null | undefined): string | null {
+    if (!value) {
+      return null;
+    }
+    const token = value
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "")
+      .trim();
+    if (token.length < 3) {
+      return null;
+    }
+    return token;
   }
 
   private extractEmailsFromText(text: string): string[] {
@@ -886,7 +1026,10 @@ export class EnrichmentService {
     ];
 
     if (remainingGaps?.has("teamMembers") || remainingGaps?.has("contactName")) {
-      queries.push({ query: `${companyName} founder CEO team site:crunchbase.com`, options: { count: 5 } });
+      queries.push({
+        query: `${companyName} founder CEO team site:linkedin.com/in OR site:crunchbase.com`,
+        options: { count: 8 },
+      });
     }
     if (remainingGaps?.has("fundingTarget") || remainingGaps?.has("stage")) {
       queries.push({ query: `${companyName} funding round raised series site:crunchbase.com OR site:techcrunch.com`, options: { count: 5 } });
@@ -1045,7 +1188,10 @@ export class EnrichmentService {
     const runtimeModel = await this.resolveRuntimeModelConfig(record.stage);
     const modelName = runtimeModel.modelName;
     const provider = this.aiProvider.resolveModel(modelName);
-    const canUseGoogleSearchTool = this.isGeminiModel(modelName);
+    const canUseGoogleSearchTool =
+      this.isGeminiModel(modelName) &&
+      runtimeModel.searchMode !== "off" &&
+      runtimeModel.searchMode !== "brave_tool_search";
     const maxAttempts = this.getEnrichmentMaxAttempts();
     let lastError = "Unknown enrichment synthesis error";
     let lastFallbackReason: EvaluationFallbackReason = "UNHANDLED_AGENT_EXCEPTION";
@@ -1146,9 +1292,25 @@ export class EnrichmentService {
     }
 
     this.logger.error(`[Enrichment] AI synthesis failed: ${lastError}`);
+    const missingFields = Array.from(remainingGaps);
+    const deterministicFallback = this.normalizeEnrichmentOutput(
+      this.buildDeterministicBackupFromSearch(
+        searchResults.responses,
+        record.name,
+        record.website ?? undefined,
+      ),
+      record,
+      missingFields,
+    );
+    this.logger.warn(
+      `[Enrichment] Using deterministic fallback output | founders=${deterministicFallback.discoveredFounders.length} | fundingHistory=${deterministicFallback.fundingHistory.length} | stillMissing=${deterministicFallback.fieldsStillMissing.length}`,
+    );
     return {
       prompt,
-      output: this.buildEmptyResult(),
+      output: {
+        ...deterministicFallback,
+        dbFieldsUpdated: [],
+      },
       usedFallback: true,
       usedTextFallback: false,
       attempt: maxAttempts,
@@ -1343,9 +1505,7 @@ export class EnrichmentService {
     for (const detail of enrichment.correctionDetails) {
       const normalized = detail.field.trim().toLowerCase();
       const knownField = CORRECTABLE_FIELDS.find(
-        (field) =>
-          field.label.toLowerCase() === normalized ||
-          String(field.dbColumn).toLowerCase() === normalized,
+        (field) => this.matchesCorrectionField(field, normalized),
       );
       if (knownField) {
         corrected.add(String(knownField.dbColumn));
@@ -2088,6 +2248,44 @@ export class EnrichmentService {
     return host === domain || host.endsWith(`.${domain}`);
   }
 
+  private isSuspiciousSubmitterDomainWebsite(
+    record: Pick<StartupRecord, "submittedByRole" | "contactEmail" | "name">,
+    website: string | null | undefined,
+  ): boolean {
+    if (!website) {
+      return false;
+    }
+
+    const submittedByRole = (record.submittedByRole ?? "").toLowerCase().trim();
+    if (!submittedByRole || submittedByRole === "founder") {
+      return false;
+    }
+
+    const submitterDomain = this.extractDomainFromEmail(record.contactEmail);
+    const websiteDomain = this.hostnameFromUrl(website);
+    if (!submitterDomain || !websiteDomain) {
+      return false;
+    }
+    if (!this.hostMatchesDomain(websiteDomain, submitterDomain)) {
+      return false;
+    }
+
+    const startupToken = this.normalizeCompanyToken(record.name);
+    if (!startupToken) {
+      return true;
+    }
+
+    const websiteToken = this.extractWebsiteRootToken(website);
+    if (!websiteToken) {
+      return true;
+    }
+
+    return (
+      !websiteToken.includes(startupToken) &&
+      !startupToken.includes(websiteToken)
+    );
+  }
+
   private isMissingWebsiteValue(value: string | null | undefined): boolean {
     const normalized = this.normalizeSourceUrl(value ?? undefined);
     if (!normalized) {
@@ -2303,6 +2501,12 @@ export class EnrichmentService {
       } else if (fieldDef.dbColumn === "website") {
         const websiteCandidate = this.normalizeSourceUrl(String(data.value));
         if (!websiteCandidate || this.isMissingWebsiteValue(websiteCandidate)) continue;
+        if (this.isSuspiciousSubmitterDomainWebsite(record, websiteCandidate)) {
+          this.logger.warn(
+            `[Enrichment] Ignoring submitter-domain website candidate during cascade update for ${record.id}: ${websiteCandidate}`,
+          );
+          continue;
+        }
         const currentWebsite = this.readDbString(currentValue);
         if (currentWebsite && this.valuesEquivalent(currentWebsite, websiteCandidate, true)) continue;
         updates[fieldDef.dbColumn] = websiteCandidate;
@@ -2340,6 +2544,12 @@ export class EnrichmentService {
       } else if (dbColumn === "website") {
         const websiteCandidate = this.normalizeSourceUrl(String(enrichedField.value));
         if (!websiteCandidate || this.isMissingWebsiteValue(websiteCandidate)) continue;
+        if (this.isSuspiciousSubmitterDomainWebsite(record, websiteCandidate)) {
+          this.logger.warn(
+            `[Enrichment] Ignoring submitter-domain website candidate during AI gap fill for ${record.id}: ${websiteCandidate}`,
+          );
+          continue;
+        }
         const currentWebsite = this.readDbString(currentValue);
         if (currentWebsite && this.valuesEquivalent(currentWebsite, websiteCandidate, true)) continue;
         updates[dbColumn] = websiteCandidate;
@@ -2357,7 +2567,9 @@ export class EnrichmentService {
 
     // Corrections (high confidence only)
     for (const correction of enrichment.correctionDetails) {
-      const fieldDef = CORRECTABLE_FIELDS.find((f) => f.label.toLowerCase() === correction.field.toLowerCase());
+      const fieldDef = CORRECTABLE_FIELDS.find((f) =>
+        this.matchesCorrectionField(f, correction.field),
+      );
       if (!fieldDef) continue;
 
       if (correction.confidence >= correctionThreshold) {
@@ -2381,6 +2593,18 @@ export class EnrichmentService {
             continue;
           }
           updates[fieldDef.dbColumn] = mapped;
+        } else if (fieldDef.dbColumn === "website") {
+          const websiteCandidate = this.normalizeSourceUrl(correction.newValue);
+          if (!websiteCandidate || this.isMissingWebsiteValue(websiteCandidate)) {
+            continue;
+          }
+          if (this.isSuspiciousSubmitterDomainWebsite(record, websiteCandidate)) {
+            this.logger.warn(
+              `[Enrichment] Ignoring submitter-domain website correction for ${record.id}: ${websiteCandidate}`,
+            );
+            continue;
+          }
+          updates[fieldDef.dbColumn] = websiteCandidate;
         } else {
           updates[fieldDef.dbColumn] = correction.newValue;
         }
@@ -2408,6 +2632,29 @@ export class EnrichmentService {
       fieldsUpdated: updatedFields,
       foundersAdded,
     };
+  }
+
+  private matchesCorrectionField(
+    fieldDef: EnrichableField,
+    candidate: string | null | undefined,
+  ): boolean {
+    const normalizedCandidate = this.normalizeFieldIdentifier(candidate);
+    if (!normalizedCandidate) {
+      return false;
+    }
+
+    return (
+      this.normalizeFieldIdentifier(fieldDef.label) === normalizedCandidate ||
+      this.normalizeFieldIdentifier(String(fieldDef.dbColumn)) === normalizedCandidate ||
+      this.normalizeFieldIdentifier(fieldDef.enrichmentKey) === normalizedCandidate
+    );
+  }
+
+  private normalizeFieldIdentifier(value: string | null | undefined): string {
+    return (value ?? "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "");
   }
 
   private isGeminiModel(modelName: string): boolean {

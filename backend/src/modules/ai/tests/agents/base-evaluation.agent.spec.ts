@@ -248,6 +248,50 @@ describe("BaseEvaluationAgent", () => {
     expect(startupSnapshotIndex).toBeLessThan(agentSectionIndex);
   });
 
+  it("renders legacy evaluation template variables with populated context", async () => {
+    promptService.resolve.mockResolvedValueOnce({
+      key: "evaluation.team",
+      stage: "seed",
+      systemPrompt: "Legacy evaluator",
+      userPrompt: [
+        "Company: {{companyName}}",
+        "Website: {{website}}",
+        "Sector: {{sector}}",
+        "Deck: {{deckContext}}",
+        "Team Report: {{teamResearchOutput}}",
+        "Admin: {{adminGuidance}}",
+      ].join("\n"),
+      source: "db",
+      revisionId: "legacy-rev",
+    });
+
+    generateTextMock.mockResolvedValueOnce({
+      output: {
+        score: 77,
+        verdict: "Legacy prompt satisfied",
+      },
+    });
+
+    await agent.run(pipelineData, {
+      feedbackNotes: [
+        {
+          scope: "phase",
+          feedback: "Verify market assumptions.",
+          createdAt: new Date("2026-03-04T12:00:00.000Z"),
+        },
+      ],
+    });
+
+    const call = generateTextMock.mock.calls[0]?.[0];
+    const prompt = String(call?.prompt ?? "");
+    expect(prompt).toContain("Company: Clipaf");
+    expect(prompt).toContain("Website: https://clipaf.com");
+    expect(prompt).toContain("Sector: Industrial SaaS");
+    expect(prompt).toContain("Team Report:");
+    expect(prompt).toContain("Admin: Verify market assumptions.");
+    expect(prompt).not.toContain("{{companyName}}");
+  });
+
   it("uses fallback when provider call fails", async () => {
     generateTextMock.mockRejectedValue(new Error("provider timeout"));
 

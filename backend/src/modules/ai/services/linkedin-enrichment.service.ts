@@ -165,6 +165,7 @@ export class LinkedinEnrichmentService {
       Math.max(1, this.maxLeadershipDiscoveryQueries),
     );
     const traceOptions = options?.onTrace ? { onTrace: options.onTrace } : undefined;
+    let allowGlobalFallbackDiscovery = true;
     for (const query of discoveryQueries) {
       let matches: LinkedInProfile[] = [];
       this.emitTrace(options, {
@@ -216,12 +217,14 @@ export class LinkedinEnrichmentService {
           this.logger.warn(
             `[LinkedInDiscovery] rate limited by Unipile; stopping leadership discovery for ${normalizedCompany}`,
           );
+          allowGlobalFallbackDiscovery = false;
           break;
         }
         if (this.isIntegrationUnavailableError(message)) {
           this.logger.warn(
             `[LinkedInDiscovery] LinkedIn integration unavailable; skipping company leadership discovery for ${normalizedCompany}`,
           );
+          allowGlobalFallbackDiscovery = false;
           break;
         }
         continue;
@@ -249,6 +252,81 @@ export class LinkedinEnrichmentService {
           `[LinkedInDiscovery] company=${normalizedCompany} reached discovery target (${this.companyLeadershipDiscoveryTarget}), stopping additional queries`,
         );
         break;
+      }
+    }
+
+    if (candidates.size === 0 && allowGlobalFallbackDiscovery) {
+      this.logger.debug(
+        `[LinkedInDiscovery] company=${normalizedCompany} yielded no in-company matches; trying global profile fallback`,
+      );
+      for (const query of discoveryQueries) {
+        let matches: LinkedInProfile[] = [];
+        this.emitTrace(options, {
+          operation: "unipile.search_profiles_fallback",
+          status: "running",
+          inputJson: {
+            query,
+            companyName: normalizedCompany,
+          },
+        });
+        try {
+          const searchTerm = `${query} ${normalizedCompany}`.trim();
+          matches = traceOptions
+            ? await this.unipileService.searchProfiles(
+                searchTerm,
+                normalizedCompany,
+                traceOptions,
+              )
+            : await this.unipileService.searchProfiles(
+                searchTerm,
+                normalizedCompany,
+              );
+          this.emitTrace(options, {
+            operation: "unipile.search_profiles_fallback",
+            status: "completed",
+            inputJson: {
+              query,
+              companyName: normalizedCompany,
+            },
+            outputJson: matches,
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          this.emitTrace(options, {
+            operation: "unipile.search_profiles_fallback",
+            status: "failed",
+            inputJson: {
+              query,
+              companyName: normalizedCompany,
+            },
+            error: message,
+          });
+          if (this.isRateLimitError(message) || this.isIntegrationUnavailableError(message)) {
+            break;
+          }
+          continue;
+        }
+
+        for (const profile of matches) {
+          const member = this.toCandidate(profile, normalizedCompany);
+          if (!member) {
+            continue;
+          }
+
+          const nameKey = member.name.toLowerCase();
+          const urlKey = member.linkedinUrl?.toLowerCase();
+          if (existingNames.has(nameKey)) continue;
+          if (urlKey && existingUrls.has(urlKey)) continue;
+
+          const dedupeKey = urlKey || nameKey;
+          if (!candidates.has(dedupeKey)) {
+            candidates.set(dedupeKey, member);
+          }
+        }
+
+        if (candidates.size >= this.companyLeadershipDiscoveryTarget) {
+          break;
+        }
       }
     }
 
@@ -650,32 +728,66 @@ export class LinkedinEnrichmentService {
     excludeUrls: string[] = [],
     options?: LinkedinEnrichmentOptions,
   ): Promise<string[]> {
+    const companyName = startupContext?.companyName;
     this.emitTrace(options, {
       operation: "unipile.search_profiles",
       status: "running",
       inputJson: {
         name: member.name,
-        company: startupContext?.companyName ?? null,
+        company: companyName ?? null,
         excludeUrls,
       },
     });
     const traceOptions = options?.onTrace ? { onTrace: options.onTrace } : undefined;
-    const matches = traceOptions
+    let matches = traceOptions
       ? await this.unipileService.searchProfiles(
           member.name,
-          startupContext?.companyName,
+          companyName,
           traceOptions,
         )
       : await this.unipileService.searchProfiles(
           member.name,
-          startupContext?.companyName,
+          companyName,
         );
+
+    if (matches.length === 0 && companyName) {
+      this.logger.debug(
+        `[LinkedInEnrichment] No company-scoped profile hits for ${member.name} @ ${companyName}; retrying global search`,
+      );
+      this.emitTrace(options, {
+        operation: "unipile.search_profiles_fallback",
+        status: "running",
+        inputJson: {
+          name: member.name,
+          company: null,
+          fallbackFromCompany: companyName,
+          excludeUrls,
+        },
+      });
+
+      matches = traceOptions
+        ? await this.unipileService.searchProfiles(member.name, undefined, traceOptions)
+        : await this.unipileService.searchProfiles(member.name);
+
+      this.emitTrace(options, {
+        operation: "unipile.search_profiles_fallback",
+        status: "completed",
+        inputJson: {
+          name: member.name,
+          company: null,
+          fallbackFromCompany: companyName,
+          excludeUrls,
+        },
+        outputJson: matches,
+      });
+    }
+
     this.emitTrace(options, {
       operation: "unipile.search_profiles",
       status: "completed",
       inputJson: {
         name: member.name,
-        company: startupContext?.companyName ?? null,
+        company: companyName ?? null,
         excludeUrls,
       },
       outputJson: matches,

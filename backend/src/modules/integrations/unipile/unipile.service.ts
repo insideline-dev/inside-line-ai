@@ -646,12 +646,37 @@ export class UnipileService {
     const ranked = items
       .filter((item) => typeof item.id === 'string' && /^\d+$/.test(item.id))
       .map((item) => {
-        const name = (item.name || '').toLowerCase();
+        const rawName = item.name || '';
+        const name = rawName.toLowerCase();
+        const normalizedName = this.normalizeCompanyToken(rawName);
         const profileUrl = (item.profile_url || '').toLowerCase();
         let score = 0;
-        if (companyToken && name.includes(companyToken)) score += 10;
-        if (websiteToken && profileUrl.includes(websiteToken)) score += 8;
-        score += Math.log10((item.followers_count || 0) + 1);
+        if (companyToken && normalizedName === companyToken) {
+          score += 60;
+        } else if (companyToken && normalizedName.startsWith(companyToken)) {
+          score += 35;
+        } else if (companyToken && companyToken.startsWith(normalizedName)) {
+          score += 20;
+        } else if (companyToken && normalizedName.includes(companyToken)) {
+          score += 15;
+        }
+
+        if (websiteToken) {
+          if (profileUrl.includes(`/${websiteToken}`)) {
+            score += 28;
+          } else if (profileUrl.includes(websiteToken) || name.includes(websiteToken)) {
+            score += 16;
+          }
+        }
+
+        if (/\b(acquired|formerly|parent company|subsidiary)\b/i.test(rawName)) {
+          score -= 20;
+        }
+        if (/\b\d+\b/.test(rawName)) {
+          score -= 4;
+        }
+
+        score += Math.min(8, Math.log10((item.followers_count || 0) + 1));
         return { id: item.id as string, score };
       })
       .sort((a, b) => b.score - a.score);
@@ -682,7 +707,18 @@ export class UnipileService {
   }
 
   private normalizeCompanyToken(value: string): string {
-    return value.trim().toLowerCase();
+    const normalized = value
+      .toLowerCase()
+      .replace(/\([^)]*\)/g, " ")
+      .replace(/[^a-z0-9]+/g, " ")
+      .replace(
+        /\b(inc|llc|ltd|limited|corp|corporation|co|company|group|holdings|holding|technologies|technology|systems|solutions)\b/g,
+        " ",
+      )
+      .replace(/\s+/g, " ")
+      .trim();
+
+    return normalized;
   }
 
   private extractWebsiteToken(website?: string): string | null {

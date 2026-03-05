@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { and, eq, desc, sql } from "drizzle-orm";
+import { and, eq, desc, sql, isNotNull, ne } from "drizzle-orm";
 import { DrizzleService } from "../../database";
 import {
   claraConversation,
@@ -136,6 +136,53 @@ export class ClaraConversationService {
       .from(claraConversation)
       .where(eq(claraConversation.startupId, startupId))
       .limit(1);
+    return row ?? null;
+  }
+
+  async findLatestAwaitingInfoByInvestorEmail(
+    investorEmail: string,
+    excludeConversationId?: string,
+  ): Promise<ClaraConversationRecord | null> {
+    const baseConditions = [
+      eq(claraConversation.investorEmail, investorEmail),
+      eq(claraConversation.status, ConversationStatus.AWAITING_INFO),
+      isNotNull(claraConversation.startupId),
+    ];
+    const conditions =
+      excludeConversationId && excludeConversationId.trim().length > 0
+        ? [...baseConditions, ne(claraConversation.id, excludeConversationId)]
+        : baseConditions;
+
+    const [row] = await this.drizzle.db
+      .select()
+      .from(claraConversation)
+      .where(and(...conditions))
+      .orderBy(desc(claraConversation.lastMessageAt))
+      .limit(1);
+
+    return row ?? null;
+  }
+
+  async findLatestByInvestorEmailWithStartup(
+    investorEmail: string,
+    excludeConversationId?: string,
+  ): Promise<ClaraConversationRecord | null> {
+    const baseConditions = [
+      eq(claraConversation.investorEmail, investorEmail),
+      isNotNull(claraConversation.startupId),
+    ];
+    const conditions =
+      excludeConversationId && excludeConversationId.trim().length > 0
+        ? [...baseConditions, ne(claraConversation.id, excludeConversationId)]
+        : baseConditions;
+
+    const [row] = await this.drizzle.db
+      .select()
+      .from(claraConversation)
+      .where(and(...conditions))
+      .orderBy(desc(claraConversation.lastMessageAt))
+      .limit(1);
+
     return row ?? null;
   }
 

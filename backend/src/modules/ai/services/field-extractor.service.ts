@@ -8,6 +8,16 @@ import { AiPromptService } from "./ai-prompt.service";
 import { AiConfigService } from "./ai-config.service";
 import { AiModelExecutionService } from "./ai-model-execution.service";
 
+const DeckClassificationSchema = z.object({
+  deckIndex: z
+    .number()
+    .int()
+    .describe(
+      "0-based index of the most likely pitch deck, or -1 if none is a pitch deck",
+    ),
+  confidence: z.number().min(0).max(1),
+});
+
 const ExtractedFieldsSchema = z.object({
   companyName: z.string().min(1).optional(),
   tagline: z.string().optional(),
@@ -15,7 +25,11 @@ const ExtractedFieldsSchema = z.object({
   industry: z.string().min(1).optional(),
   stage: z.string().min(1).optional(),
   location: z.string().optional(),
-  website: z.string().url().or(z.literal("")).optional(),
+  website: z.preprocess(
+    (value) =>
+      typeof value === "string" && value.trim().length === 0 ? undefined : value,
+    z.string().url().optional(),
+  ),
   fundingAsk: z.number().nonnegative().optional(),
   valuation: z.number().nonnegative().optional(),
 });
@@ -111,6 +125,37 @@ export class FieldExtractorService {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.warn(`AI field extraction failed, falling back to context only: ${message}`);
       return {};
+    }
+  }
+
+  async classifyBestPitchDeck(
+    documents: Array<{ name: string; snippet: string }>,
+  ): Promise<{ deckIndex: number; confidence: number } | null> {
+    if (documents.length === 0) return null;
+
+    const docList = documents
+      .map(
+        (d, i) =>
+          `[Document ${i}] "${d.name}":\n${d.snippet.slice(0, 800)}`,
+      )
+      .join("\n---\n");
+
+    try {
+      const { output } = await generateText({
+        output: Output.object({ schema: DeckClassificationSchema }),
+        temperature: 0,
+        system:
+          "You classify documents. Identify which document is a startup pitch deck (company overview, problem/solution, market opportunity, team, business model, funding ask). Return the 0-based index, or -1 if none is a pitch deck. Financial reports, earnings supplements, annual reports, and cap tables are NOT pitch decks.",
+        prompt: `Which of these documents is a startup pitch deck?\n\n${docList}`,
+        model: this.providers.resolveModelForPurpose(ModelPurpose.EXTRACTION),
+      });
+
+      return DeckClassificationSchema.parse(output);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : String(error);
+      this.logger.warn(`AI deck classification failed: ${message}`);
+      return null;
     }
   }
 

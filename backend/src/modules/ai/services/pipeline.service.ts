@@ -72,6 +72,8 @@ interface QueuePhaseParams {
   retryCount?: number;
   waitingError?: string;
   metadata?: Record<string, unknown>;
+  /** Skip re-reading pipeline state; use this pre-fetched state instead. */
+  knownState?: PipelineState;
 }
 
 const MIN_RESEARCH_PHASE_TIMEOUT_MS = 3_600_000;
@@ -1029,17 +1031,16 @@ export class PipelineService {
     }
 
     if (usePrefilledExtraction && prefilledExtraction) {
-      const refreshed = await this.pipelineState.get(startupId);
-      if (refreshed) {
-        const decision = this.phaseTransition.decideNextPhases(refreshed);
-        for (const phase of decision.queue) {
-          await this.queuePhase({
-            startupId,
-            pipelineRunId: state.pipelineRunId,
-            userId,
-            phase,
-          });
-        }
+      const refreshed = await this.pipelineState.get(startupId) ?? state;
+      const decision = this.phaseTransition.decideNextPhases(refreshed);
+      for (const phase of decision.queue) {
+        await this.queuePhase({
+          startupId,
+          pipelineRunId: state.pipelineRunId,
+          userId,
+          phase,
+          knownState: refreshed,
+        });
       }
     } else {
       for (const phase of this.phaseTransition.getInitialPhases()) {
@@ -1048,6 +1049,7 @@ export class PipelineService {
           pipelineRunId: state.pipelineRunId,
           userId,
           phase,
+          knownState: state,
         });
       }
     }
@@ -1615,8 +1617,8 @@ export class PipelineService {
   }
 
   private async queuePhase(params: QueuePhaseParams): Promise<void> {
-    const { startupId, pipelineRunId, userId, phase, delayMs = 0, retryCount = 0, waitingError, metadata } = params;
-    const latestState = await this.pipelineState.get(startupId);
+    const { startupId, pipelineRunId, userId, phase, delayMs = 0, retryCount = 0, waitingError, metadata, knownState } = params;
+    const latestState = knownState ?? await this.pipelineState.get(startupId);
     if (!latestState) {
       this.logger.debug(
         `[Pipeline] Skipping queue for ${phase}; pipeline state missing for startup ${startupId}`,

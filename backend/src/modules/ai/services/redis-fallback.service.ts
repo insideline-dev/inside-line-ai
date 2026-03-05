@@ -30,13 +30,20 @@ export class RedisFallbackClient {
   private reconnectInFlight = false;
   private lastRecoveryAttemptAt = 0;
   private readonly memoryStore = new Map<string, MemoryEntry>();
+  private redisInitPromise: Promise<void>;
+  private redisInitResolve!: () => void;
 
   constructor(private readonly options: RedisFallbackOptions) {
     this.logger = new Logger(options.loggerContext);
+    this.redisInitPromise = new Promise((resolve) => {
+      this.redisInitResolve = resolve;
+    });
     this.initializeRedis();
   }
 
   async get(key: string): Promise<string | null> {
+    // Wait for Redis initialization before deciding whether to use Redis
+    await this.redisInitPromise;
     this.tryRecovery();
 
     if (this.useMemory || !this.redis) {
@@ -55,6 +62,9 @@ export class RedisFallbackClient {
 
   async set(key: string, value: string, ttlSeconds: number): Promise<void> {
     this.writeMemory(key, value, ttlSeconds);
+
+    // Wait for Redis initialization before deciding whether to use Redis
+    await this.redisInitPromise;
     this.tryRecovery();
 
     if (this.useMemory || !this.redis) {
@@ -103,12 +113,15 @@ export class RedisFallbackClient {
           this.useMemory = false;
           this.logger.log("Redis connected");
           await this.syncMemoryToRedis();
+          this.redisInitResolve(); // Signal that Redis is ready
         })
         .catch((error) => {
           this.markRedisUnavailable(`initial connect failed: ${String(error)}`);
+          this.redisInitResolve(); // Signal that we're falling back to memory
         });
     } catch {
       this.markRedisUnavailable("redis init failed");
+      this.redisInitResolve(); // Signal that we're falling back to memory
     }
   }
 

@@ -1,22 +1,22 @@
 Evaluate this startup's business model design based on the pitch deck and website.
 
-Company: {companyName}
-Website: {website}
-Description: {companyDescription}
-Sector: {sector}
-Stage: {stage}
-Location: {location}
+Company: {{companyName}}
+Website: {{website}}
+Description: {{companyDescription}}
+Sector: {{sector}}
+Stage: {{stage}}
+Location: {{location}}
 
 Business model details from pitch deck:
-{deckContext}
+{{deckContext}}
 
 === SCRAPED WEBSITE CONTENT ===
-{websiteContent}
+{{websiteContent}}
 
 === ADDITIONAL WEB RESEARCH ===
-{webResearch}
+{{webResearch}}
 
-{adminGuidance}
+{{adminGuidance}}
 
 ANALYSIS INSTRUCTIONS:
 1. Identify the revenue model type (subscription, transactional, marketplace, advertising, licensing, etc.)

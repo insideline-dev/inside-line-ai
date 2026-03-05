@@ -1,19 +1,19 @@
 Evaluate this startup's traction based on the pitch deck.
 
-Company: {companyName}
-Website: {website}
-Description: {companyDescription}
-Sector: {sector}
-Stage: {stage}
-Location: {location}
+Company: {{companyName}}
+Website: {{website}}
+Description: {{companyDescription}}
+Sector: {{sector}}
+Stage: {{stage}}
+Location: {{location}}
 
 === TRACTION DATA FROM PITCH DECK ===
-{deckTractionData}
+{{deckTractionData}}
 
 Additional deck context:
-{deckContext}
+{{deckContext}}
 
-{adminGuidance}
+{{adminGuidance}}
 
 === ANALYSIS INSTRUCTIONS ===
 1. List all traction metrics the deck provides

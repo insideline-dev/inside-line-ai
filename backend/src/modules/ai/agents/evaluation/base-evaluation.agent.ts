@@ -620,6 +620,98 @@ export abstract class BaseEvaluationAgent<TOutput>
     return `${first}; ${second}`;
   }
 
+  private buildSchemaDescription(): string {
+    try {
+      // Use Zod's built-in JSON schema generation if available
+      const schemaAny = this.schema as unknown as Record<string, unknown>;
+      if (typeof schemaAny.toJsonSchema === "function") {
+        return JSON.stringify((schemaAny.toJsonSchema as () => unknown)(), null, 2);
+      }
+      // Fallback: describe the base evaluation shape
+      return [
+        "{",
+        '  "score": number (0-100),',
+        '  "confidence": "high" | "mid" | "low",',
+        '  "narrativeSummary": string (detailed analysis, min 420 chars),',
+        '  "keyFindings": string[] (key findings from analysis),',
+        '  "risks": string[] (identified risks),',
+        '  "dataGaps": string[] (missing data points),',
+        '  "sources": string[] (evidence sources used)',
+        "}",
+      ].join("\n");
+    } catch {
+      return '{ "score": "number (0-100)", "confidence": "string (high|mid|low)", "narrativeSummary": "string", "keyFindings": "string[]", "risks": "string[]", "dataGaps": "string[]", "sources": "string[]" }';
+    }
+  }
+
+  private buildJsonEnforcementInstructions(): string {
+    return [
+      "",
+      "=== CRITICAL OUTPUT FORMAT ===",
+      "You MUST respond with a single valid JSON object. Do NOT write markdown, narrative text, or explanations.",
+      "Your response must be ONLY the JSON object — no text before or after it.",
+      "",
+      "Required JSON schema:",
+      this.buildSchemaDescription(),
+    ].join("\n");
+  }
+
+  private async tryConvertNarrativeToJson(
+    narrativeText: string,
+    model: Parameters<typeof generateText>[0]["model"],
+    timeoutMs: number,
+  ): Promise<
+    | { success: true; output: TOutput; outputText: string }
+    | { success: false; error: string }
+  > {
+    try {
+      const conversionPrompt = [
+        "Extract structured data from the following analysis text and return ONLY a valid JSON object.",
+        "Do NOT include any text before or after the JSON object.",
+        "",
+        "Required JSON schema:",
+        this.buildSchemaDescription(),
+        "",
+        "=== ANALYSIS TEXT ===",
+        narrativeText,
+      ].join("\n");
+
+      const response = await this.withTimeout(
+        (abortSignal) =>
+          generateText({
+            model,
+            system: "You are a JSON extraction assistant. Convert narrative analysis text into structured JSON. Return ONLY a valid JSON object, nothing else.",
+            prompt: conversionPrompt,
+            temperature: 0,
+            maxOutputTokens: this.aiConfig.getEvaluationMaxOutputTokens(),
+            abortSignal,
+          }),
+        timeoutMs,
+        `${this.key} narrative-to-JSON conversion timed out`,
+      );
+
+      const responseText = this.resolveRawOutputText(response);
+      const candidate = this.extractJsonCandidate(responseText);
+      if (!candidate) {
+        return { success: false, error: "Narrative-to-JSON conversion produced no parseable JSON" };
+      }
+
+      const parsed = this.schema.safeParse(this.normalizeOutputCandidate(candidate));
+      if (!parsed.success) {
+        const issues = parsed.error.issues
+          .slice(0, 4)
+          .map((issue) => `${issue.path.length > 0 ? issue.path.join(".") : "(root)"}: ${issue.message}`)
+          .join(" | ");
+        return { success: false, error: `Narrative-to-JSON schema validation failed: ${issues}` };
+      }
+
+      return { success: true, output: parsed.data, outputText: narrativeText };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { success: false, error: `Narrative-to-JSON conversion failed: ${message}` };
+    }
+  }
+
   private async tryRecoverFromTextOutput(input: {
     systemPrompt: string;
     renderedPrompt: string;
@@ -633,11 +725,13 @@ export abstract class BaseEvaluationAgent<TOutput>
     | { success: false; error: string; outputText?: string }
   > {
     try {
+      const recoverySystemPrompt = input.systemPrompt + this.buildJsonEnforcementInstructions();
+
       const response = await this.withTimeout(
         (abortSignal) =>
           generateText({
             model: input.model,
-            system: input.systemPrompt,
+            system: recoverySystemPrompt,
             prompt: input.renderedPrompt,
             temperature: this.aiConfig.getEvaluationTemperature(),
             maxOutputTokens: this.aiConfig.getEvaluationMaxOutputTokens(),
@@ -665,9 +759,19 @@ export abstract class BaseEvaluationAgent<TOutput>
       const outputText = this.resolveRawOutputText(response);
       const candidate = this.extractJsonCandidate(outputText);
       if (!candidate) {
+        // Last resort: try converting the narrative text to JSON
+        this.logger.warn(`[${this.key}] Text recovery produced no JSON, attempting narrative-to-JSON conversion`);
+        const narrativeResult = await this.tryConvertNarrativeToJson(
+          outputText,
+          input.model,
+          Math.min(input.timeoutMs, 60_000),
+        );
+        if (narrativeResult.success) {
+          return narrativeResult;
+        }
         return {
           success: false,
-          error: "Text recovery did not contain parseable JSON object",
+          error: `Text recovery did not contain parseable JSON object; ${narrativeResult.error}`,
           outputText,
         };
       }

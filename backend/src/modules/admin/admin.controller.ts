@@ -18,7 +18,7 @@ import {
 import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
-import { z } from 'zod';
+
 import { JwtAuthGuard } from '../../auth/guards';
 import { CurrentUser } from '../../auth/decorators';
 import { UserRole } from '../../auth/entities/auth.schema';
@@ -43,18 +43,14 @@ import { AdminMatchingService } from './admin-matching.service';
 import { AdminInvestorService } from './admin-investor.service';
 import { AiPromptService } from '../ai/services/ai-prompt.service';
 import { AiPromptRuntimeService } from '../ai/services/ai-prompt-runtime.service';
-import { AiModelConfigService } from '../ai/services/ai-model-config.service';
 import { AiConfigService } from '../ai/services/ai-config.service';
 import { PipelineFlowConfigService } from '../ai/services/pipeline-flow-config.service';
-import { AgentSchemaRegistryService } from '../ai/services/agent-schema-registry.service';
 import { AgentConfigService } from '../ai/services/agent-config.service';
 import { DynamicFlowCatalogService } from '../ai/services/dynamic-flow-catalog.service';
-import { SchemaCompilerService } from '../ai/services/schema-compiler.service';
 import { PhaseTransitionService } from '../ai/orchestrator/phase-transition.service';
-import { AI_RUNTIME_ALLOWED_MODEL_NAMES } from '../ai/services/ai-runtime-config.schema';
 import { QUEUE_NAMES, QueueName } from '../../queue';
 import { EarlyAccessService, CreateEarlyAccessInviteDto } from '../early-access';
-import { AI_SCHEMAS } from '../ai/schemas';
+
 import {
   GetUsersQueryDto,
   UpdateUserDto,
@@ -64,30 +60,16 @@ import {
   GetStartupStatsQueryDto,
   RetryPhaseDto,
   RetryAgentDto,
-  CreateAiPromptRevisionDto,
-  UpdateAiPromptRevisionDto,
-  CreateAiModelConfigDraftDto,
-  UpdateAiModelConfigDraftDto,
-  BulkApplyAiModelConfigDto,
-  BulkApplyAiModelConfigResponseDto,
-  BulkAppendPromptSectionDto,
-  BulkAppendPromptSectionResponseDto,
   AiPromptDefinitionsResponseDto,
   AiPromptRevisionsResponseDto,
-  AiPromptRevisionResponseDto,
-  AiPromptSeedResultDto,
-  AiModelConfigResponseDto,
   AiPromptFlowResponseDto,
   AiPromptContextSchemaResponseDto,
   PreviewAiPromptRequestDto,
   AiPromptPreviewResponseDto,
-  AiPromptOutputSchemaResponseDto,
-  AiResolvedSchemaResponseDto,
   CreateAiAgentConfigDto,
   UpdateAiAgentConfigDto,
   AiAgentConfigResponseDto,
   AiAgentConfigListResponseDto,
-  UpstreamNodeFieldsResponseDto,
   PreviewAiPipelineContextRequestDto,
   AiPipelineContextPreviewResponseDto,
   QuickCreateStartupDto,
@@ -127,58 +109,14 @@ export class AdminController {
     private adminMatchingService: AdminMatchingService,
     private aiPromptService: AiPromptService,
     private aiPromptRuntimeService: AiPromptRuntimeService,
-    private aiModelConfigService: AiModelConfigService,
     private aiConfigService: AiConfigService,
-    private agentSchemaRegistryService: AgentSchemaRegistryService,
     private agentConfigService: AgentConfigService,
     private dynamicFlowCatalogService: DynamicFlowCatalogService,
-    private schemaCompilerService: SchemaCompilerService,
     private earlyAccessService: EarlyAccessService,
     private pipelineFlowConfigService: PipelineFlowConfigService,
     private phaseTransitionService: PhaseTransitionService,
     private adminInvestorService: AdminInvestorService,
   ) {}
-
-  private resolveOutputSchemaForKey(key: string): z.ZodTypeAny | null {
-    const schemaMap: Record<string, z.ZodTypeAny> = {
-      'extraction.fields': AI_SCHEMAS.extraction,
-      'research.team': AI_SCHEMAS.research.team,
-      'research.market': AI_SCHEMAS.research.market,
-      'research.product': AI_SCHEMAS.research.product,
-      'research.news': AI_SCHEMAS.research.news,
-      'research.competitor': AI_SCHEMAS.research.competitor,
-      'evaluation.team': AI_SCHEMAS.evaluation.team,
-      'evaluation.market': AI_SCHEMAS.evaluation.market,
-      'evaluation.product': AI_SCHEMAS.evaluation.product,
-      'evaluation.traction': AI_SCHEMAS.evaluation.traction,
-      'evaluation.businessModel': AI_SCHEMAS.evaluation.businessModel,
-      'evaluation.gtm': AI_SCHEMAS.evaluation.gtm,
-      'evaluation.financials': AI_SCHEMAS.evaluation.financials,
-      'evaluation.competitiveAdvantage': AI_SCHEMAS.evaluation.competitiveAdvantage,
-      'evaluation.legal': AI_SCHEMAS.evaluation.legal,
-      'evaluation.dealTerms': AI_SCHEMAS.evaluation.dealTerms,
-      'evaluation.exitPotential': AI_SCHEMAS.evaluation.exitPotential,
-      'synthesis.final': AI_SCHEMAS.synthesis,
-      'matching.thesis': AI_SCHEMAS.thesisAlignment,
-    };
-
-    return schemaMap[key] ?? null;
-  }
-
-  private async buildAiModelConfigResponse(key: string, stage?: string) {
-    const { definition, revisions } = await this.aiModelConfigService.listRevisionsByKey(key);
-    const resolved = await this.aiModelConfigService.resolveConfig({
-      key: definition.key as Parameters<AiModelConfigService['resolveConfig']>[0]['key'],
-      stage,
-    });
-
-    return {
-      resolved,
-      revisions,
-      allowedModels: [...AI_RUNTIME_ALLOWED_MODEL_NAMES],
-      runtimeConfigEnabled: this.aiConfigService.isPromptRuntimeConfigEnabled(),
-    };
-  }
 
   // ============ ANALYTICS ENDPOINTS ============
 
@@ -449,54 +387,6 @@ export class AdminController {
     return this.aiPromptService.getRevisionsByKey(key);
   }
 
-  @Get('ai-prompts/:key/model-config')
-  @ApiOperation({ summary: "Get resolved model config, revisions history, and allowed models" })
-  @ApiQuery({
-    name: 'stage',
-    required: false,
-    type: String,
-    description: 'Optional startup stage override for resolved runtime model config',
-  })
-  @ApiResponse({ status: 200, type: AiModelConfigResponseDto })
-  async getAiModelConfig(
-    @Param('key') key: string,
-    @Query('stage') stage?: string,
-  ) {
-    return this.buildAiModelConfigResponse(key, stage);
-  }
-
-  @Get('ai-prompts/:key/schema-resolved')
-  @ApiOperation({ summary: "Resolve runtime schema descriptor for prompt key" })
-  @ApiQuery({
-    name: 'stage',
-    required: false,
-    type: String,
-    description: 'Optional startup stage override',
-  })
-  @ApiResponse({ status: 200, type: AiResolvedSchemaResponseDto })
-  async getAiSchemaResolved(
-    @Param('key') key: string,
-    @Query('stage') stage?: string,
-  ) {
-    return this.agentSchemaRegistryService.resolveDescriptorWithSource(key, stage);
-  }
-
-  @Get('ai-resolved-schemas/:promptKey')
-  @ApiOperation({ summary: "Resolve runtime schema descriptor for prompt key" })
-  @ApiQuery({
-    name: 'stage',
-    required: false,
-    type: String,
-    description: 'Optional startup stage override',
-  })
-  @ApiResponse({ status: 200, type: AiResolvedSchemaResponseDto })
-  async getAiSchemaResolvedAlias(
-    @Param('promptKey') promptKey: string,
-    @Query('stage') stage?: string,
-  ) {
-    return this.agentSchemaRegistryService.resolveDescriptorWithSource(promptKey, stage);
-  }
-
   @Get('ai/agent-configs')
   @ApiOperation({ summary: "List all dynamic agent configs" })
   @ApiResponse({ status: 200, type: AiAgentConfigListResponseDto })
@@ -615,193 +505,6 @@ export class AdminController {
     return this.agentConfigService.toggleEnabled('pipeline', orchestratorId, agentKey);
   }
 
-  @Get('ai/agents/:nodeId/upstream-fields')
-  @ApiOperation({ summary: "List upstream schema field paths for a node" })
-  @ApiResponse({ status: 200, type: UpstreamNodeFieldsResponseDto })
-  async getAiAgentUpstreamFields(@Param('nodeId') nodeId: string) {
-    const flowGraph = await this.dynamicFlowCatalogService.getFlowGraph();
-    const pipelineFlow = flowGraph.flows.find((flow) => flow.id === 'pipeline');
-
-    if (!pipelineFlow) {
-      return { items: [] };
-    }
-
-    const nodeById = new Map(pipelineFlow.nodes.map((node) => [node.id, node]));
-    const incomingByTarget = new Map<string, string[]>();
-
-    for (const edge of pipelineFlow.edges) {
-      const current = incomingByTarget.get(edge.to) ?? [];
-      current.push(edge.from);
-      incomingByTarget.set(edge.to, current);
-    }
-
-    const queue = [nodeId];
-    const visited = new Set<string>();
-    const upstream = new Set<string>();
-
-    while (queue.length > 0) {
-      const current = queue.shift();
-      if (!current || visited.has(current)) {
-        continue;
-      }
-
-      visited.add(current);
-      const parents = incomingByTarget.get(current) ?? [];
-      for (const parent of parents) {
-        if (!upstream.has(parent)) {
-          upstream.add(parent);
-          queue.push(parent);
-        }
-      }
-    }
-
-    const items: Array<{ nodeId: string; label: string; fields: string[] }> = [];
-
-    for (const upstreamNodeId of upstream) {
-      const node = nodeById.get(upstreamNodeId);
-      if (!node) {
-        continue;
-      }
-
-      const fields = new Set<string>();
-
-      if (node.promptKeys && node.promptKeys.length > 0) {
-        for (const promptKey of node.promptKeys) {
-          try {
-            const descriptor = await this.agentSchemaRegistryService.resolveDescriptor(
-              promptKey,
-            );
-            const paths = this.schemaCompilerService.extractFieldPaths(descriptor);
-            for (const path of paths) {
-              fields.add(`${upstreamNodeId}.${path}`);
-            }
-          } catch {
-            // Keep root node token fallback
-          }
-        }
-      }
-
-      // Always include full object token for direct JSON insertion.
-      fields.add(upstreamNodeId);
-
-      if (fields.size === 0) {
-        continue;
-      }
-
-      items.push({
-        nodeId: upstreamNodeId,
-        label: node.label,
-        fields: Array.from(fields).sort(),
-      });
-    }
-
-    return { items };
-  }
-
-  @Post('ai-prompts/:key/model-config')
-  @ApiOperation({ summary: "Create model config draft revision" })
-  @ApiResponse({ status: 201, type: AiModelConfigResponseDto })
-  async createAiModelConfigDraft(
-    @CurrentUser() admin: User,
-    @Param('key') key: string,
-    @Body() dto: CreateAiModelConfigDraftDto,
-  ) {
-    await this.aiModelConfigService.createDraft(key, admin.id, dto);
-    return this.buildAiModelConfigResponse(key);
-  }
-
-  @Post('ai-prompts/model-config/bulk-apply')
-  @ApiOperation({
-    summary:
-      "Apply and publish model config across all AI nodes, research agents, or evaluation agents",
-  })
-  @ApiResponse({ status: 201, type: BulkApplyAiModelConfigResponseDto })
-  async bulkApplyAiModelConfig(
-    @CurrentUser() admin: User,
-    @Body() dto: BulkApplyAiModelConfigDto,
-  ) {
-    return this.aiModelConfigService.bulkApplyAndPublish(admin.id, dto);
-  }
-
-  @Post('ai-prompts/bulk-append-section')
-  @ApiOperation({
-    summary:
-      "Append a text section to the system prompts of all agents in a scope (research or evaluation), across all stages",
-  })
-  @ApiResponse({ status: 201, type: BulkAppendPromptSectionResponseDto })
-  async bulkAppendPromptSection(
-    @CurrentUser() admin: User,
-    @Body() dto: BulkAppendPromptSectionDto,
-  ) {
-    return this.aiPromptService.bulkAppendSection(admin.id, dto);
-  }
-
-  @Patch('ai-prompts/:key/model-config/:revisionId')
-  @ApiOperation({ summary: "Update model config draft revision" })
-  @ApiResponse({ status: 200, type: AiModelConfigResponseDto })
-  async updateAiModelConfigDraft(
-    @Param('key') key: string,
-    @Param('revisionId', ParseUUIDPipe) revisionId: string,
-    @Body() dto: UpdateAiModelConfigDraftDto,
-  ) {
-    await this.aiModelConfigService.updateDraft(key, revisionId, dto);
-    return this.buildAiModelConfigResponse(key);
-  }
-
-  @Post('ai-prompts/:key/model-config/:revisionId/publish')
-  @ApiOperation({ summary: "Publish model config draft revision" })
-  @ApiResponse({ status: 201, type: AiModelConfigResponseDto })
-  async publishAiModelConfigDraft(
-    @CurrentUser() admin: User,
-    @Param('key') key: string,
-    @Param('revisionId', ParseUUIDPipe) revisionId: string,
-  ) {
-    await this.aiModelConfigService.publishRevision(key, revisionId, admin.id);
-    return this.buildAiModelConfigResponse(key);
-  }
-
-  @Delete('ai-prompts/:key/model-config/:revisionId')
-  @ApiOperation({ summary: "Archive model config draft revision (soft delete)" })
-  async deleteAiModelConfigDraft(
-    @Param('key') key: string,
-    @Param('revisionId', ParseUUIDPipe) revisionId: string,
-  ) {
-    await this.aiModelConfigService.archiveRevision(key, revisionId);
-    return { success: true, message: 'Revision archived' };
-  }
-
-  @Get('ai-prompts/:key/output-schema')
-  @ApiOperation({ summary: "Get output JSON schema for a prompt key" })
-  @ApiQuery({
-    name: 'stage',
-    required: false,
-    type: String,
-    description: 'Optional startup stage override',
-  })
-  @ApiResponse({ status: 200, type: AiPromptOutputSchemaResponseDto })
-  async getAiPromptOutputSchema(
-    @Param('key') key: string,
-    @Query('stage') stage?: string,
-  ) {
-    const resolved = await this.agentSchemaRegistryService.resolveDescriptorWithSource(
-      key,
-      stage,
-    );
-    const zodSchema = this.schemaCompilerService.compile(resolved.schemaJson);
-
-    return {
-      key,
-      stage: resolved.stage,
-      source: resolved.source,
-      schemaJson: resolved.schemaJson,
-      jsonSchema: z.toJSONSchema(zodSchema),
-      note:
-        resolved.source === 'published'
-          ? 'Schema resolved from published revision.'
-          : 'Schema resolved from code fallback (no published revision for this stage).',
-    };
-  }
-
   @Get('ai-prompts/:key/context-schema')
   @ApiOperation({ summary: "Get runtime context schema and variable provenance for a prompt key" })
   @ApiResponse({ status: 200, type: AiPromptContextSchemaResponseDto })
@@ -826,64 +529,6 @@ export class AdminController {
     @Body() dto: PreviewAiPipelineContextRequestDto,
   ) {
     return this.aiPromptRuntimeService.previewPipelineContexts(dto);
-  }
-
-  @Post('ai-prompts/:key/revisions')
-  @ApiOperation({ summary: "Create prompt draft revision" })
-  @ApiResponse({ status: 201, type: AiPromptRevisionResponseDto })
-  async createAiPromptRevision(
-    @CurrentUser() admin: User,
-    @Param('key') key: string,
-    @Body() dto: CreateAiPromptRevisionDto,
-  ) {
-    return this.aiPromptService.createDraft(key, admin.id, dto);
-  }
-
-  @Put('ai-prompts/:key/revisions/:revisionId')
-  @ApiOperation({ summary: "Update prompt draft revision" })
-  @ApiResponse({ status: 200, type: AiPromptRevisionResponseDto })
-  async updateAiPromptRevision(
-    @Param('key') key: string,
-    @Param('revisionId', ParseUUIDPipe) revisionId: string,
-    @Body() dto: UpdateAiPromptRevisionDto,
-  ) {
-    return this.aiPromptService.updateDraft(key, revisionId, dto);
-  }
-
-  @Post('ai-prompts/:key/revisions/:revisionId/publish')
-  @ApiOperation({ summary: "Publish prompt draft revision" })
-  @ApiResponse({ status: 201, type: AiPromptRevisionResponseDto })
-  async publishAiPromptRevision(
-    @CurrentUser() admin: User,
-    @Param('key') key: string,
-    @Param('revisionId', ParseUUIDPipe) revisionId: string,
-  ) {
-    return this.aiPromptService.publishRevision(key, revisionId, admin.id);
-  }
-
-  @Post('ai-prompts/seed-from-code')
-  @ApiOperation({ summary: "Seed prompt defaults for global and stage-specific variants" })
-  @ApiResponse({ status: 201, type: AiPromptSeedResultDto })
-  async seedAiPrompts(@CurrentUser() admin: User) {
-    return this.aiPromptService.seedFromCode(admin.id);
-  }
-
-  @Post('ai-prompts/reseed-from-code')
-  @ApiOperation({ summary: "Force re-seed evaluation prompts: archives existing and seeds fresh from code catalog" })
-  async reseedAiPrompts(@CurrentUser() admin: User) {
-    return this.aiPromptService.reseedFromCode(admin.id, [
-      "evaluation.team",
-      "evaluation.market",
-      "evaluation.product",
-      "evaluation.traction",
-      "evaluation.businessModel",
-      "evaluation.gtm",
-      "evaluation.financials",
-      "evaluation.competitiveAdvantage",
-      "evaluation.legal",
-      "evaluation.dealTerms",
-      "evaluation.exitPotential",
-    ]);
   }
 
   // ============ DATA IMPORT/EXPORT ENDPOINTS ============

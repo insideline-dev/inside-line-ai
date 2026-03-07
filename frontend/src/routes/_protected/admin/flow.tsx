@@ -3,13 +3,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
-  getAdminControllerGetAiPromptFlowQueryKey,
   useAdminControllerGetAiPromptFlow,
-  useAdminControllerGetAiModelConfig,
   useAdminControllerGetActivePipelineFlowConfig,
   getAdminControllerGetActivePipelineFlowConfigQueryKey,
   useAdminControllerListPipelineFlowConfigs,
-  useAdminControllerBulkApplyAiModelConfig,
   useAdminControllerCreatePipelineFlowConfig,
   useAdminControllerUpdatePipelineFlowConfig,
   useAdminControllerPublishPipelineFlowConfig,
@@ -20,14 +17,6 @@ import type { PhaseConfig } from "@/components/pipeline/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -191,15 +180,6 @@ function normalizeFlowNodeConfigs(value: unknown): FlowNodeConfigs {
 }
 
 function AdminFlowPage() {
-  const resolveProvider = (modelName: string): string => {
-    if (modelName.startsWith("gemini")) {
-      return "google";
-    }
-    if (modelName.startsWith("gpt") || modelName.startsWith("o")) {
-      return "openai";
-    }
-    return "unknown";
-  };
   const queryClient = useQueryClient();
   const [selectedFlowId, setSelectedFlowId] = useState<string>("pipeline");
   const [draftId, setDraftId] = useState<string | null>(null);
@@ -215,10 +195,6 @@ function AdminFlowPage() {
 
   const { data: flowData, isLoading: flowLoading } =
     useAdminControllerGetAiPromptFlow();
-  const { data: modelConfigData } = useAdminControllerGetAiModelConfig(
-    "research.market",
-    undefined,
-  );
 
   const { data: configsData } =
     useAdminControllerListPipelineFlowConfigs();
@@ -228,59 +204,9 @@ function AdminFlowPage() {
     isError: hasActiveConfigError,
   } = useAdminControllerGetActivePipelineFlowConfig();
 
-  const modelConfigPayload = extractResponseData<{
-    allowedModels?: string[];
-  }>(modelConfigData);
-  const allowedModels = useMemo(
-    () =>
-      modelConfigPayload?.allowedModels && modelConfigPayload.allowedModels.length > 0
-        ? modelConfigPayload.allowedModels
-        : [
-            "gpt-5.2",
-            "gemini-3-flash-preview",
-            "o4-mini-deep-research",
-          ],
-    [modelConfigPayload?.allowedModels],
-  );
-  const researchModelOptions = useMemo(() => allowedModels, [allowedModels]);
-  const nonResearchModelOptions = useMemo(
-    () => allowedModels.filter((model) => !model.toLowerCase().includes("deep-research")),
-    [allowedModels],
-  );
-
-  const [allAiModelName, setAllAiModelName] = useState<string>("gpt-5.2");
-  const [researchModelName, setResearchModelName] = useState<string>("o4-mini-deep-research");
-  const [evaluationModelName, setEvaluationModelName] = useState<string>("gpt-5.2");
-  const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
-
-  useEffect(() => {
-    if (allowedModels.length === 0) {
-      return;
-    }
-
-    const nonResearchFallback = nonResearchModelOptions[0] ?? allowedModels[0];
-    const researchFallback = researchModelOptions[0] ?? allowedModels[0];
-    if (!nonResearchModelOptions.includes(allAiModelName)) {
-      setAllAiModelName(nonResearchFallback);
-    }
-    if (!researchModelOptions.includes(researchModelName)) {
-      setResearchModelName(researchFallback);
-    }
-    if (!nonResearchModelOptions.includes(evaluationModelName)) {
-      setEvaluationModelName(nonResearchFallback);
-    }
-  }, [
-    allAiModelName,
-    allowedModels,
-    evaluationModelName,
-    nonResearchModelOptions,
-    researchModelName,
-    researchModelOptions,
-  ]);
-
   const createDraftMutation = useAdminControllerCreatePipelineFlowConfig({
     mutation: {
-      onSuccess: (data) => {
+      onSuccess: (data: unknown) => {
         const result = extractResponseData<{ id: string }>(data);
         setDraftId(result.id);
         setIsDirty(false);
@@ -289,7 +215,8 @@ function AdminFlowPage() {
           queryKey: getAdminControllerListPipelineFlowConfigsQueryKey(),
         });
       },
-      onError: (err) => toast.error((err as Error).message || "Failed to save draft"),
+      onError: (err: unknown) =>
+        toast.error(err instanceof Error ? err.message : "Failed to save draft"),
     },
   });
 
@@ -302,7 +229,8 @@ function AdminFlowPage() {
           queryKey: getAdminControllerListPipelineFlowConfigsQueryKey(),
         });
       },
-      onError: (err) => toast.error((err as Error).message || "Failed to update"),
+      onError: (err: unknown) =>
+        toast.error(err instanceof Error ? err.message : "Failed to update"),
     },
   });
 
@@ -320,36 +248,8 @@ function AdminFlowPage() {
           }),
         ]);
       },
-      onError: (err) => toast.error((err as Error).message || "Failed to publish"),
-    },
-  });
-
-  const bulkApplyMutation = useAdminControllerBulkApplyAiModelConfig({
-    mutation: {
-      onSuccess: async (response) => {
-        const result = extractResponseData<{
-          scope: string;
-          appliedKeys: string[];
-        }>(response);
-
-        toast.success(
-          `Applied model to ${result.appliedKeys.length} prompt keys (${result.scope}).`,
-        );
-
-        await Promise.all([
-          queryClient.invalidateQueries({
-            queryKey: getAdminControllerGetAiPromptFlowQueryKey(),
-          }),
-          queryClient.invalidateQueries({
-            predicate: (query) =>
-              Array.isArray(query.queryKey) &&
-              typeof query.queryKey[0] === "string" &&
-              query.queryKey[0].startsWith("/admin/ai-prompts/"),
-          }),
-        ]);
-      },
-      onError: (err) =>
-        toast.error((err as Error).message || "Failed to bulk apply model config"),
+      onError: (err: unknown) =>
+        toast.error(err instanceof Error ? err.message : "Failed to publish"),
     },
   });
 
@@ -591,18 +491,6 @@ function AdminFlowPage() {
     ],
   );
 
-  const handleBulkApply = useCallback(
-    (scope: "all_ai_nodes" | "research_agents" | "evaluation_agents", modelName: string) => {
-      bulkApplyMutation.mutate({
-        data: {
-          scope,
-          modelName: modelName as never,
-        },
-      });
-    },
-    [bulkApplyMutation],
-  );
-
   const isSaving = createDraftMutation.isPending || updateDraftMutation.isPending;
 
   if (flowLoading) {
@@ -657,129 +545,6 @@ function AdminFlowPage() {
             Reset
           </Button>
 
-          <Dialog open={bulkDialogOpen} onOpenChange={setBulkDialogOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline" size="sm" className="h-8">
-                Bulk Apply Models
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[760px]">
-              <DialogHeader>
-                <DialogTitle>Bulk Apply Models</DialogTitle>
-                <DialogDescription>
-                  Apply and publish model config across grouped AI agents.
-                </DialogDescription>
-              </DialogHeader>
-
-              <div className="space-y-3">
-                <div className="rounded-md border p-3">
-                  <div className="flex items-center justify-between gap-3 mb-2">
-                    <div>
-                      <p className="text-sm font-medium">All AI Nodes</p>
-                      <p className="text-xs text-muted-foreground">
-                        Applies to all prompt-backed AI nodes in pipeline flow.
-                      </p>
-                    </div>
-                    <Button
-                      size="sm"
-                      disabled={bulkApplyMutation.isPending}
-                      onClick={() => handleBulkApply("all_ai_nodes", allAiModelName)}
-                    >
-                      Apply
-                    </Button>
-                  </div>
-                  <Select value={allAiModelName} onValueChange={setAllAiModelName}>
-                    <SelectTrigger className="h-8 text-xs">
-                      <SelectValue placeholder="Select model" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(nonResearchModelOptions.length > 0
-                        ? nonResearchModelOptions
-                        : allowedModels
-                      ).map((model) => (
-                        <SelectItem key={model} value={model} className="text-xs">
-                          {model}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="rounded-md border p-3">
-                  <div className="flex items-center justify-between gap-3 mb-2">
-                    <div>
-                      <p className="text-sm font-medium">Research Agents</p>
-                      <p className="text-xs text-muted-foreground">
-                        Applies model + inferred provider to all research agents.
-                      </p>
-                    </div>
-                    <Button
-                      size="sm"
-                      disabled={bulkApplyMutation.isPending}
-                      onClick={() => handleBulkApply("research_agents", researchModelName)}
-                    >
-                      Apply
-                    </Button>
-                  </div>
-                  <div className="space-y-2">
-                    <Select value={researchModelName} onValueChange={setResearchModelName}>
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue placeholder="Select model" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {researchModelOptions.map((model) => (
-                          <SelectItem key={model} value={model} className="text-xs">
-                            {model}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Badge variant="outline" className="text-[10px]">
-                      provider: {resolveProvider(researchModelName)}
-                    </Badge>
-                  </div>
-                </div>
-
-                <div className="rounded-md border p-3">
-                  <div className="flex items-center justify-between gap-3 mb-2">
-                    <div>
-                      <p className="text-sm font-medium">Evaluation Agents</p>
-                      <p className="text-xs text-muted-foreground">
-                        Applies model to all evaluation agents (search remains off).
-                      </p>
-                    </div>
-                    <Button
-                      size="sm"
-                      disabled={bulkApplyMutation.isPending}
-                      onClick={() =>
-                        handleBulkApply("evaluation_agents", evaluationModelName)
-                      }
-                    >
-                      Apply
-                    </Button>
-                  </div>
-                  <Select
-                    value={evaluationModelName}
-                    onValueChange={setEvaluationModelName}
-                  >
-                    <SelectTrigger className="h-8 text-xs">
-                      <SelectValue placeholder="Select model" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(nonResearchModelOptions.length > 0
-                        ? nonResearchModelOptions
-                        : allowedModels
-                      ).map((model) => (
-                        <SelectItem key={model} value={model} className="text-xs">
-                          {model}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
         </div>
       </div>
 

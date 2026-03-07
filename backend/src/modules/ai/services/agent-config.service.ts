@@ -1,11 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { and, asc, eq } from "drizzle-orm";
 import { DrizzleService } from "../../../database";
-import {
-  aiAgentConfig,
-  aiPromptDefinition,
-  type AiAgentConfig,
-} from "../entities";
+import { aiAgentConfig, type AiAgentConfig } from "../entities";
 import { AI_FLOW_DEFINITIONS } from "./ai-flow-catalog";
 
 export interface CreateAgentConfigInput {
@@ -76,16 +72,9 @@ export class AgentConfigService {
   }
 
   async getExecutableByOrchestrator(orchestratorNodeId: string, flowId = "pipeline") {
-    return this.drizzle.db
-      .select({
-        config: aiAgentConfig,
-        promptKey: aiPromptDefinition.key,
-      })
+    const rows = await this.drizzle.db
+      .select()
       .from(aiAgentConfig)
-      .leftJoin(
-        aiPromptDefinition,
-        eq(aiAgentConfig.promptDefinitionId, aiPromptDefinition.id),
-      )
       .where(
         and(
           eq(aiAgentConfig.flowId, flowId),
@@ -98,6 +87,11 @@ export class AgentConfigService {
         asc(aiAgentConfig.sortOrder),
         asc(aiAgentConfig.label),
       );
+
+    return rows.map((config) => ({
+      config,
+      promptKey: config.promptKey,
+    }));
   }
 
   async create(
@@ -108,13 +102,7 @@ export class AgentConfigService {
   ) {
     this.assertAgentKey(input.agentKey);
 
-    const promptDefinition = await this.getOrCreateCustomPromptDefinition(
-      flowId,
-      orchestratorNodeId,
-      input.agentKey,
-      input.label,
-      input.description,
-    );
+    const promptKey = `custom.${flowId}.${orchestratorNodeId}.${input.agentKey}`;
 
     const [created] = await this.drizzle.db
       .insert(aiAgentConfig)
@@ -126,7 +114,7 @@ export class AgentConfigService {
         description: input.description,
         kind: "prompt",
         enabled: true,
-        promptDefinitionId: promptDefinition.id,
+        promptKey,
         executionPhase: input.executionPhase ?? 1,
         dependsOn: input.dependsOn ?? [],
         sortOrder: input.sortOrder ?? 0,
@@ -271,14 +259,7 @@ export class AgentConfigService {
           continue;
         }
 
-        const promptKey = childNode.promptKeys[0];
-        const [definition] = promptKey
-          ? await this.drizzle.db
-              .select({ id: aiPromptDefinition.id })
-              .from(aiPromptDefinition)
-              .where(eq(aiPromptDefinition.key, promptKey))
-              .limit(1)
-          : [];
+        const promptKey = childNode.promptKeys[0] ?? null;
 
         await this.drizzle.db.insert(aiAgentConfig).values({
           flowId: "pipeline",
@@ -288,7 +269,7 @@ export class AgentConfigService {
           description: childNode.description,
           kind: childNode.kind,
           enabled: true,
-          promptDefinitionId: definition?.id,
+          promptKey,
           executionPhase:
             orchestratorNodeId === "research_orchestrator" && childNode.id === "research_competitor"
               ? 2
@@ -321,36 +302,5 @@ export class AgentConfigService {
     if (!/^[a-zA-Z][a-zA-Z0-9_-]{1,119}$/.test(key)) {
       throw new BadRequestException("agentKey must be alphanumeric and 2-120 chars");
     }
-  }
-
-  private async getOrCreateCustomPromptDefinition(
-    flowId: string,
-    orchestratorNodeId: string,
-    agentKey: string,
-    label: string,
-    description?: string,
-  ) {
-    const promptKey = `custom.${flowId}.${orchestratorNodeId}.${agentKey}`;
-    const [existing] = await this.drizzle.db
-      .select()
-      .from(aiPromptDefinition)
-      .where(eq(aiPromptDefinition.key, promptKey))
-      .limit(1);
-
-    if (existing) {
-      return existing;
-    }
-
-    const [created] = await this.drizzle.db
-      .insert(aiPromptDefinition)
-      .values({
-        key: promptKey,
-        displayName: label,
-        description: description ?? `Custom agent for ${orchestratorNodeId}`,
-        surface: "pipeline",
-      })
-      .returning();
-
-    return created;
   }
 }

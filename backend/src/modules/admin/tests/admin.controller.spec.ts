@@ -14,13 +14,10 @@ import { BulkDataService } from '../bulk-data.service';
 import { AdminMatchingService } from '../admin-matching.service';
 import { AiPromptService } from '../../ai/services/ai-prompt.service';
 import { AiPromptRuntimeService } from '../../ai/services/ai-prompt-runtime.service';
-import { AiModelConfigService } from '../../ai/services/ai-model-config.service';
-import { AgentSchemaRegistryService } from '../../ai/services/agent-schema-registry.service';
 import { PipelineFlowConfigService } from '../../ai/services/pipeline-flow-config.service';
 import { PhaseTransitionService } from '../../ai/orchestrator/phase-transition.service';
 import { AgentConfigService } from '../../ai/services/agent-config.service';
 import { DynamicFlowCatalogService } from '../../ai/services/dynamic-flow-catalog.service';
-import { SchemaCompilerService } from '../../ai/services/schema-compiler.service';
 import { EarlyAccessService } from '../../early-access';
 import { AdminInvestorService } from '../admin-investor.service';
 import { AiConfigService } from '../../ai/services/ai-config.service';
@@ -41,10 +38,8 @@ describe('AdminController', () => {
   let adminMatchingService: jest.Mocked<AdminMatchingService>;
   let aiPromptService: jest.Mocked<AiPromptService>;
   let aiPromptRuntimeService: jest.Mocked<AiPromptRuntimeService>;
-  let agentSchemaRegistryService: jest.Mocked<AgentSchemaRegistryService>;
   let agentConfigService: jest.Mocked<AgentConfigService>;
   let dynamicFlowCatalogService: jest.Mocked<DynamicFlowCatalogService>;
-  let schemaCompilerService: jest.Mocked<SchemaCompilerService>;
   let _earlyAccessService: jest.Mocked<EarlyAccessService>;
 
   const mockAdmin = {
@@ -178,27 +173,10 @@ describe('AdminController', () => {
           },
         },
         {
-          provide: AiModelConfigService,
-          useValue: {
-            listRevisionsByKey: jest.fn(),
-            resolveConfig: jest.fn(),
-            createDraft: jest.fn(),
-            updateDraft: jest.fn(),
-            publishRevision: jest.fn(),
-          },
-        },
-        {
           provide: AiConfigService,
           useValue: {
             getResearchAttemptTimeoutMs: jest.fn().mockReturnValue(3_600_000),
             getResearchAttemptTimeoutMsForAgent: jest.fn().mockReturnValue(3_600_000),
-          },
-        },
-        {
-          provide: AgentSchemaRegistryService,
-          useValue: {
-            resolveDescriptorWithSource: jest.fn(),
-            resolveDescriptor: jest.fn(),
           },
         },
         {
@@ -216,12 +194,6 @@ describe('AdminController', () => {
           provide: DynamicFlowCatalogService,
           useValue: {
             getFlowGraph: jest.fn(),
-          },
-        },
-        {
-          provide: SchemaCompilerService,
-          useValue: {
-            extractFieldPaths: jest.fn(),
           },
         },
         {
@@ -271,10 +243,8 @@ describe('AdminController', () => {
     adminMatchingService = module.get(AdminMatchingService);
     aiPromptService = module.get(AiPromptService);
     aiPromptRuntimeService = module.get(AiPromptRuntimeService);
-    agentSchemaRegistryService = module.get(AgentSchemaRegistryService);
     agentConfigService = module.get(AgentConfigService);
     dynamicFlowCatalogService = module.get(DynamicFlowCatalogService);
-    schemaCompilerService = module.get(SchemaCompilerService);
     _earlyAccessService = module.get(EarlyAccessService);
   });
 
@@ -822,16 +792,6 @@ describe('AdminController', () => {
       expect(dynamicFlowCatalogService.getFlowGraph).toHaveBeenCalled();
     });
 
-    it('should seed prompts from code', async () => {
-      const payload = { insertedTotal: 10, insertedGlobal: 2 };
-      aiPromptService.seedFromCode.mockResolvedValueOnce(payload as unknown);
-
-      const result = await controller.seedAiPrompts(mockAdmin as unknown);
-
-      expect(result).toEqual(payload);
-      expect(aiPromptService.seedFromCode).toHaveBeenCalledWith(mockAdmin.id);
-    });
-
     it('should return prompt runtime context schema', async () => {
       const payload = {
         key: 'research.team',
@@ -885,30 +845,6 @@ describe('AdminController', () => {
       expect(aiPromptRuntimeService.previewPipelineContexts).toHaveBeenCalledWith(body);
     });
 
-    it('should resolve runtime schema for prompt key with stage', async () => {
-      const payload = {
-        promptKey: 'evaluation.legal',
-        stage: 'seed',
-        source: 'code',
-        schemaJson: {
-          type: 'object',
-          fields: {
-            riskSummary: { type: 'string' },
-          },
-        },
-      };
-
-      agentSchemaRegistryService.resolveDescriptorWithSource.mockResolvedValueOnce(payload as unknown);
-
-      const result = await controller.getAiSchemaResolvedAlias('evaluation.legal', 'seed' as unknown);
-
-      expect(result).toEqual(payload);
-      expect(agentSchemaRegistryService.resolveDescriptorWithSource).toHaveBeenCalledWith(
-        'evaluation.legal',
-        'seed',
-      );
-    });
-
     it('should list dynamic agent configs', async () => {
       const payload = [{ orchestratorNodeId: 'evaluation_orchestrator', agentKey: 'team' }];
       agentConfigService.listAll.mockResolvedValueOnce(payload as unknown);
@@ -939,41 +875,5 @@ describe('AdminController', () => {
       );
     });
 
-    it('should return upstream schema fields for agent node', async () => {
-      dynamicFlowCatalogService.getFlowGraph.mockResolvedValueOnce({
-        flows: [
-          {
-            id: 'pipeline',
-            nodes: [
-              { id: 'research_team', label: 'Team Research', promptKeys: ['research.team'] },
-              { id: 'evaluation_team', label: 'Team Evaluation', promptKeys: ['evaluation.team'] },
-            ],
-            edges: [{ from: 'research_team', to: 'evaluation_team' }],
-          },
-        ],
-      } as unknown);
-      agentSchemaRegistryService.resolveDescriptor.mockResolvedValueOnce({
-        type: 'object',
-        fields: {
-          score: { type: 'number' },
-          findings: { type: 'array', items: { type: 'string' } },
-        },
-      } as unknown);
-      schemaCompilerService.extractFieldPaths.mockReturnValueOnce(['score', 'findings[]']);
-
-      const result = await controller.getAiAgentUpstreamFields('evaluation_team');
-
-      expect(result).toEqual({
-        items: [
-          {
-            nodeId: 'research_team',
-            label: 'Team Research',
-            fields: ['research_team', 'research_team.findings[]', 'research_team.score'],
-          },
-        ],
-      });
-      expect(agentSchemaRegistryService.resolveDescriptor).toHaveBeenCalledWith('research.team');
-      expect(schemaCompilerService.extractFieldPaths).toHaveBeenCalled();
-    });
   });
 });

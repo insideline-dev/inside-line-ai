@@ -1821,6 +1821,7 @@ export class StartupService {
       usedFallback?: boolean;
       inputText?: string | null;
       inputPrompt?: string | null;
+      systemPrompt?: string | null;
       inputJson?: unknown;
       outputText?: string | null;
       outputJson?: unknown;
@@ -1883,6 +1884,7 @@ export class StartupService {
       const hasOutputJson =
         traceMeta.outputJson !== undefined && traceMeta.outputJson !== null;
       const inputText = row.inputPrompt ?? null;
+      const systemPrompt = row.systemPrompt ?? null;
       const hasInputText =
         typeof inputText === "string" && inputText.trim().length > 0;
       const hasInputJson = row.inputJson !== undefined && row.inputJson !== null;
@@ -1910,6 +1912,7 @@ export class StartupService {
         usedFallback: row.usedFallback,
         inputText,
         inputPrompt: inputText,
+        systemPrompt,
         inputJson: row.inputJson,
         outputText,
         meta:

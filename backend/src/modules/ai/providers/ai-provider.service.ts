@@ -10,6 +10,7 @@ const MODEL_PROVIDER_PREFIX: Record<string, string> = {
   gpt: "openai",
   o1: "openai",
   o3: "openai",
+  o4: "openai",
   gemini: "google",
   claude: "anthropic",
   mistral: "mistral",

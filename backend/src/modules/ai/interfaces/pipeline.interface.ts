@@ -41,6 +41,7 @@ export enum ModelPurpose {
   THESIS_ALIGNMENT = "thesis_alignment",
   LOCATION_NORMALIZATION = "location_normalization",
   OCR = "ocr",
+  CLARA = "clara",
 }
 
 export interface TokenUsage {

@@ -105,6 +105,7 @@ export interface EvaluationAgentTraceEvent {
   status: "completed" | "fallback" | "failed";
   captureStatus?: "captured" | "missing" | "provider_error_only";
   inputPrompt: string;
+  systemPrompt?: string;
   outputText?: string;
   outputJson?: unknown;
   attempt: number;

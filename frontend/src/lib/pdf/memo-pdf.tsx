@@ -145,18 +145,6 @@ export function InvestmentMemoPDF({ startup, evaluation, weights, watermarkEmail
           );
         })}
 
-        {/* Key Recommendations */}
-        {evaluation.recommendations && evaluation.recommendations.length > 0 && (
-          <View>
-            <Text style={s.recsTitle}>Key Recommendations</Text>
-            {evaluation.recommendations.map((rec, i) => (
-              <Text key={i} style={s.recItem}>
-                {i + 1}. {rec}
-              </Text>
-            ))}
-          </View>
-        )}
-
         {/* Confidential footer */}
         <View style={{ marginTop: 30, borderTopWidth: 1, borderTopColor: COLORS.border, paddingTop: 10 }}>
           <Text style={{ fontSize: 8, color: COLORS.lightGray, textAlign: "center" }}>

@@ -82,6 +82,7 @@ export * from './aiPromptFlowResponseDtoFlowsItemNodesItemPromptKeysItem';
 export * from './aiPromptFlowResponseDtoFlowsItemNodesItemRuntimeModel';
 export * from './aiPromptFlowResponseDtoFlowsItemNodesItemRuntimeModelSearchMode';
 export * from './aiPromptFlowResponseDtoFlowsItemNodesItemRuntimeModelSource';
+export * from './aiPromptFlowResponseDtoFlowsItemNodesItemRuntimeModelSupportedSearchModesItem';
 export * from './aiPromptFlowResponseDtoFlowsItemStagesItem';
 export * from './aiPromptOutputSchemaResponseDto';
 export * from './aiPromptOutputSchemaResponseDtoKey';

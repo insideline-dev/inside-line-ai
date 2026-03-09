@@ -45,27 +45,39 @@ export interface TeamMemberEvaluation {
   };
 }
 
+export interface MemoSectionSource {
+  label: string;
+  url: string;
+}
+
 export interface MemoSection {
   title: string;
   content: string;
   highlights?: string[];
   concerns?: string[];
+  sources?: MemoSectionSource[];
 }
 
 export interface InvestorMemo {
   executiveSummary: string;
-  summary?: string;
   sections: MemoSection[];
-  recommendation: string;
-  riskLevel: "low" | "medium" | "high";
-  dealHighlights?: string[];
   keyDueDiligenceAreas?: string[];
 }
 
 export interface FounderReport {
   summary: string;
-  sections: MemoSection[];
-  actionItems: string[];
+  whatsWorking: string[];
+  pathToInevitability: string[];
+}
+
+export interface ExitScenario {
+  scenario: "conservative" | "moderate" | "optimistic";
+  exitType: string;
+  exitValuation: string;
+  timeline: string;
+  moic: number;
+  irr: number;
+  researchBasis: string;
 }
 
 export interface Source {
@@ -154,9 +166,9 @@ export interface Evaluation {
   // Final scores
   overallScore?: number;
   percentileRank?: number;
+  confidenceScore?: "High" | "Medium" | "Low";
   keyStrengths?: string[];
   keyRisks?: string[];
-  recommendations?: string[];
   dataConfidenceNotes?: string;
   executiveSummary?: string;
 
@@ -164,6 +176,9 @@ export interface Evaluation {
   founderReport?: FounderReport;
   investorMemo?: InvestorMemo;
   sources?: Source[];
+
+  // Exit scenarios (from deal terms agent, surfaced on summary page)
+  exitScenarios?: ExitScenario[];
 
   // Progress
   analysisProgress?: AnalysisProgress;

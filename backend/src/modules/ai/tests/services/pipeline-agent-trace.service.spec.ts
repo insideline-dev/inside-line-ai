@@ -28,6 +28,7 @@ describe("PipelineAgentTraceService — no truncation", () => {
 
   it("stores full inputPrompt without truncation regardless of size", async () => {
     const bigPrompt = "x".repeat(200_000);
+    const systemPrompt = "system instructions";
 
     await service.recordRun({
       startupId: "s-1",
@@ -36,10 +37,12 @@ describe("PipelineAgentTraceService — no truncation", () => {
       agentKey: "team",
       status: "completed",
       inputPrompt: bigPrompt,
+      systemPrompt,
     });
 
     const payload = insertValuesMock.mock.calls[0]?.[0] as Record<string, unknown>;
     expect(payload.inputPrompt).toBe(bigPrompt);
+    expect(payload.systemPrompt).toBe(systemPrompt);
     expect(typeof payload.inputPrompt).toBe("string");
     expect((payload.inputPrompt as string).length).toBe(200_000);
     expect((payload.inputPrompt as string).includes("[TRUNCATED]")).toBe(false);

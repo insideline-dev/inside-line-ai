@@ -161,6 +161,7 @@ const CORRECTABLE_FIELDS = ENRICHABLE_FIELDS.filter((f) => f.correctable);
 
 interface EnrichmentSynthesisResult {
   prompt: string;
+  systemPrompt: string;
   output: EnrichmentResult;
   usedFallback: boolean;
   usedTextFallback: boolean;
@@ -210,6 +211,7 @@ export interface EnrichmentRunOptions {
   onAgentComplete?: (payload: {
     agentKey: string;
     inputPrompt?: string;
+    systemPrompt?: string;
     outputText?: string;
     outputJson?: unknown;
     error?: string;
@@ -399,6 +401,7 @@ export class EnrichmentService {
 
         synthesis = {
           prompt: "",
+          systemPrompt: ENRICHMENT_GAP_ANALYSIS_SYSTEM_PROMPT,
           output: this.buildSkippedResult("No remaining gaps after internal source resolution"),
           usedFallback: false,
           usedTextFallback: false,
@@ -489,6 +492,7 @@ export class EnrichmentService {
       options?.onAgentComplete?.({
         agentKey: ENRICHMENT_AGENT_KEY,
         inputPrompt: synthesis.prompt,
+        systemPrompt: synthesis.systemPrompt,
         outputText: this.serializeOutput(enrichmentResult),
         outputJson: enrichmentResult,
         error: synthesis.error,
@@ -508,6 +512,7 @@ export class EnrichmentService {
       options?.onAgentComplete?.({
         agentKey: ENRICHMENT_AGENT_KEY,
         inputPrompt: renderedPrompt,
+        systemPrompt: ENRICHMENT_GAP_ANALYSIS_SYSTEM_PROMPT,
         error: message,
         usedFallback: false,
       });
@@ -1063,6 +1068,7 @@ export class EnrichmentService {
         if (structuredError?.success) {
           return {
             prompt,
+            systemPrompt: ENRICHMENT_GAP_ANALYSIS_SYSTEM_PROMPT,
             output: {
               ...structuredError.data,
               dbFieldsUpdated: [],
@@ -1094,6 +1100,7 @@ export class EnrichmentService {
         if (textError?.success) {
           return {
             prompt,
+            systemPrompt: ENRICHMENT_GAP_ANALYSIS_SYSTEM_PROMPT,
             output: {
               ...textError.data,
               dbFieldsUpdated: [],
@@ -1136,6 +1143,7 @@ export class EnrichmentService {
     this.logger.error(`[Enrichment] AI synthesis failed: ${lastError}`);
     return {
       prompt,
+      systemPrompt: ENRICHMENT_GAP_ANALYSIS_SYSTEM_PROMPT,
       output: this.buildEmptyResult(),
       usedFallback: true,
       usedTextFallback: false,

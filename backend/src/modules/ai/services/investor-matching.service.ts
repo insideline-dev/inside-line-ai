@@ -256,8 +256,7 @@ export class InvestorMatchingService {
           investorThesisSummary: candidate.thesisSummary ?? "Not available",
           investorThesis:
             candidate.thesisNarrative ?? candidate.notes ?? "Not available",
-          startupSummary: input.synthesis.executiveSummary,
-          recommendation: input.synthesis.recommendation,
+          startupSummary: input.synthesis.dealSnapshot,
           overallScore: input.synthesis.overallScore,
           startupProfile: JSON.stringify(input.synthesis),
         }),

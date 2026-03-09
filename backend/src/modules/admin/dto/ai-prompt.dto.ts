@@ -15,7 +15,7 @@ const PromptSearchModeSchema = z.enum([
   "brave_tool_search",
   "provider_and_brave_search",
 ]);
-const ModelConfigSourceSchema = z.enum(["default", "published", "revision_override"]);
+const ModelConfigSourceSchema = z.enum(["default", "published", "revision_override", "override"]);
 const FlowPortTypeSchema = z.enum(["text", "object", "array", "number"]);
 const ContextFieldTypeSchema = z.enum([
   "string",
@@ -254,7 +254,9 @@ const AiFlowNodeSchema = z.object({
       modelName: z.string(),
       provider: z.string(),
       searchMode: PromptSearchModeSchema,
+      supportedSearchModes: z.array(PromptSearchModeSchema),
       source: ModelConfigSourceSchema,
+      purpose: z.string(),
     })
     .optional(),
   promptKeys: z.array(PromptKeySchema),

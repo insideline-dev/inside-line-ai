@@ -4995,6 +4995,67 @@
         ]
       }
     },
+    "/admin/ai-model-overrides": {
+      "get": {
+        "operationId": "AdminController_listAiModelOverrides",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "List all AI model overrides",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/ai-model-overrides/{purpose}": {
+      "put": {
+        "operationId": "AdminController_setAiModelOverride",
+        "parameters": [
+          {
+            "name": "purpose",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Set AI model override for a purpose",
+        "tags": [
+          "Admin"
+        ]
+      },
+      "delete": {
+        "operationId": "AdminController_removeAiModelOverride",
+        "parameters": [
+          {
+            "name": "purpose",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Remove AI model override (revert to default)",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
     "/admin/agents": {
       "get": {
         "operationId": "AdminController_getAgents",
@@ -7891,6 +7952,10 @@
                       "type": "string",
                       "nullable": true
                     },
+                    "systemPrompt": {
+                      "type": "string",
+                      "nullable": true
+                    },
                     "inputJson": {},
                     "outputText": {
                       "type": "string",
@@ -9759,20 +9824,38 @@
                               "provider_and_brave_search"
                             ]
                           },
+                          "supportedSearchModes": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "off",
+                                "provider_grounded_search",
+                                "brave_tool_search",
+                                "provider_and_brave_search"
+                              ]
+                            }
+                          },
                           "source": {
                             "type": "string",
                             "enum": [
                               "default",
                               "published",
-                              "revision_override"
+                              "revision_override",
+                              "override"
                             ]
+                          },
+                          "purpose": {
+                            "type": "string"
                           }
                         },
                         "required": [
                           "modelName",
                           "provider",
                           "searchMode",
-                          "source"
+                          "supportedSearchModes",
+                          "source",
+                          "purpose"
                         ]
                       },
                       "promptKeys": {

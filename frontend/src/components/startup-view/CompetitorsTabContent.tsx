@@ -164,7 +164,7 @@ export function CompetitorsTabContent({
           differentiationStrength: getDifferentiationStrength(
             evaluation.competitiveAdvantageScore,
           ),
-          positioningRecommendation: toStringArray(evaluation.recommendations)[0],
+          positioningRecommendation: toStringArray(evaluation.keyStrengths)[0],
           currentGap: competitiveCurrentGap,
           vulnerabilities: competitiveVulnerabilities,
           defensibleAgainstFunded,

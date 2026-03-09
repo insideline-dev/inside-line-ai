@@ -28,6 +28,7 @@ import {
   RotateCcw,
   Loader2,
 } from "lucide-react";
+import { BulkModelApplyDialog } from "@/components/pipeline/BulkModelApply";
 import type { AiPromptFlowResponseDtoFlowsItem } from "@/api/generated/model";
 import { useUndoRedo } from "@/components/pipeline/hooks/use-undo-redo";
 import type { FlowEdgeDefinition } from "@/components/pipeline/flow-edges";
@@ -545,6 +546,7 @@ function AdminFlowPage() {
             Reset
           </Button>
 
+          <BulkModelApplyDialog />
         </div>
       </div>
 

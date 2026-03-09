@@ -46,6 +46,8 @@ import {
 } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
+import { Separator } from "@/components/ui/separator";
+import { BulkModelApplyDialog } from "@/components/pipeline/BulkModelApply";
 import {
   Bot,
   Clock,
@@ -435,12 +437,12 @@ function AdminAgentsPage() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [selectedPromptKey, setSelectedPromptKey] = useState<PromptKey | null>(null);
-  const [editorStage, setEditorStage] = useState<"global" | StageOption>("global");
+  const [editorStage, setEditorStage] = useState<StageOption>("seed");
   const [systemPrompt, setSystemPrompt] = useState("");
   const [userPrompt, setUserPrompt] = useState("");
   const [notes, setNotes] = useState("");
   const [activeEditorTab, setActiveEditorTab] = useState("prompts");
-  const [revisionStageFilter, setRevisionStageFilter] = useState<"all" | "global" | StageOption>("all");
+  const [revisionStageFilter, setRevisionStageFilter] = useState<"all" | StageOption>("all");
   const [previewStartupId, setPreviewStartupId] = useState("");
   const [previewStage, setPreviewStage] = useState<"auto" | StageOption>("auto");
   const [previewResult, setPreviewResult] = useState<AiPromptPreviewResponseDto | null>(null);
@@ -572,14 +574,13 @@ function AdminAgentsPage() {
   const revisions = revisionsPayload?.revisions ?? [];
   const filteredRevisions = useMemo(() => {
     if (revisionStageFilter === "all") return revisions;
-    const filterValue = revisionStageFilter === "global" ? null : revisionStageFilter;
-    return revisions.filter((r) => r.stage === filterValue);
+    return revisions.filter((r) => r.stage === revisionStageFilter);
   }, [revisions, revisionStageFilter]);
   const selectedDefinition = currentPromptKey
     ? definitionsByKey.get(currentPromptKey) ?? null
     : null;
 
-  const stageValue: StageOption | null = editorStage === "global" ? null : editorStage;
+  const stageValue: StageOption = editorStage;
   const activeDraft = useMemo(
     () =>
       revisions.find(
@@ -665,7 +666,7 @@ function AdminAgentsPage() {
     setSystemPrompt(revision.systemPrompt);
     setUserPrompt(revision.userPrompt);
     setNotes(revision.notes ?? "");
-    setEditorStage(revision.stage ?? "global");
+    setEditorStage(revision.stage ?? "seed");
     setActiveEditorTab("prompts");
     toast.success(`Loaded v${revision.version} (${formatStage(revision.stage)}) into editor`);
   };
@@ -804,6 +805,8 @@ function AdminAgentsPage() {
                 <p className="text-sm text-muted-foreground">No flow metadata found.</p>
               ) : (
                 <div className="space-y-4 py-2">
+                  <BulkModelApplyDialog />
+                  <Separator />
                   {activeFlow.stages.map((stage, index) => {
                     const stageNodes = stage.nodeIds
                       .map((nodeId) => nodeById.get(nodeId))
@@ -933,13 +936,12 @@ function AdminAgentsPage() {
                               <Label>Startup Stage</Label>
                               <Select
                                 value={editorStage}
-                                onValueChange={(value) => setEditorStage(value as "global" | StageOption)}
+                                onValueChange={(value) => setEditorStage(value as StageOption)}
                               >
                                 <SelectTrigger>
                                   <SelectValue placeholder="Select stage" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="global">Global</SelectItem>
                                   {STAGES.map((stage) => (
                                     <SelectItem key={stage} value={stage}>
                                       {formatStage(stage)}
@@ -1177,7 +1179,6 @@ function AdminAgentsPage() {
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="all">All Stages</SelectItem>
-                                <SelectItem value="global">Global</SelectItem>
                                 {STAGES.map((stage) => (
                                   <SelectItem key={stage} value={stage}>
                                     {formatStage(stage)}

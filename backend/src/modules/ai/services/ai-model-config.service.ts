@@ -9,10 +9,11 @@ import {
   type AiRuntimeSearchMode,
 } from "./ai-runtime-config.schema";
 import { AiConfigService } from "./ai-config.service";
+import { AiModelOverrideService } from "./ai-model-override.service";
 import type { ModelPurpose } from "../interfaces/pipeline.interface";
 
 export interface ResolvedModelConfig {
-  source: "default";
+  source: "default" | "override";
   revisionId: null;
   stage: StartupStage | null;
   purpose: ModelPurpose;
@@ -26,7 +27,10 @@ export interface ResolvedModelConfig {
 export class AiModelConfigService {
   private readonly logger = new Logger(AiModelConfigService.name);
 
-  constructor(private aiConfig: AiConfigService) {}
+  constructor(
+    private aiConfig: AiConfigService,
+    private overrideService: AiModelOverrideService,
+  ) {}
 
   async resolveConfig(params: {
     key: AiPromptKey;
@@ -34,6 +38,18 @@ export class AiModelConfigService {
   }): Promise<ResolvedModelConfig> {
     const normalizedStage = this.normalizeStage(params.stage);
     const purpose = resolveModelPurposeForPromptKey(params.key);
+
+    const override = await this.overrideService.getByPurpose(purpose);
+    if (override) {
+      return this.buildOverrideResolvedConfig(
+        params.key,
+        normalizedStage,
+        purpose,
+        override.modelName,
+        override.searchMode,
+      );
+    }
+
     return this.buildDefaultResolvedConfig(params.key, normalizedStage, purpose);
   }
 
@@ -60,6 +76,37 @@ export class AiModelConfigService {
         : supportedSearchModes.includes("brave_tool_search")
           ? "brave_tool_search"
           : "off",
+      supportedSearchModes,
+    };
+  }
+
+  private buildOverrideResolvedConfig(
+    key: AiPromptKey,
+    stage: StartupStage | null,
+    purpose: ModelPurpose,
+    modelName: string,
+    searchModeOverride: string | null,
+  ): ResolvedModelConfig {
+    const provider = resolveProviderForModelName(modelName);
+    const supportedSearchModes = this.getSupportedSearchModes(key, provider, modelName);
+
+    const searchMode: AiRuntimeSearchMode =
+      searchModeOverride && supportedSearchModes.includes(searchModeOverride as AiRuntimeSearchMode)
+        ? searchModeOverride as AiRuntimeSearchMode
+        : supportedSearchModes.includes("provider_grounded_search")
+          ? "provider_grounded_search"
+          : supportedSearchModes.includes("brave_tool_search")
+            ? "brave_tool_search"
+            : "off";
+
+    return {
+      source: "override",
+      revisionId: null,
+      stage,
+      purpose,
+      modelName,
+      provider,
+      searchMode,
       supportedSearchModes,
     };
   }

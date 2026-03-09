@@ -79,6 +79,12 @@ describe("Evaluation agent context engineering", () => {
     expect(context).toHaveProperty("industry");
     expect(context).toHaveProperty("competitiveLandscape");
     expect(context).toHaveProperty("targetMarket");
+    expect(String((context as { researchReportText?: unknown }).researchReportText)).toContain(
+      "Market Research Report",
+    );
+    expect(String((context as { researchReportText?: unknown }).researchReportText)).not.toContain(
+      "Team Research Report",
+    );
   });
 
   it("retains product-specific context fields", () => {
@@ -128,6 +134,21 @@ describe("Evaluation agent context engineering", () => {
     for (const agent of agents) {
       expect(() => agent.buildContext(sparsePipelineData)).not.toThrow();
     }
+  });
+
+  it("focuses traction context on traction-adjacent evidence", () => {
+    const context = new TractionEvaluationAgent(
+      providers,
+      aiConfig,
+      promptService,
+    ).buildContext(pipelineData);
+
+    expect(String((context as { researchReportText?: unknown }).researchReportText)).toContain(
+      "Deck Traction Claims",
+    );
+    expect(String((context as { researchReportText?: unknown }).researchReportText)).not.toContain(
+      "Competitor Research Report",
+    );
   });
 
   it("keeps legal and deal-terms context builders bound when passed as callbacks", () => {

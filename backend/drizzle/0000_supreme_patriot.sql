@@ -1,6 +1,3 @@
--- Current sql file was generated after introspecting the database
--- If you want to run this migration please uncomment this code before executing migrations
-/*
 CREATE TYPE "public"."admin_review_decision" AS ENUM('approved', 'rejected', 'needs_revision');--> statement-breakpoint
 CREATE TYPE "public"."agent_category" AS ENUM('orchestrator', 'analysis', 'synthesis');--> statement-breakpoint
 CREATE TYPE "public"."ai_flow_node_kind" AS ENUM('prompt', 'system');--> statement-breakpoint
@@ -1126,4 +1123,3 @@ CREATE INDEX "ai_agent_config_orchestrator_idx" ON "ai_agent_configs" USING btre
 CREATE UNIQUE INDEX "ai_agent_config_unique_agent_idx" ON "ai_agent_configs" USING btree ("flow_id" text_ops,"orchestrator_node_id" text_ops,"agent_key" text_ops);--> statement-breakpoint
 CREATE INDEX "pipeline_template_flow_status_idx" ON "pipeline_templates" USING btree ("flow_id" enum_ops,"status" text_ops);--> statement-breakpoint
 CREATE UNIQUE INDEX "pipeline_template_flow_version_unique" ON "pipeline_templates" USING btree ("flow_id" text_ops,"version" text_ops);
-*/

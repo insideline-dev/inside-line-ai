@@ -118,6 +118,7 @@ export abstract class BaseEvaluationAgent<TOutput>
     let composedSystemPrompt: string;
     let renderedPrompt: string;
     let execution: Awaited<ReturnType<NonNullable<typeof this.modelExecution>["resolveForPrompt"]>> | null = null;
+    let useTextOnlyStructuredMode = false;
 
     try {
       context = this.buildContext(pipelineData);
@@ -141,6 +142,9 @@ export abstract class BaseEvaluationAgent<TOutput>
             stage: pipelineData.extraction.stage,
           })
         : null;
+      useTextOnlyStructuredMode = this.shouldUseTextOnlyStructuredMode(
+        execution?.resolvedConfig.provider,
+      );
       const contextSections = this.formatContext(promptContext);
       const contextJson = JSON.stringify(promptContext);
       renderedPrompt = this.promptService.renderTemplate(
@@ -211,35 +215,67 @@ export abstract class BaseEvaluationAgent<TOutput>
         retryCount: Math.max(0, attempt - 1),
       });
       try {
-        const response = await this.withTimeout(
-          (abortSignal) =>
-            generateText({
-              model:
-                execution?.generateTextOptions.model ??
-                this.providers.resolveModelForPurpose(ModelPurpose.EVALUATION),
-              output: Output.object({ schema: this.schema }),
-              system: composedSystemPrompt,
-              prompt: renderedPrompt,
-              temperature: this.aiConfig.getEvaluationTemperature(),
-              maxOutputTokens: this.aiConfig.getEvaluationMaxOutputTokens(),
-              tools: execution?.generateTextOptions.tools,
-              toolChoice: execution?.generateTextOptions.toolChoice,
-              providerOptions: execution?.generateTextOptions.providerOptions,
-              abortSignal,
-            }),
-          attemptTimeoutMs,
-          `${this.key} evaluation timed out`,
-        );
+        let normalizedOutput: TOutput;
+        let responseOutputText: string;
 
-        const normalizedOutput = this.normalizeNarrativeFields(
-          this.schema.parse(response.output),
-        );
+        if (useTextOnlyStructuredMode) {
+          const recovered = await this.tryRecoverFromTextOutput({
+            systemPrompt: composedSystemPrompt,
+            renderedPrompt,
+            timeoutMs: attemptTimeoutMs,
+            model:
+              execution?.generateTextOptions.model ??
+              this.providers.resolveModelForPurpose(ModelPurpose.EVALUATION),
+            tools: execution?.generateTextOptions.tools,
+            toolChoice: execution?.generateTextOptions.toolChoice,
+            providerOptions: execution?.generateTextOptions.providerOptions,
+          });
+          if (!recovered.success) {
+            const recoveryError = new Error(recovered.error) as Error & {
+              text?: string;
+            };
+            if (
+              typeof recovered.outputText === "string" &&
+              recovered.outputText.trim().length > 0
+            ) {
+              recoveryError.text = recovered.outputText;
+            }
+            throw recoveryError;
+          }
+          normalizedOutput = this.normalizeNarrativeFields(recovered.output);
+          responseOutputText = recovered.outputText;
+        } else {
+          const response = await this.withTimeout(
+            (abortSignal) =>
+              generateText({
+                model:
+                  execution?.generateTextOptions.model ??
+                  this.providers.resolveModelForPurpose(ModelPurpose.EVALUATION),
+                output: Output.object({ schema: this.schema }),
+                system: composedSystemPrompt,
+                prompt: renderedPrompt,
+                temperature: this.aiConfig.getEvaluationTemperature(),
+                maxOutputTokens: this.aiConfig.getEvaluationMaxOutputTokens(),
+                tools: execution?.generateTextOptions.tools,
+                toolChoice: execution?.generateTextOptions.toolChoice,
+                providerOptions: execution?.generateTextOptions.providerOptions,
+                abortSignal,
+              }),
+            attemptTimeoutMs,
+            `${this.key} evaluation timed out`,
+          );
+
+          normalizedOutput = this.normalizeNarrativeFields(
+            this.schema.parse(response.output),
+          );
+          responseOutputText = this.resolveRawOutputText(response, normalizedOutput);
+        }
 
         this.emitTraceEvent(options, {
           agent: this.key,
           status: "completed",
           inputPrompt: renderedPrompt,
-          outputText: this.resolveRawOutputText(response, normalizedOutput),
+          outputText: responseOutputText,
           outputJson: normalizedOutput,
           attempt,
           retryCount: Math.max(0, attempt - 1),
@@ -260,7 +296,7 @@ export abstract class BaseEvaluationAgent<TOutput>
       } catch (error) {
         let message = error instanceof Error ? error.message : String(error);
         let capturedOutputText = this.extractRawOutputFromError(error);
-        if (this.shouldAttemptTextRecovery(message)) {
+        if (!useTextOnlyStructuredMode && this.shouldAttemptTextRecovery(message)) {
           const recovered = await this.tryRecoverFromTextOutput({
             systemPrompt: composedSystemPrompt,
             renderedPrompt,
@@ -529,7 +565,7 @@ export abstract class BaseEvaluationAgent<TOutput>
           generateText({
             model: input.model,
             system: input.systemPrompt,
-            prompt: input.renderedPrompt,
+            prompt: this.buildJsonObjectPrompt(input.renderedPrompt),
             temperature: this.aiConfig.getEvaluationTemperature(),
             maxOutputTokens: this.aiConfig.getEvaluationMaxOutputTokens(),
             tools: input.tools,
@@ -716,6 +752,22 @@ export abstract class BaseEvaluationAgent<TOutput>
     return candidates;
   }
 
+  private buildJsonObjectPrompt(renderedPrompt: string): string {
+    const jsonSchema = this.safeStringify(z.toJSONSchema(this.schema));
+    return [
+      renderedPrompt,
+      "",
+      "JSON OUTPUT CONTRACT:",
+      "- Return ONLY one valid JSON object.",
+      "- Do not use markdown fences.",
+      "- Do not include commentary before or after the JSON.",
+      "- Every required field in the schema must be present.",
+      "",
+      "JSON Schema reference:",
+      jsonSchema,
+    ].join("\n");
+  }
+
   private normalizeNarrativeFields(output: TOutput): TOutput {
     if (!this.isBaseEvaluationLike(output)) {
       return output;
@@ -896,6 +948,14 @@ export abstract class BaseEvaluationAgent<TOutput>
     }
     const normalized = message.toLowerCase();
     if (
+      normalized.includes("schema validation failed") ||
+      normalized.includes("parseable json") ||
+      normalized.includes("invalid json") ||
+      normalized.includes("did not contain parseable json")
+    ) {
+      return "SCHEMA_OUTPUT_INVALID";
+    }
+    if (
       normalized.includes("timed out") ||
       normalized.includes("timeout")
     ) {
@@ -914,6 +974,10 @@ export abstract class BaseEvaluationAgent<TOutput>
       reason === "TIMEOUT" ||
       reason === "MODEL_OR_PROVIDER_ERROR"
     );
+  }
+
+  private shouldUseTextOnlyStructuredMode(provider: string | undefined): boolean {
+    return provider === "openai";
   }
 
   private normalizeFallbackError(

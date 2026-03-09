@@ -136,8 +136,8 @@ describe("BaseEvaluationAgent", () => {
           revisionId: "rev-1",
           stage: "seed",
           purpose: "evaluation",
-          modelName: "gpt-5.2",
-          provider: "openai",
+          modelName: "gemini-3-flash-preview",
+          provider: "google",
           searchMode: "off",
           supportedSearchModes: ["off"],
         },
@@ -219,6 +219,44 @@ describe("BaseEvaluationAgent", () => {
       output: { score: 82, verdict: "Strong profile" },
       usedFallback: false,
     });
+  });
+
+  it("uses text-only JSON parsing for OpenAI-backed evaluation models", async () => {
+    modelExecution.resolveForPrompt.mockResolvedValueOnce({
+      resolvedConfig: {
+        source: "published",
+        revisionId: "rev-openai",
+        stage: "seed",
+        purpose: "evaluation",
+        modelName: "gpt-5.2",
+        provider: "openai",
+        searchMode: "off",
+        supportedSearchModes: ["off"],
+      },
+      generateTextOptions: {
+        model: modelInstance,
+        tools: undefined,
+        toolChoice: undefined,
+        providerOptions: undefined,
+      },
+    });
+    generateTextMock.mockResolvedValueOnce({
+      text: JSON.stringify({
+        score: 84,
+        verdict: "Text-mode success",
+      }),
+    });
+
+    const result = await agent.run(pipelineData);
+
+    expect(result).toEqual({
+      key: "team",
+      output: { score: 84, verdict: "Text-mode success" },
+      usedFallback: false,
+    });
+    const call = generateTextMock.mock.calls[0]?.[0];
+    expect(call?.output).toBeUndefined();
+    expect(String(call?.prompt ?? "")).toContain("JSON OUTPUT CONTRACT");
   });
 
   it("prepends Startup Snapshot baseline before agent-specific sections", async () => {

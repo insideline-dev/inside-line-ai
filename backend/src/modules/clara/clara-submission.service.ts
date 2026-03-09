@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { and, desc, eq, ilike, sql } from "drizzle-orm";
+import { and, desc, eq, ilike } from "drizzle-orm";
 import { DrizzleService } from "../../database";
 import { StorageService } from "../../storage";
 import { AssetService } from "../../storage/asset.service";
@@ -19,8 +19,6 @@ import type { AttachmentMeta, MessageContext, SubmissionResult } from "./interfa
 const PDF_MAGIC_BYTES = Buffer.from("%PDF-");
 const MAX_RETRIES = 3;
 const RETRY_DELAYS = [1000, 2000, 4000];
-const FUZZY_THRESHOLD = 0.4;
-
 interface PipelineStartResult {
   started: boolean;
   missingFields: Array<"website" | "stage">;
@@ -81,9 +79,9 @@ export class ClaraSubmissionService {
 
     const hasPitchDeckAttachment = Boolean(deckAttachment);
 
-    if (processedAttachments.length > 0 && !hasPitchDeckAttachment) {
+    if (!hasPitchDeckAttachment) {
       this.logger.warn(
-        `[ClaraSubmission] No pitch deck identified among ${processedAttachments.length} attachment(s) from ${ctx.fromEmail} — blocking submission`,
+        `[ClaraSubmission] No pitch deck identified for email from ${ctx.fromEmail} — blocking submission`,
       );
       return { noPitchDeck: true, startupId: "", startupName: "", isDuplicate: false, status: "" };
     }
@@ -106,7 +104,7 @@ export class ClaraSubmissionService {
     const shouldAttemptDuplicateMatch =
       this.isReliableCompanyNameForDuplicateMatching(companyName);
     const duplicate = shouldAttemptDuplicateMatch
-      ? await this.findFuzzyDuplicate(companyName, ownerUserId)
+      ? await this.findExactDuplicate(companyName, ownerUserId)
       : null;
     if (!shouldAttemptDuplicateMatch) {
       this.logger.debug(
@@ -114,21 +112,18 @@ export class ClaraSubmissionService {
       );
     }
     if (duplicate) {
-      const enrichmentResult = await this.enrichExistingStartup(
-        duplicate.id,
-        ownerUserId,
-        processedAttachments,
-        ctx.bodyText,
-      );
       const duplicateSnapshot = await this.loadStartupIdentitySnapshot(duplicate.id);
+      const duplicateName = duplicateSnapshot?.name ?? duplicate.name;
+      const duplicateStatus = duplicateSnapshot?.status ?? duplicate.status;
+      this.logger.warn(
+        `[ClaraSubmission] Duplicate startup detected for "${companyName}" -> ${duplicate.id} (${duplicateName}, status=${duplicateStatus})`,
+      );
       return {
         startupId: duplicate.id,
-        startupName: duplicateSnapshot?.name ?? duplicate.name,
+        startupName: duplicateName,
         isDuplicate: true,
-        isEnriched: enrichmentResult.enriched,
-        status: duplicateSnapshot?.status ?? duplicate.status,
-        pipelineStarted: enrichmentResult.pipelineStarted,
-        missingFields: enrichmentResult.missingFields,
+        duplicateBlocked: true,
+        status: duplicateStatus,
       };
     }
 
@@ -473,78 +468,40 @@ export class ClaraSubmissionService {
       .where(eq(startup.id, startupId));
   }
 
-  private async findFuzzyDuplicate(
+  private async findExactDuplicate(
     companyName: string,
     ownerUserId: string,
   ): Promise<{ id: string; name: string; status: string } | null> {
-    try {
-      const [match] = await this.drizzle.db
-        .select({
-          id: startup.id,
-          name: startup.name,
-          status: startup.status,
-        })
-        .from(startup)
-        .where(
-          and(
-            eq(startup.userId, ownerUserId),
-            sql`similarity(${startup.name}, CAST(${companyName} AS text)) > ${FUZZY_THRESHOLD}`,
-          ),
-        )
-        .orderBy(desc(sql`similarity(${startup.name}, CAST(${companyName} AS text))`))
-        .limit(1);
-      return match ?? null;
-    } catch (error) {
-      if (!this.isSimilarityUnavailable(error)) {
-        throw error;
-      }
-
-      this.logger.warn(
-        "pg_trgm similarity() unavailable; falling back to ILIKE duplicate detection",
-      );
-
-      const normalized = companyName.trim();
-      const escaped = `%${this.escapeForILike(normalized)}%`;
-      const [fallbackMatch] = await this.drizzle.db
-        .select({
-          id: startup.id,
-          name: startup.name,
-          status: startup.status,
-        })
-        .from(startup)
-        .where(
-          and(
-            eq(startup.userId, ownerUserId),
-            ilike(startup.name, escaped),
-          ),
-        )
-        .orderBy(desc(startup.createdAt))
-        .limit(1);
-
-      return fallbackMatch ?? null;
+    const normalizedCompanyName =
+      this.normalizeCompanyNameForDuplicateMatching(companyName);
+    if (!normalizedCompanyName) {
+      return null;
     }
-  }
 
-  private isSimilarityUnavailable(error: unknown): boolean {
-    if (!error || typeof error !== "object") return false;
-
-    const record = error as {
-      message?: unknown;
-      cause?: { code?: unknown };
-      code?: unknown;
-    };
-
-    const message = typeof record.message === "string" ? record.message : "";
-    const code =
-      typeof record.code === "string"
-        ? record.code
-        : record.cause && typeof record.cause.code === "string"
-          ? record.cause.code
-          : "";
+    const primaryToken = normalizedCompanyName.split(" ")[0];
+    const escapedPrimaryToken = `%${this.escapeForILike(primaryToken)}%`;
+    const candidates = await this.drizzle.db
+      .select({
+        id: startup.id,
+        name: startup.name,
+        status: startup.status,
+      })
+      .from(startup)
+      .where(
+        and(
+          eq(startup.userId, ownerUserId),
+          ilike(startup.name, escapedPrimaryToken),
+        ),
+      )
+      .orderBy(desc(startup.createdAt))
+      .limit(250);
 
     return (
-      (code === "42883" && /similarity\(/i.test(message)) ||
-      (/function similarity\(/i.test(message) && /does not exist/i.test(message))
+      candidates.find(
+        (candidate) =>
+          this.normalizeCompanyNameForDuplicateMatching(candidate.name) ===
+          normalizedCompanyName,
+      ) ?? null
     );
   }
 
@@ -745,6 +702,7 @@ export class ClaraSubmissionService {
       })
       .where(eq(startup.id, startupId));
 
+    await this.pipeline.prepareFreshAnalysis(startupId);
     await this.normalizeLegacyPlaceholderDefaults(startupId);
     await this.runPrePipelineExtraction(startupId);
     const pipelineStart = await this.startPipelineIfReady(startupId, ownerUserId, {
@@ -1202,6 +1160,30 @@ export class ClaraSubmissionService {
     }
 
     return strippedContext;
+  }
+
+  private normalizeCompanyNameForDuplicateMatching(
+    value: string | null | undefined,
+  ): string | null {
+    const candidate =
+      this.toTrustedCompanyNameCandidate(value) ??
+      this.normalizeCompanyNameCandidate(value);
+    if (!candidate) {
+      return null;
+    }
+
+    const normalized = candidate
+      .toLowerCase()
+      .replace(/&/g, " and ")
+      .replace(
+        /\b(incorporated|inc|llc|ltd|limited|corp|corporation|co|company|plc|gmbh|sarl|sa|sas)\b/g,
+        " ",
+      )
+      .replace(/[^a-z0-9]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    return normalized || null;
   }
 
   private toTrustedCompanyNameCandidate(

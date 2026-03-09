@@ -368,56 +368,81 @@ export class ClaraService {
           ].join("\n");
         } else {
         this.logger.log(
-          `[Clara] Submission handling for thread ${threadId} -> startup=${result.startupId} duplicate=${result.isDuplicate} enriched=${Boolean(result.isEnriched)} pipelineStarted=${Boolean(result.pipelineStarted)} missing=${(result.missingFields ?? []).join(",") || "none"}`,
+          `[Clara] Submission handling for thread ${threadId} -> startup=${result.startupId} duplicate=${result.isDuplicate} duplicateBlocked=${Boolean(result.duplicateBlocked)} enriched=${Boolean(result.isEnriched)} pipelineStarted=${Boolean(result.pipelineStarted)} missing=${(result.missingFields ?? []).join(",") || "none"}`,
         );
 
-        await this.conversationService.linkStartup(conversation.id, result.startupId);
-        finalStartupId = result.startupId;
-
-        const extra = {
-          startupName: result.startupName,
-          startupStatus: result.status,
-          startupStage: startupContext.startupStage ?? "seed",
-        };
-        finalStartupExtra = {
-          ...startupContext,
-          ...extra,
-        };
-
         if (result.isDuplicate) {
-          if (
-            result.pipelineStarted === false &&
-            (result.missingFields?.length ?? 0) > 0
-          ) {
-            const missingLabels = this.formatMissingFieldLabels(
-              result.missingFields ?? [],
+          if (result.duplicateBlocked) {
+            await this.conversationService.updateStatus(
+              conversation.id,
+              ConversationStatus.ACTIVE,
             );
             replyText = [
-              `We already have ${result.startupName} in our system and I’ve updated it with the details you sent.`,
+              `We already have ${result.startupName} in our system.`,
               "",
-              "Before I can restart analysis, I still need:",
-              ...missingLabels.map((label) => `- ${label}`),
-              "",
-              "Please reply with the missing details and I’ll start the pipeline immediately.",
+              "Please delete the existing startup first, then resend the pitch deck to start a fresh pipeline run.",
             ].join("\n");
-            await this.conversationService.updateStatus(
-              conversation.id,
-              ConversationStatus.AWAITING_INFO,
-            );
-          } else if (result.pipelineStarted) {
-            await this.conversationService.updateStatus(
-              conversation.id,
-              ConversationStatus.PROCESSING,
-            );
-            replyText = result.isEnriched
-              ? `We already have ${result.startupName} in our system. I've updated it with the new information you sent and re-triggered the analysis. You'll receive an updated report when it's ready.`
-              : `We already have ${result.startupName} in our system (status: ${result.status}). I've linked this conversation to the existing record and started the analysis pipeline.`;
           } else {
-            replyText = result.isEnriched
-              ? `We already have ${result.startupName} in our system. I've updated it with the new information you sent and re-triggered the analysis. You'll receive an updated report when it's ready.`
-              : `We already have ${result.startupName} in our system (status: ${result.status}). I've linked this conversation to the existing record.`;
+            await this.conversationService.linkStartup(conversation.id, result.startupId);
+            finalStartupId = result.startupId;
+
+            const extra = {
+              startupName: result.startupName,
+              startupStatus: result.status,
+              startupStage: startupContext.startupStage ?? "seed",
+            };
+            finalStartupExtra = {
+              ...startupContext,
+              ...extra,
+            };
+
+            if (
+            result.pipelineStarted === false &&
+            (result.missingFields?.length ?? 0) > 0
+            ) {
+              const missingLabels = this.formatMissingFieldLabels(
+                result.missingFields ?? [],
+              );
+              replyText = [
+                `We already have ${result.startupName} in our system and I’ve updated it with the details you sent.`,
+                "",
+                "Before I can restart analysis, I still need:",
+                ...missingLabels.map((label) => `- ${label}`),
+                "",
+                "Please reply with the missing details and I’ll start the pipeline immediately.",
+              ].join("\n");
+              await this.conversationService.updateStatus(
+                conversation.id,
+                ConversationStatus.AWAITING_INFO,
+              );
+            } else if (result.pipelineStarted) {
+              await this.conversationService.updateStatus(
+                conversation.id,
+                ConversationStatus.PROCESSING,
+              );
+              replyText = result.isEnriched
+                ? `We already have ${result.startupName} in our system. I've updated it with the new information you sent and re-triggered the analysis. You'll receive an updated report when it's ready.`
+                : `We already have ${result.startupName} in our system (status: ${result.status}). I've linked this conversation to the existing record and started the analysis pipeline.`;
+            } else {
+              replyText = result.isEnriched
+                ? `We already have ${result.startupName} in our system. I've updated it with the new information you sent and re-triggered the analysis. You'll receive an updated report when it's ready.`
+                : `We already have ${result.startupName} in our system (status: ${result.status}). I've linked this conversation to the existing record.`;
+            }
           }
         } else {
+          await this.conversationService.linkStartup(conversation.id, result.startupId);
+          finalStartupId = result.startupId;
+
+          const extra = {
+            startupName: result.startupName,
+            startupStatus: result.status,
+            startupStage: startupContext.startupStage ?? "seed",
+          };
+          finalStartupExtra = {
+            ...startupContext,
+            ...extra,
+          };
+
           if (result.pipelineStarted === false) {
             const missingLabels = this.formatMissingFieldLabels(
               result.missingFields ?? [],
@@ -632,6 +657,10 @@ export class ClaraService {
   async notifyPipelineComplete(
     startupId: string,
     overallScore?: number,
+    options?: {
+      pipelineRunId?: string | null;
+      warningMessage?: string | null;
+    },
   ): Promise<void> {
     if (!this.claraInboxId) return;
 
@@ -650,6 +679,8 @@ export class ClaraService {
     const scoreText = overallScore
       ? ` with an overall score of ${overallScore.toFixed(1)}/100`
       : "";
+    const warningMessage = options?.warningMessage?.trim() ?? "";
+    const completedWithWarnings = warningMessage.length > 0;
 
     const pdfAttachments = await this.buildCompletionPdfAttachments(
       startupId,
@@ -665,10 +696,18 @@ export class ClaraService {
     const replyText = [
       `Hi ${conversation.investorName ?? "there"},`,
       "",
-      `Great news! The analysis for ${startupRecord.name} is complete${scoreText}.`,
+      completedWithWarnings
+        ? `The analysis for ${startupRecord.name} is complete${scoreText}, but it finished with warnings and should be reviewed carefully.`
+        : `Great news! The analysis for ${startupRecord.name} is complete${scoreText}.`,
       "",
       "Our AI has evaluated the startup across multiple dimensions including team, market opportunity, product, traction, financials, competitive advantage, and more.",
       "",
+      ...(completedWithWarnings
+        ? [
+            `Important: ${warningMessage}`,
+            "",
+          ]
+        : []),
       attachedDocsText,
       "You can also reply to this email to ask follow-up questions about the analysis.",
       "",
@@ -676,13 +715,12 @@ export class ClaraService {
       "Clara",
     ].join("\n");
 
-    await this.claraChannel.send({
-      channel: "email",
-      email: {
-        inboxId: this.claraInboxId,
-        to: [conversation.investorEmail],
-        subject: `Analysis Complete: ${startupRecord.name}`,
-      },
+    await this.sendConversationEmail({
+      conversation,
+      recipientEmail: conversation.investorEmail,
+      subject: completedWithWarnings
+        ? `Analysis Complete With Warnings: ${startupRecord.name}`
+        : `Analysis Complete: ${startupRecord.name}`,
       text: replyText,
       attachments: pdfAttachments.length > 0 ? pdfAttachments : undefined,
     });
@@ -693,10 +731,15 @@ export class ClaraService {
 
     await this.conversationService.logMessage({
       conversationId: conversation.id,
-      messageId: `pipeline-complete-${startupId}`,
+      messageId: this.buildPipelineCompletionMessageId(
+        startupId,
+        options?.pipelineRunId,
+      ),
       direction: MessageDirection.OUTBOUND,
       fromEmail: `clara@agentmail.to`,
-      subject: `Analysis Complete: ${startupRecord.name}`,
+      subject: completedWithWarnings
+        ? `Analysis Complete With Warnings: ${startupRecord.name}`
+        : `Analysis Complete: ${startupRecord.name}`,
       bodyText: replyText,
       attachments:
         pdfAttachments.length > 0
@@ -805,13 +848,10 @@ export class ClaraService {
       "Clara",
     ].join("\n");
 
-    await this.claraChannel.send({
-      channel: "email",
-      email: {
-        inboxId: this.claraInboxId,
-        to: [recipient.email],
-        subject: `Action Needed: Missing startup details for ${startupRecord.name}`,
-      },
+    await this.sendConversationEmail({
+      conversation,
+      recipientEmail: recipient.email,
+      subject: `Action Needed: Missing startup details for ${startupRecord.name}`,
       text: replyText,
     });
 
@@ -1243,6 +1283,9 @@ export class ClaraService {
       lastIntent: intent,
       lastIntentConfidence: intentClassification.confidence,
       lastIntentReasoning: intentClassification.reasoning,
+      lastInboundInboxId: ctx.inboxId,
+      lastInboundMessageId: ctx.messageId,
+      lastInboundThreadId: ctx.threadId,
       lastInboundSubject: ctx.subject,
       lastInboundPreview: bodyPreview,
       lastReplyPreview: replyPreview,
@@ -1257,5 +1300,100 @@ export class ClaraService {
       attachmentReplyHistory: attachmentReply,
       recentTopics,
     };
+  }
+
+  private async sendConversationEmail(params: {
+    conversation: {
+      context?: unknown;
+    } | null;
+    recipientEmail: string;
+    subject: string;
+    text: string;
+    attachments?: AgentMail.SendAttachment[];
+  }): Promise<void> {
+    const replyTarget = this.getConversationReplyTarget(params.conversation);
+    if (replyTarget) {
+      await this.claraChannel.reply({
+        channel: "email",
+        email: {
+          inboxId: replyTarget.inboxId,
+          inReplyToMessageId: replyTarget.messageId,
+        },
+        text: params.text,
+        attachments: params.attachments,
+      });
+      return;
+    }
+
+    const inboxId = this.getConversationInboxId(params.conversation);
+    if (!inboxId) {
+      throw new Error("Clara email send target is unavailable: no inbox ID found");
+    }
+
+    await this.claraChannel.send({
+      channel: "email",
+      email: {
+        inboxId,
+        to: [params.recipientEmail],
+        subject: params.subject,
+      },
+      text: params.text,
+      attachments: params.attachments,
+    });
+  }
+
+  private getConversationReplyTarget(
+    conversation: { context?: unknown } | null,
+  ): { inboxId: string; messageId: string } | null {
+    const context = this.coerceConversationContext(conversation?.context);
+    const inboxId = this.readConversationContextString(context, "lastInboundInboxId");
+    const messageId = this.readConversationContextString(context, "lastInboundMessageId");
+    if (!inboxId || !messageId) {
+      return null;
+    }
+    return { inboxId, messageId };
+  }
+
+  private getConversationInboxId(
+    conversation: { context?: unknown } | null,
+  ): string | null {
+    const context = this.coerceConversationContext(conversation?.context);
+    return (
+      this.readConversationContextString(context, "lastInboundInboxId") ??
+      this.claraInboxId
+    );
+  }
+
+  private coerceConversationContext(
+    value: unknown,
+  ): Record<string, unknown> | null {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return null;
+    }
+    return value as Record<string, unknown>;
+  }
+
+  private readConversationContextString(
+    context: Record<string, unknown> | null,
+    key: string,
+  ): string | null {
+    const value = context?.[key];
+    if (typeof value !== "string") {
+      return null;
+    }
+    const normalized = value.trim();
+    return normalized.length > 0 ? normalized : null;
+  }
+
+  private buildPipelineCompletionMessageId(
+    startupId: string,
+    pipelineRunId?: string | null,
+  ): string {
+    const normalizedRunId = pipelineRunId?.trim();
+    if (normalizedRunId) {
+      return `pipeline-complete-${startupId}-${normalizedRunId}`;
+    }
+
+    return `pipeline-complete-${startupId}-${Date.now()}`;
   }
 }

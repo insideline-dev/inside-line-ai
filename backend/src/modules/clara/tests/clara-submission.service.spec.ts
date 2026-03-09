@@ -117,6 +117,7 @@ describe("ClaraSubmissionService", () => {
       startPipeline: jest.fn().mockResolvedValue("run-1"),
       rerunFromPhase: jest.fn().mockResolvedValue(undefined),
       cancelPipeline: jest.fn().mockResolvedValue({ removedJobs: 0 }),
+      prepareFreshAnalysis: jest.fn().mockResolvedValue(undefined),
       prefillCriticalFieldsFromDeckExtraction: jest.fn().mockResolvedValue({
         extractionSource: "startup-context",
         updatedFields: [],
@@ -255,233 +256,67 @@ describe("ClaraSubmissionService", () => {
       startupId: "existing-startup",
       startupName: "Acme Corp",
       isDuplicate: true,
-      isEnriched: true,
+      duplicateBlocked: true,
       status: StartupStatus.SUBMITTED,
-      pipelineStarted: true,
-      missingFields: [],
     });
 
     expect(mockDb.insert).not.toHaveBeenCalled();
-    // startPipeline is called because the attachment was enriched (isEnriched: true)
-    expect(pipeline.startPipeline).toHaveBeenCalledWith(
-      "existing-startup",
-      "admin-1",
-      {
-        skipExtraction: true,
-      },
-    );
+    expect(mockDb.update).not.toHaveBeenCalled();
+    expect(pipeline.startPipeline).not.toHaveBeenCalled();
   });
 
-  it("restarts pipeline for duplicate startup when reply provides missing website and stage", async () => {
-    mockDb.limit
-      .mockResolvedValueOnce([
-        {
-          id: "existing-startup",
-          name: "Acme Corp",
-          status: StartupStatus.SUBMITTED,
-        },
-      ])
-      .mockResolvedValueOnce([
-        {
-          id: "existing-startup",
-          userId: "admin-1",
-          name: "Acme Corp",
-          website: "",
-          stage: "seed",
-          industry: "Unknown",
-          location: "Unknown",
-          fundingTarget: 0,
-          teamSize: 1,
-          status: StartupStatus.SUBMITTED,
-        },
-      ]);
-
-    const ctx = createMessageContext({
-      bodyText: "Company website is https://acme.com and current stage is Series A.",
-      attachments: [],
-    });
-
-    const result = await service.handleSubmission(ctx, "admin-1", "Acme Corp");
-
-    expect(result).toEqual({
-      startupId: "existing-startup",
-      startupName: "Acme Corp",
-      isDuplicate: true,
-      isEnriched: true,
-      status: StartupStatus.SUBMITTED,
-      pipelineStarted: true,
-      missingFields: [],
-    });
-
-    expect(mockDb.update).toHaveBeenCalled();
-    expect(mockDb.set).toHaveBeenCalledWith(
-      expect.objectContaining({
-        website: "https://acme.com/",
-        stage: "series_a",
-      }),
-    );
-    expect(pipeline.startPipeline).toHaveBeenCalledWith(
-      "existing-startup",
-      "admin-1",
+  it("does not treat fuzzy similar names as duplicates", async () => {
+    mockDb.limit.mockResolvedValueOnce([
       {
-        skipExtraction: true,
+        id: "existing-startup",
+        name: "Acme 2025",
+        status: StartupStatus.SUBMITTED,
       },
-    );
-  });
-
-  it("falls back when similarity() is unavailable and still detects duplicates", async () => {
-    mockDb.limit
-      .mockRejectedValueOnce({
-        message: "function similarity(text, unknown) does not exist",
-        cause: { code: "42883" },
-      })
-      .mockResolvedValueOnce([
-        {
-          id: "existing-startup",
-          name: "Acme Corp",
-          status: StartupStatus.SUBMITTED,
-        },
-      ]);
+    ]);
 
     const ctx = createMessageContext({
       attachments: [createAttachment()],
     });
 
-    const result = await service.handleSubmission(ctx, "admin-1", "Acme Corp");
+    const result = await service.handleSubmission(ctx, "admin-1", "Acme");
+
+    expect(result.isDuplicate).toBe(false);
+    expect(result.startupId).toBe("startup-1");
+    expect(mockDb.insert).toHaveBeenCalled();
+    expect(pipeline.startPipeline).toHaveBeenCalledWith(
+      "startup-1",
+      "admin-1",
+      {
+        skipExtraction: true,
+      },
+    );
+  });
+
+  it("matches duplicates when the only difference is a legal suffix", async () => {
+    mockDb.limit.mockResolvedValueOnce([
+      {
+        id: "existing-startup",
+        name: "Acme, Inc.",
+        status: StartupStatus.SUBMITTED,
+      },
+    ]);
+
+    const ctx = createMessageContext({
+      attachments: [createAttachment()],
+    });
+
+    const result = await service.handleSubmission(ctx, "admin-1", "Acme");
 
     expect(result).toEqual({
       startupId: "existing-startup",
-      startupName: "Acme Corp",
+      startupName: "Acme, Inc.",
       isDuplicate: true,
-      isEnriched: true,
+      duplicateBlocked: true,
       status: StartupStatus.SUBMITTED,
-      pipelineStarted: true,
-      missingFields: [],
     });
 
-    expect(mockDb.limit.mock.calls.length).toBeGreaterThanOrEqual(5);
     expect(mockDb.insert).not.toHaveBeenCalled();
-    expect(pipeline.startPipeline).toHaveBeenCalledWith(
-      "existing-startup",
-      "admin-1",
-      {
-        skipExtraction: true,
-      },
-    );
-  });
-
-  it("resets stale running lock and restarts pipeline for duplicate missing-info reply", async () => {
-    mockDb.limit
-      .mockResolvedValueOnce([
-        {
-          id: "existing-startup",
-          name: "Acme Corp",
-          status: StartupStatus.SUBMITTED,
-        },
-      ])
-      .mockResolvedValueOnce([
-        {
-          id: "existing-startup",
-          userId: "admin-1",
-          name: "Acme Corp",
-          website: "",
-          stage: "seed",
-          industry: "Unknown",
-          location: "Unknown",
-          fundingTarget: 0,
-          teamSize: 1,
-          status: StartupStatus.SUBMITTED,
-        },
-      ])
-      .mockResolvedValueOnce([
-        {
-          id: "existing-startup",
-          userId: "admin-1",
-          name: "Acme Corp",
-          website: "https://acme.com/",
-          stage: "series_a",
-          industry: "Unknown",
-          location: "Unknown",
-          fundingTarget: 0,
-          teamSize: 1,
-          status: StartupStatus.SUBMITTED,
-        },
-      ]);
-
-    pipeline.startPipeline
-      .mockRejectedValueOnce(
-        new Error("Pipeline already running for startup existing-startup"),
-      )
-      .mockResolvedValueOnce("run-2");
-
-    const ctx = createMessageContext({
-      bodyText: "Website is https://acme.com and stage is Series A.",
-      attachments: [],
-    });
-
-    const result = await service.handleSubmission(ctx, "admin-1", "Acme Corp");
-
-    expect(result.pipelineStarted).toBe(true);
-    expect(pipeline.cancelPipeline).toHaveBeenCalledWith("existing-startup", {
-      reason:
-        "Reset stale running lock before restart from Clara missing-info reply.",
-    });
-    expect(pipeline.startPipeline).toHaveBeenLastCalledWith(
-      "existing-startup",
-      "admin-1",
-      {
-        skipExtraction: true,
-      },
-    );
-  });
-
-  it("restarts pipeline for duplicate startup with complete critical fields even when no new updates are parsed", async () => {
-    mockDb.limit
-      .mockResolvedValueOnce([
-        {
-          id: "existing-startup",
-          name: "Acme Corp",
-          status: StartupStatus.SUBMITTED,
-        },
-      ])
-      .mockResolvedValueOnce([
-        {
-          id: "existing-startup",
-          userId: "admin-1",
-          name: "Acme Corp",
-          website: "https://acme.com/",
-          stage: "series_a",
-          industry: "Unknown",
-          location: "Unknown",
-          fundingTarget: 0,
-          teamSize: 1,
-          status: StartupStatus.SUBMITTED,
-        },
-      ]);
-
-    const ctx = createMessageContext({
-      bodyText: "Please proceed with analysis.",
-      attachments: [],
-    });
-
-    const result = await service.handleSubmission(ctx, "admin-1", "Acme Corp");
-
-    expect(result).toEqual({
-      startupId: "existing-startup",
-      startupName: "Acme Corp",
-      isDuplicate: true,
-      isEnriched: false,
-      status: StartupStatus.SUBMITTED,
-      pipelineStarted: true,
-      missingFields: [],
-    });
-    expect(pipeline.startPipeline).toHaveBeenCalledWith(
-      "existing-startup",
-      "admin-1",
-      {
-        skipExtraction: true,
-      },
-    );
+    expect(pipeline.startPipeline).not.toHaveBeenCalled();
   });
 
   it("restarts the same startup from enrichment when missing-info reply is complete", async () => {
@@ -640,7 +475,7 @@ describe("ClaraSubmissionService", () => {
   it("extracts company name from body text", async () => {
     const ctx = createMessageContext({
       bodyText: "Our company named: TechCorp Inc. is building AI solutions.",
-      attachments: [],
+      attachments: [createAttachment()],
     });
 
     mockDbChain.returning.mockResolvedValueOnce([
@@ -681,7 +516,7 @@ describe("ClaraSubmissionService", () => {
   it("uses provided extractedCompanyName over other sources", async () => {
     const ctx = createMessageContext({
       bodyText: "Company name: WrongCorp",
-      attachments: [],
+      attachments: [createAttachment()],
     });
 
     await service.handleSubmission(ctx, "admin-1", "Correct Company");
@@ -697,7 +532,7 @@ describe("ClaraSubmissionService", () => {
     const ctx = createMessageContext({
       bodyText:
         "Please review our pitch deck.\n\nBest,\nBrainfast Team\nhttps://brainfast.ai",
-      attachments: [],
+      attachments: [createAttachment()],
     });
 
     await service.handleSubmission(ctx, "admin-1", "Uber");
@@ -743,7 +578,7 @@ describe("ClaraSubmissionService", () => {
   it("defaults to Untitled Startup when no name is found", async () => {
     const ctx = createMessageContext({
       bodyText: "Here is some text without a company name.",
-      attachments: [],
+      attachments: [createAttachment()],
     });
 
     await service.handleSubmission(ctx, "admin-1");
@@ -758,7 +593,7 @@ describe("ClaraSubmissionService", () => {
   it("generates URL-safe slug with random suffix", async () => {
     const ctx = createMessageContext({
       bodyText: "No company here",
-      attachments: [],
+      attachments: [createAttachment()],
     });
 
     await service.handleSubmission(ctx, "admin-1", "Test & Co., Inc.");
@@ -879,25 +714,23 @@ describe("ClaraSubmissionService", () => {
     );
   });
 
-  it("creates startup without pitch deck when no attachment is uploaded", async () => {
+  it("blocks submission when no pitch deck is uploaded", async () => {
     const ctx = createMessageContext({
       attachments: [],
     });
 
-    await service.handleSubmission(ctx, "admin-1");
+    const result = await service.handleSubmission(ctx, "admin-1");
 
-    expect(mockDb.values).toHaveBeenCalledWith(
-      expect.objectContaining({
-        pitchDeckPath: undefined,
-      }),
-    );
+    expect(result.noPitchDeck).toBe(true);
+    expect(mockDb.values).not.toHaveBeenCalled();
+    expect(pipeline.startPipeline).not.toHaveBeenCalled();
   });
 
   it("uses contact info from message context", async () => {
     const ctx = createMessageContext({
       fromEmail: "ceo@example.com",
       fromName: "Jane CEO",
-      attachments: [],
+      attachments: [createAttachment()],
     });
 
     await service.handleSubmission(ctx, "admin-1");
@@ -914,7 +747,7 @@ describe("ClaraSubmissionService", () => {
   it("handles missing fromName gracefully", async () => {
     const ctx = createMessageContext({
       fromName: null,
-      attachments: [],
+      attachments: [createAttachment()],
     });
 
     await service.handleSubmission(ctx, "admin-1");
@@ -931,7 +764,7 @@ describe("ClaraSubmissionService", () => {
     const longText = "a".repeat(6000);
     const ctx = createMessageContext({
       bodyText: longText,
-      attachments: [],
+      attachments: [createAttachment()],
     });
 
     await service.handleSubmission(ctx, "admin-1");

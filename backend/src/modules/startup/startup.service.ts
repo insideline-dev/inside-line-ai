@@ -629,8 +629,22 @@ export class StartupService {
 
     let jobId: string;
     if (this.aiConfig.isPipelineEnabled()) {
+      await this.aiPipeline.prepareFreshAnalysis(id);
       jobId = await this.aiPipeline.startPipeline(id, adminId);
     } else {
+      await this.drizzle.db.transaction(async (tx) => {
+        await tx
+          .delete(startupEvaluation)
+          .where(eq(startupEvaluation.startupId, id));
+        await tx
+          .update(startup)
+          .set({
+            overallScore: null,
+            percentileRank: null,
+            updatedAt: new Date(),
+          })
+          .where(eq(startup.id, id));
+      });
       jobId = await this.queue.addJob(
         QUEUE_NAMES.TASK,
         {
@@ -1608,13 +1622,9 @@ export class StartupService {
       trackedProgress.status === PipelineStatus.RUNNING &&
       !pipelineState;
 
-    const orphanProgressWarning = orphanTrackedProgress
-      ? "Live pipeline runtime state missing; showing last tracked progress snapshot."
-      : undefined;
-
     if (orphanTrackedProgress) {
       this.logger.warn(
-        `[Progress] Exposing orphan tracked progress for startup ${startupId}: startup is analyzing but live pipeline state is missing`,
+        `[Progress] Orphan pipeline detected for ${startupId}: startup is analyzing but live state is missing`,
       );
     }
 
@@ -1624,8 +1634,9 @@ export class StartupService {
         ? await this.loadAgentTraces(startupId, trackedProgress.pipelineRunId)
         : [];
 
-      // For orphaned progress, treat as failed so frontend stops polling
-      const effectiveStatus = orphanTrackedProgress ? "failed" : trackedProgress.status;
+      const effectiveStatus = orphanTrackedProgress
+        ? "failed"
+        : trackedProgress.status;
 
       response.progress = {
         overallProgress: this.normalizePercent(trackedProgress.overallProgress),
@@ -1636,7 +1647,9 @@ export class StartupService {
         updatedAt: trackedProgress.updatedAt,
         error:
           trackedProgress.error ??
-          orphanProgressWarning ??
+          (orphanTrackedProgress
+            ? "Live pipeline state is missing; rerun or retry from the admin tools."
+            : undefined) ??
           (effectiveStatus === "failed"
             ? "Pipeline failed"
             : undefined),

@@ -112,8 +112,50 @@ describe("LinkedinEnrichmentService", () => {
     expect(result[0]?.confidenceReason).toContain("currently employed");
   });
 
+  it("accepts abbreviated last-name search hits when company association is strong", async () => {
+    unipile.searchProfiles.mockResolvedValueOnce([
+      {
+        id: "joe-g-1",
+        firstName: "Joe",
+        lastName: "G",
+        headline: "Co-founder at Airbnb",
+        location: "San Francisco",
+        profileUrl: "https://linkedin.com/in/joe-g",
+        profileImageUrl: null,
+        summary: null,
+        currentCompany: null,
+        experience: [],
+        education: [],
+      },
+    ]);
+    unipile.getProfile.mockResolvedValueOnce({
+      id: "joe-g-1",
+      firstName: "Joe",
+      lastName: "G",
+      headline: "Co-founder at Airbnb",
+      location: "San Francisco",
+      profileUrl: "https://linkedin.com/in/joe-g",
+      profileImageUrl: null,
+      summary: null,
+      currentCompany: { name: "Airbnb", title: "Co-founder" },
+      experience: [],
+      education: [],
+    });
+
+    const result = await service.enrichTeamMembers(
+      "user-1",
+      [{ name: "Joe Gebbia", role: "Founder" }],
+      { companyName: "Airbnb" },
+    );
+
+    expect(unipile.searchProfiles).toHaveBeenCalledWith("Joe Gebbia", "Airbnb");
+    expect(result[0]?.enrichmentStatus).toBe("success");
+    expect(result[0]?.linkedinUrl).toBe("https://linkedin.com/in/joe-g");
+  });
+
   it("falls back to global profile search when company-scoped search has no hits", async () => {
     unipile.searchProfiles
+      .mockResolvedValueOnce([])
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([
         {
@@ -166,7 +208,8 @@ describe("LinkedinEnrichmentService", () => {
     );
 
     expect(unipile.searchProfiles).toHaveBeenNthCalledWith(1, "Travis Kalanick", "Uber");
-    expect(unipile.searchProfiles).toHaveBeenNthCalledWith(2, "Travis Kalanick");
+    expect(unipile.searchProfiles).toHaveBeenNthCalledWith(2, "Travis", "Uber");
+    expect(unipile.searchProfiles).toHaveBeenNthCalledWith(3, "Travis Kalanick");
     expect(result[0]?.enrichmentStatus).toBe("success");
     expect(result[0]?.confidenceReason).toContain(
       "historical founder/executive association",
@@ -508,6 +551,60 @@ describe("LinkedinEnrichmentService", () => {
     expect(result[0]?.enrichmentStatus).toBe("success");
   });
 
+  it("broadens company-scoped search queries when OCR misspells a founder name", async () => {
+    unipile.searchProfiles
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          id: "nathan-ocr-1",
+          firstName: "Nathan",
+          lastName: "Blecharczyk",
+          headline: "CTO at Airbnb",
+          location: "San Francisco",
+          profileUrl: "https://linkedin.com/in/nathan-blecharczyk",
+          profileImageUrl: null,
+          summary: null,
+          currentCompany: null,
+          experience: [],
+          education: [],
+        },
+      ]);
+    unipile.getProfile.mockResolvedValueOnce({
+      id: "nathan-ocr-1",
+      firstName: "Nathan",
+      lastName: "Blecharczyk",
+      headline: "CTO at Airbnb",
+      location: "San Francisco",
+      profileUrl: "https://linkedin.com/in/nathan-blecharczyk",
+      profileImageUrl: null,
+      summary: null,
+      currentCompany: { name: "Airbnb", title: "CTO" },
+      experience: [],
+      education: [],
+    });
+
+    const result = await service.enrichTeamMembers(
+      "user-1",
+      [{ name: "Nathan Blecharyk", role: "Founder" }],
+      { companyName: "Airbnb" },
+    );
+
+    expect(unipile.searchProfiles).toHaveBeenNthCalledWith(
+      1,
+      "Nathan Blecharyk",
+      "Airbnb",
+    );
+    expect(unipile.searchProfiles).toHaveBeenNthCalledWith(
+      2,
+      "Nathan",
+      "Airbnb",
+    );
+    expect(result[0]?.enrichmentStatus).toBe("success");
+    expect(result[0]?.linkedinUrl).toBe(
+      "https://linkedin.com/in/nathan-blecharczyk",
+    );
+  });
+
   it("rejects mismatched profiles and falls back to a better-matching candidate", async () => {
     unipile.getProfile
       .mockResolvedValueOnce({
@@ -714,6 +811,66 @@ describe("LinkedinEnrichmentService", () => {
         linkedinUrl: "https://linkedin.com/in/dana-lead",
       },
     ]);
+  });
+
+  it("accepts company-scoped headline matches when search results omit current-company metadata", async () => {
+    unipile.searchProfilesInCompany.mockResolvedValue([
+      {
+        id: "headline-only-1",
+        firstName: "Dara",
+        lastName: "Khosrowshahi",
+        headline: "CEO at Uber",
+        location: "San Francisco, CA",
+        profileUrl: "https://linkedin.com/in/dara-khosrowshahi-70949862",
+        profileImageUrl: null,
+        summary: null,
+        currentCompany: null,
+        experience: [],
+        education: [],
+      },
+    ]);
+
+    const discovered = await service.discoverCompanyLeadershipMembers(
+      "Uber",
+      [],
+      "https://uber.com",
+    );
+
+    expect(discovered).toEqual([
+      {
+        name: "Dara Khosrowshahi",
+        role: "CEO at Uber",
+        linkedinUrl: "https://linkedin.com/in/dara-khosrowshahi-70949862",
+      },
+    ]);
+  });
+
+  it("rejects mixed-fragment headlines where leadership signal belongs to another company", async () => {
+    unipile.searchProfilesInCompany.mockResolvedValue([
+      {
+        id: "mixed-fragment-1",
+        firstName: "Ekin",
+        lastName: "Veral",
+        headline: "Regional Marketing Manager at Uber | Co-founder of Kolektif8",
+        location: "Dubai",
+        profileUrl: "https://linkedin.com/in/ekin-veral",
+        profileImageUrl: null,
+        summary: null,
+        currentCompany: null,
+        experience: [],
+        education: [],
+      },
+    ]);
+    unipile.searchProfiles.mockResolvedValue([]);
+
+    const discovered = await service.discoverCompanyLeadershipMembers(
+      "Uber",
+      [],
+      "https://uber.com",
+    );
+
+    expect(discovered).toEqual([]);
+    expect(unipile.searchProfiles).toHaveBeenCalled();
   });
 
   it("stops company leadership discovery after a rate-limit response", async () => {

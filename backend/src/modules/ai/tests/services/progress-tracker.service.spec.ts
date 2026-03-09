@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, jest } from "bun:test";
+import type { Logger } from "@nestjs/common";
 import { DrizzleService } from "../../../../database";
 import { NotificationGateway } from "../../../../notification/notification.gateway";
 import {
@@ -324,6 +325,36 @@ describe("ProgressTrackerService", () => {
         startupId: "startup-1",
         overallScore: 91,
       }),
+    );
+  });
+
+  it("treats completed runs with warnings as warnings, not hard failures", async () => {
+    await service.initProgress({
+      startupId: "startup-1",
+      userId: "user-1",
+      pipelineRunId: "run-1",
+      phases: Object.values(PipelinePhase),
+    });
+    const loggerWarnSpy = jest.spyOn((service as unknown as { logger: Logger }).logger, "warn");
+    const loggerErrorSpy = jest.spyOn((service as unknown as { logger: Logger }).logger, "error");
+
+    const completed = await service.setPipelineStatus({
+      startupId: "startup-1",
+      userId: "user-1",
+      pipelineRunId: "run-1",
+      status: PipelineStatus.COMPLETED,
+      currentPhase: PipelinePhase.SYNTHESIS,
+      error: "Manual diligence still required.",
+      overallScore: 73.5,
+    });
+
+    expect(completed.status).toBe(PipelineStatus.COMPLETED);
+    expect(completed.error).toBe("Manual diligence still required.");
+    expect(loggerWarnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("PIPELINE COMPLETED WITH WARNINGS"),
+    );
+    expect(loggerErrorSpy).not.toHaveBeenCalledWith(
+      expect.stringContaining("PIPELINE FAILED"),
     );
   });
 

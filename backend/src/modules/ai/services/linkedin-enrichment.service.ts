@@ -113,6 +113,8 @@ export class LinkedinEnrichmentService {
   ] as const;
   private readonly executiveLeadershipPattern =
     /\b(founder|co[\s-]?founder|chairman|chief|ceo|cto|coo|cfo|cmo|cpo|president)\b/i;
+  private readonly formerAssociationPattern =
+    /\b(ex[\s-]?|former|previously|past|alumni|alumnus|alumna)\b/i;
 
   constructor(
     private unipileService: UnipileService,
@@ -231,7 +233,9 @@ export class LinkedinEnrichmentService {
       }
 
       for (const profile of matches) {
-        const member = this.toCandidate(profile, normalizedCompany);
+        const member = this.toCandidate(profile, normalizedCompany, {
+          searchScope: "company",
+        });
         if (!member) {
           continue;
         }
@@ -308,7 +312,9 @@ export class LinkedinEnrichmentService {
         }
 
         for (const profile of matches) {
-          const member = this.toCandidate(profile, normalizedCompany);
+          const member = this.toCandidate(profile, normalizedCompany, {
+            searchScope: "global",
+          });
           if (!member) {
             continue;
           }
@@ -729,69 +735,84 @@ export class LinkedinEnrichmentService {
     options?: LinkedinEnrichmentOptions,
   ): Promise<string[]> {
     const companyName = startupContext?.companyName;
-    this.emitTrace(options, {
-      operation: "unipile.search_profiles",
-      status: "running",
-      inputJson: {
-        name: member.name,
-        company: companyName ?? null,
-        excludeUrls,
-      },
-    });
     const traceOptions = options?.onTrace ? { onTrace: options.onTrace } : undefined;
-    let matches = traceOptions
-      ? await this.unipileService.searchProfiles(
-          member.name,
-          companyName,
-          traceOptions,
-        )
-      : await this.unipileService.searchProfiles(
-          member.name,
-          companyName,
-        );
+    const searchQueries = this.buildSearchQueries(member.name);
+    let matches: LinkedInProfile[] = [];
+    let matchedQuery = searchQueries[0] ?? member.name;
+
+    for (const query of searchQueries) {
+      this.emitTrace(options, {
+        operation: "unipile.search_profiles",
+        status: "running",
+        inputJson: {
+          name: query,
+          company: companyName ?? null,
+          excludeUrls,
+        },
+      });
+      matches = traceOptions
+        ? await this.unipileService.searchProfiles(
+            query,
+            companyName,
+            traceOptions,
+          )
+        : await this.unipileService.searchProfiles(
+            query,
+            companyName,
+          );
+      this.emitTrace(options, {
+        operation: "unipile.search_profiles",
+        status: "completed",
+        inputJson: {
+          name: query,
+          company: companyName ?? null,
+          excludeUrls,
+        },
+        outputJson: matches,
+      });
+      matchedQuery = query;
+      if (matches.length > 0) {
+        break;
+      }
+    }
 
     if (matches.length === 0 && companyName) {
       this.logger.debug(
         `[LinkedInEnrichment] No company-scoped profile hits for ${member.name} @ ${companyName}; retrying global search`,
       );
-      this.emitTrace(options, {
-        operation: "unipile.search_profiles_fallback",
-        status: "running",
-        inputJson: {
-          name: member.name,
-          company: null,
-          fallbackFromCompany: companyName,
-          excludeUrls,
-        },
-      });
+      for (const query of searchQueries) {
+        this.emitTrace(options, {
+          operation: "unipile.search_profiles_fallback",
+          status: "running",
+          inputJson: {
+            name: query,
+            company: null,
+            fallbackFromCompany: companyName,
+            excludeUrls,
+          },
+        });
 
-      matches = traceOptions
-        ? await this.unipileService.searchProfiles(member.name, undefined, traceOptions)
-        : await this.unipileService.searchProfiles(member.name);
+        matches = traceOptions
+          ? await this.unipileService.searchProfiles(query, undefined, traceOptions)
+          : await this.unipileService.searchProfiles(query);
 
-      this.emitTrace(options, {
-        operation: "unipile.search_profiles_fallback",
-        status: "completed",
-        inputJson: {
-          name: member.name,
-          company: null,
-          fallbackFromCompany: companyName,
-          excludeUrls,
-        },
-        outputJson: matches,
-      });
+        this.emitTrace(options, {
+          operation: "unipile.search_profiles_fallback",
+          status: "completed",
+          inputJson: {
+            name: query,
+            company: null,
+            fallbackFromCompany: companyName,
+            excludeUrls,
+          },
+          outputJson: matches,
+        });
+        matchedQuery = query;
+        if (matches.length > 0) {
+          break;
+        }
+      }
     }
-
-    this.emitTrace(options, {
-      operation: "unipile.search_profiles",
-      status: "completed",
-      inputJson: {
-        name: member.name,
-        company: companyName ?? null,
-        excludeUrls,
-      },
-      outputJson: matches,
-    });
     const excluded = new Set(excludeUrls.map((url) => this.normalizeLinkedinUrl(url)));
     const deduped = new Set<string>();
     const candidates: string[] = [];
@@ -819,6 +840,33 @@ export class LinkedinEnrichmentService {
     }
 
     return candidates;
+  }
+
+  private buildSearchQueries(name: string): string[] {
+    const normalized = name.trim();
+    if (!normalized) {
+      return [];
+    }
+
+    const rawTokens = normalized
+      .split(/[\s-]+/)
+      .map((token) => token.trim())
+      .filter((token) => token.length > 0);
+    if (rawTokens.length < 2) {
+      return [normalized];
+    }
+
+    const firstName = rawTokens[0];
+    if (!firstName) {
+      return [normalized];
+    }
+
+    return Array.from(
+      new Set([
+        normalized,
+        firstName,
+      ]),
+    );
   }
 
   private emitTrace(
@@ -981,6 +1029,7 @@ export class LinkedinEnrichmentService {
   private toCandidate(
     profile: LinkedInProfile,
     companyName: string,
+    options?: { searchScope?: "company" | "global" },
   ): TeamMemberInput | null {
     const fullName = `${profile.firstName || ''} ${profile.lastName || ''}`.trim();
     if (!fullName) {
@@ -994,7 +1043,14 @@ export class LinkedinEnrichmentService {
     }
 
     const headline = profile.headline || '';
-    if (!this.isRelevantLeadershipProfile(profile, companyName, headline)) {
+    if (
+      !this.isRelevantLeadershipProfile(
+        profile,
+        companyName,
+        headline,
+        options?.searchScope,
+      )
+    ) {
       return null;
     }
 
@@ -1010,6 +1066,7 @@ export class LinkedinEnrichmentService {
     profile: LinkedInProfile,
     companyName: string,
     headline: string,
+    searchScope: "company" | "global" = "global",
   ): boolean {
     const currentRoleTexts = this.getCurrentRoleTexts(profile, companyName);
     const hasLeadershipSignal =
@@ -1021,7 +1078,15 @@ export class LinkedinEnrichmentService {
       return false;
     }
 
-    return this.isCurrentAtTargetCompany(profile, companyName);
+    if (this.isCurrentAtTargetCompany(profile, companyName)) {
+      return true;
+    }
+
+    if (searchScope === "company") {
+      return this.hasScopedHeadlineLeadershipSignal(headline, companyName);
+    }
+
+    return this.hasGlobalHeadlineLeadershipSignal(headline, companyName);
   }
 
   private extractRoleFromHeadline(headline: string): string {
@@ -1081,6 +1146,91 @@ export class LinkedinEnrichmentService {
     return roleTexts;
   }
 
+  private hasScopedHeadlineLeadershipSignal(
+    headline: string,
+    companyName: string,
+  ): boolean {
+    const fragments = this.splitHeadlineFragments(headline);
+    if (fragments.length === 0) {
+      return false;
+    }
+
+    if (
+      fragments.some((fragment) =>
+        this.fragmentSignalsLeadershipAtTargetCompany(fragment, companyName),
+      )
+    ) {
+      return true;
+    }
+
+    if (fragments.length !== 1) {
+      return false;
+    }
+
+    const [fragment] = fragments;
+    if (!fragment) {
+      return false;
+    }
+
+    return (
+      this.executiveLeadershipPattern.test(fragment) &&
+      !this.formerAssociationPattern.test(fragment) &&
+      !this.containsCompanyReference(fragment)
+    );
+  }
+
+  private hasGlobalHeadlineLeadershipSignal(
+    headline: string,
+    companyName: string,
+  ): boolean {
+    return this.splitHeadlineFragments(headline).some((fragment) =>
+      this.fragmentSignalsLeadershipAtTargetCompany(fragment, companyName),
+    );
+  }
+
+  private fragmentSignalsLeadershipAtTargetCompany(
+    fragment: string,
+    companyName: string,
+  ): boolean {
+    if (
+      !this.executiveLeadershipPattern.test(fragment) ||
+      this.formerAssociationPattern.test(fragment)
+    ) {
+      return false;
+    }
+
+    return this.hasExactHeadlineTargetCompanySignal(fragment, companyName);
+  }
+
+  private hasExactHeadlineTargetCompanySignal(
+    fragment: string,
+    companyName: string,
+  ): boolean {
+    const target = companyName.trim();
+    if (!target) {
+      return false;
+    }
+
+    const escapedTarget = this.escapeRegExp(target).replace(/\s+/g, "\\s+");
+    const pattern = new RegExp(
+      `(?:\\bat\\b|@)\\s*${escapedTarget}(?=$|\\s*[|,.;:)])`,
+      "i",
+    );
+
+    return pattern.test(fragment);
+  }
+
+  private splitHeadlineFragments(headline: string): string[] {
+    return headline
+      .split(/[|]/)
+      .map((fragment) => fragment.trim())
+      .filter((fragment) => fragment.length > 0);
+  }
+
+  private containsCompanyReference(value: string): boolean {
+    return /\b(?:at|@|formerly at|ex[\s-])\b/i.test(value);
+  }
+
   private matchesTargetCompany(
     candidateCompany: string | null | undefined,
     targetCompany: string,
@@ -1128,6 +1278,10 @@ export class LinkedinEnrichmentService {
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, " ")
       .trim();
+  }
+
+  private escapeRegExp(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   }
 
   private hasProfileName(profile: LinkedInProfile): boolean {
@@ -1607,11 +1761,80 @@ export class LinkedinEnrichmentService {
       return true;
     }
 
+    if (this.tokensMatchByInitial(left, right)) {
+      return true;
+    }
+
     // Allow mild variation like "nathaniel" vs "nathan" while preventing unrelated names.
     if (left.length >= 4 && right.length >= 4) {
-      return left.startsWith(right) || right.startsWith(left);
+      if (left.startsWith(right) || right.startsWith(left)) {
+        return true;
+      }
+    }
+
+    if (
+      left.length >= 7 &&
+      right.length >= 7 &&
+      this.commonPrefixLength(left, right) >= 5
+    ) {
+      return this.isWithinEditDistance(left, right, 2);
     }
 
     return false;
+  }
+
+  private tokensMatchByInitial(
+    left: string,
+    right: string,
+  ): boolean {
+    return (
+      (left.length === 1 && right.startsWith(left)) ||
+      (right.length === 1 && left.startsWith(right))
+    );
+  }
+
+  private commonPrefixLength(left: string, right: string): number {
+    const limit = Math.min(left.length, right.length);
+    let index = 0;
+    while (index < limit && left[index] === right[index]) {
+      index += 1;
+    }
+    return index;
+  }
+
+  private isWithinEditDistance(
+    left: string,
+    right: string,
+    maxDistance: number,
+  ): boolean {
+    if (Math.abs(left.length - right.length) > maxDistance) {
+      return false;
+    }
+
+    let previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+
+    for (let row = 1; row <= left.length; row += 1) {
+      const current = [row];
+      let rowMin = current[0] ?? row;
+
+      for (let column = 1; column <= right.length; column += 1) {
+        const substitutionCost = left[row - 1] === right[column - 1] ? 0 : 1;
+        const value = Math.min(
+          (previous[column] ?? column) + 1,
+          (current[column - 1] ?? column) + 1,
+          (previous[column - 1] ?? column - 1) + substitutionCost,
+        );
+        current[column] = value;
+        rowMin = Math.min(rowMin, value);
+      }
+
+      if (rowMin > maxDistance) {
+        return false;
+      }
+
+      previous = current;
+    }
+
+    return (previous[right.length] ?? maxDistance + 1) <= maxDistance;
   }
 }

@@ -200,6 +200,48 @@ describe("GeminiResearchService", () => {
     expect(result.output).toBe("Deep research report");
   });
 
+  it("falls back to standard text generation when deep research ends in failure", async () => {
+    openAiDeepResearch.runResearchText.mockRejectedValueOnce(
+      new Error("OpenAI deep research response resp_123 ended with status failed"),
+    );
+    generateTextMock.mockResolvedValueOnce({
+      text: "Recovered research report from standard text generation",
+      sources: [{ title: "Search result", url: "https://example.com/research" }],
+      providerMetadata: {},
+    });
+
+    const result = await service.researchText({
+      agent: "market",
+      modelName: "o4-mini-deep-research",
+      model: modelInstance as never,
+      prompt: "market prompt",
+      systemPrompt: "market system",
+      minReportLength: 10,
+      searchEnforcement: {
+        requiresProviderEvidence: true,
+        requiresBraveToolCall: false,
+      },
+      fallback: () => "fallback report",
+    });
+
+    expect(openAiDeepResearch.runResearchText).toHaveBeenCalledTimes(1);
+    expect(generateTextMock).toHaveBeenCalledTimes(1);
+    expect(result.usedFallback).toBe(false);
+    expect(result.output).toBe(
+      "Recovered research report from standard text generation",
+    );
+    expect(result.sources.map((source) => source.url)).toEqual([
+      "https://example.com/research",
+    ]);
+    expect(result.meta).toEqual(
+      expect.objectContaining({
+        deepResearch: expect.objectContaining({
+          degradedToStandardText: true,
+        }),
+      }),
+    );
+  });
+
   it("resumes deep research polling from stored checkpoint and persists checkpoint events", async () => {
     pipelineAgentTrace.getLatestDeepResearchCheckpoint.mockResolvedValueOnce({
       responseId: "resp_resume",
@@ -467,7 +509,7 @@ describe("GeminiResearchService", () => {
     expect(aiConfig.getModelForPurpose).toHaveBeenCalled();
   });
 
-  it("keeps schema-valid output and marks warning when both provider and brave search evidence are missing", async () => {
+  it("falls back when schema-valid output is missing required provider search evidence", async () => {
     generateTextMock.mockResolvedValueOnce({
       output: {
         marketReports: ["Report"],
@@ -499,19 +541,17 @@ describe("GeminiResearchService", () => {
       }),
     });
 
-    expect(result.usedFallback).toBe(false);
-    expect(result.error).toBeUndefined();
-    expect(result.output.marketReports).toEqual(["Report"]);
-    expect(result.output.sources).toEqual([]);
-    expect(result.meta).toEqual({
-      searchEnforcement: {
-        missingProviderEvidence: true,
-        missingBraveToolCall: true,
-      },
-    });
+    expect(result.usedFallback).toBe(true);
+    expect(result.error).toBe(
+      "Provider search evidence is required but no grounded sources were returned",
+    );
+    expect(result.fallbackReason).toBe("MISSING_PROVIDER_EVIDENCE");
+    expect(result.rawProviderError).toBeUndefined();
+    expect(result.output.marketReports).toEqual([]);
+    expect(result.output.sources).toEqual(["https://fallback.example.com"]);
   });
 
-  it("keeps long text output and marks warning when provider/brave evidence is missing", async () => {
+  it("preserves long text output in degraded mode when provider search evidence is missing", async () => {
     const report = "R".repeat(2600);
     generateTextMock.mockResolvedValueOnce({
       text: report,
@@ -532,15 +572,17 @@ describe("GeminiResearchService", () => {
       fallback: () => "fallback report",
     });
 
-    expect(result.usedFallback).toBe(false);
+    expect(result.usedFallback).toBe(true);
     expect(result.output).toBe(report);
-    expect(result.error).toBeUndefined();
-    expect(result.meta).toEqual({
-      searchEnforcement: {
-        missingProviderEvidence: true,
-        missingBraveToolCall: true,
-      },
-    });
+    expect(result.error).toBe(
+      "Provider search evidence is required but no grounded sources were returned",
+    );
+    expect(result.fallbackReason).toBe("MISSING_PROVIDER_EVIDENCE");
+    expect(result.meta).toEqual(
+      expect.objectContaining({
+        preservedUngroundedOutput: true,
+      }),
+    );
   });
 
   it("fallback sources default to empty array when undefined", async () => {

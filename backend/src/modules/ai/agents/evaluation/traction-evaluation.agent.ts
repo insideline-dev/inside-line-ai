@@ -41,7 +41,7 @@ export class TractionEvaluationAgent extends BaseEvaluationAgent<TractionEvaluat
   }
 
   buildContext(pipelineData: EvaluationPipelineInput) {
-    const { extraction, scraping } = pipelineData;
+    const { extraction, scraping, research } = pipelineData;
     const notableClaims = Array.isArray(scraping.notableClaims)
       ? scraping.notableClaims
       : [];
@@ -70,7 +70,11 @@ export class TractionEvaluationAgent extends BaseEvaluationAgent<TractionEvaluat
     const newsResearch = null;
 
     return {
-      researchReportText: this.buildResearchReportText(pipelineData),
+      researchReportText: this.buildFocusedTractionResearchReport(
+        research.news,
+        research.product,
+        notableClaims,
+      ),
       tractionMetrics,
       stage: extraction.stage,
       newsResearch,
@@ -92,11 +96,49 @@ export class TractionEvaluationAgent extends BaseEvaluationAgent<TractionEvaluat
     });
   }
 
+  private buildFocusedTractionResearchReport(
+    news: EvaluationPipelineInput["research"]["news"],
+    product: EvaluationPipelineInput["research"]["product"],
+    notableClaims: string[],
+  ): string {
+    const sections = [
+      ["News Research Report", this.limitSection(news, 2_400)],
+      ["Product Research Report", this.limitSection(product, 1_600)],
+      ["Deck Traction Claims", notableClaims.slice(0, 12).join("\n").trim()],
+    ]
+      .filter(([, value]) => value.length > 0)
+      .map(([label, value]) => `## ${label}\n${value}`);
+
+    return sections.join("\n\n");
+  }
+
   private truncate(value: string, max: number): string {
     if (value.length <= max) {
       return value;
     }
     return `${value.slice(0, max - 3)}...`;
+  }
+
+  private limitSection(value: unknown, maxChars: number): string {
+    const text = this.toText(value);
+    if (text.length <= maxChars) {
+      return text;
+    }
+    return `${text.slice(0, maxChars)}\n\n...[truncated]`;
+  }
+
+  private toText(value: unknown): string {
+    if (typeof value === "string") {
+      return value.trim();
+    }
+    if (value == null) {
+      return "";
+    }
+    try {
+      return JSON.stringify(value, null, 2).trim();
+    } catch {
+      return String(value).trim();
+    }
   }
 
   private sanitizeTractionMetrics(

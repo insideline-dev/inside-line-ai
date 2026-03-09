@@ -85,6 +85,15 @@ interface ResearchTextResponse {
   retryCount: number;
 }
 
+interface PreservedUngroundedTextInput {
+  agent: ResearchAgentKey;
+  outputText: string;
+  error: string;
+  lastSources: SourceEntry[];
+  lastSourceSanitization: SourceSanitizationSummary;
+  attempt: number;
+}
+
 interface SourceCarrier {
   sources?: Array<{ title?: string; url?: string }>;
   providerMetadata?: unknown;
@@ -180,34 +189,10 @@ export class GeminiResearchService {
             await this.sleep(delayMs);
             continue;
           }
-
-          const mergedSourceUrls = this.mergeSourceUrls(
-            structured.data.sources,
-            structured.sourceUrls,
+          this.logger.warn(
+            `Research agent ${request.agent} completed without required search evidence; using fallback instead: ${enforcement.error}`,
           );
-          return {
-            output: {
-              ...structured.data,
-              sources: mergedSourceUrls.urls,
-            },
-            sources: structured.sources,
-            usedFallback: false,
-            outputText: structured.outputText,
-            meta: this.withSourceSanitizationMeta(
-              {
-                searchEnforcement: {
-                  missingProviderEvidence: enforcement.missingProviderEvidence,
-                  missingBraveToolCall: enforcement.missingBraveToolCall,
-                },
-              },
-              this.combineSourceSanitization(
-                structured.sourceSanitization,
-                mergedSourceUrls.sanitization,
-              ),
-            ),
-            attempt,
-            retryCount: Math.max(0, attempt - 1),
-          };
+          break;
         } else {
           const mergedSourceUrls = this.mergeSourceUrls(
             structured.data.sources,
@@ -269,34 +254,10 @@ export class GeminiResearchService {
             await this.sleep(delayMs);
             continue;
           }
-
-          const mergedSourceUrls = this.mergeSourceUrls(
-            text.data.sources,
-            text.sourceUrls,
+          this.logger.warn(
+            `Research agent ${request.agent} completed without required search evidence; using fallback instead: ${enforcement.error}`,
           );
-          return {
-            output: {
-              ...text.data,
-              sources: mergedSourceUrls.urls,
-            },
-            sources: text.sources,
-            usedFallback: false,
-            outputText: text.outputText,
-            meta: this.withSourceSanitizationMeta(
-              {
-                searchEnforcement: {
-                  missingProviderEvidence: enforcement.missingProviderEvidence,
-                  missingBraveToolCall: enforcement.missingBraveToolCall,
-                },
-              },
-              this.combineSourceSanitization(
-                text.sourceSanitization,
-                mergedSourceUrls.sanitization,
-              ),
-            ),
-            attempt,
-            retryCount: Math.max(0, attempt - 1),
-          };
+          break;
         } else {
           const mergedSourceUrls = this.mergeSourceUrls(
             text.data.sources,
@@ -439,67 +400,87 @@ export class GeminiResearchService {
         let meta: Record<string, unknown> | undefined;
 
         if (isOpenAiDeepResearchModel(modelName)) {
-          const checkpoint = await this.getDeepResearchResumeCheckpoint(request);
-          const resumeResponseId = checkpoint?.responseId;
-          const deepResearch = await this.withTimeout(
-            (abortSignal) =>
-              this.openAiDeepResearch.runResearchText({
-                agent: request.agent,
+          try {
+            const checkpoint = await this.getDeepResearchResumeCheckpoint(request);
+            const resumeResponseId = checkpoint?.responseId;
+            const deepResearch = await this.withTimeout(
+              (abortSignal) =>
+                this.openAiDeepResearch.runResearchText({
+                  agent: request.agent,
+                  modelName,
+                  systemPrompt: request.systemPrompt,
+                  prompt: request.prompt,
+                  enableWebSearch:
+                    request.searchEnforcement?.requiresProviderEvidence ?? false,
+                  timeoutMs: attemptTimeoutMs,
+                  resumeResponseId,
+                  abortSignal,
+                  onCheckpoint: async (event) => {
+                    await this.persistDeepResearchCheckpoint(request, event);
+                  },
+                }),
+              attemptTimeoutMs,
+              `Research agent ${request.agent} timed out`,
+            );
+
+            extractedSources = {
+              entries: deepResearch.sources,
+              evidenceCount: deepResearch.sources.length,
+              sanitization: {
+                droppedCount: 0,
+                droppedHosts: [],
+              },
+            };
+            lastOutputText = deepResearch.text.trim();
+            meta = {
+              deepResearch: {
+                ...deepResearch.rawMeta,
+                ...(resumeResponseId
+                  ? { resumedFromCheckpoint: true, resumeResponseId }
+                  : {}),
+                ...(checkpoint ? { checkpoint } : {}),
+              },
+            };
+          } catch (deepResearchError) {
+            const errorMessage = this.errorMessage(deepResearchError);
+            this.logger.warn(
+              `Research text agent ${request.agent} deep research failed; falling back to standard text generation: ${errorMessage}`,
+            );
+            const standardText = await this.runStandardTextGeneration({
+              agent: request.agent,
+              model,
+              systemPrompt: request.systemPrompt,
+              prompt: request.prompt,
+              tools: request.tools,
+              toolChoice: request.toolChoice,
+              stopWhen: request.stopWhen,
+              providerOptions: request.providerOptions,
+              timeoutMs: attemptTimeoutMs,
+            });
+            extractedSources = standardText.extractedSources;
+            lastOutputText = standardText.outputText.trim();
+            meta = {
+              deepResearch: {
+                degradedToStandardText: true,
+                error: errorMessage,
                 modelName,
-                systemPrompt: request.systemPrompt,
-                prompt: request.prompt,
-                enableWebSearch:
-                  request.searchEnforcement?.requiresProviderEvidence ?? false,
-                timeoutMs: attemptTimeoutMs,
-                resumeResponseId,
-                abortSignal,
-                onCheckpoint: async (event) => {
-                  await this.persistDeepResearchCheckpoint(request, event);
-                },
-              }),
-            attemptTimeoutMs,
-            `Research agent ${request.agent} timed out`,
-          );
-
-          extractedSources = {
-            entries: deepResearch.sources,
-            evidenceCount: deepResearch.sources.length,
-            sanitization: {
-              droppedCount: 0,
-              droppedHosts: [],
-            },
-          };
-          lastOutputText = deepResearch.text.trim();
-          meta = {
-            deepResearch: {
-              ...deepResearch.rawMeta,
-              ...(resumeResponseId
-                ? { resumedFromCheckpoint: true, resumeResponseId }
-                : {}),
-              ...(checkpoint ? { checkpoint } : {}),
-            },
-          };
+              },
+            };
+          }
         } else {
-          const response = await this.withTimeout(
-            (abortSignal) =>
-              generateText({
-                model,
-                system: request.systemPrompt,
-                prompt: request.prompt,
-                tools: request.tools,
-                toolChoice: request.toolChoice,
-                stopWhen: request.stopWhen,
-                providerOptions: request.providerOptions,
-                temperature: this.aiConfig.getResearchTemperature(),
-                abortSignal,
-              }),
-            attemptTimeoutMs,
-            `Research agent ${request.agent} timed out`,
-          );
-
-          const responseRecord = (response ?? {}) as SourceCarrier & { text?: string };
-          extractedSources = this.extractSources(responseRecord, request.agent);
-          lastOutputText = this.resolveRawOutputText(responseRecord, undefined).trim();
+          const standardText = await this.runStandardTextGeneration({
+            agent: request.agent,
+            model,
+            systemPrompt: request.systemPrompt,
+            prompt: request.prompt,
+            tools: request.tools,
+            toolChoice: request.toolChoice,
+            stopWhen: request.stopWhen,
+            providerOptions: request.providerOptions,
+            timeoutMs: attemptTimeoutMs,
+          });
+          extractedSources = standardText.extractedSources;
+          lastOutputText = standardText.outputText.trim();
         }
 
         lastSources = extractedSources.entries;
@@ -529,26 +510,16 @@ export class GeminiResearchService {
           }
           if (lastOutputText.length >= request.minReportLength) {
             this.logger.warn(
-              `Research text agent ${request.agent} completed without required search evidence; accepting output with warning: ${enforcement.error}`,
+              `Research text agent ${request.agent} completed without required search evidence; preserving generated output in degraded mode: ${enforcement.error}`,
             );
-            return {
-              output: lastOutputText,
-              sources: extractedSources.entries,
-              usedFallback: false,
+            return this.preserveUngroundedTextOutput({
+              agent: request.agent,
               outputText: lastOutputText,
-              meta: this.withSourceSanitizationMeta(
-                {
-                  ...meta,
-                  searchEnforcement: {
-                    missingProviderEvidence: enforcement.missingProviderEvidence,
-                    missingBraveToolCall: enforcement.missingBraveToolCall,
-                  },
-                },
-                extractedSources.sanitization,
-              ),
+              error: enforcement.error,
+              lastSources,
+              lastSourceSanitization,
               attempt,
-              retryCount: Math.max(0, attempt - 1),
-            };
+            });
           }
         }
 
@@ -623,6 +594,44 @@ export class GeminiResearchService {
       ),
       attempt: maxAttempts,
       retryCount: Math.max(0, maxAttempts - 1),
+    };
+  }
+
+  private async runStandardTextGeneration(input: {
+    agent: ResearchAgentKey;
+    model: GenerateTextModel;
+    systemPrompt: string;
+    prompt: string;
+    tools?: GenerateTextTools;
+    toolChoice?: GenerateTextToolChoice;
+    stopWhen?: GenerateTextStopWhen;
+    providerOptions?: GenerateTextProviderOptions;
+    timeoutMs: number;
+  }): Promise<{
+    outputText: string;
+    extractedSources: ExtractedSources;
+  }> {
+    const response = await this.withTimeout(
+      (abortSignal) =>
+        generateText({
+          model: input.model,
+          system: input.systemPrompt,
+          prompt: input.prompt,
+          tools: input.tools,
+          toolChoice: input.toolChoice,
+          stopWhen: input.stopWhen,
+          providerOptions: input.providerOptions,
+          temperature: this.aiConfig.getResearchTemperature(),
+          abortSignal,
+        }),
+      input.timeoutMs,
+      `Research agent ${input.agent} timed out`,
+    );
+
+    const responseRecord = (response ?? {}) as SourceCarrier & { text?: string };
+    return {
+      extractedSources: this.extractSources(responseRecord, input.agent),
+      outputText: this.resolveRawOutputText(responseRecord, undefined),
     };
   }
 
@@ -971,6 +980,30 @@ export class GeminiResearchService {
       return undefined;
     }
     return message.slice(0, 2_000);
+  }
+
+  private preserveUngroundedTextOutput(
+    input: PreservedUngroundedTextInput,
+  ): ResearchTextResponse {
+    const fallbackReason = this.classifyFallbackReason(input.error);
+    return {
+      output: input.outputText,
+      sources:
+        input.lastSources.length > 0
+          ? input.lastSources
+          : this.toInternalSource(input.agent),
+      usedFallback: true,
+      error: input.error,
+      fallbackReason,
+      rawProviderError: this.resolveRawProviderError(input.error, fallbackReason),
+      outputText: input.outputText,
+      meta: this.withSourceSanitizationMeta(
+        { preservedUngroundedOutput: true },
+        input.lastSourceSanitization,
+      ),
+      attempt: input.attempt,
+      retryCount: Math.max(0, input.attempt - 1),
+    };
   }
 
   private async sleep(ms: number): Promise<void> {

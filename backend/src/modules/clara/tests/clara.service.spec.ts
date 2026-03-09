@@ -1,4 +1,3 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { ClaraService } from '../clara.service';
 import { DrizzleService } from '../../../database';
@@ -44,6 +43,7 @@ describe('ClaraService', () => {
     startupId: null,
     status: ConversationStatus.ACTIVE,
     lastIntent: null,
+    context: {},
     createdAt: new Date(),
   };
 
@@ -92,6 +92,27 @@ describe('ClaraService', () => {
       return null;
     }),
   });
+
+  const createService = (overrides?: {
+    configService?: typeof configService;
+    drizzleService?: typeof drizzleService;
+    claraChannel?: typeof claraChannel;
+    conversationService?: typeof conversationService;
+    claraAi?: typeof claraAi;
+    submissionService?: typeof submissionService;
+    toolsService?: typeof toolsService;
+    pdfService?: typeof pdfService;
+  }) =>
+    new ClaraService(
+      (overrides?.configService ?? configService) as unknown as ConfigService,
+      (overrides?.drizzleService ?? drizzleService) as unknown as DrizzleService,
+      (overrides?.claraChannel ?? claraChannel) as unknown as ClaraChannelService,
+      (overrides?.conversationService ?? conversationService) as unknown as ClaraConversationService,
+      (overrides?.claraAi ?? claraAi) as unknown as ClaraAiService,
+      (overrides?.submissionService ?? submissionService) as unknown as ClaraSubmissionService,
+      (overrides?.toolsService ?? toolsService) as unknown as ClaraToolsService,
+      (overrides?.pdfService ?? pdfService) as unknown as PdfService,
+    );
 
   beforeEach(async () => {
     configService = createConfigService('inbox-1', 'admin-user-1');
@@ -165,22 +186,7 @@ describe('ClaraService', () => {
       generateReport: jest.fn().mockResolvedValue({ url: 'https://example.com/report.pdf' }),
     };
 
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        ClaraService,
-        { provide: ConfigService, useValue: configService },
-        { provide: DrizzleService, useValue: drizzleService },
-        { provide: AgentMailClientService, useValue: agentMailClient },
-        { provide: ClaraConversationService, useValue: conversationService },
-        { provide: ClaraAiService, useValue: claraAi },
-        { provide: ClaraSubmissionService, useValue: submissionService },
-        { provide: ClaraToolsService, useValue: toolsService },
-        { provide: ClaraChannelService, useValue: claraChannel },
-        { provide: PdfService, useValue: pdfService },
-      ],
-    }).compile();
-
-    service = module.get<ClaraService>(ClaraService);
+    service = createService();
   });
 
   it('should be defined', () => {
@@ -197,66 +203,21 @@ describe('ClaraService', () => {
     it('should return false when CLARA_INBOX_ID is not set', async () => {
       configService = createConfigService(null, 'admin-user-1');
 
-      const module: TestingModule = await Test.createTestingModule({
-        providers: [
-          ClaraService,
-          { provide: ConfigService, useValue: configService },
-          { provide: DrizzleService, useValue: drizzleService },
-          { provide: AgentMailClientService, useValue: agentMailClient },
-          { provide: ClaraConversationService, useValue: conversationService },
-          { provide: ClaraAiService, useValue: claraAi },
-          { provide: ClaraSubmissionService, useValue: submissionService },
-          { provide: ClaraToolsService, useValue: toolsService },
-        { provide: ClaraChannelService, useValue: claraChannel },
-        { provide: PdfService, useValue: pdfService },
-        ],
-      }).compile();
-
-      const testService = module.get<ClaraService>(ClaraService);
+      const testService = createService({ configService });
       expect(testService.isEnabled()).toBe(false);
     });
 
     it('should return false when CLARA_ADMIN_USER_ID is not set', async () => {
       configService = createConfigService('inbox-1', null);
 
-      const module: TestingModule = await Test.createTestingModule({
-        providers: [
-          ClaraService,
-          { provide: ConfigService, useValue: configService },
-          { provide: DrizzleService, useValue: drizzleService },
-          { provide: AgentMailClientService, useValue: agentMailClient },
-          { provide: ClaraConversationService, useValue: conversationService },
-          { provide: ClaraAiService, useValue: claraAi },
-          { provide: ClaraSubmissionService, useValue: submissionService },
-          { provide: ClaraToolsService, useValue: toolsService },
-        { provide: ClaraChannelService, useValue: claraChannel },
-        { provide: PdfService, useValue: pdfService },
-        ],
-      }).compile();
-
-      const testService = module.get<ClaraService>(ClaraService);
+      const testService = createService({ configService });
       expect(testService.isEnabled()).toBe(false);
     });
 
     it('should return false when both env vars are not set', async () => {
       configService = createConfigService(null, null);
 
-      const module: TestingModule = await Test.createTestingModule({
-        providers: [
-          ClaraService,
-          { provide: ConfigService, useValue: configService },
-          { provide: DrizzleService, useValue: drizzleService },
-          { provide: AgentMailClientService, useValue: agentMailClient },
-          { provide: ClaraConversationService, useValue: conversationService },
-          { provide: ClaraAiService, useValue: claraAi },
-          { provide: ClaraSubmissionService, useValue: submissionService },
-          { provide: ClaraToolsService, useValue: toolsService },
-        { provide: ClaraChannelService, useValue: claraChannel },
-        { provide: PdfService, useValue: pdfService },
-        ],
-      }).compile();
-
-      const testService = module.get<ClaraService>(ClaraService);
+      const testService = createService({ configService });
       expect(testService.isEnabled()).toBe(false);
     });
   });
@@ -349,7 +310,7 @@ describe('ClaraService', () => {
         startupName: 'TestCo',
         status: 'processing',
         isDuplicate: true,
-        isEnriched: false,
+        duplicateBlocked: true,
       });
 
       drizzleService.db.limit.mockResolvedValueOnce([]);
@@ -360,8 +321,13 @@ describe('ClaraService', () => {
         'inbox-1',
         'msg-123',
         expect.objectContaining({
-          text: expect.stringContaining('already have TestCo'),
+          text: expect.stringContaining('delete the existing startup first'),
         }),
+      );
+      expect(conversationService.linkStartup).not.toHaveBeenCalled();
+      expect(conversationService.updateStatus).toHaveBeenCalledWith(
+        'conv-1',
+        ConversationStatus.ACTIVE,
       );
     });
   });
@@ -387,22 +353,7 @@ describe('ClaraService', () => {
     it('should skip processing when not configured', async () => {
       configService = createConfigService(null, null);
 
-      const module: TestingModule = await Test.createTestingModule({
-        providers: [
-          ClaraService,
-          { provide: ConfigService, useValue: configService },
-          { provide: DrizzleService, useValue: drizzleService },
-          { provide: AgentMailClientService, useValue: agentMailClient },
-          { provide: ClaraConversationService, useValue: conversationService },
-          { provide: ClaraAiService, useValue: claraAi },
-          { provide: ClaraSubmissionService, useValue: submissionService },
-          { provide: ClaraToolsService, useValue: toolsService },
-        { provide: ClaraChannelService, useValue: claraChannel },
-        { provide: PdfService, useValue: pdfService },
-        ],
-      }).compile();
-
-      const testService = module.get<ClaraService>(ClaraService);
+      const testService = createService({ configService });
 
       await testService.handleIncomingMessage('inbox-1', 'thread-123', 'msg-123');
 
@@ -436,6 +387,7 @@ describe('ClaraService', () => {
       expect(conversationService.logMessage).toHaveBeenCalledWith(
         expect.objectContaining({
           conversationId: 'conv-1',
+          messageId: expect.stringContaining('pipeline-complete-startup-1-'),
           direction: MessageDirection.OUTBOUND,
         }),
       );
@@ -443,6 +395,31 @@ describe('ClaraService', () => {
         'conv-1',
         ConversationStatus.COMPLETED,
       );
+    });
+
+    it('should reply on the existing conversation thread when inbox/message context is available', async () => {
+      const conversationWithContext = {
+        ...mockConversation,
+        startupId: 'startup-1',
+        context: {
+          lastInboundInboxId: 'inbox-live',
+          lastInboundMessageId: 'msg-live',
+        },
+      };
+
+      conversationService.findByStartupId.mockResolvedValueOnce(conversationWithContext);
+      drizzleService.db.limit.mockResolvedValueOnce([mockStartup]);
+
+      await service.notifyPipelineComplete('startup-1', 85.5);
+
+      expect(agentMailClient.replyToMessage).toHaveBeenCalledWith(
+        'inbox-live',
+        'msg-live',
+        expect.objectContaining({
+          text: expect.stringContaining('overall score of 85.5/100'),
+        }),
+      );
+      expect(agentMailClient.sendMessage).not.toHaveBeenCalled();
     });
 
     it('should send notification without score when not provided', async () => {
@@ -460,6 +437,42 @@ describe('ClaraService', () => {
         'inbox-1',
         expect.objectContaining({
           text: expect.not.stringContaining('overall score'),
+        }),
+      );
+    });
+
+    it('should include warning language when pipeline completed with warnings', async () => {
+      const conversationWithStartup = {
+        ...mockConversation,
+        startupId: 'startup-1',
+      };
+
+      conversationService.findByStartupId.mockResolvedValueOnce(conversationWithStartup);
+      drizzleService.db.limit.mockResolvedValueOnce([mockStartup]);
+
+      await service.notifyPipelineComplete('startup-1', 85.5, {
+        pipelineRunId: 'run-123',
+        warningMessage: 'Synthesis failed — all scores require manual verification.',
+      });
+
+      expect(agentMailClient.sendMessage).toHaveBeenCalledWith(
+        'inbox-1',
+        expect.objectContaining({
+          subject: 'Analysis Complete With Warnings: TestCo',
+          text: expect.stringContaining('finished with warnings'),
+        }),
+      );
+      expect(agentMailClient.sendMessage).toHaveBeenCalledWith(
+        'inbox-1',
+        expect.objectContaining({
+          text: expect.stringContaining(
+            'Synthesis failed — all scores require manual verification.',
+          ),
+        }),
+      );
+      expect(conversationService.logMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          messageId: 'pipeline-complete-startup-1-run-123',
         }),
       );
     });
@@ -490,22 +503,7 @@ describe('ClaraService', () => {
     it('should no-op when Clara is not configured', async () => {
       configService = createConfigService(null, 'admin-user-1');
 
-      const module: TestingModule = await Test.createTestingModule({
-        providers: [
-          ClaraService,
-          { provide: ConfigService, useValue: configService },
-          { provide: DrizzleService, useValue: drizzleService },
-          { provide: AgentMailClientService, useValue: agentMailClient },
-          { provide: ClaraConversationService, useValue: conversationService },
-          { provide: ClaraAiService, useValue: claraAi },
-          { provide: ClaraSubmissionService, useValue: submissionService },
-          { provide: ClaraToolsService, useValue: toolsService },
-        { provide: ClaraChannelService, useValue: claraChannel },
-        { provide: PdfService, useValue: pdfService },
-        ],
-      }).compile();
-
-      const testService = module.get<ClaraService>(ClaraService);
+      const testService = createService({ configService });
 
       await testService.notifyPipelineComplete('startup-1', 85.5);
 

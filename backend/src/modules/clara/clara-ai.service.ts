@@ -51,7 +51,7 @@ export class ClaraAiService {
         stage: extra?.startupStage,
       });
       const { text } = await generateText({
-        model: this.providers.resolveModelForPurpose(ModelPurpose.EXTRACTION),
+        model: this.providers.resolveModelForPurpose(ModelPurpose.CLARA),
         temperature: 0.4,
         system: promptConfig.systemPrompt,
         prompt: this.buildResponsePrompt(promptConfig.userPrompt, intent, ctx, extra),
@@ -137,7 +137,7 @@ export class ClaraAiService {
 
     try {
       const { output } = await generateText({
-        model: this.providers.resolveModelForPurpose(ModelPurpose.EXTRACTION),
+        model: this.providers.resolveModelForPurpose(ModelPurpose.CLARA),
         output: Output.object({ schema: IntentClassificationSchema }),
         temperature: 0.1,
         system: promptConfig.systemPrompt,
@@ -324,7 +324,7 @@ export class ClaraAiService {
         .join("\n");
 
       const { text } = await generateText({
-        model: this.providers.resolveModelForPurpose(ModelPurpose.EXTRACTION),
+        model: this.providers.resolveModelForPurpose(ModelPurpose.CLARA),
         tools,
         stopWhen: stepCountIs(5),
         temperature: 0.3,

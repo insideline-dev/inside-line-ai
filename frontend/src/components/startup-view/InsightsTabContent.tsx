@@ -112,8 +112,7 @@ export function InsightsTabContent({ evaluation }: InsightsTabContentProps) {
   }
 
   const overallStrengths = (evaluation.keyStrengths as string[]) || [];
-  const overallRisks = (evaluation.keyRisks as string[]) || [];
-  const recommendations = (evaluation.recommendations as string[]) || [];
+  const risks = (evaluation.keyRisks as string[]) || [];
 
   const teamInsights = extractInsights(evaluation.teamData);
   const marketInsights = extractInsights(evaluation.marketData);
@@ -145,11 +144,11 @@ export function InsightsTabContent({ evaluation }: InsightsTabContentProps) {
 
   return (
     <div className="space-y-6" data-testid="container-insights-tab">
-      <Card className="bg-primary/5 border-primary/20" data-testid="card-overall-recommendations">
+      <Card className="bg-primary/5 border-primary/20" data-testid="card-overall-risks">
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
             <Lightbulb className="w-5 h-5" />
-            <span data-testid="text-recommendations-title">Overall Recommendations</span>
+            <span data-testid="text-risks-title">Key Risks</span>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -173,21 +172,16 @@ export function InsightsTabContent({ evaluation }: InsightsTabContentProps) {
                 <Lightbulb className="w-4 h-4 text-chart-4" />
                 <span className="font-medium text-sm">Ways to Strengthen Your Pitch</span>
               </div>
-              <ul className="space-y-2" data-testid="list-founder-improvements">
-                {recommendations.length > 0 ? (
-                  recommendations.slice(0, 4).map((rec, i) => (
-                    <li key={i} className="text-sm flex items-start gap-2" data-testid={`item-founder-improvement-${i}`}>
-                      <ChevronRight className="w-3 h-3 mt-1 shrink-0 text-chart-4" />
-                      <span>{rec}</span>
-                    </li>
-                  ))
-                ) : (
-                  overallRisks.slice(0, 4).map((risk, i) => (
-                    <li key={i} className="text-sm flex items-start gap-2" data-testid={`item-founder-improvement-${i}`}>
+              <ul className="space-y-2" data-testid="list-key-risks">
+                {risks.length > 0 ? (
+                  risks.slice(0, 4).map((risk, i) => (
+                    <li key={i} className="text-sm flex items-start gap-2" data-testid={`item-key-risk-${i}`}>
                       <ChevronRight className="w-3 h-3 mt-1 shrink-0 text-chart-4" />
                       <span>{risk}</span>
                     </li>
                   ))
+                ) : (
+                  <li className="text-sm text-muted-foreground" data-testid="text-no-risks">No key risks identified.</li>
                 )}
               </ul>
             </div>

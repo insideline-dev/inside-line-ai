@@ -94,6 +94,9 @@ export function SummaryCard({
   const risks = getDisplayRisks(evaluation);
   const evaluationRecord = (evaluation ?? null) as Record<string, unknown> | null;
   const overallConfidence =
+    (evaluationRecord && typeof evaluationRecord.confidenceScore === "string"
+      ? evaluationRecord.confidenceScore
+      : null) ??
     (evaluationRecord && typeof evaluationRecord.confidenceLevel === "string"
       ? evaluationRecord.confidenceLevel
       : null) ??

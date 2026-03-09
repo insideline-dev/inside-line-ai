@@ -5,7 +5,7 @@ import { StorageService } from "../../../storage/storage.service";
 import { ASSET_TYPES } from "../../../storage/storage.config";
 import { PdfService } from "../../startup/pdf.service";
 import { startup } from "../../startup/entities";
-import type { SynthesisResult } from "../interfaces/phase-results.interface";
+
 
 export interface MemoUploadResult {
   investorMemoUrl: string;
@@ -24,7 +24,6 @@ export class MemoGeneratorService {
 
   async generateAndUpload(
     startupId: string,
-    synthesis: SynthesisResult,
   ): Promise<MemoUploadResult> {
     const [record] = await this.drizzle.db
       .select({ id: startup.id, userId: startup.userId })
@@ -52,7 +51,6 @@ export class MemoGeneratorService {
       startupId,
       {
         memoType: "investor",
-        recommendation: synthesis.recommendation,
       },
     );
 
@@ -64,7 +62,6 @@ export class MemoGeneratorService {
       startupId,
       {
         memoType: "founder",
-        recommendation: synthesis.recommendation,
       },
     );
 

@@ -34,7 +34,17 @@ export class DynamicAgentRunnerService {
     promptKey: AiPromptKey | string;
     pipelineData: EvaluationPipelineInput | ResearchPipelineInput;
     stage?: StartupStage;
-  }): Promise<{ key: string; output: unknown; usedFallback: boolean; error?: string }> {
+  }): Promise<{
+    key: string;
+    output: unknown;
+    usedFallback: boolean;
+    error?: string;
+    inputPrompt: string;
+    systemPrompt: string;
+    outputText: string;
+    attempt: number;
+    retryCount: number;
+  }> {
     const promptConfig = await this.promptService.resolve({
       key: params.promptKey,
       stage: params.stage,
@@ -76,6 +86,11 @@ export class DynamicAgentRunnerService {
           key: params.agentKey,
           output: response.output,
           usedFallback: false,
+          inputPrompt: renderedPrompt,
+          systemPrompt: promptConfig.systemPrompt,
+          outputText: this.safeStringify(response.output),
+          attempt,
+          retryCount: Math.max(0, attempt - 1),
         };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -87,20 +102,32 @@ export class DynamicAgentRunnerService {
           continue;
         }
 
+        const fallbackOutput = this.buildFallbackObject(descriptor);
         return {
           key: params.agentKey,
-          output: this.buildFallbackObject(descriptor),
+          output: fallbackOutput,
           usedFallback: true,
           error: message,
+          inputPrompt: renderedPrompt,
+          systemPrompt: promptConfig.systemPrompt,
+          outputText: this.safeStringify(fallbackOutput),
+          attempt,
+          retryCount: Math.max(0, attempt - 1),
         };
       }
     }
 
+    const fallbackOutput = this.buildFallbackObject(descriptor);
     return {
       key: params.agentKey,
-      output: this.buildFallbackObject(descriptor),
+      output: fallbackOutput,
       usedFallback: true,
       error: "Unhandled dynamic agent execution path",
+      inputPrompt: renderedPrompt,
+      systemPrompt: promptConfig.systemPrompt,
+      outputText: this.safeStringify(fallbackOutput),
+      attempt: maxAttempts,
+      retryCount: Math.max(0, maxAttempts - 1),
     };
   }
 
@@ -142,5 +169,13 @@ export class DynamicAgentRunnerService {
 
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private safeStringify(value: unknown): string {
+    try {
+      return JSON.stringify(value, null, 2);
+    } catch {
+      return String(value);
+    }
   }
 }

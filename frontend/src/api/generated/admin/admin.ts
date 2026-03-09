@@ -6422,6 +6422,278 @@ export const useAdminControllerPublishPipelineFlowConfig = <TError = ErrorType<u
       > => {
       return useMutation(getAdminControllerPublishPipelineFlowConfigMutationOptions(options), queryClient);
     }
+    /**
+ * @summary List all AI model overrides
+ */
+export type adminControllerListAiModelOverridesResponse200 = {
+  data: void
+  status: 200
+}
+    
+export type adminControllerListAiModelOverridesResponseSuccess = (adminControllerListAiModelOverridesResponse200) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerListAiModelOverridesResponse = (adminControllerListAiModelOverridesResponseSuccess)
+
+export const getAdminControllerListAiModelOverridesUrl = () => {
+
+
+  
+
+  return `/admin/ai-model-overrides`
+}
+
+export const adminControllerListAiModelOverrides = async ( options?: RequestInit): Promise<adminControllerListAiModelOverridesResponse> => {
+  
+  return customFetch<adminControllerListAiModelOverridesResponse>(getAdminControllerListAiModelOverridesUrl(),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getAdminControllerListAiModelOverridesQueryKey = () => {
+    return [
+    `/admin/ai-model-overrides`
+    ] as const;
+    }
+
+    
+export const getAdminControllerListAiModelOverridesQueryOptions = <TData = Awaited<ReturnType<typeof adminControllerListAiModelOverrides>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerListAiModelOverrides>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAdminControllerListAiModelOverridesQueryKey();
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof adminControllerListAiModelOverrides>>> = ({ signal }) => adminControllerListAiModelOverrides({ signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof adminControllerListAiModelOverrides>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type AdminControllerListAiModelOverridesQueryResult = NonNullable<Awaited<ReturnType<typeof adminControllerListAiModelOverrides>>>
+export type AdminControllerListAiModelOverridesQueryError = ErrorType<unknown>
+
+
+export function useAdminControllerListAiModelOverrides<TData = Awaited<ReturnType<typeof adminControllerListAiModelOverrides>>, TError = ErrorType<unknown>>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerListAiModelOverrides>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof adminControllerListAiModelOverrides>>,
+          TError,
+          Awaited<ReturnType<typeof adminControllerListAiModelOverrides>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAdminControllerListAiModelOverrides<TData = Awaited<ReturnType<typeof adminControllerListAiModelOverrides>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerListAiModelOverrides>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof adminControllerListAiModelOverrides>>,
+          TError,
+          Awaited<ReturnType<typeof adminControllerListAiModelOverrides>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAdminControllerListAiModelOverrides<TData = Awaited<ReturnType<typeof adminControllerListAiModelOverrides>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerListAiModelOverrides>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List all AI model overrides
+ */
+
+export function useAdminControllerListAiModelOverrides<TData = Awaited<ReturnType<typeof adminControllerListAiModelOverrides>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerListAiModelOverrides>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getAdminControllerListAiModelOverridesQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+/**
+ * @summary Set AI model override for a purpose
+ */
+export type adminControllerSetAiModelOverrideResponse200 = {
+  data: void
+  status: 200
+}
+    
+export type adminControllerSetAiModelOverrideResponseSuccess = (adminControllerSetAiModelOverrideResponse200) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerSetAiModelOverrideResponse = (adminControllerSetAiModelOverrideResponseSuccess)
+
+export const getAdminControllerSetAiModelOverrideUrl = (purpose: string,) => {
+
+
+  
+
+  return `/admin/ai-model-overrides/${purpose}`
+}
+
+export const adminControllerSetAiModelOverride = async (purpose: string, options?: RequestInit): Promise<adminControllerSetAiModelOverrideResponse> => {
+  
+  return customFetch<adminControllerSetAiModelOverrideResponse>(getAdminControllerSetAiModelOverrideUrl(purpose),
+  {      
+    ...options,
+    method: 'PUT'
+    
+    
+  }
+);}
+
+
+
+
+export const getAdminControllerSetAiModelOverrideMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerSetAiModelOverride>>, TError,{purpose: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminControllerSetAiModelOverride>>, TError,{purpose: string}, TContext> => {
+
+const mutationKey = ['adminControllerSetAiModelOverride'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminControllerSetAiModelOverride>>, {purpose: string}> = (props) => {
+          const {purpose} = props ?? {};
+
+          return  adminControllerSetAiModelOverride(purpose,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminControllerSetAiModelOverrideMutationResult = NonNullable<Awaited<ReturnType<typeof adminControllerSetAiModelOverride>>>
+    
+    export type AdminControllerSetAiModelOverrideMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Set AI model override for a purpose
+ */
+export const useAdminControllerSetAiModelOverride = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerSetAiModelOverride>>, TError,{purpose: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof adminControllerSetAiModelOverride>>,
+        TError,
+        {purpose: string},
+        TContext
+      > => {
+      return useMutation(getAdminControllerSetAiModelOverrideMutationOptions(options), queryClient);
+    }
+    /**
+ * @summary Remove AI model override (revert to default)
+ */
+export type adminControllerRemoveAiModelOverrideResponse200 = {
+  data: void
+  status: 200
+}
+    
+export type adminControllerRemoveAiModelOverrideResponseSuccess = (adminControllerRemoveAiModelOverrideResponse200) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerRemoveAiModelOverrideResponse = (adminControllerRemoveAiModelOverrideResponseSuccess)
+
+export const getAdminControllerRemoveAiModelOverrideUrl = (purpose: string,) => {
+
+
+  
+
+  return `/admin/ai-model-overrides/${purpose}`
+}
+
+export const adminControllerRemoveAiModelOverride = async (purpose: string, options?: RequestInit): Promise<adminControllerRemoveAiModelOverrideResponse> => {
+  
+  return customFetch<adminControllerRemoveAiModelOverrideResponse>(getAdminControllerRemoveAiModelOverrideUrl(purpose),
+  {      
+    ...options,
+    method: 'DELETE'
+    
+    
+  }
+);}
+
+
+
+
+export const getAdminControllerRemoveAiModelOverrideMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerRemoveAiModelOverride>>, TError,{purpose: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminControllerRemoveAiModelOverride>>, TError,{purpose: string}, TContext> => {
+
+const mutationKey = ['adminControllerRemoveAiModelOverride'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminControllerRemoveAiModelOverride>>, {purpose: string}> = (props) => {
+          const {purpose} = props ?? {};
+
+          return  adminControllerRemoveAiModelOverride(purpose,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminControllerRemoveAiModelOverrideMutationResult = NonNullable<Awaited<ReturnType<typeof adminControllerRemoveAiModelOverride>>>
+    
+    export type AdminControllerRemoveAiModelOverrideMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Remove AI model override (revert to default)
+ */
+export const useAdminControllerRemoveAiModelOverride = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerRemoveAiModelOverride>>, TError,{purpose: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof adminControllerRemoveAiModelOverride>>,
+        TError,
+        {purpose: string},
+        TContext
+      > => {
+      return useMutation(getAdminControllerRemoveAiModelOverrideMutationOptions(options), queryClient);
+    }
     export type adminControllerGetAgentsResponse200 = {
   data: void
   status: 200

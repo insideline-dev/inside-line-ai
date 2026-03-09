@@ -59,11 +59,7 @@ function resolvePublishedForStage(
 }
 
 export function NodePromptEditor({ promptKey }: NodePromptEditorProps) {
-  const GLOBAL_STAGE = "global" as const;
-  const STAGE_OPTIONS = [
-    GLOBAL_STAGE,
-    ...Object.values(CreateAiPromptRevisionDtoStage),
-  ] as const;
+  const STAGE_OPTIONS = Object.values(CreateAiPromptRevisionDtoStage);
 
   const [selectedStage, setSelectedStage] = useState<PromptStage | null>(null);
   const [promptMode, setPromptMode] = useState<"system" | "user">("system");
@@ -126,9 +122,9 @@ export function NodePromptEditor({ promptKey }: NodePromptEditorProps) {
           Stage Preview
         </Label>
         <Select
-          value={selectedStage ?? GLOBAL_STAGE}
+          value={selectedStage ?? STAGE_OPTIONS[0]}
           onValueChange={(value) =>
-            setSelectedStage(value === GLOBAL_STAGE ? null : (value as PromptStage))
+            setSelectedStage(value as PromptStage)
           }
         >
           <SelectTrigger className="h-8 text-xs">
@@ -137,7 +133,7 @@ export function NodePromptEditor({ promptKey }: NodePromptEditorProps) {
           <SelectContent>
             {STAGE_OPTIONS.map((stageOption) => (
               <SelectItem key={stageOption} value={stageOption} className="text-xs">
-                {stageOption === GLOBAL_STAGE ? "Global" : stageLabel(stageOption)}
+                {stageLabel(stageOption)}
               </SelectItem>
             ))}
           </SelectContent>

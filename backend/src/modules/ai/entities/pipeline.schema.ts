@@ -116,6 +116,7 @@ export const pipelineAgentRun = pgTable(
     retryCount: integer("retry_count").notNull().default(0),
     usedFallback: boolean("used_fallback").notNull().default(false),
     inputPrompt: text("input_prompt"),
+    systemPrompt: text("system_prompt"),
     inputJson: jsonb("input_json").$type<unknown>(),
     outputText: text("output_text"),
     outputJson: jsonb("output_json").$type<unknown>(),

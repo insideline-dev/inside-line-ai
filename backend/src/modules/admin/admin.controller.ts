@@ -44,6 +44,8 @@ import { AdminInvestorService } from './admin-investor.service';
 import { AiPromptService } from '../ai/services/ai-prompt.service';
 import { AiPromptRuntimeService } from '../ai/services/ai-prompt-runtime.service';
 import { AiConfigService } from '../ai/services/ai-config.service';
+import { AiModelOverrideService } from '../ai/services/ai-model-override.service';
+import { AI_RUNTIME_ALLOWED_MODEL_NAMES } from '../ai/services/ai-runtime-config.schema';
 import { PipelineFlowConfigService } from '../ai/services/pipeline-flow-config.service';
 import { AgentConfigService } from '../ai/services/agent-config.service';
 import { DynamicFlowCatalogService } from '../ai/services/dynamic-flow-catalog.service';
@@ -110,6 +112,7 @@ export class AdminController {
     private aiPromptService: AiPromptService,
     private aiPromptRuntimeService: AiPromptRuntimeService,
     private aiConfigService: AiConfigService,
+    private aiModelOverrideService: AiModelOverrideService,
     private agentConfigService: AgentConfigService,
     private dynamicFlowCatalogService: DynamicFlowCatalogService,
     private earlyAccessService: EarlyAccessService,
@@ -757,6 +760,35 @@ export class AdminController {
   ) {
     await this.pipelineFlowConfigService.archive(id);
     return { success: true, message: 'Config archived' };
+  }
+
+  // ============ AI MODEL OVERRIDES ============
+
+  @Get('ai-model-overrides')
+  @ApiOperation({ summary: "List all AI model overrides" })
+  async listAiModelOverrides() {
+    const overrides = await this.aiModelOverrideService.listAll();
+    return {
+      data: overrides,
+      allowedModels: AI_RUNTIME_ALLOWED_MODEL_NAMES,
+    };
+  }
+
+  @Put('ai-model-overrides/:purpose')
+  @ApiOperation({ summary: "Set AI model override for a purpose" })
+  async setAiModelOverride(
+    @CurrentUser() admin: User,
+    @Param('purpose') purpose: string,
+    @Body() body: { modelName: string; searchMode?: string },
+  ) {
+    return this.aiModelOverrideService.upsert(purpose, body.modelName, admin.id, body.searchMode);
+  }
+
+  @Delete('ai-model-overrides/:purpose')
+  @ApiOperation({ summary: "Remove AI model override (revert to default)" })
+  async removeAiModelOverride(@Param('purpose') purpose: string) {
+    await this.aiModelOverrideService.remove(purpose);
+    return { success: true };
   }
 
   // ============================================================================

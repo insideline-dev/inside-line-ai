@@ -1,16 +1,21 @@
-import { Injectable } from "@nestjs/common";
+import { Inject, Injectable, forwardRef } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { QueueName, QUEUE_NAMES } from "../../../queue";
 import { DEFAULT_MODEL_BY_PURPOSE } from "../ai.config";
 import { ModelPurpose } from "../interfaces/pipeline.interface";
 import { ResearchAgentKey } from "../interfaces/agent.interface";
+import { AiModelOverrideService } from "./ai-model-override.service";
 
 const DEFAULT_RESEARCH_ATTEMPT_TIMEOUT_MS = 3_600_000;
 const DEFAULT_RESEARCH_AGENT_HARD_TIMEOUT_MS = 3_600_000;
 
 @Injectable()
 export class AiConfigService {
-  constructor(private config: ConfigService) {}
+  constructor(
+    private config: ConfigService,
+    @Inject(forwardRef(() => AiModelOverrideService))
+    private overrideService: AiModelOverrideService,
+  ) {}
 
   private toPositiveInt(value: number | undefined, fallback: number): number {
     if (typeof value !== "number" || !Number.isFinite(value)) {
@@ -192,6 +197,9 @@ export class AiConfigService {
   }
 
   getModelForPurpose(purpose: ModelPurpose): string {
+    const override = this.overrideService.getModelNameSync(purpose);
+    if (override) return override;
+
     switch (purpose) {
       case ModelPurpose.EXTRACTION:
         return this.config.get<string>(
@@ -232,6 +240,11 @@ export class AiConfigService {
         return this.config.get<string>(
           "AI_MODEL_OCR",
           DEFAULT_MODEL_BY_PURPOSE[ModelPurpose.OCR],
+        );
+      case ModelPurpose.CLARA:
+        return this.config.get<string>(
+          "AI_MODEL_CLARA",
+          DEFAULT_MODEL_BY_PURPOSE[ModelPurpose.CLARA],
         );
       default:
         return DEFAULT_MODEL_BY_PURPOSE[purpose];

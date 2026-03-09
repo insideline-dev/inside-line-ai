@@ -327,6 +327,7 @@ describe("BaseEvaluationAgent", () => {
         attempt: 1,
         retryCount: 1,
         usedFallback: false,
+        systemPrompt: expect.stringContaining("Test evaluator"),
       }),
     );
     expect(onTrace).toHaveBeenCalledWith(
@@ -343,6 +344,7 @@ describe("BaseEvaluationAgent", () => {
         attempt: 3,
         retryCount: 2,
         usedFallback: true,
+        systemPrompt: expect.stringContaining("Test evaluator"),
       }),
     );
   });

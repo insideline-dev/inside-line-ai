@@ -1,0 +1,1 @@
+ALTER TABLE "pipeline_agent_runs" ADD COLUMN "system_prompt" text;

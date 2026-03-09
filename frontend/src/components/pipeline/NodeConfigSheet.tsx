@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Sheet,
   SheetContent,
@@ -22,10 +22,64 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Bot, Cog, ArrowRight } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { AiPromptFlowResponseDtoFlowsItemNodesItem } from "@/api/generated/model";
+import { customFetch } from "@/api/client";
 import { NodePromptEditor } from "./NodePromptEditor";
 import { AddAgentDialog } from "./dialogs/AddAgentDialog";
 import { OrchestratorAgentManager } from "./dialogs/OrchestratorAgentManager";
+
+interface AiModelOverridesResponse {
+  data: Array<{ purpose: string; modelName: string; updatedBy: string | null; updatedAt: string }>;
+  allowedModels: readonly string[];
+}
+
+function inferPurposeFromPromptKey(key: string | undefined): string | undefined {
+  if (!key) return undefined;
+  if (key === "enrichment.gapFill") return "enrichment";
+  if (key === "extraction.fields") return "extraction";
+  if (key.startsWith("research.")) return "research";
+  if (key.startsWith("evaluation.")) return "evaluation";
+  if (key === "synthesis.final") return "synthesis";
+  if (key === "matching.thesis") return "thesis_alignment";
+  if (key.startsWith("clara.")) return "clara";
+  return "extraction";
+}
+
+function useAiModelOverrides() {
+  return useQuery({
+    queryKey: ["admin", "ai-model-overrides"],
+    queryFn: () => customFetch<AiModelOverridesResponse>("/admin/ai-model-overrides"),
+    staleTime: 30_000,
+  });
+}
+
+function useSetModelOverride() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ purpose, modelName, searchMode }: { purpose: string; modelName: string; searchMode?: string }) =>
+      customFetch(`/admin/ai-model-overrides/${purpose}`, {
+        method: "PUT",
+        body: JSON.stringify({ modelName, searchMode }),
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["admin", "ai-model-overrides"] });
+      void queryClient.invalidateQueries({ queryKey: ["/admin/ai-prompts/flow"] });
+    },
+  });
+}
+
+function useRemoveModelOverride() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (purpose: string) =>
+      customFetch(`/admin/ai-model-overrides/${purpose}`, { method: "DELETE" }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["admin", "ai-model-overrides"] });
+      void queryClient.invalidateQueries({ queryKey: ["/admin/ai-prompts/flow"] });
+    },
+  });
+}
 
 interface PhaseConfigData {
   timeoutMs: number;
@@ -116,9 +170,45 @@ export function NodeConfigSheet({
   const [scrapeDiscoveryEnabled, setScrapeDiscoveryEnabled] = useState(false);
   const [scrapeManualPathsInput, setScrapeManualPathsInput] = useState("");
 
+  const { data: overridesData } = useAiModelOverrides();
+  const setOverride = useSetModelOverride();
+  const removeOverride = useRemoveModelOverride();
+
   const isSystem = node?.kind === "system";
   const isScrapeWebsiteNode = node?.id === "scrape_website";
   const selectedKey = activePromptKey ?? node?.promptKeys[0] ?? null;
+
+  const allowedModels = overridesData?.allowedModels ?? [
+    "gpt-5.2", "gpt-5.4", "gemini-3-flash-preview", "o4-mini-deep-research",
+  ];
+  const runtimePurpose =
+    ((node?.runtimeModel as Record<string, unknown> | undefined)?.purpose as string | undefined)
+    ?? inferPurposeFromPromptKey(node?.promptKeys[0]);
+
+  const handleModelChange = useCallback(
+    (modelName: string | null) => {
+      if (!runtimePurpose) return;
+      if (modelName === null) {
+        removeOverride.mutate(runtimePurpose);
+      } else {
+        const currentSearchMode = (node?.runtimeModel as Record<string, unknown> | undefined)?.searchMode as string | undefined;
+        setOverride.mutate({ purpose: runtimePurpose, modelName, searchMode: currentSearchMode });
+      }
+    },
+    [runtimePurpose, node?.runtimeModel, setOverride, removeOverride],
+  );
+
+  const handleSearchModeChange = useCallback(
+    (searchMode: string) => {
+      if (!runtimePurpose || !node?.runtimeModel) return;
+      setOverride.mutate({
+        purpose: runtimePurpose,
+        modelName: node.runtimeModel.modelName,
+        searchMode,
+      });
+    },
+    [runtimePurpose, node?.runtimeModel, setOverride],
+  );
 
   useEffect(() => {
     if (!node || node.promptKeys.length === 0) {
@@ -401,10 +491,93 @@ export function NodeConfigSheet({
                     />
                   )}
 
-                  <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
-                    Model configuration is managed in code. Runtime model overrides
-                    have been removed from this UI.
-                  </div>
+                  {node.runtimeModel ? (
+                    <div className="space-y-3 rounded-md border border-border/70 p-3">
+                      <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        Model
+                      </Label>
+                      <div className="flex items-center gap-2">
+                        <Select
+                          value={node.runtimeModel.modelName}
+                          onValueChange={(value) => handleModelChange(value)}
+                          disabled={!runtimePurpose || setOverride.isPending || removeOverride.isPending}
+                        >
+                          <SelectTrigger className="h-8 text-xs flex-1">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {allowedModels.map((model) => (
+                              <SelectItem key={model} value={model} className="text-xs">
+                                {model}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Badge variant="outline" className="text-[10px] shrink-0">
+                          {node.runtimeModel.provider}
+                        </Badge>
+                      </div>
+                      {(() => {
+                        const supportedSearchModes: string[] =
+                          ((node.runtimeModel as Record<string, unknown>)?.supportedSearchModes as string[] | undefined)
+                          ?? ["off"];
+                        return supportedSearchModes.length > 1 ? (
+                          <div className="space-y-1.5">
+                            <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                              Search Mode
+                            </Label>
+                            <Select
+                              value={node.runtimeModel.searchMode}
+                              onValueChange={handleSearchModeChange}
+                              disabled={!runtimePurpose || setOverride.isPending}
+                            >
+                              <SelectTrigger className="h-8 text-xs">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {supportedSearchModes.map((mode) => (
+                                  <SelectItem key={mode} value={mode} className="text-xs">
+                                    {mode === "off" ? "Off"
+                                      : mode === "provider_grounded_search" ? "Provider Search"
+                                      : mode === "brave_tool_search" ? "Brave Search"
+                                      : "Provider + Brave"}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        ) : node.runtimeModel.searchMode !== "off" ? (
+                          <Badge variant="outline" className="text-[10px]">
+                            search: {node.runtimeModel.searchMode}
+                          </Badge>
+                        ) : null;
+                      })()}
+                      {(node.runtimeModel.source as string) === "override" ? (
+                        <div className="flex items-center justify-between">
+                          <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                            Custom override active.
+                          </p>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 text-[11px] text-muted-foreground"
+                            onClick={() => handleModelChange(null)}
+                            disabled={removeOverride.isPending}
+                          >
+                            Revert to default
+                          </Button>
+                        </div>
+                      ) : (
+                        <p className="text-[11px] text-muted-foreground">
+                          Using default from environment config.
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+                      No model configuration available for this node.
+                    </div>
+                  )}
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">

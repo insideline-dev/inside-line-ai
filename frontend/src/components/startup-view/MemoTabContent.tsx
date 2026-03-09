@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+
 import { ConfidenceBadge } from "@/components/ConfidenceBadge";
 import { MemoSection } from "@/components/MemoSection";
 import {
@@ -18,31 +18,28 @@ import {
   Swords,
   Search,
   Download,
+  ExternalLink,
 } from "lucide-react";
 import type { Startup } from "@/types/startup";
 import type { Evaluation } from "@/types/evaluation";
+
+interface MemoSectionSource {
+  label: string;
+  url: string;
+}
 
 interface InvestorMemoSection {
   title: string;
   content: string;
   highlights?: string[];
   concerns?: string[];
+  sources?: MemoSectionSource[];
 }
 
 interface InvestorMemo {
   executiveSummary?: string;
-  summary?: string;
   sections?: InvestorMemoSection[];
-  recommendation?: string;
-  riskLevel?: string;
-  dealHighlights?: string[];
   keyDueDiligenceAreas?: string[];
-}
-
-interface FounderReport {
-  summary?: string;
-  sections?: InvestorMemoSection[];
-  actionItems?: string[];
 }
 
 interface AdminFeedbackHandler {
@@ -68,7 +65,6 @@ interface MemoTabContentProps {
   startup: Startup;
   evaluation: Evaluation;
   investorMemo?: InvestorMemo | null;
-  founderReport?: FounderReport | null;
   adminFeedback?: AdminFeedbackHandler;
   showScores?: boolean;
   weights?: ScoringWeights | null;
@@ -258,6 +254,21 @@ function getMemoSectionKey(title: string):
   return map[normalized] ?? null;
 }
 
+function toSourceArray(value: unknown): MemoSectionSource[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is { label: string; url: string } =>
+      item != null &&
+      typeof item === "object" &&
+      typeof (item as Record<string, unknown>).url === "string" &&
+      ((item as Record<string, unknown>).url as string).length > 0,
+    )
+    .map((item) => ({
+      label: typeof item.label === "string" && item.label.trim().length > 0 ? item.label.trim() : item.url,
+      url: item.url,
+    }));
+}
+
 function toMemoSections(value: unknown): InvestorMemoSection[] {
   if (!Array.isArray(value)) return [];
   return value
@@ -272,6 +283,7 @@ function toMemoSections(value: unknown): InvestorMemoSection[] {
         content,
         highlights: toStringArray(record.highlights),
         concerns: toStringArray(record.concerns),
+        sources: toSourceArray(record.sources),
       };
     })
     .filter((item): item is InvestorMemoSection => item !== null);
@@ -286,15 +298,12 @@ export function MemoTabContent({
   startup,
   evaluation,
   investorMemo,
-  founderReport,
   adminFeedback,
   showScores = true,
   weights,
   animateOnMount = false,
 }: MemoTabContentProps) {
   const memo = (investorMemo ?? (evaluation.investorMemo as InvestorMemo | null | undefined)) ?? null;
-  const founderReportData =
-    (founderReport ?? (evaluation.founderReport as FounderReport | null | undefined)) ?? null;
   const memoSections = toMemoSections(memo?.sections);
   const sectionByKey = new Map<string, InvestorMemoSection>();
 
@@ -306,14 +315,7 @@ export function MemoTabContent({
   }
 
   const dueDiligenceAreas = toStringArray(memo?.keyDueDiligenceAreas);
-  const founderActionItems = toStringArray(founderReportData?.actionItems);
-  const founderSections = toMemoSections(founderReportData?.sections);
-  const evaluationRecord = evaluation as unknown as Record<string, unknown>;
-  const synthesisConfidence =
-    (typeof evaluationRecord.confidenceLevel === "string" &&
-      evaluationRecord.confidenceLevel) ||
-    (typeof evaluationRecord.confidence === "string" && evaluationRecord.confidence) ||
-    "unknown";
+  const synthesisConfidence = (evaluation as unknown as Record<string, unknown>).confidenceScore as string | undefined ?? "unknown";
 
   const getAdminFeedbackProps = (sectionKey: string) => {
     if (!adminFeedback) return undefined;
@@ -329,10 +331,8 @@ export function MemoTabContent({
   };
 
   const executiveSummaryText =
-    evaluation.executiveSummary ||
     memo?.executiveSummary ||
-    memo?.summary ||
-    founderReport?.summary ||
+    evaluation.executiveSummary ||
     `Synthesis executive summary for ${startup.name} is not available yet.`;
 
   return (
@@ -373,19 +373,13 @@ export function MemoTabContent({
           data-testid="card-synthesis-verdict"
         >
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Synthesis Verdict</CardTitle>
+            <CardTitle className="text-base">Synthesis Quality</CardTitle>
             <CardDescription>
-              Final synthesis recommendation, confidence, and data-quality notes
+              Confidence level and data-quality notes
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="outline" data-testid="badge-synthesis-recommendation">
-                Recommendation: {memo?.recommendation || "Not provided"}
-              </Badge>
-              <Badge variant="secondary" className="capitalize" data-testid="badge-synthesis-risk-level">
-                Risk: {memo?.riskLevel || "Not provided"}
-              </Badge>
               <ConfidenceBadge
                 confidence={synthesisConfidence}
                 dataTestId="badge-synthesis-confidence"
@@ -403,31 +397,15 @@ export function MemoTabContent({
           animateOnMount={animateOnMount}
           summary={executiveSummaryText}
           defaultExpanded={true}
-          details={
-            memo?.dealHighlights && memo.dealHighlights.length > 0 ? (
-              <div>
-                <h4 className="font-medium mb-2">Deal Highlights</h4>
-                <ul className="space-y-2">
-                  {memo.dealHighlights.slice(0, 6).map((highlight, i) => (
-                    <li key={`${highlight}-${i}`} className="flex items-start gap-2 text-sm">
-                      <span className="w-5 h-5 rounded-full bg-primary/20 text-primary text-xs font-medium flex items-center justify-center shrink-0 mt-0.5">
-                        {i + 1}
-                      </span>
-                      <span>{highlight}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : undefined
-          }
         />
 
         {SECTION_CONFIG.map((config) => {
           const section = sectionByKey.get(config.key);
           const sectionHighlights = toStringArray(section?.highlights);
           const sectionConcerns = toStringArray(section?.concerns);
+          const sectionSources = section?.sources ?? [];
           const sectionDetails =
-            sectionHighlights.length > 0 || sectionConcerns.length > 0 ? (
+            sectionHighlights.length > 0 || sectionConcerns.length > 0 || sectionSources.length > 0 ? (
               <div className="space-y-3">
                 {sectionHighlights.length > 0 && (
                   <div>
@@ -449,6 +427,35 @@ export function MemoTabContent({
                     </ul>
                   </div>
                 )}
+                {sectionSources.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 pt-1 border-t">
+                    {sectionSources.map((source, index) => {
+                      const isExternalLink = source.url.startsWith("http");
+                      const pillClass =
+                        "inline-flex items-center gap-1 rounded-full border bg-muted/40 px-2 py-0.5 text-[11px] text-muted-foreground transition-colors";
+                      return isExternalLink ? (
+                        <a
+                          key={`${source.url}-${index}`}
+                          href={source.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={`${pillClass} hover:bg-muted hover:text-foreground`}
+                        >
+                          <ExternalLink className="h-2.5 w-2.5 shrink-0" />
+                          {source.label}
+                        </a>
+                      ) : (
+                        <span
+                          key={`${source.url}-${index}`}
+                          className={`${pillClass} cursor-default`}
+                        >
+                          <FileText className="h-2.5 w-2.5 shrink-0" />
+                          {source.label}
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             ) : undefined;
 
@@ -461,6 +468,7 @@ export function MemoTabContent({
               score={showScores ? getScore(evaluation, config.scoreKey) : undefined}
               weight={`${weights?.[config.weightKey] ?? 0}%`}
               summary={section?.content || "Synthesis section is not available yet for this dimension."}
+              sources={sectionSources}
               details={sectionDetails}
               evaluationNote={config.evaluationNote}
               adminFeedback={getAdminFeedbackProps(config.key)}
@@ -489,44 +497,6 @@ export function MemoTabContent({
           )}
         </div>
 
-        <div className="rounded-lg border bg-muted/20 p-4 space-y-3" data-testid="section-founder-report">
-          <div className="flex items-center justify-between gap-3">
-            <h3 className="font-semibold text-base">Founder Report Action Plan</h3>
-            <Badge variant="outline" data-testid="badge-founder-actions-count">
-              {founderActionItems.length} action{founderActionItems.length === 1 ? "" : "s"}
-            </Badge>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            {founderReportData?.summary || "Founder report summary is not available yet."}
-          </p>
-          {founderActionItems.length > 0 ? (
-            <ul className="space-y-2">
-              {founderActionItems.map((item, index) => (
-                <li
-                  key={`${item}-${index}`}
-                  className="flex items-start gap-2 text-sm text-muted-foreground"
-                >
-                  <span className="mt-2 h-1.5 w-1.5 rounded-full bg-primary shrink-0" />
-                  <span>{item}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              No founder action items were generated by synthesis.
-            </p>
-          )}
-          {founderSections.length > 0 && (
-            <div className="space-y-2 border-t pt-3">
-              {founderSections.slice(0, 2).map((section, index) => (
-                <div key={`${section.title}-${index}`} className="rounded-md border bg-background p-3">
-                  <p className="text-sm font-medium">{section.title}</p>
-                  <p className="mt-1 text-sm text-muted-foreground">{section.content}</p>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
       </CardContent>
     </Card>
   );

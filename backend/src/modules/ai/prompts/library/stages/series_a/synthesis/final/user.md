@@ -13,47 +13,47 @@ Description: {{companyDescription}}
 === AGENT OUTPUTS ===
 
 1. TEAM ANALYSIS
-Score: {{teamScore}}/10 | Confidence: {{teamConfidence}}
+Score: {{teamScore}}/100 | Confidence: {{teamConfidence}}
 {{teamAnalysis}}
 
 2. MARKET ANALYSIS
-Score: {{marketScore}}/10 | Confidence: {{marketConfidence}}
+Score: {{marketScore}}/100 | Confidence: {{marketConfidence}}
 {{marketAnalysis}}
 
 3. PRODUCT ANALYSIS
-Score: {{productScore}}/10 | Confidence: {{productConfidence}}
+Score: {{productScore}}/100 | Confidence: {{productConfidence}}
 {{productAnalysis}}
 
 4. TRACTION ANALYSIS
-Score: {{tractionScore}}/10 | Confidence: {{tractionConfidence}}
+Score: {{tractionScore}}/100 | Confidence: {{tractionConfidence}}
 {{tractionAnalysis}}
 
 5. BUSINESS MODEL ANALYSIS
-Score: {{businessModelScore}}/10 | Confidence: {{businessModelConfidence}}
+Score: {{businessModelScore}}/100 | Confidence: {{businessModelConfidence}}
 {{businessModelAnalysis}}
 
 6. GO-TO-MARKET ANALYSIS
-Score: {{gtmScore}}/10 | Confidence: {{gtmConfidence}}
+Score: {{gtmScore}}/100 | Confidence: {{gtmConfidence}}
 {{gtmAnalysis}}
 
 7. FINANCIALS ANALYSIS
-Score: {{financialsScore}}/10 | Confidence: {{financialsConfidence}}
+Score: {{financialsScore}}/100 | Confidence: {{financialsConfidence}}
 {{financialsAnalysis}}
 
 8. COMPETITIVE ADVANTAGE ANALYSIS
-Score: {{competitiveAdvantageScore}}/10 | Confidence: {{competitiveAdvantageConfidence}}
+Score: {{competitiveAdvantageScore}}/100 | Confidence: {{competitiveAdvantageConfidence}}
 {{competitiveAdvantageAnalysis}}
 
 9. LEGAL & REGULATORY ANALYSIS
-Score: {{legalScore}}/10 | Confidence: {{legalConfidence}}
+Score: {{legalScore}}/100 | Confidence: {{legalConfidence}}
 {{legalAnalysis}}
 
 10. DEAL TERMS ANALYSIS
-Score: {{dealTermsScore}}/10 | Confidence: {{dealTermsConfidence}}
+Score: {{dealTermsScore}}/100 | Confidence: {{dealTermsConfidence}}
 {{dealTermsAnalysis}}
 
 11. EXIT POTENTIAL ANALYSIS
-Score: {{exitScore}}/10 | Confidence: {{exitConfidence}}
+Score: {{exitScore}}/100 | Confidence: {{exitConfidence}}
 {{exitPotentialAnalysis}}
 
 === EVALUATION AGENT RECOMMENDATIONS ===

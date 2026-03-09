@@ -145,6 +145,7 @@ export function createMockEvaluationResult(
     },
     exitPotential: {
       ...base,
+      exitScenarios: [],
     },
     summary: {
       completedAgents: 11,

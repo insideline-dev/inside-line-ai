@@ -49,6 +49,7 @@ export interface RecordPipelineAgentRunInput {
   retryCount?: number;
   usedFallback?: boolean;
   inputPrompt?: string;
+  systemPrompt?: string;
   inputText?: string;
   inputJson?: unknown;
   outputText?: string;
@@ -127,6 +128,7 @@ export class PipelineAgentTraceService {
       Math.max(0, attempt - 1),
     );
     const inputPrompt = input.inputPrompt ?? input.inputText ?? null;
+    const systemPrompt = input.systemPrompt ?? null;
     const outputText = input.outputText ?? null;
     const inputJson = this.normalizeJsonField(input.inputJson);
     const outputJson = this.attachTraceMeta(
@@ -155,6 +157,7 @@ export class PipelineAgentTraceService {
         input.usedFallback ??
         (traceKind === "ai_agent" && input.status === "fallback"),
       inputPrompt,
+      systemPrompt,
       inputJson,
       outputText,
       outputJson,

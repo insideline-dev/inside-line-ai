@@ -34,6 +34,7 @@ export interface SynthesisRunTraceDetails {
   retryCount: number;
   usedFallback: boolean;
   inputPrompt?: string;
+  systemPrompt?: string;
   outputText?: string;
   outputJson?: unknown;
   error?: string;
@@ -91,7 +92,7 @@ export class SynthesisService {
     const overallScore = this.scoreComputation.computeWeightedScore(sectionScores, normalizedWeights);
 
     this.logger.log(
-      `[Synthesis] Agent output | Strengths: ${synthesizedOutput.strengths.length} | Concerns: ${synthesizedOutput.concerns.length}`,
+      `[Synthesis] Agent output | Strengths: ${synthesizedOutput.keyStrengths.length} | Risks: ${synthesizedOutput.keyRisks.length}`,
     );
 
     const synthesis = this.buildSynthesisResult(
@@ -104,10 +105,16 @@ export class SynthesisService {
     const percentileRank = await this.scoreComputation.computePercentileRank(synthesis.overallScore);
     synthesis.percentileRank = percentileRank;
 
+    const confidenceScore = this.scoreComputation.computeConfidenceScore(
+      evaluation as unknown as Record<string, unknown>,
+      normalizedWeights,
+    );
+    synthesis.confidenceScore = confidenceScore;
+
     await this.persistResults(startupId, synthesis, evaluation, scraping, research);
 
     this.logger.log(
-      `[Synthesis] ✅ Results persisted | Score: ${synthesis.overallScore} | KeyStrengths: ${synthesis.strengths?.length} | KeyRisks: ${synthesis.concerns?.length}`,
+      `[Synthesis] ✅ Results persisted | Score: ${synthesis.overallScore} | KeyStrengths: ${synthesis.keyStrengths?.length} | KeyRisks: ${synthesis.keyRisks?.length}`,
     );
 
     await this.performPostSynthesisOps(startupId, synthesis, extraction);
@@ -121,6 +128,7 @@ export class SynthesisService {
         retryCount: generated.retryCount,
         usedFallback: generated.usedFallback,
         inputPrompt: generated.inputPrompt,
+        systemPrompt: generated.systemPrompt,
         outputText: generated.outputText,
         outputJson: generated.outputJson,
         error: generated.error,
@@ -236,10 +244,10 @@ export class SynthesisService {
       sectionScores,
       overallScore,
       percentileRank,
-      keyStrengths: synthesis.strengths,
-      keyRisks: synthesis.concerns,
-      recommendations: synthesis.nextSteps,
-      executiveSummary: synthesis.executiveSummary,
+      confidenceScore: synthesis.confidenceScore ?? null,
+      keyStrengths: synthesis.keyStrengths,
+      keyRisks: synthesis.keyRisks,
+      executiveSummary: synthesis.dealSnapshot,
       investorMemo: synthesis.investorMemo,
       founderReport: synthesis.founderReport,
       sources: persistedSources,
@@ -535,7 +543,7 @@ export class SynthesisService {
       {
         agent: "SynthesisAgent",
         description: "Final synthesis and investor memo generation",
-        score: Math.round(synthesis.overallScore),
+        score: synthesis.overallScore != null ? Math.round(synthesis.overallScore) : undefined,
         model: synthesisModel,
       },
     ].map((entry) => ({
@@ -567,7 +575,6 @@ export class SynthesisService {
           executiveSummary: startupEvaluation.executiveSummary,
           keyStrengths: startupEvaluation.keyStrengths,
           keyRisks: startupEvaluation.keyRisks,
-          recommendations: startupEvaluation.recommendations,
           investorMemo: startupEvaluation.investorMemo,
           founderReport: startupEvaluation.founderReport,
           dataConfidenceNotes: startupEvaluation.dataConfidenceNotes,
@@ -580,17 +587,14 @@ export class SynthesisService {
         return fallbackOutput;
       }
 
-      const executiveSummary =
+      const dealSnapshot =
         typeof existing.executiveSummary === "string"
           ? sanitizeNarrativeText(existing.executiveSummary.trim())
           : "";
-      const strengths = this.sanitizeStringArray(
+      const keyStrengths = this.sanitizeStringArray(
         this.toStringArray(existing.keyStrengths),
       );
-      const risks = this.sanitizeStringArray(this.toStringArray(existing.keyRisks));
-      const recommendations = this.sanitizeStringArray(
-        this.toStringArray(existing.recommendations),
-      );
+      const keyRisks = this.sanitizeStringArray(this.toStringArray(existing.keyRisks));
       const investorMemo = this.sanitizeInvestorMemo(
         this.toObjectValue<InvestorMemo>(existing.investorMemo),
       );
@@ -599,10 +603,9 @@ export class SynthesisService {
       );
 
       const hasReusableNarrative =
-        executiveSummary.length > 0 ||
-        strengths.length > 0 ||
-        risks.length > 0 ||
-        recommendations.length > 0 ||
+        dealSnapshot.length > 0 ||
+        keyStrengths.length > 0 ||
+        keyRisks.length > 0 ||
         Boolean(investorMemo) ||
         Boolean(founderReport);
 
@@ -619,17 +622,13 @@ export class SynthesisService {
 
       return {
         ...fallbackOutput,
-        executiveSummary:
-          executiveSummary.length > 0
-            ? executiveSummary
-            : fallbackOutput.executiveSummary,
-        strengths:
-          strengths.length > 0 ? strengths : fallbackOutput.strengths,
-        concerns: risks.length > 0 ? risks : fallbackOutput.concerns,
-        nextSteps:
-          recommendations.length > 0
-            ? recommendations
-            : fallbackOutput.nextSteps,
+        dealSnapshot:
+          dealSnapshot.length > 0
+            ? dealSnapshot
+            : fallbackOutput.dealSnapshot,
+        keyStrengths:
+          keyStrengths.length > 0 ? keyStrengths : fallbackOutput.keyStrengths,
+        keyRisks: keyRisks.length > 0 ? keyRisks : fallbackOutput.keyRisks,
         investorMemo: investorMemo ?? fallbackOutput.investorMemo,
         founderReport: founderReport ?? fallbackOutput.founderReport,
         dataConfidenceNotes: [previousConfidenceNotes, preservationNote]
@@ -675,10 +674,6 @@ export class SynthesisService {
     return {
       ...memo,
       executiveSummary: sanitizeNarrativeText(memo.executiveSummary),
-      summary:
-        typeof memo.summary === "string"
-          ? sanitizeNarrativeText(memo.summary)
-          : memo.summary,
       sections: (memo.sections ?? []).map((section) => ({
         ...section,
         content: sanitizeNarrativeText(section.content),
@@ -689,7 +684,6 @@ export class SynthesisService {
           ? this.sanitizeStringArray(section.concerns)
           : section.concerns,
       })),
-      dealHighlights: this.sanitizeStringArray(memo.dealHighlights ?? []),
       keyDueDiligenceAreas: this.sanitizeStringArray(
         memo.keyDueDiligenceAreas ?? [],
       ),
@@ -706,17 +700,8 @@ export class SynthesisService {
     return {
       ...report,
       summary: sanitizeNarrativeText(report.summary),
-      sections: (report.sections ?? []).map((section) => ({
-        ...section,
-        content: sanitizeNarrativeText(section.content),
-        highlights: section.highlights
-          ? this.sanitizeStringArray(section.highlights)
-          : section.highlights,
-        concerns: section.concerns
-          ? this.sanitizeStringArray(section.concerns)
-          : section.concerns,
-      })),
-      actionItems: this.sanitizeStringArray(report.actionItems ?? []),
+      whatsWorking: this.sanitizeStringArray(report.whatsWorking ?? []),
+      pathToInevitability: this.sanitizeStringArray(report.pathToInevitability ?? []),
     };
   }
 
@@ -728,7 +713,6 @@ export class SynthesisService {
     try {
       const memo = await this.memoGenerator.generateAndUpload(
         startupId,
-        synthesis,
       );
       synthesis.investorMemoUrl = memo.investorMemoUrl;
       synthesis.founderReportUrl = memo.founderReportUrl;

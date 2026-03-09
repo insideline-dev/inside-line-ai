@@ -25,11 +25,15 @@ export class MarketEvaluationAgent extends BaseEvaluationAgent<MarketEvaluation>
   }
 
   buildContext(pipelineData: EvaluationPipelineInput) {
-    const { extraction } = pipelineData;
+    const { extraction, research } = pipelineData;
     const claimedTAM = undefined;
 
     return {
-      researchReportText: this.buildResearchReportText(pipelineData),
+      researchReportText: this.buildFocusedMarketResearchReport(
+        research.market,
+        research.competitor,
+        research.product,
+      ),
       industry: extraction.industry,
       claimedTAM,
       targetMarket: extraction.industry,
@@ -46,5 +50,43 @@ export class MarketEvaluationAgent extends BaseEvaluationAgent<MarketEvaluation>
       marketTiming: "Timing is favorable due to sustained demand tailwinds",
       credibilityScore: clampScore(20),
     });
+  }
+
+  private buildFocusedMarketResearchReport(
+    market: EvaluationPipelineInput["research"]["market"],
+    competitor: EvaluationPipelineInput["research"]["competitor"],
+    product: EvaluationPipelineInput["research"]["product"],
+  ): string {
+    const sections = [
+      ["Market Research Report", this.limitSection(market, 4_000)],
+      ["Competitor Research Report", this.limitSection(competitor, 2_500)],
+      ["Product Research Report", this.limitSection(product, 1_800)],
+    ]
+      .filter(([, value]) => value.length > 0)
+      .map(([label, value]) => `## ${label}\n${value}`);
+
+    return sections.join("\n\n");
+  }
+
+  private limitSection(value: unknown, maxChars: number): string {
+    const text = this.toText(value);
+    if (text.length <= maxChars) {
+      return text;
+    }
+    return `${text.slice(0, maxChars)}\n\n...[truncated]`;
+  }
+
+  private toText(value: unknown): string {
+    if (typeof value === "string") {
+      return value.trim();
+    }
+    if (value == null) {
+      return "";
+    }
+    try {
+      return JSON.stringify(value, null, 2).trim();
+    } catch {
+      return String(value).trim();
+    }
   }
 }

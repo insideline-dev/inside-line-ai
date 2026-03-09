@@ -68,6 +68,7 @@ export interface SubmissionResult {
   startupId: string;
   startupName: string;
   isDuplicate: boolean;
+  duplicateBlocked?: boolean;
   isEnriched?: boolean;
   status: string;
   pipelineStarted?: boolean;

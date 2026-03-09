@@ -461,96 +461,116 @@ export class AiModelConfigService {
       );
     }
 
-    const [definition] = await this.drizzle.db
-      .select({ id: aiPromptDefinition.id })
-      .from(aiPromptDefinition)
-      .where(eq(aiPromptDefinition.key, params.key))
-      .limit(1);
+    try {
+      const [definition] = await this.drizzle.db
+        .select({ id: aiPromptDefinition.id })
+        .from(aiPromptDefinition)
+        .where(eq(aiPromptDefinition.key, params.key))
+        .limit(1);
 
-    if (!definition) {
+      if (!definition) {
+        return this.logResolvedConfig(
+          params,
+          normalizedStage,
+          this.buildDefaultResolvedConfig(
+            params.key,
+            normalizedStage,
+            purpose,
+          ),
+        );
+      }
+
+      const candidates = await this.drizzle.db
+        .select({
+          id: aiModelConfigRevision.id,
+          stage: aiModelConfigRevision.stage,
+          modelName: aiModelConfigRevision.modelName,
+          searchMode: aiModelConfigRevision.searchMode,
+        })
+        .from(aiModelConfigRevision)
+        .where(
+          and(
+            eq(aiModelConfigRevision.definitionId, definition.id),
+            eq(aiModelConfigRevision.status, "published"),
+            normalizedStage
+              ? or(
+                  eq(aiModelConfigRevision.stage, normalizedStage),
+                  isNull(aiModelConfigRevision.stage),
+                )
+              : isNull(aiModelConfigRevision.stage),
+          ),
+        )
+        .orderBy(
+          desc(aiModelConfigRevision.stage),
+          desc(aiModelConfigRevision.publishedAt),
+          desc(aiModelConfigRevision.createdAt),
+        );
+
+      const stageMatch = normalizedStage
+        ? candidates.find((candidate) => candidate.stage === normalizedStage)
+        : null;
+      const globalMatch = candidates.find(
+        (candidate) => candidate.stage === null,
+      );
+      const selected = stageMatch ?? globalMatch;
+
+      if (!selected) {
+        return this.logResolvedConfig(
+          params,
+          normalizedStage,
+          this.buildDefaultResolvedConfig(
+            params.key,
+            normalizedStage,
+            purpose,
+          ),
+        );
+      }
+
+      const modelConfig = this.parseModelConfig({
+        modelName: selected.modelName as AiModelConfig["modelName"],
+        searchMode: selected.searchMode,
+      });
+      this.validateModelConfigForKey(params.key, modelConfig);
+
+      const provider = resolveProviderForModelName(modelConfig.modelName);
+
       return this.logResolvedConfig(
         params,
         normalizedStage,
-        this.buildDefaultResolvedConfig(
-          params.key,
-          normalizedStage,
+        {
+          source: "published",
+          revisionId: selected.id,
+          stage: normalizedStage,
           purpose,
-        ),
-      );
-    }
-
-    const candidates = await this.drizzle.db
-      .select({
-        id: aiModelConfigRevision.id,
-        stage: aiModelConfigRevision.stage,
-        modelName: aiModelConfigRevision.modelName,
-        searchMode: aiModelConfigRevision.searchMode,
-      })
-      .from(aiModelConfigRevision)
-      .where(
-        and(
-          eq(aiModelConfigRevision.definitionId, definition.id),
-          eq(aiModelConfigRevision.status, "published"),
-          normalizedStage
-            ? or(
-                eq(aiModelConfigRevision.stage, normalizedStage),
-                isNull(aiModelConfigRevision.stage),
-              )
-            : isNull(aiModelConfigRevision.stage),
-        ),
-      )
-      .orderBy(
-        desc(aiModelConfigRevision.stage),
-        desc(aiModelConfigRevision.publishedAt),
-        desc(aiModelConfigRevision.createdAt),
-      );
-
-    const stageMatch = normalizedStage
-      ? candidates.find((candidate) => candidate.stage === normalizedStage)
-      : null;
-    const globalMatch = candidates.find(
-      (candidate) => candidate.stage === null,
-    );
-    const selected = stageMatch ?? globalMatch;
-
-    if (!selected) {
-      return this.logResolvedConfig(
-        params,
-        normalizedStage,
-        this.buildDefaultResolvedConfig(
-          params.key,
-          normalizedStage,
-          purpose,
-        ),
-      );
-    }
-
-    const modelConfig = this.parseModelConfig({
-      modelName: selected.modelName as AiModelConfig["modelName"],
-      searchMode: selected.searchMode,
-    });
-    this.validateModelConfigForKey(params.key, modelConfig);
-
-    const provider = resolveProviderForModelName(modelConfig.modelName);
-
-    return this.logResolvedConfig(
-      params,
-      normalizedStage,
-      {
-        source: "published",
-        revisionId: selected.id,
-        stage: normalizedStage,
-        purpose,
-        modelName: modelConfig.modelName,
-        provider,
-        searchMode: modelConfig.searchMode,
-        supportedSearchModes: this.getSupportedSearchModes(
-          params.key,
+          modelName: modelConfig.modelName,
           provider,
-          modelConfig.modelName,
+          searchMode: modelConfig.searchMode,
+          supportedSearchModes: this.getSupportedSearchModes(
+            params.key,
+            provider,
+            modelConfig.modelName,
+          ),
+        },
+      );
+    } catch (error) {
+      if (!this.isRuntimeConfigTableUnavailable(error)) {
+        throw error;
+      }
+
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `Model config resolution failed for ${params.key} (${normalizedStage ?? "global"}), using default runtime config: ${message}`,
+      );
+      return this.logResolvedConfig(
+        params,
+        normalizedStage,
+        this.buildDefaultResolvedConfig(
+          params.key,
+          normalizedStage,
+          purpose,
         ),
-      },
-    );
+      );
+    }
   }
 
   private buildDefaultResolvedConfig(
@@ -849,5 +869,12 @@ export class AiModelConfigService {
 
   private async getOrCreateDefinition(key: string): Promise<AiPromptDefinition> {
     return this.getOrCreateDefinitionWithDb(this.drizzle.db, key);
+  }
+
+  private isRuntimeConfigTableUnavailable(error: unknown): boolean {
+    const message = error instanceof Error ? error.message : String(error);
+    return /ai_prompt_definitions|ai_model_config_revisions|relation .* does not exist|failed query/i.test(
+      message,
+    );
   }
 }

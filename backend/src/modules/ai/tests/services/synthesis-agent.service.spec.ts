@@ -9,7 +9,7 @@ mock.module("ai", () => ({
 import type { AiConfigService } from "../../services/ai-config.service";
 import type { AiProviderService } from "../../providers/ai-provider.service";
 import type { AiPromptService } from "../../services/ai-prompt.service";
-import { ModelPurpose } from "../../interfaces/pipeline.interface";
+import type { AiModelExecutionService } from "../../services/ai-model-execution.service";
 import { SynthesisAgent } from "../../agents/synthesis";
 import { createEvaluationPipelineInput } from "../fixtures/evaluation-pipeline.fixture";
 import { createMockEvaluationResult } from "../fixtures/mock-evaluation.fixture";
@@ -21,6 +21,7 @@ describe("SynthesisAgent", () => {
   let providers: jest.Mocked<AiProviderService>;
   let aiConfig: jest.Mocked<AiConfigService>;
   let promptService: jest.Mocked<AiPromptService>;
+  let modelExecution: jest.Mocked<AiModelExecutionService>;
   const resolvedModel = { provider: "resolved-model" };
 
   beforeEach(() => {
@@ -55,10 +56,32 @@ describe("SynthesisAgent", () => {
       }),
     } as unknown as jest.Mocked<AiPromptService>;
 
+    modelExecution = {
+      resolveForPrompt: jest.fn().mockResolvedValue({
+        resolvedConfig: {
+          source: "published",
+          revisionId: "rev-1",
+          stage: "seed",
+          purpose: "synthesis",
+          modelName: "gemini-3-flash-preview",
+          provider: "google",
+          searchMode: "off",
+          supportedSearchModes: ["off"],
+        },
+        generateTextOptions: {
+          model: resolvedModel,
+          tools: undefined,
+          toolChoice: undefined,
+          providerOptions: undefined,
+        },
+      }),
+    } as unknown as jest.Mocked<AiModelExecutionService>;
+
     service = new SynthesisAgent(
       providers as unknown as AiProviderService,
       aiConfig as unknown as AiConfigService,
       promptService as unknown as AiPromptService,
+      modelExecution as unknown as AiModelExecutionService,
     );
   });
 
@@ -100,9 +123,10 @@ describe("SynthesisAgent", () => {
       stageWeights: { team: 0.25, traction: 0.2, market: 0.2, product: 0.15, dealTerms: 0.1, exitPotential: 0.1 },
     });
 
-    expect(providers.resolveModelForPurpose).toHaveBeenCalledWith(
-      ModelPurpose.SYNTHESIS,
-    );
+    expect(modelExecution.resolveForPrompt).toHaveBeenCalledWith({
+      key: "synthesis.final",
+      stage: pipeline.extraction.stage,
+    });
     expect(aiConfig.getSynthesisTemperature).toHaveBeenCalledTimes(1);
     expect(aiConfig.getSynthesisMaxOutputTokens).toHaveBeenCalledTimes(1);
     expect(generateTextMock).toHaveBeenCalledWith(
@@ -163,6 +187,69 @@ describe("SynthesisAgent", () => {
       expect.objectContaining({ recommendation: "Consider" }),
     );
     expect(result.outputText).toContain("overallScore");
+  });
+
+  it("uses text-only JSON parsing for OpenAI-backed synthesis models", async () => {
+    modelExecution.resolveForPrompt.mockResolvedValueOnce({
+      resolvedConfig: {
+        source: "published",
+        revisionId: "rev-openai",
+        stage: "seed",
+        purpose: "synthesis",
+        modelName: "gpt-5.2",
+        provider: "openai",
+        searchMode: "off",
+        supportedSearchModes: ["off"],
+      },
+      generateTextOptions: {
+        model: resolvedModel,
+        tools: undefined,
+        toolChoice: undefined,
+        providerOptions: undefined,
+      },
+    });
+    generateTextMock.mockResolvedValueOnce({
+      text: JSON.stringify({
+        overallScore: 81.1,
+        recommendation: "Consider",
+        executiveSummary: "Promising company with credible upside and manageable execution risk.",
+        strengths: ["Strong founder-market fit"],
+        concerns: ["Still early on repeatable GTM proof"],
+        investmentThesis: "Attractive if execution milestones continue to be met.",
+        nextSteps: ["Validate repeatability of acquisition channels"],
+        confidenceLevel: "Medium",
+        investorMemo: {
+          executiveSummary: "Investor memo body",
+          summary: "Memo summary",
+          sections: [],
+          recommendation: "Consider",
+          riskLevel: "medium",
+          dealHighlights: ["Founder-market fit"],
+          keyDueDiligenceAreas: ["Validate GTM repeatability"],
+        },
+        founderReport: {
+          summary: "Founder report body",
+          sections: [],
+          actionItems: ["Validate repeatability of acquisition channels"],
+        },
+        dataConfidenceNotes: "Evidence quality is moderate.",
+      }),
+    });
+
+    const pipeline = createEvaluationPipelineInput();
+    const result = await service.runDetailed({
+      extraction: pipeline.extraction,
+      scraping: pipeline.scraping,
+      research: pipeline.research,
+      evaluation: createMockEvaluationResult(),
+      stageWeights: { team: 0.25, traction: 0.2, market: 0.2, product: 0.15, dealTerms: 0.1, exitPotential: 0.1 },
+    });
+
+    expect(result.usedFallback).toBe(false);
+    expect(result.output.recommendation).toBe("Consider");
+    const call = generateTextMock.mock.calls[0]?.[0];
+    expect(call?.output).toBeUndefined();
+    expect(String(call?.prompt ?? "")).toContain("JSON OUTPUT CONTRACT");
   });
 
   it("expands short executive summary into a detailed multi-paragraph narrative", async () => {
@@ -330,9 +417,12 @@ describe("SynthesisAgent", () => {
       stageWeights: { team: 0.25, traction: 0.2, market: 0.2, product: 0.15, dealTerms: 0.1, exitPotential: 0.1 },
     });
 
-    expect(providers.resolveModelForPurpose).toHaveBeenCalledWith(
-      ModelPurpose.SYNTHESIS,
-    );
+    expect(modelExecution.resolveForPrompt).toHaveBeenCalledWith({
+      key: "synthesis.final",
+      stage: pipeline.extraction.stage,
+    });
+    const call = generateTextMock.mock.calls[0]?.[0];
+    expect(call?.output).toBeDefined();
   });
 
   it("synthesis brief is wrapped in evaluation_data tags", async () => {

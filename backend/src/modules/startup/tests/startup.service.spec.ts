@@ -11,11 +11,12 @@ import { DrizzleService } from "../../../database";
 import { QueueService } from "../../../queue";
 import { StorageService } from "../../../storage";
 import { UserRole } from "../../../auth/entities/auth.schema";
-import { StartupStatus, StartupStage } from "../entities/startup.schema";
+import { startup, StartupStatus, StartupStage } from "../entities/startup.schema";
 import { AiConfigService } from "../../ai/services/ai-config.service";
 import { PipelineService } from "../../ai/services/pipeline.service";
 import { PipelineFeedbackService } from "../../ai/services/pipeline-feedback.service";
 import { StartupMatchingPipelineService } from "../../ai/services/startup-matching-pipeline.service";
+import { startupEvaluation } from "../../analysis/entities/analysis.schema";
 import {
   PipelineStatus,
   ModelPurpose,
@@ -125,6 +126,8 @@ describe("StartupService", () => {
 
     pipelineService = {
       startPipeline: jest.fn().mockResolvedValue("pipeline-run-id"),
+      prepareFreshAnalysis: jest.fn().mockResolvedValue(undefined),
+      cancelPipeline: jest.fn().mockResolvedValue({ removedJobs: 0 }),
       getPipelineStatus: jest.fn().mockResolvedValue(null),
       getTrackedProgress: jest.fn().mockResolvedValue(null),
       retryPhase: jest.fn().mockResolvedValue(undefined),
@@ -610,6 +613,56 @@ describe("StartupService", () => {
       await expect(service.resubmit(mockStartupId, mockUserId)).rejects.toThrow(
         BadRequestException,
       );
+    });
+  });
+
+  describe("reanalyze", () => {
+    it("clears stale analysis artifacts before starting a fresh pipeline run", async () => {
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          ...mockStartup,
+          status: StartupStatus.PENDING_REVIEW,
+          overallScore: 82,
+          percentileRank: 91,
+        },
+      ]);
+
+      const result = await service.reanalyze(mockStartupId, mockUserId);
+
+      expect(result).toEqual({ jobId: "pipeline-run-id" });
+      expect(pipelineService.prepareFreshAnalysis).toHaveBeenCalledWith(
+        mockStartupId,
+      );
+      expect(pipelineService.startPipeline).toHaveBeenCalledWith(
+        mockStartupId,
+        mockUserId,
+      );
+    });
+
+    it("clears persisted evaluation data before queueing legacy reanalysis", async () => {
+      aiConfigService.isPipelineEnabled.mockReturnValueOnce(false);
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          ...mockStartup,
+          status: StartupStatus.PENDING_REVIEW,
+          overallScore: 82,
+          percentileRank: 91,
+        },
+      ]);
+      queueService.addJob.mockResolvedValueOnce("legacy-job-id");
+
+      const result = await service.reanalyze(mockStartupId, mockUserId);
+
+      expect(result).toEqual({ jobId: "legacy-job-id" });
+      expect(mockDb.delete).toHaveBeenCalledWith(startupEvaluation);
+      expect(mockDb.update).toHaveBeenCalledWith(startup);
+      expect(mockDb.set).toHaveBeenCalledWith(
+        expect.objectContaining({
+          overallScore: null,
+          percentileRank: null,
+        }),
+      );
+      expect(queueService.addJob).toHaveBeenCalled();
     });
   });
 
@@ -1190,7 +1243,7 @@ describe("StartupService", () => {
       expect(result.progress?.overallProgress).toBe(0);
     });
 
-    it("returns failed status for orphaned progress (no live pipeline state)", async () => {
+    it("marks orphaned tracked progress as failed without mutating pipeline state", async () => {
       const analyzingStartup = {
         ...mockStartup,
         status: StartupStatus.ANALYZING,
@@ -1220,10 +1273,13 @@ describe("StartupService", () => {
 
       const result = await service.getProgress(mockStartupId, mockUserId);
 
-      // Should return failed status so frontend stops polling
       expect(result.progress?.pipelineStatus).toBe("failed");
-      expect(result.progress?.error).toContain("missing");
+      expect(result.progress?.error).toContain(
+        "Live pipeline state is missing; rerun or retry from the admin tools.",
+      );
       expect(result.progress?.pipelineRunId).toBe("dead-run-id");
+      expect(pipelineService.cancelPipeline).not.toHaveBeenCalled();
+      expect(pipelineService.startPipeline).not.toHaveBeenCalled();
     });
   });
 });

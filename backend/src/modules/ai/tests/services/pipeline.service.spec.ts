@@ -452,6 +452,37 @@ describe("PipelineService", () => {
     );
   });
 
+  it("starts pipeline even when runtime snapshot capture fails", async () => {
+    stateService.get.mockResolvedValueOnce(null);
+    stateService.init.mockResolvedValueOnce(createState());
+    pipelineTemplateService.getRuntimeSnapshot.mockRejectedValueOnce(
+      new Error('column "flow_id" does not exist'),
+    );
+
+    const runId = await service.startPipeline("startup-1", "user-1");
+
+    expect(runId).toBe("run-1");
+    expect(mockDb.values).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pipelineRunId: "run-1",
+        config: expect.objectContaining({
+          runtimeSnapshot: expect.objectContaining({
+            source: "unavailable",
+            error: 'column "flow_id" does not exist',
+          }),
+        }),
+      }),
+    );
+    expect(queue.addJob).toHaveBeenCalledWith(
+      "ai-extraction",
+      expect.objectContaining({
+        startupId: "startup-1",
+        type: "ai_extraction",
+      }),
+      expect.any(Object),
+    );
+  });
+
   it("starts pipeline from prefilled extraction cache without re-queueing extraction", async () => {
     stateService.get.mockResolvedValueOnce(null);
     stateService.init.mockResolvedValueOnce(createState());
@@ -1204,6 +1235,12 @@ describe("PipelineService", () => {
   });
 
   it("marks pipeline completed when synthesis is the final completed phase", async () => {
+    const clara = {
+      isEnabled: jest.fn().mockReturnValue(true),
+      notifyMissingStartupInfo: jest.fn().mockResolvedValue(undefined),
+      notifyPipelineComplete: jest.fn().mockResolvedValue(undefined),
+    };
+    moduleRef.get.mockReturnValueOnce(clara as any);
     const state = createState({}, {
       [PipelinePhase.EXTRACTION]: PhaseStatus.COMPLETED,
       [PipelinePhase.SCRAPING]: PhaseStatus.COMPLETED,
@@ -1245,6 +1282,77 @@ describe("PipelineService", () => {
       "AI pipeline analysis completed successfully.",
       expect.any(String),
       "/admin/startup/startup-1",
+    );
+    expect(clara.notifyPipelineComplete).toHaveBeenCalledWith(
+      "startup-1",
+      88,
+      {
+        pipelineRunId: "run-1",
+      },
+    );
+  });
+
+  it("completes with warnings when synthesis fallback degraded the run", async () => {
+    const clara = {
+      isEnabled: jest.fn().mockReturnValue(true),
+      notifyMissingStartupInfo: jest.fn().mockResolvedValue(undefined),
+      notifyPipelineComplete: jest.fn().mockResolvedValue(undefined),
+    };
+    moduleRef.get.mockReturnValueOnce(clara as any);
+    const state = createState(
+      { quality: "degraded" },
+      {
+        [PipelinePhase.EXTRACTION]: PhaseStatus.COMPLETED,
+        [PipelinePhase.SCRAPING]: PhaseStatus.COMPLETED,
+        [PipelinePhase.RESEARCH]: PhaseStatus.COMPLETED,
+        [PipelinePhase.EVALUATION]: PhaseStatus.COMPLETED,
+        [PipelinePhase.SYNTHESIS]: PhaseStatus.COMPLETED,
+      },
+    );
+    stateService.get.mockResolvedValue(state);
+    stateService.getPhaseResult.mockResolvedValue({
+      overallScore: 85.9,
+      dataConfidenceNotes:
+        "Synthesis failed — all scores require manual verification.",
+    });
+    phaseTransition.decideNextPhases.mockReturnValueOnce({
+      queue: [],
+      blockedByRequiredFailure: false,
+      pipelineComplete: true,
+      degraded: true,
+    });
+
+    await service.onPhaseCompleted("startup-1", PipelinePhase.SYNTHESIS);
+
+    expect(progressTracker.setPipelineStatus).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: PipelineStatus.COMPLETED,
+        overallScore: 85.9,
+        error: "Synthesis failed — all scores require manual verification.",
+      }),
+    );
+    expect(notifications.createAndBroadcast).toHaveBeenCalledWith(
+      "user-1",
+      expect.stringContaining("Analysis completed with warnings"),
+      "Synthesis failed — all scores require manual verification.",
+      expect.any(String),
+      "/admin/startup/startup-1",
+    );
+    expect(notifications.createAndBroadcast).not.toHaveBeenCalledWith(
+      "user-1",
+      expect.stringContaining("Analysis completed"),
+      "AI pipeline analysis completed successfully.",
+      expect.any(String),
+      "/admin/startup/startup-1",
+    );
+    expect(clara.notifyPipelineComplete).toHaveBeenCalledWith(
+      "startup-1",
+      85.9,
+      {
+        pipelineRunId: "run-1",
+        warningMessage:
+          "Synthesis failed — all scores require manual verification.",
+      },
     );
   });
 
@@ -1567,6 +1675,32 @@ describe("PipelineService", () => {
         key: "team",
         status: "completed",
       }),
+    );
+    expect(stateService.setQuality).not.toHaveBeenCalled();
+  });
+
+  it("marks pipeline quality degraded when an agent uses fallback output", async () => {
+    await service.onAgentProgress({
+      startupId: "startup-1",
+      userId: "user-1",
+      pipelineRunId: "run-1",
+      phase: PipelinePhase.RESEARCH,
+      key: "market",
+      status: "completed",
+      progress: 100,
+      usedFallback: true,
+      fallbackReason: "MISSING_PROVIDER_EVIDENCE",
+    });
+
+    expect(progressTracker.updateAgentProgress).toHaveBeenCalledWith(
+      expect.objectContaining({
+        key: "market",
+        usedFallback: true,
+      }),
+    );
+    expect(stateService.setQuality).toHaveBeenCalledWith(
+      "startup-1",
+      "degraded",
     );
   });
 

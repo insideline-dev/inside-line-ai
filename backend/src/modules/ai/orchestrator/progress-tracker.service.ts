@@ -571,9 +571,15 @@ export class ProgressTrackerService {
       }
       if (params.error) {
         payload.error = params.error;
-        this.logger.error(
-          `[Pipeline] ❌ PIPELINE FAILED | Error: ${params.error} | Startup: ${params.startupId}`,
-        );
+        if (params.status === PipelineStatus.COMPLETED) {
+          this.logger.warn(
+            `[Pipeline] ⚠️ PIPELINE COMPLETED WITH WARNINGS | Warning: ${params.error} | Startup: ${params.startupId}`,
+          );
+        } else {
+          this.logger.error(
+            `[Pipeline] ❌ PIPELINE FAILED | Error: ${params.error} | Startup: ${params.startupId}`,
+          );
+        }
       } else if (params.status === PipelineStatus.COMPLETED) {
         delete payload.error;
       }

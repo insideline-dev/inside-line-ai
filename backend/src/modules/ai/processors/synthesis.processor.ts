@@ -169,6 +169,10 @@ export class SynthesisProcessor
             completedAt,
           });
 
+          if (details.trace.usedFallback) {
+            await this.pipelineState.setQuality(startupId, "degraded");
+          }
+
           return details.synthesis;
         } catch (error) {
           const completedAt = new Date();

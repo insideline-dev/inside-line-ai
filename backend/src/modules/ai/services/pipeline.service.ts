@@ -7,6 +7,7 @@ import { NotificationType } from "../../../notification/entities";
 import { NotificationService } from "../../../notification/notification.service";
 import { QueueService } from "../../../queue";
 import { startup, StartupStage, StartupStatus } from "../../startup/entities";
+import { startupEvaluation } from "../../analysis/entities";
 import { pipelineRun, pipelineAgentRun } from "../entities";
 import type {
   EnrichmentResult,
@@ -965,6 +966,25 @@ export class PipelineService {
     };
   }
 
+  async prepareFreshAnalysis(startupId: string): Promise<void> {
+    this.extractionService.clearExtractionCache(startupId);
+
+    await this.drizzle.db.transaction(async (tx) => {
+      await tx
+        .delete(startupEvaluation)
+        .where(eq(startupEvaluation.startupId, startupId));
+
+      await tx
+        .update(startup)
+        .set({
+          overallScore: null,
+          percentileRank: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(startup.id, startupId));
+    });
+  }
+
   async startPipeline(
     startupId: string,
     userId: string,
@@ -1541,6 +1561,18 @@ export class PipelineService {
     dataSummary?: Record<string, unknown>;
   }): Promise<void> {
     await this.progressTracker.updateAgentProgress(params);
+    if (!params.usedFallback) {
+      return;
+    }
+
+    try {
+      await this.pipelineState.setQuality(params.startupId, "degraded");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `[Pipeline] Failed to mark pipeline quality degraded after fallback agent output | Startup: ${params.startupId} | Phase: ${params.phase} | Agent: ${params.key} | Error: ${message}`,
+      );
+    }
   }
 
   async onPhaseSkipped<P extends PipelinePhase>(params: {
@@ -1868,9 +1900,22 @@ export class PipelineService {
   }
 
   private async createPipelineRunRecord(state: PipelineState): Promise<void> {
-    const runtimeSnapshot = await this.pipelineTemplateService.getRuntimeSnapshot(
-      "pipeline",
-    );
+    let runtimeSnapshot: Record<string, unknown>;
+    try {
+      runtimeSnapshot = await this.pipelineTemplateService.getRuntimeSnapshot(
+        "pipeline",
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `[Pipeline] Failed to capture runtime snapshot for startup ${state.startupId}; continuing with fallback metadata only: ${message}`,
+      );
+      runtimeSnapshot = {
+        source: "unavailable",
+        capturedAt: new Date().toISOString(),
+        error: message,
+      };
+    }
 
     await this.drizzle.db.insert(pipelineRun).values({
       pipelineRunId: state.pipelineRunId,
@@ -2044,6 +2089,11 @@ export class PipelineService {
       return;
     }
 
+    const degradedCompletionReason =
+      decision.degraded && !decision.blockedByRequiredFailure
+        ? await this.resolveDegradedCompletionReason(startupId, lastError)
+        : null;
+
     if (decision.blockedByRequiredFailure) {
       await this.pipelineState.setQuality(startupId, "degraded");
       const degradedReason = lastError ?? "Critical phase failed, completed with degraded output";
@@ -2075,6 +2125,52 @@ export class PipelineService {
           message: degradedReason,
         });
       }
+      this.notifyClaraSafely(startupId, {
+        pipelineRunId: refreshed.pipelineRunId,
+        warningMessage: degradedReason,
+      });
+      return;
+    }
+
+    if (degradedCompletionReason) {
+      await this.pipelineState.setStatus(startupId, PipelineStatus.COMPLETED);
+      await this.updatePipelineRunStatus(
+        refreshed.pipelineRunId,
+        PipelineStatus.COMPLETED,
+        degradedCompletionReason,
+      );
+      const synthesisResult = await this.pipelineState.getPhaseResult(
+        startupId,
+        PipelinePhase.SYNTHESIS,
+      );
+      await this.progressTracker.setPipelineStatus({
+        startupId,
+        userId: refreshed.userId,
+        pipelineRunId: refreshed.pipelineRunId,
+        status: PipelineStatus.COMPLETED,
+        currentPhase: PipelinePhase.SYNTHESIS,
+        overallScore: synthesisResult?.overallScore,
+        error: degradedCompletionReason,
+      });
+      await this.persistCompletedPipelineStateSnapshotSafely(
+        startupId,
+        refreshed.pipelineRunId,
+      );
+      await this.finalizeStartupAfterPipelineCompletion(startupId, refreshed.userId);
+      if (shouldNotifyTerminal) {
+        await this.notifyPipelineLifecycle({
+          userId: refreshed.userId,
+          startupId,
+          type: NotificationType.WARNING,
+          title: "Analysis completed with warnings",
+          message: degradedCompletionReason,
+        });
+      }
+      this.notifyClaraSafely(startupId, {
+        overallScore: synthesisResult?.overallScore,
+        pipelineRunId: refreshed.pipelineRunId,
+        warningMessage: degradedCompletionReason,
+      });
       return;
     }
 
@@ -2108,7 +2204,30 @@ export class PipelineService {
     }
 
     // Notify Clara conversation if exists
-    this.notifyClaraSafely(startupId, synthesisResult?.overallScore);
+    this.notifyClaraSafely(startupId, {
+      overallScore: synthesisResult?.overallScore,
+      pipelineRunId: refreshed.pipelineRunId,
+    });
+  }
+
+  private async resolveDegradedCompletionReason(
+    startupId: string,
+    lastError?: string,
+  ): Promise<string> {
+    if (lastError && lastError.trim().length > 0) {
+      return lastError.trim();
+    }
+
+    const synthesis = await this.pipelineState.getPhaseResult(
+      startupId,
+      PipelinePhase.SYNTHESIS,
+    );
+    const confidenceNotes = synthesis?.dataConfidenceNotes?.trim();
+    if (confidenceNotes) {
+      return confidenceNotes;
+    }
+
+    return "Analysis completed with warnings; one or more agents used fallback output.";
   }
 
   private async notifyPipelineLifecycle(params: {
@@ -2157,13 +2276,30 @@ export class PipelineService {
 
   private notifyClaraSafely(
     startupId: string,
-    overallScore?: number,
+    options?: {
+      overallScore?: number;
+      pipelineRunId?: string;
+      warningMessage?: string | null;
+    },
   ): void {
     const clara = this.getClaraService();
     if (!clara?.isEnabled()) return;
-    clara.notifyPipelineComplete(startupId, overallScore).catch((err) => {
-      this.logger.error(`Clara notification failed for ${startupId}: ${err}`);
-    });
+    clara
+      .notifyPipelineComplete(
+        startupId,
+        options?.overallScore,
+        {
+          ...(options?.pipelineRunId
+            ? { pipelineRunId: options.pipelineRunId }
+            : {}),
+          ...(options?.warningMessage
+            ? { warningMessage: options.warningMessage }
+            : {}),
+        },
+      )
+      .catch((err) => {
+        this.logger.error(`Clara notification failed for ${startupId}: ${err}`);
+      });
   }
 
   private async getCriticalMissingAfterEnrichment(

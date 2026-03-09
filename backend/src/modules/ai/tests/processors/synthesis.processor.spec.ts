@@ -108,6 +108,7 @@ describe("SynthesisProcessor", () => {
       }),
       updatePhase: jest.fn().mockResolvedValue(undefined),
       setPhaseResult: jest.fn().mockResolvedValue(undefined),
+      setQuality: jest.fn().mockResolvedValue(undefined),
     } as unknown as jest.Mocked<PipelineStateService>;
 
     pipelineService = {
@@ -313,6 +314,10 @@ describe("SynthesisProcessor", () => {
         status: "fallback",
         usedFallback: true,
       }),
+    );
+    expect(pipelineState.setQuality).toHaveBeenCalledWith(
+      "startup-1",
+      "degraded",
     );
   });
 });

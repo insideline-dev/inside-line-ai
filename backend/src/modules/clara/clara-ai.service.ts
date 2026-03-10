@@ -334,7 +334,7 @@ export class ClaraAiService {
       return text;
     } catch (error) {
       this.logger.warn(`Agent loop failed: ${error}`);
-      return this.fallbackResponse(ClaraIntent.GREETING);
+      return "I'm sorry, I ran into a technical issue processing your message. Please try again shortly.";
     }
   }
 

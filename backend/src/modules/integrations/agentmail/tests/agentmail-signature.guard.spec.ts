@@ -112,7 +112,7 @@ describe('AgentMailSignatureGuard', () => {
       configService.get.mockReturnValueOnce(svixSecret);
 
       const id = 'msg_123';
-      const timestamp = '1739644800';
+      const timestamp = String(Math.floor(Date.now() / 1000));
       const sig = generateSvixSignature(mockPayload, svixSecret, id, timestamp);
 
       const context = createMockContext(
@@ -136,7 +136,7 @@ describe('AgentMailSignatureGuard', () => {
       configService.get.mockReturnValueOnce(svixSecret);
 
       const id = 'msg_456';
-      const timestamp = '1739644801';
+      const timestamp = String(Math.floor(Date.now() / 1000));
       const sig = generateSvixSignature(mockPayload, svixSecret, id, timestamp);
 
       const context = createMockContext(

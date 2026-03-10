@@ -78,6 +78,41 @@ export class RedisFallbackClient {
     }
   }
 
+  /**
+   * Set key=value only if the key does not already exist (atomic NX).
+   * Returns true if the key was set, false if it already existed.
+   */
+  async setNx(key: string, value: string, ttlSeconds: number): Promise<boolean> {
+    await this.redisInitPromise;
+    this.tryRecovery();
+
+    if (this.useMemory || !this.redis) {
+      const existing = this.memoryStore.get(key);
+      if (existing && existing.expiresAt > Date.now()) {
+        return false;
+      }
+      this.writeMemory(key, value, ttlSeconds);
+      return true;
+    }
+
+    try {
+      const result = await this.redis.set(key, value, "EX", ttlSeconds, "NX");
+      if (result === "OK") {
+        this.writeMemory(key, value, ttlSeconds);
+        return true;
+      }
+      return false;
+    } catch (error) {
+      this.markRedisUnavailable(`redis setNx failed: ${String(error)}`);
+      const existing = this.memoryStore.get(key);
+      if (existing && existing.expiresAt > Date.now()) {
+        return false;
+      }
+      this.writeMemory(key, value, ttlSeconds);
+      return true;
+    }
+  }
+
   async del(key: string): Promise<void> {
     this.memoryStore.delete(key);
 

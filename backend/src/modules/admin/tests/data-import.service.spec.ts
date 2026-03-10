@@ -47,7 +47,7 @@ describe('DataImportService', () => {
   describe('importUsers', () => {
     const validCsv = `email,name,role
 john@example.com,John Doe,founder
-jane@example.com,Jane Smith,admin`;
+jane@example.com,Jane Smith,investor`;
 
     it('should import valid users from CSV', async () => {
       mockDb.limit
@@ -60,6 +60,23 @@ jane@example.com,Jane Smith,admin`;
       expect(result.imported).toBe(2);
       expect(result.skipped).toBe(0);
       expect(result.errors).toHaveLength(0);
+    });
+
+    it('should skip users with admin role', async () => {
+      const csvWithAdmin = `email,name,role
+john@example.com,John Doe,founder
+admin@example.com,Admin User,admin`;
+
+      mockDb.limit
+        .mockResolvedValueOnce([]) // john doesn't exist
+        .mockResolvedValueOnce([]); // admin user doesn't exist (but gets skipped by role check)
+      mockDb.values.mockReturnThis();
+
+      const result = await service.importUsers(csvWithAdmin);
+
+      expect(result.imported).toBe(1);
+      expect(result.skipped).toBe(1);
+      expect(result.errors[0].error).toBe('Admin role cannot be assigned via CSV import');
     });
 
     it('should skip users with invalid email', async () => {

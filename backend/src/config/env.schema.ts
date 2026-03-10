@@ -108,6 +108,8 @@ export const envSchema = z.object({
   // Clara email assistant routing
   CLARA_INBOX_ID: z.string().optional(),
   CLARA_ADMIN_USER_ID: z.string().optional(),
+  // Comma-separated list of additional email addresses treated as Clara-originated (e.g. "clara@insideline.ai,clara@example.com")
+  CLARA_EMAIL_ALIASES: z.string().optional(),
 
   // Unipile Integration (LinkedIn)
   UNIPILE_DSN: z.string().optional(),
@@ -155,7 +157,7 @@ export const envSchema = z.object({
   AI_MODEL_THESIS_ALIGNMENT: z.string().default("gemini-3-flash-preview"),
   AI_MODEL_LOCATION_NORMALIZATION: z.string().default("gemini-3-flash-preview"),
   AI_MODEL_OCR: z.string().default("mistral-ocr-latest"),
-  AI_MODEL_CLARA: z.string().default("gpt-5.4"),
+  AI_MODEL_CLARA: z.string().default("gpt-4o"),
   AI_MODEL_ENRICHMENT: z.string().default("gemini-3-flash-preview"),
   AI_ENRICHMENT_ENABLED: z.coerce.boolean().default(true),
   AI_SOURCE_SANITIZATION_ENABLED: z.coerce.boolean().default(true),

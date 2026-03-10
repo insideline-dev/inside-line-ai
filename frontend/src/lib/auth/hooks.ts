@@ -17,6 +17,8 @@ export const authKeys = {
 function consumeRedirect(): string | null {
   const redirect = sessionStorage.getItem("redirectAfterAuth");
   if (redirect) sessionStorage.removeItem("redirectAfterAuth");
+  // Validate at consumption point: must be a relative path, no protocol injection
+  if (!redirect || !redirect.startsWith("/") || redirect.startsWith("//")) return null;
   return redirect;
 }
 
@@ -136,7 +138,6 @@ export function useLogout() {
     mutationFn: () => authApi.logout(),
     onSuccess: () => {
       setAccessToken(null);
-      queryClient.setQueryData(authKeys.user, null);
       queryClient.removeQueries({ queryKey: authKeys.user });
       navigate({ to: "/login" });
     },
@@ -152,7 +153,6 @@ export function useLogoutAll() {
     mutationFn: () => authApi.logoutAll(),
     onSuccess: () => {
       setAccessToken(null);
-      queryClient.setQueryData(authKeys.user, null);
       queryClient.removeQueries({ queryKey: authKeys.user });
       navigate({ to: "/login" });
     },

@@ -7,6 +7,7 @@ import {
   Delete,
   UseGuards,
   Query,
+  ForbiddenException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -69,8 +70,13 @@ export class StorageController {
   @ApiOperation({ summary: 'Get presigned download URL' })
   @ApiResponse({ status: 200, type: DownloadUrlResponseDto })
   async getDownloadUrl(
+    @CurrentUser() user: User,
     @Param('key') key: string,
   ): Promise<DownloadUrlResponseDto> {
+    // Keys are namespaced as {userId}/... — verify the requesting user owns this key.
+    if (!key.startsWith(`${user.id}/`)) {
+      throw new ForbiddenException('Access denied');
+    }
     const url = await this.storage.getDownloadUrl(key);
     return { url };
   }
@@ -83,17 +89,6 @@ export class StorageController {
   })
   async deleteAsset(@CurrentUser() user: User, @Param('id') id: string) {
     await this.assetService.deleteAsset(id, user.id);
-    return { success: true };
-  }
-
-  @Delete(':key')
-  @ApiOperation({ summary: 'Delete a raw file from R2' })
-  @ApiResponse({
-    status: 200,
-    schema: { properties: { success: { type: 'boolean' } } },
-  })
-  async deleteFile(@Param('key') key: string) {
-    await this.storage.delete(key);
     return { success: true };
   }
 }

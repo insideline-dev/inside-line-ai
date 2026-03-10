@@ -68,7 +68,7 @@ export class AuthController {
     private profileService: ProfileService,
     private emailService: EmailService,
     private earlyAccess: EarlyAccessService,
-    config: ConfigService,
+    private config: ConfigService,
   ) {
     this.isGoogleOAuthConfigured = !!(
       config.get<string>("GOOGLE_CLIENT_ID") &&
@@ -289,9 +289,8 @@ export class AuthController {
       authResult !== null &&
       "__earlyAccessRejected" in authResult
     ) {
-      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3030";
       const error = encodeURIComponent(authResult.error);
-      return res.redirect(`${frontendUrl}/auth/callback?error=${error}`);
+      return res.redirect(`${this.getSafeFrontendUrl()}/auth/callback?error=${error}`);
     }
 
     const foundUser = authResult as DbUser;
@@ -306,8 +305,7 @@ export class AuthController {
     const tokens = await this.authService.generateTokens(refreshedUser);
     this.setTokenCookies(res, tokens.accessToken, tokens.refreshToken);
 
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3030";
-    return res.redirect(`${frontendUrl}/auth/callback?success=true`);
+    return res.redirect(`${this.getSafeFrontendUrl()}/auth/callback?success=true`);
   }
 
   // ============ ONBOARDING ============
@@ -453,6 +451,19 @@ export class AuthController {
 
   // ============ HELPERS ============
 
+  private getSafeFrontendUrl(): string {
+    const configured = this.config.get<string>("FRONTEND_URL") || "http://localhost:3030";
+    try {
+      const url = new URL(configured);
+      if (!["http:", "https:"].includes(url.protocol)) {
+        return "http://localhost:3030";
+      }
+      return configured;
+    } catch {
+      return "http://localhost:3030";
+    }
+  }
+
   private setTokenCookies(
     res: Response,
     accessToken: string,
@@ -476,7 +487,7 @@ export class AuthController {
       secure,
       sameSite,
       path: "/",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
+      maxAge: this.authService.getRefreshTokenTtlMs(),
     });
   }
 

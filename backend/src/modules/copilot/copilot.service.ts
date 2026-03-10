@@ -182,11 +182,24 @@ export class CopilotService {
   }
 
   private readActionIntent(bodyText: string | null): "confirm" | "cancel" | "other" {
-    const normalized = (bodyText ?? "").trim().toLowerCase();
-    if (/\bconfirm\b/.test(normalized)) {
+    // Strip quoted reply content (lines starting with ">") before checking intent,
+    // so a forwarded/replied-to email containing "confirm" or "cancel" doesn't
+    // accidentally trigger an action the user never intended.
+    const withoutQuotes = (bodyText ?? "")
+      .split("\n")
+      .filter((line) => !line.trimStart().startsWith(">"))
+      .join("\n")
+      .trim()
+      .toLowerCase();
+
+    // Only treat short, unambiguous replies as intent signals.
+    // A message longer than 120 chars is almost certainly prose, not a command.
+    const isShortReply = withoutQuotes.length <= 120;
+
+    if (isShortReply && /^\s*(yes\s+)?confirm\s*[.!]?\s*$/.test(withoutQuotes)) {
       return "confirm";
     }
-    if (/\bcancel\b/.test(normalized) || /\bnevermind\b/.test(normalized)) {
+    if (isShortReply && /^\s*(no\s+)?(cancel|nevermind|never\s+mind)\s*[.!]?\s*$/.test(withoutQuotes)) {
       return "cancel";
     }
     return "other";

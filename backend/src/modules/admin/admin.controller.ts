@@ -31,7 +31,7 @@ import { claraConversation } from '../clara/entities/clara-conversation.schema';
 import { claraMessage } from '../clara/entities/clara-message.schema';
 import { copilotActionAudit } from '../copilot/entities';
 import { startup } from '../startup/entities/startup.schema';
-import { desc, eq, inArray } from 'drizzle-orm';
+import { desc, eq, inArray, sql } from 'drizzle-orm';
 import { AnalyticsService } from './analytics.service';
 import { UserManagementService } from './user-management.service';
 import { ScoringConfigService } from './scoring-config.service';
@@ -658,7 +658,21 @@ export class AdminController {
 
   @Get('conversations')
   @ApiOperation({ summary: 'List Clara AI conversations' })
-  async getConversations() {
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  async getConversations(
+    @Query('page') rawPage?: string,
+    @Query('limit') rawLimit?: string,
+  ) {
+    const page = Math.max(1, parseInt(rawPage ?? '1', 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(rawLimit ?? '50', 10) || 50));
+    const offset = (page - 1) * limit;
+
+    const [countRow] = await this.drizzle.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(claraConversation);
+    const total = countRow?.count ?? 0;
+
     const rows = await this.drizzle.db
       .select({
         id: claraConversation.id,
@@ -676,7 +690,9 @@ export class AdminController {
       })
       .from(claraConversation)
       .leftJoin(startup, eq(claraConversation.startupId, startup.id))
-      .orderBy(desc(claraConversation.lastMessageAt));
+      .orderBy(desc(claraConversation.lastMessageAt))
+      .limit(limit)
+      .offset(offset);
 
     const conversationIds = rows.map((row) => row.id);
     const latestActions = conversationIds.length
@@ -716,7 +732,9 @@ export class AdminController {
           lastCopilotAction: latestActionByConversation.get(row.id) ?? null,
         };
       }),
-      total: rows.length,
+      total,
+      page,
+      limit,
     };
   }
 

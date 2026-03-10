@@ -75,10 +75,15 @@ export class DataImportService {
           continue;
         }
 
-        // Validate role if provided
+        // Validate role if provided — admin role cannot be granted via CSV import
         const role = row.role?.toLowerCase();
         if (role && !Object.values(UserRole).includes(role as UserRole)) {
           result.errors.push({ row: rowNum, error: 'Invalid role' });
+          result.skipped++;
+          continue;
+        }
+        if (role === UserRole.ADMIN) {
+          result.errors.push({ row: rowNum, error: 'Admin role cannot be assigned via CSV import' });
           result.skipped++;
           continue;
         }

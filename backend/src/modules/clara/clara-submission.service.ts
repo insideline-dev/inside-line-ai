@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { and, desc, eq, ilike } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { DrizzleService } from "../../database";
 import { StorageService } from "../../storage";
 import { AssetService } from "../../storage/asset.service";
@@ -456,31 +456,29 @@ export class ClaraSubmissionService {
       return null;
     }
 
-    const primaryToken = normalizedCompanyName.split(" ")[0];
-    const escapedPrimaryToken = `%${this.escapeForILike(primaryToken)}%`;
-    const candidates = await this.drizzle.db
-      .select({
-        id: startup.id,
-        name: startup.name,
-        status: startup.status,
-      })
+    // Mirror the JS normalization in SQL for a single exact-match query,
+    // avoiding the previous approach of fetching 250 rows and filtering in memory.
+    const normalizedExpr = sql`trim(regexp_replace(
+      regexp_replace(
+        replace(lower(${startup.name}), '&', ' and '),
+        '\m(incorporated|inc|llc|ltd|limited|corp|corporation|co|company|plc|gmbh|sarl|sa|sas)\M',
+        ' ', 'gi'
+      ),
+      '[^a-z0-9]+', ' ', 'g'
+    ))`;
+
+    const [row] = await this.drizzle.db
+      .select({ id: startup.id, name: startup.name, status: startup.status })
       .from(startup)
       .where(
         and(
           eq(startup.userId, ownerUserId),
-          ilike(startup.name, escapedPrimaryToken),
+          sql`${normalizedExpr} = ${normalizedCompanyName}`,
         ),
       )
-      .orderBy(desc(startup.createdAt))
-      .limit(250);
+      .limit(1);
 
-    return (
-      candidates.find(
-        (candidate) =>
-          this.normalizeCompanyNameForDuplicateMatching(candidate.name) ===
-          normalizedCompanyName,
-      ) ?? null
-    );
+    return row ?? null;
   }
 
   private escapeForILike(value: string): string {

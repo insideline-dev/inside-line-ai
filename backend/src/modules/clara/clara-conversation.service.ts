@@ -225,16 +225,17 @@ export class ClaraConversationService {
       errorMessage: params.errorMessage ?? null,
     };
 
-    await this.drizzle.db.insert(claraMessage).values(values);
-
-    await this.drizzle.db
-      .update(claraConversation)
-      .set({
-        messageCount: sql`${claraConversation.messageCount} + 1`,
-        lastMessageAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(claraConversation.id, params.conversationId));
+    await this.drizzle.db.transaction(async (tx) => {
+      await tx.insert(claraMessage).values(values);
+      await tx
+        .update(claraConversation)
+        .set({
+          messageCount: sql`${claraConversation.messageCount} + 1`,
+          lastMessageAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(claraConversation.id, params.conversationId));
+    });
   }
 
   async hasMessage(

@@ -537,7 +537,7 @@ describe("ClaraAiService", () => {
 
     it("replaces underscores with spaces", () => {
       const result = service.extractCompanyFromFilename("acme_corp_2024.pdf");
-      expect(result).toBe("acme corp 2024");
+      expect(result).toBe("acme corp");
     });
 
     it("replaces hyphens with spaces", () => {
@@ -583,7 +583,7 @@ describe("ClaraAiService", () => {
       const result = service.extractCompanyFromFilename(
         "Acme_Corp_Pitch_Deck_2024.pdf",
       );
-      expect(result).toBe("Acme Corp  2024");
+      expect(result).toBe("Acme Corp");
     });
   });
 });

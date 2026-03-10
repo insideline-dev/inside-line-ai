@@ -14,6 +14,11 @@ import { startupMatch } from "../investor/entities/investor.schema";
 import { PdfService } from "../startup/pdf.service";
 import { AnalyticsService } from "../admin/analytics.service";
 import { StartupService } from "../startup/startup.service";
+import type {
+  CopilotActionExecutionResult,
+  CopilotPendingAction,
+} from "../copilot/interfaces/copilot.interface";
+import type { CreateNote, UpdateMatchStatus } from "../investor/dto";
 import type { ClaraAgentRuntimeState } from "./interfaces/clara.interface";
 import { ClaraChannelService, type ClaraChannelKind } from "./clara-channel.service";
 
@@ -338,7 +343,290 @@ export class ClaraToolsService {
           });
         },
       }),
+
+      proposeCreateNote: tool({
+        description:
+          "Prepare a new investor note for a startup. This only proposes the change and requires a confirmation reply before execution.",
+        inputSchema: z.object({
+          startupName: z.string().optional(),
+          content: z.string().min(1).max(5000),
+          category: z.string().max(100).optional(),
+          isPinned: z.boolean().optional(),
+        }),
+        execute: async ({ startupName, content, category, isPinned }) => {
+          if (!actor.actorUserId) return { message: noAccount };
+          if (!this.isInvestor(actor)) return { message: notInvestor };
+
+          const target = await this.resolveStartupForActor({
+            actor,
+            name: startupName ?? undefined,
+          });
+          if (!target) {
+            return {
+              message: startupName
+                ? `No accessible startup found matching "${startupName}".`
+                : "I couldn't determine which startup to add a note for.",
+            };
+          }
+
+          return this.proposePendingAction(actor, {
+            actionKey: "create_note",
+            confirmationMessage: `I can create a note for ${target.name}. Reply CONFIRM to continue or CANCEL to stop.`,
+            successMessage: `The note for ${target.name} was saved.`,
+            targetSummary: target.name,
+            startupId: target.id,
+            payload: {
+              startupId: target.id,
+              content,
+              category,
+              isPinned,
+            },
+          });
+        },
+      }),
+
+      proposeUpdateNote: tool({
+        description:
+          "Prepare an update to an existing investor note by note ID. This only proposes the change and requires confirmation.",
+        inputSchema: z.object({
+          noteId: z.string().uuid(),
+          content: z.string().min(1).max(5000).optional(),
+          category: z.string().max(100).optional(),
+          isPinned: z.boolean().optional(),
+        }),
+        execute: async ({ noteId, content, category, isPinned }) => {
+          if (!actor.actorUserId) return { message: noAccount };
+          if (!this.isInvestor(actor)) return { message: notInvestor };
+
+          return this.proposePendingAction(actor, {
+            actionKey: "update_note",
+            confirmationMessage:
+              "I can update that note. Reply CONFIRM to continue or CANCEL to stop.",
+            successMessage: "The note was updated.",
+            targetSummary: noteId,
+            noteId,
+            payload: {
+              noteId,
+              content,
+              category,
+              isPinned,
+            },
+          });
+        },
+      }),
+
+      proposeToggleSavedMatch: tool({
+        description:
+          "Prepare a save/unsave toggle for an investor match by startup name. This only proposes the change and requires confirmation.",
+        inputSchema: z.object({
+          startupName: z.string().optional(),
+        }),
+        execute: async ({ startupName }) => {
+          if (!actor.actorUserId) return { message: noAccount };
+          if (!this.isInvestor(actor)) return { message: notInvestor };
+
+          const target = await this.resolveStartupForActor({
+            actor,
+            name: startupName ?? undefined,
+          });
+          if (!target) {
+            return {
+              message: startupName
+                ? `No accessible startup found matching "${startupName}".`
+                : "I couldn't determine which startup to save or unsave.",
+            };
+          }
+
+          return this.proposePendingAction(actor, {
+            actionKey: "toggle_saved_match",
+            confirmationMessage: `I can update the saved state for ${target.name}. Reply CONFIRM to continue or CANCEL to stop.`,
+            successMessage: `${target.name} was updated in your saved matches.`,
+            targetSummary: target.name,
+            startupId: target.id,
+            payload: {
+              startupId: target.id,
+            },
+          });
+        },
+      }),
+
+      proposeUpdateMatchStatus: tool({
+        description:
+          "Prepare an investor match status update for a startup. This only proposes the change and requires confirmation.",
+        inputSchema: z.object({
+          startupName: z.string().optional(),
+          status: z.enum(["new", "reviewing", "engaged", "closed", "passed"]),
+          passReason: z.string().max(500).optional(),
+          passNotes: z.string().max(5000).optional(),
+          investmentAmount: z.number().positive().optional(),
+          investmentCurrency: z.string().max(10).optional(),
+          investmentDate: z.string().datetime().optional(),
+          investmentNotes: z.string().max(5000).optional(),
+          meetingRequested: z.boolean().optional(),
+        }),
+        execute: async ({ startupName, ...statusUpdate }) => {
+          if (!actor.actorUserId) return { message: noAccount };
+          if (!this.isInvestor(actor)) return { message: notInvestor };
+
+          const target = await this.resolveStartupForActor({
+            actor,
+            name: startupName ?? undefined,
+          });
+          if (!target) {
+            return {
+              message: startupName
+                ? `No accessible startup found matching "${startupName}".`
+                : "I couldn't determine which startup match to update.",
+            };
+          }
+
+          const match = await this.resolveMatchForActor(actor, target.id);
+          if (!match) {
+            return {
+              message: `No accessible investor match found for ${target.name}.`,
+            };
+          }
+
+          return this.proposePendingAction(actor, {
+            actionKey: "update_match_status",
+            confirmationMessage: `I can change ${target.name} to ${statusUpdate.status}. Reply CONFIRM to continue or CANCEL to stop.`,
+            successMessage: `${target.name} was moved to ${statusUpdate.status}.`,
+            targetSummary: target.name,
+            startupId: target.id,
+            matchId: match.id,
+            payload: {
+              matchId: match.id,
+              ...statusUpdate,
+            },
+          });
+        },
+      }),
+
+      proposeReanalyzeStartup: tool({
+        description:
+          "Prepare an admin-only startup reanalysis. This only proposes the change and requires confirmation.",
+        inputSchema: z.object({
+          startupName: z.string().optional(),
+          startupId: z.string().optional(),
+        }),
+        execute: async ({ startupName, startupId }) => {
+          if (!actor.actorUserId) return { message: noAccount };
+          if (!this.isAdmin(actor)) return { message: notAdmin };
+
+          const target = await this.resolveStartupForActor({
+            actor,
+            startupId,
+            name: startupName ?? undefined,
+          });
+          if (!target) {
+            return {
+              message:
+                startupName || startupId
+                  ? `No accessible startup found for "${startupName ?? startupId}".`
+                  : "I couldn't determine which startup to reanalyze.",
+            };
+          }
+
+          return this.proposePendingAction(actor, {
+            actionKey: "reanalyze_startup",
+            confirmationMessage: `I can re-run the analysis for ${target.name}. Reply CONFIRM to continue or CANCEL to stop.`,
+            successMessage: `${target.name} has been queued for reanalysis.`,
+            targetSummary: target.name,
+            startupId: target.id,
+            payload: {
+              startupId: target.id,
+            },
+          });
+        },
+      }),
     };
+  }
+
+  async executePendingAction(
+    pendingAction: CopilotPendingAction,
+    actor: {
+      actorUserId: string | null;
+      actorRole: string | null;
+    },
+  ): Promise<CopilotActionExecutionResult> {
+    if (!actor.actorUserId) {
+      throw new Error(
+        "No Inside Line account is linked to this sender, so I cannot complete that action.",
+      );
+    }
+
+    switch (pendingAction.actionKey) {
+      case "create_note": {
+        const result = await this.noteService.create(
+          actor.actorUserId,
+          pendingAction.payload as unknown as CreateNote,
+        );
+        return {
+          message: pendingAction.successMessage,
+          result,
+        };
+      }
+      case "update_note": {
+        const { noteId, ...updatePayload } = pendingAction.payload;
+        if (typeof noteId !== "string") {
+          throw new Error("The pending note update is missing its note ID.");
+        }
+        const result = await this.noteService.update(
+          noteId,
+          actor.actorUserId,
+          updatePayload,
+        );
+        return {
+          message: pendingAction.successMessage,
+          result,
+        };
+      }
+      case "toggle_saved_match": {
+        const startupId = pendingAction.payload.startupId;
+        if (typeof startupId !== "string") {
+          throw new Error("The pending saved-match update is missing its startup.");
+        }
+        const result = await this.matchService.toggleSaved(actor.actorUserId, startupId);
+        return {
+          message: pendingAction.successMessage,
+          result,
+        };
+      }
+      case "update_match_status": {
+        const matchId = pendingAction.payload.matchId;
+        if (typeof matchId !== "string") {
+          throw new Error("The pending match-status update is missing its match ID.");
+        }
+        const updatePayload: UpdateMatchStatus = {
+          status: pendingAction.payload.status as UpdateMatchStatus["status"],
+        };
+        const result = await this.matchService.updateMatchStatus(
+          actor.actorUserId,
+          matchId,
+          updatePayload,
+        );
+        return {
+          message: pendingAction.successMessage,
+          result,
+        };
+      }
+      case "reanalyze_startup": {
+        if (actor.actorRole !== "admin") {
+          throw new Error("This action requires an admin account.");
+        }
+        const startupId = pendingAction.payload.startupId;
+        if (typeof startupId !== "string") {
+          throw new Error("The pending reanalysis request is missing its startup.");
+        }
+        const result = await this.startupService.reanalyze(startupId, actor.actorUserId);
+        return {
+          message: pendingAction.successMessage,
+          result,
+        };
+      }
+      default:
+        throw new Error(`Unsupported pending action: ${pendingAction.actionKey}`);
+    }
   }
 
   private normalizeActor(input: BuildToolsInput): ResolvedToolActor {
@@ -502,9 +790,48 @@ export class ClaraToolsService {
     return row;
   }
 
+  private async resolveMatchForActor(
+    actor: ResolvedToolActor,
+    startupId: string,
+  ): Promise<{ id: string; startupId: string } | null> {
+    if (!actor.actorUserId || actor.actorRole !== "investor") {
+      return null;
+    }
+
+    const [row] = await this.drizzle.db
+      .select({
+        id: startupMatch.id,
+        startupId: startupMatch.startupId,
+      })
+      .from(startupMatch)
+      .where(
+        and(
+          eq(startupMatch.investorId, actor.actorUserId),
+          eq(startupMatch.startupId, startupId),
+        ),
+      )
+      .limit(1);
+
+    return row ?? null;
+  }
+
   private isSimilarityUnavailable(error: unknown): boolean {
     const message = error instanceof Error ? error.message : String(error);
     return /function similarity\(/i.test(message) && /does not exist/i.test(message);
+  }
+
+  private proposePendingAction(actor: ResolvedToolActor, pendingAction: CopilotPendingAction) {
+    if (actor.runtime) {
+      actor.runtime.pendingAction = pendingAction;
+    }
+
+    return {
+      proposed: true,
+      requiresConfirmation: true,
+      message: pendingAction.confirmationMessage,
+      actionKey: pendingAction.actionKey,
+      targetSummary: pendingAction.targetSummary,
+    };
   }
 
   private async sendStartupPdfAttachment(params: {

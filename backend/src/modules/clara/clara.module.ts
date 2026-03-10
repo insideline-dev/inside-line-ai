@@ -5,6 +5,7 @@ import { StorageModule } from "../../storage";
 import { NotificationModule } from "../../notification/notification.module";
 import { AgentMailModule } from "../integrations/agentmail/agentmail.module";
 import { AiModule } from "../ai";
+import { CopilotModule } from "../copilot";
 import { InvestorModule } from "../investor/investor.module";
 import { StartupModule } from "../startup";
 import { AdminModule } from "../admin";
@@ -23,6 +24,7 @@ import { ClaraChannelService } from "./clara-channel.service";
     NotificationModule,
     forwardRef(() => AgentMailModule),
     forwardRef(() => AiModule),
+    CopilotModule,
     InvestorModule,
     StartupModule,
     AdminModule,

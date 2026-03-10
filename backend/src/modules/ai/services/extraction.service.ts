@@ -507,18 +507,22 @@ export class ExtractionService {
             ? `No extractable deck text; OCR fallback failed: ${ocrFailureMessage}`
             : "No extractable deck text after OCR fallback"
           : "No extractable deck text and OCR fallback could not be started";
-        this.logger.error(
-          `[Extraction] ${errorMessage} | startup=${startupId}`,
+        warnings.push("No extractable deck text; falling back to startup form data");
+        this.logger.error(`[Extraction] ${errorMessage} | startup=${startupId}`);
+        this.logger.warn(
+          `[Extraction] Falling back to startup form context after extraction failures for startup ${startupId}`,
         );
-        throw new Error(errorMessage);
+        extractedText = fallbackText;
+        source = "startup-context";
+        pageCount = 0;
+      } else {
+        extractedText = fallbackText;
+        source = "startup-context";
+        warnings.push("No extractable deck text found; using startup form data only");
+        this.logger.warn(
+          `[Extraction] No extractable text found for startup ${startupId}; using startup context fallback`,
+        );
       }
-
-      extractedText = fallbackText;
-      source = "startup-context";
-      warnings.push("No extractable deck text found; using startup form data only");
-      this.logger.warn(
-        `[Extraction] No extractable text found for startup ${startupId}; using startup context fallback`,
-      );
     }
     extractedText = this.mergeExtractionTexts(
       extractedText,

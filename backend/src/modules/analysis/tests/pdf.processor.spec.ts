@@ -99,7 +99,7 @@ describe('PdfProcessor', () => {
         pitchDeckUrl: null,
         demoUrl: null,
       };
-      const content = generateMemoContent(startupWithoutLinks as any, null);
+      const content = generateMemoContent(startupWithoutLinks as unknown as typeof _mockStartup, null);
 
       expect(content).not.toContain('Website:');
       expect(content).not.toContain('Pitch Deck:');
@@ -122,7 +122,7 @@ describe('PdfProcessor', () => {
 
 // Helper function that mimics the processor's content generation
 function generateMemoContent(
-  startupData: typeof mockStartup,
+  startupData: typeof _mockStartup,
   scores: StartupScores | null,
 ): string {
   const lines = [
@@ -168,7 +168,7 @@ function generateMemoContent(
   return lines.join('\n');
 }
 
-const mockStartup = {
+const _mockStartup = {
   id: '123e4567-e89b-12d3-a456-426614174000',
   userId: '123e4567-e89b-12d3-a456-426614174001',
   name: 'Test Startup',

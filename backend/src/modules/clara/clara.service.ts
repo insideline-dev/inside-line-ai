@@ -4,7 +4,12 @@ import { eq } from "drizzle-orm";
 import type { AgentMail } from "agentmail";
 import { DrizzleService } from "../../database";
 import { user } from "../../auth/entities/auth.schema";
-import { startup, StartupStage } from "../startup/entities/startup.schema";
+import { startup } from "../startup/entities/startup.schema";
+import {
+  isMissingWebsiteValue,
+  isLikelyPlaceholderStage,
+  type StartupFieldRecord,
+} from "../ai/utils/startup-field-utils";
 import { PdfService } from "../startup/pdf.service";
 import { CopilotService } from "../copilot";
 import type { CopilotPendingAction } from "../copilot";
@@ -874,9 +879,10 @@ export class ClaraService {
     const dedupeScope =
       options?.pipelineRunId?.trim() || `adhoc-${new Date().toISOString().slice(0, 10)}`;
     const messageId = `missing-info-${startupId}-${dedupeScope}-${unresolvedMissing.join("-")}`;
-    if (conversation) {
+    let conv = conversation;
+    if (conv) {
       const alreadySent = await this.conversationService.hasMessage(
-        conversation.id,
+        conv.id,
         messageId,
         MessageDirection.OUTBOUND,
       );
@@ -917,21 +923,29 @@ export class ClaraService {
       `Sent Clara missing-info request for startup ${startupId} to ${recipient.email} (fields=${unresolvedMissing.join(",")}, scope=${dedupeScope})`,
     );
 
-    if (conversation) {
-      await this.conversationService.logMessage({
-        conversationId: conversation.id,
-        messageId,
-        direction: MessageDirection.OUTBOUND,
-        fromEmail: "clara@agentmail.to",
-        subject: `Action Needed: Missing startup details for ${startupRecord.name}`,
-        bodyText: replyText,
-        processed: true,
-      });
-      await this.conversationService.updateStatus(
-        conversation.id,
-        ConversationStatus.AWAITING_INFO,
+    if (!conv) {
+      conv = await this.conversationService.findOrCreate(
+        `missing-info-outbound-${startupId}`,
+        recipient.email,
+        recipient.name,
+        null,
       );
+      await this.conversationService.linkStartup(conv.id, startupId);
     }
+
+    await this.conversationService.logMessage({
+      conversationId: conv.id,
+      messageId,
+      direction: MessageDirection.OUTBOUND,
+      fromEmail: "clara@agentmail.to",
+      subject: `Action Needed: Missing startup details for ${startupRecord.name}`,
+      bodyText: replyText,
+      processed: true,
+    });
+    await this.conversationService.updateStatus(
+      conv.id,
+      ConversationStatus.AWAITING_INFO,
+    );
   }
 
   private normalizeMissingStartupFields(
@@ -1005,99 +1019,12 @@ export class ClaraService {
 
   private isStartupFieldMissing(
     field: "website" | "stage",
-    startupRecord: {
-      website: string;
-      stage: string;
-      industry: string;
-      location: string;
-      fundingTarget: number;
-      teamSize: number;
-    },
+    startupRecord: StartupFieldRecord,
   ): boolean {
     if (field === "website") {
-      return this.isMissingWebsiteValue(startupRecord.website);
+      return isMissingWebsiteValue(startupRecord.website);
     }
-    return this.isLikelyPlaceholderStage(startupRecord);
-  }
-
-  private isMissingWebsiteValue(value: string | null | undefined): boolean {
-    if (!value) return true;
-    try {
-      const host = new URL(value).hostname.toLowerCase().replace(/^www\./, "");
-      return host === "pending-extraction.com";
-    } catch {
-      return true;
-    }
-  }
-
-  private isLikelyPlaceholderStage(startupRecord: {
-    website: string;
-    stage: string;
-    industry: string;
-    location: string;
-    fundingTarget: number;
-    teamSize: number;
-  }): boolean {
-    const normalizedStage = this.mapStageToEnum(startupRecord.stage);
-    if (!normalizedStage) {
-      return true;
-    }
-    if (normalizedStage !== StartupStage.SEED) {
-      return false;
-    }
-
-    const structuralSignals = [
-      this.isMissingWebsiteValue(startupRecord.website),
-      this.isLikelyPlaceholderText(startupRecord.industry),
-      this.isLikelyPlaceholderText(startupRecord.location),
-    ];
-    const secondarySignals = [
-      startupRecord.fundingTarget <= 0,
-      startupRecord.teamSize <= 1,
-    ];
-    const totalSignals = [...structuralSignals, ...secondarySignals];
-    return (
-      structuralSignals.filter(Boolean).length >= 1 &&
-      totalSignals.filter(Boolean).length >= 2
-    );
-  }
-
-  private isLikelyPlaceholderText(value: string | null | undefined): boolean {
-    if (!value) {
-      return true;
-    }
-    const normalized = value.trim().toLowerCase();
-    if (!normalized) {
-      return true;
-    }
-    return (
-      normalized.includes("pending extraction") ||
-      normalized.includes("pending-extraction") ||
-      normalized === "unknown" ||
-      normalized === "n/a"
-    );
-  }
-
-  private mapStageToEnum(value: string | null | undefined): StartupStage | null {
-    if (!value) {
-      return null;
-    }
-
-    const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, "_");
-    const mapping: Record<string, StartupStage> = {
-      pre_seed: StartupStage.PRE_SEED,
-      preseed: StartupStage.PRE_SEED,
-      seed: StartupStage.SEED,
-      series_a: StartupStage.SERIES_A,
-      series_b: StartupStage.SERIES_B,
-      series_c: StartupStage.SERIES_C,
-      series_d: StartupStage.SERIES_D,
-      series_e: StartupStage.SERIES_E,
-      series_f: StartupStage.SERIES_F_PLUS,
-      series_f_plus: StartupStage.SERIES_F_PLUS,
-      "series_f+": StartupStage.SERIES_F_PLUS,
-    };
-    return mapping[normalized] ?? null;
+    return isLikelyPlaceholderStage(startupRecord);
   }
 
   private async findUserByEmail(

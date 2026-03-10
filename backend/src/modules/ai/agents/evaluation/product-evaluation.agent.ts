@@ -25,6 +25,14 @@ export class ProductEvaluationAgent extends BaseEvaluationAgent<ProductEvaluatio
     super(providers, aiConfig, promptService, modelExecution);
   }
 
+  protected override getAgentTemplateVariables(
+    pipelineData: EvaluationPipelineInput,
+  ): Record<string, string> {
+    return {
+      productResearchOutput: pipelineData.research.product ?? "Not provided",
+    };
+  }
+
   buildContext(pipelineData: EvaluationPipelineInput) {
     const { extraction, scraping } = pipelineData;
     const subpages = Array.isArray(scraping.website?.subpages)
@@ -84,11 +92,20 @@ export class ProductEvaluationAgent extends BaseEvaluationAgent<ProductEvaluatio
   fallback({ extraction }: EvaluationPipelineInput): ProductEvaluation {
     return ProductEvaluationSchema.parse({
       ...baseEvaluation(25, "Product evaluation incomplete — requires manual review"),
-      productDescription: extraction.rawText || "Product description is limited",
-      uniqueValue: "Differentiation exists but needs stronger external proof",
-      technologyStack: ["Unknown"],
+      productSummary: {
+        description: extraction.rawText || "Product description is limited",
+        techStage: "idea",
+      },
+      productOverview: {
+        whatItDoes: extraction.tagline || "Unknown",
+        targetUser: "Unknown",
+        productCategory: extraction.industry || "Unknown",
+        coreValueProp: "Unknown",
+      },
+      strengths: [],
       keyFeatures: ["Core workflow automation", "Operator analytics"],
-      productMaturity: extraction.stage,
+      technologyStack: ["Unknown"],
+      founderPitchRecommendations: [],
     });
   }
 }

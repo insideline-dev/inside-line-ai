@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { ConfidenceBadge } from "@/components/ConfidenceBadge";
 import {
   Building2,
   Globe,
@@ -113,6 +114,14 @@ interface CompetitivePositioning {
   startupDisadvantages?: string[];
   differentiationStrength?: "strong" | "moderate" | "weak";
   positioningRecommendation?: string;
+  currentGap?: string;
+  vulnerabilities?: string[];
+  defensibleAgainstFunded?: boolean | null;
+  differentiationType?: string;
+  differentiationDurability?: string;
+  moatStage?: string;
+  moatEvidence?: string[];
+  moatSelfReinforcing?: boolean | null;
 }
 
 interface BarriersToEntry {
@@ -164,6 +173,7 @@ interface CompetitorAnalysisProps {
   keyRisks?: string[];
   competitiveAdvantageScore?: number | null;
   competitiveAdvantageWeight?: number;
+  competitiveAdvantageConfidence?: string;
 }
 
 function getThreatBadgeVariant(
@@ -189,311 +199,6 @@ function formatUrl(url: string): string {
   } catch {
     return url;
   }
-}
-
-function getLogoUrl(website: string): string {
-  if (!website) return "";
-  try {
-    const domain = website
-      .replace(/^https?:\/\//, "")
-      .replace(/^www\./, "")
-      .split("/")[0];
-    return `https://logo.clearbit.com/${domain}`;
-  } catch {
-    return "";
-  }
-}
-
-function getInitials(name: string): string {
-  return name
-    .split(" ")
-    .map((word) => word[0])
-    .join("")
-    .substring(0, 2)
-    .toUpperCase();
-}
-
-interface MatrixCompetitor {
-  name: string;
-  website: string;
-  x: number;
-  y: number;
-  isTarget?: boolean;
-  type: "direct" | "indirect" | "target";
-}
-
-function CompetitiveMatrix({
-  directCompetitors = [],
-  indirectCompetitors = [],
-  basicDirectCompetitors = [],
-  basicIndirectCompetitors = [],
-  companyName,
-  positioning,
-}: {
-  directCompetitors?: DirectCompetitor[];
-  indirectCompetitors?: IndirectCompetitor[];
-  basicDirectCompetitors?: string[];
-  basicIndirectCompetitors?: string[];
-  companyName: string;
-  positioning?: { differentiationStrength?: string } | null;
-}) {
-  const allCompetitors: MatrixCompetitor[] = [];
-
-  directCompetitors.forEach((comp, i) => {
-    let x = 0.3 + (i * 0.15) % 0.5;
-    let y = 0.4 + (i * 0.12) % 0.4;
-
-    if (comp.marketPosition?.marketShare) {
-      const share = comp.marketPosition.marketShare.toLowerCase();
-      if (share.includes("leader") || share.includes("dominant")) {
-        x = 0.75 + Math.random() * 0.15;
-      } else if (share.includes("significant") || share.includes("major")) {
-        x = 0.5 + Math.random() * 0.2;
-      } else {
-        x = 0.2 + Math.random() * 0.25;
-      }
-    }
-
-    if (comp.funding?.totalRaised) {
-      const funding = comp.funding.totalRaised.toLowerCase();
-      if (funding.includes("b") || funding.includes("billion")) {
-        y = 0.75 + Math.random() * 0.15;
-      } else if (
-        funding.includes("100m") ||
-        funding.includes("200m") ||
-        funding.includes("500m")
-      ) {
-        y = 0.55 + Math.random() * 0.2;
-      } else {
-        y = 0.25 + Math.random() * 0.25;
-      }
-    }
-
-    allCompetitors.push({
-      name: comp.name,
-      website: comp.website,
-      x: Math.min(0.9, Math.max(0.1, x)),
-      y: Math.min(0.9, Math.max(0.1, y)),
-      type: "direct",
-    });
-  });
-
-  basicDirectCompetitors.forEach((name, i) => {
-    const x = 0.45 + (i * 0.12) % 0.35;
-    const y = 0.5 + (i * 0.1) % 0.3;
-    allCompetitors.push({
-      name,
-      website: "",
-      x: Math.min(0.85, Math.max(0.15, x)),
-      y: Math.min(0.85, Math.max(0.15, y)),
-      type: "direct",
-    });
-  });
-
-  indirectCompetitors.forEach((comp, i) => {
-    let x = 0.2 + (i * 0.18) % 0.4;
-    let y = 0.5 + (i * 0.1) % 0.3;
-
-    if (comp.threatLevel === "high") {
-      x = 0.5 + Math.random() * 0.3;
-      y = 0.5 + Math.random() * 0.3;
-    } else if (comp.threatLevel === "medium") {
-      x = 0.3 + Math.random() * 0.3;
-      y = 0.4 + Math.random() * 0.3;
-    } else {
-      x = 0.15 + Math.random() * 0.25;
-      y = 0.2 + Math.random() * 0.3;
-    }
-
-    allCompetitors.push({
-      name: comp.name,
-      website: comp.website,
-      x: Math.min(0.85, Math.max(0.1, x)),
-      y: Math.min(0.85, Math.max(0.1, y)),
-      type: "indirect",
-    });
-  });
-
-  basicIndirectCompetitors.forEach((name, i) => {
-    const x = 0.2 + (i * 0.15) % 0.3;
-    const y = 0.35 + (i * 0.12) % 0.25;
-    allCompetitors.push({
-      name,
-      website: "",
-      x: Math.min(0.75, Math.max(0.15, x)),
-      y: Math.min(0.7, Math.max(0.15, y)),
-      type: "indirect",
-    });
-  });
-
-  let targetX = 0.6;
-  let targetY = 0.6;
-  if (positioning?.differentiationStrength === "strong") {
-    targetX = 0.7;
-    targetY = 0.75;
-  } else if (positioning?.differentiationStrength === "moderate") {
-    targetX = 0.5;
-    targetY = 0.55;
-  } else {
-    targetX = 0.35;
-    targetY = 0.4;
-  }
-
-  allCompetitors.push({
-    name: companyName,
-    website: "",
-    x: targetX,
-    y: targetY,
-    isTarget: true,
-    type: "target",
-  });
-
-  const handleCompetitorClick = (website: string) => {
-    if (website) {
-      const url = website.startsWith("http") ? website : `https://${website}`;
-      window.open(url, "_blank", "noopener,noreferrer");
-    }
-  };
-
-  return (
-    <Card data-testid="card-competitive-matrix">
-      <CardHeader className="pb-3">
-        <CardTitle
-          className="flex items-center gap-2 text-lg text-balance"
-          data-testid="text-matrix-title"
-        >
-          <Target className="h-5 w-5 text-primary" />
-          Competitive Positioning Matrix
-        </CardTitle>
-        <p className="text-xs text-muted-foreground text-pretty">
-          Click on logos to visit competitor websites
-        </p>
-      </CardHeader>
-      <CardContent>
-        <div
-          className="relative w-full h-80 bg-muted/30 rounded-lg border"
-          data-testid="matrix-container"
-        >
-          <div className="absolute inset-0 grid grid-cols-2 grid-rows-2">
-            <div className="border-r border-b border-dashed border-muted-foreground/30 flex items-center justify-center">
-              <span className="text-xs text-muted-foreground/50">
-                Niche Players
-              </span>
-            </div>
-            <div className="border-b border-dashed border-muted-foreground/30 flex items-center justify-center">
-              <span className="text-xs text-muted-foreground/50">
-                Challengers
-              </span>
-            </div>
-            <div className="border-r border-dashed border-muted-foreground/30 flex items-center justify-center">
-              <span className="text-xs text-muted-foreground/50">
-                Visionaries
-              </span>
-            </div>
-            <div className="flex items-center justify-center">
-              <span className="text-xs text-muted-foreground/50">
-                Leaders
-              </span>
-            </div>
-          </div>
-
-          <div className="absolute left-0 top-1/2 -translate-y-1/2 -rotate-90 text-xs text-muted-foreground whitespace-nowrap origin-center -ml-8">
-            Product Strength
-          </div>
-          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 text-xs text-muted-foreground whitespace-nowrap mb-1">
-            Market Presence
-          </div>
-
-          {allCompetitors.map((comp, i) => (
-            <Tooltip key={i}>
-              <TooltipTrigger asChild>
-                <button
-                  onClick={() => handleCompetitorClick(comp.website)}
-                  aria-label={`Open ${comp.name} website`}
-                  className={cn(
-                    "absolute w-10 h-10 rounded-full flex items-center justify-center text-xs font-medium transition-colors",
-                    comp.isTarget &&
-                      "bg-primary text-primary-foreground ring-2 ring-primary ring-offset-2 ring-offset-background",
-                    !comp.isTarget &&
-                      comp.type === "direct" &&
-                      "bg-destructive/20 border-2 border-destructive hover:bg-destructive/30",
-                    !comp.isTarget &&
-                      comp.type === "indirect" &&
-                      "bg-amber-500/20 border-2 border-amber-500 hover:bg-amber-500/30",
-                    comp.website ? "cursor-pointer" : "cursor-default",
-                  )}
-                  style={{
-                    left: `calc(${comp.x * 100}% - 20px)`,
-                    bottom: `calc(${comp.y * 100}% - 20px)`,
-                  }}
-                  data-testid={`matrix-competitor-${i}`}
-                >
-                  {comp.website && !comp.isTarget ? (
-                    <img
-                      src={getLogoUrl(comp.website)}
-                      alt={comp.name}
-                      className="w-7 h-7 rounded-full object-contain"
-                      onError={(event) => {
-                        const target = event.target as HTMLImageElement;
-                        target.style.display = "none";
-                        const parent = target.parentElement;
-                        if (parent) {
-                          parent.textContent = getInitials(comp.name);
-                        }
-                      }}
-                    />
-                  ) : (
-                    <span>{getInitials(comp.name)}</span>
-                  )}
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="top" data-testid={`tooltip-competitor-${i}`}>
-                <div className="text-center">
-                  <p className="font-medium text-pretty">{comp.name}</p>
-                  {comp.isTarget && (
-                    <p className="text-xs text-muted-foreground">
-                      (Your Company)
-                    </p>
-                  )}
-                  {comp.type === "direct" && (
-                    <p className="text-xs text-destructive">Direct Competitor</p>
-                  )}
-                  {comp.type === "indirect" && (
-                    <p className="text-xs text-amber-600">
-                      Indirect Competitor
-                    </p>
-                  )}
-                  {comp.website && (
-                    <p className="text-xs text-muted-foreground">
-                      {formatUrl(comp.website)}
-                    </p>
-                  )}
-                </div>
-              </TooltipContent>
-            </Tooltip>
-          ))}
-        </div>
-
-        <div
-          className="flex items-center justify-center gap-6 mt-4 text-xs"
-          data-testid="matrix-legend"
-        >
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded-full bg-primary" />
-            <span>{companyName}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded-full bg-destructive/20 border-2 border-destructive" />
-            <span>Direct Competitors</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded-full bg-amber-500/20 border-2 border-amber-500" />
-            <span>Indirect Competitors</span>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
 }
 
 export function ProductDefinitionCard({
@@ -1228,6 +933,36 @@ function CompetitorLink({ name, index }: { name: string; index: number }) {
   );
 }
 
+function renderTextValue(value?: string | null): string {
+  if (!value || value.trim().length === 0) return "Not provided";
+  return value;
+}
+
+function renderBooleanBadge(
+  value: boolean | null | undefined,
+  labels: { trueLabel: string; falseLabel: string; unknownLabel?: string },
+) {
+  if (value === true) {
+    return (
+      <Badge variant="default" className="text-xs">
+        {labels.trueLabel}
+      </Badge>
+    );
+  }
+  if (value === false) {
+    return (
+      <Badge variant="secondary" className="text-xs">
+        {labels.falseLabel}
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className="text-xs">
+      {labels.unknownLabel ?? "Not provided"}
+    </Badge>
+  );
+}
+
 function BasicCompetitorLandscapeCard({
   landscape,
   positioning,
@@ -1237,6 +972,7 @@ function BasicCompetitorLandscapeCard({
   keyRisks = [],
   score,
   weight,
+  confidence,
 }: {
   landscape: BasicCompetitorLandscape;
   positioning?: {
@@ -1250,6 +986,7 @@ function BasicCompetitorLandscapeCard({
   keyRisks?: string[];
   score?: number | null;
   weight?: number;
+  confidence?: string;
 }) {
   const directNames = landscape?.directCompetitors || [];
   const indirectNames = landscape?.indirectCompetitors || [];
@@ -1261,6 +998,8 @@ function BasicCompetitorLandscapeCard({
     competitivePositioning?.startupDisadvantages ||
     landscape?.competitiveDisadvantages ||
     [];
+  const vulnerabilities = competitivePositioning?.vulnerabilities || [];
+  const moatEvidence = competitivePositioning?.moatEvidence || [];
 
   const getScoreColor = (s: number) => {
     if (s >= 80) return "text-green-600";
@@ -1297,7 +1036,10 @@ function BasicCompetitorLandscapeCard({
   return (
     <div className="space-y-6" data-testid="section-basic-landscape">
       {score !== null && score !== undefined && (
-        <Card data-testid="card-competitive-score">
+        <Card
+          className="border-primary/20 bg-gradient-to-br from-primary/10 via-background to-background"
+          data-testid="card-competitive-score"
+        >
           <CardContent className="py-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -1312,6 +1054,11 @@ function BasicCompetitorLandscapeCard({
                     {weight !== undefined ? `${weight}%` : ""} weight in overall
                     evaluation
                   </p>
+                  <ConfidenceBadge
+                    confidence={confidence ?? "unknown"}
+                    className="mt-2"
+                    dataTestId="badge-competitive-confidence"
+                  />
                 </div>
               </div>
               <div className="text-right">
@@ -1424,6 +1171,128 @@ function BasicCompetitorLandscapeCard({
           </CardContent>
         </Card>
       )}
+
+      <Card
+        className="border-primary/15"
+        data-testid="card-competitive-signals"
+      >
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base text-balance">
+            <Shield className="h-5 w-5 text-primary" />
+            Competitive Signals
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Detailed moat and positioning indicators from competitive evaluation
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="rounded-lg border bg-muted/30 p-3">
+              <p className="text-xs font-medium text-muted-foreground mb-1">
+                Differentiation Type
+              </p>
+              <p
+                className="text-sm capitalize text-pretty"
+                data-testid="text-differentiation-type"
+              >
+                {renderTextValue(competitivePositioning?.differentiationType)}
+              </p>
+            </div>
+            <div className="rounded-lg border bg-muted/30 p-3">
+              <p className="text-xs font-medium text-muted-foreground mb-1">
+                Differentiation Durability
+              </p>
+              <p
+                className="text-sm text-pretty"
+                data-testid="text-differentiation-durability"
+              >
+                {renderTextValue(
+                  competitivePositioning?.differentiationDurability,
+                )}
+              </p>
+            </div>
+            <div className="rounded-lg border bg-muted/30 p-3">
+              <p className="text-xs font-medium text-muted-foreground mb-1">
+                Moat Stage
+              </p>
+              <p className="text-sm text-pretty" data-testid="text-moat-stage">
+                {renderTextValue(competitivePositioning?.moatStage)}
+              </p>
+            </div>
+            <div className="rounded-lg border bg-muted/30 p-3">
+              <p className="text-xs font-medium text-muted-foreground mb-2">
+                Self-Reinforcing Moat
+              </p>
+              {renderBooleanBadge(competitivePositioning?.moatSelfReinforcing, {
+                trueLabel: "Yes",
+                falseLabel: "No",
+              })}
+            </div>
+            <div className="rounded-lg border bg-muted/30 p-3 md:col-span-2">
+              <p className="text-xs font-medium text-muted-foreground mb-1">
+                Current Competitive Gap
+              </p>
+              <p className="text-sm text-pretty" data-testid="text-current-gap">
+                {renderTextValue(competitivePositioning?.currentGap)}
+              </p>
+            </div>
+            <div className="rounded-lg border bg-muted/30 p-3">
+              <p className="text-xs font-medium text-muted-foreground mb-2">
+                Defensible Against Funded Competitors
+              </p>
+              {renderBooleanBadge(
+                competitivePositioning?.defensibleAgainstFunded,
+                {
+                  trueLabel: "Defensible",
+                  falseLabel: "Not defensible",
+                },
+              )}
+            </div>
+            <div className="rounded-lg border bg-muted/30 p-3">
+              <p className="text-xs font-medium text-muted-foreground mb-2">
+                Vulnerabilities
+              </p>
+              {vulnerabilities.length > 0 ? (
+                <ul className="space-y-1 text-sm text-muted-foreground">
+                  {vulnerabilities.slice(0, 4).map((item, index) => (
+                    <li
+                      key={`${item}-${index}`}
+                      className="flex items-start gap-2 text-pretty"
+                    >
+                      <AlertTriangle className="h-3.5 w-3.5 mt-0.5 text-amber-500 shrink-0" />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground">Not provided</p>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-lg border bg-muted/20 p-3">
+            <p className="text-xs font-medium text-muted-foreground mb-2">
+              Moat Evidence
+            </p>
+            {moatEvidence.length > 0 ? (
+              <ul className="space-y-1 text-sm text-muted-foreground">
+                {moatEvidence.slice(0, 5).map((item, index) => (
+                  <li
+                    key={`${item}-${index}`}
+                    className="flex items-start gap-2 text-pretty"
+                    data-testid={`text-moat-evidence-${index}`}
+                  >
+                    <CheckCircle className="h-3.5 w-3.5 mt-0.5 text-green-600 shrink-0" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-muted-foreground">No moat evidence provided</p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       {barriersToEntry &&
         (barriersToEntry.technical ||
@@ -1606,6 +1475,7 @@ export function CompetitorAnalysis({
   keyRisks = [],
   competitiveAdvantageScore,
   competitiveAdvantageWeight,
+  competitiveAdvantageConfidence = "unknown",
 }: CompetitorAnalysisProps) {
   const hasDetailedCompetitorData =
     directCompetitors.length > 0 ||
@@ -1615,7 +1485,11 @@ export function CompetitorAnalysis({
     (basicLandscape?.directCompetitors?.length || 0) > 0 ||
     (basicLandscape?.indirectCompetitors?.length || 0) > 0;
   const hasAnyData =
-    hasDetailedCompetitorData || hasBasicCompetitorData || marketLandscape || positioning;
+    hasDetailedCompetitorData ||
+    hasBasicCompetitorData ||
+    marketLandscape ||
+    positioning ||
+    competitivePositioning;
 
   if (!hasAnyData) {
     return (
@@ -1648,15 +1522,6 @@ export function CompetitorAnalysis({
     keyRisks,
   };
 
-  const directNames =
-    competitiveData.competitorLandscape?.directCompetitors ||
-    directCompetitors.map((c: any) => c.name || c.category || "Unknown") ||
-    [];
-  const indirectNames =
-    competitiveData.competitorLandscape?.indirectCompetitors ||
-    indirectCompetitors.map((c: any) => c.name || c.category || "Unknown") ||
-    [];
-
   return (
     <div className="space-y-6">
       {competitiveData.productDefinition && (
@@ -1665,15 +1530,6 @@ export function CompetitorAnalysis({
           companyName={companyName}
         />
       )}
-
-      <CompetitiveMatrix
-        directCompetitors={directCompetitors as DirectCompetitor[]}
-        indirectCompetitors={indirectCompetitors as IndirectCompetitor[]}
-        basicDirectCompetitors={directNames}
-        basicIndirectCompetitors={indirectNames}
-        companyName={companyName}
-        positioning={competitivePositioning}
-      />
 
       {competitiveData.marketLandscape && (
         <MarketLandscapeCard landscape={competitiveData.marketLandscape} />
@@ -1693,6 +1549,7 @@ export function CompetitorAnalysis({
           keyRisks={keyRisks}
           score={competitiveAdvantageScore ?? undefined}
           weight={competitiveAdvantageWeight}
+          confidence={competitiveAdvantageConfidence}
         />
       )}
 

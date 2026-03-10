@@ -11,7 +11,7 @@ describe('PortalService', () => {
   let drizzleService: jest.Mocked<DrizzleService>;
 
   const createMockDb = () => {
-    const mockChain: any = {
+    const mockChain = {
       select: jest.fn().mockReturnThis(),
       from: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
@@ -130,7 +130,7 @@ describe('PortalService', () => {
       jest.spyOn(Promise, 'all').mockResolvedValueOnce([
         [mockPortal],
         [{ count: 1 }],
-      ] as any);
+      ] as unknown);
 
       const query = { page: 1, limit: 10 };
       const result = await service.findAll(mockUserId, query);

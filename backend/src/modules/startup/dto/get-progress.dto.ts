@@ -81,6 +81,7 @@ export const ProgressAgentTraceSchema = z.object({
   usedFallback: z.boolean().optional(),
   inputText: z.string().nullable().optional(),
   inputPrompt: z.string().nullable().optional(),
+  systemPrompt: z.string().nullable().optional(),
   inputJson: z.unknown().optional(),
   outputText: z.string().nullable().optional(),
   outputJson: z.unknown().optional(),

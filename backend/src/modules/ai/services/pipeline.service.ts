@@ -3,6 +3,7 @@ import { ModuleRef } from "@nestjs/core";
 import { randomUUID } from "crypto";
 import { eq, and } from "drizzle-orm";
 import { DrizzleService } from "../../../database";
+import { StorageService } from "../../../storage";
 import { NotificationType } from "../../../notification/entities";
 import { NotificationService } from "../../../notification/notification.service";
 import { QueueService } from "../../../queue";
@@ -19,6 +20,17 @@ import type {
   ResearchAgentKey,
 } from "../interfaces/agent.interface";
 import { EVALUATION_AGENT_KEYS, RESEARCH_AGENT_KEYS } from "../constants/agent-keys";
+import {
+  isMissingWebsiteValue,
+  isLikelyPlaceholderText,
+  isLikelyPlaceholderStage,
+  mapStageToEnum,
+  normalizeWebsiteCandidate,
+  extractWebsiteFromText,
+  extractStageFromText,
+  getMissingCriticalFields as getFieldGaps,
+  type StartupFieldRecord,
+} from "../utils/startup-field-utils";
 import { AiConfigService } from "./ai-config.service";
 import { PipelineFeedbackService } from "./pipeline-feedback.service";
 import { PipelineAgentTraceService } from "./pipeline-agent-trace.service";
@@ -118,6 +130,7 @@ export class PipelineService {
     private errorRecovery: ErrorRecoveryService,
     private pipelineTemplateService: PipelineTemplateService,
     private enrichmentService: EnrichmentService,
+    private storage: StorageService,
     private extractionService: ExtractionService,
     private moduleRef: ModuleRef,
     @Optional() private pipelineAgentTrace?: PipelineAgentTraceService,
@@ -155,14 +168,7 @@ export class PipelineService {
       throw new BadRequestException(`Startup ${startupId} not found`);
     }
 
-    const missing: Array<"website" | "stage"> = [];
-    if (this.isMissingWebsiteValue(record.website)) {
-      missing.push("website");
-    }
-    if (this.isLikelyPlaceholderStage(record)) {
-      missing.push("stage");
-    }
-    return missing;
+    return getFieldGaps(record as StartupFieldRecord);
   }
 
   private async notifyClaraMissingInfoForPipelineStart(
@@ -226,265 +232,6 @@ export class PipelineService {
     throw new BadRequestException(
       `${PIPELINE_MISSING_FIELDS_ERROR_PREFIX} [${missingFields.join(", ")}].`,
     );
-  }
-
-  private isMissingWebsiteValue(value: string | null | undefined): boolean {
-    if (!value) return true;
-    try {
-      const host = new URL(value).hostname.toLowerCase().replace(/^www\./, "");
-      return host === "pending-extraction.com";
-    } catch {
-      return true;
-    }
-  }
-
-  private isLikelyPlaceholderStage(record: {
-    website: string;
-    stage: string;
-    industry: string;
-    location: string;
-    fundingTarget: number;
-    teamSize: number;
-  }): boolean {
-    const normalizedStage = this.mapStageToEnum(record.stage);
-    if (!normalizedStage) {
-      return true;
-    }
-    if (normalizedStage !== StartupStage.SEED) {
-      return false;
-    }
-
-    const structuralSignals = [
-      this.isMissingWebsiteValue(record.website),
-      this.isLikelyPlaceholderText(record.industry),
-      this.isLikelyPlaceholderText(record.location),
-    ];
-    const secondarySignals = [
-      record.fundingTarget <= 0,
-      record.teamSize <= 1,
-    ];
-    const totalSignals = [...structuralSignals, ...secondarySignals];
-    return (
-      structuralSignals.filter(Boolean).length >= 1 &&
-      totalSignals.filter(Boolean).length >= 2
-    );
-  }
-
-  private mapStageToEnum(value: string | null | undefined): StartupStage | null {
-    if (!value) {
-      return null;
-    }
-
-    const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, "_");
-    const mapping: Record<string, StartupStage> = {
-      pre_seed: StartupStage.PRE_SEED,
-      preseed: StartupStage.PRE_SEED,
-      seed: StartupStage.SEED,
-      series_a: StartupStage.SERIES_A,
-      series_b: StartupStage.SERIES_B,
-      series_c: StartupStage.SERIES_C,
-      series_d: StartupStage.SERIES_D,
-      series_e: StartupStage.SERIES_E,
-      series_f: StartupStage.SERIES_F_PLUS,
-      series_f_plus: StartupStage.SERIES_F_PLUS,
-      "series_f+": StartupStage.SERIES_F_PLUS,
-    };
-    return mapping[normalized] ?? null;
-  }
-
-  private normalizeWebsiteCandidate(
-    value: string | null | undefined,
-  ): string | null {
-    if (!value || typeof value !== "string") {
-      return null;
-    }
-
-    const trimmed = value.trim();
-    if (!trimmed) {
-      return null;
-    }
-
-    const candidate = /^https?:\/\//i.test(trimmed)
-      ? trimmed
-      : `https://${trimmed}`;
-
-    try {
-      const parsed = new URL(candidate);
-      parsed.protocol = parsed.protocol.toLowerCase();
-      parsed.hostname = parsed.hostname.toLowerCase();
-      parsed.hash = "";
-      return parsed.toString();
-    } catch {
-      return null;
-    }
-  }
-
-  private isSuspiciousInvestorSubmitterWebsite(params: {
-    website: string | null | undefined;
-    submittedByRole: string | null | undefined;
-    contactEmail: string | null | undefined;
-    startupName: string | null | undefined;
-  }): boolean {
-    if (!params.website) {
-      return false;
-    }
-    const submittedByRole = (params.submittedByRole ?? "").toLowerCase().trim();
-    if (!submittedByRole || submittedByRole === "founder") {
-      return false;
-    }
-
-    const submitterDomain = this.extractEmailDomain(params.contactEmail);
-    const websiteDomain = this.extractWebsiteDomain(params.website);
-    if (!submitterDomain || !websiteDomain) {
-      return false;
-    }
-    if (submitterDomain !== websiteDomain) {
-      return false;
-    }
-
-    const startupToken = this.normalizeStartupToken(params.startupName);
-    if (!startupToken) {
-      return true;
-    }
-    return !websiteDomain.includes(startupToken);
-  }
-
-  private extractEmailDomain(email: string | null | undefined): string | null {
-    if (!email) {
-      return null;
-    }
-    const normalized = email.trim().toLowerCase();
-    const atIndex = normalized.lastIndexOf("@");
-    if (atIndex <= 0 || atIndex === normalized.length - 1) {
-      return null;
-    }
-    return normalized.slice(atIndex + 1);
-  }
-
-  private extractWebsiteDomain(website: string | null | undefined): string | null {
-    if (!website) {
-      return null;
-    }
-    try {
-      return new URL(website).hostname.toLowerCase().replace(/^www\./, "");
-    } catch {
-      return null;
-    }
-  }
-
-  private extractCompanyNameFromWebsite(
-    website: string | null | undefined,
-  ): string | null {
-    const domain = this.extractWebsiteDomain(website);
-    if (!domain) {
-      return null;
-    }
-
-    const parts = domain.split(".").filter(Boolean);
-    if (parts.length === 0) {
-      return null;
-    }
-
-    let root = parts.length >= 2 ? parts[parts.length - 2] : parts[0];
-    const broadSuffixes = new Set(["co", "com", "org", "net", "gov", "edu", "ac"]);
-    if (broadSuffixes.has(root) && parts.length >= 3) {
-      root = parts[parts.length - 3];
-    }
-
-    const genericLabels = new Set([
-      "www",
-      "app",
-      "api",
-      "docs",
-      "mail",
-      "admin",
-      "portal",
-      "staging",
-      "dev",
-      "beta",
-    ]);
-    if (genericLabels.has(root) || root.length < 2) {
-      return null;
-    }
-
-    const normalized = root.replace(/[-_]+/g, " ").trim();
-    if (!normalized) {
-      return null;
-    }
-
-    return normalized
-      .split(/\s+/)
-      .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
-      .join(" ");
-  }
-
-  private normalizeStartupToken(value: string | null | undefined): string | null {
-    if (!value) {
-      return null;
-    }
-    const token = value
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, "")
-      .trim();
-    if (token.length < 3) {
-      return null;
-    }
-    return token;
-  }
-
-  private extractWebsiteFromText(text: string | null | undefined): string | null {
-    if (!text || typeof text !== "string") {
-      return null;
-    }
-
-    const explicitMatches =
-      text.match(/\bhttps?:\/\/[^\s<>()]+|\bwww\.[^\s<>()]+/gi) ?? [];
-    const labeledBareDomain =
-      text.match(
-        /\bwebsite\b[^a-z0-9]+([a-z0-9][a-z0-9.-]+\.[a-z]{2,}(?:\/[^\s<>()]*)?)/i,
-      )?.[1] ?? null;
-
-    const candidates = labeledBareDomain
-      ? [...explicitMatches, labeledBareDomain]
-      : explicitMatches;
-
-    for (const rawCandidate of candidates) {
-      const normalizedCandidate = rawCandidate
-        .replace(/[),.;]+$/g, "")
-        .trim();
-      if (!normalizedCandidate) {
-        continue;
-      }
-      const candidate = /^https?:\/\//i.test(normalizedCandidate)
-        ? normalizedCandidate
-        : `https://${normalizedCandidate}`;
-      const normalized = this.normalizeWebsiteCandidate(candidate);
-      if (!normalized || this.isMissingWebsiteValue(normalized)) {
-        continue;
-      }
-      return normalized;
-    }
-
-    return null;
-  }
-
-  private extractStageFromText(text: string | null | undefined): StartupStage | null {
-    if (!text || typeof text !== "string") {
-      return null;
-    }
-
-    const normalized = text.toLowerCase();
-    if (/\bpre[\s-]?seed\b/.test(normalized)) return StartupStage.PRE_SEED;
-    if (/\bseries[\s-]?a\b/.test(normalized)) return StartupStage.SERIES_A;
-    if (/\bseries[\s-]?b\b/.test(normalized)) return StartupStage.SERIES_B;
-    if (/\bseries[\s-]?c\b/.test(normalized)) return StartupStage.SERIES_C;
-    if (/\bseries[\s-]?d\b/.test(normalized)) return StartupStage.SERIES_D;
-    if (/\bseries[\s-]?e\b/.test(normalized)) return StartupStage.SERIES_E;
-    if (/\bseries[\s-]?f(?:\+|[\s-]?plus)?\b/.test(normalized)) {
-      return StartupStage.SERIES_F_PLUS;
-    }
-    if (/\bseed\b/.test(normalized)) return StartupStage.SEED;
-    return null;
   }
 
   private extractCompanyNameFromRawText(text: string | null | undefined): string | null {
@@ -630,21 +377,22 @@ export class PipelineService {
 
     const missing: Array<"website" | "stage"> = [];
     const websiteCandidate =
-      this.normalizeWebsiteCandidate(extraction.website) ??
-      this.extractWebsiteFromText(extraction.rawText);
-    if (this.isMissingWebsiteValue(websiteCandidate)) {
+      normalizeWebsiteCandidate(extraction.website) ??
+      extractWebsiteFromText(extraction.rawText);
+    if (isMissingWebsiteValue(websiteCandidate)) {
       missing.push("website");
     }
 
     const stageCandidate =
-      this.extractStageFromText(extraction.rawText);
+      mapStageToEnum(extraction.stage) ??
+      extractStageFromText(extraction.rawText);
     if (!stageCandidate) {
       missing.push("stage");
     } else if (stageCandidate === StartupStage.SEED) {
       const structuralPlaceholderSignals = [
-        this.isLikelyPlaceholderText(extraction.industry),
-        this.isLikelyPlaceholderText(extraction.location),
-        this.isMissingWebsiteValue(websiteCandidate),
+        isLikelyPlaceholderText(extraction.industry),
+        isLikelyPlaceholderText(extraction.location),
+        isMissingWebsiteValue(websiteCandidate),
       ];
       if (structuralPlaceholderSignals.some(Boolean)) {
         missing.push("stage");
@@ -652,22 +400,6 @@ export class PipelineService {
     }
 
     return Array.from(new Set(missing));
-  }
-
-  private isLikelyPlaceholderText(value: string | null | undefined): boolean {
-    if (!value) {
-      return true;
-    }
-    const normalized = value.trim().toLowerCase();
-    if (!normalized) {
-      return true;
-    }
-    return (
-      normalized.includes("pending extraction") ||
-      normalized.includes("pending-extraction") ||
-      normalized === "unknown" ||
-      normalized === "n/a"
-    );
   }
 
   private isLikelyPlaceholderStartupName(value: string | null | undefined): boolean {
@@ -846,62 +578,29 @@ export class PipelineService {
     > = [];
 
     const normalizedWebsite =
-      this.normalizeWebsiteCandidate(extraction.website) ??
-      this.extractWebsiteFromText(extraction.rawText);
-    const shouldRejectSubmitterDomainWebsite =
-      this.isSuspiciousInvestorSubmitterWebsite({
-        website: normalizedWebsite,
-        submittedByRole: record.submittedByRole,
-        contactEmail: record.contactEmail,
-        startupName: record.name,
-      });
-    if (shouldRejectSubmitterDomainWebsite && normalizedWebsite) {
-      this.logger.warn(
-        `[Pipeline] Ignoring submitter-domain website candidate for ${startupId}: ${normalizedWebsite}`,
-      );
-    }
+      normalizeWebsiteCandidate(extraction.website) ??
+      extractWebsiteFromText(extraction.rawText);
     if (
-      this.isMissingWebsiteValue(record.website) &&
+      isMissingWebsiteValue(record.website) &&
       normalizedWebsite &&
-      !shouldRejectSubmitterDomainWebsite &&
-      !this.isMissingWebsiteValue(normalizedWebsite)
+      !isMissingWebsiteValue(normalizedWebsite)
     ) {
       updates.website = normalizedWebsite;
       updatedFields.push("website");
     }
 
     const mappedStage =
-      this.extractStageFromText(extraction.rawText);
-    if (this.isLikelyPlaceholderStage(record) && mappedStage) {
+      mapStageToEnum(extraction.stage) ??
+      extractStageFromText(extraction.rawText);
+    if (isLikelyPlaceholderStage(record) && mappedStage) {
       updates.stage = mappedStage;
       updatedFields.push("stage");
     }
 
-    const extractedNameCandidate =
+    const nameCandidate =
       this.sanitizeStartupName(extraction.companyName) ??
       this.extractCompanyNameFromRawText(extraction.rawText);
-    const websiteDerivedName = this.sanitizeStartupName(
-      this.extractCompanyNameFromWebsite(normalizedWebsite),
-    );
-    const shouldPreferWebsiteDerivedName =
-      Boolean(websiteDerivedName) &&
-      (!extractedNameCandidate ||
-        this.isLikelyFilenameDerivedStartupName(extractedNameCandidate) ||
-        (this.isLikelyFilenameDerivedStartupName(record.name) &&
-          this.normalizeStartupNameForComparison(extractedNameCandidate) ===
-            this.normalizeStartupNameForComparison(record.name)));
-    const nameCandidate = shouldPreferWebsiteDerivedName
-      ? websiteDerivedName
-      : extractedNameCandidate;
-    if (shouldPreferWebsiteDerivedName && nameCandidate) {
-      this.logger.debug(
-        `[Pipeline] Prefill using website-derived startup name for ${startupId}: ${record.name} -> ${nameCandidate}`,
-      );
-    }
-    if (
-      nameCandidate &&
-      this.shouldUseExtractedStartupNameForPrefill(record.name, nameCandidate)
-    ) {
+    if (nameCandidate && this.shouldUseExtractedStartupNameForPrefill(record.name, nameCandidate)) {
       updates.name = nameCandidate;
       updatedFields.push("name");
     }
@@ -909,8 +608,8 @@ export class PipelineService {
     const industryCandidate = extraction.industry?.trim();
     if (
       industryCandidate &&
-      !this.isLikelyPlaceholderText(industryCandidate) &&
-      this.isLikelyPlaceholderText(record.industry)
+      !isLikelyPlaceholderText(industryCandidate) &&
+      isLikelyPlaceholderText(record.industry)
     ) {
       updates.industry = industryCandidate;
       updatedFields.push("industry");
@@ -919,8 +618,8 @@ export class PipelineService {
     const locationCandidate = extraction.location?.trim();
     if (
       locationCandidate &&
-      !this.isLikelyPlaceholderText(locationCandidate) &&
-      this.isLikelyPlaceholderText(record.location)
+      !isLikelyPlaceholderText(locationCandidate) &&
+      isLikelyPlaceholderText(record.location)
     ) {
       updates.location = locationCandidate;
       updatedFields.push("location");
@@ -1003,12 +702,7 @@ export class PipelineService {
       );
     }
 
-    const usePrefilledExtraction = options?.skipExtraction === true;
-    const prefilledExtractionFromState = usePrefilledExtraction
-      ? this.readExtractionResultFromState(
-          await this.getPipelineStateWithSnapshotFallback(startupId),
-        )
-      : null;
+    await this.assertPitchDeckStorageReady(startupId);
 
     const state = await this.pipelineState.init(startupId, userId);
     await this.pipelineAgentTrace?.cleanupExpired().catch((error) => {
@@ -1024,59 +718,14 @@ export class PipelineService {
       phases: this.phaseTransition.getConfig().phases.map((phase) => phase.phase),
     });
 
-    const cachedExtraction = usePrefilledExtraction
-      ? this.extractionService.getCachedResult(startupId)
-      : null;
-    const prefilledExtraction = cachedExtraction ?? prefilledExtractionFromState;
-    if (usePrefilledExtraction && prefilledExtraction) {
-      await this.pipelineState.setPhaseResult(
+    for (const phase of this.phaseTransition.getInitialPhases()) {
+      await this.queuePhase({
         startupId,
-        PipelinePhase.EXTRACTION,
-        prefilledExtraction,
-      );
-      await this.pipelineState.updatePhase(
-        startupId,
-        PipelinePhase.EXTRACTION,
-        PhaseStatus.COMPLETED,
-      );
-      await this.progressTracker.updatePhaseProgress({
-        startupId,
-        userId,
         pipelineRunId: state.pipelineRunId,
-        phase: PipelinePhase.EXTRACTION,
-        status: PhaseStatus.COMPLETED,
+        userId,
+        phase,
+        knownState: state,
       });
-      this.logger.log(
-        `[Pipeline] Using prefilled extraction for startup ${startupId}; extraction phase marked completed (source=${cachedExtraction ? "cache" : "pipeline-state"})`,
-      );
-    } else if (usePrefilledExtraction) {
-      this.logger.warn(
-        `[Pipeline] skipExtraction requested for startup ${startupId} but no reusable extraction result was found; queuing extraction phase normally`,
-      );
-    }
-
-    if (usePrefilledExtraction && prefilledExtraction) {
-      const refreshed = await this.pipelineState.get(startupId) ?? state;
-      const decision = this.phaseTransition.decideNextPhases(refreshed);
-      for (const phase of decision.queue) {
-        await this.queuePhase({
-          startupId,
-          pipelineRunId: state.pipelineRunId,
-          userId,
-          phase,
-          knownState: refreshed,
-        });
-      }
-    } else {
-      for (const phase of this.phaseTransition.getInitialPhases()) {
-        await this.queuePhase({
-          startupId,
-          pipelineRunId: state.pipelineRunId,
-          userId,
-          phase,
-          knownState: state,
-        });
-      }
     }
 
     await this.notifyPipelineLifecycle({
@@ -1093,21 +742,34 @@ export class PipelineService {
     return state.pipelineRunId;
   }
 
-  private readExtractionResultFromState(
-    state: PipelineState | null,
-  ): ExtractionResult | null {
-    if (!state) {
-      return null;
+  private async assertPitchDeckStorageReady(startupId: string): Promise<void> {
+    const [startupRecord] = await this.drizzle.db
+      .select({
+        pitchDeckPath: startup.pitchDeckPath,
+      })
+      .from(startup)
+      .where(eq(startup.id, startupId))
+      .limit(1);
+
+    if (!startupRecord?.pitchDeckPath) {
+      return;
     }
-    const result = state.results?.[PipelinePhase.EXTRACTION];
-    if (!result || typeof result !== "object") {
-      return null;
+
+    try {
+      const exists = await this.storage.exists(startupRecord.pitchDeckPath);
+      if (exists) {
+        return;
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new BadRequestException(
+        `Unable to verify pitch deck in storage for startup ${startupId}: ${message}`,
+      );
     }
-    const rawText = (result as { rawText?: unknown }).rawText;
-    if (typeof rawText !== "string" || rawText.trim().length === 0) {
-      return null;
-    }
-    return result as ExtractionResult;
+
+    throw new BadRequestException(
+      `Pitch deck file is missing in storage for startup ${startupId}. Expected object key: ${startupRecord.pitchDeckPath}. Re-upload the file and retry the analysis.`,
+    );
   }
 
   async getPipelineStatus(startupId: string): Promise<PipelineState | null> {
@@ -1526,6 +1188,7 @@ export class PipelineService {
         this.phaseTransition.getConfig().defaultRetryPolicy,
         retryCount,
       );
+      await this.pipelineState.resetPhase(startupId, phase);
       await this.queuePhase({
         startupId,
         pipelineRunId: state.pipelineRunId,
@@ -1881,7 +1544,7 @@ export class PipelineService {
         await this.startupMatching.queueStartupMatching({
           startupId,
           requestedBy,
-          triggerSource: "retry",
+          triggerSource: "pipeline_completion",
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);

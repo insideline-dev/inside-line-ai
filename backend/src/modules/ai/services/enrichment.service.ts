@@ -24,6 +24,12 @@ import { PipelineStateService } from "./pipeline-state.service";
 import { BraveSearchService, type BraveSearchResponse } from "./brave-search.service";
 import { ClaraEmailContextService } from "./clara-email-context.service";
 import { AiModelConfigService } from "./ai-model-config.service";
+import {
+  isMissingWebsiteValue as isMissingWebsiteValueShared,
+  isLikelyPlaceholderText as isPlaceholderTextShared,
+  isLikelyPlaceholderStage as isLikelyPlaceholderStageShared,
+  mapStageToEnum as mapStageToEnumShared,
+} from "../utils/startup-field-utils";
 
 export const ENRICHMENT_AGENT_KEY = "gap_fill_hybrid";
 export const ENRICHMENT_PROMPT_KEY = "enrichment.gapFill";
@@ -46,10 +52,6 @@ const TIER_2_SOURCE_DOMAINS = [
   "venturebeat.com",
   "linkedin.com",
 ];
-
-const PLACEHOLDER_WEBSITE_HOSTS = new Set([
-  "pending-extraction.com",
-]);
 
 const CRITICAL_ENRICHMENT_FIELDS = new Set([
   "website",
@@ -160,6 +162,7 @@ const CORRECTABLE_FIELDS = ENRICHABLE_FIELDS.filter((f) => f.correctable);
 
 interface EnrichmentSynthesisResult {
   prompt: string;
+  systemPrompt: string;
   output: EnrichmentResult;
   usedFallback: boolean;
   usedTextFallback: boolean;
@@ -209,6 +212,7 @@ export interface EnrichmentRunOptions {
   onAgentComplete?: (payload: {
     agentKey: string;
     inputPrompt?: string;
+    systemPrompt?: string;
     outputText?: string;
     outputJson?: unknown;
     error?: string;
@@ -398,6 +402,7 @@ export class EnrichmentService {
 
         synthesis = {
           prompt: "",
+          systemPrompt: ENRICHMENT_GAP_ANALYSIS_SYSTEM_PROMPT,
           output: this.buildSkippedResult("No remaining gaps after internal source resolution"),
           usedFallback: false,
           usedTextFallback: false,
@@ -488,6 +493,7 @@ export class EnrichmentService {
       options?.onAgentComplete?.({
         agentKey: ENRICHMENT_AGENT_KEY,
         inputPrompt: synthesis.prompt,
+        systemPrompt: synthesis.systemPrompt,
         outputText: this.serializeOutput(enrichmentResult),
         outputJson: enrichmentResult,
         error: synthesis.error,
@@ -507,6 +513,7 @@ export class EnrichmentService {
       options?.onAgentComplete?.({
         agentKey: ENRICHMENT_AGENT_KEY,
         inputPrompt: renderedPrompt,
+        systemPrompt: ENRICHMENT_GAP_ANALYSIS_SYSTEM_PROMPT,
         error: message,
         usedFallback: false,
       });
@@ -783,21 +790,7 @@ export class EnrichmentService {
   }
 
   private mapStageToEnum(value: string): string | null {
-    const normalized = value.toLowerCase().replace(/[\s-]+/g, "_");
-    const mapping: Record<string, string> = {
-      pre_seed: StartupStage.PRE_SEED,
-      preseed: StartupStage.PRE_SEED,
-      seed: StartupStage.SEED,
-      series_a: StartupStage.SERIES_A,
-      series_b: StartupStage.SERIES_B,
-      series_c: StartupStage.SERIES_C,
-      series_d: StartupStage.SERIES_D,
-      series_e: StartupStage.SERIES_E,
-      series_f: StartupStage.SERIES_F_PLUS,
-      series_f_plus: StartupStage.SERIES_F_PLUS,
-      "series_f+": StartupStage.SERIES_F_PLUS,
-    };
-    return mapping[normalized] ?? null;
+    return mapStageToEnumShared(value);
   }
 
   private async resolveRuntimeModelConfig(
@@ -1221,6 +1214,7 @@ export class EnrichmentService {
         if (structuredError?.success) {
           return {
             prompt,
+            systemPrompt: ENRICHMENT_GAP_ANALYSIS_SYSTEM_PROMPT,
             output: {
               ...structuredError.data,
               dbFieldsUpdated: [],
@@ -1252,6 +1246,7 @@ export class EnrichmentService {
         if (textError?.success) {
           return {
             prompt,
+            systemPrompt: ENRICHMENT_GAP_ANALYSIS_SYSTEM_PROMPT,
             output: {
               ...textError.data,
               dbFieldsUpdated: [],
@@ -1307,10 +1302,8 @@ export class EnrichmentService {
     );
     return {
       prompt,
-      output: {
-        ...deterministicFallback,
-        dbFieldsUpdated: [],
-      },
+      systemPrompt: ENRICHMENT_GAP_ANALYSIS_SYSTEM_PROMPT,
+      output: this.buildEmptyResult(),
       usedFallback: true,
       usedTextFallback: false,
       attempt: maxAttempts,
@@ -2287,59 +2280,26 @@ export class EnrichmentService {
   }
 
   private isMissingWebsiteValue(value: string | null | undefined): boolean {
-    const normalized = this.normalizeSourceUrl(value ?? undefined);
-    if (!normalized) {
-      return true;
-    }
-    const host = this.hostnameFromUrl(normalized);
-    if (!host) {
-      return true;
-    }
-    return PLACEHOLDER_WEBSITE_HOSTS.has(host);
+    return isMissingWebsiteValueShared(value);
   }
 
   private isPlaceholderText(value: string | null | undefined): boolean {
-    if (typeof value !== "string") {
-      return true;
-    }
-    const normalized = value.trim().toLowerCase();
-    if (normalized.length === 0) {
-      return true;
-    }
-    return (
-      normalized.includes("pending extraction") ||
-      normalized.includes("pending-extraction") ||
-      normalized === "unknown" ||
-      normalized === "n/a"
-    );
+    return isPlaceholderTextShared(value);
   }
 
   private isLikelyPlaceholderStage(
     stageValue: string | null | undefined,
     record: StartupRecord,
   ): boolean {
-    const mappedStage = this.mapStageToEnum(stageValue ?? "");
-    if (!mappedStage) {
-      return true;
-    }
-    if (mappedStage !== StartupStage.SEED) {
-      return false;
-    }
-
-    const structuralSignals = [
-      this.isMissingWebsiteValue(record.website),
-      this.isPlaceholderText(record.industry),
-      this.isPlaceholderText(record.location),
-    ];
-    const secondarySignals = [
-      typeof record.fundingTarget !== "number" || record.fundingTarget <= 0,
-      typeof record.teamSize !== "number" || record.teamSize <= 1,
-    ];
-    const totalSignals = [...structuralSignals, ...secondarySignals];
-    return (
-      structuralSignals.filter(Boolean).length >= 1 &&
-      totalSignals.filter(Boolean).length >= 2
-    );
+    return isLikelyPlaceholderStageShared({
+      ...record,
+      stage: stageValue ?? record.stage ?? "",
+      website: record.website ?? "",
+      industry: record.industry ?? "",
+      location: record.location ?? "",
+      fundingTarget: typeof record.fundingTarget === "number" ? record.fundingTarget : 0,
+      teamSize: typeof record.teamSize === "number" ? record.teamSize : 0,
+    });
   }
 
   private isMissingStageValue(record: StartupRecord): boolean {

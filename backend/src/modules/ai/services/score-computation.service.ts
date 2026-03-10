@@ -261,6 +261,52 @@ export class ScoreComputationService {
     return Number(((atOrBelow / scores.length) * 100).toFixed(1));
   }
 
+  computeConfidenceScore(
+    evaluation: Record<string, unknown>,
+    weights: NormalizedWeights,
+  ): "High" | "Medium" | "Low" {
+    const CONFIDENCE_MAP: Record<string, number> = {
+      high: 1.0,
+      mid: 0.67,
+      medium: 0.67,
+      low: 0.33,
+    };
+
+    const keys: Array<keyof NormalizedWeights> = [
+      "team",
+      "market",
+      "product",
+      "traction",
+      "businessModel",
+      "gtm",
+      "financials",
+      "competitiveAdvantage",
+      "legal",
+      "dealTerms",
+      "exitPotential",
+    ];
+
+    let weightedSum = 0;
+    let totalWeight = 0;
+
+    for (const key of keys) {
+      const section = evaluation[key] as
+        | { confidence?: string }
+        | undefined;
+      const rawConfidence = section?.confidence?.toLowerCase() ?? "low";
+      const numeric = CONFIDENCE_MAP[rawConfidence] ?? 0.33;
+      const weight = weights[key] ?? 0;
+      weightedSum += numeric * weight;
+      totalWeight += weight;
+    }
+
+    if (totalWeight === 0) return "Low";
+    const avg = weightedSum / totalWeight;
+    if (avg >= 0.7) return "High";
+    if (avg >= 0.4) return "Medium";
+    return "Low";
+  }
+
   private toStartupStage(stage: string): StartupStage {
     if (Object.values(StartupStage).includes(stage as StartupStage)) {
       return stage as StartupStage;

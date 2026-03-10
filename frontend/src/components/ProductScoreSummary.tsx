@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { ConfidenceBadge } from "@/components/ConfidenceBadge";
 import {
   Package,
   CheckCircle2,
@@ -18,6 +19,7 @@ interface ProductScoreSummaryProps {
   keyStrengths?: string[];
   keyRisks?: string[];
   weight?: number;
+  confidence?: string;
 }
 
 function getTRLLabel(trl: string | null | undefined): { label: string; color: string } {
@@ -44,6 +46,7 @@ export function ProductScoreSummary({
   keyStrengths,
   keyRisks,
   weight,
+  confidence = "unknown",
 }: ProductScoreSummaryProps) {
   const trlInfo = getTRLLabel(trlStage);
   const normalizedMoatType = moatType && moatType.trim().length > 0 ? moatType : "none";
@@ -52,7 +55,10 @@ export function ProductScoreSummary({
 
   return (
     <div className="space-y-6">
-      <Card data-testid="card-product-score">
+      <Card
+        className="border-primary/20 bg-gradient-to-br from-primary/10 via-background to-background"
+        data-testid="card-product-score"
+      >
         <CardContent className="py-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -62,6 +68,11 @@ export function ProductScoreSummary({
               <div>
                 <h3 className="text-lg font-semibold">Product Score</h3>
                 <p className="text-sm text-muted-foreground">{weight !== undefined ? `${weight}%` : ''} weight in overall evaluation</p>
+                <ConfidenceBadge
+                  confidence={confidence}
+                  className="mt-2"
+                  dataTestId="badge-product-confidence"
+                />
               </div>
             </div>
             <div className="text-right">
@@ -93,7 +104,7 @@ export function ProductScoreSummary({
         </Card>
       )}
 
-      <Card>
+      <Card className="border-primary/15">
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <Cpu className="w-5 h-5 text-primary" />
@@ -144,28 +155,29 @@ export function ProductScoreSummary({
       </Card>
 
       <div className="grid gap-6 md:grid-cols-2">
-        {keyStrengths && keyStrengths.length > 0 && (
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
-                <CheckCircle2 className="w-5 h-5 text-violet-500" />
+                <CheckCircle2 className="w-5 h-5 text-emerald-600" />
                 Product Strengths
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <ul className="space-y-2">
-                {keyStrengths.slice(0, 5).map((strength, idx) => (
-                  <li key={idx} className="flex items-start gap-2 text-sm">
-                    <CheckCircle2 className="w-4 h-4 mt-0.5 text-violet-500 shrink-0" />
-                    <span>{strength}</span>
-                  </li>
-                ))}
-              </ul>
+              {keyStrengths && keyStrengths.length > 0 ? (
+                <ul className="space-y-2">
+                  {keyStrengths.slice(0, 5).map((strength, idx) => (
+                    <li key={idx} className="flex items-start gap-2 text-sm">
+                      <CheckCircle2 className="w-4 h-4 mt-0.5 text-emerald-600 shrink-0" />
+                      <span>{strength}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground">No clear product strengths were identified in this run.</p>
+              )}
             </CardContent>
           </Card>
-        )}
 
-        {keyRisks && keyRisks.length > 0 && (
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
@@ -174,17 +186,20 @@ export function ProductScoreSummary({
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <ul className="space-y-2">
-                {keyRisks.slice(0, 5).map((risk, idx) => (
-                  <li key={idx} className="flex items-start gap-2 text-sm">
-                    <AlertTriangle className="w-4 h-4 mt-0.5 text-rose-500 shrink-0" />
-                    <span>{risk}</span>
-                  </li>
-                ))}
-              </ul>
+              {keyRisks && keyRisks.length > 0 ? (
+                <ul className="space-y-2">
+                  {keyRisks.slice(0, 5).map((risk, idx) => (
+                    <li key={idx} className="flex items-start gap-2 text-sm">
+                      <AlertTriangle className="w-4 h-4 mt-0.5 text-rose-500 shrink-0" />
+                      <span>{risk}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground">No explicit product risks were identified in this run.</p>
+              )}
             </CardContent>
           </Card>
-        )}
       </div>
     </div>
   );

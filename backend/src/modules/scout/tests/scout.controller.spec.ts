@@ -9,6 +9,7 @@ import { DrizzleService } from '../../../database';
 import { UserRole } from '../../../auth/entities/auth.schema';
 import { ScoutApplicationStatus } from '../entities/scout.schema';
 import { StartupStage } from '../../startup/entities/startup.schema';
+import { ApplyScoutDto, ScoutSubmitStartupDto } from '../dto';
 
 type User = {
   id: string;
@@ -181,7 +182,7 @@ describe('ScoutController', () => {
         new Error('Validation failed: email must be a valid email'),
       );
 
-      await expect(controller.apply(mockUser, invalidDto as any)).rejects.toThrow(
+      await expect(controller.apply(mockUser, invalidDto as unknown as ApplyScoutDto)).rejects.toThrow(
         expect.objectContaining({
           message: expect.stringContaining('email'),
         }),
@@ -199,7 +200,7 @@ describe('ScoutController', () => {
       );
 
       await expect(
-        controller.apply(mockUser, incompleteDto as any),
+        controller.apply(mockUser, incompleteDto as unknown as ApplyScoutDto),
       ).rejects.toThrow();
     });
 
@@ -230,14 +231,14 @@ describe('ScoutController', () => {
 
     it('should handle optional portfolio array', async () => {
       const dtoWithoutPortfolio = { ...validDto };
-      delete (dtoWithoutPortfolio as any).portfolio;
+      delete (dtoWithoutPortfolio as Record<string, unknown>).portfolio;
 
       scoutService.apply.mockResolvedValue({
         ...mockApplication,
         portfolio: [],
       });
 
-      const result = await controller.apply(mockUser, dtoWithoutPortfolio);
+      await controller.apply(mockUser, dtoWithoutPortfolio);
 
       expect(scoutService.apply).toHaveBeenCalledWith(
         mockUser.id,
@@ -294,7 +295,7 @@ describe('ScoutController', () => {
         submission: { id: 'submission-id', scoutId: mockUser.id },
       };
 
-      submissionService.submit.mockResolvedValue(mockResult as any);
+      submissionService.submit.mockResolvedValue(mockResult as unknown);
 
       const result = await controller.submit(mockUser, validSubmitDto);
 
@@ -308,7 +309,7 @@ describe('ScoutController', () => {
         submission: { id: 'submission-id', scoutId: mockUser.id },
       };
 
-      submissionService.submit.mockResolvedValue(mockResult as any);
+      submissionService.submit.mockResolvedValue(mockResult as unknown);
 
       await controller.submit(mockUser, validSubmitDto);
 
@@ -346,7 +347,7 @@ describe('ScoutController', () => {
         submission: { id: 'submission-id', scoutId: mockUser.id },
       };
 
-      submissionService.submit.mockResolvedValue(mockResult as any);
+      submissionService.submit.mockResolvedValue(mockResult as unknown);
 
       await controller.submit(mockUser, dtoWithOptionals);
 
@@ -392,7 +393,7 @@ describe('ScoutController', () => {
       );
 
       await expect(
-        controller.submit(mockUser, incompleteDto as any),
+        controller.submit(mockUser, incompleteDto as unknown as ScoutSubmitStartupDto),
       ).rejects.toThrow();
     });
 
@@ -426,7 +427,7 @@ describe('ScoutController', () => {
         submission: { id: 'submission-id', scoutId: mockUser.id },
       };
 
-      submissionService.submit.mockResolvedValue(mockResult as any);
+      submissionService.submit.mockResolvedValue(mockResult as unknown);
 
       await controller.submit(mockUser, dtoWithoutNotes);
 

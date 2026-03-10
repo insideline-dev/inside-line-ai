@@ -227,6 +227,7 @@ export class EnrichmentProcessor
           onAgentComplete: ({
             agentKey,
             inputPrompt,
+            systemPrompt,
             outputJson,
             outputText,
             error,
@@ -282,6 +283,7 @@ export class EnrichmentProcessor
                 status: usedFallback ? "fallback" : isFailed ? "failed" : "completed",
                 usedFallback,
                 inputPrompt,
+                systemPrompt,
                 outputJson,
                 outputText,
                 error,

@@ -4,6 +4,7 @@ import { ModelPurpose } from "../interfaces/pipeline.interface";
 
 export const AI_RUNTIME_ALLOWED_MODEL_NAMES = [
   "gpt-5.2",
+  "gpt-5.4",
   "gemini-3-flash-preview",
   "o4-mini-deep-research",
 ] as const;
@@ -104,7 +105,7 @@ export function resolveModelPurposeForPromptKey(
   }
 
   if (key.startsWith("clara.")) {
-    return ModelPurpose.EXTRACTION;
+    return ModelPurpose.CLARA;
   }
 
   return ModelPurpose.EXTRACTION;

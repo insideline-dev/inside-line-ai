@@ -183,21 +183,57 @@ export function generateMemoDocument(ctx: PdfContext): PDFKit.PDFDocument {
   }
 
   const founderMarketFit = teamData?.founderMarketFit as Record<string, unknown> | undefined;
-  if (founderMarketFit?.assessment) {
+  const founderMarketFitWhy =
+    (founderMarketFit?.why as string | undefined) ??
+    (founderMarketFit?.assessment as string | undefined);
+  if (founderMarketFitWhy) {
+    const score =
+      typeof founderMarketFit?.score === 'number'
+        ? ` (${Math.round(founderMarketFit.score)}/100)`
+        : '';
     teamAdditional.push({
-      label: 'Founder-Market Fit:',
-      text: founderMarketFit.assessment as string,
+      label: `Founder-Market Fit${score}:`,
+      text: founderMarketFitWhy,
     });
   }
 
   const teamComposition = teamData?.teamComposition as Record<string, unknown> | undefined;
   if (teamComposition) {
     const compParts: string[] = [];
-    if (teamComposition.hasBusinessLeader) compParts.push('Business Leader');
-    if (teamComposition.hasTechnicalLeader) compParts.push('Technical Leader');
-    if (teamComposition.hasIndustryExpert) compParts.push('Industry Expert');
+    const isCovered = (value: unknown): boolean =>
+      Boolean(
+        value === true ||
+          (value &&
+            typeof value === 'object' &&
+            (value as Record<string, unknown>).covered === true),
+      );
+    if (
+      teamComposition.hasBusinessLeader ||
+      isCovered(teamComposition.businessLeadership)
+    ) compParts.push('Business Leadership');
+    if (
+      teamComposition.hasTechnicalLeader ||
+      isCovered(teamComposition.technicalCapability)
+    ) compParts.push('Technical Capability');
+    if (
+      teamComposition.hasIndustryExpert ||
+      isCovered(teamComposition.domainExpertise)
+    ) compParts.push('Domain Expertise');
+    if (
+      teamComposition.hasOperationsLeader ||
+      isCovered(teamComposition.gtmCapability)
+    ) compParts.push('GTM Capability');
     if (compParts.length > 0) {
       teamAdditional.push({ label: 'Team Composition:', text: compParts.join(', ') });
+    }
+    const compositionSentence =
+      (teamComposition.sentence as string | undefined) ??
+      (teamComposition.reason as string | undefined);
+    if (compositionSentence) {
+      teamAdditional.push({
+        label: 'Composition Assessment:',
+        text: compositionSentence,
+      });
     }
   }
 
@@ -299,23 +335,23 @@ export function generateMemoDocument(ctx: PdfContext): PDFKit.PDFDocument {
     addMemoSection(doc, 'Funding History', fundingParts.join('\n'), null, undefined, undefined, userEmail);
   }
 
-  // Deal Terms (5%)
-  addMemoSection(
-    doc,
-    'Deal Terms',
-    getSummaryFromData(dealTermsData),
-    evaluation?.dealTermsScore,
-    '5%',
-    undefined,
-    userEmail,
-  );
-
   // Legal & Regulatory (5%)
   addMemoSection(
     doc,
     'Legal & Regulatory',
     getSummaryFromData(legalData),
     evaluation?.legalScore,
+    '5%',
+    undefined,
+    userEmail,
+  );
+
+  // Deal Terms (5%)
+  addMemoSection(
+    doc,
+    'Deal Terms',
+    getSummaryFromData(dealTermsData),
+    evaluation?.dealTermsScore,
     '5%',
     undefined,
     userEmail,

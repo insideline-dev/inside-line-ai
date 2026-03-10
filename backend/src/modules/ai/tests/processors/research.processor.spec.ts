@@ -134,7 +134,7 @@ describe("ResearchProcessor", () => {
       } satisfies AiResearchJobData,
     } as unknown as Job<AiResearchJobData>;
 
-    const result = await (processor as any).process(job);
+    const result = await (processor as unknown as { process: (job: typeof job) => Promise<{ type: string }> }).process(job);
 
     expect(pipelineState.updatePhase).toHaveBeenCalledWith(
       "startup-1",
@@ -187,7 +187,7 @@ describe("ResearchProcessor", () => {
       } satisfies AiResearchJobData,
     } as unknown as Job<AiResearchJobData>;
 
-    await expect((processor as any).process(job)).rejects.toThrow(
+    await expect((processor as unknown as { process: (job: typeof job) => Promise<unknown> }).process(job)).rejects.toThrow(
       "provider unavailable",
     );
     expect(pipelineState.updatePhase).toHaveBeenCalledWith(
@@ -263,7 +263,7 @@ describe("ResearchProcessor", () => {
       } satisfies AiResearchJobData,
     } as unknown as Job<AiResearchJobData>;
 
-    await (processor as any).process(job);
+    await (processor as unknown as { process: (job: typeof job) => Promise<unknown> }).process(job);
 
     expect(pipelineService.onAgentProgress).toHaveBeenCalledWith(
       expect.objectContaining({

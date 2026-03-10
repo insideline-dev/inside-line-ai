@@ -7,6 +7,84 @@ import {
   PipelineAgentTraceService,
 } from "../../services/pipeline-agent-trace.service";
 
+describe("PipelineAgentTraceService — no truncation", () => {
+  let drizzle: jest.Mocked<DrizzleService>;
+  let config: ConfigService;
+  let insertValuesMock: ReturnType<typeof jest.fn>;
+  let service: PipelineAgentTraceService;
+
+  beforeEach(() => {
+    insertValuesMock = jest.fn().mockResolvedValue(undefined);
+    drizzle = {
+      db: {
+        insert: jest.fn(() => ({ values: insertValuesMock })),
+      },
+    } as unknown as jest.Mocked<DrizzleService>;
+    config = {
+      get: jest.fn((_key: string, fallback?: unknown) => fallback),
+    } as unknown as ConfigService;
+    service = new PipelineAgentTraceService(drizzle, config);
+  });
+
+  it("stores full inputPrompt without truncation regardless of size", async () => {
+    const bigPrompt = "x".repeat(200_000);
+    const systemPrompt = "system instructions";
+
+    await service.recordRun({
+      startupId: "s-1",
+      pipelineRunId: "r-1",
+      phase: PipelinePhase.EVALUATION,
+      agentKey: "team",
+      status: "completed",
+      inputPrompt: bigPrompt,
+      systemPrompt,
+    });
+
+    const payload = insertValuesMock.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(payload.inputPrompt).toBe(bigPrompt);
+    expect(payload.systemPrompt).toBe(systemPrompt);
+    expect(typeof payload.inputPrompt).toBe("string");
+    expect((payload.inputPrompt as string).length).toBe(200_000);
+    expect((payload.inputPrompt as string).includes("[TRUNCATED]")).toBe(false);
+  });
+
+  it("stores full outputText without truncation regardless of size", async () => {
+    const bigOutput = "y".repeat(150_000);
+
+    await service.recordRun({
+      startupId: "s-2",
+      pipelineRunId: "r-2",
+      phase: PipelinePhase.SYNTHESIS,
+      agentKey: "synthesis",
+      status: "completed",
+      outputText: bigOutput,
+    });
+
+    const payload = insertValuesMock.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(payload.outputText).toBe(bigOutput);
+    expect((payload.outputText as string).includes("[TRUNCATED]")).toBe(false);
+  });
+
+  it("stores full inputJson without truncation regardless of size", async () => {
+    const bigJson = { data: "z".repeat(500_000) };
+
+    await service.recordRun({
+      startupId: "s-3",
+      pipelineRunId: "r-3",
+      phase: PipelinePhase.RESEARCH,
+      agentKey: "market",
+      status: "completed",
+      inputJson: bigJson,
+    });
+
+    const payload = insertValuesMock.mock.calls[0]?.[0] as Record<string, unknown>;
+    const stored = payload.inputJson as { data: string };
+    expect(stored.data.length).toBe(500_000);
+    expect(JSON.stringify(stored).includes("[TRUNCATED]")).toBe(false);
+    expect(JSON.stringify(stored).includes("__truncated")).toBe(false);
+  });
+});
+
 describe("PipelineAgentTraceService deep research checkpoints", () => {
   let drizzle: jest.Mocked<DrizzleService>;
   let config: ConfigService;

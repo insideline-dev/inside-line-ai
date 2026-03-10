@@ -98,24 +98,22 @@ export const mockEvaluations: Evaluation[] = [
       "Competitive market with well-funded incumbents",
       "Sales cycle may be longer than projected",
     ],
-    recommendations: [
-      "Strongly recommend investment at current terms",
-      "Consider board seat given strategic value",
-    ],
     executiveSummary: "DataSync AI represents a compelling Series Seed opportunity with strong fundamentals across team, market, and product dimensions.",
     investorMemo: {
       executiveSummary: "Strong investment opportunity with experienced team and clear market need",
       sections: createMemoSections("DataSync AI"),
-      recommendation: "Proceed with investment",
-      riskLevel: "medium",
     },
     founderReport: {
       summary: "Your startup shows strong potential with some areas for improvement",
-      sections: createMemoSections("Your startup"),
-      actionItems: [
-        "Hire a VP of Sales within 6 months",
-        "Strengthen enterprise security certifications",
-        "Build out customer success function",
+      whatsWorking: [
+        "Strong team with relevant domain expertise",
+        "Clear product-market fit signals from early customers",
+        "Defensible competitive position through proprietary AI",
+      ],
+      pathToInevitability: [
+        "When you close 3 enterprise contracts with measurable ROI within 12 months",
+        "Once you prove a repeatable sales motion with sub-6 month cycles",
+        "When ARR reaches $2M with net revenue retention above 120%",
       ],
     },
     sources: [

@@ -23,10 +23,10 @@ import { EarlyAccessService } from '../../modules/early-access';
 
 describe('AuthController Registration', () => {
   let controller: AuthController;
-  let authService: any;
-  let userAuthService: any;
-  let emailService: any;
-  let profileService: any;
+  let authService: ReturnType<typeof createMockAuthService>;
+  let userAuthService: ReturnType<typeof createMockUserAuthService>;
+  let emailService: ReturnType<typeof createMockEmailService>;
+  let profileService: ReturnType<typeof createMockProfileService>;
 
   beforeEach(async () => {
     authService = createMockAuthService();

@@ -122,6 +122,8 @@ export type GetProgressResponseDtoProgress = {
   inputText?: string | null;
   /** @nullable */
   inputPrompt?: string | null;
+  /** @nullable */
+  systemPrompt?: string | null;
   inputJson?: unknown;
   /** @nullable */
   outputText?: string | null;

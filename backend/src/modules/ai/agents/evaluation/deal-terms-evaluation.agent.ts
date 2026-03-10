@@ -24,6 +24,28 @@ export class DealTermsEvaluationAgent extends BaseEvaluationAgent<DealTermsEvalu
     super(providers, aiConfig, promptService, modelExecution);
   }
 
+  protected override getAgentTemplateVariables(
+    _pipelineData: EvaluationPipelineInput,
+  ): Record<string, string> {
+    const ctx = _pipelineData.extraction.startupContext;
+    return {
+      competitorResearchOutput: _pipelineData.research.competitor ?? "Not provided",
+      newsResearchOutput: _pipelineData.research.news ?? "Not provided",
+      roundSize: _pipelineData.extraction.fundingAsk?.toString() ?? "Not provided",
+      roundCurrency: ctx?.roundCurrency ?? "USD",
+      valuation: _pipelineData.extraction.valuation?.toString() ?? "Not provided",
+      valuationType: ctx?.valuationType ?? "Not provided",
+      raiseType: ctx?.raiseType ?? "Not provided",
+      leadSecured: ctx?.leadSecured != null ? String(ctx.leadSecured) : "Not provided",
+      leadInvestorName: ctx?.leadInvestorName ?? "Not provided",
+      hasPreviousFunding: ctx?.hasPreviousFunding != null ? String(ctx.hasPreviousFunding) : "Not provided",
+      previousFundingAmount: ctx?.previousFundingAmount?.toString() ?? "Not provided",
+      previousFundingCurrency: ctx?.previousFundingCurrency ?? "Not provided",
+      previousInvestors: ctx?.previousInvestors ?? "Not provided",
+      previousRoundType: ctx?.previousRoundType ?? "Not provided",
+    };
+  }
+
   readonly buildContext = (pipelineData: EvaluationPipelineInput) => {
     const { extraction, scraping } = pipelineData;
     const rawText = typeof extraction.rawText === "string" ? extraction.rawText : "";
@@ -89,15 +111,9 @@ export class DealTermsEvaluationAgent extends BaseEvaluationAgent<DealTermsEvalu
     };
   };
 
-  fallback({ extraction }: EvaluationPipelineInput): DealTermsEvaluation {
-    const ask = extraction.fundingAsk ?? 0;
-
+  fallback({ extraction: _extraction }: EvaluationPipelineInput): DealTermsEvaluation {
     return DealTermsEvaluationSchema.parse({
       ...baseEvaluation(20, "Deal terms evaluation incomplete — requires manual review"),
-      valuation: extraction.valuation ?? Math.max(5_000_000, ask * 5),
-      askAmount: ask,
-      equity: 12,
-      termsQuality: "Terms appear within market range for current stage",
     });
   }
 }

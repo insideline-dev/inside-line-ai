@@ -14,6 +14,8 @@ export interface PreviewAiPromptRequestDto {
   stage?: PreviewAiPromptRequestDtoStage;
   /** @minLength 1 */
   investorThesis?: string;
+  /** @minLength 1 */
+  investorThesisSummary?: string;
   /** @pattern ^(?!\.)(?!.*\.\.)([A-Za-z0-9_'+\-\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\-]*\.)+[A-Za-z]{2,}$ */
   fromEmail?: string;
   subject?: string;

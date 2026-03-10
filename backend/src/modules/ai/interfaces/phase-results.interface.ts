@@ -13,6 +13,7 @@ import type {
   TractionEvaluation,
 } from "../schemas";
 import type { InvestorMemo, FounderReport } from "../schemas/synthesis.schema";
+import type { ExitScenario } from "../schemas/evaluations/exit-potential.schema";
 
 export interface StartupFileReference {
   path: string;
@@ -194,6 +195,14 @@ export interface ResearchResult {
   sources: SourceEntry[];
   errors: Array<{ agent: "team" | "market" | "product" | "news" | "competitor"; error: string }>;
   researchParameters?: ResearchParameters;
+  orchestratorGuidance?: string;
+  researchFallbackSummary?: {
+    attemptedAgents: number;
+    fallbackAgents: number;
+    fallbackRatio: number;
+    criticalFallbackAgents: Array<"team" | "market" | "product">;
+    warning: boolean;
+  };
 }
 
 export interface EvaluationSummary {
@@ -369,15 +378,10 @@ export interface ClaraEmailContext {
 }
 
 export interface SynthesisResult {
-  overallScore: number;
-  recommendation: "Pass" | "Consider" | "Decline";
-  executiveSummary: string;
-  strengths: string[];
-  concerns: string[];
-  investmentThesis: string;
-  nextSteps: string[];
-  confidenceLevel: "High" | "Medium" | "Low";
-  percentileRank?: number;
+  dealSnapshot: string;
+  keyStrengths: string[];
+  keyRisks: string[];
+  exitScenarios: ExitScenario[];
   sectionScores: {
     team: number;
     market: number;
@@ -391,6 +395,9 @@ export interface SynthesisResult {
     dealTerms: number;
     exitPotential: number;
   };
+  overallScore: number;
+  percentileRank?: number;
+  confidenceScore?: "High" | "Medium" | "Low";
   investorMemo: InvestorMemo;
   founderReport: FounderReport;
   dataConfidenceNotes: string;

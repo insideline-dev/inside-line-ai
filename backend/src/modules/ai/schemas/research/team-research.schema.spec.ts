@@ -26,12 +26,13 @@ describe("TeamResearchSchema", () => {
     expect(parsed.linkedinProfiles).toHaveLength(1);
   });
 
-  it("rejects invalid profile structure", () => {
-    expect(() =>
-      TeamResearchSchema.parse({
-        linkedinProfiles: [{ name: "Jane" }],
-      }),
-    ).toThrow();
+  it("coerces profile with missing fields using defaults", () => {
+    const result = TeamResearchSchema.parse({
+      linkedinProfiles: [{ name: "Jane" }],
+    });
+    expect(result.linkedinProfiles[0].name).toBe("Jane");
+    expect(result.linkedinProfiles[0].title).toBe("Unknown title");
+    expect(result.linkedinProfiles[0].company).toBe("Unknown company");
   });
 
   it("accepts null optional online presence fields", () => {

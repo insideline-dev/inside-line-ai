@@ -10,8 +10,8 @@ describe('AnalyticsService', () => {
   let cacheService: { get: ReturnType<typeof jest.fn>; set: ReturnType<typeof jest.fn> };
 
   const createMockDb = () => {
-    const resolveQueue: any[] = [];
-    const db: any = {
+    const resolveQueue: unknown[] = [];
+    const db: Record<string, unknown> & { _queue: unknown[] } = {
       _queue: resolveQueue,
       select: jest.fn().mockImplementation(() => db),
       from: jest.fn().mockImplementation(() => db),
@@ -21,7 +21,7 @@ describe('AnalyticsService', () => {
       limit: jest.fn().mockImplementation(() => db),
       innerJoin: jest.fn().mockImplementation(() => db),
       execute: jest.fn(),
-      then: jest.fn().mockImplementation((resolve: any) => {
+      then: jest.fn().mockImplementation((resolve: (value: unknown) => unknown) => {
         const value = resolveQueue.length > 0 ? resolveQueue.shift() : [];
         return resolve(value);
       }),
@@ -124,10 +124,10 @@ describe('AnalyticsService', () => {
 
       // The service makes many parallel queries, let's simplify
       // by mocking at a higher level
-      jest.spyOn(service as any, 'getWeeklySignups').mockResolvedValue([
+      jest.spyOn(service as never, 'getWeeklySignups').mockResolvedValue([
         { week: '2024-01-01', count: 5 },
       ]);
-      jest.spyOn(service as any, 'getTopIndustries').mockResolvedValue([
+      jest.spyOn(service as never, 'getTopIndustries').mockResolvedValue([
         { industry: 'SaaS', count: 20 },
       ]);
 
@@ -270,7 +270,7 @@ describe('AnalyticsService', () => {
       try {
         await service.getStartupStats(30);
         expect(true).toBe(false); // Should not reach here
-      } catch (error: any) {
+      } catch (error: unknown) {
         // Zod validation should catch the missing field in approvalStats
         expect(error).toBeDefined();
       }
@@ -343,8 +343,8 @@ describe('AnalyticsService', () => {
       mockDb.groupBy.mockImplementation(() => []);
       mockDb.execute.mockResolvedValue([]);
 
-      jest.spyOn(service as any, 'getWeeklySignups').mockResolvedValue([]);
-      jest.spyOn(service as any, 'getTopIndustries').mockResolvedValue([]);
+      jest.spyOn(service as never, 'getWeeklySignups').mockResolvedValue([]);
+      jest.spyOn(service as never, 'getTopIndustries').mockResolvedValue([]);
 
       // Complex Promise.all in getOverview, simplified mocking
       // Just verify cache.set was called with proper structure

@@ -179,4 +179,24 @@ describe("AiConfigService", () => {
 
     expect(service.getResearchAgentHardTimeoutMs()).toBe(3_600_000);
   });
+
+  describe("getResearchAttemptTimeoutMsForAgent", () => {
+    it("returns the global 1-hour research attempt timeout for competitor agent", () => {
+      config.get.mockImplementation((_: string, fallback?: unknown) => fallback as number);
+
+      expect(service.getResearchAttemptTimeoutMsForAgent("competitor")).toBe(3_600_000);
+    });
+
+    it("returns the standard research attempt timeout for all agents including competitor", () => {
+      config.get.mockImplementation((_: string, fallback?: unknown) => fallback as number);
+
+      const standard = service.getResearchAttemptTimeoutMs();
+
+      expect(service.getResearchAttemptTimeoutMsForAgent("team")).toBe(standard);
+      expect(service.getResearchAttemptTimeoutMsForAgent("market")).toBe(standard);
+      expect(service.getResearchAttemptTimeoutMsForAgent("product")).toBe(standard);
+      expect(service.getResearchAttemptTimeoutMsForAgent("news")).toBe(standard);
+      expect(service.getResearchAttemptTimeoutMsForAgent("competitor")).toBe(standard);
+    });
+  });
 });

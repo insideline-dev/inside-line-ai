@@ -204,7 +204,7 @@ export class EvaluationService {
       EVALUATION_AGENT_KEYS.length - next.summary.failedAgents;
     next.summary.degraded =
       next.summary.completedAgents < next.summary.minimumRequired ||
-      (next.summary.fallbackAgents ?? 0) > 0;
+      (next.summary.fallbackAgents ?? 0) > 3;
 
     return next;
   }

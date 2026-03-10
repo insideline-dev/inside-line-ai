@@ -11,7 +11,7 @@ import { eq, and, or, ilike, sql, desc, inArray } from "drizzle-orm";
 import { UserRole } from "../../auth/entities/auth.schema";
 import { DrizzleService } from "../../database";
 import { QueueService, QUEUE_NAMES } from "../../queue";
-import { StorageService } from "../../storage";
+import { StorageService, AssetType } from "../../storage";
 import { AiConfigService } from "../ai/services/ai-config.service";
 import type {
   EvaluationAgentKey,
@@ -550,6 +550,7 @@ export class StartupService {
         startupId: id,
         requestedBy: actorId,
         triggerSource: "approval",
+        requireApproved: false,
       });
       this.logger.log(
         `Queued startup matching for ${id} (analysisJobId=${queued.analysisJobId}, queueJobId=${queued.queueJobId})`,
@@ -1074,7 +1075,7 @@ export class StartupService {
 
     const result = await this.storage.getUploadUrl(
       userId,
-      assetType as any,
+      assetType as unknown as AssetType,
       dto.fileType,
       id,
     );
@@ -1853,6 +1854,7 @@ export class StartupService {
       usedFallback?: boolean;
       inputText?: string | null;
       inputPrompt?: string | null;
+      systemPrompt?: string | null;
       inputJson?: unknown;
       outputText?: string | null;
       outputJson?: unknown;
@@ -1915,6 +1917,7 @@ export class StartupService {
       const hasOutputJson =
         traceMeta.outputJson !== undefined && traceMeta.outputJson !== null;
       const inputText = row.inputPrompt ?? null;
+      const systemPrompt = row.systemPrompt ?? null;
       const hasInputText =
         typeof inputText === "string" && inputText.trim().length > 0;
       const hasInputJson = row.inputJson !== undefined && row.inputJson !== null;
@@ -1942,6 +1945,7 @@ export class StartupService {
         usedFallback: row.usedFallback,
         inputText,
         inputPrompt: inputText,
+        systemPrompt,
         inputJson: row.inputJson,
         outputText,
         meta:

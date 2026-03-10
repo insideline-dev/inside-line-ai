@@ -59,6 +59,7 @@ describe("EnrichmentProcessor", () => {
           options?.onAgentComplete?.({
             agentKey: ENRICHMENT_AGENT_KEY,
             inputPrompt: "Enrichment prompt",
+            systemPrompt: "Enrichment system prompt",
             outputText: JSON.stringify(createEmptyEnrichmentResult()),
             outputJson: createEmptyEnrichmentResult(),
             usedFallback: true,
@@ -230,6 +231,7 @@ describe("EnrichmentProcessor", () => {
         agentKey: ENRICHMENT_AGENT_KEY,
         status: "fallback",
         usedFallback: true,
+        systemPrompt: "Enrichment system prompt",
         fallbackReason: "SCHEMA_OUTPUT_INVALID",
         rawProviderError: "Unterminated fractional number in JSON at position 3689",
         attempt: 2,

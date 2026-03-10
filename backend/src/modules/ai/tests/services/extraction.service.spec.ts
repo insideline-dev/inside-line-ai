@@ -74,7 +74,7 @@ describe("ExtractionService", () => {
       }),
     } as unknown as jest.Mocked<ConfigService>;
 
-    drizzle = { db: mockDb as any } as jest.Mocked<DrizzleService>;
+    drizzle = { db: mockDb as unknown as DrizzleService["db"] } as jest.Mocked<DrizzleService>;
     storage = {
       getDownloadUrl: jest.fn().mockResolvedValue("https://storage.test/deck.pdf"),
     } as unknown as jest.Mocked<StorageService>;
@@ -114,7 +114,7 @@ describe("ExtractionService", () => {
       status: 200,
       headers: { get: jest.fn().mockReturnValue("1024") },
       arrayBuffer: jest.fn().mockResolvedValue(new Uint8Array([1, 2, 3, 4]).buffer),
-    }) as any;
+    }) as unknown as typeof fetch;
 
     service = new ExtractionService(
       config,
@@ -249,8 +249,14 @@ describe("ExtractionService", () => {
       new Error("invalid PDF"),
     );
     mistralOcr.extractFromPdf.mockRejectedValueOnce(new Error("OCR timeout"));
-    await expect(service.run("startup-1")).rejects.toThrow(
-      "No extractable deck text; OCR fallback failed: OCR timeout",
+    const result = await service.run("startup-1");
+
+    expect(result.source).toBe("startup-context");
+    expect(result.rawText).toContain("AI diligence pipeline");
+    expect(result.warnings).toContain("pdf-parse failed: invalid PDF");
+    expect(result.warnings).toContain("Mistral OCR failed: OCR timeout");
+    expect(result.warnings).toContain(
+      "No extractable deck text; falling back to startup form data",
     );
   });
 
@@ -295,7 +301,7 @@ describe("ExtractionService", () => {
       status: 200,
       headers: { get: jest.fn().mockReturnValue(String(120 * 1024 * 1024)) },
       arrayBuffer: jest.fn().mockResolvedValue(new Uint8Array([1, 2, 3]).buffer),
-    }) as any;
+    }) as unknown as typeof fetch;
     fieldExtractor.extractFields.mockResolvedValueOnce({});
 
     const result = await service.run("startup-1");
@@ -315,7 +321,7 @@ describe("ExtractionService", () => {
       status: 200,
       headers: { get: jest.fn().mockReturnValue("0") },
       arrayBuffer: jest.fn().mockResolvedValue(new Uint8Array().buffer),
-    }) as any;
+    }) as unknown as typeof fetch;
     fieldExtractor.extractFields.mockResolvedValueOnce({});
 
     const result = await service.run("startup-1");

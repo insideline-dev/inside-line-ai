@@ -1,27 +1,21 @@
 import { z } from "zod";
-import { BaseEvaluationSchema } from "../base-evaluation.schema";
+import { SimpleEvaluationSchema } from "../simple-evaluation.schema";
 
-const requiredStringFromNull = (fallback: string) =>
-  z.preprocess(
-    (value) => (value == null ? fallback : value),
-    z.string().min(1),
-  );
-
-const stringArray = z.preprocess(
-  (value) =>
-    Array.isArray(value)
-      ? value.filter((item): item is string => typeof item === "string")
-      : [],
-  z.array(z.string()),
-).default([]);
-
-export const ExitPotentialEvaluationSchema = BaseEvaluationSchema.extend({
-  exitScenarios: stringArray,
-  acquirers: stringArray,
-  exitTimeline: requiredStringFromNull("Exit timeline requires manual review"),
-  returnPotential: requiredStringFromNull("Return potential requires manual review"),
+export const ExitScenarioSchema = z.object({
+  scenario: z.enum(["conservative", "moderate", "optimistic"]),
+  exitType: z.string(),
+  exitValuation: z.string(),
+  timeline: z.string(),
+  moic: z.number(),
+  irr: z.number(),
+  researchBasis: z.string(),
 });
 
+export const ExitPotentialEvaluationSchema = SimpleEvaluationSchema.extend({
+  exitScenarios: z.array(ExitScenarioSchema),
+});
+
+export type ExitScenario = z.infer<typeof ExitScenarioSchema>;
 export type ExitPotentialEvaluation = z.infer<
   typeof ExitPotentialEvaluationSchema
 >;

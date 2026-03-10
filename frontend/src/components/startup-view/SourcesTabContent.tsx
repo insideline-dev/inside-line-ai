@@ -26,6 +26,14 @@ interface SourceLike {
   relevance?: string;
 }
 
+interface SourceRowData {
+  url?: string;
+  title: string;
+  subtitle?: string;
+  agentLabel: string;
+  timestamp?: string;
+}
+
 interface SourcesTabContentProps {
   startup: Startup;
   evaluation: Evaluation | null;
@@ -156,6 +164,141 @@ function SourceRow({
   );
 }
 
+function toRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+  return value as Record<string, unknown>;
+}
+
+function toRecordArray(value: unknown): Array<Record<string, unknown>> {
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (item): item is Record<string, unknown> =>
+      Boolean(item) && typeof item === "object" && !Array.isArray(item),
+  );
+}
+
+function collectStructuredSectionSources(
+  evaluation: Evaluation | null,
+): SourceRowData[] {
+  if (!evaluation) return [];
+
+  const sectionMeta: Array<{ key: keyof Evaluation; label: string }> = [
+    { key: "teamData", label: "Team" },
+    { key: "marketData", label: "Market" },
+    { key: "productData", label: "Product" },
+    { key: "tractionData", label: "Traction" },
+    { key: "businessModelData", label: "Business Model" },
+    { key: "gtmData", label: "Go-to-Market" },
+    { key: "financialsData", label: "Financials" },
+    { key: "competitiveAdvantageData", label: "Competitive Advantage" },
+    { key: "legalData", label: "Legal" },
+    { key: "dealTermsData", label: "Deal Terms" },
+    { key: "exitPotentialData", label: "Exit Potential" },
+  ];
+
+  const rows: SourceRowData[] = [];
+
+  for (const section of sectionMeta) {
+    const sectionData = toRecord(evaluation[section.key]);
+    const sectionSources = sectionData.sources;
+
+    if (Array.isArray(sectionSources)) {
+      for (const source of sectionSources) {
+        if (typeof source === "string") {
+          rows.push({
+            url: source,
+            title: source,
+            subtitle: `${section.label} source`,
+            agentLabel: "Orchestrator",
+            timestamp: evaluation.updatedAt || evaluation.createdAt,
+          });
+          continue;
+        }
+
+        const sourceRecord = toRecord(source);
+        const url =
+          typeof sourceRecord.url === "string" ? sourceRecord.url : undefined;
+        if (!url) continue;
+
+        rows.push({
+          url,
+          title:
+            (typeof sourceRecord.name === "string" && sourceRecord.name) ||
+            (typeof sourceRecord.title === "string" && sourceRecord.title) ||
+            url,
+          subtitle: `${section.label} source`,
+          agentLabel: "Orchestrator",
+          timestamp:
+            (typeof sourceRecord.timestamp === "string" && sourceRecord.timestamp) ||
+            evaluation.updatedAt ||
+            evaluation.createdAt,
+        });
+      }
+    }
+
+    if (section.key === "marketData") {
+      const marketSizing = toRecord(sectionData.marketSizing);
+      const tamSources = toRecordArray(toRecord(marketSizing.tam).sources);
+      const samSources = toRecordArray(toRecord(marketSizing.sam).sources);
+      for (const source of [...tamSources, ...samSources]) {
+        const url = typeof source.url === "string" ? source.url : undefined;
+        if (!url) continue;
+        rows.push({
+          url,
+          title:
+            (typeof source.name === "string" && source.name) ||
+            (typeof source.title === "string" && source.title) ||
+            url,
+          subtitle: "Market sizing source",
+          agentLabel: "MarketDeepResearch",
+          timestamp:
+            (typeof source.date === "string" && source.date) ||
+            evaluation.updatedAt ||
+            evaluation.createdAt,
+        });
+      }
+    }
+
+    if (section.key === "competitiveAdvantageData") {
+      const competitors = toRecord(sectionData.competitors);
+      const direct = toRecordArray(competitors.direct);
+      const indirect = toRecordArray(competitors.indirect);
+      for (const source of [...direct, ...indirect]) {
+        const url = typeof source.url === "string" ? source.url : undefined;
+        if (!url) continue;
+        rows.push({
+          url,
+          title:
+            (typeof source.name === "string" && source.name) ||
+            (typeof source.title === "string" && source.title) ||
+            url,
+          subtitle: "Competitor source",
+          agentLabel: "CompetitorDeepResearch",
+          timestamp: evaluation.updatedAt || evaluation.createdAt,
+        });
+      }
+    }
+  }
+
+  return rows;
+}
+
+function dedupeSourceRows(rows: SourceRowData[]): SourceRowData[] {
+  const seen = new Set<string>();
+  const output: SourceRowData[] = [];
+
+  for (const row of rows) {
+    const key = `${row.url ?? ""}|${row.title.toLowerCase()}|${row.subtitle ?? ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    output.push(row);
+  }
+
+  return output;
+}
+
 export function SourcesTabContent({
   startup,
   evaluation,
@@ -171,6 +314,7 @@ export function SourcesTabContent({
     (item) => Boolean(item?.url) && !isDocumentSource(item),
   );
   const documentSourcesFromEvaluation = allSources.filter(isDocumentSource);
+  const structuredSectionSources = collectStructuredSectionSources(evaluation);
 
   const modelByAgent = allSources.reduce(
     (acc, source) => {
@@ -198,7 +342,7 @@ export function SourcesTabContent({
     },
     {} as Partial<Record<AiAgentRowKey, string>>,
   );
-  const websiteSources = [
+  const websiteSources = dedupeSourceRows([
     ...(startup.website
       ? [
           {
@@ -216,8 +360,9 @@ export function SourcesTabContent({
       subtitle: source.relevance || source.type || "Research source",
       agentLabel: getSourceAgentLabel(source.agent),
       timestamp: source.timestamp || evaluation?.updatedAt || evaluation?.createdAt,
-    })),
-  ];
+        })),
+    ...structuredSectionSources,
+  ]);
 
   const documentSources = [
     ...(startup.pitchDeckUrl

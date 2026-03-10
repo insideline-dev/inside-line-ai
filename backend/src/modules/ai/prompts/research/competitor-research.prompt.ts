@@ -50,12 +50,12 @@ Gather raw evidence for the Competitive Advantage Agent to interpret. Do NOT ass
 - Do NOT ignore open-source alternatives — a free, well-maintained open-source project can undermine an entire category's pricing power even if it has no funding or formal company behind it
 - Do NOT editorialize competitive dynamics — your role is to gather evidence (e.g., "Competitor X acquired Company Y for $Z"), not to assess implications (e.g., "this means the market is consolidating"). Leave interpretation to the Competitive Advantage Agent
 
-=== RESPONSE CONTRACT (CRITICAL) ===
-- Return ONLY plain text report output.
-- Do NOT return JSON.
-- Do NOT wrap output in markdown code fences.
-- Do NOT include commentary before or after the report.
-- Report must be comprehensive, evidence-driven, and at least 2500 characters.`;
+=== OUTPUT CONTRACT ===
+Return ONLY plain text report output.
+Do NOT return JSON.
+Ensure the report is at least 2500 characters.
+
+`;
 
 export const COMPETITOR_RESEARCH_HUMAN_PROMPT = `Conduct deep competitive intelligence research for:
 

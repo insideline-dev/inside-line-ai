@@ -28,6 +28,43 @@ export class FinancialsEvaluationAgent extends BaseEvaluationAgent<FinancialsEva
     super(providers, aiConfig, promptService, modelExecution);
   }
 
+  protected override getAgentTemplateVariables(
+    _pipelineData: EvaluationPipelineInput,
+  ): Record<string, string> {
+    const rawText = _pipelineData.extraction.rawText ?? "";
+    const financialLines = rawText
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(
+        (line) =>
+          line.length > 0 &&
+          /revenue|mrr|arr|burn rate|runway|gross margin|unit economics|ltv|cac|ebitda|net income|recurring revenue/i.test(
+            line,
+          ),
+      )
+      .slice(0, 15)
+      .join("\n");
+
+    const claims = Array.isArray(_pipelineData.scraping.notableClaims)
+      ? _pipelineData.scraping.notableClaims
+          .filter((claim) =>
+            /revenue|mrr|arr|funding|raised|burn|runway|profit|margin/i.test(claim),
+          )
+          .slice(0, 5)
+          .join("\n")
+      : "";
+
+    const combined = [financialLines, claims].filter(Boolean).join("\n");
+
+    return {
+      valuation: _pipelineData.extraction.valuation?.toString() ?? "Not provided",
+      valuationType: _pipelineData.extraction.startupContext?.valuationType ?? "Not provided",
+      roundSize: _pipelineData.extraction.fundingAsk?.toString() ?? "Not provided",
+      roundCurrency: _pipelineData.extraction.startupContext?.roundCurrency ?? "USD",
+      financialModel: combined || "Not provided",
+    };
+  }
+
   buildContext(pipelineData: EvaluationPipelineInput) {
     const { extraction } = pipelineData;
     const fundingTarget = extraction.fundingAsk;
@@ -59,15 +96,10 @@ export class FinancialsEvaluationAgent extends BaseEvaluationAgent<FinancialsEva
     };
   }
 
-  fallback({ extraction }: EvaluationPipelineInput): FinancialsEvaluation {
-    const ask = extraction.fundingAsk ?? 0;
-
+  fallback({ extraction: _extraction }: EvaluationPipelineInput): FinancialsEvaluation {
     return FinancialsEvaluationSchema.parse({
       ...baseEvaluation(20, "Financial evaluation incomplete — requires manual review"),
-      burnRate: Math.max(0, ask / 18),
-      runway: 18,
-      fundingHistory: [],
-      financialHealth: "Financial health is acceptable at current stage",
+      founderPitchRecommendations: [],
     });
   }
 }

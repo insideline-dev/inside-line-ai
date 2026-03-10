@@ -15,9 +15,8 @@ import * as bcrypt from 'bcrypt';
 describe('Auth Security Tests', () => {
   let userAuthService: UserAuthService;
   let authService: AuthService;
-  let drizzleService: any;
+  let drizzleService: ReturnType<typeof createMockDrizzle>;
   let jwtService: jest.Mocked<JwtService>;
-  let configService: jest.Mocked<ConfigService>;
 
   const mockUser: DbUser = {
     id: 'user-1',
@@ -79,7 +78,6 @@ describe('Auth Security Tests', () => {
     userAuthService = module.get<UserAuthService>(UserAuthService);
     authService = module.get<AuthService>(AuthService);
     jwtService = module.get(JwtService);
-    configService = module.get(ConfigService);
   });
 
   // ============ PASSWORD SECURITY TESTS ============
@@ -132,7 +130,7 @@ describe('Auth Security Tests', () => {
 
       // Check that values was called, and the password is hashed
       const valuesCall = drizzleService.db.values.mock.calls.find(
-        (call: any[]) => call[0]?.password,
+        (call: unknown[]) => (call[0] as Record<string, unknown>)?.password,
       );
       if (valuesCall) {
         const storedPassword = valuesCall[0].password;
@@ -153,7 +151,7 @@ describe('Auth Security Tests', () => {
       );
 
       const valuesCall = drizzleService.db.values.mock.calls.find(
-        (call: any[]) => call[0]?.password,
+        (call: unknown[]) => (call[0] as Record<string, unknown>)?.password,
       );
       if (valuesCall) {
         const storedPassword = valuesCall[0].password;

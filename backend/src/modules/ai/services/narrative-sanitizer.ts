@@ -5,7 +5,7 @@ const SCORE_WITH_CONFIDENCE_LINE_REGEX =
 const SCORE_SENTENCE_REGEX =
   /(^|[.!?]\s+)([^.!?\n]*\b\d{1,3}\s*\/\s*100\b[^.!?\n]*[.!?]?)/gim;
 const CONFIDENCE_PHRASE_REGEX =
-  /\s*,?\s*(?:with\s+)?(?:high|medium|low|\d{1,3}%?)\s+confidence\b/gi;
+  /\s*,?\s*(?:with\s+)?(?:high|mid|medium|low|\d{1,3}%?)\s+confidence\b/gi;
 const SCORE_DIMENSION_LABEL_REGEX =
   /\b(?:highest|lowest)[-\s]scor(?:ed|ing)\s+dimensions?\s+are\b[^.!?\n]*[.!?]?/gi;
 
@@ -53,6 +53,45 @@ export function sanitizeNarrativeText(input: string): string {
   cleaned = cleaned.replace(/\n{3,}/g, "\n\n");
 
   return cleaned.trim();
+}
+
+export function reconcileCitationMarkers(
+  narrative: string,
+  sources: Array<{ label: string; url: string }>,
+): { narrative: string; sources: Array<{ label: string; url: string }> } {
+  const markerRegex = /\[(\d+)\]/g;
+
+  // 1. Remove markers that reference out-of-bounds indices
+  let cleaned = narrative.replace(markerRegex, (match, indexStr: string) => {
+    const idx = parseInt(indexStr, 10);
+    return idx >= 1 && idx <= sources.length ? match : "";
+  });
+
+  // 2. Collect which 1-based indices are still referenced
+  const referenced = new Set<number>();
+  let m: RegExpExecArray | null;
+  const scanRegex = /\[(\d+)\]/g;
+  while ((m = scanRegex.exec(cleaned)) !== null) {
+    referenced.add(parseInt(m[1], 10));
+  }
+
+  // 3. Build new sources array keeping only referenced ones, and create old→new index map
+  const indexMap = new Map<number, number>();
+  const newSources: Array<{ label: string; url: string }> = [];
+  for (let i = 0; i < sources.length; i++) {
+    if (referenced.has(i + 1)) {
+      indexMap.set(i + 1, newSources.length + 1);
+      newSources.push(sources[i]);
+    }
+  }
+
+  // 4. Re-index markers in the text
+  cleaned = cleaned.replace(/\[(\d+)\]/g, (_, indexStr: string) => {
+    const newIdx = indexMap.get(parseInt(indexStr, 10));
+    return newIdx != null ? `[${newIdx}]` : "";
+  });
+
+  return { narrative: cleaned, sources: newSources };
 }
 
 export function hasScoreConfidenceLanguage(input: string): boolean {

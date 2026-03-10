@@ -1,10 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { CONTENT_PATTERNS } from "../../constants";
-import type {
-  EvaluationAgentResult,
-  EvaluationAgentRunOptions,
-  EvaluationPipelineInput,
-} from "../../interfaces/agent.interface";
+import type { EvaluationPipelineInput } from "../../interfaces/agent.interface";
 import { TractionEvaluationSchema, type TractionEvaluation } from "../../schemas";
 import { AiConfigService } from "../../services/ai-config.service";
 import { AiPromptService } from "../../services/ai-prompt.service";
@@ -29,14 +25,14 @@ export class TractionEvaluationAgent extends BaseEvaluationAgent<TractionEvaluat
     super(providers, aiConfig, promptService, modelExecution);
   }
 
-  async run(
+  protected override getAgentTemplateVariables(
     pipelineData: EvaluationPipelineInput,
-    options?: EvaluationAgentRunOptions,
-  ): Promise<EvaluationAgentResult<TractionEvaluation>> {
-    const result = await super.run(pipelineData, options);
+  ): Record<string, string> {
+    const claims = Array.isArray(pipelineData.scraping.notableClaims)
+      ? pipelineData.scraping.notableClaims
+      : [];
     return {
-      ...result,
-      output: this.sanitizeTractionMetrics(result.output, pipelineData),
+      deckTractionData: claims.length > 0 ? claims.join("\n") : "Not provided",
     };
   }
 
@@ -67,49 +63,18 @@ export class TractionEvaluationAgent extends BaseEvaluationAgent<TractionEvaluat
       fundingAsk: extraction.fundingAsk,
     };
 
-    const newsResearch = null;
-
     return {
-      researchReportText: this.buildFocusedTractionResearchReport(
-        research.news,
-        research.product,
-        notableClaims,
-      ),
+      researchReportText: this.buildResearchReportText(pipelineData),
       tractionMetrics,
       stage: extraction.stage,
-      newsResearch,
       previousFunding,
     };
   }
 
-  fallback({ extraction }: EvaluationPipelineInput): TractionEvaluation {
+  fallback({ extraction: _extraction }: EvaluationPipelineInput): TractionEvaluation {
     return TractionEvaluationSchema.parse({
       ...baseEvaluation(20, "Traction data insufficient — requires manual review"),
-      metrics: {
-        users: undefined,
-        revenue: undefined,
-        growthRatePct: undefined,
-      },
-      customerValidation: "Initial customer validation exists but is limited",
-      growthTrajectory: "Trajectory is promising but lacks audited evidence",
-      revenueModel: "Revenue model needs expanded detail",
     });
-  }
-
-  private buildFocusedTractionResearchReport(
-    news: EvaluationPipelineInput["research"]["news"],
-    product: EvaluationPipelineInput["research"]["product"],
-    notableClaims: string[],
-  ): string {
-    const sections = [
-      ["News Research Report", this.limitSection(news, 2_400)],
-      ["Product Research Report", this.limitSection(product, 1_600)],
-      ["Deck Traction Claims", notableClaims.slice(0, 12).join("\n").trim()],
-    ]
-      .filter(([, value]) => value.length > 0)
-      .map(([label, value]) => `## ${label}\n${value}`);
-
-    return sections.join("\n\n");
   }
 
   private truncate(value: string, max: number): string {
@@ -117,75 +82,5 @@ export class TractionEvaluationAgent extends BaseEvaluationAgent<TractionEvaluat
       return value;
     }
     return `${value.slice(0, max - 3)}...`;
-  }
-
-  private limitSection(value: unknown, maxChars: number): string {
-    const text = this.toText(value);
-    if (text.length <= maxChars) {
-      return text;
-    }
-    return `${text.slice(0, maxChars)}\n\n...[truncated]`;
-  }
-
-  private toText(value: unknown): string {
-    if (typeof value === "string") {
-      return value.trim();
-    }
-    if (value == null) {
-      return "";
-    }
-    try {
-      return JSON.stringify(value, null, 2).trim();
-    } catch {
-      return String(value).trim();
-    }
-  }
-
-  private sanitizeTractionMetrics(
-    output: TractionEvaluation,
-    pipelineData: EvaluationPipelineInput,
-  ): TractionEvaluation {
-    const revenue = output.metrics.revenue;
-    if (revenue == null) {
-      return output;
-    }
-
-    const stage = typeof pipelineData.extraction.stage === "string"
-      ? pipelineData.extraction.stage.toLowerCase()
-      : "";
-    const earlyStagePattern = /\b(idea|pre[ _-]?seed|seed|pre[ _-]?series[ _-]?a)\b/;
-    const isEarlyStage = earlyStagePattern.test(stage);
-
-    const evidenceCorpus = [
-      ...(Array.isArray(pipelineData.scraping.notableClaims)
-        ? pipelineData.scraping.notableClaims
-        : []),
-      pipelineData.research.combinedReportText ?? "",
-    ]
-      .join(" ")
-      .toLowerCase();
-
-    const hasVolumeSignal =
-      /\b(tpv|gpv|gmv|payment volume|transaction volume|gross merchandise volume)\b/.test(
-        evidenceCorpus,
-      );
-    const hasExplicitRevenueSignal = /\b(revenue|arr|mrr|sales)\b/.test(
-      evidenceCorpus,
-    );
-    const looksLikeVolumeMisclassification =
-      hasVolumeSignal && !hasExplicitRevenueSignal;
-    const implausibleForEarlyStage = isEarlyStage && revenue >= 100_000_000;
-
-    if (!looksLikeVolumeMisclassification && !implausibleForEarlyStage) {
-      return output;
-    }
-
-    return {
-      ...output,
-      metrics: {
-        ...output.metrics,
-        revenue: undefined,
-      },
-    };
   }
 }

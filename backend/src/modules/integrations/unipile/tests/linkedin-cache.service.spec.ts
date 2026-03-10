@@ -5,7 +5,7 @@ import type { LinkedInProfile } from '../entities';
 
 describe('LinkedInCacheService', () => {
   let service: LinkedInCacheService;
-  let drizzleService: any;
+  let drizzleService: ReturnType<typeof createMockDrizzle>;
 
   const mockProfile: LinkedInProfile = {
     id: 'profile-123',

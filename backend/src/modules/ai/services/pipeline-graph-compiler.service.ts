@@ -189,7 +189,7 @@ export class PipelineGraphCompilerService {
     const discoveryEnabled =
       typeof record.discoveryEnabled === "boolean"
         ? record.discoveryEnabled
-        : false;
+        : true;
 
     return {
       ...(manualPaths.length > 0 ? { manualPaths } : {}),

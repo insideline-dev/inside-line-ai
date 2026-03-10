@@ -31,26 +31,12 @@ Find all relevant news and public information about the company:
 - **Tier 2**: Industry-specific publications, reputable tech blogs, major regional outlets
 - **Tier 3** (lowest weight): Social media mentions, minor blogs, forums — include but flag as low-confidence
 
-=== OUTPUT FORMAT ===
-Provide chronological list of mentions with:
-- Date of mention
-- Source name and credibility tier
-- Sentiment score (positive/neutral/negative)
-- Source URL
-- Brief summary of the mention
-- Recency category (last 3mo / 3-12mo / 1-2yr / 2yr+)
+=== OUTPUT CONTRACT ===
+Return ONLY plain text report output.
+Do NOT return JSON.
+Ensure the report is at least 2500 characters.
 
-Also provide:
-- Overall sentiment trend (improving / stable / declining)
-- Media presence assessment (strong / moderate / weak / silent)
-- Key narrative themes emerging from coverage
-
-=== RESPONSE CONTRACT (CRITICAL) ===
-- Return ONLY plain text report output.
-- Do NOT return JSON.
-- Do NOT wrap output in markdown code fences.
-- Do NOT include commentary before or after the report.
-- Report must be comprehensive, evidence-driven, and at least 2500 characters.`;
+`;
 
 export const NEWS_RESEARCH_HUMAN_PROMPT = `Search news and public mentions for:
 

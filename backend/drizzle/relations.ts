@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm/relations";
-import { users, investorProfiles, investorTheses, stageScoringWeights, startupMatches, startups, teamMembers, adminReviews, startupEvaluations, agentConversations, agentMessages, accounts, refreshTokens, userProfiles, assets, notifications, startupDrafts, dataRooms, investorInterests, meetings, teamInvites, investorNotes, investorPortfolios, portals, portalSubmissions, scoutApplications, scoutSubmissions, scoutCommissions, analysisJobs, emailThreads, linkedinProfileCaches, agentPrompts, investorScoringPreferences, pipelineRuns, pipelineFailures, agentmailConfigs, pipelineFeedback, claraConversations, claraMessages, investorInboxSubmission, aiPromptDefinitions, aiPromptRevisions, earlyAccessInvites, pipelineAgentRuns, aiContextConfigRevisions, aiModelConfigRevisions, pipelineFlowConfigs, aiAgentSchemaRevisions, aiAgentConfigs, pipelineTemplates } from "./schema";
+import { users, investorProfiles, investorTheses, stageScoringWeights, startupMatches, startups, teamMembers, adminReviews, startupEvaluations, agentConversations, agentMessages, accounts, refreshTokens, userProfiles, assets, notifications, startupDrafts, dataRooms, investorInterests, meetings, teamInvites, investorNotes, investorPortfolios, portals, portalSubmissions, scoutApplications, scoutSubmissions, scoutCommissions, analysisJobs, emailThreads, linkedinProfileCaches, investorScoringPreferences, pipelineRuns, pipelineFailures, agentmailConfigs, pipelineFeedback, claraConversations, claraMessages, investorInboxSubmission, earlyAccessInvites, pipelineAgentRuns, pipelineFlowConfigs, aiAgentConfigs, pipelineTemplates } from "./schema";
 
 export const investorProfilesRelations = relations(investorProfiles, ({one, many}) => ({
 	user: one(users, {
@@ -51,7 +51,6 @@ export const usersRelations = relations(users, ({many}) => ({
 	scoutCommissions: many(scoutCommissions),
 	emailThreads: many(emailThreads),
 	linkedinProfileCaches: many(linkedinProfileCaches),
-	agentPrompts: many(agentPrompts),
 	startups_userId: many(startups, {
 		relationName: "startups_userId_users_id"
 	}),
@@ -64,41 +63,17 @@ export const usersRelations = relations(users, ({many}) => ({
 	pipelineFeedbacks: many(pipelineFeedback),
 	claraConversations: many(claraConversations),
 	investorInboxSubmissions: many(investorInboxSubmission),
-	aiPromptRevisions_createdBy: many(aiPromptRevisions, {
-		relationName: "aiPromptRevisions_createdBy_users_id"
-	}),
-	aiPromptRevisions_publishedBy: many(aiPromptRevisions, {
-		relationName: "aiPromptRevisions_publishedBy_users_id"
-	}),
 	earlyAccessInvites_redeemedByUserId: many(earlyAccessInvites, {
 		relationName: "earlyAccessInvites_redeemedByUserId_users_id"
 	}),
 	earlyAccessInvites_createdByUserId: many(earlyAccessInvites, {
 		relationName: "earlyAccessInvites_createdByUserId_users_id"
 	}),
-	aiContextConfigRevisions_createdBy: many(aiContextConfigRevisions, {
-		relationName: "aiContextConfigRevisions_createdBy_users_id"
-	}),
-	aiContextConfigRevisions_publishedBy: many(aiContextConfigRevisions, {
-		relationName: "aiContextConfigRevisions_publishedBy_users_id"
-	}),
-	aiModelConfigRevisions_createdBy: many(aiModelConfigRevisions, {
-		relationName: "aiModelConfigRevisions_createdBy_users_id"
-	}),
-	aiModelConfigRevisions_publishedBy: many(aiModelConfigRevisions, {
-		relationName: "aiModelConfigRevisions_publishedBy_users_id"
-	}),
 	pipelineFlowConfigs_createdBy: many(pipelineFlowConfigs, {
 		relationName: "pipelineFlowConfigs_createdBy_users_id"
 	}),
 	pipelineFlowConfigs_publishedBy: many(pipelineFlowConfigs, {
 		relationName: "pipelineFlowConfigs_publishedBy_users_id"
-	}),
-	aiAgentSchemaRevisions_createdBy: many(aiAgentSchemaRevisions, {
-		relationName: "aiAgentSchemaRevisions_createdBy_users_id"
-	}),
-	aiAgentSchemaRevisions_publishedBy: many(aiAgentSchemaRevisions, {
-		relationName: "aiAgentSchemaRevisions_publishedBy_users_id"
 	}),
 	aiAgentConfigs: many(aiAgentConfigs),
 	pipelineTemplates_createdBy: many(pipelineTemplates, {
@@ -422,13 +397,6 @@ export const linkedinProfileCachesRelations = relations(linkedinProfileCaches, (
 	}),
 }));
 
-export const agentPromptsRelations = relations(agentPrompts, ({one}) => ({
-	user: one(users, {
-		fields: [agentPrompts.lastModifiedBy],
-		references: [users.id]
-	}),
-}));
-
 export const investorScoringPreferencesRelations = relations(investorScoringPreferences, ({one}) => ({
 	user: one(users, {
 		fields: [investorScoringPreferences.investorId],
@@ -508,31 +476,6 @@ export const investorInboxSubmissionRelations = relations(investorInboxSubmissio
 	}),
 }));
 
-export const aiPromptRevisionsRelations = relations(aiPromptRevisions, ({one}) => ({
-	aiPromptDefinition: one(aiPromptDefinitions, {
-		fields: [aiPromptRevisions.definitionId],
-		references: [aiPromptDefinitions.id]
-	}),
-	user_createdBy: one(users, {
-		fields: [aiPromptRevisions.createdBy],
-		references: [users.id],
-		relationName: "aiPromptRevisions_createdBy_users_id"
-	}),
-	user_publishedBy: one(users, {
-		fields: [aiPromptRevisions.publishedBy],
-		references: [users.id],
-		relationName: "aiPromptRevisions_publishedBy_users_id"
-	}),
-}));
-
-export const aiPromptDefinitionsRelations = relations(aiPromptDefinitions, ({many}) => ({
-	aiPromptRevisions: many(aiPromptRevisions),
-	aiContextConfigRevisions: many(aiContextConfigRevisions),
-	aiModelConfigRevisions: many(aiModelConfigRevisions),
-	aiAgentSchemaRevisions: many(aiAgentSchemaRevisions),
-	aiAgentConfigs: many(aiAgentConfigs),
-}));
-
 export const earlyAccessInvitesRelations = relations(earlyAccessInvites, ({one}) => ({
 	user_redeemedByUserId: one(users, {
 		fields: [earlyAccessInvites.redeemedByUserId],
@@ -557,40 +500,6 @@ export const pipelineAgentRunsRelations = relations(pipelineAgentRuns, ({one}) =
 	}),
 }));
 
-export const aiContextConfigRevisionsRelations = relations(aiContextConfigRevisions, ({one}) => ({
-	aiPromptDefinition: one(aiPromptDefinitions, {
-		fields: [aiContextConfigRevisions.definitionId],
-		references: [aiPromptDefinitions.id]
-	}),
-	user_createdBy: one(users, {
-		fields: [aiContextConfigRevisions.createdBy],
-		references: [users.id],
-		relationName: "aiContextConfigRevisions_createdBy_users_id"
-	}),
-	user_publishedBy: one(users, {
-		fields: [aiContextConfigRevisions.publishedBy],
-		references: [users.id],
-		relationName: "aiContextConfigRevisions_publishedBy_users_id"
-	}),
-}));
-
-export const aiModelConfigRevisionsRelations = relations(aiModelConfigRevisions, ({one}) => ({
-	aiPromptDefinition: one(aiPromptDefinitions, {
-		fields: [aiModelConfigRevisions.definitionId],
-		references: [aiPromptDefinitions.id]
-	}),
-	user_createdBy: one(users, {
-		fields: [aiModelConfigRevisions.createdBy],
-		references: [users.id],
-		relationName: "aiModelConfigRevisions_createdBy_users_id"
-	}),
-	user_publishedBy: one(users, {
-		fields: [aiModelConfigRevisions.publishedBy],
-		references: [users.id],
-		relationName: "aiModelConfigRevisions_publishedBy_users_id"
-	}),
-}));
-
 export const pipelineFlowConfigsRelations = relations(pipelineFlowConfigs, ({one}) => ({
 	user_createdBy: one(users, {
 		fields: [pipelineFlowConfigs.createdBy],
@@ -604,28 +513,7 @@ export const pipelineFlowConfigsRelations = relations(pipelineFlowConfigs, ({one
 	}),
 }));
 
-export const aiAgentSchemaRevisionsRelations = relations(aiAgentSchemaRevisions, ({one}) => ({
-	aiPromptDefinition: one(aiPromptDefinitions, {
-		fields: [aiAgentSchemaRevisions.definitionId],
-		references: [aiPromptDefinitions.id]
-	}),
-	user_createdBy: one(users, {
-		fields: [aiAgentSchemaRevisions.createdBy],
-		references: [users.id],
-		relationName: "aiAgentSchemaRevisions_createdBy_users_id"
-	}),
-	user_publishedBy: one(users, {
-		fields: [aiAgentSchemaRevisions.publishedBy],
-		references: [users.id],
-		relationName: "aiAgentSchemaRevisions_publishedBy_users_id"
-	}),
-}));
-
 export const aiAgentConfigsRelations = relations(aiAgentConfigs, ({one}) => ({
-	aiPromptDefinition: one(aiPromptDefinitions, {
-		fields: [aiAgentConfigs.promptDefinitionId],
-		references: [aiPromptDefinitions.id]
-	}),
 	user: one(users, {
 		fields: [aiAgentConfigs.createdBy],
 		references: [users.id]

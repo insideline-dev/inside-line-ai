@@ -24,6 +24,35 @@ export class TeamEvaluationAgent extends BaseEvaluationAgent<TeamEvaluation> {
     super(providers, aiConfig, promptService, modelExecution);
   }
 
+  protected override getAgentTemplateVariables(
+    pipelineData: EvaluationPipelineInput,
+  ): Record<string, string> {
+    const teamMembers = Array.isArray(pipelineData.scraping.teamMembers)
+      ? pipelineData.scraping.teamMembers
+      : [];
+
+    const teamMembersData =
+      teamMembers.length > 0
+        ? teamMembers
+            .map((member) => {
+              const parts = [`Name: ${member.name}`];
+              if (member.role) parts.push(`Role: ${member.role}`);
+              if (member.linkedinUrl) parts.push(`LinkedIn: ${member.linkedinUrl}`);
+              if (member.linkedinProfile?.headline)
+                parts.push(`Headline: ${member.linkedinProfile.headline}`);
+              if (member.linkedinProfile?.summary)
+                parts.push(`Summary: ${member.linkedinProfile.summary}`);
+              return parts.join("\n");
+            })
+            .join("\n\n")
+        : "Not provided";
+
+    return {
+      teamMembersData,
+      teamResearchOutput: pipelineData.research.team ?? "Not provided",
+    };
+  }
+
   buildContext(pipelineData: EvaluationPipelineInput) {
     const { extraction, scraping } = pipelineData;
     const teamMembers = Array.isArray(scraping.teamMembers)
@@ -57,12 +86,22 @@ export class TeamEvaluationAgent extends BaseEvaluationAgent<TeamEvaluation> {
     const teamMembers = Array.isArray(scraping.teamMembers)
       ? scraping.teamMembers
       : [];
+    const founderFitScore = 25 + stageMultiplier(extraction.stage);
     return TeamEvaluationSchema.parse({
       ...baseEvaluation(25, "Team evaluation incomplete — requires manual review"),
-      founderQuality: "Founding team has domain-relevant background",
-      teamCompletion: clampScore(25 + teamMembers.length * 5),
-      executionCapability: "Execution capability appears moderate to strong",
-      founderMarketFitScore: clampScore(25 + stageMultiplier(extraction.stage)),
+      founderMarketFit: {
+        score: clampScore(founderFitScore),
+        why: "Founder-market fit assessment pending — insufficient data for automated evaluation",
+      },
+      teamComposition: {
+        businessLeadership: false,
+        technicalCapability: false,
+        domainExpertise: false,
+        gtmCapability: false,
+        sentence: "Team composition assessment pending — automated evaluation did not complete",
+        reason: "Team composition assessment pending — automated evaluation did not complete",
+      },
+      strengths: [],
       teamMembers: teamMembers.length
         ? teamMembers.map((member) => ({
             name: member.name,
@@ -80,6 +119,8 @@ export class TeamEvaluationAgent extends BaseEvaluationAgent<TeamEvaluation> {
               concerns: ["Limited public profile data"],
             },
           ],
+      founderRecommendations: [],
+      founderPitchRecommendations: [],
     });
   }
 }

@@ -14,15 +14,13 @@ import { BulkDataService } from '../bulk-data.service';
 import { AdminMatchingService } from '../admin-matching.service';
 import { AiPromptService } from '../../ai/services/ai-prompt.service';
 import { AiPromptRuntimeService } from '../../ai/services/ai-prompt-runtime.service';
-import { AiModelConfigService } from '../../ai/services/ai-model-config.service';
-import { AgentSchemaRegistryService } from '../../ai/services/agent-schema-registry.service';
 import { PipelineFlowConfigService } from '../../ai/services/pipeline-flow-config.service';
 import { PhaseTransitionService } from '../../ai/orchestrator/phase-transition.service';
 import { AgentConfigService } from '../../ai/services/agent-config.service';
 import { DynamicFlowCatalogService } from '../../ai/services/dynamic-flow-catalog.service';
-import { SchemaCompilerService } from '../../ai/services/schema-compiler.service';
 import { EarlyAccessService } from '../../early-access';
 import { AdminInvestorService } from '../admin-investor.service';
+import { AiConfigService } from '../../ai/services/ai-config.service';
 import { UserRole } from '../../../auth/entities/auth.schema';
 import { StartupStatus } from '../../startup/entities/startup.schema';
 import { PipelinePhase } from '../../ai/interfaces/pipeline.interface';
@@ -36,15 +34,13 @@ describe('AdminController', () => {
   let dataImportService: jest.Mocked<DataImportService>;
   let queueManagementService: jest.Mocked<QueueManagementService>;
   let startupService: jest.Mocked<StartupService>;
-  let startupIntakeService: jest.Mocked<StartupIntakeService>;
+  let _startupIntakeService: jest.Mocked<StartupIntakeService>;
   let adminMatchingService: jest.Mocked<AdminMatchingService>;
   let aiPromptService: jest.Mocked<AiPromptService>;
   let aiPromptRuntimeService: jest.Mocked<AiPromptRuntimeService>;
-  let agentSchemaRegistryService: jest.Mocked<AgentSchemaRegistryService>;
   let agentConfigService: jest.Mocked<AgentConfigService>;
   let dynamicFlowCatalogService: jest.Mocked<DynamicFlowCatalogService>;
-  let schemaCompilerService: jest.Mocked<SchemaCompilerService>;
-  let earlyAccessService: jest.Mocked<EarlyAccessService>;
+  let _earlyAccessService: jest.Mocked<EarlyAccessService>;
 
   const mockAdmin = {
     id: 'admin-id',
@@ -159,6 +155,7 @@ describe('AdminController', () => {
           provide: AiPromptService,
           useValue: {
             listPromptDefinitions: jest.fn(),
+            getPromptCoverageAudit: jest.fn(),
             getFlowGraph: jest.fn(),
             getRevisionsByKey: jest.fn(),
             createDraft: jest.fn(),
@@ -176,24 +173,10 @@ describe('AdminController', () => {
           },
         },
         {
-          provide: AiModelConfigService,
+          provide: AiConfigService,
           useValue: {
-            listRevisionsByKey: jest.fn(),
-            resolveConfig: jest.fn(),
-            createDraft: jest.fn(),
-            updateDraft: jest.fn(),
-            publishRevision: jest.fn(),
-          },
-        },
-        {
-          provide: AgentSchemaRegistryService,
-          useValue: {
-            listRevisionsByKey: jest.fn(),
-            resolveDescriptorWithSource: jest.fn(),
-            createDraft: jest.fn(),
-            updateDraft: jest.fn(),
-            publishRevision: jest.fn(),
-            resolveDescriptor: jest.fn(),
+            getResearchAttemptTimeoutMs: jest.fn().mockReturnValue(3_600_000),
+            getResearchAttemptTimeoutMsForAgent: jest.fn().mockReturnValue(3_600_000),
           },
         },
         {
@@ -211,12 +194,6 @@ describe('AdminController', () => {
           provide: DynamicFlowCatalogService,
           useValue: {
             getFlowGraph: jest.fn(),
-          },
-        },
-        {
-          provide: SchemaCompilerService,
-          useValue: {
-            extractFieldPaths: jest.fn(),
           },
         },
         {
@@ -262,15 +239,13 @@ describe('AdminController', () => {
     dataImportService = module.get(DataImportService);
     queueManagementService = module.get(QueueManagementService);
     startupService = module.get(StartupService);
-    startupIntakeService = module.get(StartupIntakeService);
+    _startupIntakeService = module.get(StartupIntakeService);
     adminMatchingService = module.get(AdminMatchingService);
     aiPromptService = module.get(AiPromptService);
     aiPromptRuntimeService = module.get(AiPromptRuntimeService);
-    agentSchemaRegistryService = module.get(AgentSchemaRegistryService);
     agentConfigService = module.get(AgentConfigService);
     dynamicFlowCatalogService = module.get(DynamicFlowCatalogService);
-    schemaCompilerService = module.get(SchemaCompilerService);
-    earlyAccessService = module.get(EarlyAccessService);
+    _earlyAccessService = module.get(EarlyAccessService);
   });
 
   afterEach(() => {
@@ -340,7 +315,7 @@ describe('AdminController', () => {
           meta: { total: 1, page: 1, limit: 20, totalPages: 1 },
         };
 
-        userManagementService.findAll.mockResolvedValueOnce(mockResponse as any);
+        userManagementService.findAll.mockResolvedValueOnce(mockResponse as unknown);
 
         const result = await controller.getUsers({ page: 1, limit: 20 });
 
@@ -352,7 +327,7 @@ describe('AdminController', () => {
       it('should return a user by id', async () => {
         const mockUser = { id: 'user-1', name: 'Test', email: 'test@example.com' };
 
-        userManagementService.findOne.mockResolvedValueOnce(mockUser as any);
+        userManagementService.findOne.mockResolvedValueOnce(mockUser as unknown);
 
         const result = await controller.getUser('user-1');
 
@@ -364,7 +339,7 @@ describe('AdminController', () => {
       it('should update a user', async () => {
         const mockUser = { id: 'user-1', name: 'Updated', email: 'test@example.com' };
 
-        userManagementService.update.mockResolvedValueOnce(mockUser as any);
+        userManagementService.update.mockResolvedValueOnce(mockUser as unknown);
 
         const result = await controller.updateUser('user-1', { name: 'Updated' });
 
@@ -411,7 +386,7 @@ describe('AdminController', () => {
           meta: { total: 1, page: 1, limit: 20, totalPages: 1 },
         };
 
-        startupService.adminFindPending.mockResolvedValueOnce(mockResponse as any);
+        startupService.adminFindPending.mockResolvedValueOnce(mockResponse as unknown);
 
         const result = await controller.getPendingStartups({ page: 1, limit: 20 });
 
@@ -423,7 +398,7 @@ describe('AdminController', () => {
       it('should approve a startup', async () => {
         const mockStartup = { id: 'startup-1', status: StartupStatus.APPROVED };
 
-        startupService.approve.mockResolvedValueOnce(mockStartup as any);
+        startupService.approve.mockResolvedValueOnce(mockStartup as unknown);
 
         const result = await controller.approveStartup(mockAdmin, 'startup-1');
 
@@ -443,7 +418,7 @@ describe('AdminController', () => {
           rejectionReason: 'Not ready for investment',
         };
 
-        startupService.reject.mockResolvedValueOnce(mockStartup as any);
+        startupService.reject.mockResolvedValueOnce(mockStartup as unknown);
 
         const result = await controller.rejectStartup(
           mockAdmin,
@@ -470,7 +445,7 @@ describe('AdminController', () => {
     describe('POST /admin/startups/:id/reanalyze', () => {
       it('should trigger startup reanalysis', async () => {
         const payload = { jobId: 'pipeline-run-1' };
-        startupService.reanalyze.mockResolvedValueOnce(payload as any);
+        startupService.reanalyze.mockResolvedValueOnce(payload as unknown);
 
         const result = await controller.reanalyzeStartup(mockAdmin, 'startup-1');
 
@@ -491,7 +466,7 @@ describe('AdminController', () => {
           status: 'queued',
           triggerSource: 'manual',
         };
-        adminMatchingService.triggerMatchForStartup.mockResolvedValueOnce(payload as any);
+        adminMatchingService.triggerMatchForStartup.mockResolvedValueOnce(payload as unknown);
 
         const result = await controller.matchStartupInvestors(mockAdmin, 'startup-1');
 
@@ -510,7 +485,7 @@ describe('AdminController', () => {
           status: 'completed',
           jobId: 'analysis-job-1',
         };
-        adminMatchingService.getLatestMatchingStatus.mockResolvedValueOnce(payload as any);
+        adminMatchingService.getLatestMatchingStatus.mockResolvedValueOnce(payload as unknown);
 
         const result = await controller.getStartupMatchingStatus('startup-1');
 
@@ -529,7 +504,7 @@ describe('AdminController', () => {
           feedback: 'Focus on revised unit economics assumptions',
         };
         const payload = { accepted: true };
-        startupService.adminRetryPhase.mockResolvedValueOnce(payload as any);
+        startupService.adminRetryPhase.mockResolvedValueOnce(payload as unknown);
 
         const result = await controller.retryStartupPhase(
           mockAdmin,
@@ -554,7 +529,7 @@ describe('AdminController', () => {
           feedback: 'Re-check TAM assumptions with updated sources',
         };
         const payload = { accepted: true };
-        startupService.adminRetryAgent.mockResolvedValueOnce(payload as any);
+        startupService.adminRetryAgent.mockResolvedValueOnce(payload as unknown);
 
         const result = await controller.retryStartupAgent(
           mockAdmin,
@@ -580,7 +555,7 @@ describe('AdminController', () => {
           { stage: 'seed', weights: { team: 25, market: 18 } },
         ];
 
-        scoringConfigService.getAll.mockResolvedValueOnce(weights as any);
+        scoringConfigService.getAll.mockResolvedValueOnce(weights as unknown);
 
         const result = await controller.getAllScoringWeights();
 
@@ -593,7 +568,7 @@ describe('AdminController', () => {
       it('should return scoring weights for a stage', async () => {
         const stageWeights = { stage: 'seed', weights: { team: 25, market: 18 } };
 
-        scoringConfigService.getByStage.mockResolvedValueOnce(stageWeights as any);
+        scoringConfigService.getByStage.mockResolvedValueOnce(stageWeights as unknown);
 
         const result = await controller.getScoringWeightsByStage('seed');
 
@@ -622,7 +597,7 @@ describe('AdminController', () => {
       });
 
       it('should throw if no file provided', async () => {
-        await expect(controller.importUsers(undefined as any)).rejects.toThrow(
+        await expect(controller.importUsers(undefined as unknown)).rejects.toThrow(
           BadRequestException,
         );
       });
@@ -667,7 +642,7 @@ describe('AdminController', () => {
         const mockRes = {
           setHeader: jest.fn(),
           send: jest.fn(),
-        } as any;
+        } as unknown as import('express').Response;
 
         await controller.exportUsers({}, mockRes);
 
@@ -688,7 +663,7 @@ describe('AdminController', () => {
         const mockRes = {
           setHeader: jest.fn(),
           send: jest.fn(),
-        } as any;
+        } as unknown as import('express').Response;
 
         await controller.exportStartups({}, mockRes);
 
@@ -779,7 +754,7 @@ describe('AdminController', () => {
   describe('AI Prompt Management Endpoints', () => {
     it('should return prompt definitions', async () => {
       const payload = [{ key: 'research.team' }];
-      aiPromptService.listPromptDefinitions.mockResolvedValueOnce(payload as any);
+      aiPromptService.listPromptDefinitions.mockResolvedValueOnce(payload as unknown);
 
       const result = await controller.getAiPrompts();
 
@@ -787,24 +762,34 @@ describe('AdminController', () => {
       expect(aiPromptService.listPromptDefinitions).toHaveBeenCalled();
     });
 
+    it('should return prompt coverage audit', async () => {
+      const payload = {
+        strictModeEnabled: false,
+        items: [
+          {
+            key: 'evaluation.team',
+            isCritical: true,
+            hasPublishedGlobal: false,
+            wouldFallback: true,
+          },
+        ],
+      };
+      aiPromptService.getPromptCoverageAudit.mockResolvedValueOnce(payload as unknown);
+
+      const result = await controller.getAiPromptCoverageAudit();
+
+      expect(result).toEqual(payload);
+      expect(aiPromptService.getPromptCoverageAudit).toHaveBeenCalled();
+    });
+
     it('should return flow graph metadata', async () => {
       const payload = { flows: [{ id: 'pipeline' }] };
-      dynamicFlowCatalogService.getFlowGraph.mockResolvedValueOnce(payload as any);
+      dynamicFlowCatalogService.getFlowGraph.mockResolvedValueOnce(payload as unknown);
 
       const result = await controller.getAiPromptFlow();
 
       expect(result).toEqual(payload);
       expect(dynamicFlowCatalogService.getFlowGraph).toHaveBeenCalled();
-    });
-
-    it('should seed prompts from code', async () => {
-      const payload = { insertedTotal: 10, insertedGlobal: 2 };
-      aiPromptService.seedFromCode.mockResolvedValueOnce(payload as any);
-
-      const result = await controller.seedAiPrompts(mockAdmin as any);
-
-      expect(result).toEqual(payload);
-      expect(aiPromptService.seedFromCode).toHaveBeenCalledWith(mockAdmin.id);
     });
 
     it('should return prompt runtime context schema', async () => {
@@ -816,7 +801,7 @@ describe('AdminController', () => {
         contextFields: [],
       };
 
-      aiPromptRuntimeService.getContextSchema.mockReturnValueOnce(payload as any);
+      aiPromptRuntimeService.getContextSchema.mockReturnValueOnce(payload as unknown);
 
       const result = await controller.getAiPromptContextSchema('research.team');
 
@@ -832,9 +817,9 @@ describe('AdminController', () => {
       };
       const body = { startupId: 'ed8f8dcb-4145-4af3-92ce-c8d879ec43db', stage: 'seed' };
 
-      aiPromptRuntimeService.previewPrompt.mockResolvedValueOnce(payload as any);
+      aiPromptRuntimeService.previewPrompt.mockResolvedValueOnce(payload as unknown);
 
-      const result = await controller.previewAiPrompt('research.team', body as any);
+      const result = await controller.previewAiPrompt('research.team', body as unknown);
 
       expect(result).toEqual(payload);
       expect(aiPromptRuntimeService.previewPrompt).toHaveBeenCalledWith('research.team', body);
@@ -852,121 +837,17 @@ describe('AdminController', () => {
         stage: 'seed',
       };
 
-      aiPromptRuntimeService.previewPipelineContexts.mockResolvedValueOnce(payload as any);
+      aiPromptRuntimeService.previewPipelineContexts.mockResolvedValueOnce(payload as unknown);
 
-      const result = await controller.previewAiPipelineContext(body as any);
+      const result = await controller.previewAiPipelineContext(body as unknown);
 
       expect(result).toEqual(payload);
       expect(aiPromptRuntimeService.previewPipelineContexts).toHaveBeenCalledWith(body);
     });
 
-    it('should list schema revisions', async () => {
-      const payload = {
-        definition: { key: 'evaluation.legal' },
-        revisions: [],
-      };
-
-      agentSchemaRegistryService.listRevisionsByKey.mockResolvedValueOnce(payload as any);
-
-      const result = await controller.getAiSchemaRevisions('evaluation.legal');
-
-      expect(result).toEqual(payload);
-      expect(agentSchemaRegistryService.listRevisionsByKey).toHaveBeenCalledWith('evaluation.legal');
-    });
-
-    it('should resolve runtime schema for prompt key with stage', async () => {
-      const payload = {
-        promptKey: 'evaluation.legal',
-        stage: 'seed',
-        source: 'code',
-        schemaJson: {
-          type: 'object',
-          fields: {
-            riskSummary: { type: 'string' },
-          },
-        },
-      };
-
-      agentSchemaRegistryService.resolveDescriptorWithSource.mockResolvedValueOnce(payload as any);
-
-      const result = await controller.getAiSchemaResolvedAlias('evaluation.legal', 'seed' as any);
-
-      expect(result).toEqual(payload);
-      expect(agentSchemaRegistryService.resolveDescriptorWithSource).toHaveBeenCalledWith(
-        'evaluation.legal',
-        'seed',
-      );
-    });
-
-    it('should create schema revision draft', async () => {
-      const dto = {
-        schemaJson: {
-          type: 'object',
-          fields: {
-            score: { type: 'number', min: 0, max: 100 },
-          },
-        },
-      };
-      const payload = { id: 'rev-1', status: 'draft' };
-
-      agentSchemaRegistryService.createDraft.mockResolvedValueOnce(payload as any);
-
-      const result = await controller.createAiSchemaRevision(
-        mockAdmin as any,
-        'evaluation.legal',
-        dto as any,
-      );
-
-      expect(result).toEqual(payload);
-      expect(agentSchemaRegistryService.createDraft).toHaveBeenCalledWith(
-        'evaluation.legal',
-        mockAdmin.id,
-        dto,
-      );
-    });
-
-    it('should update schema revision draft', async () => {
-      const dto = { notes: 'updated' };
-      const payload = { id: 'rev-1', notes: 'updated' };
-
-      agentSchemaRegistryService.updateDraft.mockResolvedValueOnce(payload as any);
-
-      const result = await controller.updateAiSchemaRevision(
-        'evaluation.legal',
-        'rev-1',
-        dto as any,
-      );
-
-      expect(result).toEqual(payload);
-      expect(agentSchemaRegistryService.updateDraft).toHaveBeenCalledWith(
-        'evaluation.legal',
-        'rev-1',
-        dto,
-      );
-    });
-
-    it('should publish schema revision draft', async () => {
-      const payload = { id: 'rev-1', status: 'published' };
-
-      agentSchemaRegistryService.publishRevision.mockResolvedValueOnce(payload as any);
-
-      const result = await controller.publishAiSchemaRevision(
-        mockAdmin as any,
-        'evaluation.legal',
-        'rev-1',
-      );
-
-      expect(result).toEqual(payload);
-      expect(agentSchemaRegistryService.publishRevision).toHaveBeenCalledWith(
-        'evaluation.legal',
-        'rev-1',
-        mockAdmin.id,
-      );
-    });
-
     it('should list dynamic agent configs', async () => {
       const payload = [{ orchestratorNodeId: 'evaluation_orchestrator', agentKey: 'team' }];
-      agentConfigService.listAll.mockResolvedValueOnce(payload as any);
+      agentConfigService.listAll.mockResolvedValueOnce(payload as unknown);
 
       const result = await controller.getAiAgentConfigs();
 
@@ -977,12 +858,12 @@ describe('AdminController', () => {
     it('should create dynamic agent config', async () => {
       const dto = { agentKey: 'newAgent', label: 'New Agent' };
       const payload = { id: 'cfg-1', ...dto };
-      agentConfigService.create.mockResolvedValueOnce(payload as any);
+      agentConfigService.create.mockResolvedValueOnce(payload as unknown);
 
       const result = await controller.createAiAgentConfig(
-        mockAdmin as any,
+        mockAdmin as unknown,
         'evaluation_orchestrator',
-        dto as any,
+        dto as unknown,
       );
 
       expect(result).toEqual(payload);
@@ -994,41 +875,5 @@ describe('AdminController', () => {
       );
     });
 
-    it('should return upstream schema fields for agent node', async () => {
-      dynamicFlowCatalogService.getFlowGraph.mockResolvedValueOnce({
-        flows: [
-          {
-            id: 'pipeline',
-            nodes: [
-              { id: 'research_team', label: 'Team Research', promptKeys: ['research.team'] },
-              { id: 'evaluation_team', label: 'Team Evaluation', promptKeys: ['evaluation.team'] },
-            ],
-            edges: [{ from: 'research_team', to: 'evaluation_team' }],
-          },
-        ],
-      } as any);
-      agentSchemaRegistryService.resolveDescriptor.mockResolvedValueOnce({
-        type: 'object',
-        fields: {
-          score: { type: 'number' },
-          findings: { type: 'array', items: { type: 'string' } },
-        },
-      } as any);
-      schemaCompilerService.extractFieldPaths.mockReturnValueOnce(['score', 'findings[]']);
-
-      const result = await controller.getAiAgentUpstreamFields('evaluation_team');
-
-      expect(result).toEqual({
-        items: [
-          {
-            nodeId: 'research_team',
-            label: 'Team Research',
-            fields: ['research_team', 'research_team.findings[]', 'research_team.score'],
-          },
-        ],
-      });
-      expect(agentSchemaRegistryService.resolveDescriptor).toHaveBeenCalledWith('research.team');
-      expect(schemaCompilerService.extractFieldPaths).toHaveBeenCalled();
-    });
   });
 });

@@ -141,6 +141,13 @@ export class AgentMailSignatureGuard implements CanActivate {
         return false;
       }
 
+      // Replay attack prevention: reject webhooks older than 5 minutes
+      const tsMs = parseInt(ts, 10) * 1000;
+      if (isNaN(tsMs) || Math.abs(Date.now() - tsMs) > 5 * 60 * 1000) {
+        this.logger.warn('Svix webhook timestamp outside acceptable window — possible replay attack');
+        return false;
+      }
+
       const secretPart = secret.replace(/^whsec_/, '');
       const secretBytes = Buffer.from(secretPart, 'base64');
       const signedContent = `${id}.${ts}.${payload.toString('utf8')}`;

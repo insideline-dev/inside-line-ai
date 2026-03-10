@@ -1,6 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { eq } from "drizzle-orm";
+import { RedisFallbackClient } from "../ai/services/redis-fallback.service";
 import type { AgentMail } from "agentmail";
 import { DrizzleService } from "../../database";
 import { user } from "../../auth/entities/auth.schema";
@@ -33,7 +34,8 @@ export class ClaraService {
   private readonly logger = new Logger(ClaraService.name);
   private readonly claraInboxId: string | null;
   private readonly adminUserId: string | null;
-  private readonly inboundMessageLocks = new Set<string>();
+  private readonly claraEmailAliases: Set<string>;
+  private readonly webhookLock: RedisFallbackClient;
 
   constructor(
     private config: ConfigService,
@@ -49,6 +51,16 @@ export class ClaraService {
     this.claraInboxId = this.config.get<string>("CLARA_INBOX_ID") ?? null;
     this.adminUserId =
       this.config.get<string>("CLARA_ADMIN_USER_ID") ?? null;
+    const rawAliases = this.config.get<string>("CLARA_EMAIL_ALIASES") ?? "";
+    this.claraEmailAliases = new Set(
+      rawAliases.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean),
+    );
+    this.webhookLock = new RedisFallbackClient({
+      redisUrl: this.config.get<string>("REDIS_URL") ?? "redis://localhost:6379",
+      recoveryIntervalMs: 60_000,
+      maxMemoryEntries: 5_000,
+      loggerContext: "ClaraWebhookLock",
+    });
 
     if (this.claraInboxId) {
       this.logger.log(`Clara enabled for inbox ${this.claraInboxId}`);
@@ -92,14 +104,14 @@ export class ClaraService {
       return;
     }
 
-    const lockKey = `${this.normalizeInboxId(inboxId)}:${threadId}:${messageId || "(empty)"}`;
-    if (this.inboundMessageLocks.has(lockKey)) {
+    const lockKey = `clara:lock:${this.normalizeInboxId(inboxId)}:${threadId}:${messageId || "(empty)"}`;
+    const acquired = await this.webhookLock.setNx(lockKey, "1", 120);
+    if (!acquired) {
       this.logger.warn(
         `[Clara] Skipping concurrent duplicate webhook processing for thread ${threadId}, message ${messageId || "(empty)"}`,
       );
       return;
     }
-    this.inboundMessageLocks.add(lockKey);
 
     try {
       const message = await this.claraChannel.getEmailMessage(
@@ -182,27 +194,11 @@ export class ClaraService {
         );
       }
 
-      const alreadyRepliedToMessage =
-        typeof (this.conversationService as ClaraConversationService & {
-          hasMessage?: (
-            conversationId: string,
-            messageId: string,
-            direction: MessageDirection,
-          ) => Promise<boolean>;
-        }).hasMessage === "function"
-          ? await (this.conversationService as ClaraConversationService & {
-              hasMessage: (
-                conversationId: string,
-                messageId: string,
-                direction: MessageDirection,
-              ) => Promise<boolean>;
-            }).hasMessage(
-              conversation.id,
-              `reply-${messageId}`,
-              MessageDirection.OUTBOUND,
-            )
-          : false;
-
+      const alreadyRepliedToMessage = await this.conversationService.hasMessage(
+        conversation.id,
+        `reply-${messageId}`,
+        MessageDirection.OUTBOUND,
+      );
       if (alreadyRepliedToMessage) {
         this.logger.warn(
           `Skipping duplicate Clara webhook message ${messageId} for thread ${threadId}`,
@@ -210,26 +206,11 @@ export class ClaraService {
         return;
       }
 
-      const alreadyProcessedInbound =
-        typeof (this.conversationService as ClaraConversationService & {
-          hasMessage?: (
-            conversationId: string,
-            messageId: string,
-            direction: MessageDirection,
-          ) => Promise<boolean>;
-        }).hasMessage === "function"
-          ? await (this.conversationService as ClaraConversationService & {
-              hasMessage: (
-                conversationId: string,
-                messageId: string,
-                direction: MessageDirection,
-              ) => Promise<boolean>;
-            }).hasMessage(
-              conversation.id,
-              messageId,
-              MessageDirection.INBOUND,
-            )
-          : false;
+      const alreadyProcessedInbound = await this.conversationService.hasMessage(
+        conversation.id,
+        messageId,
+        MessageDirection.INBOUND,
+      );
       if (alreadyProcessedInbound) {
         this.logger.warn(
           `Skipping duplicate inbound Clara webhook message ${messageId} for thread ${threadId}`,
@@ -289,20 +270,7 @@ export class ClaraService {
         pendingAction: null,
       };
 
-      if (typeof (this.claraAi as ClaraAiService & {
-        classifyIntent?: (context: MessageContext) => Promise<IntentClassification>;
-      }).classifyIntent === "function") {
-        intentClassification = await (this.claraAi as ClaraAiService & {
-          classifyIntent: (context: MessageContext) => Promise<IntentClassification>;
-        }).classifyIntent(ctx);
-      } else {
-        const fallbackSubmission = this.claraAi.isLikelySubmission(ctx);
-        intentClassification = {
-          intent: fallbackSubmission ? ClaraIntent.SUBMISSION : ClaraIntent.GREETING,
-          confidence: fallbackSubmission ? 0.95 : 0.4,
-          reasoning: "Legacy ClaraAi mock fallback",
-        };
-      }
+      intentClassification = await this.claraAi.classifyIntent(ctx);
       const unresolvedCriticalFields = conversation.startupId
         ? await this.submissionService.getMissingCriticalFieldsForStartup(
             conversation.startupId,
@@ -357,7 +325,7 @@ export class ClaraService {
 
         const result = await this.submissionService.handleSubmission(
           ctx,
-          this.adminUserId,
+          this.adminUserId!, // guarded by early return at top of handleIncomingMessage
           extractedName,
         );
         if (result.noPitchDeck) {
@@ -515,7 +483,7 @@ export class ClaraService {
           const resolution = await this.submissionService.resolveMissingInfoFromReply(
             conversation.startupId,
             replyContent || null,
-            investorUserId ?? this.adminUserId,
+            investorUserId ?? this.adminUserId!, // guarded by early return at top of handleIncomingMessage
           );
           if (resolution) {
             if (conversation.startupId !== resolution.startupId) {
@@ -686,24 +654,22 @@ export class ClaraService {
         processed: true,
       });
 
-      if (typeof this.conversationService.updateContext === "function") {
-        await this.conversationService.updateContext(
-          conversation.id,
-          this.mergeConversationContext(
-            conversation.context as Record<string, unknown> | null | undefined,
-            this.buildConversationMemoryPatch({
-              ctx,
-              intent,
-              intentClassification,
-              replyText: outboundText,
-              startupId: finalStartupId,
-              startupExtra: finalStartupExtra,
-              attachmentReply: agentRuntime.replyAttachments,
-              pendingAction: pendingActionForMemory,
-            }),
-          ),
-        );
-      }
+      await this.conversationService.updateContext(
+        conversation.id,
+        this.mergeConversationContext(
+          conversation.context as Record<string, unknown> | null | undefined,
+          this.buildConversationMemoryPatch({
+            ctx,
+            intent,
+            intentClassification,
+            replyText: outboundText,
+            startupId: finalStartupId,
+            startupExtra: finalStartupExtra,
+            attachmentReply: agentRuntime.replyAttachments,
+            pendingAction: pendingActionForMemory,
+          }),
+        ),
+      );
 
       this.logger.log(`Processed message ${messageId}: intent=${intent}`);
     } catch (error) {
@@ -713,7 +679,7 @@ export class ClaraService {
       );
       throw error;
     } finally {
-      this.inboundMessageLocks.delete(lockKey);
+      await this.webhookLock.del(lockKey);
     }
   }
 
@@ -1088,11 +1054,7 @@ export class ClaraService {
       return true;
     }
 
-    const aliasPatterns = [
-      "clara@agentmail.to",
-      "clara@insideline.ai",
-    ];
-    if (aliasPatterns.includes(normalized)) {
+    if (this.claraEmailAliases.has(normalized)) {
       return true;
     }
 

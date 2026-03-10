@@ -11,6 +11,7 @@ import { ThesisService } from "../investor/thesis.service";
 import { InvestorNoteService } from "../investor/investor-note.service";
 import { PortfolioService } from "../investor/portfolio.service";
 import { startupMatch } from "../investor/entities/investor.schema";
+import { investorNote } from "../investor/entities/investor-note.schema";
 import { PdfService } from "../startup/pdf.service";
 import { AnalyticsService } from "../admin/analytics.service";
 import { StartupService } from "../startup/startup.service";
@@ -22,18 +23,15 @@ import type { CreateNote, UpdateMatchStatus } from "../investor/dto";
 import type { ClaraAgentRuntimeState } from "./interfaces/clara.interface";
 import { ClaraChannelService, type ClaraChannelKind } from "./clara-channel.service";
 
-type BuildToolsInput =
-  | string
-  | null
-  | {
-      actorUserId: string | null;
-      actorRole?: string | null;
-      linkedStartupId?: string | null;
-      channel?: ClaraChannelKind;
-      inboxId?: string;
-      inReplyToMessageId?: string;
-      runtime?: ClaraAgentRuntimeState;
-    };
+type BuildToolsInput = {
+  actorUserId: string | null;
+  actorRole?: string | null;
+  linkedStartupId?: string | null;
+  channel?: ClaraChannelKind;
+  inboxId?: string;
+  inReplyToMessageId?: string;
+  runtime?: ClaraAgentRuntimeState;
+};
 
 type ResolvedToolActor = {
   actorUserId: string | null;
@@ -251,6 +249,7 @@ export class ClaraToolsService {
           limit: z.number().min(1).max(10).default(5).describe("Max results"),
         }),
         execute: async ({ query, limit }) => {
+          if (!actor.actorUserId) return { message: noAccount };
           const escaped = `%${query}%`;
           return this.drizzle.db
             .select({
@@ -276,6 +275,7 @@ export class ClaraToolsService {
           limit: z.number().min(1).max(20).default(10),
         }),
         execute: async ({ limit }) => {
+          if (!actor.actorUserId) return { message: noAccount };
           return this.drizzle.db
             .select({
               id: startup.id,
@@ -397,6 +397,15 @@ export class ClaraToolsService {
         execute: async ({ noteId, content, category, isPinned }) => {
           if (!actor.actorUserId) return { message: noAccount };
           if (!this.isInvestor(actor)) return { message: notInvestor };
+
+          const [existingNote] = await this.drizzle.db
+            .select({ id: investorNote.id })
+            .from(investorNote)
+            .where(and(eq(investorNote.id, noteId), eq(investorNote.investorId, actor.actorUserId)))
+            .limit(1);
+          if (!existingNote) {
+            return { message: "I couldn't find a note with that ID in your account." };
+          }
 
           return this.proposePendingAction(actor, {
             actionKey: "update_note",
@@ -597,9 +606,8 @@ export class ClaraToolsService {
         if (typeof matchId !== "string") {
           throw new Error("The pending match-status update is missing its match ID.");
         }
-        const updatePayload: UpdateMatchStatus = {
-          status: pendingAction.payload.status as UpdateMatchStatus["status"],
-        };
+        const { matchId: _id, ...rest } = pendingAction.payload;
+        const updatePayload = rest as UpdateMatchStatus;
         const result = await this.matchService.updateMatchStatus(
           actor.actorUserId,
           matchId,
@@ -630,17 +638,6 @@ export class ClaraToolsService {
   }
 
   private normalizeActor(input: BuildToolsInput): ResolvedToolActor {
-    if (typeof input === "string" || input == null) {
-      return {
-        actorUserId: input,
-        actorRole: input ? "investor" : null,
-        linkedStartupId: null,
-        channel: "email",
-        inboxId: null,
-        inReplyToMessageId: null,
-      };
-    }
-
     return {
       actorUserId: input.actorUserId ?? null,
       actorRole: input.actorRole ?? null,

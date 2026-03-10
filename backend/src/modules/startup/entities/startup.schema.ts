@@ -260,7 +260,7 @@ export const startupDraft = pgTable(
 // RELATIONS
 // ============================================================================
 
-export const startupRelations = relations(startup, ({ one, many }) => ({
+export const startupRelations = relations(startup, ({ one }) => ({
   user: one(user, {
     fields: [startup.userId],
     references: [user.id],

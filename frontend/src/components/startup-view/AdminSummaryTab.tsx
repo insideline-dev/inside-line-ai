@@ -1,8 +1,9 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScoreRing } from "@/components/analysis/ScoreRing";
-import { CheckCircle2, AlertTriangle, ChevronRight, Sparkles } from "lucide-react";
+import { ConfidenceBadge } from "@/components/ConfidenceBadge";
+import { CheckCircle2, AlertTriangle, ChevronRight, Sparkles, TrendingUp, ArrowRight } from "lucide-react";
 import type { Startup } from "@/types/startup";
-import type { Evaluation } from "@/types/evaluation";
+import type { Evaluation, ExitScenario, FounderReport } from "@/types/evaluation";
 import type { ScoringWeights } from "@/lib/score-utils";
 import {
   getDisplayOverallScore,
@@ -24,6 +25,12 @@ interface SectionScoreRow {
   score: number;
   weight: number;
 }
+
+const EXIT_SCENARIO_DISPLAY_ORDER = {
+  conservative: 0,
+  moderate: 1,
+  optimistic: 2,
+} as const;
 
 function formatCompactCurrency(value?: number | null): string {
   if (value == null) return "N/A";
@@ -47,6 +54,16 @@ function formatRaiseType(value?: string | null): string {
     .split("_")
     .map((part) => part.toUpperCase() === "SAFE" ? "SAFE" : part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function formatMoic(value: number): string {
+  if (!Number.isFinite(value)) return "N/A";
+  return `${Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1)}X`;
+}
+
+function formatPercent(value: number): string {
+  if (!Number.isFinite(value)) return "N/A";
+  return `${Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1)}%`;
 }
 
 function scoreBarClass(score: number): string {
@@ -109,11 +126,24 @@ export function AdminSummaryTab({
   const strengths = getDisplayStrengths(evaluation);
   const risks = getDisplayRisks(evaluation);
   const sectionRows = evaluation ? getSectionRows(evaluation, weights) : [];
-  const executiveSummary =
+  const overallConfidence = evaluation?.confidenceScore ?? "unknown";
+  const dealSnapshot =
     evaluation?.executiveSummary ||
     evaluation?.investorMemo?.executiveSummary ||
     startup.description ||
     "No summary generated yet.";
+  const founderReportData = (evaluation?.founderReport ?? null) as FounderReport | null;
+  const whatsWorking = founderReportData?.whatsWorking?.filter((s) => s.trim().length > 0) ?? [];
+  const pathToInevitability = founderReportData?.pathToInevitability?.filter((s) => s.trim().length > 0) ?? [];
+  const exitScenarioSource: ExitScenario[] =
+    (evaluation?.exitScenarios as ExitScenario[] | undefined) ??
+    ((evaluation?.exitPotentialData as Record<string, unknown> | undefined)?.exitScenarios as ExitScenario[] | undefined) ??
+    [];
+  const exitScenarios = [...exitScenarioSource].sort(
+    (left, right) =>
+      EXIT_SCENARIO_DISPLAY_ORDER[left.scenario] -
+      EXIT_SCENARIO_DISPLAY_ORDER[right.scenario],
+  );
 
   return (
     <div className="space-y-6">
@@ -122,6 +152,11 @@ export function AdminSummaryTab({
             <div className="grid gap-5 md:grid-cols-[220px_minmax(0,1fr)]">
               <div className="flex flex-col items-center justify-center rounded-xl border bg-muted/15 px-4 py-6">
                 <ScoreRing score={score} size="lg" showLabel={false} variant="secondary" />
+                <ConfidenceBadge
+                  confidence={overallConfidence}
+                  className="mt-3"
+                  dataTestId="badge-overall-confidence"
+                />
                 <div className="mt-3 rounded-xl border bg-background px-3 py-1">
                   <p className="text-[13px] font-semibold">{percentile}</p>
                 </div>
@@ -158,7 +193,7 @@ export function AdminSummaryTab({
             <p className="text-xs text-muted-foreground">Top highlights for a quick pitch</p>
           </CardHeader>
           <CardContent className="space-y-3">
-            <p className="text-sm leading-relaxed">{executiveSummary}</p>
+            <p className="text-sm leading-relaxed">{dealSnapshot}</p>
             {strengths.length > 0 && (
               <ul className="space-y-1.5 text-sm">
                 {strengths.slice(0, 4).map((item, idx) => (
@@ -168,6 +203,80 @@ export function AdminSummaryTab({
                   </li>
                 ))}
               </ul>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <TrendingUp className="h-4 w-4 text-primary" />
+              Exit Scenarios
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Return scenarios from exit potential analysis
+            </p>
+          </CardHeader>
+          <CardContent>
+            {exitScenarios.length > 0 ? (
+              <div className="grid gap-0 md:grid-cols-[1fr_auto_1fr_auto_1fr] items-stretch">
+                {exitScenarios.map((scenario, idx) => (
+                  <div key={scenario.scenario} className="contents">
+                    <div
+                      className={`rounded-xl border px-4 py-4 ${
+                        scenario.scenario === "optimistic"
+                          ? "border-violet-200 bg-violet-50/60 dark:border-violet-900/50 dark:bg-violet-950/20"
+                          : scenario.scenario === "moderate"
+                            ? "border-indigo-200 bg-indigo-50/60 dark:border-indigo-900/50 dark:bg-indigo-950/20"
+                            : "border-slate-200 bg-slate-50/80 dark:border-slate-800 dark:bg-slate-950/30"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                          {scenario.scenario}
+                        </p>
+                        <span className="rounded-full bg-background/80 px-2 py-1 text-[10px] font-medium text-muted-foreground">
+                          {scenario.exitType}
+                        </span>
+                      </div>
+                      <div className="mt-5">
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                          MOIC
+                        </p>
+                        <p className="mt-1 text-4xl font-bold tracking-tight">
+                          {formatMoic(scenario.moic)}
+                        </p>
+                      </div>
+                      <div className="mt-4 border-t border-border/60 pt-3">
+                        <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+                          IRR
+                        </p>
+                        <p className="mt-1 text-sm font-medium">
+                          {formatPercent(scenario.irr)}
+                        </p>
+                      </div>
+                      <p className="mt-4 text-xs text-muted-foreground">
+                        {scenario.exitValuation}
+                        {scenario.timeline ? ` · ${scenario.timeline}` : ""}
+                      </p>
+                      {scenario.researchBasis && (
+                        <p className="mt-2 text-[11px] leading-tight text-muted-foreground/70 italic">
+                          {scenario.researchBasis}
+                        </p>
+                      )}
+                    </div>
+                    {idx < exitScenarios.length - 1 && (
+                      <div className="hidden md:flex items-center justify-center px-2">
+                        <ChevronRight className="h-5 w-5 text-muted-foreground/40" />
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground/60 italic text-center py-4">
+                Exit scenarios will be available after re-analysis
+              </p>
             )}
           </CardContent>
         </Card>
@@ -233,6 +342,57 @@ export function AdminSummaryTab({
             </CardContent>
           </Card>
         )}
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Founder Report</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              {founderReportData?.summary || "Founder report summary is not available yet."}
+            </p>
+
+            {whatsWorking.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-1.5 text-sm font-medium text-emerald-700 dark:text-emerald-400">
+                  <CheckCircle2 className="h-4 w-4" />
+                  What&apos;s Working
+                </div>
+                <ul className="space-y-1.5">
+                  {whatsWorking.map((item, index) => (
+                    <li key={`w-${index}`} className="flex items-start gap-2 text-sm text-muted-foreground">
+                      <span className="mt-2 h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {pathToInevitability.length > 0 && (
+              <div className="space-y-2 border-t pt-3">
+                <div className="flex items-center gap-1.5 text-sm font-medium text-violet-700 dark:text-violet-400">
+                  <ArrowRight className="h-4 w-4" />
+                  Path to Inevitability
+                </div>
+                <ul className="space-y-1.5">
+                  {pathToInevitability.map((item, index) => (
+                    <li key={`p-${index}`} className="flex items-start gap-2 text-sm text-muted-foreground">
+                      <span className="mt-2 h-1.5 w-1.5 rounded-full bg-violet-500 shrink-0" />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {whatsWorking.length === 0 && pathToInevitability.length === 0 && !founderReportData?.summary && (
+              <p className="text-sm text-muted-foreground">
+                Founder report details are not available yet.
+              </p>
+            )}
+          </CardContent>
+        </Card>
     </div>
   );
 }

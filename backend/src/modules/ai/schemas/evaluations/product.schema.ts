@@ -1,26 +1,33 @@
 import { z } from "zod";
-import { BaseEvaluationSchema } from "../base-evaluation.schema";
+import { BaseEvaluationSchema, requiredStringFromNull, stringArray } from "../base-evaluation.schema";
+import { FounderPitchRecommendationSchema } from "../simple-evaluation.schema";
 
-const requiredStringFromNull = (fallback: string) =>
-  z.preprocess(
-    (value) => (value == null ? fallback : value),
-    z.string().min(1),
-  );
+export const ProductSummarySchema = z.object({
+  description: requiredStringFromNull("Product description pending"),
+  techStage: z.enum(["mature", "mvp", "idea", "scaling"]).default("idea"),
+}).default({ description: "Product description pending", techStage: "idea" });
 
-const stringArray = z.preprocess(
-  (value) =>
-    Array.isArray(value)
-      ? value.filter((item): item is string => typeof item === "string")
-      : [],
-  z.array(z.string()),
-).default([]);
+export const ProductOverviewSchema = z.object({
+  whatItDoes: requiredStringFromNull("Unknown"),
+  targetUser: requiredStringFromNull("Unknown"),
+  productCategory: requiredStringFromNull("Unknown"),
+  coreValueProp: requiredStringFromNull("Unknown"),
+}).default({ whatItDoes: "Unknown", targetUser: "Unknown", productCategory: "Unknown", coreValueProp: "Unknown" });
+
+export const ProductStrengthsAndRisksSchema = z.object({
+  strengths: stringArray,
+  risks: stringArray,
+}).default({ strengths: [], risks: [] });
 
 export const ProductEvaluationSchema = BaseEvaluationSchema.extend({
-  productDescription: requiredStringFromNull("Product description requires manual review"),
-  uniqueValue: requiredStringFromNull("Unique value requires manual review"),
-  technologyStack: stringArray,
+  productSummary: ProductSummarySchema,
+  productOverview: ProductOverviewSchema,
+  productStrengthsAndRisks: ProductStrengthsAndRisksSchema,
+  strengths: stringArray,
+  risks: stringArray,
   keyFeatures: stringArray,
-  productMaturity: requiredStringFromNull("Product maturity requires manual review"),
+  technologyStack: stringArray,
+  founderPitchRecommendations: z.array(FounderPitchRecommendationSchema).default([]),
 });
 
 export type ProductEvaluation = z.infer<typeof ProductEvaluationSchema>;

@@ -103,7 +103,9 @@ export class DynamicFlowCatalogService {
           modelName: resolved.modelName,
           provider: resolved.provider,
           searchMode: resolved.searchMode,
+          supportedSearchModes: resolved.supportedSearchModes,
           source: resolved.source,
+          purpose: resolved.purpose,
         },
       };
     } catch {

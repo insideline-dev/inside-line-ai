@@ -24,6 +24,16 @@ export class LegalEvaluationAgent extends BaseEvaluationAgent<LegalEvaluation> {
     super(providers, aiConfig, promptService, modelExecution);
   }
 
+  protected override getAgentTemplateVariables(
+    _pipelineData: EvaluationPipelineInput,
+  ): Record<string, string> {
+    return {
+      teamResearchOutput: _pipelineData.research.team ?? "Not provided",
+      productResearchOutput: _pipelineData.research.product ?? "Not provided",
+      newsResearchOutput: _pipelineData.research.news ?? "Not provided",
+    };
+  }
+
   readonly buildContext = (pipelineData: EvaluationPipelineInput) => {
     const { extraction, scraping } = pipelineData;
     const rawText = typeof extraction.rawText === "string" ? extraction.rawText : "";
@@ -83,9 +93,7 @@ export class LegalEvaluationAgent extends BaseEvaluationAgent<LegalEvaluation> {
   fallback(): LegalEvaluation {
     return LegalEvaluationSchema.parse({
       ...baseEvaluation(25, "Legal evaluation incomplete — requires manual review"),
-      ipStatus: "No material IP blockers identified",
-      regulatoryRisks: ["Regulatory exposure depends on target geography"],
-      legalStructure: "Standard venture-friendly entity assumptions",
+      founderPitchRecommendations: [],
     });
   }
 }

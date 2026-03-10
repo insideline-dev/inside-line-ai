@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { ConfidenceBadge } from "@/components/ConfidenceBadge";
 import { ScoreRing } from "@/components/analysis/ScoreRing";
 import {
   CheckCircle,
@@ -49,6 +50,8 @@ interface SummaryCardProps {
   showSectionScores?: boolean;
   showRecommendation?: boolean;
   weights?: ScoringWeights | null;
+  summaryLayout?: "tiles" | "pills";
+  showStrengthsAndRisks?: boolean;
 }
 
 function formatCurrency(value: number | null | undefined): string {
@@ -81,12 +84,26 @@ export function SummaryCard({
   showScores = true,
   showSectionScores = true,
   weights,
+  summaryLayout = "tiles",
+  showStrengthsAndRisks = true,
 }: SummaryCardProps) {
   const [animateBars, setAnimateBars] = useState(false);
   const overallScore = getDisplayOverallScore(evaluation, startup.overallScore);
   const percentileRank = getDisplayPercentileRank(evaluation, startup.percentileRank);
   const strengths = getDisplayStrengths(evaluation);
   const risks = getDisplayRisks(evaluation);
+  const evaluationRecord = (evaluation ?? null) as Record<string, unknown> | null;
+  const overallConfidence =
+    (evaluationRecord && typeof evaluationRecord.confidenceScore === "string"
+      ? evaluationRecord.confidenceScore
+      : null) ??
+    (evaluationRecord && typeof evaluationRecord.confidenceLevel === "string"
+      ? evaluationRecord.confidenceLevel
+      : null) ??
+    (evaluationRecord && typeof evaluationRecord.confidence === "string"
+      ? evaluationRecord.confidence
+      : null) ??
+    "unknown";
 
   useEffect(() => {
     setAnimateBars(false);
@@ -108,10 +125,15 @@ export function SummaryCard({
     <div className="space-y-6">
       <Card>
         <CardContent className="p-6">
-          <div className="flex flex-col md:flex-row gap-6">
+          <div className="flex flex-col gap-6 md:flex-row">
             {showScores && (
               <div className="flex flex-col items-center text-center" data-testid="container-score">
                 <ScoreRing score={overallScore} size="lg" />
+                <ConfidenceBadge
+                  confidence={overallConfidence}
+                  className="mt-2"
+                  dataTestId="badge-overall-confidence"
+                />
                 {percentileRank != null && (
                   <Badge variant="outline" className="mt-2" data-testid="badge-percentile">
                     Top {Math.round(100 - percentileRank)}%
@@ -120,33 +142,60 @@ export function SummaryCard({
               </div>
             )}
             
-            <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 gap-3 md:gap-4 min-w-0">
-              <div className="p-3 bg-muted/50 rounded-lg" data-testid="info-stage">
-                <p className="text-xs text-muted-foreground mb-1">Stage</p>
-                <p className="font-medium text-xs break-words">{formatStage(startup.stage)}</p>
+            {summaryLayout === "pills" ? (
+              <div className="min-w-0 flex-1 space-y-3">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Startup Snapshot
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Badge variant="secondary" className="rounded-full px-3 py-1 text-sm font-medium">
+                    Stage: {formatStage(startup.stage)}
+                  </Badge>
+                  <Badge variant="secondary" className="rounded-full px-3 py-1 text-sm font-medium">
+                    Sector: {startup.industry || "N/A"}
+                  </Badge>
+                  <Badge variant="secondary" className="rounded-full px-3 py-1 text-sm font-medium">
+                    Location: {startup.location || "N/A"}
+                  </Badge>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Badge variant="outline" className="rounded-full px-3 py-1 text-sm font-medium">
+                    Round Size: {formatCurrency(startup.fundingTarget)}
+                  </Badge>
+                  <Badge variant="outline" className="rounded-full px-3 py-1 text-sm font-medium">
+                    Valuation: {formatCurrency(startup.valuation)}
+                  </Badge>
+                </div>
               </div>
-              <div className="p-3 bg-muted/50 rounded-lg" data-testid="info-sector">
-                <p className="text-xs text-muted-foreground mb-1">Sector</p>
-                <p className="font-medium text-xs break-words">{startup.industry || "N/A"}</p>
+            ) : (
+              <div className="min-w-0 flex-1 grid grid-cols-2 gap-3 sm:grid-cols-3 md:gap-4">
+                <div className="rounded-lg bg-muted/50 p-3" data-testid="info-stage">
+                  <p className="mb-1 text-xs text-muted-foreground">Stage</p>
+                  <p className="break-words text-xs font-medium">{formatStage(startup.stage)}</p>
+                </div>
+                <div className="rounded-lg bg-muted/50 p-3" data-testid="info-sector">
+                  <p className="mb-1 text-xs text-muted-foreground">Sector</p>
+                  <p className="break-words text-xs font-medium">{startup.industry || "N/A"}</p>
+                </div>
+                <div className="rounded-lg bg-muted/50 p-3" data-testid="info-location">
+                  <p className="mb-1 text-xs text-muted-foreground">Location</p>
+                  <p className="break-words text-xs font-medium">{startup.location || "N/A"}</p>
+                </div>
+                <div className="rounded-lg bg-muted/50 p-3" data-testid="info-round-size">
+                  <p className="mb-1 text-xs text-muted-foreground">Round Size</p>
+                  <p className="break-words text-xs font-medium">{formatCurrency(startup.fundingTarget)}</p>
+                </div>
+                <div className="rounded-lg bg-muted/50 p-3" data-testid="info-valuation">
+                  <p className="mb-1 text-xs text-muted-foreground">Valuation</p>
+                  <p className="break-words text-xs font-medium">{formatCurrency(startup.valuation)}</p>
+                </div>
               </div>
-              <div className="p-3 bg-muted/50 rounded-lg" data-testid="info-location">
-                <p className="text-xs text-muted-foreground mb-1">Location</p>
-                <p className="font-medium text-xs break-words">{startup.location || "N/A"}</p>
-              </div>
-              <div className="p-3 bg-muted/50 rounded-lg" data-testid="info-round-size">
-                <p className="text-xs text-muted-foreground mb-1">Round Size</p>
-                <p className="font-medium text-xs break-words">{formatCurrency(startup.fundingTarget)}</p>
-              </div>
-              <div className="p-3 bg-muted/50 rounded-lg" data-testid="info-valuation">
-                <p className="text-xs text-muted-foreground mb-1">Valuation</p>
-                <p className="font-medium text-xs break-words">{formatCurrency(startup.valuation)}</p>
-              </div>
-            </div>
+            )}
           </div>
         </CardContent>
       </Card>
 
-      {evaluation && (
+      {evaluation && showStrengthsAndRisks && (
         <div className="grid md:grid-cols-2 gap-4">
           <Card className="bg-chart-2/5 border-chart-2/20" data-testid="card-strengths">
             <CardHeader className="pb-2">

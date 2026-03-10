@@ -83,6 +83,7 @@ export interface PipelineAgentTrace {
   usedFallback?: boolean;
   inputText?: string | null;
   inputPrompt?: string | null;
+  systemPrompt?: string | null;
   inputJson?: unknown;
   outputText?: string | null;
   outputJson?: unknown;

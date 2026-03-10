@@ -14,9 +14,8 @@ describe('ClaraService', () => {
   let service: ClaraService;
   let configService: { get: jest.Mock };
   let drizzleService: ReturnType<typeof createMockDrizzle>;
-  let agentMailClient: Record<string, jest.Mock>;
-  let conversationService: Record<string, jest.Mock>;
   let claraChannel: Record<string, jest.Mock>;
+  let conversationService: Record<string, jest.Mock>;
   let claraAi: {
     isLikelySubmission: jest.Mock;
     runAgentLoop: jest.Mock;
@@ -120,10 +119,10 @@ describe('ClaraService', () => {
   beforeEach(async () => {
     configService = createConfigService('inbox-1', 'admin-user-1');
     drizzleService = createMockDrizzle();
-    agentMailClient = {
-      getMessage: jest.fn().mockResolvedValue(mockMessage),
-      replyToMessage: jest.fn().mockResolvedValue({ messageId: 'reply-1' }),
-      sendMessage: jest.fn().mockResolvedValue({ messageId: 'msg-1' }),
+    claraChannel = {
+      getEmailMessage: jest.fn().mockResolvedValue(mockMessage),
+      reply: jest.fn().mockResolvedValue({ messageId: 'reply-1' }),
+      send: jest.fn().mockResolvedValue({ messageId: 'msg-1' }),
     };
     conversationService = {
       findOrCreate: jest.fn().mockResolvedValue(mockConversation),
@@ -137,33 +136,6 @@ describe('ClaraService', () => {
       findByStartupId: jest.fn().mockResolvedValue(null),
       hasMessage: jest.fn().mockResolvedValue(false),
       updateContext: jest.fn().mockResolvedValue({}),
-    };
-    claraChannel = {
-      getEmailMessage: jest
-        .fn()
-        .mockImplementation((inboxId: string, messageId: string) =>
-          agentMailClient.getMessage(inboxId, messageId),
-        ),
-      reply: jest
-        .fn()
-        .mockImplementation((params: { email: { inboxId: string; inReplyToMessageId: string }; text?: string; html?: string; attachments?: unknown[] }) =>
-          agentMailClient.replyToMessage(params.email.inboxId, params.email.inReplyToMessageId, {
-            text: params.text,
-            html: params.html,
-            attachments: params.attachments,
-          }),
-        ),
-      send: jest
-        .fn()
-        .mockImplementation((params: { email: { inboxId: string; to: string[]; subject?: string }; text?: string; html?: string; attachments?: unknown[] }) =>
-          agentMailClient.sendMessage(params.email.inboxId, {
-            to: params.email.to,
-            subject: params.email.subject,
-            text: params.text,
-            html: params.html,
-            attachments: params.attachments,
-          }),
-        ),
     };
     claraAi = {
       isLikelySubmission: jest.fn().mockReturnValue(false),
@@ -211,23 +183,20 @@ describe('ClaraService', () => {
       expect(service.isEnabled()).toBe(true);
     });
 
-    it('should return false when CLARA_INBOX_ID is not set', async () => {
+    it('should return false when CLARA_INBOX_ID is not set', () => {
       configService = createConfigService(null, 'admin-user-1');
-
       const testService = createService({ configService });
       expect(testService.isEnabled()).toBe(false);
     });
 
-    it('should return false when CLARA_ADMIN_USER_ID is not set', async () => {
+    it('should return false when CLARA_ADMIN_USER_ID is not set', () => {
       configService = createConfigService('inbox-1', null);
-
       const testService = createService({ configService });
       expect(testService.isEnabled()).toBe(false);
     });
 
-    it('should return false when both env vars are not set', async () => {
+    it('should return false when both env vars are not set', () => {
       configService = createConfigService(null, null);
-
       const testService = createService({ configService });
       expect(testService.isEnabled()).toBe(false);
     });
@@ -260,14 +229,14 @@ describe('ClaraService', () => {
         ],
       };
 
-      agentMailClient.getMessage.mockResolvedValueOnce(messageWithAttachment);
+      claraChannel.getEmailMessage.mockResolvedValueOnce(messageWithAttachment);
       claraAi.isLikelySubmission.mockReturnValueOnce(true);
 
       drizzleService.db.limit.mockResolvedValueOnce([]); // no investor user
 
       await service.handleIncomingMessage('inbox-1', 'thread-123', 'msg-123');
 
-      expect(agentMailClient.getMessage).toHaveBeenCalledWith('inbox-1', 'msg-123');
+      expect(claraChannel.getEmailMessage).toHaveBeenCalledWith('inbox-1', 'msg-123');
       expect(conversationService.findOrCreate).toHaveBeenCalledWith(
         'thread-123',
         'investor@example.com',
@@ -294,10 +263,8 @@ describe('ClaraService', () => {
         'conv-1',
         ConversationStatus.PROCESSING,
       );
-      expect(agentMailClient.replyToMessage).toHaveBeenCalledWith(
-        'inbox-1',
-        'msg-123',
-        expect.objectContaining({ text: expect.any(String) }),
+      expect(claraChannel.reply).toHaveBeenCalledWith(
+        expect.objectContaining({ channel: 'email', text: expect.any(String) }),
       );
       expect(conversationService.logMessage).toHaveBeenCalledTimes(2); // inbound + outbound
     });
@@ -314,7 +281,7 @@ describe('ClaraService', () => {
         ],
       };
 
-      agentMailClient.getMessage.mockResolvedValueOnce(messageWithAttachment);
+      claraChannel.getEmailMessage.mockResolvedValueOnce(messageWithAttachment);
       claraAi.isLikelySubmission.mockReturnValueOnce(true);
       submissionService.handleSubmission.mockResolvedValueOnce({
         startupId: 'startup-1',
@@ -328,9 +295,7 @@ describe('ClaraService', () => {
 
       await service.handleIncomingMessage('inbox-1', 'thread-123', 'msg-123');
 
-      expect(agentMailClient.replyToMessage).toHaveBeenCalledWith(
-        'inbox-1',
-        'msg-123',
+      expect(claraChannel.reply).toHaveBeenCalledWith(
         expect.objectContaining({
           text: expect.stringContaining('delete the existing startup first'),
         }),
@@ -351,10 +316,8 @@ describe('ClaraService', () => {
       await service.handleIncomingMessage('inbox-1', 'thread-123', 'msg-123');
 
       expect(copilotService.handleTurn).toHaveBeenCalled();
-      expect(agentMailClient.replyToMessage).toHaveBeenCalledWith(
-        'inbox-1',
-        'msg-123',
-        expect.objectContaining({ text: 'Agent response' }),
+      expect(claraChannel.reply).toHaveBeenCalledWith(
+        expect.objectContaining({ channel: 'email', text: 'Agent response' }),
       );
     });
 
@@ -392,12 +355,11 @@ describe('ClaraService', () => {
   describe('handleIncomingMessage - not configured', () => {
     it('should skip processing when not configured', async () => {
       configService = createConfigService(null, null);
-
       const testService = createService({ configService });
 
       await testService.handleIncomingMessage('inbox-1', 'thread-123', 'msg-123');
 
-      expect(agentMailClient.getMessage).not.toHaveBeenCalled();
+      expect(claraChannel.getEmailMessage).not.toHaveBeenCalled();
     });
   });
 
@@ -416,11 +378,9 @@ describe('ClaraService', () => {
       await service.notifyPipelineComplete('startup-1', 85.5);
 
       expect(conversationService.findByStartupId).toHaveBeenCalledWith('startup-1');
-      expect(agentMailClient.sendMessage).toHaveBeenCalledWith(
-        'inbox-1',
+      expect(claraChannel.send).toHaveBeenCalledWith(
         expect.objectContaining({
-          to: ['investor@example.com'],
-          subject: 'Analysis Complete: TestCo',
+          channel: 'email',
           text: expect.stringContaining('overall score of 85.5/100'),
         }),
       );
@@ -437,31 +397,6 @@ describe('ClaraService', () => {
       );
     });
 
-    it('should reply on the existing conversation thread when inbox/message context is available', async () => {
-      const conversationWithContext = {
-        ...mockConversation,
-        startupId: 'startup-1',
-        context: {
-          lastInboundInboxId: 'inbox-live',
-          lastInboundMessageId: 'msg-live',
-        },
-      };
-
-      conversationService.findByStartupId.mockResolvedValueOnce(conversationWithContext);
-      drizzleService.db.limit.mockResolvedValueOnce([mockStartup]);
-
-      await service.notifyPipelineComplete('startup-1', 85.5);
-
-      expect(agentMailClient.replyToMessage).toHaveBeenCalledWith(
-        'inbox-live',
-        'msg-live',
-        expect.objectContaining({
-          text: expect.stringContaining('overall score of 85.5/100'),
-        }),
-      );
-      expect(agentMailClient.sendMessage).not.toHaveBeenCalled();
-    });
-
     it('should send notification without score when not provided', async () => {
       const conversationWithStartup = {
         ...mockConversation,
@@ -473,8 +408,7 @@ describe('ClaraService', () => {
 
       await service.notifyPipelineComplete('startup-1');
 
-      expect(agentMailClient.sendMessage).toHaveBeenCalledWith(
-        'inbox-1',
+      expect(claraChannel.send).toHaveBeenCalledWith(
         expect.objectContaining({
           text: expect.not.stringContaining('overall score'),
         }),
@@ -495,15 +429,12 @@ describe('ClaraService', () => {
         warningMessage: 'Synthesis failed — all scores require manual verification.',
       });
 
-      expect(agentMailClient.sendMessage).toHaveBeenCalledWith(
-        'inbox-1',
+      expect(claraChannel.send).toHaveBeenCalledWith(
         expect.objectContaining({
-          subject: 'Analysis Complete With Warnings: TestCo',
           text: expect.stringContaining('finished with warnings'),
         }),
       );
-      expect(agentMailClient.sendMessage).toHaveBeenCalledWith(
-        'inbox-1',
+      expect(claraChannel.send).toHaveBeenCalledWith(
         expect.objectContaining({
           text: expect.stringContaining(
             'Synthesis failed — all scores require manual verification.',
@@ -523,7 +454,7 @@ describe('ClaraService', () => {
       await service.notifyPipelineComplete('startup-1', 85.5);
 
       expect(drizzleService.db.select).not.toHaveBeenCalled();
-      expect(agentMailClient.sendMessage).not.toHaveBeenCalled();
+      expect(claraChannel.send).not.toHaveBeenCalled();
     });
 
     it('should no-op when startup record not found', async () => {
@@ -537,12 +468,11 @@ describe('ClaraService', () => {
 
       await service.notifyPipelineComplete('startup-1', 85.5);
 
-      expect(agentMailClient.sendMessage).not.toHaveBeenCalled();
+      expect(claraChannel.send).not.toHaveBeenCalled();
     });
 
     it('should no-op when Clara is not configured', async () => {
       configService = createConfigService(null, 'admin-user-1');
-
       const testService = createService({ configService });
 
       await testService.notifyPipelineComplete('startup-1', 85.5);

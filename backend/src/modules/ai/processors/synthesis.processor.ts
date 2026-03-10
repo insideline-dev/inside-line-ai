@@ -33,6 +33,7 @@ interface SynthesisTracePayload {
   retryCount: number;
   usedFallback: boolean;
   inputPrompt?: string;
+  systemPrompt?: string;
   outputText?: string;
   outputJson?: unknown;
   error?: string;
@@ -271,6 +272,7 @@ export class SynthesisProcessor
         retryCount: input.trace.retryCount,
         usedFallback: input.trace.usedFallback,
         inputPrompt: input.trace.inputPrompt,
+        systemPrompt: input.trace.systemPrompt,
         outputText: input.trace.outputText,
         outputJson: input.trace.outputJson,
         error: input.trace.error,

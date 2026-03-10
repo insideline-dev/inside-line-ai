@@ -5,16 +5,18 @@ const generateTextMock = jest.fn();
 mock.module("ai", () => ({
   generateText: generateTextMock,
   Output: { object: ({ schema }: { schema: unknown }) => schema },
+  NoObjectGeneratedError: class NoObjectGeneratedError extends Error {
+    static isInstance(e: unknown) { return e instanceof this; }
+  },
 }));
 
 import { TractionEvaluationAgent } from "../../agents/evaluation/traction-evaluation.agent";
-import { ModelPurpose } from "../../interfaces/pipeline.interface";
 import type { AiProviderService } from "../../providers/ai-provider.service";
 import type { AiConfigService } from "../../services/ai-config.service";
 import type { AiPromptService } from "../../services/ai-prompt.service";
 import { createEvaluationPipelineInput } from "../fixtures/evaluation-pipeline.fixture";
 
-describe("TractionEvaluationAgent metric sanitization", () => {
+describe("TractionEvaluationAgent", () => {
   let agent: TractionEvaluationAgent;
   let providers: jest.Mocked<AiProviderService>;
   let aiConfig: jest.Mocked<AiConfigService>;
@@ -59,84 +61,81 @@ describe("TractionEvaluationAgent metric sanitization", () => {
     );
   });
 
-  it("clears revenue when only TPV-style volume evidence exists", async () => {
+  it("returns model output without metrics field (SimpleEvaluationSchema)", async () => {
     const pipelineData = createEvaluationPipelineInput();
-    pipelineData.extraction.stage = "seed";
-    pipelineData.scraping.notableClaims = ["Company processed over $1T TPV last year."];
-    pipelineData.research.news = {
-      articles: [
-        {
-          title: "Company hits $1T in annual payment volume",
-          source: "Fintech Wire",
-          date: "2026-01-01",
-          summary: "Payment volume expanded rapidly across enterprise merchants.",
-          url: "https://news.example.com/tpv",
-        },
-      ],
-      pressReleases: [],
-      sentiment: "positive",
-      recentEvents: ["Payment volume milestone announced"],
-      sources: ["https://news.example.com/tpv"],
-    };
 
     generateTextMock.mockResolvedValueOnce({
       output: {
-        score: 90,
-        confidence: 0.9,
-        feedback: "Strong momentum with broad adoption.",
-        keyFindings: ["Volume growth is strong"],
-        risks: ["Potential metric ambiguity"],
-        dataGaps: ["Net revenue not clearly disclosed"],
-        sources: ["https://news.example.com/tpv"],
-        metrics: {
-          users: 500000,
-          revenue: 1_000_000_000_000,
-          growthRatePct: 40,
-        },
-        customerValidation: "Large enterprise adoption",
-        growthTrajectory: "Rapidly expanding usage",
-        revenueModel: "Transaction fee model",
+        score: 72,
+        confidence: "medium",
+        narrativeSummary: "Early traction with three pilot customers and positive engagement signals.",
+        keyFindings: ["3 pilot customers signed", "NPS of 60 reported"],
+        risks: ["Very early stage"],
+        dataGaps: ["No cohort retention data"],
+        sources: ["https://example.com"],
       },
     });
 
     const result = await agent.run(pipelineData);
 
-    expect(providers.resolveModelForPurpose).toHaveBeenCalledWith(
-      ModelPurpose.EVALUATION,
-    );
     expect(result.usedFallback).toBe(false);
-    expect(result.output.metrics.revenue).toBeUndefined();
+    expect(result.output.score).toBe(72);
+    expect(result.output.confidence).toBe("mid");
+    expect("metrics" in result.output).toBe(false);
   });
 
-  it("keeps revenue when explicit revenue evidence exists", async () => {
+  it("does not fail when notableClaims contains TPV-style text (no sanitization)", async () => {
     const pipelineData = createEvaluationPipelineInput();
-    pipelineData.scraping.notableClaims = [
-      "ARR reached $12M with 140% net revenue retention.",
-    ];
+    pipelineData.scraping.notableClaims = ["Company processed over $1T TPV last year."];
 
     generateTextMock.mockResolvedValueOnce({
       output: {
-        score: 82,
-        confidence: 0.8,
-        feedback: "Revenue quality and growth are solid for stage.",
-        keyFindings: ["ARR growth validated"],
-        risks: ["Customer concentration risk"],
-        dataGaps: ["Cohort view is limited"],
-        sources: ["https://metrics.example.com/arr"],
-        metrics: {
-          users: 4200,
-          revenue: 12_000_000,
-          growthRatePct: 18,
-        },
-        customerValidation: "Strong logos and renewal evidence",
-        growthTrajectory: "Consistent quarter-over-quarter growth",
-        revenueModel: "Annual SaaS subscriptions",
+        score: 80,
+        confidence: "high",
+        narrativeSummary: "Strong volume metrics with large-scale processing evidence.",
+        keyFindings: ["$1T TPV processed"],
+        risks: ["Revenue vs volume distinction unclear"],
+        dataGaps: ["Net revenue not confirmed"],
+        sources: [],
       },
     });
 
     const result = await agent.run(pipelineData);
 
     expect(result.usedFallback).toBe(false);
-    expect(result.output.metrics.revenue).toBe(12_000_000);
+    expect(result.output.score).toBe(80);
+  });
+
+  it("uses fallback with confidence 'low' when model fails", async () => {
+    const pipelineData = createEvaluationPipelineInput();
+    generateTextMock.mockRejectedValue(new Error("provider timeout"));
+
+    const result = await agent.run(pipelineData);
+
+    expect(result.usedFallback).toBe(true);
+    expect(result.output.confidence).toBe("low");
+    expect(result.output.score).toBeLessThanOrEqual(25);
+  });
+
+  it("buildContext includes notableClaims in tractionMetrics", () => {
+    const pipelineData = createEvaluationPipelineInput();
+    pipelineData.scraping.notableClaims = ["ARR reached $12M", "140% NRR"];
+
+    const context = agent.buildContext(pipelineData);
+
+    expect(context.tractionMetrics).toBeDefined();
+    const metrics = context.tractionMetrics as { notableClaims: string[] };
+    expect(metrics.notableClaims).toContain("ARR reached $12M");
+    expect(metrics.notableClaims).toContain("140% NRR");
+  });
+
+  it("buildContext handles missing notableClaims gracefully", () => {
+    const pipelineData = createEvaluationPipelineInput();
+    pipelineData.scraping.notableClaims = [];
+
+    const context = agent.buildContext(pipelineData);
+
+    const metrics = context.tractionMetrics as { notableClaims: string[] };
+    expect(metrics.notableClaims).toEqual([]);
   });
 });

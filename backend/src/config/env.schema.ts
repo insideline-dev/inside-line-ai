@@ -12,6 +12,11 @@ export const envSchema = z.object({
     .string()
     .url("DATABASE_URL must be a valid PostgreSQL connection string"),
   PROD_DATABASE_URL: z.string().optional(),
+  DB_POOL_MAX: z.coerce.number().int().positive().default(20),
+  DB_CONNECT_TIMEOUT_SECONDS: z.coerce.number().positive().default(10),
+  DB_IDLE_TIMEOUT_SECONDS: z.coerce.number().positive().default(30),
+  DB_MAX_LIFETIME_SECONDS: z.coerce.number().positive().default(1800),
+  DB_DISABLE_PREPARE_FOR_POOLER: z.coerce.boolean().default(true),
 
   // Redis Configuration (use REDIS_URL, or fallback to individual vars)
   REDIS_URL: z.string().default("redis://localhost:6379"),
@@ -114,6 +119,7 @@ export const envSchema = z.object({
   SCRAPING_RATE_LIMIT_MS: z.coerce.number().default(1000),
   SCRAPING_MAX_SUBPAGES: z.coerce.number().default(20),
   SCRAPING_BATCH_SIZE: z.coerce.number().default(5),
+  SCRAPING_DISCOVERY_ENABLED: z.coerce.boolean().default(true),
   WEBSITE_CACHE_TTL_HOURS: z.coerce.number().default(24),
   LINKEDIN_CACHE_TTL_DAYS: z.coerce.number().default(7),
   AI_SCRAPING_DEBUG_LOG_ENABLED: z.coerce.boolean().default(true),
@@ -123,10 +129,7 @@ export const envSchema = z.object({
   AI_AGENT_DEBUG_LOG_ENABLED: z.coerce.boolean().default(true),
   AI_AGENT_DEBUG_LOG_PATH: z.string().default("logs/ai-agent-debug.jsonl"),
   AI_AGENT_TRACE_RETENTION_DAYS: z.coerce.number().default(30),
-  AI_AGENT_TRACE_MAX_PROMPT_CHARS: z.coerce.number().default(30000),
-  AI_AGENT_TRACE_MAX_OUTPUT_CHARS: z.coerce.number().default(50000),
-  AI_AGENT_TRACE_MAX_JSON_BYTES: z.coerce.number().default(250000),
-  AI_AGENT_TRACE_MAX_META_BYTES: z.coerce.number().default(50000),
+  AI_PROMPT_STRICT_DB_REQUIRED: z.coerce.boolean().default(false),
   SCRAPING_MAX_LINKS_PER_PAGE: z.coerce.number().default(100),
   SCRAPING_MAX_PATH_DEPTH: z.coerce.number().default(4),
   SCRAPING_BATCH_DELAY_MS: z.coerce.number().default(500),
@@ -152,6 +155,7 @@ export const envSchema = z.object({
   AI_MODEL_THESIS_ALIGNMENT: z.string().default("gemini-3-flash-preview"),
   AI_MODEL_LOCATION_NORMALIZATION: z.string().default("gemini-3-flash-preview"),
   AI_MODEL_OCR: z.string().default("mistral-ocr-latest"),
+  AI_MODEL_CLARA: z.string().default("gpt-5.4"),
   AI_MODEL_ENRICHMENT: z.string().default("gemini-3-flash-preview"),
   AI_ENRICHMENT_ENABLED: z.coerce.boolean().default(true),
   AI_SOURCE_SANITIZATION_ENABLED: z.coerce.boolean().default(true),
@@ -166,6 +170,7 @@ export const envSchema = z.object({
   AI_RESEARCH_MAX_ATTEMPTS: z.coerce.number().default(2),
   AI_RESEARCH_AGENT_HARD_TIMEOUT_MS: z.coerce.number().default(3600000),
   AI_RESEARCH_AGENT_STAGGER_MS: z.coerce.number().default(5000),
+
   AI_EVALUATION_AGENT_STAGGER_MS: z.coerce.number().default(5000),
   OPENAI_DEEP_RESEARCH_POLL_INTERVAL_MS: z.coerce.number().default(15000),
   AI_EVALUATION_TEMPERATURE: z.coerce.number().default(0.2),

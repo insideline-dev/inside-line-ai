@@ -49,6 +49,7 @@ export interface RecordPipelineAgentRunInput {
   retryCount?: number;
   usedFallback?: boolean;
   inputPrompt?: string;
+  systemPrompt?: string;
   inputText?: string;
   inputJson?: unknown;
   outputText?: string;
@@ -87,10 +88,6 @@ export interface FindDeepResearchCheckpointInput {
 @Injectable()
 export class PipelineAgentTraceService {
   private readonly logger = new Logger(PipelineAgentTraceService.name);
-  private readonly promptCharLimit: number;
-  private readonly outputCharLimit: number;
-  private readonly jsonByteLimit: number;
-  private readonly metaByteLimit: number;
   private readonly retentionDays: number;
   private readonly runtimeMetadata: {
     buildId: string;
@@ -104,22 +101,6 @@ export class PipelineAgentTraceService {
     private drizzle: DrizzleService,
     private config: ConfigService,
   ) {
-    this.promptCharLimit = this.config.get<number>(
-      "AI_AGENT_TRACE_MAX_PROMPT_CHARS",
-      30_000,
-    );
-    this.outputCharLimit = this.config.get<number>(
-      "AI_AGENT_TRACE_MAX_OUTPUT_CHARS",
-      50_000,
-    );
-    this.jsonByteLimit = this.config.get<number>(
-      "AI_AGENT_TRACE_MAX_JSON_BYTES",
-      250_000,
-    );
-    this.metaByteLimit = this.config.get<number>(
-      "AI_AGENT_TRACE_MAX_META_BYTES",
-      50_000,
-    );
     this.retentionDays = this.config.get<number>(
       "AI_AGENT_TRACE_RETENTION_DAYS",
       30,
@@ -146,14 +127,12 @@ export class PipelineAgentTraceService {
       input.retryCount,
       Math.max(0, attempt - 1),
     );
-    const inputPrompt = this.truncateText(
-      input.inputPrompt ?? input.inputText,
-      this.promptCharLimit,
-    );
-    const outputText = this.truncateText(input.outputText, this.outputCharLimit);
-    const inputJson = this.normalizeJsonField(input.inputJson, this.jsonByteLimit);
+    const inputPrompt = input.inputPrompt ?? input.inputText ?? null;
+    const systemPrompt = input.systemPrompt ?? null;
+    const outputText = input.outputText ?? null;
+    const inputJson = this.normalizeJsonField(input.inputJson);
     const outputJson = this.attachTraceMeta(
-      this.normalizeJsonField(input.outputJson, this.jsonByteLimit),
+      this.normalizeJsonField(input.outputJson),
       traceKind,
       input.fallbackReason,
       input.rawProviderError,
@@ -178,6 +157,7 @@ export class PipelineAgentTraceService {
         input.usedFallback ??
         (traceKind === "ai_agent" && input.status === "fallback"),
       inputPrompt,
+      systemPrompt,
       inputJson,
       outputText,
       outputJson,
@@ -311,36 +291,20 @@ export class PipelineAgentTraceService {
     };
   }
 
-  private truncateText(value: string | undefined, limit: number): string | null {
-    if (!value) {
-      return null;
-    }
-
-    if (value.length <= limit) {
-      return value;
-    }
-
-    return `${value.slice(0, limit)}\n\n[TRUNCATED]`;
-  }
-
-  private normalizeJsonField(value: unknown, limitBytes: number): unknown | null {
+  private normalizeJsonField(value: unknown): unknown | null {
     if (value === undefined) {
       return null;
     }
 
     try {
-      const parsed = JSON.parse(JSON.stringify(value)) as unknown;
-      return this.limitJsonPayload(parsed, limitBytes);
+      return JSON.parse(JSON.stringify(value)) as unknown;
     } catch {
       return null;
     }
   }
 
   private normalizeMeta(value: Record<string, unknown> | undefined): Record<string, unknown> | null {
-    const baseNormalized = this.normalizeJsonField(
-      value ?? {},
-      this.metaByteLimit,
-    );
+    const baseNormalized = this.normalizeJsonField(value ?? {});
     const base =
       baseNormalized &&
       typeof baseNormalized === "object" &&
@@ -349,7 +313,7 @@ export class PipelineAgentTraceService {
         : {};
 
     const withRuntime = this.withRuntimeMetadata(base);
-    const normalized = this.normalizeJsonField(withRuntime, this.metaByteLimit);
+    const normalized = this.normalizeJsonField(withRuntime);
     if (!normalized || typeof normalized !== "object" || Array.isArray(normalized)) {
       return { runtime: this.runtimeMetadata };
     }
@@ -376,31 +340,6 @@ export class PipelineAgentTraceService {
       },
       ...rest,
     };
-  }
-
-  private limitJsonPayload(value: unknown, limitBytes: number): unknown {
-    try {
-      const serialized = JSON.stringify(value);
-      const serializedBytes = Buffer.byteLength(serialized, "utf8");
-      if (serializedBytes <= limitBytes) {
-        return value;
-      }
-
-      const preview = serialized.slice(0, Math.max(0, limitBytes));
-      return {
-        __truncated: true,
-        __originalBytes: serializedBytes,
-        __keptBytes: limitBytes,
-        __preview: `${preview}\n\n[TRUNCATED]`,
-      };
-    } catch {
-      return {
-        __truncated: true,
-        __originalBytes: 0,
-        __keptBytes: limitBytes,
-        __preview: "[UNSERIALIZABLE JSON PAYLOAD]",
-      };
-    }
   }
 
   private attachTraceMeta(

@@ -58,13 +58,10 @@ export class BusinessModelEvaluationAgent extends BaseEvaluationAgent<BusinessMo
     };
   }
 
-  fallback({ extraction }: EvaluationPipelineInput): BusinessModelEvaluation {
+  fallback({ extraction: _extraction }: EvaluationPipelineInput): BusinessModelEvaluation {
     return BusinessModelEvaluationSchema.parse({
       ...baseEvaluation(22, "Business model evaluation incomplete — requires manual review"),
-      revenueStreams: ["Subscription", "Service add-ons"],
-      unitEconomics: "Unit economics assumptions are preliminary",
-      scalability: "Model scales with increased automation and channel leverage",
-      defensibility: "Defensibility is moderate and execution-dependent",
+      founderPitchRecommendations: [],
     });
   }
 }

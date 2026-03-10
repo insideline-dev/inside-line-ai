@@ -7,9 +7,16 @@ import { ASSET_TYPES } from "../../storage/storage.config";
 import { UserRole } from "../../auth/entities/auth.schema";
 import { AgentMailClientService } from "../integrations/agentmail/agentmail-client.service";
 import { startup, StartupStatus, StartupStage } from "../startup/entities/startup.schema";
-import { DataRoomService } from "../startup/data-room.service";
-import { PipelineService } from "../ai/services/pipeline.service";
+import {
+  PipelineService,
+  PIPELINE_MISSING_FIELDS_ERROR_PREFIX,
+} from "../ai/services/pipeline.service";
 import { PipelinePhase } from "../ai/interfaces/pipeline.interface";
+import {
+  extractWebsiteFromText,
+  extractStageFromText,
+  getMissingCriticalFields,
+} from "../ai/utils/startup-field-utils";
 import { NotificationService } from "../../notification/notification.service";
 import { NotificationType } from "../../notification/entities";
 import { ClaraAiService } from "./clara-ai.service";
@@ -53,7 +60,6 @@ export class ClaraSubmissionService {
     private drizzle: DrizzleService,
     private storage: StorageService,
     private assetService: AssetService,
-    private dataRoomService: DataRoomService,
     private agentMailClient: AgentMailClientService,
     private pipeline: PipelineService,
     private notifications: NotificationService,
@@ -112,7 +118,7 @@ export class ClaraSubmissionService {
       );
     }
     if (duplicate) {
-      const duplicateSnapshot = await this.loadStartupIdentitySnapshot(duplicate.id);
+      const duplicateSnapshot = await this.loadCriticalStartupSnapshot(duplicate.id);
       const duplicateName = duplicateSnapshot?.name ?? duplicate.name;
       const duplicateStatus = duplicateSnapshot?.status ?? duplicate.status;
       this.logger.warn(
@@ -127,11 +133,8 @@ export class ClaraSubmissionService {
       };
     }
 
-    const websiteFromEmail = this.extractWebsiteFromText(ctx.bodyText, {
-      expectedCompanyName: companyName,
-      requireCompanySignal: true,
-    });
-    const stageFromEmail = this.extractStageFromText(ctx.bodyText);
+    const websiteFromEmail = extractWebsiteFromText(ctx.bodyText);
+    const stageFromEmail = extractStageFromText(ctx.bodyText);
     const location = "Unknown";
     const geography = deriveStartupGeography(location);
 
@@ -171,13 +174,12 @@ export class ClaraSubmissionService {
     if (uploadedFiles.length > 0) {
       await this.mergeUploadedFilesIntoStartup(created.id, uploadedFiles);
     }
-    await this.persistToDataRoom(created.id, processedAttachments);
     this.logger.log(
       `Created startup ${created.id} (${companyName}) from email by ${ctx.fromEmail}`,
     );
 
     await this.runPrePipelineExtraction(created.id);
-    const refreshedCreated = await this.loadStartupIdentitySnapshot(created.id);
+    const refreshedCreated = await this.loadCriticalStartupSnapshot(created.id);
     const resolvedStartupName = refreshedCreated?.name ?? companyName;
     const resolvedStatus = refreshedCreated?.status ?? StartupStatus.SUBMITTED;
     const pipelineStart = await this.startPipelineIfReady(created.id, ownerUserId, {
@@ -350,30 +352,6 @@ export class ClaraSubmissionService {
       }));
   }
 
-  private async persistToDataRoom(
-    startupId: string,
-    attachments: AttachmentMeta[],
-  ): Promise<void> {
-    const uploaded = attachments.filter(
-      (a) => a.status === "uploaded" && a.assetId,
-    );
-    for (const att of uploaded) {
-      const category = att.isPitchDeck ? "pitch_deck" : "supporting_document";
-      try {
-        await this.dataRoomService.uploadDocument(startupId, att.assetId!, category);
-      } catch (error) {
-        this.logger.warn(
-          `[ClaraSubmission] Failed to add ${att.filename} to data room: ${error}`,
-        );
-      }
-    }
-    if (uploaded.length > 0) {
-      this.logger.log(
-        `[ClaraSubmission] Added ${uploaded.length} file(s) to data room for startup ${startupId}`,
-      );
-    }
-  }
-
   private selectPrimaryDeckAttachment(
     attachments: AttachmentMeta[],
   ): (AttachmentMeta & { storagePath: string }) | undefined {
@@ -522,25 +500,24 @@ export class ClaraSubmissionService {
       return null;
     }
 
+    const missingBefore = getMissingCriticalFields(current);
     const updates: Partial<typeof startup.$inferInsert> = {};
     const updatedFields: Array<"website" | "stage"> = [];
 
-    const normalizedReplyText = this.normalizeReplyForFieldExtraction(messageText);
-    const websiteCandidate = this.extractWebsiteFromText(normalizedReplyText, {
-      expectedCompanyName: current.name,
-      requireCompanySignal: true,
-    });
-    if (websiteCandidate && websiteCandidate !== current.website) {
-      updates.website = websiteCandidate;
-      updatedFields.push("website");
+    if (missingBefore.includes("website")) {
+      const websiteCandidate = extractWebsiteFromText(messageText);
+      if (websiteCandidate) {
+        updates.website = websiteCandidate;
+        updatedFields.push("website");
+      }
     }
 
-    const stageCandidate =
-      this.extractStageFromText(normalizedReplyText) ??
-      this.extractStageFromText(messageText);
-    if (stageCandidate) {
-      updates.stage = stageCandidate;
-      updatedFields.push("stage");
+    if (missingBefore.includes("stage")) {
+      const stageCandidate = extractStageFromText(messageText);
+      if (stageCandidate) {
+        updates.stage = stageCandidate;
+        updatedFields.push("stage");
+      }
     }
 
     if (updatedFields.length > 0) {
@@ -557,11 +534,8 @@ export class ClaraSubmissionService {
     if (!refreshed) {
       return null;
     }
-    // Fields explicitly provided by the user in their reply are trusted regardless
-    // of heuristic checks (e.g. SEED stage with placeholder industry/location signals)
-    let remainingMissing = this.getMissingCriticalFields(refreshed).filter(
-      (field) => !updatedFields.includes(field),
-    );
+    let remainingMissing = getMissingCriticalFields(refreshed);
+
     let pipelineStarted = false;
     if (remainingMissing.length === 0) {
       pipelineStarted = await this.restartPipelineAfterMissingInfoUpdate(
@@ -589,7 +563,7 @@ export class ClaraSubmissionService {
     if (!snapshot) {
       return [];
     }
-    return this.getMissingCriticalFields(snapshot);
+    return getMissingCriticalFields(snapshot);
   }
 
   async hasMissingCriticalFields(startupId: string): Promise<boolean> {
@@ -635,16 +609,13 @@ export class ClaraSubmissionService {
     if (current) {
       const updates: Partial<typeof startup.$inferInsert> = {};
 
-      const websiteCandidate = this.extractWebsiteFromText(bodyText, {
-        expectedCompanyName: current.name,
-        requireCompanySignal: true,
-      });
+      const websiteCandidate = extractWebsiteFromText(bodyText);
       if (websiteCandidate && websiteCandidate !== current.website) {
         updates.website = websiteCandidate;
         updatedCriticalFields.push("website");
       }
 
-      const stageCandidate = this.extractStageFromText(bodyText);
+      const stageCandidate = extractStageFromText(bodyText);
       if (stageCandidate && stageCandidate !== current.stage) {
         updates.stage = stageCandidate;
         updatedCriticalFields.push("stage");
@@ -673,7 +644,7 @@ export class ClaraSubmissionService {
 
     if (!newDeck) {
       const snapshot = await this.loadCriticalStartupSnapshot(startupId);
-      const missingFields = snapshot ? this.getMissingCriticalFields(snapshot) : [];
+      const missingFields = snapshot ? getMissingCriticalFields(snapshot) : [];
 
       if (missingFields.length > 0 && updatedCriticalFields.length === 0) {
         return {
@@ -733,7 +704,7 @@ export class ClaraSubmissionService {
     if (!opts?.skipValidation && !opts?.allowMissingCritical) {
       const snapshot = await this.loadCriticalStartupSnapshot(startupId);
       if (snapshot) {
-        const missing = this.getMissingCriticalFields(snapshot);
+        const missing = getMissingCriticalFields(snapshot);
         if (missing.length > 0) {
           return { started: false, missingFields: missing };
         }
@@ -750,24 +721,15 @@ export class ClaraSubmissionService {
       if (!message.includes("Pipeline already running")) {
         throw error;
       }
-
-      const snapshot = await this.loadCriticalStartupSnapshot(startupId);
-      if (snapshot?.status === StartupStatus.ANALYZING) {
-        return { started: true, missingFields: [] };
-      }
-
-      this.logger.warn(
-        `[ClaraSubmission] Detected stale pipeline running lock for ${startupId} while status=${snapshot?.status ?? "unknown"}; resetting before restart`,
-      );
-      await this.pipeline.cancelPipeline(startupId, {
-        reason:
-          "Reset stale running lock before restart from Clara missing-info reply.",
-      });
-
-      await this.pipeline.startPipeline(startupId, userId, {
-        skipExtraction: opts?.skipExtraction,
-      });
-      return { started: true, missingFields: [] };
+      const parsedMissing = this.extractMissingFieldsFromStartError(message);
+      const fallbackSnapshot = await this.loadCriticalStartupSnapshot(startupId);
+      const fallbackMissing = fallbackSnapshot
+        ? getMissingCriticalFields(fallbackSnapshot)
+        : [];
+      return {
+        started: false,
+        missingFields: parsedMissing.length > 0 ? parsedMissing : fallbackMissing,
+      };
     }
   }
 
@@ -785,6 +747,17 @@ export class ClaraSubmissionService {
         `[ClaraSubmission] Pre-pipeline extraction failed for ${startupId}: ${message}`,
       );
     }
+  }
+
+  private extractMissingFieldsFromStartError(
+    message: string,
+  ): Array<"website" | "stage"> {
+    const matches = message.match(/\[([^\]]+)\]/);
+    if (!matches?.[1]) return [];
+    return matches[1]
+      .split(",")
+      .map((v) => v.trim().toLowerCase())
+      .filter((v): v is "website" | "stage" => v === "website" || v === "stage");
   }
 
   private async loadCriticalStartupSnapshot(
@@ -808,289 +781,6 @@ export class ClaraSubmissionService {
       .limit(1);
 
     return record ?? null;
-  }
-
-  private async loadStartupIdentitySnapshot(
-    startupId: string,
-  ): Promise<{ name: string; status: StartupStatus } | null> {
-    const [record] = await this.drizzle.db
-      .select({
-        name: startup.name,
-        status: startup.status,
-      })
-      .from(startup)
-      .where(eq(startup.id, startupId))
-      .limit(1);
-
-    return record ?? null;
-  }
-
-  private getMissingCriticalFields(
-    record: Pick<
-      CriticalStartupSnapshot,
-      "website" | "stage" | "industry" | "location" | "fundingTarget" | "teamSize"
-    >,
-  ): Array<"website" | "stage"> {
-    const missing: Array<"website" | "stage"> = [];
-    if (this.isMissingWebsiteValue(record.website)) {
-      missing.push("website");
-    }
-    if (this.isLikelyPlaceholderStage(record)) {
-      missing.push("stage");
-    }
-    return missing;
-  }
-
-  private isMissingWebsiteValue(value: string | null | undefined): boolean {
-    if (!value) return true;
-    try {
-      const host = new URL(value).hostname.toLowerCase().replace(/^www\./, "");
-      return host === "pending-extraction.com";
-    } catch {
-      return true;
-    }
-  }
-
-  private isLikelyPlaceholderStage(record: {
-    website: string;
-    stage: string;
-    industry: string;
-    location: string;
-    fundingTarget: number;
-    teamSize: number;
-  }): boolean {
-    const normalizedStage = this.mapStageToEnum(record.stage);
-    if (!normalizedStage) {
-      return true;
-    }
-    if (normalizedStage !== StartupStage.SEED) {
-      return false;
-    }
-
-    const structuralSignals = [
-      this.isMissingWebsiteValue(record.website),
-      this.isLikelyPlaceholderText(record.industry),
-      this.isLikelyPlaceholderText(record.location),
-    ];
-    const secondarySignals = [
-      record.fundingTarget <= 0,
-      record.teamSize <= 1,
-    ];
-    const totalSignals = [...structuralSignals, ...secondarySignals];
-    return (
-      structuralSignals.filter(Boolean).length >= 1 &&
-      totalSignals.filter(Boolean).length >= 2
-    );
-  }
-
-  private isLikelyPlaceholderText(value: string | null | undefined): boolean {
-    if (!value) {
-      return true;
-    }
-    const normalized = value.trim().toLowerCase();
-    if (!normalized) {
-      return true;
-    }
-    return (
-      normalized.includes("pending extraction") ||
-      normalized.includes("pending-extraction") ||
-      normalized === "unknown" ||
-      normalized === "n/a"
-    );
-  }
-
-  private mapStageToEnum(value: string | null | undefined): StartupStage | null {
-    if (!value) {
-      return null;
-    }
-
-    const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, "_");
-    const mapping: Record<string, StartupStage> = {
-      pre_seed: StartupStage.PRE_SEED,
-      preseed: StartupStage.PRE_SEED,
-      seed: StartupStage.SEED,
-      series_a: StartupStage.SERIES_A,
-      series_b: StartupStage.SERIES_B,
-      series_c: StartupStage.SERIES_C,
-      series_d: StartupStage.SERIES_D,
-      series_e: StartupStage.SERIES_E,
-      series_f: StartupStage.SERIES_F_PLUS,
-      series_f_plus: StartupStage.SERIES_F_PLUS,
-      "series_f+": StartupStage.SERIES_F_PLUS,
-    };
-    return mapping[normalized] ?? null;
-  }
-
-  private extractWebsiteFromText(
-    text: string | null | undefined,
-    options?: {
-      expectedCompanyName?: string | null;
-      requireCompanySignal?: boolean;
-    },
-  ): string | null {
-    if (!text) {
-      return null;
-    }
-
-    const expectedCompanyName = options?.expectedCompanyName?.trim();
-    const requireCompanySignal = options?.requireCompanySignal === true;
-
-    const matches: Array<{ value: string; labeled: boolean }> = [];
-    const explicitMatches =
-      text.match(/\bhttps?:\/\/[^\s<>()]+|\bwww\.[^\s<>()]+/gi) ?? [];
-    matches.push(...explicitMatches.map((value) => ({ value, labeled: false })));
-
-    const labeledBareDomain =
-      text.match(
-        /\bwebsite\b[^a-z0-9]+([a-z0-9][a-z0-9.-]+\.[a-z]{2,}(?:\/[^\s<>()]*)?)/i,
-      )?.[1] ?? null;
-    if (labeledBareDomain) {
-      matches.unshift({ value: labeledBareDomain, labeled: true });
-    }
-
-    if (matches.length === 0) return null;
-
-    let firstValid: string | null = null;
-    let firstLabeled: string | null = null;
-    for (const candidateMeta of matches) {
-      const normalizedCandidate = candidateMeta.value
-        .replace(/[),.;]+$/g, "")
-        .trim();
-      const candidate = normalizedCandidate.startsWith("http")
-        ? normalizedCandidate
-        : `https://${normalizedCandidate}`;
-      try {
-        const parsed = new URL(candidate);
-        const host = parsed.hostname.toLowerCase().replace(/^www\./, "");
-        if (!host || host === "pending-extraction.com") {
-          continue;
-        }
-
-        const normalizedUrl = parsed.toString();
-        if (!firstValid) {
-          firstValid = normalizedUrl;
-        }
-        if (candidateMeta.labeled && !firstLabeled) {
-          firstLabeled = normalizedUrl;
-        }
-
-        if (
-          expectedCompanyName &&
-          this.isWebsiteLikelyForCompany(normalizedUrl, expectedCompanyName)
-        ) {
-          return normalizedUrl;
-        }
-      } catch {
-        continue;
-      }
-    }
-
-    if (requireCompanySignal) {
-      return null;
-    }
-
-    return firstLabeled ?? firstValid;
-  }
-
-  private isWebsiteLikelyForCompany(
-    website: string,
-    companyName: string,
-  ): boolean {
-    const websiteToken = this.extractWebsiteRootToken(website);
-    if (!websiteToken) {
-      return false;
-    }
-
-    const companyToken = this.normalizeCompanyToken(companyName);
-    if (!companyToken || companyToken.length < 3) {
-      return true;
-    }
-    if (websiteToken.includes(companyToken) || companyToken.includes(websiteToken)) {
-      return true;
-    }
-
-    const significantTokens = companyName
-      .toLowerCase()
-      .replace(/[^a-z0-9\s]/g, " ")
-      .split(/\s+/)
-      .map((token) => token.trim())
-      .filter((token) => token.length >= 4);
-
-    return significantTokens.some((token) => websiteToken.includes(token));
-  }
-
-  private extractWebsiteRootToken(website: string): string | null {
-    try {
-      const host = new URL(website).hostname.toLowerCase().replace(/^www\./, "");
-      const parts = host.split(".").filter(Boolean);
-      if (parts.length === 0) {
-        return null;
-      }
-
-      let root = parts.length >= 2 ? parts[parts.length - 2] : parts[0];
-      const broadSuffixes = new Set(["co", "com", "org", "net", "gov", "edu", "ac"]);
-      if (broadSuffixes.has(root) && parts.length >= 3) {
-        root = parts[parts.length - 3];
-      }
-      return root.replace(/[^a-z0-9]/g, "");
-    } catch {
-      return null;
-    }
-  }
-
-  private normalizeCompanyToken(value: string | null | undefined): string | null {
-    if (!value) {
-      return null;
-    }
-    const token = value
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, "")
-      .trim();
-    if (token.length < 3) {
-      return null;
-    }
-    return token;
-  }
-
-  private extractStageFromText(text: string | null | undefined): StartupStage | null {
-    if (!text) {
-      return null;
-    }
-
-    const normalized = text.toLowerCase();
-    if (/\bpre[\s-]?seed\b/.test(normalized)) return StartupStage.PRE_SEED;
-    if (/\bseries[\s-]?a\b/.test(normalized)) return StartupStage.SERIES_A;
-    if (/\bseries[\s-]?b\b/.test(normalized)) return StartupStage.SERIES_B;
-    if (/\bseries[\s-]?c\b/.test(normalized)) return StartupStage.SERIES_C;
-    if (/\bseries[\s-]?d\b/.test(normalized)) return StartupStage.SERIES_D;
-    if (/\bseries[\s-]?e\b/.test(normalized)) return StartupStage.SERIES_E;
-    if (/\bseries[\s-]?f(?:\+|[\s-]?plus)?\b/.test(normalized)) {
-      return StartupStage.SERIES_F_PLUS;
-    }
-    if (/\bseed\b/.test(normalized)) return StartupStage.SEED;
-    return null;
-  }
-
-  private normalizeReplyForFieldExtraction(
-    text: string | null | undefined,
-  ): string {
-    if (!text) {
-      return "";
-    }
-
-    const withoutQuotedLines = text
-      .split(/\r?\n/)
-      .filter((line) => !line.trim().startsWith(">"))
-      .join("\n");
-    const withoutThreadQuote = withoutQuotedLines
-      .split(/\nOn .+wrote:\n/i)[0]
-      .split(/\nFrom:\s.+\n/i)[0];
-
-    // Avoid extracting stage from Clara template labels in quoted/repeated content.
-    return withoutThreadQuote.replace(
-      /current funding stage\s*\(pre-seed,\s*seed,\s*series a,\s*etc\.\)\s*:?/gi,
-      "",
-    );
   }
 
   private asMessage(error: unknown): string {

@@ -216,6 +216,7 @@ export const startupEvaluation = pgTable(
     // Final Scores
     overallScore: real('overall_score'),
     percentileRank: real('percentile_rank'),
+    confidenceScore: text('confidence_score'),
     keyStrengths: jsonb('key_strengths'),
     keyRisks: jsonb('key_risks'),
     recommendations: jsonb('recommendations'),

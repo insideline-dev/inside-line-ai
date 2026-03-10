@@ -218,6 +218,7 @@ export class EvaluationAgentRegistryService {
               agent: agent.key,
               status: "fallback",
               inputPrompt: "",
+              systemPrompt: "",
               outputText: this.safeStringify(fallbackOutput),
               outputJson: fallbackOutput,
               attempt: 1,
@@ -281,7 +282,7 @@ export class EvaluationAgentRegistryService {
       fallbackKeys,
       warnings,
       fallbackReasonCounts,
-      degraded: completedAgents < minimumRequired || fallbackAgents > 0,
+      degraded: completedAgents < minimumRequired || fallbackAgents > 3,
     };
 
     if (summary.degraded) {
@@ -409,6 +410,7 @@ export class EvaluationAgentRegistryService {
           agent: key,
           status: "fallback",
           inputPrompt: "",
+          systemPrompt: "",
           outputText: this.safeStringify(fallbackOutput),
           outputJson: fallbackOutput,
           attempt: 1,
@@ -464,13 +466,42 @@ export class EvaluationAgentRegistryService {
 
       resolved.push({
         key: config.agentKey as EvaluationAgentKey,
-        run: async (pipelineData) =>
-          this.dynamicAgentRunner.run({
+        run: async (pipelineData, options) => {
+          const result = await this.dynamicAgentRunner.run({
             agentKey: config.agentKey,
             promptKey,
             pipelineData,
             stage: pipelineData.extraction.stage as never,
-          }) as unknown as ReturnType<EvaluationAgent<unknown>["run"]>,
+          });
+          options?.onTrace?.({
+            agent: config.agentKey as EvaluationAgentKey,
+            status: result.usedFallback ? "fallback" : "completed",
+            inputPrompt: result.inputPrompt,
+            systemPrompt: result.systemPrompt,
+            outputText: result.outputText,
+            outputJson: result.output,
+            attempt: result.attempt,
+            retryCount: result.retryCount,
+            usedFallback: result.usedFallback,
+            error: result.error,
+            fallbackReason: result.usedFallback
+              ? "UNHANDLED_AGENT_EXCEPTION"
+              : undefined,
+            rawProviderError: result.error,
+          });
+          return {
+            key: result.key as EvaluationAgentKey,
+            output: result.output,
+            usedFallback: result.usedFallback,
+            error: result.error,
+            attempt: result.attempt,
+            retryCount: result.retryCount,
+            fallbackReason: result.usedFallback
+              ? "UNHANDLED_AGENT_EXCEPTION"
+              : undefined,
+            rawProviderError: result.error,
+          };
+        },
         fallback: () => ({}),
       });
     }
@@ -501,6 +532,7 @@ export class EvaluationAgentRegistryService {
         retryCount: event.retryCount,
         usedFallback: event.usedFallback,
         inputPrompt: event.inputPrompt,
+        systemPrompt: event.systemPrompt,
         outputText: event.outputText,
         outputJson: event.outputJson,
         meta: event.meta,

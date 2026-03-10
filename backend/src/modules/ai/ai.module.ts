@@ -22,6 +22,7 @@ import {
 import { AiConfigService } from "./services/ai-config.service";
 import { AiDebugLogService } from "./services/ai-debug-log.service";
 import { AiModelConfigService } from "./services/ai-model-config.service";
+import { AiModelOverrideService } from "./services/ai-model-override.service";
 import { AiPromptService } from "./services/ai-prompt.service";
 import { AiPromptRuntimeService } from "./services/ai-prompt-runtime.service";
 import {
@@ -87,6 +88,7 @@ import { OpenAiDeepResearchService } from "./services/openai-deep-research.servi
     AiConfigService,
     AiDebugLogService,
     AiModelConfigService,
+    AiModelOverrideService,
     AiPromptService,
     AiPromptRuntimeService,
     SchemaCompilerService,
@@ -150,6 +152,7 @@ import { OpenAiDeepResearchService } from "./services/openai-deep-research.servi
     AiProviderService,
     AiConfigService,
     AiModelConfigService,
+    AiModelOverrideService,
     AiPromptService,
     AiPromptRuntimeService,
     SchemaCompilerService,

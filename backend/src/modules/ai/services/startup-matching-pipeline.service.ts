@@ -22,7 +22,7 @@ import { PipelinePhase } from "../interfaces/pipeline.interface";
 import type { SynthesisResult } from "../interfaces/phase-results.interface";
 import { InvestorMatchingService } from "./investor-matching.service";
 
-type MatchingTriggerSource = "approval" | "manual" | "retry";
+type MatchingTriggerSource = "approval" | "manual" | "retry" | "pipeline_completion" | "thesis_update";
 
 export interface QueueStartupMatchingParams {
   startupId: string;
@@ -323,7 +323,9 @@ export class StartupMatchingPipelineService {
     if (
       (triggerSource !== "approval" &&
         triggerSource !== "manual" &&
-        triggerSource !== "retry") ||
+        triggerSource !== "retry" &&
+        triggerSource !== "pipeline_completion" &&
+        triggerSource !== "thesis_update") ||
       typeof candidatesEvaluated !== "number" ||
       typeof matchesFound !== "number" ||
       typeof failedCandidates !== "number" ||
@@ -354,7 +356,9 @@ export class StartupMatchingPipelineService {
     if (
       triggerSource === "approval" ||
       triggerSource === "manual" ||
-      triggerSource === "retry"
+      triggerSource === "retry" ||
+      triggerSource === "pipeline_completion" ||
+      triggerSource === "thesis_update"
     ) {
       return triggerSource;
     }

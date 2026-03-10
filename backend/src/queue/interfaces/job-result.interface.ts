@@ -110,7 +110,7 @@ export interface AiMatchingJobResult extends BaseJobResult {
   startupId: string;
   analysisJobId: string;
   data: {
-    triggerSource: "approval" | "manual" | "retry";
+    triggerSource: "approval" | "manual" | "retry" | "pipeline_completion" | "thesis_update";
     candidatesEvaluated: number;
     matchesFound: number;
     failedCandidates: number;

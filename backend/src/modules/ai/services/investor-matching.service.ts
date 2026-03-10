@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { and, eq, isNull, or } from "drizzle-orm";
+import { and, eq, isNull, or, sql } from "drizzle-orm";
 import { generateText, Output } from "ai";
 import { z } from "zod";
 import { DrizzleService } from "../../../database";
@@ -148,6 +148,7 @@ export class InvestorMatchingService {
           weightedStartupScore,
           compositeFitScore,
           fit.fitRationale,
+          fit.usedFallback,
         );
 
         const candidateThreshold =
@@ -171,6 +172,8 @@ export class InvestorMatchingService {
         } satisfies EvaluatedCandidate;
       },
     );
+
+    await this.backfillLegacyFitRationale(input.startupId);
 
     return {
       candidatesEvaluated: firstFilterPassed.length,
@@ -253,8 +256,7 @@ export class InvestorMatchingService {
           investorThesisSummary: candidate.thesisSummary ?? "Not available",
           investorThesis:
             candidate.thesisNarrative ?? candidate.notes ?? "Not available",
-          startupSummary: input.synthesis.executiveSummary,
-          recommendation: input.synthesis.recommendation,
+          startupSummary: input.synthesis.dealSnapshot,
           overallScore: input.synthesis.overallScore,
           startupProfile: JSON.stringify(input.synthesis),
         }),
@@ -318,6 +320,7 @@ export class InvestorMatchingService {
     weightedStartupScore: number,
     compositeFitScore: number,
     fitRationale: string,
+    thesisFitFallback = false,
   ): Promise<void> {
     const [existing] = await this.drizzle.db
       .select({ id: startupMatch.id })
@@ -340,6 +343,7 @@ export class InvestorMatchingService {
       matchReason: `Composite fit ${compositeFitScore}/100 (thesis ${thesisFitScore}, weighted startup ${Math.round(weightedStartupScore)}). ${fitRationale}`,
       thesisFitScore,
       fitRationale,
+      thesisFitFallback,
       updatedAt: new Date(),
     };
 
@@ -363,7 +367,23 @@ export class InvestorMatchingService {
       matchReason: `Composite fit ${compositeFitScore}/100 (thesis ${thesisFitScore}, weighted startup ${Math.round(weightedStartupScore)}). ${fitRationale}`,
       thesisFitScore,
       fitRationale,
+      thesisFitFallback,
     });
+  }
+
+  private async backfillLegacyFitRationale(startupId: string): Promise<void> {
+    await this.drizzle.db
+      .update(startupMatch)
+      .set({
+        fitRationale: sql`coalesce(${startupMatch.matchReason}, 'Legacy match rationale unavailable. Review this match manually.')`,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(startupMatch.startupId, startupId),
+          isNull(startupMatch.fitRationale),
+        ),
+      );
   }
 
   private async mapWithConcurrency<TInput, TOutput>(

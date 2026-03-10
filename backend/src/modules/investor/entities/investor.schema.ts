@@ -15,7 +15,6 @@ import {
 import { user } from '../../../auth/entities/auth.schema';
 import {
   startup,
-  StartupStage,
   startupStageEnum,
 } from '../../startup/entities/startup.schema';
 
@@ -219,6 +218,7 @@ export const startupMatch = pgTable(
     meetingRequestedAt: timestamp('meeting_requested_at'),
     thesisFitScore: integer('thesis_fit_score'),
     fitRationale: text('fit_rationale'),
+    thesisFitFallback: boolean('thesis_fit_fallback').default(false),
 
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at')

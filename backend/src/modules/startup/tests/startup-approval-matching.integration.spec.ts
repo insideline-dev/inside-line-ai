@@ -8,6 +8,7 @@ import { StorageService } from "../../../storage";
 import { StartupStatus, StartupStage, startup } from "../entities/startup.schema";
 import { AiConfigService } from "../../ai/services/ai-config.service";
 import { PipelineService } from "../../ai/services/pipeline.service";
+import { PipelineStateSnapshotService } from "../../ai/services/pipeline-state-snapshot.service";
 import { PipelineFeedbackService } from "../../ai/services/pipeline-feedback.service";
 import { StartupMatchingPipelineService } from "../../ai/services/startup-matching-pipeline.service";
 import { EnrichmentService } from "../../ai/services/enrichment.service";
@@ -286,6 +287,7 @@ describe("Startup lifecycle integration: submit -> pipeline complete -> approve 
 
     storage = {
       getUploadUrl: jest.fn(),
+      exists: jest.fn().mockResolvedValue(true),
     } as unknown as jest.Mocked<StorageService>;
 
     aiConfig = {
@@ -405,6 +407,7 @@ describe("Startup lifecycle integration: submit -> pipeline complete -> approve 
       updatePhaseProgress: jest.fn().mockResolvedValue(undefined),
       initProgress: jest.fn().mockResolvedValue(undefined),
       updateAgentProgress: jest.fn().mockResolvedValue(undefined),
+      resetPhasesForRerun: jest.fn().mockResolvedValue(undefined),
     } as unknown as jest.Mocked<ProgressTrackerService>;
 
     const errorRecovery = {
@@ -462,6 +465,7 @@ describe("Startup lifecycle integration: submit -> pipeline complete -> approve 
       errorRecovery,
       pipelineTemplateService,
       enrichmentService,
+      storage,
       extractionService,
       moduleRef,
     );

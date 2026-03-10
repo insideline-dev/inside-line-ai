@@ -1,29 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { useQueryClient } from "@tanstack/react-query";
 import {
-  getAdminControllerGetAiPromptFlowQueryKey,
-  getAdminControllerGetAiModelConfigQueryKey,
-  getAdminControllerGetAiPromptRevisionsQueryKey,
-  getAdminControllerGetAiPromptsQueryKey,
-  useAdminControllerCreateAiModelConfigDraft,
-  useAdminControllerCreateAiPromptRevision,
-  useAdminControllerGetAiModelConfig,
   useAdminControllerGetAiPromptContextSchema,
   useAdminControllerGetAiPromptFlow,
-  useAdminControllerGetAiPromptOutputSchema,
   useAdminControllerGetAiPromptRevisions,
   useAdminControllerGetAiPrompts,
-  useAdminControllerPublishAiModelConfigDraft,
-  useAdminControllerPublishAiPromptRevision,
   useAdminControllerPreviewAiPrompt,
   useAdminControllerPreviewAiPipelineContext,
-  useAdminControllerSeedAiPrompts,
-  useAdminControllerUpdateAiModelConfigDraft,
-  useAdminControllerUpdateAiPromptRevision,
 } from "@/api/generated/admin/admin";
 import type {
-  AiModelConfigResponseDto,
   AiPromptContextSchemaResponseDto,
   AiPromptDefinitionsResponseDto,
   AiPromptDefinitionsResponseDtoItem,
@@ -32,12 +17,9 @@ import type {
   AiPromptFlowResponseDtoFlowsItemNodesItemInputsItem,
   AiPromptFlowResponseDtoFlowsItemNodesItem,
   AiPromptPreviewResponseDto,
-  AiPromptOutputSchemaResponseDto,
   AiPipelineContextPreviewResponseDto,
   AiPromptFlowResponseDtoFlowsItemNodesItemPromptKeysItem,
   AiPromptRevisionsResponseDto,
-  AiPromptSeedResultDto,
-  CreateAiModelConfigDraftDto,
   PreviewAiPromptRequestDto,
 } from "@/api/generated/model";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -64,9 +46,10 @@ import {
 } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
+import { Separator } from "@/components/ui/separator";
+import { BulkModelApplyDialog } from "@/components/pipeline/BulkModelApply";
 import {
   Bot,
-  CheckCircle2,
   Clock,
   FileSearch,
   Globe,
@@ -76,9 +59,6 @@ import {
   Newspaper,
   Eye,
   RefreshCw,
-  Rocket,
-  RotateCcw,
-  Save,
   Search,
   Target,
   Workflow,
@@ -304,85 +284,6 @@ function NodeCard({
   );
 }
 
-function JsonSchemaTreeNode({
-  name,
-  schema,
-  depth = 0,
-}: {
-  name: string;
-  schema: unknown;
-  depth?: number;
-}) {
-  const [expanded, setExpanded] = useState(depth < 2);
-
-  if (!schema || typeof schema !== "object") {
-    return (
-      <div style={{ paddingLeft: `${depth * 16}px` }} className="py-1 text-xs">
-        <span className="font-mono text-muted-foreground">{name}</span>
-        <Badge variant="outline" className="ml-2 text-[10px]">
-          {typeof schema}
-        </Badge>
-      </div>
-    );
-  }
-
-  const schemaRecord = schema as Record<string, unknown>;
-  const type = schemaRecord.type;
-  const isArray = type === "array";
-  const isObject = type === "object";
-
-  if (!isArray && !isObject) {
-    return (
-      <div style={{ paddingLeft: `${depth * 16}px` }} className="py-1 text-xs">
-        <span className="font-mono text-muted-foreground">{name}</span>
-        <Badge variant="outline" className="ml-2 text-[10px]">
-          {typeof type === "string" ? type : "unknown"}
-        </Badge>
-      </div>
-    );
-  }
-
-  const propertiesRaw = schemaRecord.properties;
-  const properties =
-    propertiesRaw && typeof propertiesRaw === "object"
-      ? (propertiesRaw as Record<string, unknown>)
-      : {};
-  const itemsRaw = schemaRecord.items;
-  const items =
-    itemsRaw && typeof itemsRaw === "object"
-      ? (itemsRaw as Record<string, unknown>)
-      : {};
-
-  return (
-    <div style={{ paddingLeft: `${depth * 16}px` }} className="py-1 text-xs">
-      <button
-        type="button"
-        onClick={() => setExpanded((value) => !value)}
-        className="flex cursor-pointer items-center gap-1 font-mono text-muted-foreground hover:text-foreground"
-      >
-        <span>{expanded ? "▼" : "▶"}</span>
-        <span>{name}</span>
-        <Badge variant="outline" className="text-[10px]">
-          {isArray ? "array" : "object"}
-        </Badge>
-      </button>
-
-      {expanded ? (
-        <div>
-          {isArray && Object.keys(items).length > 0 ? (
-            <JsonSchemaTreeNode name="[items]" schema={items} depth={depth + 1} />
-          ) : null}
-          {isObject
-            ? Object.entries(properties).map(([key, value]) => (
-                <JsonSchemaTreeNode key={key} name={key} schema={value} depth={depth + 1} />
-              ))
-            : null}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 function GraphContextPanel({
   activeFlow,
   selectedNode,
@@ -532,29 +433,16 @@ function GraphContextPanel({
 }
 
 function AdminAgentsPage() {
-  const queryClient = useQueryClient();
-
   const [selectedFlowId, setSelectedFlowId] = useState<"pipeline" | "clara">("pipeline");
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [selectedPromptKey, setSelectedPromptKey] = useState<PromptKey | null>(null);
-  const [editorStage, setEditorStage] = useState<"global" | StageOption>("global");
+  const [editorStage, setEditorStage] = useState<StageOption>("seed");
   const [systemPrompt, setSystemPrompt] = useState("");
   const [userPrompt, setUserPrompt] = useState("");
   const [notes, setNotes] = useState("");
-  const [modelName, setModelName] = useState("gemini-3-flash-preview");
-  const [searchMode, setSearchMode] = useState<
-    | "off"
-    | "provider_grounded_search"
-    | "brave_tool_search"
-    | "provider_and_brave_search"
-  >("provider_grounded_search");
-  const [enableLegacyModelEditing, setEnableLegacyModelEditing] = useState(false);
-  const [modelStage, setModelStage] = useState<"global" | StageOption>("global");
-  const [modelNotes, setModelNotes] = useState("");
   const [activeEditorTab, setActiveEditorTab] = useState("prompts");
-  const [revisionStageFilter, setRevisionStageFilter] = useState<"all" | "global" | StageOption>("all");
-  const [schemaViewMode, setSchemaViewMode] = useState<"tree" | "json">("tree");
+  const [revisionStageFilter, setRevisionStageFilter] = useState<"all" | StageOption>("all");
   const [previewStartupId, setPreviewStartupId] = useState("");
   const [previewStage, setPreviewStage] = useState<"auto" | StageOption>("auto");
   const [previewResult, setPreviewResult] = useState<AiPromptPreviewResponseDto | null>(null);
@@ -674,25 +562,6 @@ function AdminAgentsPage() {
       enabled: Boolean(currentPromptKey),
     },
   });
-  const modelConfigQuery = useAdminControllerGetAiModelConfig(
-    currentPromptKey ?? "",
-    undefined,
-    {
-      query: {
-        enabled: Boolean(currentPromptKey),
-      },
-    },
-  );
-  const outputSchemaQuery = useAdminControllerGetAiPromptOutputSchema(
-    currentPromptKey ?? "",
-    undefined,
-    {
-      query: {
-        enabled: Boolean(currentPromptKey),
-      },
-    },
-  );
-
   const revisionsPayload = useMemo(() => {
     const data = extractResponseData<AiPromptRevisionsResponseDto>(revisionsQuery.data);
     return data;
@@ -701,28 +570,17 @@ function AdminAgentsPage() {
     const data = extractResponseData<AiPromptContextSchemaResponseDto>(contextSchemaQuery.data);
     return data;
   }, [contextSchemaQuery.data]);
-  const modelConfigPayload = useMemo(() => {
-    const data = extractResponseData<AiModelConfigResponseDto>(modelConfigQuery.data);
-    return data;
-  }, [modelConfigQuery.data]);
-  const outputSchemaPayload = useMemo(() => {
-    const data = extractResponseData<AiPromptOutputSchemaResponseDto>(outputSchemaQuery.data);
-    return data;
-  }, [outputSchemaQuery.data]);
 
   const revisions = revisionsPayload?.revisions ?? [];
   const filteredRevisions = useMemo(() => {
     if (revisionStageFilter === "all") return revisions;
-    const filterValue = revisionStageFilter === "global" ? null : revisionStageFilter;
-    return revisions.filter((r) => r.stage === filterValue);
+    return revisions.filter((r) => r.stage === revisionStageFilter);
   }, [revisions, revisionStageFilter]);
-  const modelConfigRevisions = modelConfigPayload?.revisions ?? [];
   const selectedDefinition = currentPromptKey
     ? definitionsByKey.get(currentPromptKey) ?? null
     : null;
 
-  const stageValue: StageOption | null = editorStage === "global" ? null : editorStage;
-
+  const stageValue: StageOption = editorStage;
   const activeDraft = useMemo(
     () =>
       revisions.find(
@@ -744,15 +602,6 @@ function AdminAgentsPage() {
       null,
     [revisions, stageValue],
   );
-  const modelStageValue: StageOption | null = modelStage === "global" ? null : modelStage;
-  const activeModelDraft = useMemo(
-    () =>
-      modelConfigRevisions.find(
-        (revision) => revision.status === "draft" && revision.stage === modelStageValue,
-      ) ?? null,
-    [modelConfigRevisions, modelStageValue],
-  );
-
   useEffect(() => {
     if (!currentPromptKey) {
       setSystemPrompt("");
@@ -771,7 +620,7 @@ function AdminAgentsPage() {
     if (activePublished) {
       setSystemPrompt(activePublished.systemPrompt);
       setUserPrompt(activePublished.userPrompt);
-      setNotes("");
+      setNotes(activePublished.notes ?? "");
       return;
     }
 
@@ -784,140 +633,6 @@ function AdminAgentsPage() {
     setPreviewResult(null);
   }, [currentPromptKey]);
 
-  useEffect(() => {
-    if (!currentPromptKey || !modelConfigPayload) {
-      setModelName("");
-      setSearchMode("off");
-      setModelStage("global");
-      setModelNotes("");
-      return;
-    }
-
-    if (modelConfigPayload.resolved) {
-      setModelName(modelConfigPayload.resolved.modelName);
-      setSearchMode(modelConfigPayload.resolved.searchMode);
-      setModelStage(
-        modelConfigPayload.resolved.stage
-          ? (modelConfigPayload.resolved.stage as StageOption)
-          : "global",
-      );
-      setModelNotes("");
-    }
-  }, [currentPromptKey, modelConfigPayload]);
-
-  const seedMutation = useAdminControllerSeedAiPrompts({
-    mutation: {
-      onSuccess: (result) => {
-        const payload = extractResponseData<AiPromptSeedResultDto>(result);
-        queryClient.invalidateQueries({ queryKey: getAdminControllerGetAiPromptsQueryKey() });
-        queryClient.invalidateQueries({ queryKey: getAdminControllerGetAiPromptFlowQueryKey() });
-        if (currentPromptKey) {
-          queryClient.invalidateQueries({
-            queryKey: getAdminControllerGetAiPromptRevisionsQueryKey(currentPromptKey),
-          });
-        }
-
-        if (!payload) {
-          toast.success("Seed completed");
-          return;
-        }
-
-        const stageInsertCount = Object.values(payload.insertedByStage ?? {}).reduce(
-          (acc, count) => acc + Number(count),
-          0,
-        );
-
-        toast.success(
-          `Seeded ${payload.insertedTotal} revisions (${payload.insertedGlobal} global + ${stageInsertCount} stage-specific, ${payload.skippedExisting} skipped)`,
-        );
-      },
-      onError: (error) => {
-        const message = (error as Error).message || "Failed to seed prompts";
-        toast.error(message);
-      },
-    },
-  });
-
-  const createDraftMutation = useAdminControllerCreateAiPromptRevision({
-    mutation: {
-      onSuccess: () => {
-        if (currentPromptKey) {
-          queryClient.invalidateQueries({ queryKey: getAdminControllerGetAiPromptRevisionsQueryKey(currentPromptKey) });
-        }
-        queryClient.invalidateQueries({ queryKey: getAdminControllerGetAiPromptsQueryKey() });
-        toast.success("Draft created");
-      },
-      onError: (error) => toast.error((error as Error).message || "Failed to create draft"),
-    },
-  });
-  const createModelConfigMutation = useAdminControllerCreateAiModelConfigDraft({
-    mutation: {
-      onSuccess: () => {
-        if (currentPromptKey) {
-          queryClient.invalidateQueries({
-            queryKey: getAdminControllerGetAiModelConfigQueryKey(currentPromptKey),
-          });
-        }
-        toast.success("Model config draft created");
-      },
-      onError: (error) =>
-        toast.error((error as Error).message || "Failed to create model config draft"),
-    },
-  });
-  const updateModelConfigMutation = useAdminControllerUpdateAiModelConfigDraft({
-    mutation: {
-      onSuccess: () => {
-        if (currentPromptKey) {
-          queryClient.invalidateQueries({
-            queryKey: getAdminControllerGetAiModelConfigQueryKey(currentPromptKey),
-          });
-        }
-        toast.success("Model config draft updated");
-      },
-      onError: (error) =>
-        toast.error((error as Error).message || "Failed to update model config draft"),
-    },
-  });
-  const publishModelConfigMutation = useAdminControllerPublishAiModelConfigDraft({
-    mutation: {
-      onSuccess: () => {
-        if (currentPromptKey) {
-          queryClient.invalidateQueries({
-            queryKey: getAdminControllerGetAiModelConfigQueryKey(currentPromptKey),
-          });
-        }
-        toast.success("Model config draft published");
-      },
-      onError: (error) =>
-        toast.error((error as Error).message || "Failed to publish model config draft"),
-    },
-  });
-
-  const updateDraftMutation = useAdminControllerUpdateAiPromptRevision({
-    mutation: {
-      onSuccess: () => {
-        if (currentPromptKey) {
-          queryClient.invalidateQueries({ queryKey: getAdminControllerGetAiPromptRevisionsQueryKey(currentPromptKey) });
-        }
-        queryClient.invalidateQueries({ queryKey: getAdminControllerGetAiPromptsQueryKey() });
-        toast.success("Draft updated");
-      },
-      onError: (error) => toast.error((error as Error).message || "Failed to update draft"),
-    },
-  });
-
-  const publishMutation = useAdminControllerPublishAiPromptRevision({
-    mutation: {
-      onSuccess: () => {
-        if (currentPromptKey) {
-          queryClient.invalidateQueries({ queryKey: getAdminControllerGetAiPromptRevisionsQueryKey(currentPromptKey) });
-        }
-        queryClient.invalidateQueries({ queryKey: getAdminControllerGetAiPromptsQueryKey() });
-        toast.success("Prompt revision published");
-      },
-      onError: (error) => toast.error((error as Error).message || "Failed to publish revision"),
-    },
-  });
   const previewMutation = useAdminControllerPreviewAiPrompt({
     mutation: {
       onSuccess: (result) => {
@@ -925,7 +640,8 @@ function AdminAgentsPage() {
         setPreviewResult(payload);
         toast.success("Runtime preview generated");
       },
-      onError: (error) => toast.error((error as Error).message || "Failed to generate preview"),
+      onError: (error: unknown) =>
+        toast.error(error instanceof Error ? error.message : "Failed to generate preview"),
     },
   });
   const pipelineContextPreviewMutation =
@@ -937,111 +653,22 @@ function AdminAgentsPage() {
           setPipelineContextPreviewResult(payload);
           toast.success("Pipeline context preview generated");
         },
-        onError: (error) =>
+        onError: (error: unknown) =>
           toast.error(
-            (error as Error).message || "Failed to generate pipeline context preview",
+            error instanceof Error
+              ? error.message
+              : "Failed to generate pipeline context preview",
           ),
       },
     });
-
-  const isSaving =
-    createDraftMutation.isPending || updateDraftMutation.isPending || publishMutation.isPending;
-
-  const handleSaveDraft = () => {
-    if (!currentPromptKey) return;
-
-    if (!systemPrompt.trim() && !userPrompt.trim()) {
-      toast.error("System and user prompts cannot both be empty");
-      return;
-    }
-
-    const payload = {
-      stage: stageValue,
-      systemPrompt,
-      userPrompt,
-      notes: notes || undefined,
-    };
-
-    if (activeDraft) {
-      updateDraftMutation.mutate({
-        key: currentPromptKey,
-        revisionId: activeDraft.id,
-        data: payload,
-      });
-      return;
-    }
-
-    createDraftMutation.mutate({
-      key: currentPromptKey,
-      data: payload,
-    });
-  };
-
-  const handlePublish = (revisionId: string) => {
-    if (!currentPromptKey) return;
-    publishMutation.mutate({ key: currentPromptKey, revisionId });
-  };
 
   const handleLoadRevision = (revision: PromptRevision) => {
     setSystemPrompt(revision.systemPrompt);
     setUserPrompt(revision.userPrompt);
     setNotes(revision.notes ?? "");
-    setEditorStage(revision.stage ?? "global");
+    setEditorStage(revision.stage ?? "seed");
     setActiveEditorTab("prompts");
     toast.success(`Loaded v${revision.version} (${formatStage(revision.stage)}) into editor`);
-  };
-
-  const handleRestoreAsDraft = (revision: PromptRevision) => {
-    if (!currentPromptKey) return;
-    createDraftMutation.mutate({
-      key: currentPromptKey,
-      data: {
-        stage: revision.stage,
-        systemPrompt: revision.systemPrompt,
-        userPrompt: revision.userPrompt,
-        notes: revision.notes ?? undefined,
-      },
-    });
-  };
-
-  const handleSaveModelConfigDraft = () => {
-    if (!currentPromptKey || !modelName) {
-      toast.error("Select a model before saving");
-      return;
-    }
-
-    const selectedModel = modelConfigPayload?.allowedModels.find(
-      (candidate) => candidate === modelName,
-    );
-    if (!selectedModel) {
-      toast.error("Select a valid model from the allowed list");
-      return;
-    }
-
-    const modelValue = selectedModel as CreateAiModelConfigDraftDto["modelName"];
-
-    if (activeModelDraft) {
-      updateModelConfigMutation.mutate({
-        key: currentPromptKey,
-        revisionId: activeModelDraft.id,
-        data: {
-          modelName: modelValue,
-          searchMode,
-          notes: modelNotes || undefined,
-        },
-      });
-      return;
-    }
-
-    createModelConfigMutation.mutate({
-      key: currentPromptKey,
-      data: {
-        modelName: modelValue,
-        searchMode,
-        stage: modelStageValue,
-        notes: modelNotes || undefined,
-      },
-    });
   };
 
   const allowedVariables = contextSchema?.allowedVariables ?? revisionsPayload?.allowedVariables ?? selectedDefinition?.allowedVariables ?? [];
@@ -1115,7 +742,7 @@ function AdminAgentsPage() {
         <div>
           <h1 className="text-2xl font-bold">AI Agent Prompt Console</h1>
           <p className="text-muted-foreground">
-            Visualize the data flow, click any agent, and manage stage-aware prompt revisions.
+            Visualize the data flow, click any agent, and preview stage-aware prompt templates.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -1127,17 +754,11 @@ function AdminAgentsPage() {
               if (currentPromptKey) {
                 revisionsQuery.refetch();
                 contextSchemaQuery.refetch();
-                modelConfigQuery.refetch();
-                outputSchemaQuery.refetch();
               }
             }}
           >
             <RefreshCw className="mr-2 h-4 w-4" />
             Refresh
-          </Button>
-          <Button onClick={() => seedMutation.mutate()} disabled={seedMutation.isPending}>
-            <Rocket className="mr-2 h-4 w-4" />
-            {seedMutation.isPending ? "Seeding..." : "Seed From Code"}
           </Button>
         </div>
       </div>
@@ -1146,7 +767,7 @@ function AdminAgentsPage() {
         Primary model and search configuration now lives in
         {" "}
         <span className="font-semibold">/admin/flow</span>
-        . This page remains available as an advanced fallback editor.
+        . Prompt templates are file-backed and preview-only in the app.
       </div>
 
       <Tabs
@@ -1184,6 +805,8 @@ function AdminAgentsPage() {
                 <p className="text-sm text-muted-foreground">No flow metadata found.</p>
               ) : (
                 <div className="space-y-4 py-2">
+                  <BulkModelApplyDialog />
+                  <Separator />
                   {activeFlow.stages.map((stage, index) => {
                     const stageNodes = stage.nodeIds
                       .map((nodeId) => nodeById.get(nodeId))
@@ -1302,9 +925,9 @@ function AdminAgentsPage() {
 
                       <Card>
                         <CardHeader>
-                          <CardTitle className="text-base">Prompt Editor</CardTitle>
+                          <CardTitle className="text-base">Prompt Preview</CardTitle>
                           <CardDescription>
-                            {selectedDefinition?.description ?? "Create, update, and publish stage-aware prompt revisions."}
+                            {selectedDefinition?.description ?? "Preview stage-aware prompt templates from local files."}
                           </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
@@ -1313,13 +936,12 @@ function AdminAgentsPage() {
                               <Label>Startup Stage</Label>
                               <Select
                                 value={editorStage}
-                                onValueChange={(value) => setEditorStage(value as "global" | StageOption)}
+                                onValueChange={(value) => setEditorStage(value as StageOption)}
                               >
                                 <SelectTrigger>
                                   <SelectValue placeholder="Select stage" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="global">Global</SelectItem>
                                   {STAGES.map((stage) => (
                                     <SelectItem key={stage} value={stage}>
                                       {formatStage(stage)}
@@ -1329,11 +951,11 @@ function AdminAgentsPage() {
                               </Select>
                             </div>
                             <div className="space-y-2">
-                              <Label>Notes (optional)</Label>
+                              <Label>Notes</Label>
                               <Input
                                 value={notes}
-                                onChange={(event) => setNotes(event.target.value)}
-                                placeholder="What changed in this draft?"
+                                readOnly
+                                placeholder="No notes"
                               />
                             </div>
                           </div>
@@ -1342,8 +964,8 @@ function AdminAgentsPage() {
                             <Label>System Prompt</Label>
                             <Textarea
                               value={systemPrompt}
-                              onChange={(event) => setSystemPrompt(event.target.value)}
-                              className="min-h-[160px] font-mono text-xs"
+                              readOnly
+                              className="min-h-[160px] font-mono text-xs bg-muted/20"
                               placeholder="System prompt"
                             />
                           </div>
@@ -1352,8 +974,8 @@ function AdminAgentsPage() {
                             <Label>User Prompt</Label>
                             <Textarea
                               value={userPrompt}
-                              onChange={(event) => setUserPrompt(event.target.value)}
-                              className="min-h-[240px] font-mono text-xs"
+                              readOnly
+                              className="min-h-[240px] font-mono text-xs bg-muted/20"
                               placeholder="User prompt template"
                             />
                           </div>
@@ -1387,20 +1009,12 @@ function AdminAgentsPage() {
                           ) : null}
 
                           <div className="flex flex-wrap items-center gap-2">
-                            <Button onClick={handleSaveDraft} disabled={!currentPromptKey || isSaving}>
-                              <Save className="mr-2 h-4 w-4" />
-                              {activeDraft ? "Update Draft" : "Create Draft"}
-                            </Button>
-                            {activeDraft ? (
-                              <Button
-                                variant="secondary"
-                                onClick={() => handlePublish(activeDraft.id)}
-                                disabled={publishMutation.isPending}
-                              >
-                                <CheckCircle2 className="mr-2 h-4 w-4" />
-                                Publish Draft
-                              </Button>
-                            ) : null}
+                            <Badge variant="secondary">Preview Only</Badge>
+                            <span className="text-xs text-muted-foreground">
+                              Prompt templates are managed from files in
+                              {" "}
+                              <code>backend/src/modules/ai/prompts/library</code>.
+                            </span>
                             {activePublished ? (
                               <Badge variant="outline" className="ml-auto">
                                 Using {activePublished.stage ? formatStage(activePublished.stage) : "Global"} v{activePublished.version}
@@ -1565,7 +1179,6 @@ function AdminAgentsPage() {
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="all">All Stages</SelectItem>
-                                <SelectItem value="global">Global</SelectItem>
                                 {STAGES.map((stage) => (
                                   <SelectItem key={stage} value={stage}>
                                     {formatStage(stage)}
@@ -1605,26 +1218,6 @@ function AdminAgentsPage() {
                                       <Eye className="mr-1 h-3 w-3" />
                                       Load
                                     </Button>
-                                    {revision.status === "draft" ? (
-                                      <Button
-                                        size="sm"
-                                        variant="secondary"
-                                        onClick={() => handlePublish(revision.id)}
-                                      >
-                                        Publish
-                                      </Button>
-                                    ) : null}
-                                    {revision.status === "archived" ? (
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => handleRestoreAsDraft(revision)}
-                                        disabled={createDraftMutation.isPending}
-                                      >
-                                        <RotateCcw className="mr-1 h-3 w-3" />
-                                        Restore
-                                      </Button>
-                                    ) : null}
                                   </div>
                                 </div>
                                 {revision.userPrompt ? (
@@ -1651,272 +1244,30 @@ function AdminAgentsPage() {
                     </TabsContent>
 
                     <TabsContent value="model-config" className="space-y-4">
-                      {!currentPromptKey ? (
-                        <Card>
-                          <CardContent className="pt-6">
-                            <p className="text-sm text-muted-foreground">
-                              Select a prompt to view model config
-                            </p>
-                          </CardContent>
-                        </Card>
-                      ) : (
-                        <>
-                          <Card className="border-amber-200 bg-amber-50">
-                            <CardContent className="pt-6">
-                              <div className="flex flex-wrap items-center justify-between gap-3">
-                                <div className="space-y-1">
-                                  <p className="text-sm font-medium text-amber-900">
-                                    Primary settings moved to /admin/flow
-                                  </p>
-                                  <p className="text-xs text-amber-900/90">
-                                    Use Flow for day-to-day model/search configuration. Enable this
-                                    editor only for fallback or advanced edits.
-                                  </p>
-                                </div>
-                                <Button
-                                  size="sm"
-                                  variant={enableLegacyModelEditing ? "secondary" : "outline"}
-                                  onClick={() =>
-                                    setEnableLegacyModelEditing((current) => !current)
-                                  }
-                                >
-                                  {enableLegacyModelEditing
-                                    ? "Disable Fallback Editing"
-                                    : "Enable Fallback Editing"}
-                                </Button>
-                              </div>
-                            </CardContent>
-                          </Card>
-
-                          <div
-                            className={`space-y-4 transition-opacity ${
-                              enableLegacyModelEditing
-                                ? "opacity-100"
-                                : "pointer-events-none opacity-50"
-                            }`}
-                          >
-                          {modelConfigPayload?.resolved ? (
-                            <Card className="border-blue-200 bg-blue-50">
-                              <CardContent className="pt-6">
-                                <div className="flex items-center justify-between">
-                                  <div className="space-y-1">
-                                    <p className="text-sm font-medium">Current Configuration</p>
-                                    <p className="text-xs text-muted-foreground">
-                                      {modelConfigPayload.resolved.modelName}
-                                      <Badge variant="outline" className="ml-2">
-                                        {modelConfigPayload.resolved.source}
-                                      </Badge>
-                                    </p>
-                                  </div>
-                                  <div className="text-xs font-mono text-muted-foreground">
-                                    {modelConfigPayload.resolved.provider}
-                                  </div>
-                                </div>
-                              </CardContent>
-                            </Card>
-                          ) : null}
-
-                          <div>
-                            <Label>Stage</Label>
-                            <Select
-                              value={modelStage}
-                              onValueChange={(value) => setModelStage(value as "global" | StageOption)}
-                            >
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="global">Global</SelectItem>
-                                {STAGES.map((stage) => (
-                                  <SelectItem key={stage} value={stage}>
-                                    {formatStage(stage)}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-
-                          <div>
-                            <Label>Model</Label>
-                            <Select value={modelName} onValueChange={setModelName}>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select model" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {(modelConfigPayload?.allowedModels ?? []).map((model) => (
-                                  <SelectItem key={model} value={model}>
-                                    {model}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-
-                          {modelConfigPayload?.resolved?.supportedSearchModes?.includes(
-                            "provider_grounded_search",
-                          ) ? (
-                            <div className="flex items-center justify-between">
-                              <Label>Grounded Search (Google)</Label>
-                              <input
-                                type="checkbox"
-                                checked={searchMode === "provider_grounded_search"}
-                                onChange={(event) =>
-                                  setSearchMode(
-                                    event.target.checked
-                                      ? "provider_grounded_search"
-                                      : "off",
-                                  )
-                                }
-                                className="h-4 w-4"
-                              />
-                            </div>
-                          ) : null}
-
-                          <div>
-                            <Label>Notes</Label>
-                            <Textarea
-                              value={modelNotes}
-                              onChange={(event) => setModelNotes(event.target.value)}
-                              placeholder="Optional notes about this configuration..."
-                              className="h-20"
-                            />
-                          </div>
-
-                          <div className="flex gap-2">
-                            <Button
-                              onClick={handleSaveModelConfigDraft}
-                              disabled={
-                                !modelName ||
-                                createModelConfigMutation.isPending ||
-                                updateModelConfigMutation.isPending
-                              }
-                            >
-                              {createModelConfigMutation.isPending ||
-                              updateModelConfigMutation.isPending
-                                ? "Saving..."
-                                : activeModelDraft
-                                  ? "Update Draft"
-                                  : "Save Draft"}
-                            </Button>
-                            <Button
-                              variant="outline"
-                              onClick={() => {
-                                if (!currentPromptKey || !activeModelDraft) return;
-                                publishModelConfigMutation.mutate({
-                                  key: currentPromptKey,
-                                  revisionId: activeModelDraft.id,
-                                });
-                              }}
-                              disabled={!activeModelDraft || publishModelConfigMutation.isPending}
-                            >
-                              {publishModelConfigMutation.isPending
-                                ? "Publishing..."
-                                : "Publish Draft"}
-                            </Button>
-                          </div>
-
-                          <Card>
-                            <CardHeader>
-                              <CardTitle className="text-sm">Revision History</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                              <div className="space-y-2">
-                                {modelConfigRevisions.length === 0 ? (
-                                  <p className="text-sm text-muted-foreground">
-                                    No model config revisions for this prompt key.
-                                  </p>
-                                ) : (
-                                  modelConfigRevisions.map((revision) => (
-                                    <div
-                                      key={revision.id}
-                                      className="flex items-center justify-between rounded border p-2 text-sm"
-                                    >
-                                      <div>
-                                        <Badge variant="outline">{revision.status}</Badge>
-                                        <span className="ml-2 text-xs text-muted-foreground">
-                                          v{revision.version} • {formatStage(revision.stage)} •{" "}
-                                          {new Date(revision.createdAt).toLocaleDateString()}
-                                        </span>
-                                      </div>
-                                      <span className="text-xs">{revision.modelName}</span>
-                                    </div>
-                                  ))
-                                )}
-                              </div>
-                            </CardContent>
-                          </Card>
-                          </div>
-                        </>
-                      )}
+                      <Card className="border-amber-200 bg-amber-50">
+                        <CardContent className="pt-6">
+                          <p className="text-sm font-medium text-amber-900">
+                            Model configuration has moved to /admin/flow
+                          </p>
+                          <p className="mt-1 text-xs text-amber-900/90">
+                            Use the Flow page for all model and search configuration.
+                          </p>
+                        </CardContent>
+                      </Card>
                     </TabsContent>
 
                     <TabsContent value="output-schema" className="space-y-4">
-                      {!currentPromptKey ? (
-                        <Card>
-                          <CardContent className="pt-6">
-                            <p className="text-sm text-muted-foreground">
-                              Select a prompt to view output schema
-                            </p>
-                          </CardContent>
-                        </Card>
-                      ) : (
-                        <>
-                          <Card className="border-amber-200 bg-amber-50">
-                            <CardContent className="pt-6">
-                              <p className="text-xs text-amber-900">
-                                Schema is defined in code. Editable schema config coming in a
-                                future update.
-                              </p>
-                            </CardContent>
-                          </Card>
-
-                          <div className="flex gap-2">
-                            <Button
-                              variant={schemaViewMode === "tree" ? "default" : "outline"}
-                              size="sm"
-                              onClick={() => setSchemaViewMode("tree")}
-                            >
-                              Visual Tree
-                            </Button>
-                            <Button
-                              variant={schemaViewMode === "json" ? "default" : "outline"}
-                              size="sm"
-                              onClick={() => setSchemaViewMode("json")}
-                            >
-                              Raw JSON
-                            </Button>
-                          </div>
-
-                          {outputSchemaQuery.isLoading ? (
-                            <Skeleton className="h-64 w-full" />
-                          ) : outputSchemaPayload ? (
-                            <Card>
-                              <CardContent className="pt-6">
-                                {schemaViewMode === "tree" ? (
-                                  <div className="space-y-2 font-mono text-xs">
-                                    <JsonSchemaTreeNode
-                                      name={currentPromptKey}
-                                      schema={outputSchemaPayload.jsonSchema}
-                                    />
-                                  </div>
-                                ) : (
-                                  <pre className="max-h-96 overflow-auto rounded bg-muted p-3 text-xs">
-                                    {JSON.stringify(outputSchemaPayload.jsonSchema, null, 2)}
-                                  </pre>
-                                )}
-                              </CardContent>
-                            </Card>
-                          ) : (
-                            <Card>
-                              <CardContent className="pt-6">
-                                <p className="text-sm text-muted-foreground">
-                                  No schema found for this prompt
-                                </p>
-                              </CardContent>
-                            </Card>
-                          )}
-                        </>
-                      )}
+                      <Card className="border-amber-200 bg-amber-50">
+                        <CardContent className="pt-6">
+                          <p className="text-sm font-medium text-amber-900">
+                            Output schema viewer has been removed
+                          </p>
+                          <p className="mt-1 text-xs text-amber-900/90">
+                            Schema definitions live in code at{" "}
+                            <code>backend/src/modules/ai/schemas/</code>.
+                          </p>
+                        </CardContent>
+                      </Card>
                     </TabsContent>
 
                     <TabsContent value="runtime-preview">

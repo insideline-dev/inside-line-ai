@@ -5,11 +5,11 @@ import type {
   EvaluationAgent,
   EvaluationAgentKey,
   EvaluationFallbackReason,
+  EvaluationFeedbackNote,
   EvaluationAgentResult,
   EvaluationPipelineInput,
   EvaluationAgentRunOptions,
   EvaluationAgentTraceEvent,
-  EvaluationFeedbackNote,
 } from "../../interfaces/agent.interface";
 import { ModelPurpose } from "../../interfaces/pipeline.interface";
 import { AiProviderService } from "../../providers/ai-provider.service";
@@ -26,13 +26,11 @@ const LEGACY_PROMPT_JSON_MAX_CHARS = 14_000;
 
 interface BaseEvaluationLike {
   score: number;
-  confidence: number;
-  feedback: string;
+  confidence: string;
+  narrativeSummary: string;
   keyFindings?: string[];
   risks?: string[];
   dataGaps?: string[];
-  narrativeSummary?: string;
-  memoNarrative?: string;
 }
 
 @Injectable()
@@ -103,6 +101,113 @@ export abstract class BaseEvaluationAgent<TOutput>
     return this.safeStringify(value).trim();
   }
 
+  /**
+   * Build common template variables shared across all evaluation agents.
+   * Subclasses extend via `getAgentTemplateVariables()`.
+   */
+  protected buildCommonTemplateVariables(
+    pipelineData: EvaluationPipelineInput,
+    feedbackNotes: EvaluationFeedbackNote[],
+  ): Record<string, string> {
+    const snapshot = buildEvaluationCommonBaseline({
+      extraction: pipelineData.extraction,
+      adminFeedback: feedbackNotes,
+    });
+
+    const adminGuidance =
+      feedbackNotes.length > 0
+        ? feedbackNotes
+            .map((n) => `[${n.scope}] ${n.feedback}`)
+            .join("\n")
+        : "None";
+
+    return {
+      companyName: snapshot.companyName,
+      companyDescription:
+        pipelineData.extraction.tagline || pipelineData.extraction.rawText?.slice(0, 2000) || "Not provided",
+      sector: snapshot.industry,
+      stage: snapshot.stage,
+      website: snapshot.website,
+      location: snapshot.location,
+      deckContext: pipelineData.extraction.rawText || "Not provided",
+      adminGuidance,
+      webResearch: this.buildResearchReportText(pipelineData),
+      websiteContent: pipelineData.scraping.website?.fullText ?? "Not provided",
+    };
+  }
+
+  /**
+   * Override in subclasses to provide agent-specific template variables.
+   * Called alongside `buildCommonTemplateVariables()` and merged into the template variable map.
+   */
+  protected getAgentTemplateVariables(
+    _pipelineData: EvaluationPipelineInput,
+  ): Record<string, string> {
+    return {};
+  }
+
+  /**
+   * Hook for agent-specific output compatibility mapping before schema validation.
+   * Subclasses can override to normalize legacy model payloads.
+   */
+  protected normalizeOutputCandidate(candidate: unknown): unknown {
+    return candidate;
+  }
+
+  /**
+   * Safely parse a JSON-stringified research branch back to an object.
+   * Research branches are coerced to strings by normalizeResearchResult(),
+   * but may contain structured JSON data we can extract fields from.
+   */
+  protected tryParseResearchJson(
+    text: string | null | undefined,
+  ): Record<string, unknown> | null {
+    if (typeof text !== "string" || text.trim().length === 0) {
+      return null;
+    }
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Extract the first line from rawText matching a regex pattern.
+   * Used to pull claimed metrics (TAM, revenue, growth) from pitch deck text.
+   */
+  protected extractClaimLine(rawText: string, matcher: RegExp): string {
+    const lines = rawText
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0 && !line.startsWith("#"));
+    return lines.find((line) => matcher.test(line)) ?? "Not provided";
+  }
+
+  /**
+   * Extract all lines from text matching a regex pattern (up to maxLines).
+   * Used to pull contextual evidence from raw text research reports.
+   */
+  protected extractMatchingLines(
+    text: string | null | undefined,
+    matcher: RegExp,
+    maxLines = 10,
+  ): string {
+    if (!text || typeof text !== "string") {
+      return "";
+    }
+    return text
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0 && !line.startsWith("#") && matcher.test(line))
+      .slice(0, maxLines)
+      .join("\n");
+  }
+
   async run(
     pipelineData: EvaluationPipelineInput,
     options?: EvaluationAgentRunOptions,
@@ -118,8 +223,6 @@ export abstract class BaseEvaluationAgent<TOutput>
     let composedSystemPrompt: string;
     let renderedPrompt: string;
     let execution: Awaited<ReturnType<NonNullable<typeof this.modelExecution>["resolveForPrompt"]>> | null = null;
-    let useTextOnlyStructuredMode = false;
-
     try {
       context = this.buildContext(pipelineData);
       const feedbackNotes = options?.feedbackNotes ?? [];
@@ -142,20 +245,18 @@ export abstract class BaseEvaluationAgent<TOutput>
             stage: pipelineData.extraction.stage,
           })
         : null;
-      useTextOnlyStructuredMode = this.shouldUseTextOnlyStructuredMode(
-        execution?.resolvedConfig.provider,
-      );
       const contextSections = this.formatContext(promptContext);
       const contextJson = JSON.stringify(promptContext);
+      const commonVars = this.buildCommonTemplateVariables(pipelineData, feedbackNotes);
+      const agentVars = this.getAgentTemplateVariables(pipelineData);
       renderedPrompt = this.promptService.renderTemplate(
         promptConfig.userPrompt,
-        this.buildPromptTemplateVariables({
-          pipelineData,
-          promptContext,
+        {
+          ...commonVars,
+          ...agentVars,
           contextSections,
           contextJson,
-          feedbackNotes,
-        }),
+        },
       );
       composedSystemPrompt = [
         promptConfig.systemPrompt || this.systemPrompt,
@@ -172,26 +273,18 @@ export abstract class BaseEvaluationAgent<TOutput>
         "Most startups should score 50-80. Scores above 85 are RARE.",
         "When in doubt, score conservatively.",
         "",
-        "## Confidence Score (0.0 - 1.0)",
-        "- 0.8-1.0: All key data points available with third-party validation",
-        "- 0.6-0.8: Most data available, some self-reported metrics",
-        "- 0.4-0.6: Partial data, significant gaps",
-        "- 0.2-0.4: Minimal data, heavy inference required",
-        "- 0.0-0.2: Critical data missing, evaluation is speculative",
+        '## Confidence Level ("high" | "mid" | "low")',
+        '- "high": All key data points available with third-party validation',
+        '- "mid": Most data available, some self-reported or partially verified',
+        '- "low": Minimal data, heavy inference required, or critical data missing',
         "",
         "## Rules",
         "- Evaluate using ONLY the provided context. Do not invent facts.",
         "- When key evidence is missing, lower confidence and avoid extreme scores.",
         "- Keep rationales concise and tied to observable evidence.",
-        "- Return ONLY structured object output with no markdown wrappers.",
-        "- Required string fields must never be null (use \"Unknown\" when unavailable).",
-        "- Use [] for missing arrays and {} for missing objects.",
-        "",
-        "## Narrative Output Contract",
-        "- Prioritize valid structured JSON object output over prose length.",
-        "- Keep `feedback` concise and evidence-based; include explicit data gaps.",
-        "- `narrativeSummary` and `memoNarrative` are optional and may be short.",
-        "- Never include score/confidence phrasing in narrative text (for example `88/100` or `85% confidence`).",
+        "- Keep narrative claims strictly aligned with provided evidence (no invented facts).",
+        "- Prefer concise analytical writing over marketing language.",
+        "- Never include score/confidence phrasing in narrative text (for example `88/100` or `high confidence`).",
       ].join("\n");
     } catch (setupError) {
       const msg = setupError instanceof Error ? setupError.message : String(setupError);
@@ -215,67 +308,36 @@ export abstract class BaseEvaluationAgent<TOutput>
         retryCount: Math.max(0, attempt - 1),
       });
       try {
-        let normalizedOutput: TOutput;
-        let responseOutputText: string;
+        const response = await this.withTimeout(
+          (abortSignal) =>
+            generateText({
+              model:
+                execution?.generateTextOptions.model ??
+                this.providers.resolveModelForPurpose(ModelPurpose.EVALUATION),
+              output: Output.object({ schema: this.schema }),
+              system: composedSystemPrompt,
+              prompt: renderedPrompt,
+              temperature: this.aiConfig.getEvaluationTemperature(),
+              maxOutputTokens: this.aiConfig.getEvaluationMaxOutputTokens(),
+              tools: execution?.generateTextOptions.tools,
+              toolChoice: execution?.generateTextOptions.toolChoice,
+              providerOptions: execution?.generateTextOptions.providerOptions,
+              abortSignal,
+            }),
+          attemptTimeoutMs,
+          `${this.key} evaluation timed out`,
+        );
 
-        if (useTextOnlyStructuredMode) {
-          const recovered = await this.tryRecoverFromTextOutput({
-            systemPrompt: composedSystemPrompt,
-            renderedPrompt,
-            timeoutMs: attemptTimeoutMs,
-            model:
-              execution?.generateTextOptions.model ??
-              this.providers.resolveModelForPurpose(ModelPurpose.EVALUATION),
-            tools: execution?.generateTextOptions.tools,
-            toolChoice: execution?.generateTextOptions.toolChoice,
-            providerOptions: execution?.generateTextOptions.providerOptions,
-          });
-          if (!recovered.success) {
-            const recoveryError = new Error(recovered.error) as Error & {
-              text?: string;
-            };
-            if (
-              typeof recovered.outputText === "string" &&
-              recovered.outputText.trim().length > 0
-            ) {
-              recoveryError.text = recovered.outputText;
-            }
-            throw recoveryError;
-          }
-          normalizedOutput = this.normalizeNarrativeFields(recovered.output);
-          responseOutputText = recovered.outputText;
-        } else {
-          const response = await this.withTimeout(
-            (abortSignal) =>
-              generateText({
-                model:
-                  execution?.generateTextOptions.model ??
-                  this.providers.resolveModelForPurpose(ModelPurpose.EVALUATION),
-                output: Output.object({ schema: this.schema }),
-                system: composedSystemPrompt,
-                prompt: renderedPrompt,
-                temperature: this.aiConfig.getEvaluationTemperature(),
-                maxOutputTokens: this.aiConfig.getEvaluationMaxOutputTokens(),
-                tools: execution?.generateTextOptions.tools,
-                toolChoice: execution?.generateTextOptions.toolChoice,
-                providerOptions: execution?.generateTextOptions.providerOptions,
-                abortSignal,
-              }),
-            attemptTimeoutMs,
-            `${this.key} evaluation timed out`,
-          );
-
-          normalizedOutput = this.normalizeNarrativeFields(
-            this.schema.parse(response.output),
-          );
-          responseOutputText = this.resolveRawOutputText(response, normalizedOutput);
-        }
+        const normalizedOutput = this.normalizeNarrativeFields(
+          this.schema.parse(this.normalizeOutputCandidate(response.output)),
+        );
 
         this.emitTraceEvent(options, {
           agent: this.key,
           status: "completed",
           inputPrompt: renderedPrompt,
-          outputText: responseOutputText,
+          systemPrompt: composedSystemPrompt,
+          outputText: this.resolveRawOutputText(response, normalizedOutput),
           outputJson: normalizedOutput,
           attempt,
           retryCount: Math.max(0, attempt - 1),
@@ -296,7 +358,7 @@ export abstract class BaseEvaluationAgent<TOutput>
       } catch (error) {
         let message = error instanceof Error ? error.message : String(error);
         let capturedOutputText = this.extractRawOutputFromError(error);
-        if (!useTextOnlyStructuredMode && this.shouldAttemptTextRecovery(message)) {
+        if (this.shouldAttemptTextRecovery(message)) {
           const recovered = await this.tryRecoverFromTextOutput({
             systemPrompt: composedSystemPrompt,
             renderedPrompt,
@@ -316,6 +378,7 @@ export abstract class BaseEvaluationAgent<TOutput>
               agent: this.key,
               status: "completed",
               inputPrompt: renderedPrompt,
+              systemPrompt: composedSystemPrompt,
               outputText: recovered.outputText,
               outputJson: normalizedOutput,
               attempt,
@@ -361,6 +424,7 @@ export abstract class BaseEvaluationAgent<TOutput>
             agent: this.key,
             status: "failed",
             inputPrompt: renderedPrompt,
+            systemPrompt: composedSystemPrompt,
             outputText: capturedOutputText,
             outputJson: capturedOutputJson,
             attempt,
@@ -402,9 +466,23 @@ export abstract class BaseEvaluationAgent<TOutput>
           fallbackReason,
           rawProviderError,
         });
-        this.logger.warn(
-          `${this.key} evaluation fallback used: ${normalizedMessage}`,
-        );
+
+        if (fallbackReason === "SCHEMA_OUTPUT_INVALID" && error instanceof z.ZodError) {
+          const zodIssues = error.issues
+            .slice(0, 8)
+            .map((issue) => {
+              const path = issue.path.length > 0 ? issue.path.join(".") : "(root)";
+              return `${path}: ${issue.message}`;
+            })
+            .join(" | ");
+          this.logger.warn(
+            `[FALLBACK] Agent "${this.key}" fell back due to schema validation failure. Reason: ${fallbackReason}. Zod errors: ${zodIssues}`,
+          );
+        } else {
+          this.logger.warn(
+            `[FALLBACK] Agent "${this.key}" fell back. Reason: ${fallbackReason}. Message: ${normalizedMessage}`,
+          );
+        }
         const fallbackOutput = this.normalizeNarrativeFields(
           this.fallback(pipelineData),
         );
@@ -412,6 +490,7 @@ export abstract class BaseEvaluationAgent<TOutput>
           agent: this.key,
           status: "fallback",
           inputPrompt: renderedPrompt,
+          systemPrompt: composedSystemPrompt,
           outputText: capturedOutputText ?? this.safeStringify(fallbackOutput),
           outputJson: fallbackOutput,
           attempt,
@@ -453,6 +532,7 @@ export abstract class BaseEvaluationAgent<TOutput>
       agent: this.key,
       status: "fallback",
       inputPrompt: renderedPrompt,
+      systemPrompt: composedSystemPrompt,
       outputText: lastCapturedOutputText ?? this.safeStringify(fallbackOutput),
       outputJson: fallbackOutput,
       attempt: maxAttempts,
@@ -547,6 +627,98 @@ export abstract class BaseEvaluationAgent<TOutput>
     return `${first}; ${second}`;
   }
 
+  private buildSchemaDescription(): string {
+    try {
+      // Use Zod's built-in JSON schema generation if available
+      const schemaAny = this.schema as unknown as Record<string, unknown>;
+      if (typeof schemaAny.toJsonSchema === "function") {
+        return JSON.stringify((schemaAny.toJsonSchema as () => unknown)(), null, 2);
+      }
+      // Fallback: describe the base evaluation shape
+      return [
+        "{",
+        '  "score": number (0-100),',
+        '  "confidence": "high" | "mid" | "low",',
+        '  "narrativeSummary": string (detailed analysis, min 420 chars),',
+        '  "keyFindings": string[] (key findings from analysis),',
+        '  "risks": string[] (identified risks),',
+        '  "dataGaps": string[] (missing data points),',
+        '  "sources": string[] (evidence sources used)',
+        "}",
+      ].join("\n");
+    } catch {
+      return '{ "score": "number (0-100)", "confidence": "string (high|mid|low)", "narrativeSummary": "string", "keyFindings": "string[]", "risks": "string[]", "dataGaps": "string[]", "sources": "string[]" }';
+    }
+  }
+
+  private buildJsonEnforcementInstructions(): string {
+    return [
+      "",
+      "=== CRITICAL OUTPUT FORMAT ===",
+      "You MUST respond with a single valid JSON object. Do NOT write markdown, narrative text, or explanations.",
+      "Your response must be ONLY the JSON object — no text before or after it.",
+      "",
+      "Required JSON schema:",
+      this.buildSchemaDescription(),
+    ].join("\n");
+  }
+
+  private async tryConvertNarrativeToJson(
+    narrativeText: string,
+    model: Parameters<typeof generateText>[0]["model"],
+    timeoutMs: number,
+  ): Promise<
+    | { success: true; output: TOutput; outputText: string }
+    | { success: false; error: string }
+  > {
+    try {
+      const conversionPrompt = [
+        "Extract structured data from the following analysis text and return ONLY a valid JSON object.",
+        "Do NOT include any text before or after the JSON object.",
+        "",
+        "Required JSON schema:",
+        this.buildSchemaDescription(),
+        "",
+        "=== ANALYSIS TEXT ===",
+        narrativeText,
+      ].join("\n");
+
+      const response = await this.withTimeout(
+        (abortSignal) =>
+          generateText({
+            model,
+            system: "You are a JSON extraction assistant. Convert narrative analysis text into structured JSON. Return ONLY a valid JSON object, nothing else.",
+            prompt: conversionPrompt,
+            temperature: 0,
+            maxOutputTokens: this.aiConfig.getEvaluationMaxOutputTokens(),
+            abortSignal,
+          }),
+        timeoutMs,
+        `${this.key} narrative-to-JSON conversion timed out`,
+      );
+
+      const responseText = this.resolveRawOutputText(response);
+      const candidate = this.extractJsonCandidate(responseText);
+      if (!candidate) {
+        return { success: false, error: "Narrative-to-JSON conversion produced no parseable JSON" };
+      }
+
+      const parsed = this.schema.safeParse(this.normalizeOutputCandidate(candidate));
+      if (!parsed.success) {
+        const issues = parsed.error.issues
+          .slice(0, 4)
+          .map((issue) => `${issue.path.length > 0 ? issue.path.join(".") : "(root)"}: ${issue.message}`)
+          .join(" | ");
+        return { success: false, error: `Narrative-to-JSON schema validation failed: ${issues}` };
+      }
+
+      return { success: true, output: parsed.data, outputText: narrativeText };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { success: false, error: `Narrative-to-JSON conversion failed: ${message}` };
+    }
+  }
+
   private async tryRecoverFromTextOutput(input: {
     systemPrompt: string;
     renderedPrompt: string;
@@ -560,12 +732,14 @@ export abstract class BaseEvaluationAgent<TOutput>
     | { success: false; error: string; outputText?: string }
   > {
     try {
+      const recoverySystemPrompt = input.systemPrompt + this.buildJsonEnforcementInstructions();
+
       const response = await this.withTimeout(
         (abortSignal) =>
           generateText({
             model: input.model,
-            system: input.systemPrompt,
-            prompt: this.buildJsonObjectPrompt(input.renderedPrompt),
+            system: recoverySystemPrompt,
+            prompt: input.renderedPrompt,
             temperature: this.aiConfig.getEvaluationTemperature(),
             maxOutputTokens: this.aiConfig.getEvaluationMaxOutputTokens(),
             tools: input.tools,
@@ -578,7 +752,9 @@ export abstract class BaseEvaluationAgent<TOutput>
       );
       const responseOutput = (response as { output?: unknown }).output;
       if (responseOutput !== undefined) {
-        const direct = this.schema.safeParse(responseOutput);
+        const direct = this.schema.safeParse(
+          this.normalizeOutputCandidate(responseOutput),
+        );
         if (direct.success) {
           return {
             success: true,
@@ -590,13 +766,25 @@ export abstract class BaseEvaluationAgent<TOutput>
       const outputText = this.resolveRawOutputText(response);
       const candidate = this.extractJsonCandidate(outputText);
       if (!candidate) {
+        // Last resort: try converting the narrative text to JSON
+        this.logger.warn(`[${this.key}] Text recovery produced no JSON, attempting narrative-to-JSON conversion`);
+        const narrativeResult = await this.tryConvertNarrativeToJson(
+          outputText,
+          input.model,
+          Math.min(input.timeoutMs, 60_000),
+        );
+        if (narrativeResult.success) {
+          return narrativeResult;
+        }
         return {
           success: false,
-          error: "Text recovery did not contain parseable JSON object",
+          error: `Text recovery did not contain parseable JSON object; ${narrativeResult.error}`,
           outputText,
         };
       }
-      const parsed = this.schema.safeParse(candidate);
+      const parsed = this.schema.safeParse(
+        this.normalizeOutputCandidate(candidate),
+      );
       if (!parsed.success) {
         const issues = parsed.error.issues
           .slice(0, 4)
@@ -773,23 +961,17 @@ export abstract class BaseEvaluationAgent<TOutput>
       return output;
     }
 
-    const narrativeCandidate = this.sanitizeNarrative(this.pickExistingNarrative(output));
+    const narrativeCandidate = this.sanitizeNarrative(output.narrativeSummary);
     const generatedNarrative = this.sanitizeNarrative(
       this.buildNarrativeFromStructuredSignals(output),
     );
     const narrative = this.hasDetailedNarrative(narrativeCandidate)
       ? narrativeCandidate
       : generatedNarrative;
-    const sanitizedFeedback = this.sanitizeNarrative(output.feedback);
-    const feedback = this.hasDetailedNarrative(sanitizedFeedback)
-      ? sanitizedFeedback
-      : narrative;
 
     return {
       ...output,
-      feedback,
       narrativeSummary: narrative,
-      memoNarrative: narrative,
     };
   }
 
@@ -826,26 +1008,16 @@ export abstract class BaseEvaluationAgent<TOutput>
     const record = value as Record<string, unknown>;
     return (
       typeof record.score === "number" &&
-      typeof record.confidence === "number" &&
-      typeof record.feedback === "string"
+      typeof record.confidence === "string" &&
+      typeof record.narrativeSummary === "string"
     );
-  }
-
-  private pickExistingNarrative(value: BaseEvaluationLike): string | null {
-    const candidates = [value.narrativeSummary, value.memoNarrative, value.feedback];
-    for (const candidate of candidates) {
-      if (typeof candidate === "string" && candidate.trim().length > 0) {
-        return candidate.trim();
-      }
-    }
-    return null;
   }
 
   private buildNarrativeFromStructuredSignals(value: BaseEvaluationLike): string {
     const findings = this.cleanStringArray(value.keyFindings).slice(0, 4);
     const risks = this.cleanStringArray(value.risks).slice(0, 3);
     const dataGaps = this.cleanStringArray(value.dataGaps).slice(0, 3);
-    const intro = this.normalizeWhitespace(value.feedback);
+    const intro = this.normalizeWhitespace(value.narrativeSummary);
 
     const paragraphOne = [
       intro.length > 0

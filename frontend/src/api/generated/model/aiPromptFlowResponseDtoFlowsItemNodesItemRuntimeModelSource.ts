@@ -13,4 +13,5 @@ export const AiPromptFlowResponseDtoFlowsItemNodesItemRuntimeModelSource = {
   default: 'default',
   published: 'published',
   revision_override: 'revision_override',
+  override: 'override',
 } as const;

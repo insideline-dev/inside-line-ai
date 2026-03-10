@@ -7,10 +7,13 @@
  */
 import type { AiPromptFlowResponseDtoFlowsItemNodesItemRuntimeModelSearchMode } from './aiPromptFlowResponseDtoFlowsItemNodesItemRuntimeModelSearchMode';
 import type { AiPromptFlowResponseDtoFlowsItemNodesItemRuntimeModelSource } from './aiPromptFlowResponseDtoFlowsItemNodesItemRuntimeModelSource';
+import type { AiPromptFlowResponseDtoFlowsItemNodesItemRuntimeModelSupportedSearchModesItem } from './aiPromptFlowResponseDtoFlowsItemNodesItemRuntimeModelSupportedSearchModesItem';
 
 export type AiPromptFlowResponseDtoFlowsItemNodesItemRuntimeModel = {
   modelName: string;
   provider: string;
   searchMode: AiPromptFlowResponseDtoFlowsItemNodesItemRuntimeModelSearchMode;
+  supportedSearchModes: AiPromptFlowResponseDtoFlowsItemNodesItemRuntimeModelSupportedSearchModesItem[];
   source: AiPromptFlowResponseDtoFlowsItemNodesItemRuntimeModelSource;
+  purpose: string;
 };

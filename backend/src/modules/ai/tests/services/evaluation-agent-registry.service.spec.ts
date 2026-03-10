@@ -197,6 +197,29 @@ describe("EvaluationAgentRegistryService", () => {
     });
   });
 
+  it("does NOT mark run as degraded when 3 or fewer agents use fallback", async () => {
+    const fallbackKeys = new Set<EvaluationAgentKey>(["team", "market", "product"]);
+
+    const agents = ALL_KEYS.map((key) =>
+      createAgent(key, { fallback: fallbackKeys.has(key) }),
+    );
+
+    const service = createRegistry(
+      agents,
+      pipelineState as unknown as PipelineStateService,
+      phaseTransition as unknown as PhaseTransitionService,
+      pipelineFeedback as unknown as PipelineFeedbackService,
+      agentConfigService as unknown as AgentConfigService,
+      dynamicAgentRunner as unknown as DynamicAgentRunnerService,
+    );
+
+    const result = await service.runAll("startup-threshold", pipelineData);
+
+    expect(result.summary.fallbackAgents).toBe(3);
+    // 3 is NOT > 3, so degraded should be false (assuming completedAgents >= minimumRequired)
+    expect(result.summary.degraded).toBe(false);
+  });
+
   it("uses agent fallback output when an agent throws", async () => {
     const agents = ALL_KEYS.map((key) =>
       createAgent(key, { reject: key === "market" }),
@@ -506,5 +529,53 @@ describe("EvaluationAgentRegistryService", () => {
 
     expect(traceService.recordRun).toHaveBeenCalled();
     expect(traceResolved).toBe(true);
+  });
+
+  it("persists systemPrompt for custom evaluation agent traces", async () => {
+    const traceService = {
+      recordRun: jest.fn().mockResolvedValue(undefined),
+    } as unknown as PipelineAgentTraceService;
+
+    agentConfigService.getExecutableByOrchestrator.mockResolvedValueOnce([
+      {
+        config: {
+          isCustom: true,
+          agentKey: "team",
+        },
+        promptKey: "evaluation.team.custom",
+      } as never,
+    ]);
+
+    dynamicAgentRunner.run.mockResolvedValueOnce({
+      key: "team",
+      output: { score: 82, keyFindings: [], risks: [], dataGaps: [], sources: [] },
+      usedFallback: false,
+      inputPrompt: "Dynamic user prompt",
+      systemPrompt: "Dynamic system prompt",
+      outputText: "{\"score\":82}",
+      attempt: 1,
+      retryCount: 0,
+    });
+
+    const agents = ALL_KEYS.map((key) => createAgent(key));
+    const service = createRegistry(
+      agents,
+      pipelineState as unknown as PipelineStateService,
+      phaseTransition as unknown as PhaseTransitionService,
+      pipelineFeedback as unknown as PipelineFeedbackService,
+      agentConfigService as unknown as AgentConfigService,
+      dynamicAgentRunner as unknown as DynamicAgentRunnerService,
+      traceService,
+    );
+
+    await service.runAll("startup-dynamic-trace", pipelineData);
+
+    expect(traceService.recordRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentKey: "team",
+        inputPrompt: "Dynamic user prompt",
+        systemPrompt: "Dynamic system prompt",
+      }),
+    );
   });
 });

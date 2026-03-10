@@ -52,7 +52,7 @@ describe("ScrapingService", () => {
       },
     ]);
 
-    drizzle = { db: mockDb as any } as jest.Mocked<DrizzleService>;
+    drizzle = { db: mockDb as unknown as DrizzleService["db"] } as jest.Mocked<DrizzleService>;
 
     websiteScraper = {
       deepScrape: jest.fn().mockResolvedValue({
@@ -105,7 +105,7 @@ describe("ScrapingService", () => {
       "https://inside-line.test",
       {
         manualPaths: [],
-        discoveryEnabled: false,
+        discoveryEnabled: true,
       },
     );
     expect(linkedin.enrichTeamMembers).toHaveBeenCalledTimes(1);
@@ -169,7 +169,7 @@ describe("ScrapingService", () => {
       "https://inside-line.test",
       expect.objectContaining({
         manualPaths: [],
-        discoveryEnabled: false,
+        discoveryEnabled: true,
       }),
     );
   });
@@ -264,7 +264,7 @@ describe("ScrapingService", () => {
         hasTeamPage: false,
         hasPricingPage: false,
       },
-    } as any);
+    } as never);
 
     const result = await service.run("startup-1");
 
@@ -333,7 +333,7 @@ describe("ScrapingService", () => {
         hasTeamPage: false,
         hasPricingPage: false,
       },
-    } as any);
+    } as never);
 
     linkedin.enrichTeamMembers.mockImplementationOnce(async (_, members) =>
       members.map((member) => ({
@@ -404,7 +404,7 @@ describe("ScrapingService", () => {
         hasTeamPage: false,
         hasPricingPage: false,
       },
-    } as any);
+    } as never);
 
     linkedin.enrichTeamMembers.mockResolvedValueOnce([
       {
@@ -418,7 +418,7 @@ describe("ScrapingService", () => {
         linkedinUrl: "https://www.linkedin.com/in/cyrille-jacques-a7035457",
         enrichmentStatus: "not_found",
       },
-    ] as any);
+    ] as never);
 
     const result = await service.run("startup-3");
 
@@ -481,7 +481,7 @@ describe("ScrapingService", () => {
         enrichmentStatus: "not_found",
         confidenceReason: "Current company does not match target company \"Airbnb\"",
       },
-    ] as any);
+    ] as never);
 
     const serviceWithPipelineState = new ScrapingService(
       drizzle,
@@ -704,7 +704,7 @@ describe("ScrapingService", () => {
         hasTeamPage: false,
         hasPricingPage: false,
       },
-    } as any);
+    } as never);
 
     const pipelineState = {
       getPhaseResult: jest.fn().mockImplementation(
@@ -788,7 +788,7 @@ describe("ScrapingService", () => {
         hasTeamPage: false,
         hasPricingPage: false,
       },
-    } as any);
+    } as never);
 
     const pipelineState = {
       getPhaseResult: jest.fn().mockImplementation(

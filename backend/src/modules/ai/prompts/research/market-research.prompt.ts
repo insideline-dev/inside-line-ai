@@ -72,7 +72,6 @@ Assign confidence levels to each data point:
 - **50-69**: Tier 2 sources only, or data is 2-3 years old, or sources partially conflict
 - **Below 50**: Tier 3 sources only, data is 3+ years old, or significant conflicts — flag as speculative
 
-=== OUTPUT FORMAT ===
 Provide structured research output:
 
 **Market Size**
@@ -100,12 +99,12 @@ Provide structured research output:
 **Data Gaps**
 - [List any areas where research was inconclusive or unavailable]
 
-=== RESPONSE CONTRACT (CRITICAL) ===
-- Return ONLY plain text report output.
-- Do NOT return JSON.
-- Do NOT wrap output in markdown code fences.
-- Do NOT include commentary before or after the report.
-- Report must be comprehensive, evidence-driven, and at least 2500 characters.`;
+=== OUTPUT CONTRACT ===
+Return ONLY plain text report output.
+Do NOT return JSON.
+Ensure the report is at least 2500 characters.
+
+`;
 
 export const MARKET_RESEARCH_HUMAN_PROMPT = `Deep market research for:
 

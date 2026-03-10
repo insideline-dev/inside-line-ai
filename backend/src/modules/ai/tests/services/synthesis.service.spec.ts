@@ -82,6 +82,7 @@ describe("SynthesisService", () => {
       runDetailed: jest.fn().mockResolvedValue({
         output: createMockSynthesisResult(),
         inputPrompt: "Synthesis prompt",
+        systemPrompt: "Synthesis system prompt",
         outputText: JSON.stringify(createMockSynthesisResult()),
         outputJson: createMockSynthesisResult(),
         usedFallback: false,
@@ -106,6 +107,7 @@ describe("SynthesisService", () => {
       }),
       computeWeightedScore: jest.fn().mockReturnValue(79.4),
       computePercentileRank: jest.fn().mockResolvedValue(75),
+      computeConfidenceScore: jest.fn().mockReturnValue("Medium"),
     } as unknown as jest.Mocked<ScoreComputationService>;
 
     aiConfig = {
@@ -140,7 +142,6 @@ describe("SynthesisService", () => {
     expect(scoreComputation.computePercentileRank).toHaveBeenCalledWith(79.4);
     expect(memoGenerator.generateAndUpload).toHaveBeenCalledWith(
       "startup-1",
-      expect.any(Object),
     );
     expect(drizzle.db.transaction).toHaveBeenCalledTimes(1);
     expect(result.overallScore).toBe(79.4);
@@ -149,33 +150,26 @@ describe("SynthesisService", () => {
 
   it("receives fallback result when synthesis agent fails", async () => {
     synthesisAgent.runDetailed.mockResolvedValueOnce({
-      output: {
-        overallScore: 0,
-        recommendation: "Decline",
-        executiveSummary: "Synthesis failed — manual review required.",
-        strengths: [],
-        concerns: ["Automated synthesis could not be completed"],
-        investmentThesis:
-          "Unable to generate investment thesis due to synthesis failure.",
-        nextSteps: ["Manual review required"],
-        confidenceLevel: "Low",
+      output: createMockSynthesisResult({
+        dealSnapshot: "Synthesis failed — manual review required.",
+        keyStrengths: [],
+        keyRisks: ["Automated synthesis could not be completed"],
+        exitScenarios: [],
         investorMemo: {
           executiveSummary: "Synthesis generation failed. Please review evaluation data manually.",
           sections: [],
-          recommendation: "Decline",
-          riskLevel: "high",
-          dealHighlights: [],
           keyDueDiligenceAreas: ["Manual review required"],
         },
         founderReport: {
           summary: "We were unable to generate an automated report. Our team will follow up.",
-          sections: [],
-          actionItems: ["Await manual review from the investment team"],
+          whatsWorking: [],
+          pathToInevitability: ["Await manual review from the investment team"],
         },
         dataConfidenceNotes:
           "Synthesis failed — all scores require manual verification.",
-      },
+      }),
       inputPrompt: "Synthesis prompt",
+      systemPrompt: "Synthesis system prompt",
       outputText: "fallback output",
       outputJson: { overallScore: 0 },
       usedFallback: true,
@@ -189,8 +183,8 @@ describe("SynthesisService", () => {
     const result = await service.run("startup-1");
 
     expect(synthesisAgent.runDetailed).toHaveBeenCalledTimes(1);
-    expect(result.recommendation).toBe("Decline");
-    expect(result.executiveSummary).toContain("manual review required");
+    expect(result.dealSnapshot).toContain("manual review required");
+    expect(result.keyRisks).toContain("Automated synthesis could not be completed");
   });
 
   it("returns trace metadata from runDetailed", async () => {
@@ -200,6 +194,7 @@ describe("SynthesisService", () => {
     expect(result.trace.status).toBe("completed");
     expect(result.trace.usedFallback).toBe(false);
     expect(result.trace.inputPrompt).toBe("Synthesis prompt");
+    expect(result.trace.systemPrompt).toBe("Synthesis system prompt");
     expect(result.trace.outputText).toContain("overallScore");
   });
 
@@ -255,32 +250,25 @@ describe("SynthesisService", () => {
 
   it("sanitizes preserved previous narrative when fallback reuses stored output", async () => {
     synthesisAgent.runDetailed.mockResolvedValueOnce({
-      output: {
-        overallScore: 0,
-        recommendation: "Decline",
-        executiveSummary: "Synthesis failed — manual review required.",
-        strengths: [],
-        concerns: ["Automated synthesis could not be completed"],
-        investmentThesis:
-          "Unable to generate investment thesis due to synthesis failure.",
-        nextSteps: ["Manual review required"],
-        confidenceLevel: "Low",
+      output: createMockSynthesisResult({
+        dealSnapshot: "Synthesis failed — manual review required.",
+        keyStrengths: [],
+        keyRisks: ["Automated synthesis could not be completed"],
+        exitScenarios: [],
         investorMemo: {
           executiveSummary: "Synthesis generation failed.",
           sections: [],
-          recommendation: "Decline",
-          riskLevel: "high",
-          dealHighlights: [],
           keyDueDiligenceAreas: ["Manual review required"],
         },
         founderReport: {
           summary: "Automated founder report unavailable.",
-          sections: [],
-          actionItems: ["Await manual review"],
+          whatsWorking: [],
+          pathToInevitability: ["Await manual review"],
         },
         dataConfidenceNotes: "Fallback mode.",
-      },
+      }),
       inputPrompt: "Synthesis prompt",
+      systemPrompt: "Synthesis system prompt",
       outputText: "fallback output",
       outputJson: { overallScore: 0 },
       usedFallback: true,
@@ -304,12 +292,9 @@ describe("SynthesisService", () => {
                 "Uber is currently rated 85/100 with a Pass recommendation and medium confidence. Highest-scoring dimensions are Traction and Team.",
               keyStrengths: ["Team quality (91/100, 84% confidence)"],
               keyRisks: ["Lowest-scoring dimensions are Legal and Deal Terms."],
-              recommendations: ["Validate data reconciliation (70/100, medium confidence)"],
               investorMemo: {
                 executiveSummary:
                   "This section is currently scored at 88/100 with 85% confidence. Investor memo body.",
-                summary:
-                  "Highest-scoring dimensions are Team and Product. Lowest-scoring dimensions are GTM.",
                 sections: [
                   {
                     title: "Overview",
@@ -317,22 +302,15 @@ describe("SynthesisService", () => {
                       "This section is currently scored at 88/100 with 85% confidence. Narrative body.",
                   },
                 ],
-                recommendation: "Consider",
-                riskLevel: "medium",
-                dealHighlights: ["Team (91/100, 84% confidence)"],
                 keyDueDiligenceAreas: ["Resolve mismatch with medium confidence"],
               },
               founderReport: {
                 summary:
                   "This section is currently scored at 88/100 with 85% confidence. Founder report body.",
-                sections: [
-                  {
-                    title: "Plan",
-                    content:
-                      "Lowest-scoring dimensions are GTM and Legal. Improve accordingly.",
-                  },
+                whatsWorking: [
+                  "This section is currently scored at 88/100 with 85% confidence.",
                 ],
-                actionItems: ["Strengthen GTM with medium confidence"],
+                pathToInevitability: ["Strengthen GTM with medium confidence"],
               },
               dataConfidenceNotes:
                 "Highest-scoring dimensions are Team and Product. Lowest-scoring dimensions are Legal.",
@@ -344,12 +322,11 @@ describe("SynthesisService", () => {
 
     const result = await service.run("startup-1");
 
-    expect(result.executiveSummary).not.toContain("/100");
-    expect(result.executiveSummary.toLowerCase()).not.toContain("highest-scoring");
-    expect(result.strengths.join(" ")).not.toContain("/100");
-    expect(result.concerns.join(" ").toLowerCase()).not.toContain("lowest-scoring");
+    expect(result.dealSnapshot).not.toContain("/100");
+    expect(result.dealSnapshot.toLowerCase()).not.toContain("highest-scoring");
+    expect(result.keyStrengths.join(" ")).not.toContain("/100");
+    expect(result.keyRisks.join(" ").toLowerCase()).not.toContain("lowest-scoring");
     expect(result.investorMemo.executiveSummary).not.toContain("/100");
-    expect(result.investorMemo.summary ?? "").not.toContain("Highest-scoring");
     expect(result.founderReport.summary).not.toContain("/100");
     expect(result.dataConfidenceNotes.toLowerCase()).not.toContain("highest-scoring");
   });

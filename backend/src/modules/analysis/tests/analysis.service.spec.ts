@@ -2,33 +2,15 @@ import {
   describe,
   it,
   expect,
-  beforeEach,
-  afterEach,
-  jest,
 } from 'bun:test';
 import { AnalysisJobType, AnalysisJobStatus, AnalysisJobPriority } from '../entities';
 
-// Mock types for testing
-interface MockDb {
-  select: jest.Mock;
-  from: jest.Mock;
-  where: jest.Mock;
-  limit: jest.Mock;
-  offset: jest.Mock;
-  orderBy: jest.Mock;
-  insert: jest.Mock;
-  values: jest.Mock;
-  returning: jest.Mock;
-  update: jest.Mock;
-  set: jest.Mock;
-}
-
 describe('AnalysisService', () => {
   const mockStartupId = '123e4567-e89b-12d3-a456-426614174000';
-  const mockUserId = '123e4567-e89b-12d3-a456-426614174001';
+  const _mockUserId = '123e4567-e89b-12d3-a456-426614174001';
   const mockJobId = '123e4567-e89b-12d3-a456-426614174002';
 
-  const mockJob = {
+  const _mockJob = {
     id: mockJobId,
     startupId: mockStartupId,
     jobType: AnalysisJobType.SCORING,

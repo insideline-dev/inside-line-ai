@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { TrendingUp, TrendingDown, Minus, Info, RefreshCw, MessageSquare, ChevronDown, ChevronUp } from "lucide-react";
+import { CitedText } from "./CitedText";
 import { toast } from "sonner";
 import type { LucideIcon } from "lucide-react";
 
@@ -22,6 +23,7 @@ interface MemoSectionProps {
   score?: number | null;
   weight?: string;
   summary: string | null;
+  sources?: Array<{ label: string; url: string }>;
   details?: React.ReactNode;
   evaluationNote?: string;
   trend?: "up" | "down" | "neutral";
@@ -37,6 +39,7 @@ export function MemoSection({
   score,
   weight,
   summary,
+  sources,
   details,
   evaluationNote,
   trend,
@@ -198,11 +201,11 @@ export function MemoSection({
         )}
 
         {summary && (
-          <div className={`text-sm text-muted-foreground leading-relaxed rounded-md ${isAnimating ? "animate-content-update" : ""}`}>
-            {summary.split('\n\n').map((paragraph, idx) => (
-              <p key={idx} className="mb-2 last:mb-0">{paragraph}</p>
-            ))}
-          </div>
+          <CitedText
+            text={summary}
+            sources={sources}
+            className={`text-sm text-muted-foreground leading-relaxed rounded-md ${isAnimating ? "animate-content-update" : ""}`}
+          />
         )}
 
         {details && (

@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, jest, mock } from 'bun:test';
 import { ConfigService } from '@nestjs/config';
-import type { Queue, QueueEvents } from 'bullmq';
 import { QUEUE_NAMES } from '../queue.config';
 
 // Mock BullMQ before importing QueueService
@@ -58,7 +57,7 @@ describe('QueueService', () => {
     mockRedisClient.quit.mockClear();
 
     configService = {
-      get: jest.fn((key: string, defaultValue?: any) => {
+      get: jest.fn((key: string, defaultValue?: unknown) => {
         if (key === 'REDIS_URL') return 'redis://localhost:6379';
         return defaultValue;
       }),
@@ -84,12 +83,12 @@ describe('QueueService', () => {
       const jobId = 'job-456';
       const returnValue = { success: true, data: 'test' };
 
-      let completedHandler: any;
+      let completedHandler: ((args: { jobId: string; returnvalue: string }) => void) | undefined;
       mockQueueEvents.on.mockImplementation((event, handler) => {
         if (event === 'completed') {
-          completedHandler = handler;
+          completedHandler = handler as typeof completedHandler;
         }
-        return mockQueueEvents as any;
+        return mockQueueEvents as unknown;
       });
 
       const promise = service.waitForJob(QUEUE_NAMES.TASK, jobId, 5000);
@@ -110,12 +109,12 @@ describe('QueueService', () => {
       const jobId = 'job-789';
       const failureReason = 'Task execution failed';
 
-      let failedHandler: any;
+      let failedHandler: ((args: { jobId: string; failedReason: string }) => void) | undefined;
       mockQueueEvents.on.mockImplementation((event, handler) => {
         if (event === 'failed') {
-          failedHandler = handler;
+          failedHandler = handler as typeof failedHandler;
         }
-        return mockQueueEvents as any;
+        return mockQueueEvents as unknown;
       });
 
       const promise = service.waitForJob(QUEUE_NAMES.TASK, jobId, 5000);
@@ -134,13 +133,13 @@ describe('QueueService', () => {
     it('should handle double cleanup safely via cleaned flag', async () => {
       const jobId = 'job-cleanup';
 
-      let completedHandler: any;
-      let failedHandler: any;
+      let completedHandler: ((args: { jobId: string; returnvalue: string }) => void) | undefined;
+      let failedHandler: ((args: { jobId: string; failedReason: string }) => void) | undefined;
 
       mockQueueEvents.on.mockImplementation((event, handler) => {
-        if (event === 'completed') completedHandler = handler;
-        if (event === 'failed') failedHandler = handler;
-        return mockQueueEvents as any;
+        if (event === 'completed') completedHandler = handler as typeof completedHandler;
+        if (event === 'failed') failedHandler = handler as typeof failedHandler;
+        return mockQueueEvents as unknown;
       });
 
       const promise = service.waitForJob(QUEUE_NAMES.TASK, jobId, 100);
@@ -164,12 +163,12 @@ describe('QueueService', () => {
       const targetJobId = 'job-target';
       const otherJobId = 'job-other';
 
-      let completedHandler: any;
+      let completedHandler: ((args: { jobId: string; returnvalue: string }) => void) | undefined;
       mockQueueEvents.on.mockImplementation((event, handler) => {
         if (event === 'completed') {
-          completedHandler = handler;
+          completedHandler = handler as typeof completedHandler;
         }
-        return mockQueueEvents as any;
+        return mockQueueEvents as unknown;
       });
 
       const promise = service.waitForJob(QUEUE_NAMES.TASK, targetJobId, 200);

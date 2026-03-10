@@ -1,92 +1,51 @@
 import { describe, expect, it } from "bun:test";
 import { ProductResearchAgent } from "../../agents/research/product-research.agent";
-import type { ResearchPipelineInput } from "../../interfaces/agent.interface";
 
-const pipelineInput: ResearchPipelineInput = {
-  extraction: {
-    companyName: "Inside Line",
-    tagline: "AI startup diligence",
-    founderNames: ["Alex Founder"],
-    industry: "SaaS",
-    stage: "seed",
-    location: "San Francisco, CA",
-    website: "https://inside-line.test",
-    fundingAsk: 1_500_000,
-    rawText: "Inside Line automates startup diligence workflows.",
-  },
-  scraping: {
-    websiteUrl: "https://inside-line.test",
-    websiteSummary: "AI diligence workspace",
-    website: {
-      url: "https://inside-line.test/",
-      title: "Inside Line",
-      description: "AI diligence workspace",
-      fullText: "Product and feature pages",
-      headings: ["Features", "Pricing"],
-      subpages: [
-        { url: "https://inside-line.test/product", title: "Product", content: "Automation" },
-        { url: "https://inside-line.test/features", title: "Features", content: "Signals" },
-      ],
-      links: [],
-      teamBios: [],
-      customerLogos: [],
-      testimonials: [],
-      metadata: {
-        scrapedAt: new Date().toISOString(),
-        pageCount: 3,
-        hasAboutPage: false,
-        hasTeamPage: false,
-        hasPricingPage: true,
-      },
-    },
-    teamMembers: [{ name: "Alex Founder", role: "CEO", linkedinUrl: "https://linkedin.com/in/alex-founder" }],
-    notableClaims: ["B2B SaaS"],
-    scrapeErrors: [],
-  },
-};
+const VALID_PRODUCT_REPORT = [
+  "Verification:",
+  "Target: Acme | Domain: https://acme.test | Confidence: High",
+  "",
+  "Product Type & Vertical:",
+  "Software | Fintech",
+  "",
+  "Research Approach:",
+  "Prioritized pricing, product docs, customer evidence, and enterprise readiness signals.",
+  "",
+  "Findings:",
+  "1. Product: Core workflow automation with underwriting orchestration.",
+  "2. Maturity: Public beta with customer case studies and release notes.",
+  "3. Customer: B2B lenders in North America.",
+  "4. Pricing & GTM: Usage-based pricing with sales-led motion.",
+  "5. Customer Evidence: Three named customers with implementation outcomes.",
+  "6. Technical: Public API docs, SSO support, and audit logging.",
+  "7. Integrations & Stickiness: Deep CRM integrations and workflow embedding.",
+  "8. Compliance: SOC 2 claim present; regulatory evidence incomplete.",
+  "9. Other Relevant Signals: Strong implementation partner ecosystem.",
+  "",
+  "Unverified Items:",
+  "SOC 2 report was claimed but not independently confirmed.",
+  "",
+  "Research Gaps:",
+  "No third-party review volume data available.",
+  "",
+  "Notably Absent / Risk Signals:",
+  "No public uptime history despite enterprise positioning.",
+].join("\n");
 
 describe("ProductResearchAgent", () => {
-  it("builds product-only context and excludes team/market/news fields", () => {
-    const context = ProductResearchAgent.contextBuilder(pipelineInput);
-
-    expect(Object.keys(context).sort()).toEqual([
-      "businessModel",
-      "demoUrl",
-      "knownCompetitors",
-      "productDescription",
-      "specificMarket",
-      "websiteHeadings",
-      "websiteProductPages",
-    ]);
-    expect(context).not.toHaveProperty("teamMembers");
-    expect(context).not.toHaveProperty("claimedTAM");
-    expect(context).not.toHaveProperty("knownFunding");
-    expect(context.businessModel).toBeUndefined();
-    expect(context.specificMarket).toBeUndefined();
+  it("accepts report output that follows the required section contract", () => {
+    const parsed = ProductResearchAgent.schema.parse(VALID_PRODUCT_REPORT);
+    expect(parsed).toBe(VALID_PRODUCT_REPORT);
   });
 
-  it("uses researchParameters when available", () => {
-    const inputWithParams: ResearchPipelineInput = {
-      ...pipelineInput,
-      researchParameters: {
-        companyName: "Inside Line",
-        sector: "SaaS",
-        specificMarket: "AI-powered startup diligence",
-        productDescription: "Automated VC due diligence platform",
-        targetCustomers: "Venture capital firms",
-        knownCompetitors: ["Harmonic", "Sourcescrub"],
-        geographicFocus: "United States",
-        businessModel: "SaaS subscription",
-        fundingStage: "seed",
-        teamMembers: [],
-        claimedMetrics: { tam: "$5B", growthRate: "25% CAGR" },
-      },
-    };
-    const context = ProductResearchAgent.contextBuilder(inputWithParams);
+  it("rejects report output that misses required findings sections", () => {
+    const invalid = VALID_PRODUCT_REPORT.replace(
+      "9. Other Relevant Signals: Strong implementation partner ecosystem.",
+      "",
+    );
 
-    expect(context.productDescription).toBe("Automated VC due diligence platform");
-    expect(context.knownCompetitors).toEqual(["Harmonic", "Sourcescrub"]);
-    expect(context.businessModel).toBe("SaaS subscription");
-    expect(context.specificMarket).toBe("AI-powered startup diligence");
+    expect(() => ProductResearchAgent.schema.parse(invalid)).toThrow(
+      /Product research output failed report contract/i,
+    );
   });
 });

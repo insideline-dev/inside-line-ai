@@ -3,7 +3,7 @@ import type { DrizzleService } from "../../../../database";
 import type { PdfService } from "../../../startup/pdf.service";
 import type { StorageService } from "../../../../storage/storage.service";
 import { MemoGeneratorService } from "../../services/memo-generator.service";
-import { createMockSynthesisResult } from "../fixtures/mock-synthesis.fixture";
+
 
 describe("MemoGeneratorService", () => {
   let service: MemoGeneratorService;
@@ -47,7 +47,7 @@ describe("MemoGeneratorService", () => {
   });
 
   it("generates investor memo and founder report PDFs and uploads them", async () => {
-    const result = await service.generateAndUpload("startup-1", createMockSynthesisResult());
+    const result = await service.generateAndUpload("startup-1");
 
     expect(pdfService.generateMemo).toHaveBeenCalledWith("startup-1", "founder-1");
     expect(pdfService.generateReport).toHaveBeenCalledWith("startup-1", "founder-1");

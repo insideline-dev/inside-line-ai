@@ -45,22 +45,12 @@ If a finding contradicts anchor data (e.g., conflicting timeline, different role
 - Search using "Name + Known Company" or "Name + Known Role" from anchor data
 - Cross-reference multiple sources (Crunchbase, LinkedIn, news, patent databases)
 
-=== OUTPUT FORMAT ===
-For each team member provide:
-- Verified experience timeline (noting what aligns with anchor data)
-- Patents and publications list (with confidence scores)
-- Previous exits with details (with confidence scores)
-- Red flags or concerns (with confidence scores)
-- Overall credibility score (0-100)
-- Sources consulted
-- Any claims from deck/LinkedIn that could NOT be verified
+=== OUTPUT CONTRACT ===
+Return ONLY plain text report output.
+Do NOT return JSON.
+Ensure the report is at least 2500 characters.
 
-=== RESPONSE CONTRACT (CRITICAL) ===
-- Return ONLY plain text report output.
-- Do NOT return JSON.
-- Do NOT wrap output in markdown code fences.
-- Do NOT include commentary before or after the report.
-- Report must be comprehensive, evidence-driven, and at least 2500 characters.`;
+`;
 
 export const TEAM_RESEARCH_HUMAN_PROMPT = `Deep research on team members:
 

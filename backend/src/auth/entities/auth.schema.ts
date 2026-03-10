@@ -72,7 +72,7 @@ export const user = pgTable(
       .$onUpdate(() => new Date())
       .notNull(),
   },
-  (table) => [],
+  (_table) => [],
 );
 
 // NOTE: Session table removed - using stateless JWT tokens instead

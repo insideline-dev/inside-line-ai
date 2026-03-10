@@ -28,7 +28,14 @@ export interface AiFlowNodeDefinition {
       | "provider_grounded_search"
       | "brave_tool_search"
       | "provider_and_brave_search";
-    source: "default" | "published" | "revision_override";
+    supportedSearchModes: Array<
+      | "off"
+      | "provider_grounded_search"
+      | "brave_tool_search"
+      | "provider_and_brave_search"
+    >;
+    source: "default" | "published" | "revision_override" | "override";
+    purpose: string;
   };
 }
 

@@ -7,12 +7,9 @@ import {
   boolean,
   index,
   uuid,
-  uniqueIndex,
   pgEnum,
   jsonb,
-  varchar,
 } from 'drizzle-orm/pg-core';
-import { user } from '../../../auth/entities/auth.schema';
 import { startup } from '../../startup/entities/startup.schema';
 import { investorProfile } from '../../investor/entities/investor.schema';
 
@@ -67,59 +64,6 @@ export const messageIntentEnum = pgEnum('message_intent', [
   MessageIntent.GREETING,
   MessageIntent.UNKNOWN,
 ]);
-
-export enum AgentCategory {
-  ORCHESTRATOR = 'orchestrator',
-  ANALYSIS = 'analysis',
-  SYNTHESIS = 'synthesis',
-}
-export const agentCategoryEnum = pgEnum('agent_category', [
-  AgentCategory.ORCHESTRATOR,
-  AgentCategory.ANALYSIS,
-  AgentCategory.SYNTHESIS,
-]);
-
-// ============================================================================
-// AGENT PROMPTS TABLE
-// ============================================================================
-
-export const agentPrompt = pgTable(
-  'agent_prompts',
-  {
-    id: uuid('id').primaryKey().defaultRandom(),
-    agentKey: varchar('agent_key', { length: 50 }).notNull().unique(),
-    displayName: text('display_name').notNull(),
-    description: text('description'),
-    category: agentCategoryEnum('category').notNull(),
-
-    // Prompt configuration
-    systemPrompt: text('system_prompt').notNull(),
-    humanPrompt: text('human_prompt').notNull(),
-
-    // Agent metadata
-    tools: jsonb('tools').$type<string[]>(),
-    inputs: jsonb('inputs').$type<{ key: string; description: string; required: boolean }[]>(),
-    outputs: jsonb('outputs').$type<{ key: string; type: string; description: string }[]>(),
-
-    // Flow configuration
-    parentAgent: text('parent_agent'),
-    executionOrder: integer('execution_order').default(0),
-    isParallel: boolean('is_parallel').default(true),
-
-    // Version tracking
-    version: integer('version').default(1).notNull(),
-    lastModifiedBy: uuid('last_modified_by').references(() => user.id),
-
-    createdAt: timestamp('created_at').defaultNow().notNull(),
-    updatedAt: timestamp('updated_at')
-      .defaultNow()
-      .$onUpdate(() => new Date())
-      .notNull(),
-  },
-  (table) => [
-    uniqueIndex('agent_prompt_key_idx').on(table.agentKey),
-  ],
-);
 
 // ============================================================================
 // AGENT CONVERSATIONS TABLE
@@ -260,7 +204,7 @@ export const agentInbox = pgTable(
       .$onUpdate(() => new Date())
       .notNull(),
   },
-  (table) => [
+  (_table) => [
   ],
 );
 
@@ -305,13 +249,6 @@ export const attachmentDownload = pgTable(
 // RELATIONS
 // ============================================================================
 
-export const agentPromptRelations = relations(agentPrompt, ({ one }) => ({
-  modifier: one(user, {
-    fields: [agentPrompt.lastModifiedBy],
-    references: [user.id],
-  }),
-}));
-
 export const agentConversationRelations = relations(agentConversation, ({ one, many }) => ({
   investorProfile: one(investorProfile, {
     fields: [agentConversation.investorProfileId],
@@ -335,8 +272,6 @@ export const agentMessageRelations = relations(agentMessage, ({ one }) => ({
 // TYPE EXPORTS
 // ============================================================================
 
-export type AgentPrompt = typeof agentPrompt.$inferSelect;
-export type NewAgentPrompt = typeof agentPrompt.$inferInsert;
 export type AgentConversation = typeof agentConversation.$inferSelect;
 export type NewAgentConversation = typeof agentConversation.$inferInsert;
 export type AgentMessage = typeof agentMessage.$inferSelect;

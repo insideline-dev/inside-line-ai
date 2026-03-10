@@ -1,6 +1,5 @@
 import { index, integer, jsonb, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid, varchar, boolean } from "drizzle-orm/pg-core";
 import { user } from "../../../auth/entities";
-import { aiPromptDefinition } from "./ai-prompt.schema";
 
 export const aiFlowNodeKindEnum = pgEnum("ai_flow_node_kind", ["prompt", "system"]);
 
@@ -15,7 +14,7 @@ export const aiAgentConfig = pgTable(
     description: text("description"),
     kind: aiFlowNodeKindEnum("kind").default("prompt").notNull(),
     enabled: boolean("enabled").default(true).notNull(),
-    promptDefinitionId: uuid("prompt_definition_id").references(() => aiPromptDefinition.id),
+    promptKey: varchar("prompt_key", { length: 120 }),
     executionPhase: integer("execution_phase").default(1).notNull(),
     dependsOn: jsonb("depends_on").$type<string[]>().default([]).notNull(),
     sortOrder: integer("sort_order").default(0).notNull(),

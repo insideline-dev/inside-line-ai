@@ -18,6 +18,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useStartupRealtimeProgress } from "@/lib/startup/useStartupRealtimeProgress";
 import { PhaseDataInspector } from "./PhaseDataInspector";
 import { ScrapeLogTable } from "./ScrapeLogTable";
@@ -436,7 +437,7 @@ function toPrettyJson(value: unknown): string {
   }
 }
 
-function toPrettyInput(trace: PipelineAgentTrace | null): string {
+function toPrettyUserPrompt(trace: PipelineAgentTrace | null): string {
   if (!trace) {
     return "";
   }
@@ -454,6 +455,19 @@ function toPrettyInput(trace: PipelineAgentTrace | null): string {
   }
   if (sections.length > 0) return sections.join("\n\n");
   return "Input not captured";
+}
+
+function toPrettySystemPrompt(trace: PipelineAgentTrace | null): string {
+  if (!trace) {
+    return "";
+  }
+  if (
+    typeof trace.systemPrompt === "string" &&
+    trace.systemPrompt.trim().length > 0
+  ) {
+    return trace.systemPrompt;
+  }
+  return "System prompt not captured";
 }
 
 function toPrettyOutput(trace: PipelineAgentTrace | null): string {
@@ -482,6 +496,37 @@ function toPrettyMeta(trace: PipelineAgentTrace | null): string {
     return toPrettyJson(trace.meta);
   }
   return "Metadata not captured";
+}
+
+export function TraceInputPanel({
+  trace,
+  defaultTab = "user",
+}: {
+  trace: PipelineAgentTrace | null;
+  defaultTab?: "user" | "system";
+}) {
+  return (
+    <Tabs defaultValue={defaultTab} className="space-y-2">
+      <TabsList className="grid h-8 w-full grid-cols-2">
+        <TabsTrigger value="user" className="text-xs">
+          User Prompt
+        </TabsTrigger>
+        <TabsTrigger value="system" className="text-xs">
+          System Prompt
+        </TabsTrigger>
+      </TabsList>
+      <TabsContent value="user" className="mt-0">
+        <pre className="max-h-[440px] overflow-auto rounded-md border bg-muted/30 p-3 text-xs leading-relaxed whitespace-pre-wrap">
+          {toPrettyUserPrompt(trace)}
+        </pre>
+      </TabsContent>
+      <TabsContent value="system" className="mt-0">
+        <pre className="max-h-[440px] overflow-auto rounded-md border bg-muted/30 p-3 text-xs leading-relaxed whitespace-pre-wrap">
+          {toPrettySystemPrompt(trace)}
+        </pre>
+      </TabsContent>
+    </Tabs>
+  );
 }
 
 function isPhaseStepTrace(trace: PipelineAgentTrace): boolean {
@@ -1625,9 +1670,7 @@ export function AdminPipelineLivePanel({
             <div className="grid gap-3 md:grid-cols-2">
               <div className="space-y-1">
                 <p className="text-xs font-medium text-muted-foreground">Input</p>
-                <pre className="max-h-[440px] overflow-auto rounded-md border bg-muted/30 p-3 text-xs leading-relaxed whitespace-pre-wrap">
-                  {toPrettyInput(selectedTrace)}
-                </pre>
+                <TraceInputPanel trace={selectedTrace} />
               </div>
               <div className="space-y-1">
                 <p className="text-xs font-medium text-muted-foreground">Output</p>

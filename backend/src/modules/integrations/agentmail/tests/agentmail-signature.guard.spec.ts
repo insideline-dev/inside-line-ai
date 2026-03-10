@@ -58,7 +58,7 @@ describe('AgentMailSignatureGuard', () => {
     } as ExecutionContext;
   };
 
-  const generateValidSignature = (payload: any, secret: string): string => {
+  const generateValidSignature = (payload: unknown, secret: string): string => {
     const hmac = crypto.createHmac('sha256', secret);
     hmac.update(JSON.stringify(payload));
     return `sha256=${hmac.digest('hex')}`;
@@ -303,9 +303,9 @@ describe('AgentMailSignatureGuard', () => {
       try {
         guard.canActivate(context);
         expect(true).toBe(false); // Should not reach here
-      } catch (error: any) {
+      } catch (error: unknown) {
         expect(error).toBeInstanceOf(UnauthorizedException);
-        expect(error.message).toContain('Webhook not configured');
+        expect((error as UnauthorizedException).message).toContain('Webhook not configured');
       } finally {
         configService.get.mockReturnValue(mockSecret);
       }
@@ -319,9 +319,9 @@ describe('AgentMailSignatureGuard', () => {
       try {
         guard.canActivate(context);
         expect(true).toBe(false); // Should not reach here
-      } catch (error: any) {
+      } catch (error: unknown) {
         expect(error).toBeInstanceOf(UnauthorizedException);
-        expect(error.message).toContain('Webhook not configured');
+        expect((error as UnauthorizedException).message).toContain('Webhook not configured');
       } finally {
         configService.get.mockReturnValue(mockSecret);
       }

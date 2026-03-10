@@ -1,6 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute, useParams } from "@tanstack/react-router";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -9,9 +8,11 @@ import {
   StartupHeader,
   SummaryCard,
   InsightsTabContent,
+  MarketTabContent,
   ProductTabContent,
   TeamTabContent,
   SourcesTabContent,
+  FounderRecommendationsTab,
 } from "@/components/startup-view";
 import {
   useStartupControllerFindOne,
@@ -21,6 +22,7 @@ import { EditTeamSheet } from "@/components/startup/EditTeamSheet";
 import type { Startup } from "@/types/startup";
 import type { Evaluation } from "@/types/evaluation";
 import { Pencil } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_protected/founder/startup/$id")({
   component: StartupDetail,
@@ -39,6 +41,16 @@ interface DataRoomDocument {
   assetMimeType?: string | null;
 }
 
+const FOUNDER_STARTUP_SECTIONS = [
+  { id: "summary", label: "Summary" },
+  { id: "insights", label: "Insights" },
+  { id: "recommendations", label: "Recommendations" },
+  { id: "team", label: "Team" },
+  { id: "product", label: "Product" },
+  { id: "market", label: "Market" },
+  { id: "sources", label: "Sources" },
+] as const;
+
 function unwrapApiResponse<T>(payload: unknown): T {
   if (
     payload &&
@@ -52,9 +64,27 @@ function unwrapApiResponse<T>(payload: unknown): T {
   return payload as T;
 }
 
+function findScrollContainer(node: HTMLElement | null): HTMLElement | null {
+  let current = node?.parentElement ?? null;
+  while (current) {
+    const style = window.getComputedStyle(current);
+    const overflowY = style.overflowY.toLowerCase();
+    if (
+      overflowY === "auto" ||
+      overflowY === "scroll" ||
+      overflowY === "overlay"
+    ) {
+      return current;
+    }
+    current = current.parentElement;
+  }
+  return null;
+}
+
 function StartupDetail() {
   const { id } = useParams({ from: "/_protected/founder/startup/$id" });
   const [editTeamOpen, setEditTeamOpen] = useState(false);
+  const [activeSection, setActiveSection] = useState<string>("summary");
 
   const {
     data: startupResponse,
@@ -79,10 +109,51 @@ function StartupDetail() {
     },
   });
 
+  useEffect(() => {
+    const firstSection = document.getElementById(
+      FOUNDER_STARTUP_SECTIONS[0]?.id ?? "summary",
+    );
+    const scrollRoot = findScrollContainer(firstSection);
+    const anchorOffset = 120;
+
+    const resolveActiveSection = () => {
+      const rootTop = scrollRoot ? scrollRoot.getBoundingClientRect().top : 0;
+      let nextActive: string = FOUNDER_STARTUP_SECTIONS[0]?.id ?? "summary";
+
+      for (const section of FOUNDER_STARTUP_SECTIONS) {
+        const element = document.getElementById(section.id);
+        if (!element) continue;
+
+        const offsetFromRootTop = element.getBoundingClientRect().top - rootTop;
+        if (offsetFromRootTop <= anchorOffset) {
+          nextActive = section.id;
+        } else {
+          break;
+        }
+      }
+
+      setActiveSection((prev) => (prev === nextActive ? prev : nextActive));
+    };
+
+    resolveActiveSection();
+    const scrollTarget: HTMLElement | Window = scrollRoot ?? window;
+    scrollTarget.addEventListener("scroll", resolveActiveSection, {
+      passive: true,
+    });
+    window.addEventListener("resize", resolveActiveSection);
+
+    return () => {
+      scrollTarget.removeEventListener("scroll", resolveActiveSection);
+      window.removeEventListener("resize", resolveActiveSection);
+    };
+  }, [startup?.id]);
+
   if (error) {
     return (
       <div className="text-center py-12">
-        <h2 className="text-xl font-semibold text-destructive">Error loading startup</h2>
+        <h2 className="text-xl font-semibold text-destructive">
+          Error loading startup
+        </h2>
         <p className="text-muted-foreground mt-2">{(error as Error).message}</p>
         <Button asChild className="mt-4">
           <a href="/founder">Back to Dashboard</a>
@@ -131,17 +202,21 @@ function StartupDetail() {
 
     // First, add submitted team members
     if (startup.teamMembers && startup.teamMembers.length > 0) {
-      members.push(...startup.teamMembers.map(m => ({
-        name: m.name,
-        role: m.role,
-        linkedinUrl: m.linkedinUrl,
-      })));
+      members.push(
+        ...startup.teamMembers.map((m) => ({
+          name: m.name,
+          role: m.role,
+          linkedinUrl: m.linkedinUrl,
+        })),
+      );
     }
 
     // Then merge in evaluation data if available
     if (evaluation?.teamMemberEvaluations) {
-      evaluation.teamMemberEvaluations.forEach(evalMember => {
-        const existing = members.find(m => m.name?.toLowerCase() === evalMember.name?.toLowerCase());
+      evaluation.teamMemberEvaluations.forEach((evalMember) => {
+        const existing = members.find(
+          (m) => m.name?.toLowerCase() === evalMember.name?.toLowerCase(),
+        );
         if (existing) {
           Object.assign(existing, evalMember);
         } else {
@@ -153,13 +228,23 @@ function StartupDetail() {
     return members;
   })();
 
+  const scrollToSection = (sectionId: string) => {
+    const element = document.getElementById(sectionId);
+    if (!element) return;
+    element.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const renderPendingCard = (message: string) => (
+    <Card className="border-dashed">
+      <CardContent className="p-12 text-center">
+        <p className="text-muted-foreground">{message}</p>
+      </CardContent>
+    </Card>
+  );
+
   return (
-    <div className="space-y-6">
-      <StartupHeader
-        startup={startup}
-        backLink="/founder"
-        showStatus={true}
-      />
+    <div className="mx-auto max-w-[1400px] space-y-8">
+      <StartupHeader startup={startup} backLink="/founder" showStatus={true} />
 
       {startup.status === "analyzing" && (
         <Card>
@@ -169,106 +254,166 @@ function StartupDetail() {
         </Card>
       )}
 
-      <Tabs defaultValue="summary" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="summary" data-testid="tab-summary">Summary</TabsTrigger>
-          <TabsTrigger value="insights" data-testid="tab-insights">Insights</TabsTrigger>
-          <TabsTrigger value="product" data-testid="tab-product">Product</TabsTrigger>
-          <TabsTrigger value="team" data-testid="tab-team">Team</TabsTrigger>
-          <TabsTrigger value="sources" data-testid="tab-sources">Sources</TabsTrigger>
-        </TabsList>
+      <div className="grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,1fr)_240px]">
+        <div className="space-y-12">
+          <section
+            id="summary"
+            className="scroll-mt-28 space-y-4"
+            data-testid="section-summary"
+          >
+            <h2 className="text-2xl font-semibold tracking-tight">Summary</h2>
+            {evaluation ? (
+              <SummaryCard
+                startup={startup}
+                evaluation={evaluation}
+                investorMemo={evaluation.investorMemo as any}
+                showScores={false}
+                showSectionScores={false}
+                summaryLayout="pills"
+                showStrengthsAndRisks={false}
+              />
+            ) : (
+              renderPendingCard(
+                startup.status === "analyzing"
+                  ? "Your startup is currently being analyzed. This may take a few minutes."
+                  : "Analysis has not been completed yet.",
+              )
+            )}
+          </section>
 
-        <TabsContent value="summary" className="space-y-6">
-          {evaluation ? (
-            <SummaryCard
+          <section
+            id="insights"
+            className="scroll-mt-28 space-y-4"
+            data-testid="section-insights"
+          >
+            <h2 className="text-2xl font-semibold tracking-tight">Insights</h2>
+            {evaluation ? (
+              <InsightsTabContent evaluation={evaluation} />
+            ) : (
+              renderPendingCard(
+                "Insights will be available once the analysis is complete.",
+              )
+            )}
+          </section>
+
+          <section
+            id="recommendations"
+            className="scroll-mt-28 space-y-4"
+            data-testid="section-recommendations"
+          >
+            <h2 className="text-2xl font-semibold tracking-tight">
+              Recommendations
+            </h2>
+            <FounderRecommendationsTab evaluation={evaluation ?? null} />
+          </section>
+
+          <section
+            id="team"
+            className="scroll-mt-28 space-y-4"
+            data-testid="section-team"
+          >
+            <div className="flex items-center justify-between gap-4">
+              <h2 className="text-2xl font-semibold tracking-tight">Team</h2>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setEditTeamOpen(true)}
+              >
+                <Pencil className="mr-2 h-4 w-4" />
+                Edit Team
+              </Button>
+            </div>
+            {evaluation ? (
+              <TeamTabContent
+                evaluation={evaluation}
+                teamMembers={teamMembers}
+                teamWeight={undefined}
+                companyName={startup.name}
+              />
+            ) : (
+              renderPendingCard(
+                "Team analysis will be available once the evaluation is complete.",
+              )
+            )}
+          </section>
+
+          <section
+            id="product"
+            className="scroll-mt-28 space-y-4"
+            data-testid="section-product"
+          >
+            <h2 className="text-2xl font-semibold tracking-tight">Product</h2>
+            {evaluation ? (
+              <ProductTabContent
+                startup={startup}
+                evaluation={evaluation}
+                productWeight={undefined}
+              />
+            ) : (
+              renderPendingCard(
+                "Product analysis will be available once the evaluation is complete.",
+              )
+            )}
+          </section>
+
+          <section
+            id="market"
+            className="scroll-mt-28 space-y-4"
+            data-testid="section-market"
+          >
+            <h2 className="text-2xl font-semibold tracking-tight">Market</h2>
+            {evaluation ? (
+              <MarketTabContent evaluation={evaluation} />
+            ) : (
+              renderPendingCard(
+                "Market analysis will be available once the evaluation is complete.",
+              )
+            )}
+          </section>
+
+          <section
+            id="sources"
+            className="scroll-mt-28 space-y-4"
+            data-testid="section-sources"
+          >
+            <h2 className="text-2xl font-semibold tracking-tight">Sources</h2>
+            <SourcesTabContent
               startup={startup}
-              evaluation={evaluation}
-              investorMemo={evaluation.investorMemo as any}
-              showScores={false}
-              showSectionScores={false}
+              evaluation={evaluation ?? null}
+              dataRoomDocuments={dataRoomDocuments}
             />
-          ) : (
-            <Card className="border-dashed">
-              <CardContent className="p-12 text-center">
-                <p className="text-muted-foreground">
-                  {startup.status === "analyzing"
-                    ? "Your startup is currently being analyzed. This may take a few minutes."
-                    : "Analysis has not been completed yet."}
+          </section>
+        </div>
+
+        <aside className="hidden lg:block">
+          <div className="sticky top-6">
+            <Card className="border-border/70 bg-background/80 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/65">
+              <CardContent className="p-3">
+                <p className="mb-2 px-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Jump To
                 </p>
+                <nav className="space-y-1">
+                  {FOUNDER_STARTUP_SECTIONS.map((section) => (
+                    <button
+                      key={section.id}
+                      type="button"
+                      onClick={() => scrollToSection(section.id)}
+                      className={cn(
+                        "w-full rounded-md px-2 py-1.5 text-left text-sm transition-colors",
+                        activeSection === section.id
+                          ? "bg-primary/10 font-medium text-primary"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                      )}
+                    >
+                      {section.label}
+                    </button>
+                  ))}
+                </nav>
               </CardContent>
             </Card>
-          )}
-        </TabsContent>
-
-        <TabsContent value="insights" className="space-y-6" data-testid="tab-content-insights">
-          {evaluation ? (
-            <InsightsTabContent evaluation={evaluation} />
-          ) : (
-            <Card className="border-dashed">
-              <CardContent className="p-12 text-center">
-                <p className="text-muted-foreground">
-                  Insights will be available once the analysis is complete.
-                </p>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
-
-        <TabsContent value="product" className="space-y-6">
-          {evaluation ? (
-            <ProductTabContent
-              startup={startup}
-              evaluation={evaluation}
-              productWeight={undefined}
-            />
-          ) : (
-            <Card className="border-dashed">
-              <CardContent className="p-12 text-center">
-                <p className="text-muted-foreground">
-                  Product analysis will be available once the evaluation is complete.
-                </p>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
-
-        <TabsContent value="team" className="space-y-6">
-          <div className="flex justify-end">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setEditTeamOpen(true)}
-            >
-              <Pencil className="mr-2 h-4 w-4" />
-              Edit Team
-            </Button>
           </div>
-          {evaluation ? (
-            <TeamTabContent
-              evaluation={evaluation}
-              teamMembers={teamMembers}
-              teamWeight={undefined}
-              companyName={startup.name}
-            />
-          ) : (
-            <Card className="border-dashed">
-              <CardContent className="p-12 text-center">
-                <p className="text-muted-foreground">
-                  Team analysis will be available once the evaluation is complete.
-                </p>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
-
-        <TabsContent value="sources" className="space-y-6">
-          <SourcesTabContent
-            startup={startup}
-            evaluation={evaluation ?? null}
-            dataRoomDocuments={dataRoomDocuments}
-          />
-        </TabsContent>
-      </Tabs>
+        </aside>
+      </div>
 
       <EditTeamSheet
         open={editTeamOpen}

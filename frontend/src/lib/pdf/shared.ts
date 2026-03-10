@@ -28,8 +28,8 @@ export const SECTION_META: {
   { key: "gtm", label: "Go-to-Market Strategy", scoreKey: "gtm", dataKey: "gtmData" },
   { key: "competitiveAdvantage", label: "Competitive Landscape", scoreKey: "competitiveAdvantage", dataKey: "competitiveAdvantageData" },
   { key: "financials", label: "Financials", scoreKey: "financials", dataKey: "financialsData" },
-  { key: "dealTerms", label: "Deal Terms", scoreKey: "dealTerms", dataKey: "dealTermsData" },
   { key: "legal", label: "Legal & Regulatory", scoreKey: "legal", dataKey: "legalData" },
+  { key: "dealTerms", label: "Deal Terms", scoreKey: "dealTerms", dataKey: "dealTermsData" },
   { key: "exitPotential", label: "Exit Potential", scoreKey: "exitPotential", dataKey: "exitPotentialData" },
 ];
 
@@ -68,7 +68,7 @@ export function getSummaryFromData(data: unknown): string {
 
   const record = data as Record<string, unknown>;
   const fields = [
-    "narrativeSummary", "memoNarrative", "summary", "assessment",
+    "memoNarrative", "narrativeSummary", "summary", "assessment",
     "feedback", "overview", "analysis", "description",
     "detailedAnalysis", "investmentThesis", "financialHealth",
     "competitivePosition", "termsQuality", "legalStructure",

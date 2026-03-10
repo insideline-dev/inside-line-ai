@@ -42,5 +42,8 @@ export * from '../modules/ai/entities';
 // Clara
 export * from '../modules/clara/entities';
 
+// Copilot
+export * from '../modules/copilot/entities';
+
 // Early Access
 export * from '../modules/early-access/entities';

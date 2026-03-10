@@ -29,8 +29,9 @@ import { StartupIntakeService } from '../startup/startup-intake.service';
 import { DrizzleService } from '../../database';
 import { claraConversation } from '../clara/entities/clara-conversation.schema';
 import { claraMessage } from '../clara/entities/clara-message.schema';
+import { copilotActionAudit } from '../copilot/entities';
 import { startup } from '../startup/entities/startup.schema';
-import { desc, eq } from 'drizzle-orm';
+import { desc, eq, inArray } from 'drizzle-orm';
 import { AnalyticsService } from './analytics.service';
 import { UserManagementService } from './user-management.service';
 import { ScoringConfigService } from './scoring-config.service';
@@ -1078,6 +1079,7 @@ export class AdminController {
         status: claraConversation.status,
         lastIntent: claraConversation.lastIntent,
         messageCount: claraConversation.messageCount,
+        context: claraConversation.context,
         lastMessageAt: claraConversation.lastMessageAt,
         createdAt: claraConversation.createdAt,
       })
@@ -1085,7 +1087,46 @@ export class AdminController {
       .leftJoin(startup, eq(claraConversation.startupId, startup.id))
       .orderBy(desc(claraConversation.lastMessageAt));
 
-    return { data: rows, total: rows.length };
+    const conversationIds = rows.map((row) => row.id);
+    const latestActions = conversationIds.length
+      ? await this.drizzle.db
+          .select({
+            conversationId: copilotActionAudit.conversationId,
+            actionKey: copilotActionAudit.actionKey,
+            status: copilotActionAudit.status,
+            targetSummary: copilotActionAudit.targetSummary,
+            createdAt: copilotActionAudit.createdAt,
+          })
+          .from(copilotActionAudit)
+          .where(inArray(copilotActionAudit.conversationId, conversationIds))
+          .orderBy(desc(copilotActionAudit.createdAt))
+      : [];
+
+    const latestActionByConversation = new Map<string, (typeof latestActions)[number]>();
+    for (const action of latestActions) {
+      if (!action.conversationId || latestActionByConversation.has(action.conversationId)) {
+        continue;
+      }
+      latestActionByConversation.set(action.conversationId, action);
+    }
+
+    return {
+      data: rows.map((row) => {
+        const context =
+          row.context && typeof row.context === 'object' && !Array.isArray(row.context)
+            ? (row.context as Record<string, unknown>)
+            : {};
+        return {
+          ...row,
+          pendingAction:
+            context.pendingAction && typeof context.pendingAction === 'object'
+              ? context.pendingAction
+              : null,
+          lastCopilotAction: latestActionByConversation.get(row.id) ?? null,
+        };
+      }),
+      total: rows.length,
+    };
   }
 
   @Get('conversations/:id/messages')

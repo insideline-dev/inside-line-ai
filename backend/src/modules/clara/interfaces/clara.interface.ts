@@ -1,3 +1,5 @@
+import type { CopilotPendingAction } from "../../copilot/interfaces/copilot.interface";
+
 export enum ClaraIntent {
   SUBMISSION = "submission",
   QUESTION = "question",
@@ -83,4 +85,5 @@ export interface ClaraAgentRuntimeState {
     filename: string;
     contentType: string;
   }>;
+  pendingAction: CopilotPendingAction | null;
 }

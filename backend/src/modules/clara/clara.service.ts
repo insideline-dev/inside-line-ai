@@ -6,6 +6,8 @@ import { DrizzleService } from "../../database";
 import { user } from "../../auth/entities/auth.schema";
 import { startup, StartupStage } from "../startup/entities/startup.schema";
 import { PdfService } from "../startup/pdf.service";
+import { CopilotService } from "../copilot";
+import type { CopilotPendingAction } from "../copilot";
 import { ClaraConversationService } from "./clara-conversation.service";
 import { ClaraAiService } from "./clara-ai.service";
 import { ClaraSubmissionService } from "./clara-submission.service";
@@ -36,6 +38,7 @@ export class ClaraService {
     private claraAi: ClaraAiService,
     private submissionService: ClaraSubmissionService,
     private toolsService: ClaraToolsService,
+    private copilotService: CopilotService,
     private pdfService: PdfService,
   ) {
     this.claraInboxId = this.config.get<string>("CLARA_INBOX_ID") ?? null;
@@ -271,10 +274,14 @@ export class ClaraService {
       let intentClassification: IntentClassification;
       let finalStartupId: string | null = conversation.startupId;
       let finalStartupExtra = startupContext;
+      let pendingActionForMemory = this.readPendingActionFromMemory(
+        ctx.conversationMemory,
+      );
       const agentRuntime: ClaraAgentRuntimeState = {
         replyHandled: false,
         replyText: null,
         replyAttachments: [],
+        pendingAction: null,
       };
 
       if (typeof (this.claraAi as ClaraAiService & {
@@ -559,34 +566,84 @@ export class ClaraService {
               );
             }
           } else {
-            const tools = this.toolsService.buildTools({
-              actorUserId,
-              actorRole,
-              linkedStartupId: conversation.startupId,
-              channel: "email",
-              inboxId: ctx.inboxId,
-              inReplyToMessageId: ctx.messageId,
-              runtime: agentRuntime,
-            });
-            replyText = await this.claraAi.runAgentLoop(ctx, tools, {
-              actorRole,
+            const copilotResult = await this.copilotService.handleTurn({
+              ctx: {
+                bodyText: ctx.bodyText,
+                fromEmail: ctx.fromEmail,
+                threadId: ctx.threadId,
+              },
+              actor: {
+                userId: actorUserId,
+                role: actorRole,
+              },
+              conversationId: conversation.id,
               conversationMemory: ctx.conversationMemory,
+              runtime: agentRuntime,
+              runAgentLoop: async () => {
+                const tools = this.toolsService.buildTools({
+                  actorUserId,
+                  actorRole,
+                  linkedStartupId: conversation.startupId,
+                  channel: "email",
+                  inboxId: ctx.inboxId,
+                  inReplyToMessageId: ctx.messageId,
+                  runtime: agentRuntime,
+                });
+                return this.claraAi.runAgentLoop(ctx, tools, {
+                  actorRole,
+                  conversationMemory: ctx.conversationMemory,
+                });
+              },
+              executePendingAction: (pendingAction) =>
+                this.toolsService.executePendingAction(pendingAction, {
+                  actorUserId,
+                  actorRole,
+                }),
             });
+            replyText = copilotResult.replyText;
+            pendingActionForMemory = copilotResult.clearPendingAction
+              ? null
+              : copilotResult.pendingAction;
           }
         } else {
-          const tools = this.toolsService.buildTools({
-            actorUserId,
-            actorRole,
-            linkedStartupId: conversation.startupId,
-            channel: "email",
-            inboxId: ctx.inboxId,
-            inReplyToMessageId: ctx.messageId,
-            runtime: agentRuntime,
-          });
-          replyText = await this.claraAi.runAgentLoop(ctx, tools, {
-            actorRole,
+          const copilotResult = await this.copilotService.handleTurn({
+            ctx: {
+              bodyText: ctx.bodyText,
+              fromEmail: ctx.fromEmail,
+              threadId: ctx.threadId,
+            },
+            actor: {
+              userId: actorUserId,
+              role: actorRole,
+            },
+            conversationId: conversation.id,
             conversationMemory: ctx.conversationMemory,
+            runtime: agentRuntime,
+            runAgentLoop: async () => {
+              const tools = this.toolsService.buildTools({
+                actorUserId,
+                actorRole,
+                linkedStartupId: conversation.startupId,
+                channel: "email",
+                inboxId: ctx.inboxId,
+                inReplyToMessageId: ctx.messageId,
+                runtime: agentRuntime,
+              });
+              return this.claraAi.runAgentLoop(ctx, tools, {
+                actorRole,
+                conversationMemory: ctx.conversationMemory,
+              });
+            },
+            executePendingAction: (pendingAction) =>
+              this.toolsService.executePendingAction(pendingAction, {
+                actorUserId,
+                actorRole,
+              }),
           });
+          replyText = copilotResult.replyText;
+          pendingActionForMemory = copilotResult.clearPendingAction
+            ? null
+            : copilotResult.pendingAction;
         }
       }
 
@@ -637,6 +694,7 @@ export class ClaraService {
               startupId: finalStartupId,
               startupExtra: finalStartupExtra,
               attachmentReply: agentRuntime.replyAttachments,
+              pendingAction: pendingActionForMemory,
             }),
           ),
         );
@@ -1263,8 +1321,18 @@ export class ClaraService {
       startupStage?: string;
     };
     attachmentReply: Array<{ filename: string; contentType: string }>;
+    pendingAction: CopilotPendingAction | null;
   }): Record<string, unknown> {
-    const { ctx, intent, intentClassification, replyText, startupId, startupExtra, attachmentReply } = params;
+    const {
+      ctx,
+      intent,
+      intentClassification,
+      replyText,
+      startupId,
+      startupExtra,
+      attachmentReply,
+      pendingAction,
+    } = params;
 
     const bodyPreview = (ctx.bodyText ?? "").trim().slice(0, 300);
     const replyPreview = (replyText ?? "").trim().slice(0, 300);
@@ -1298,8 +1366,20 @@ export class ClaraService {
       linkedStartupScore:
         typeof startupExtra.score === "number" ? startupExtra.score : null,
       attachmentReplyHistory: attachmentReply,
+      pendingAction,
       recentTopics,
     };
+  }
+
+  private readPendingActionFromMemory(
+    memory: Record<string, unknown> | null | undefined,
+  ): CopilotPendingAction | null {
+    const pendingAction = memory?.pendingAction;
+    if (!pendingAction || typeof pendingAction !== "object" || Array.isArray(pendingAction)) {
+      return null;
+    }
+
+    return pendingAction as CopilotPendingAction;
   }
 
   private async sendConversationEmail(params: {

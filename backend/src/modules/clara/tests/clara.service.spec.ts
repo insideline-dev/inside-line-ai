@@ -1,13 +1,13 @@
 import { ConfigService } from '@nestjs/config';
 import { ClaraService } from '../clara.service';
 import { DrizzleService } from '../../../database';
-import { AgentMailClientService } from '../../integrations/agentmail/agentmail-client.service';
 import { ClaraConversationService } from '../clara-conversation.service';
 import { ClaraAiService } from '../clara-ai.service';
 import { ClaraSubmissionService } from '../clara-submission.service';
 import { ClaraToolsService } from '../clara-tools.service';
 import { ClaraChannelService } from '../clara-channel.service';
 import { PdfService } from '../../startup/pdf.service';
+import { CopilotService } from '../../copilot';
 import { ConversationStatus, MessageDirection } from '../interfaces/clara.interface';
 
 describe('ClaraService', () => {
@@ -30,6 +30,7 @@ describe('ClaraService', () => {
     hasMissingCriticalFields: jest.Mock;
   };
   let toolsService: { buildTools: jest.Mock };
+  let copilotService: { handleTurn: jest.Mock };
   let pdfService: {
     generateMemo: jest.Mock;
     generateReport: jest.Mock;
@@ -101,6 +102,7 @@ describe('ClaraService', () => {
     claraAi?: typeof claraAi;
     submissionService?: typeof submissionService;
     toolsService?: typeof toolsService;
+    copilotService?: typeof copilotService;
     pdfService?: typeof pdfService;
   }) =>
     new ClaraService(
@@ -111,6 +113,7 @@ describe('ClaraService', () => {
       (overrides?.claraAi ?? claraAi) as unknown as ClaraAiService,
       (overrides?.submissionService ?? submissionService) as unknown as ClaraSubmissionService,
       (overrides?.toolsService ?? toolsService) as unknown as ClaraToolsService,
+      (overrides?.copilotService ?? copilotService) as unknown as CopilotService,
       (overrides?.pdfService ?? pdfService) as unknown as PdfService,
     );
 
@@ -133,6 +136,7 @@ describe('ClaraService', () => {
       linkStartup: jest.fn().mockResolvedValue({}),
       findByStartupId: jest.fn().mockResolvedValue(null),
       hasMessage: jest.fn().mockResolvedValue(false),
+      updateContext: jest.fn().mockResolvedValue({}),
     };
     claraChannel = {
       getEmailMessage: jest
@@ -180,6 +184,13 @@ describe('ClaraService', () => {
     };
     toolsService = {
       buildTools: jest.fn().mockReturnValue({}),
+    };
+    copilotService = {
+      handleTurn: jest.fn().mockResolvedValue({
+        replyText: 'Agent response',
+        pendingAction: null,
+        clearPendingAction: false,
+      }),
     };
     pdfService = {
       generateMemo: jest.fn().mockResolvedValue({ url: 'https://example.com/memo.pdf' }),
@@ -333,18 +344,47 @@ describe('ClaraService', () => {
   });
 
   describe('handleIncomingMessage - non-submission flow', () => {
-    it('should run agent loop when not a submission', async () => {
+    it('should route non-submission email turns through the shared copilot service', async () => {
       drizzleService.db.limit.mockResolvedValueOnce([]);
       // isLikelySubmission defaults to false in beforeEach
 
       await service.handleIncomingMessage('inbox-1', 'thread-123', 'msg-123');
 
-      expect(toolsService.buildTools).toHaveBeenCalled();
-      expect(claraAi.runAgentLoop).toHaveBeenCalled();
+      expect(copilotService.handleTurn).toHaveBeenCalled();
       expect(agentMailClient.replyToMessage).toHaveBeenCalledWith(
         'inbox-1',
         'msg-123',
         expect.objectContaining({ text: 'Agent response' }),
+      );
+    });
+
+    it('should persist pending action state from the copilot service into conversation context', async () => {
+      drizzleService.db.limit.mockResolvedValueOnce([]);
+      copilotService.handleTurn.mockResolvedValueOnce({
+        replyText: 'Reply CONFIRM to save Acme.',
+        pendingAction: {
+          actionKey: 'toggle_saved_match',
+          confirmationMessage: 'Reply CONFIRM to save Acme.',
+          successMessage: 'Acme is saved.',
+          targetSummary: 'Acme',
+          startupId: 'startup-1',
+          payload: {
+            startupId: 'startup-1',
+          },
+        },
+        clearPendingAction: false,
+      });
+
+      await service.handleIncomingMessage('inbox-1', 'thread-123', 'msg-123');
+
+      expect(conversationService.updateContext).toHaveBeenCalledWith(
+        'conv-1',
+        expect.objectContaining({
+          pendingAction: expect.objectContaining({
+            actionKey: 'toggle_saved_match',
+            startupId: 'startup-1',
+          }),
+        }),
       );
     });
   });

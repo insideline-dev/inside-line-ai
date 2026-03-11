@@ -1,0 +1,731 @@
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { ConfidenceBadge } from "@/components/ConfidenceBadge";
+import {
+  PiggyBank,
+  TrendingUp,
+  CheckCircle2,
+  AlertTriangle,
+  Wallet,
+  Target,
+  FileSpreadsheet,
+  BarChart3,
+} from "lucide-react";
+import type { Evaluation } from "@/types/evaluation";
+
+interface FinancialsTabContentProps {
+  evaluation: Evaluation | null;
+  financialsWeight?: number;
+}
+
+type GenericRecord = Record<string, unknown>;
+
+interface SubScoreItem {
+  dimension: string;
+  weight: number;
+  score: number;
+}
+
+function toRecord(value: unknown): GenericRecord {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return value as GenericRecord;
+}
+
+function toString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function toStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => (typeof item === "string" ? item.trim() : ""))
+    .filter((item) => item.length > 0);
+}
+
+function toBoolean(value: unknown): boolean | null {
+  if (typeof value === "boolean") return value;
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  if (["true", "yes", "y"].includes(normalized)) return true;
+  if (["false", "no", "n"].includes(normalized)) return false;
+  return null;
+}
+
+function toNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().replace(/[$,%\s,]/g, "");
+  if (!normalized) return null;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function toSubScores(value: unknown): SubScoreItem[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item): SubScoreItem | null => {
+      const record = toRecord(item);
+      const dimension = toString(record.dimension);
+      const weight = toNumber(record.weight);
+      const score = toNumber(record.score);
+      if (!dimension || weight === null || score === null) return null;
+      return { dimension, weight, score };
+    })
+    .filter((item): item is SubScoreItem => item !== null);
+}
+
+function formatPercent(value: number): string {
+  if (!Number.isFinite(value)) return "0%";
+  return `${Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1)}%`;
+}
+
+function formatWeight(value: number): string {
+  return value <= 1 ? formatPercent(value * 100) : formatPercent(value);
+}
+
+function scoreTone(score: number): string {
+  if (score >= 80) return "text-emerald-600";
+  if (score >= 60) return "text-amber-600";
+  return "text-rose-600";
+}
+
+function scoreBarTone(score: number): string {
+  if (score >= 80) return "bg-emerald-500";
+  if (score >= 60) return "bg-amber-500";
+  return "bg-rose-500";
+}
+
+function impactBadgeClass(value: string): string {
+  switch (value) {
+    case "critical":
+      return "border-rose-200 bg-rose-50 text-rose-700";
+    case "important":
+      return "border-amber-200 bg-amber-50 text-amber-700";
+    default:
+      return "border-slate-200 bg-slate-50 text-slate-600";
+  }
+}
+
+function labelBadgeClass(value: string): string {
+  switch (value) {
+    case "strong":
+    case "ahead":
+    case "advanced":
+    case "ipo_grade":
+    case "ipo-grade":
+    case "path_clear":
+    case "profitable":
+      return "border-emerald-200 bg-emerald-50 text-emerald-700";
+    case "moderate":
+    case "partial":
+    case "developing":
+    case "solid":
+    case "path_described":
+    case "revenue_not_profitable":
+    case "revenue-not-profitable":
+      return "border-amber-200 bg-amber-50 text-amber-700";
+    case "weak":
+    case "none":
+    case "basic":
+    case "pre_revenue":
+    case "pre-revenue":
+      return "border-rose-200 bg-rose-50 text-rose-700";
+    default:
+      return "border-slate-200 bg-slate-50 text-slate-600";
+  }
+}
+
+function formatEnumLabel(value: string | undefined): string {
+  if (!value) return "Unknown";
+  return value
+    .replace(/[_-]+/g, " ")
+    .split(" ")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function runwayTone(runwayMonths: number | null): string {
+  if (runwayMonths === null) return "border-slate-200 bg-slate-50 text-slate-700";
+  if (runwayMonths >= 18) return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  if (runwayMonths >= 12) return "border-amber-200 bg-amber-50 text-amber-700";
+  return "border-rose-200 bg-rose-50 text-rose-700";
+}
+
+function parseDataGapItems(value: unknown): Array<{ gap: string; impact: string; suggestedAction: string | null }> {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (typeof item === "string" && item.trim().length > 0) {
+        return { gap: item.trim(), impact: "important", suggestedAction: null };
+      }
+      const record = toRecord(item);
+      const gap = toString(record.gap) ?? toString(record.description);
+      if (!gap) return null;
+      return {
+        gap,
+        impact: toString(record.impact) ?? "important",
+        suggestedAction: toString(record.suggestedAction) ?? null,
+      };
+    })
+    .filter((item): item is { gap: string; impact: string; suggestedAction: string | null } => item !== null);
+}
+
+function countTrue(values: Array<boolean | null>): number {
+  return values.filter((value) => value === true).length;
+}
+
+function Gauge({
+  label,
+  steps,
+  activeValue,
+}: {
+  label: string;
+  steps: string[];
+  activeValue: string | undefined;
+}) {
+  const normalized = activeValue?.replace(/-/g, "_");
+  const activeIndex = steps.findIndex((step) => step === normalized);
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-medium">{label}</p>
+        <Badge variant="outline" className={labelBadgeClass(normalized ?? "")}>
+          {formatEnumLabel(normalized)}
+        </Badge>
+      </div>
+      <div className="grid gap-2 md:grid-cols-5">
+        {steps.map((step, index) => {
+          const filled = activeIndex >= 0 && index <= activeIndex;
+          return (
+            <div
+              key={step}
+              className={`rounded-lg border px-3 py-2 text-xs ${
+                filled ? labelBadgeClass(step) : "border-slate-200 bg-muted/20 text-muted-foreground"
+              }`}
+            >
+              {formatEnumLabel(step)}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function CoverageCell({ label, value }: { label: string; value: boolean | null }) {
+  return (
+    <div className="rounded-lg border bg-muted/20 p-3">
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-sm font-medium leading-tight">{label}</p>
+        {value === true ? (
+          <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+        ) : (
+          <AlertTriangle className="h-4 w-4 shrink-0 text-muted-foreground" />
+        )}
+      </div>
+      <p className="mt-2 text-xs text-muted-foreground">
+        {value === null ? "Not covered" : value ? "Covered" : "Not covered"}
+      </p>
+    </div>
+  );
+}
+
+export function FinancialsTabContent({ evaluation, financialsWeight }: FinancialsTabContentProps) {
+  if (!evaluation) {
+    return (
+      <Card className="border-dashed" data-testid="card-financials-empty">
+        <CardContent className="p-12 text-center">
+          <PiggyBank className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
+          <h3 className="mb-2 font-semibold">No financial data</h3>
+          <p className="text-muted-foreground">
+            Financial evaluation data has not been generated yet.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const financialsData = toRecord(evaluation.financialsData);
+  const scoring = toRecord(financialsData.scoring);
+  const keyMetrics = toRecord(financialsData.keyMetrics);
+  const capitalPlan = toRecord(financialsData.capitalPlan);
+  const projections = toRecord(financialsData.projections);
+  const charts = toRecord(financialsData.charts);
+  const financialPlanning = toRecord(financialsData.financialPlanning);
+
+  const score =
+    toNumber(evaluation.financialsScore) ??
+    toNumber(scoring.overallScore) ??
+    toNumber(financialsData.score) ??
+    0;
+  const confidence =
+    toString(scoring.confidence) ??
+    toString(financialsData.confidence) ??
+    "unknown";
+  const scoringBasis = toString(scoring.scoringBasis);
+  const subScores = toSubScores(scoring.subScores);
+
+  const financialModelProvided = toBoolean(financialsData.financialModelProvided) ?? false;
+  const strengths = toStringArray(financialsData.strengths);
+  const risks = toStringArray(financialsData.risks);
+  const dataGaps = parseDataGapItems(financialsData.dataGaps);
+
+  const raiseAmount = toString(keyMetrics.raiseAmount);
+  const monthlyBurn = toString(keyMetrics.monthlyBurn);
+  const runway = toString(keyMetrics.runway);
+  const runwayMonths = toNumber(keyMetrics.runwayMonths);
+  const useOfFundsBreakdown = Array.isArray(capitalPlan.useOfFundsBreakdown)
+    ? (capitalPlan.useOfFundsBreakdown as unknown[]).map((item) => {
+        const record = toRecord(item);
+        return {
+          category: toString(record.category) ?? "Unknown",
+          percentage: toNumber(record.percentage) ?? 0,
+        };
+      })
+    : [];
+
+  const capitalCoverage = {
+    burnPlanDescribed: toBoolean(capitalPlan.burnPlanDescribed),
+    useOfFundsDescribed: toBoolean(capitalPlan.useOfFundsDescribed),
+    runwayEstimated: toBoolean(capitalPlan.runwayEstimated),
+    raiseJustified: toBoolean(capitalPlan.raiseJustified),
+    milestoneTied: toBoolean(capitalPlan.milestoneTied),
+    capitalEfficiencyAddressed: toBoolean(capitalPlan.capitalEfficiencyAddressed),
+  };
+  const capitalCoverageCount = countTrue(Object.values(capitalCoverage));
+  const capitalPlanAvailable = capitalCoverageCount > 0;
+  const capitalPlanSummary = toString(capitalPlan.summary);
+  const milestoneAlignment = toString(capitalPlan.milestoneAlignment);
+
+  const projectionsProvided = toBoolean(projections.provided) ?? false;
+  const assumptionsStated = toBoolean(projections.assumptionsStated);
+  const internallyConsistent = toBoolean(projections.internallyConsistent);
+  const projectionsSummary = toString(projections.summary);
+  const projectionsCredibility = toString(projections.credibility) ?? "none";
+  const scenarioDetail = toString(projections.scenarioDetail);
+  const assumptionAssessment = toString(projections.assumptionAssessment);
+  const assumptions = Array.isArray(projections.assumptions)
+    ? (projections.assumptions as unknown[]).map((item) => {
+        const record = toRecord(item);
+        return {
+          assumption: toString(record.assumption) ?? "Unknown",
+          value: toString(record.value) ?? "Unknown",
+          assessment: toString(record.assessment) ?? "Unknown",
+          verdict: toString(record.verdict) ?? "unsupported",
+        };
+      })
+    : [];
+  const profitabilityPath = toString(projections.profitabilityPath);
+  const showUploadPrompt = !financialModelProvided;
+  const showProjectionCoverage = projectionsProvided || financialModelProvided;
+
+  const revenueProjection = Array.isArray(charts.revenueProjection) ? charts.revenueProjection as unknown[] : [];
+  const burnProjection = Array.isArray(charts.burnProjection) ? charts.burnProjection as unknown[] : [];
+  const scenarioComparison = Array.isArray(charts.scenarioComparison) ? charts.scenarioComparison as unknown[] : [];
+  const marginProgression = Array.isArray(charts.marginProgression) ? charts.marginProgression as unknown[] : [];
+
+  const sophisticationLevel = toString(financialPlanning.sophisticationLevel);
+  const diligenceFlags = Array.isArray(financialPlanning.diligenceFlags)
+    ? (financialPlanning.diligenceFlags as unknown[]).map((item) => {
+        const record = toRecord(item);
+        return {
+          flag: toString(record.flag) ?? "Unknown",
+          priority: toString(record.priority) ?? "routine",
+        };
+      })
+    : [];
+  const planningSummary = toString(financialPlanning.summary);
+
+  return (
+    <div className="space-y-6" data-testid="financials-tab-content">
+      <Card className="border-primary/20 bg-gradient-to-br from-primary/10 via-background to-background">
+        <CardContent className="py-6">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="rounded-full bg-primary/10 p-3">
+                <PiggyBank className="h-6 w-6 text-primary" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold">Financial Plan Score</h3>
+                <p className="text-sm text-muted-foreground">
+                  {typeof financialsWeight === "number" ? `${financialsWeight}%` : ""} weight in overall evaluation
+                </p>
+                <ConfidenceBadge confidence={confidence} className="mt-2" dataTestId="badge-financials-confidence" />
+              </div>
+            </div>
+            <div className="text-right">
+              <span className={`text-4xl font-bold ${scoreTone(score)}`}>{Math.round(score)}</span>
+              <span className="text-lg text-muted-foreground">/100</span>
+            </div>
+          </div>
+
+          {(scoringBasis || subScores.length > 0 || confidence === "low" || confidence === "mid") && (
+            <div className="mt-5 space-y-4 border-t border-border/60 pt-4">
+              {scoringBasis && <p className="text-sm text-muted-foreground">{scoringBasis}</p>}
+
+              {subScores.length > 0 && (
+                <div className="space-y-3">
+                  {subScores.map((item) => (
+                    <div key={item.dimension} className="grid grid-cols-[minmax(0,1fr)_48px] gap-3">
+                      <div>
+                        <div className="mb-1 flex items-center justify-between gap-3 text-xs">
+                          <span className="font-medium">{item.dimension}</span>
+                          <span className="text-muted-foreground">{formatWeight(item.weight)}</span>
+                        </div>
+                        <div className="h-2.5 rounded-full bg-muted">
+                          <div className={`h-full rounded-full ${scoreBarTone(item.score)}`} style={{ width: `${Math.max(0, Math.min(100, item.score))}%` }} />
+                        </div>
+                      </div>
+                      <div className="text-right text-xs font-medium">{Math.round(item.score)}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {(confidence === "low" || confidence === "mid") && (
+                <p className="text-xs text-muted-foreground">
+                  {confidence === "low"
+                    ? "Limited financial data available. The score is based on partial deck information."
+                    : "Partial financial data available. Uploading a financial model would improve analysis confidence."}
+                </p>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {(raiseAmount || monthlyBurn || runway || useOfFundsBreakdown.length > 0) && (
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {raiseAmount && (
+            <Card>
+              <CardContent className="flex items-center gap-3 p-4">
+                <Wallet className="h-5 w-5 text-primary" />
+                <div>
+                  <p className="text-lg font-semibold">{raiseAmount}</p>
+                  <p className="text-xs text-muted-foreground">Raise Amount</p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          {monthlyBurn && (
+            <Card>
+              <CardContent className="flex items-center gap-3 p-4">
+                <TrendingUp className="h-5 w-5 text-primary" />
+                <div>
+                  <p className="text-lg font-semibold">{monthlyBurn}</p>
+                  <p className="text-xs text-muted-foreground">Monthly Burn</p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          {runway && (
+            <Card>
+              <CardContent className="flex items-center gap-3 p-4">
+                <Badge variant="outline" className={runwayTone(runwayMonths)}>
+                  {runway}
+                </Badge>
+                <div>
+                  <p className="text-xs font-medium">Post-Raise Runway</p>
+                  <p className="text-xs text-muted-foreground">
+                    {runwayMonths !== null ? `${runwayMonths} months` : "No numeric runway provided"}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          {useOfFundsBreakdown.length > 0 && (
+            <Card>
+              <CardContent className="flex items-center gap-3 p-4">
+                <Target className="h-5 w-5 text-primary" />
+                <div>
+                  <p className="text-lg font-semibold">{useOfFundsBreakdown.length}</p>
+                  <p className="text-xs text-muted-foreground">Fund Allocation Categories</p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Capital Plan Assessment</CardTitle>
+          <CardDescription>Coverage, allocation clarity, and milestone alignment.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {capitalPlanAvailable ? (
+            <>
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-medium">{capitalCoverageCount}/6 elements described</p>
+                {milestoneAlignment && (
+                  <Badge variant="outline" className={labelBadgeClass(milestoneAlignment)}>
+                    {formatEnumLabel(milestoneAlignment)}
+                  </Badge>
+                )}
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                <CoverageCell label="Burn Plan Described" value={capitalCoverage.burnPlanDescribed} />
+                <CoverageCell label="Use of Funds Breakdown" value={capitalCoverage.useOfFundsDescribed} />
+                <CoverageCell label="Runway Estimated" value={capitalCoverage.runwayEstimated} />
+                <CoverageCell label="Raise Justified" value={capitalCoverage.raiseJustified} />
+                <CoverageCell label="Milestones Tied to Capital" value={capitalCoverage.milestoneTied} />
+                <CoverageCell label="Capital Efficiency Addressed" value={capitalCoverage.capitalEfficiencyAddressed} />
+              </div>
+
+              {useOfFundsBreakdown.length > 0 && (
+                <div className="space-y-3 rounded-xl border bg-muted/20 p-4">
+                  <div className="flex items-center gap-2">
+                    <Target className="h-4 w-4 text-primary" />
+                    <p className="text-sm font-medium">Use of Funds Breakdown</p>
+                  </div>
+                  <div className="space-y-3">
+                    {useOfFundsBreakdown.map((item) => (
+                      <div key={item.category} className="space-y-1.5">
+                        <div className="flex items-center justify-between gap-3 text-xs">
+                          <span>{item.category}</span>
+                          <span className="font-medium">{formatPercent(item.percentage)}</span>
+                        </div>
+                        <div className="h-2 rounded-full bg-background">
+                          <div className="h-full rounded-full bg-primary" style={{ width: `${Math.max(0, Math.min(100, item.percentage))}%` }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {capitalPlanSummary && (
+                <p className="text-sm leading-relaxed text-muted-foreground">{capitalPlanSummary}</p>
+              )}
+            </>
+          ) : (
+            <div className="rounded-xl border border-dashed bg-muted/10 p-5 text-sm text-muted-foreground">
+              Capital planning is not covered in the current deck. This gap should also appear in the diligence list below.
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Projection Assessment</CardTitle>
+          <CardDescription>Projection coverage, credibility, and model depth.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {showUploadPrompt && (
+            <div className="rounded-xl border border-dashed bg-primary/[0.04] p-5">
+              <div className="flex items-start gap-3">
+                <div className="rounded-full bg-primary/10 p-2">
+                  <FileSpreadsheet className="h-5 w-5 text-primary" />
+                </div>
+                <div className="space-y-2">
+                  <p className="font-medium">Upload Financial Model for Full Analysis</p>
+                  <p className="text-sm text-muted-foreground">
+                    A spreadsheet model unlocks deeper projection, scenario, and planning analysis. This tab is already ready to render that data when it becomes available.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showProjectionCoverage ? (
+            <>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <CoverageCell label="Projections Provided" value={projectionsProvided} />
+                <CoverageCell label="Assumptions Stated" value={assumptionsStated} />
+                <CoverageCell label="Internally Consistent" value={projectionsProvided ? internallyConsistent : null} />
+                <div className="rounded-lg border bg-muted/20 p-3">
+                  <p className="text-sm font-medium">Credibility</p>
+                  <Badge variant="outline" className={`mt-2 ${labelBadgeClass(projectionsCredibility)}`}>
+                    {formatEnumLabel(projectionsCredibility)}
+                  </Badge>
+                </div>
+              </div>
+              {projectionsSummary && (
+                <p className="text-sm leading-relaxed text-muted-foreground">{projectionsSummary}</p>
+              )}
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              No projections were provided in the deck, and no financial model has been uploaded yet.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-6 md:grid-cols-2">
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+              Financial Strengths
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {strengths.length > 0 ? (
+              <ul className="space-y-2">
+                {strengths.map((item, index) => (
+                  <li key={`${item}-${index}`} className="flex items-start gap-2 text-sm">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-muted-foreground">No explicit financial strengths were captured in this run.</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-rose-500" />
+              Financial Risks
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {risks.length > 0 ? (
+              <ul className="space-y-2">
+                {risks.map((item, index) => (
+                  <li key={`${item}-${index}`} className="flex items-start gap-2 text-sm">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-rose-500" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-muted-foreground">No explicit financial risks were captured in this run.</p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Data Gaps & Diligence</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {dataGaps.length > 0 ? (
+            <div className="space-y-3">
+              {dataGaps.map((item, index) => (
+                <div key={`${item.gap}-${index}`} className="rounded-lg border bg-muted/20 p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <p className="text-sm font-medium">{item.gap}</p>
+                    <Badge variant="outline" className={impactBadgeClass(item.impact)}>
+                      {formatEnumLabel(item.impact)}
+                    </Badge>
+                  </div>
+                  {item.suggestedAction && (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Suggested action: {item.suggestedAction}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No financial diligence gaps are listed yet.</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {financialModelProvided && (
+        <>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <BarChart3 className="h-5 w-5 text-primary" />
+                Financial Model Analysis
+              </CardTitle>
+              <CardDescription>Structured output unlocked by uploaded model data.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4 lg:grid-cols-2">
+              <div className="rounded-lg border bg-muted/20 p-4">
+                <p className="text-sm font-medium">Projection Datasets</p>
+                <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
+                  <li>Revenue projection points: {revenueProjection.length}</li>
+                  <li>Burn projection points: {burnProjection.length}</li>
+                  <li>Scenario comparison points: {scenarioComparison.length}</li>
+                  <li>Margin progression points: {marginProgression.length}</li>
+                </ul>
+              </div>
+              <div className="rounded-lg border bg-muted/20 p-4">
+                <p className="text-sm font-medium">Model Commentary</p>
+                <div className="mt-3 space-y-2 text-sm text-muted-foreground">
+                  {scenarioDetail && <p>Scenario detail: {scenarioDetail}</p>}
+                  {assumptionAssessment && <p>Assumption assessment: {assumptionAssessment}</p>}
+                  {!scenarioDetail && !assumptionAssessment && (
+                    <p>No additional model commentary was returned for this run.</p>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {assumptions.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Assumption Deep Dive</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {assumptions.map((item, index) => (
+                  <div key={`${item.assumption}-${index}`} className="rounded-lg border bg-muted/20 p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-medium">{item.assumption}</p>
+                        <p className="text-xs text-muted-foreground">Value: {item.value}</p>
+                      </div>
+                      <Badge variant="outline" className={labelBadgeClass(item.verdict)}>
+                        {formatEnumLabel(item.verdict)}
+                      </Badge>
+                    </div>
+                    <p className="mt-2 text-sm text-muted-foreground">{item.assessment}</p>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Profitability & Planning Maturity</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <Gauge
+                label="Profitability Path"
+                steps={["pre_revenue", "revenue_not_profitable", "path_described", "path_clear", "profitable"]}
+                activeValue={profitabilityPath}
+              />
+              <Gauge
+                label="Planning Sophistication"
+                steps={["basic", "developing", "solid", "advanced", "ipo_grade"]}
+                activeValue={sophisticationLevel}
+              />
+
+              {diligenceFlags.length > 0 && (
+                <div className="space-y-3">
+                  <p className="text-sm font-medium">Diligence Flags</p>
+                  {diligenceFlags.map((item, index) => (
+                    <div key={`${item.flag}-${index}`} className="flex flex-wrap items-start justify-between gap-3 rounded-lg border bg-muted/20 p-4">
+                      <p className="text-sm">{item.flag}</p>
+                      <Badge variant="outline" className={impactBadgeClass(item.priority)}>
+                        {formatEnumLabel(item.priority)}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {planningSummary && (
+                <p className="text-sm text-muted-foreground">{planningSummary}</p>
+              )}
+            </CardContent>
+          </Card>
+        </>
+      )}
+    </div>
+  );
+}

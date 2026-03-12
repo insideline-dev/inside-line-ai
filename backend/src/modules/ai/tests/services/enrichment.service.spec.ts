@@ -270,6 +270,21 @@ describe("EnrichmentService", () => {
       expect(completion?.retryCount).toBe(0);
     });
 
+    it("accepts text-mode scalar fields even when source is omitted", async () => {
+      const aiJson = makeEnrichmentJson({
+        website: { value: "https://acme.com", confidence: 0.87 },
+      });
+      generateTextMock.mockResolvedValue({ text: aiJson });
+
+      const { service } = buildService({
+        record: makeStartupRecord({ website: null }),
+      });
+      const result = await service.run(STARTUP_ID);
+
+      expect(result.website?.value).toBe("https://acme.com");
+      expect(result.website?.source).toBe("AI synthesis (source unspecified)");
+    });
+
     it("treats schema-valid but non-substantive output as invalid when web evidence exists", async () => {
       const aiJson = makeEnrichmentJson();
       generateTextMock.mockResolvedValue({ text: aiJson });
@@ -352,6 +367,75 @@ describe("EnrichmentService", () => {
       expect(completion?.usedFallback).toBe(false);
       expect(completion?.attempt).toBe(1);
       expect(completion?.retryCount).toBe(0);
+    });
+
+    it("returns deterministic backup data when structured-output schema is rejected by the provider", async () => {
+      generateTextMock.mockRejectedValue(
+        new Error(
+          "Invalid schema for response_format 'response': In context=('properties', 'discoveredFounders', 'items'), 'required' is required to be supplied and to be an array including every key in properties. Missing 'role'.",
+        ),
+      );
+
+      const { service } = buildService({
+        braveConfigured: true,
+        braveSearchResponses: [
+          {
+            query: "Acme founder CEO LinkedIn",
+            results: [
+              {
+                title: "Jane Doe - Acme Inc | LinkedIn",
+                url: "https://www.linkedin.com/in/jane-doe/",
+                description: "CEO and co-founder at Acme Inc",
+              },
+              {
+                title: "Acme - Crunchbase Company Profile",
+                url: "https://www.crunchbase.com/organization/acme-inc",
+                description: "Acme company profile and funding history",
+              },
+            ],
+          },
+        ],
+      });
+
+      let completion:
+        | { usedFallback: boolean; fallbackReason?: string; rawProviderError?: string }
+        | undefined;
+      const result = await service.run(STARTUP_ID, {
+        onAgentComplete: (payload) => {
+          completion = payload;
+        },
+      });
+
+      expect(result.discoveredFounders.length).toBeGreaterThan(0);
+      expect(result.sources.length).toBeGreaterThan(0);
+      expect(completion?.usedFallback).toBe(true);
+      expect(completion?.fallbackReason).toBe("MODEL_OR_PROVIDER_ERROR");
+      expect(completion?.rawProviderError).toContain("Missing 'role'");
+    });
+
+    it("accepts partial contact field objects and string shorthand in text output", async () => {
+      generateTextMock.mockResolvedValue({
+        text: makeEnrichmentJson({
+          contactName: "Brian Chesky",
+          contactEmail: {
+            value: "brian@example.com",
+          },
+          companyName: {
+            value: "Airbnb",
+            confidence: 0.91,
+            source: "https://www.airbnb.com",
+          },
+        }),
+      });
+
+      const { service } = buildService({});
+      const result = await service.run(STARTUP_ID);
+
+      expect(result.contactName?.value).toBe("Brian Chesky");
+      expect(result.contactName?.confidence).toBe(0.5);
+      expect(result.contactEmail?.value).toBe("brian@example.com");
+      expect(result.contactEmail?.confidence).toBe(0.5);
+      expect(result.companyName?.value).toBe("Airbnb");
     });
   });
 

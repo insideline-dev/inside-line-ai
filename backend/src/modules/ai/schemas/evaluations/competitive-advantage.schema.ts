@@ -31,25 +31,36 @@ export const StrategicPositioningSchema = z.object({
   differentiation: requiredStringFromNull("Unknown"),
   uniqueValueProposition: requiredStringFromNull("Unknown"),
   differentiationType: z.enum([
-    "technical", "data", "distribution", "regulatory",
-    "network_effects", "switching_costs", "brand", "none",
-  ]).default("none"),
-  durability: z.enum(["strong", "moderate", "weak", "none"]).default("none"),
+    "technology",
+    "network_effects",
+    "data",
+    "brand",
+    "cost",
+    "regulatory",
+    "other",
+  ]).default("other"),
+  durability: z.enum(["strong", "moderate", "weak"]).default("weak"),
 }).default({
   differentiation: "Unknown",
   uniqueValueProposition: "Unknown",
-  differentiationType: "none",
-  durability: "none",
+  differentiationType: "other",
+  durability: "weak",
 });
 
 // --- Moat Assessment ---
 
 export const MoatAssessmentSchema = z.object({
   moatType: z.enum([
-    "network_effects", "proprietary_data", "regulatory",
-    "switching_costs", "scale", "IP", "brand", "none",
+    "network_effects",
+    "switching_costs",
+    "proprietary_data",
+    "technology",
+    "brand",
+    "regulatory",
+    "scale",
+    "none",
   ]).default("none"),
-  moatStage: z.enum(["potential", "forming", "established", "deep", "dominant"]).default("potential"),
+  moatStage: z.enum(["potential", "emerging", "forming", "established", "dominant"]).default("potential"),
   moatEvidence: stringArray,
   selfReinforcing: z.boolean().default(false),
   timeToReplicate: requiredStringFromNull("Unknown"),
@@ -73,13 +84,13 @@ export const BarriersToEntrySchema = z.object({
 // --- Competitive Position ---
 
 export const CompetitivePositionSchema = z.object({
-  currentGap: z.enum(["widening", "stable", "narrowing"]).default("stable"),
+  currentGap: z.enum(["leading", "competitive", "behind", "unclear"]).default("unclear"),
   gapEvidence: requiredStringFromNull("Unknown"),
   vulnerabilities: stringArray,
   defensibleAgainstFunded: z.boolean().default(false),
   defensibilityRationale: requiredStringFromNull("Unknown"),
 }).default({
-  currentGap: "stable",
+  currentGap: "unclear",
   gapEvidence: "Unknown",
   vulnerabilities: [],
   defensibleAgainstFunded: false,
@@ -92,7 +103,7 @@ const DirectCompetitorSchema = z.object({
   name: requiredStringFromNull("Unknown competitor"),
   description: requiredStringFromNull("Description unavailable"),
   url: optionalUrl,
-  fundingRaised: optionalNonNegativeNumber,
+  fundingRaised: optionalString,
 });
 
 const IndirectCompetitorSchema = z.object({

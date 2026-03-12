@@ -43,7 +43,10 @@ Bad: Raise size outlier for stage
 After scoring, explicitly list:
 - STRENGTHS: What supports the deal (valuation below public comps, IPO up-round potential, strong margins support multiple, raise size comparable)
 - RISKS: What concerns exist (valuation above public comps, IPO down-round risk, growth deceleration, preference stack unknown)
-- DATA GAPS: What you CANNOT assess (term sheet details, full cap table, preference stack, blocking rights, liquidation preferences) — flag for formal diligence
+- DATA GAPS: What you CANNOT assess. For each gap, assess:
+  - Gap description (term sheet details, full cap table, preference stack, blocking rights, liquidation preferences)
+  - Impact if unresolved: "critical" (would change score/recommendation), "important" (would change confidence), "minor" (contextual, nice-to-have)
+  - Suggested diligence action to resolve it
 - SOURCES: Cite which inputs informed each finding — e.g., "public comps: sector median 8x revenue," "deck: $50M ARR implies 20x multiple," "competition research: comparable Series C at 15x"
 
 --- NARRATIVE STRUCTURE ---
@@ -89,13 +92,29 @@ STAY IN SCOPE: Price the deal — assess valuation reasonableness, deal structur
 
 --- OUTPUT FIELD MAPPING ---
 
-Your response MUST populate these fields:
+Your evaluation above should populate these structured output fields:
 
-- score → 0-100 integer from the SCORING RUBRIC
-- confidence → "high", "mid", or "low" from the SCORING RUBRIC
-- scoringBasis → one-sentence explanation from the SCORING RUBRIC
-- narrativeSummary → the 450-650 word narrative from NARRATIVE STRUCTURE
-- keyFindings → the STRENGTHS from STRENGTHS, RISKS & DATA GAPS
-- risks → the RISKS from STRENGTHS, RISKS & DATA GAPS
-- dataGaps → the DATA GAPS from STRENGTHS, RISKS & DATA GAPS
-- sources → the SOURCES from STRENGTHS, RISKS & DATA GAPS
+Scoring:
+- scoring.overallScore → your 0-100 score from the scoring rubric
+- scoring.confidence → "high", "mid", or "low" from the scoring rubric
+- scoring.scoringBasis → one-sentence explanation of what drove the score
+- scoring.subScores[] → array of sub-dimension scores, one per evaluation dimension. Each entry: { dimension (name), weight (decimal), score (0-100) }. Dimensions for this stage: Valuation Assessment (0.80), Deal Structure (0.20)
+
+Deal Terms Overview:
+- dealOverview.impliedMultiple → string describing the implied multiple (e.g., "20x ARR", "15x revenue"), or null if insufficient data to calculate
+- dealOverview.comparableRange → string describing the comparable multiple range from research (e.g., "12x-18x ARR for sector Series A"), or null if no comparables found
+- dealOverview.premiumDiscount → "significant_premium", "slight_premium", "in_line", "slight_discount", "significant_discount", or "insufficient_data" — how does the implied multiple compare to comparables?
+- dealOverview.roundType → the round type (e.g., "priced", "SAFE", "convertible note")
+- dealOverview.raiseSizeAssessment → "large_for_stage", "typical", "small_for_stage", or "insufficient_data" — how does the raise size compare to comparable rounds?
+- dealOverview.valuationProvided → true/false — was an explicit valuation provided in the round details?
+
+Strengths & Risks:
+- strengths → specific deal terms strengths (string, one per line)
+- risks → specific deal terms risks (string, one per line)
+
+Data Gaps:
+- dataGaps[] → array of { gap, impact ("critical", "important", "minor"), suggestedAction }
+
+Narrative (not rendered on a tab):
+- narrativeSummary → the 3-4 paragraph narrative (450-650 words)
+- sources → primary sources used

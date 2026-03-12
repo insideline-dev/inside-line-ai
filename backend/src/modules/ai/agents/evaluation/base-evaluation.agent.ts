@@ -19,6 +19,7 @@ import { EVALUATION_PROMPT_KEY_BY_AGENT } from "../../services/ai-prompt-catalog
 import { buildEvaluationCommonBaseline } from "../../services/evaluation-prompt-baseline";
 import { AiModelExecutionService } from "../../services/ai-model-execution.service";
 import { sanitizeNarrativeText } from "../../services/narrative-sanitizer";
+import { normalizeBaseEvaluationCandidate } from "../../schemas";
 
 const NARRATIVE_MIN_LENGTH = 420;
 const LEGACY_PROMPT_TEXT_MAX_CHARS = 18_000;
@@ -151,7 +152,7 @@ export abstract class BaseEvaluationAgent<TOutput>
    * Subclasses can override to normalize legacy model payloads.
    */
   protected normalizeOutputCandidate(candidate: unknown): unknown {
-    return candidate;
+    return normalizeBaseEvaluationCandidate(candidate);
   }
 
   /**

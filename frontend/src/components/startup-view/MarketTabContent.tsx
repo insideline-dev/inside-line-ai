@@ -61,7 +61,28 @@ function toMarketSources(value: unknown): MarketSourceView[] {
 
 function toBoolean(value: unknown): boolean | null {
   if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["true", "yes", "y", "aligned", "present"].includes(normalized)) return true;
+    if (["false", "no", "n", "none", "unknown", "not provided"].includes(normalized)) return false;
+  }
   return null;
+}
+
+function toEntryConditions(
+  value: unknown,
+): Array<{ factor: string; severity: string; note: string }> {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const record = item as Record<string, unknown>;
+      const factor = getMeaningful(record.factor) || "Unknown factor";
+      const severity = getMeaningful(record.severity) || "moderate";
+      const note = getMeaningful(record.note) || "Not provided";
+      return { factor, severity, note };
+    })
+    .filter((item): item is { factor: string; severity: string; note: string } => item !== null);
 }
 
 function isPlaceholder(value: string | undefined): boolean {
@@ -144,7 +165,7 @@ export function MarketTabContent({ evaluation, marketWeight }: MarketTabContentP
   const marketLifecycle = toRecord(growthTiming.marketLifecycle);
   const marketStructure = toRecord(marketData.marketStructure);
   const concentrationTrend = toRecord(marketStructure.concentrationTrend);
-  const entryConditions = toRecord(marketStructure.entryConditions);
+  const entryConditions = toEntryConditions(marketStructure.entryConditions);
   const scoring = toRecord(marketData.scoring);
 
   const confidence =
@@ -199,7 +220,10 @@ export function MarketTabContent({ evaluation, marketWeight }: MarketTabContentP
   const deckTamClaimed = getMeaningful(deckVsResearch.tamClaimed) || "Not provided";
   const deckTamResearched = getMeaningful(deckVsResearch.tamResearched) || "Not provided";
   const deckDiscrepancyFlag = toBoolean(deckVsResearch.discrepancyFlag);
-  const deckDiscrepancyNotes = getMeaningful(deckVsResearch.discrepancyNotes) || "Not provided";
+  const deckDiscrepancyNotes =
+    getMeaningful(deckVsResearch.notes) ||
+    getMeaningful(deckVsResearch.discrepancyNotes) ||
+    "Not provided";
 
   const whyNowThesis =
     getMeaningful(whyNow.thesis) ||
@@ -212,10 +236,7 @@ export function MarketTabContent({ evaluation, marketWeight }: MarketTabContentP
     (typeof evaluation?.marketScore === "number" && evaluation.marketScore >= 75
       ? "right_time"
       : "slightly_early");
-  const timingRationale =
-    getMeaningful(growthTiming.timingRationale) ||
-    getMeaningful(legacySizeGrowth.rationale) ||
-    "Not provided";
+  const timingRationale = getMeaningful(legacySizeGrowth.rationale) || "Not provided";
   const growthRateCagr = getMeaningful(growthRate.cagr) || "Not provided";
   const growthRatePeriod = getMeaningful(growthRate.period) || "Not provided";
   const growthRateSource = getMeaningful(growthRate.source) || "Not provided";
@@ -228,19 +249,23 @@ export function MarketTabContent({ evaluation, marketWeight }: MarketTabContentP
     getMeaningful(marketStructure.structureType) ||
     inferStructureType(getMeaningful(legacyStructure.rationale) || "");
   const entryAssessment =
-    getMeaningful(entryConditions.assessment) ||
+    (entryConditions.length > 0
+      ? entryConditions.map((item) => `${item.factor}: ${item.severity}`).join(" · ")
+      : null) ||
     (typeof evaluation?.marketScore === "number" && evaluation.marketScore >= 75
       ? "favorable"
       : "neutral");
   const entryRationale =
-    getMeaningful(entryConditions.rationale) ||
+    (entryConditions.length > 0
+      ? entryConditions.map((item) => item.note).join(" ")
+      : null) ||
     getMeaningful(legacyStructure.rationale) ||
     "Not provided";
   const concentrationDirection = getMeaningful(concentrationTrend.direction) || "Not provided";
   const concentrationEvidence = getMeaningful(concentrationTrend.evidence) || "Not provided";
 
   const dataGaps = [
-    ...toStringArray(marketData.dataGaps),
+    ...toStructuredGapStrings(marketData.dataGaps),
     ...toStructuredGapStrings(marketData.marketResearchGaps),
     ...toStructuredGapStrings(marketData.researchGaps),
   ].filter((item, index, arr) => arr.findIndex((x) => x.toLowerCase() === item.toLowerCase()) === index);

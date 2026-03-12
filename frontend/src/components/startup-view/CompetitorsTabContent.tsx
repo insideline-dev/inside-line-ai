@@ -282,6 +282,7 @@ function uniqueStrings(values: string[]): string[] {
 }
 
 function formatFundingValue(value: unknown): string | null {
+  if (typeof value === "string" && value.trim().length > 0) return value.trim();
   if (typeof value !== "number" || !Number.isFinite(value)) return null;
   if (value >= 1_000_000_000) return `$${(value / 1_000_000_000).toFixed(1)}B`;
   if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`;

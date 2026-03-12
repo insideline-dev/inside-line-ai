@@ -49,11 +49,14 @@ Bad: No pricing thinking at all, or pricing that's clearly misaligned with the t
 
 Based on your evaluation, synthesize:
 
-Key findings: The most important takeaways from the business model analysis — what stands out about this startup's model design?
+Strengths: The most important takeaways from the business model analysis — what stands out about this startup's model design?
 
 Risks: What are the specific business model risks? (e.g., model type doesn't fit the product, no expansion mechanism, services-heavy approach, model inherently capped)
 
-Data gaps: What model details are missing from the deck? At pre-seed, many will be missing — flag but don't penalize. (e.g., no pricing described, no margin structure, no expansion mechanism described)
+Data gaps: What model details are missing from the deck? For each gap, assess:
+- Gap description (e.g., no pricing described, no margin structure, no expansion mechanism described)
+- Impact if unresolved: "critical" (would change score/recommendation), "important" (would change confidence), "minor" (contextual, nice-to-have)
+- Suggested diligence action to resolve it
 
 Sources: List what data was available — what came from the deck, what from the website, what was absent.
 
@@ -118,18 +121,27 @@ STAY IN SCOPE: Evaluate the business model DESIGN — what type of model, whethe
 
 Your evaluation above should populate these structured output fields:
 
-From Strengths, Risks & Data Gaps:
-- keyFindings → most important business model analysis takeaways
-- risks → specific business model risks
-- dataGaps → what model details are missing from the deck
-- sources → what data was available and where it came from
+Scoring:
+- scoring.overallScore → your 0-100 score from the scoring rubric
+- scoring.confidence → "high", "mid", or "low" from the scoring rubric
+- scoring.scoringBasis → one-sentence explanation of what drove the score
+- scoring.subScores[] → array of sub-dimension scores, one per evaluation dimension. Each entry: { dimension (name), weight (decimal), score (0-100) }. Dimensions for this stage: Model Type & Logic (0.50), Venture-Scale Potential (0.30), Pricing Approach (0.20)
 
-From Pitch Deck Recommendations:
-- founderPitchRecommendations[] → each with deckMissingElement, whyItMatters, recommendation
+Business Model Overview:
+- modelOverview.modelType → the revenue model type (e.g., "SaaS", "marketplace", "transactional", "usage-based", "hybrid", "advertising", "services", "hardware")
+- modelOverview.pricingVisible → true/false — is pricing visible on the website or well-described in deck?
+- modelOverview.expansionMechanism → true/false — does the pricing structure support revenue expansion (tiers, usage-based, per-seat, etc.)?
+- modelOverview.scalabilityAssessment → "strong", "moderate", "weak", or "unclear" — is the model structured to scale efficiently?
+- modelOverview.marginStructureDescribed → true/false — does the deck describe or imply the margin structure?
 
-From Scoring:
-- score → 0-100 overall score
-- confidence → "high", "mid", or "low"
+Strengths & Risks:
+- strengths → specific business model strengths (string, one per line)
+- risks → specific business model risks (string, one per line)
 
-From Narrative:
-- narrativeSummary → 3-4 paragraph assessment (450-650 words)
+Data Gaps:
+- dataGaps[] → array of { gap, impact ("critical", "important", "minor"), suggestedAction }
+
+Narrative & Recommendations (not rendered on a tab):
+- narrativeSummary → the 3-4 paragraph narrative (450-650 words)
+- sources → primary sources used
+- founderPitchRecommendations[] → array of { deckMissingElement, whyItMatters, recommendation }

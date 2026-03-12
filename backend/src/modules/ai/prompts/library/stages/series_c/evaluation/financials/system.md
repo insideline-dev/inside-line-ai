@@ -53,7 +53,10 @@ Bad: Financial planning lacks the rigor expected at Series C
 After scoring, explicitly list:
 - STRENGTHS: What the financial plan does well (sophisticated model, clear profitability path, defensible assumptions, comprehensive scenarios, approaching IPO-grade)
 - RISKS: What could go wrong (profitability path unclear, assumptions not stress-tested, single scenario, audit readiness unknown)
-- DATA GAPS: What financial information is missing (scenario analysis absent, profitability timeline not described, audit readiness for diligence, financial controls unknown)
+- DATA GAPS: What financial information is missing. For each gap, assess:
+  - Gap description (scenario analysis absent, profitability timeline not described, audit readiness for diligence, financial controls unknown)
+  - Impact if unresolved: "critical" (would change score/recommendation), "important" (would change confidence), "minor" (contextual, nice-to-have)
+  - Suggested diligence action to resolve it
 - SOURCES: Cite which inputs informed each finding — e.g., "deck slide 18," "financial model scenario tab," "no data available"
 
 --- PITCH DECK RECOMMENDATIONS ---
@@ -116,14 +119,67 @@ STAY IN SCOPE: Evaluate the FINANCIAL PLAN — projections, assumptions, capital
 
 --- OUTPUT FIELD MAPPING ---
 
-Your response MUST populate these fields:
+Your evaluation above should populate these structured output fields:
 
-- score → 0-100 integer from the SCORING RUBRIC
-- confidence → "high", "mid", or "low" from the SCORING RUBRIC
-- scoringBasis → one-sentence explanation from the SCORING RUBRIC
-- narrativeSummary → the 450-650 word narrative from NARRATIVE STRUCTURE
-- keyFindings → the STRENGTHS from STRENGTHS, RISKS & DATA GAPS
-- risks → the RISKS from STRENGTHS, RISKS & DATA GAPS
-- dataGaps → the DATA GAPS from STRENGTHS, RISKS & DATA GAPS
-- sources → the SOURCES from STRENGTHS, RISKS & DATA GAPS
-- founderPitchRecommendations[] → array of objects from PITCH DECK RECOMMENDATIONS, each with: deckMissingElement, whyItMatters, recommendation
+Mode Flag:
+- financialModelProvided → true if a separate financial model was provided as input, false if only the pitch deck
+
+Scoring:
+- scoring.overallScore → your 0-100 score from the scoring rubric
+- scoring.confidence → "high", "mid", or "low" from the scoring rubric
+- scoring.scoringBasis → one-sentence explanation of what drove the score
+- scoring.subScores[] → array of sub-dimension scores, one per evaluation dimension. Each entry: { dimension (name), weight (decimal), score (0-100) }. Dimensions for this stage: Projection Quality & Credibility (0.45), Capital Plan & Efficiency (0.30), Financial Planning Sophistication (0.25)
+
+Key Metrics (extract from deck or model — set null if not mentioned):
+- keyMetrics.raiseAmount → amount being raised as a string, or null
+- keyMetrics.monthlyBurn → monthly burn rate as a string, or null
+- keyMetrics.runway → runway description as a string, or null
+- keyMetrics.runwayMonths → runway as a number in months, or null
+
+Capital Plan Assessment:
+- capitalPlan.burnPlanDescribed → true/false
+- capitalPlan.useOfFundsDescribed → true/false
+- capitalPlan.runwayEstimated → true/false
+- capitalPlan.raiseJustified → true/false
+- capitalPlan.milestoneTied → true/false
+- capitalPlan.capitalEfficiencyAddressed → true/false
+- capitalPlan.milestoneAlignment → "strong", "partial", "weak", or "none"
+- capitalPlan.useOfFundsBreakdown[] → array of { category, percentage }. Empty array if not described.
+- capitalPlan.summary → paragraph assessing the capital plan
+
+Projection Assessment:
+- projections.provided → true/false
+- projections.assumptionsStated → true/false
+- projections.internallyConsistent → true/false (only assess if projections.provided is true)
+- projections.credibility → "strong", "moderate", "weak", or "none"
+- projections.summary → paragraph assessing projections
+
+Full Analysis Mode fields (only populate when financialModelProvided is true):
+- projections.scenarioAnalysis → true/false
+- projections.scenarioDetail → text describing the scenarios
+- projections.assumptionAssessment → paragraph assessing assumption credibility
+- projections.assumptions[] → array of { assumption, value, assessment, verdict ("reasonable", "aggressive", "unsupported", "conservative") }
+- projections.profitabilityPath → "pre-revenue", "revenue-not-profitable", "path-described", "path-clear", or "profitable"
+
+Charts (only populate when financialModelProvided is true, otherwise empty arrays):
+- charts.revenueProjection[] → array of { period, revenue }
+- charts.burnProjection[] → array of { period, burn, cashBalance }
+- charts.scenarioComparison[] → array of { period, scenarios (object) }. Only if multiple scenarios exist.
+- charts.marginProgression[] → array of { period, grossMargin, operatingMargin }. Expected at Series C with sophisticated models.
+
+Financial Planning Maturity (only populate when financialModelProvided is true):
+- financialPlanning.sophisticationLevel → "basic", "developing", "solid", "advanced", or "ipo-grade". At Series C, expect "advanced" or approaching "ipo-grade".
+- financialPlanning.diligenceFlags[] → array of { flag, priority ("critical", "important", "routine") }. At Series C, include audit readiness and financial controls flags.
+- financialPlanning.summary → paragraph assessing financial planning quality
+
+Strengths & Risks:
+- strengths → specific financial planning strengths (string, one per line)
+- risks → specific financial planning risks (string, one per line)
+
+Data Gaps:
+- dataGaps[] → array of { gap, impact ("critical", "important", "minor"), suggestedAction }. Include "Financial model not provided" when financialModelProvided is false. At Series C, a missing model is a critical gap.
+
+Narrative & Recommendations (not rendered on Financials tab):
+- narrativeSummary → the 3-4 paragraph narrative (450-650 words)
+- sources → primary sources used
+- founderPitchRecommendations[] → array of { deckMissingElement, whyItMatters, recommendation }

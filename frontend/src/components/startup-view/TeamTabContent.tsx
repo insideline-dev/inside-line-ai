@@ -82,6 +82,20 @@ function toStringArray(value: unknown): string[] {
     .filter(Boolean);
 }
 
+function toStructuredGapStrings(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (typeof item === "string") return item.trim();
+      if (!item || typeof item !== "object") return "";
+      const record = item as Record<string, unknown>;
+      const gap = typeof record.gap === "string" ? record.gap.trim() : "";
+      const impact = typeof record.impact === "string" ? record.impact.trim() : "";
+      return gap ? (impact ? `${gap} (${impact} impact)` : gap) : "";
+    })
+    .filter(Boolean);
+}
+
 function dedupeStrings(values: string[]): string[] {
   const seen = new Set<string>();
   const output: string[] = [];
@@ -140,10 +154,11 @@ function extractTeamRisks(evaluation: Evaluation | null): string[] {
     return dedupeStrings(explicit).slice(0, 5);
   }
 
-  const memberConcerns = memberEvals.flatMap((member) =>
-    toStringArray((member as any).concerns),
-  );
-  const dataGaps = toStringArray((teamData as any).dataGaps);
+  const memberConcerns = memberEvals.flatMap((member) => [
+    ...toStringArray((member as any).concerns),
+    ...toStringArray((member as any).risks),
+  ]);
+  const dataGaps = toStructuredGapStrings((teamData as any).dataGaps);
   return dedupeStrings([...memberConcerns, ...dataGaps]).slice(0, 5);
 }
 
@@ -330,10 +345,20 @@ function extractFounderRecommendations(teamData: Record<string, unknown> | undef
       if (!item || typeof item !== "object") return null;
 
       const record = item as Record<string, unknown>;
-      const bullet = typeof record.bullet === "string" ? record.bullet.trim() : "";
+      const bullet =
+        typeof record.recommendation === "string"
+          ? record.recommendation.trim()
+          : typeof record.bullet === "string"
+            ? record.bullet.trim()
+            : "";
       if (!bullet) return null;
 
-      const rawType = typeof record.type === "string" ? record.type.toLowerCase().trim() : "";
+      const rawType =
+        typeof record.action === "string"
+          ? record.action.toLowerCase().trim()
+          : typeof record.type === "string"
+            ? record.type.toLowerCase().trim()
+            : "";
       const type: FounderRecommendationItem["type"] =
         rawType === "hire" || rawType === "reframe" ? rawType : "recommendation";
       return { type, bullet };
@@ -484,6 +509,7 @@ function buildTeamMembers(
         (li.summary as string) ||
         (member.bio as string) ||
         (memberEval?.bio as string) ||
+        (teamEvalData?.relevance as string) ||
         (founderData?.background as string) ||
         (linkedinAnalysis.background as string) ||
         "",
@@ -511,7 +537,10 @@ function buildTeamMembers(
         (founderData?.founderMarketFit as number | undefined) ||
         (linkedinAnalysis.founderFitScore as number | undefined),
       relevantExperience: (teamEvalData?.relevantExperience as string) || "",
-      background: (teamEvalData?.background as string) || "",
+      background:
+        (teamEvalData?.relevance as string) ||
+        (teamEvalData?.background as string) ||
+        "",
     };
   });
 }

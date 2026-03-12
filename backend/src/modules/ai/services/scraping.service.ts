@@ -1670,8 +1670,8 @@ export class ScrapingService {
           z.object({
             name: z.string(),
             role: z.string(),
-            linkedinUrl: z.string().optional(),
-            bio: z.string().optional(),
+            linkedinUrl: z.string().nullable(),
+            bio: z.string().nullable(),
           }),
         )
         .max(10),

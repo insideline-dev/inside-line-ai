@@ -475,7 +475,8 @@ export class SynthesisAgent {
     if (founderRecs.length > 0) {
       lines.push("TEAM AGENT — FOUNDER RECOMMENDATIONS:");
       for (const rec of founderRecs) {
-        lines.push(`- [${rec.type.toUpperCase()}] ${rec.bullet}`);
+        const label = rec.action.trim().toUpperCase();
+        lines.push(`- [${label}] ${rec.recommendation}`);
       }
       lines.push("");
     }
@@ -820,9 +821,6 @@ Citation rules:
       )
       .map((scenario) => ({
         ...scenario,
-        exitType: this.normalizeWhitespace(
-          sanitizeNarrativeText(scenario.exitType),
-        ),
         exitValuation: this.normalizeWhitespace(
           sanitizeNarrativeText(scenario.exitValuation),
         ),
@@ -840,7 +838,37 @@ Citation rules:
       return [];
     }
     return input
-      .filter((item): item is string => typeof item === "string")
+      .flatMap((item) => {
+        if (typeof item === "string") {
+          return [item];
+        }
+        if (!item || typeof item !== "object") {
+          return [];
+        }
+        const record = item as Record<string, unknown>;
+        const gap =
+          typeof record.gap === "string"
+            ? record.gap
+            : typeof record.description === "string"
+              ? record.description
+              : "";
+        const impact =
+          typeof record.impact === "string" ? record.impact : "";
+        const action =
+          typeof record.suggestedAction === "string"
+            ? record.suggestedAction
+            : typeof record.action === "string"
+              ? record.action
+              : "";
+        const composed = [
+          gap.trim(),
+          impact.trim() ? `(${impact.trim()} impact)` : "",
+          action.trim() ? `Action: ${action.trim()}` : "",
+        ]
+          .filter((part) => part.length > 0)
+          .join(" ");
+        return composed.length > 0 ? [composed] : [];
+      })
       .map((item) => this.normalizeWhitespace(item))
       .filter((item) => item.length > 0);
   }
@@ -1353,7 +1381,7 @@ Citation rules:
           narrativeSummary?: string;
           keyFindings?: string[];
           risks?: string[];
-          dataGaps?: string[];
+          dataGaps?: unknown[];
         };
         const weight = stageWeights[key];
         const weightLabel = weight
@@ -1369,8 +1397,9 @@ Citation rules:
         const risks = ev.risks?.length
           ? ` | Risks: ${ev.risks.join("; ")}`
           : "";
-        const dataGaps = ev.dataGaps?.length
-          ? ` | Data Gaps: ${ev.dataGaps.join("; ")}`
+        const cleanedDataGaps = this.cleanStringArray(ev.dataGaps);
+        const dataGaps = cleanedDataGaps.length
+          ? ` | Data Gaps: ${cleanedDataGaps.join("; ")}`
           : "";
         const scoreLine = `- ${key}${weightLabel}: Score ${ev.score}/100 (confidence ${ev.confidence})${findings}${risks}${dataGaps}`;
         const sectionNarrative =

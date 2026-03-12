@@ -19,9 +19,9 @@ describe("TeamEvaluationSchema", () => {
       {
         name: "John Doe",
         role: "CEO",
-        background: "Ex-Google",
+        relevance: "Ex-Google operator with category expertise",
         strengths: ["Leadership"],
-        concerns: [],
+        risks: [],
       },
     ],
     founderRecommendations: [],
@@ -77,13 +77,13 @@ describe("TeamEvaluationSchema", () => {
         {
           name: "Alice",
           role: "CTO",
-          background: "Ex-Meta",
+          relevance: "Ex-Meta engineering lead",
         },
       ],
     });
 
     expect(parsed.teamMembers[0]?.strengths).toEqual([]);
-    expect(parsed.teamMembers[0]?.concerns).toEqual([]);
+    expect(parsed.teamMembers[0]?.risks).toEqual([]);
   });
 
   it("defaults strengths to empty array when omitted", () => {

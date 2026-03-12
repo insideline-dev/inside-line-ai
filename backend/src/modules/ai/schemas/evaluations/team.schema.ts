@@ -1,18 +1,37 @@
 import { z } from "zod";
-import { BaseEvaluationSchema, requiredStringFromNull, stringArray } from "../base-evaluation.schema";
+import {
+  BaseEvaluationSchema,
+  requiredStringFromNull,
+  stringArray,
+} from "../base-evaluation.schema";
 import { FounderPitchRecommendationSchema } from "../simple-evaluation.schema";
 
-export const TeamMemberEvaluationSchema = z.object({
+const teamMemberRawSchema = z.object({
   name: requiredStringFromNull("Unknown member"),
   role: requiredStringFromNull("Unknown role"),
-  background: requiredStringFromNull("Background unavailable"),
+  relevance: requiredStringFromNull("Relevance unavailable"),
   strengths: stringArray,
-  concerns: stringArray,
+  risks: stringArray,
 });
 
+export const TeamMemberEvaluationSchema = z.preprocess((value) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return value;
+  }
+  const record = value as Record<string, unknown>;
+  return {
+    ...record,
+    relevance:
+      record.relevance ??
+      record.background ??
+      "Relevance unavailable",
+    risks: record.risks ?? record.concerns ?? [],
+  };
+}, teamMemberRawSchema);
+
 export const FounderRecommendationSchema = z.object({
-  type: z.enum(["hire", "reframe"]),
-  bullet: z.string().min(1),
+  action: requiredStringFromNull("Recommendation"),
+  recommendation: requiredStringFromNull("Recommendation pending"),
 });
 
 export type FounderRecommendation = z.infer<typeof FounderRecommendationSchema>;

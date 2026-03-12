@@ -19,6 +19,36 @@ function toStringArray(value: unknown): string[] {
     .filter(Boolean);
 }
 
+function toStructuredTextArray(
+  value: unknown,
+  preferredKey: "feature" | "technology",
+): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (typeof item === "string") return item.trim();
+      if (!item || typeof item !== "object") return "";
+      const record = item as Record<string, unknown>;
+      const preferred = record[preferredKey];
+      return typeof preferred === "string" ? preferred.trim() : "";
+    })
+    .filter(Boolean);
+}
+
+function toDataGapStrings(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (typeof item === "string") return item.trim();
+      if (!item || typeof item !== "object") return "";
+      const record = item as Record<string, unknown>;
+      const gap = typeof record.gap === "string" ? record.gap.trim() : "";
+      const impact = typeof record.impact === "string" ? record.impact.trim() : "";
+      return gap ? (impact ? `${gap} (${impact} impact)` : gap) : "";
+    })
+    .filter(Boolean);
+}
+
 function dedupeStrings(values: string[]): string[] {
   const seen = new Set<string>();
   const output: string[] = [];
@@ -76,12 +106,10 @@ export function ProductTabContent({ startup, evaluation, showScores = true, prod
   const productScore = evaluation?.productScore;
   const competitiveData = (evaluation?.competitiveAdvantageData as any) || {};
   const trlStage = normalizeTrlStage(
-    startup.technologyReadinessLevel ||
+      startup.technologyReadinessLevel ||
       productData?.technologyReadiness?.stage ||
-      // new schema: productSummary.techStage
-      productData?.productSummary?.techStage ||
+      productData?.productOverview?.techStage ||
       productData?.technologyStage ||
-      // legacy: productMaturity
       productData?.productMaturity,
   );
   const moatType =
@@ -112,18 +140,17 @@ export function ProductTabContent({ startup, evaluation, showScores = true, prod
       ...toStringArray(productData?.productStrengthsAndRisks?.risks),
       ...toStringArray(productData?.keyRisks),
       ...toStringArray(productData?.risks),
-      ...toStringArray(productData?.dataGaps),
+      ...toDataGapStrings(productData?.dataGaps),
     ].filter(Boolean),
   );
-  // New schema: productSummary.description > legacy productDescription
   const productSummary =
     evaluation?.productSummary ||
-    productData?.productSummary?.description ||
+    productData?.productOverview?.description ||
     productData?.productDescription;
   // New schema: productOverview fields
   const productOverview = productData?.productOverview as Record<string, unknown> | undefined;
-  const keyFeatures = toStringArray(productData?.keyFeatures);
-  const technologyStack = toStringArray(productData?.technologyStack);
+  const keyFeatures = toStructuredTextArray(productData?.keyFeatures, "feature");
+  const technologyStack = toStructuredTextArray(productData?.technologyStack, "technology");
   // New schema: founderPitchRecommendations
   const founderPitchRecommendations = toPitchRecommendations(productData?.founderPitchRecommendations);
 

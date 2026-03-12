@@ -373,9 +373,9 @@ export class SynthesisService {
     evaluatedMembers: Array<{
       name: string;
       role: string;
-      background: string;
+      relevance: string;
       strengths: string[];
-      concerns: string[];
+      risks: string[];
     }>,
     scrapedMembers: Array<{
       name: string;
@@ -421,9 +421,9 @@ export class SynthesisService {
       return {
         name: member.name,
         role: member.role || scraped?.role || "Team Member",
-        background: member.background,
+        relevance: member.relevance,
         strengths: member.strengths,
-        concerns: member.concerns,
+        risks: member.risks,
         scrapedCandidate: Boolean(scraped),
         linkedinUrl: scraped?.linkedinUrl,
         enrichmentStatus: scraped?.enrichmentStatus ?? "not_found",
@@ -449,9 +449,9 @@ export class SynthesisService {
       merged.push({
         name: scraped.name,
         role: scraped.role || "Team Member",
-        background: "Background pending team evaluation analysis.",
+        relevance: "Relevance pending team evaluation analysis.",
         strengths: [],
-        concerns: [],
+        risks: [],
         scrapedCandidate: true,
         linkedinUrl: scraped.linkedinUrl,
         enrichmentStatus: scraped.enrichmentStatus,

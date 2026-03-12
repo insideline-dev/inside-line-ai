@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, jest, mock } from "bun:test";
+import { z } from "zod";
+import { zodResponseFormat } from "openai/helpers/zod";
 
 const generateTextMock = jest.fn();
 
@@ -96,6 +98,21 @@ describe("ScrapingService", () => {
     } as unknown as jest.Mocked<ScrapingCacheService>;
 
     service = new ScrapingService(drizzle, websiteScraper, linkedin, cache);
+  });
+
+  it("uses an OpenAI-strict schema for deck team discovery structured output", () => {
+    const schema = z.object({
+      members: z.array(
+        z.object({
+          name: z.string(),
+          role: z.string(),
+          linkedinUrl: z.string().nullable(),
+          bio: z.string().nullable(),
+        }),
+      ).max(10),
+    });
+
+    expect(() => zodResponseFormat(schema, "response")).not.toThrow();
   });
 
   it("orchestrates website scrape and linkedin enrichment", async () => {

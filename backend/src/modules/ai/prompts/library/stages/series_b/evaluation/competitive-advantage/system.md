@@ -105,15 +105,14 @@ Based on your evaluation, synthesize:
 
 Strengths: What specific competitive advantages does this startup have at Series B? (e.g., multiple moat sources, widening gap, high barriers, competitors retreating)
 
-Key findings: The most important takeaways from the competitive analysis.
-
 Risks: What are the specific competitive risks? (e.g., moat eroding, new threats, single point of vulnerability, competitors gaining)
 
-Data gaps: What couldn't be assessed from the available inputs? (e.g., moat depth unmeasurable from desk research, competitor roadmaps unknown, IP strength unverifiable)
+Data gaps: What couldn't be assessed from the available inputs? For each gap, assess:
+- Gap description (e.g., moat depth unmeasurable from desk research, competitor roadmaps unknown, IP strength unverifiable)
+- Impact if unresolved: "critical" (would change score/recommendation), "important" (would change confidence), "minor" (contextual, nice-to-have)
+- Suggested diligence action to resolve it
 
 Sources: List the primary sources used — what came from competition research, what from the deck, what from product research.
-
-Details: Additional competitive context relevant to the investment decision.
 
 --- PITCH DECK RECOMMENDATIONS ---
 
@@ -169,46 +168,48 @@ STAY IN SCOPE: Evaluate only the competitive advantage — differentiation, moat
 
 Your evaluation above should populate these structured output fields:
 
-From section 1 (Moat Strength):
+Scoring:
+- scoring.overallScore → your 0-100 score from the scoring rubric
+- scoring.confidence → "high", "mid", or "low" from the scoring rubric
+- scoring.scoringBasis → one-sentence explanation of what drove the score
+- scoring.subScores[] → array of sub-dimension scores, one per evaluation dimension. Each entry: { dimension (name), weight (decimal), score (0-100) }. Dimensions for this stage: Moat Strength (0.40), Defensibility (0.35), Threat Assessment (0.25)
+
+Strategic Positioning:
 - strategicPositioning.differentiation → summary of how the startup differentiates
 - strategicPositioning.uniqueValueProposition → what makes this approach distinct
 - strategicPositioning.differentiationType → "technology", "network_effects", "data", "brand", "cost", "regulatory", or "other"
 - strategicPositioning.durability → "strong", "moderate", or "weak"
+
+Moat Assessment (rendered on Product tab, not Competitors tab):
 - moatAssessment.moatType → "network_effects", "switching_costs", "proprietary_data", "technology", "brand", "regulatory", "scale", or "none"
 - moatAssessment.moatStage → "potential", "emerging", "forming", "established", or "dominant"
 - moatAssessment.moatEvidence → evidence supporting the moat classification
 - moatAssessment.selfReinforcing → true/false
-- moatAssessment.timeToReplicate → estimated time for well-funded competitor to replicate
+- moatAssessment.timeToReplicate → estimated time for well-funded competitor to replicate ("months", "1-2 years", "3-5 years", "5+ years"). Also rendered on Competitors tab in Competitive Position Summary.
 
-From section 2 (Defensibility):
+Competitive Landscape:
+- competitors.direct[] → array of direct competitors. For each: { name (string), description (string), url (string), fundingRaised (string) }
+- competitors.indirect[] → array of indirect competitors. For each: { name (string), description (string), whyIndirect (string), url (string), threatLevel ("high", "medium", "low") }
+- competitivePosition.currentGap → "leading", "competitive", "behind", or "unclear"
+- competitivePosition.gapEvidence → evidence supporting gap assessment
+- competitivePosition.vulnerabilities → where competitors are stronger
 - competitivePosition.defensibleAgainstFunded → true/false
 - competitivePosition.defensibilityRationale → why or why not defensible
+
+Barriers to Entry:
 - barriersToEntry.technical → true/false
 - barriersToEntry.capital → true/false
 - barriersToEntry.network → true/false
 - barriersToEntry.regulatory → true/false
 
-From section 3 (Threat Assessment):
-- competitors.direct[] → for each: name, description, url, fundingRaised
-- competitors.indirect[] → for each: name, description, whyIndirect, url, threatLevel
-- competitivePosition.currentGap → "leading", "competitive", "behind", or "unclear"
-- competitivePosition.gapEvidence → evidence supporting gap assessment
-- competitivePosition.vulnerabilities → where competitors are stronger
+Strengths & Risks:
+- strengths → specific competitive strengths from the evaluation (string, one strength per line)
+- risks → specific competitive risks from the evaluation (string, one risk per line)
 
-From Strengths, Risks & Data Gaps:
-- strengths → specific competitive strengths
-- keyFindings → most important competitive analysis takeaways
-- risks → specific competitive risks
-- dataGaps → what couldn't be assessed
+Data Gaps:
+- dataGaps[] → array of gaps. For each: { gap (description), impact ("critical", "important", or "minor"), suggestedAction (diligence step to resolve) }
+
+Narrative & Recommendations (used by other tabs, not rendered on Competitors tab):
+- narrativeSummary → the 3-4 paragraph narrative from the Narrative Structure section (450-650 words)
 - sources → primary sources used
-- details → additional competitive context
-
-From Pitch Deck Recommendations:
-- founderPitchRecommendations[] → each with deckMissingElement, whyItMatters, recommendation
-
-From Scoring:
-- score → 0-100 overall score
-- confidence → "high", "mid", or "low"
-
-From Narrative:
-- narrativeSummary → 3-4 paragraph assessment (450-650 words)
+- founderPitchRecommendations[] → what's missing from the deck about competitive advantage. For each: { deckMissingElement (what's absent), whyItMatters (why investors care), recommendation (what to add/clarify) }

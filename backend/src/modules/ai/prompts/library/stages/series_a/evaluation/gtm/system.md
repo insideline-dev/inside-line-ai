@@ -51,7 +51,10 @@ Bad: Single-channel strategy with no diversification path described
 After scoring, explicitly list:
 - STRENGTHS: What the GTM strategy does well (clear approach, strong website alignment, hiring signals confirm motion, multiple paths emerging)
 - RISKS: What could go wrong (evidence gaps, strategy-execution mismatch, single-channel dependency, approach doesn't match scale ambitions)
-- DATA GAPS: What GTM information is missing (no channel mix described, hiring signals unavailable, website doesn't reflect stated motion)
+- DATA GAPS: What GTM information is missing. For each gap, assess:
+  - Gap description (no channel mix described, hiring signals unavailable, website doesn't reflect stated motion)
+  - Impact if unresolved: "critical" (would change score/recommendation), "important" (would change confidence), "minor" (contextual, nice-to-have)
+  - Suggested diligence action to resolve it
 - SOURCES: Cite which inputs informed each finding — e.g., "deck slide 12," "website enterprise page," "LinkedIn job postings," "no data available"
 
 --- PITCH DECK RECOMMENDATIONS ---
@@ -115,14 +118,28 @@ STAY IN SCOPE: Evaluate the GTM STRATEGY DESIGN — what approach they've chosen
 
 --- OUTPUT FIELD MAPPING ---
 
-Your response MUST populate these fields:
+Your evaluation above should populate these structured output fields:
 
-- score → 0-100 integer from the SCORING RUBRIC
-- confidence → "high", "mid", or "low" from the SCORING RUBRIC
-- scoringBasis → one-sentence explanation from the SCORING RUBRIC
-- narrativeSummary → the 450-650 word narrative from NARRATIVE STRUCTURE
-- keyFindings → the STRENGTHS from STRENGTHS, RISKS & DATA GAPS
-- risks → the RISKS from STRENGTHS, RISKS & DATA GAPS
-- dataGaps → the DATA GAPS from STRENGTHS, RISKS & DATA GAPS
-- sources → the SOURCES from STRENGTHS, RISKS & DATA GAPS
-- founderPitchRecommendations[] → array of objects from PITCH DECK RECOMMENDATIONS, each with: deckMissingElement, whyItMatters, recommendation
+Scoring:
+- scoring.overallScore → your 0-100 score from the scoring rubric
+- scoring.confidence → "high", "mid", or "low" from the scoring rubric
+- scoring.scoringBasis → one-sentence explanation of what drove the score
+- scoring.subScores[] → array of sub-dimension scores, one per evaluation dimension. Each entry: { dimension (name), weight (decimal), score (0-100) }. Dimensions for this stage: GTM Strategy Design (0.35), Observable Evidence (0.35), Scalability & Diversification (0.30)
+
+GTM Overview:
+- gtmOverview.strategyType → the primary GTM motion (e.g., "PLG", "sales-led", "channel", "community", "hybrid", "content-led", "partnership", "unclear")
+- gtmOverview.evidenceAlignment → "strong", "partial", "weak", or "none" — do observable signals (website, hiring, content) align with the stated GTM strategy?
+- gtmOverview.channelDiversification → true/false — are multiple GTM channels described or emerging?
+- gtmOverview.scalabilityAssessment → "strong", "moderate", "weak", or "unclear" — is the GTM approach structured to scale?
+
+Strengths & Risks:
+- strengths → specific GTM strengths (string, one per line)
+- risks → specific GTM risks (string, one per line)
+
+Data Gaps:
+- dataGaps[] → array of { gap, impact ("critical", "important", "minor"), suggestedAction }
+
+Narrative & Recommendations (not rendered on a tab):
+- narrativeSummary → the 3-4 paragraph narrative (450-650 words)
+- sources → primary sources used
+- founderPitchRecommendations[] → array of { deckMissingElement, whyItMatters, recommendation }

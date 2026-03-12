@@ -56,10 +56,15 @@ Assess the market's structural characteristics:
 - Industry consolidation or expansion trends? (research)
 - Regulatory tailwinds or headwinds? (research)
 - Technology shifts affecting market structure? (research)
-- Entry conditions at this scale
+- Entry conditions — assess each barrier individually:
+  - Regulatory barriers (low / moderate / high)
+  - Capital requirements (low / moderate / high)
+  - Incumbent lock-in (low / moderate / high)
+  - Distribution access (easy / moderate / difficult)
+  - Technology barriers (low / moderate / high)
 - Tailwinds and headwinds with sources
 
-Produce a marketStructure summary covering: structure type, concentration trend, regulatory dynamics, tailwinds, and headwinds.
+Produce a marketStructure summary covering: structure type, concentration trend, entry conditions scorecard, regulatory dynamics, tailwinds, and headwinds.
 
 4. LONG-TERM MARKET TRAJECTORY (10%)
 - Market growth sustainable long-term? (research projections)
@@ -93,15 +98,16 @@ Market growth decelerating at a time when scale requires expansion
 
 Based on your evaluation, synthesize:
 
-Key findings: The most important takeaways from the market analysis — what stands out about this market at Series C scale?
+Strengths: The most important takeaways from the market analysis — what stands out about this market at Series C scale?
 
 Risks: What are the specific market risks? (e.g., TAM ceiling, concentration favoring incumbents, no expansion path, growth deceleration at scale)
 
-Data gaps: Where was research inconclusive or unavailable? (e.g., international sizing unverifiable, adjacent market data thin, long-term projections unavailable)
+Data gaps: Where was research inconclusive or unavailable? For each gap, assess:
+- Gap description (e.g., international sizing unverifiable, adjacent market data thin, long-term projections unavailable)
+- Impact if unresolved: "critical" (would change score/recommendation), "important" (would change confidence), "minor" (contextual, nice-to-have)
+- Suggested diligence action to resolve it (e.g., "Validate international TAM with geographic-specific research", "Confirm adjacent market entry feasibility", "Assess comparable public company market dynamics")
 
 Sources: List the primary sources used — which research reports, what tier, how recent, what came only from the deck.
-
-Diligence items: What needs further investigation beyond desk research? (e.g., "Validate international TAM with geographic-specific research", "Confirm adjacent market entry feasibility", "Assess comparable public company market dynamics")
 
 --- PITCH DECK RECOMMENDATIONS ---
 
@@ -161,14 +167,13 @@ Your evaluation above should populate these structured output fields:
 From the Evaluation Framework:
 - marketSizing → TAM/SAM/SOM analysis, source attribution with tiers, deck-vs-research discrepancies, IPO-scale viability
 - marketGrowthAndTiming → growth rate with source, expansion trajectory, adjacent market sizing, market lifecycle position
-- marketStructure → structure type, concentration trend, regulatory dynamics, tailwinds, headwinds
+- marketStructure → structure type, concentration trend, entry conditions scorecard (per-barrier severity), regulatory dynamics, tailwinds, headwinds
 
 From Strengths, Risks & Data Gaps:
-- keyFindings → most important market analysis takeaways
+- strengths → specific market strengths
 - risks → specific market risks
-- dataGaps → where research was inconclusive or unavailable
+- dataGaps → where research was inconclusive or unavailable, with impact level (critical/important/minor) and suggested diligence action per gap
 - sources → primary sources used with tiers
-- diligenceItems → what needs further investigation beyond desk research
 
 From Pitch Deck Recommendations:
 - founderPitchRecommendations[] → what's missing from the deck about the market
@@ -177,6 +182,7 @@ From Scoring:
 - scoring.overallScore → 0-100 overall score
 - scoring.confidence → "high", "mid", or "low"
 - scoring.scoringBasis → one-sentence explanation of what drove the score
+- scoring.subScores[] → array of sub-dimension scores, one per evaluation dimension. Each entry: { dimension (name), weight (decimal), score (0-100) }. Dimensions for this stage: TAM & Scale (0.40), TAM Expansion (0.30), Market Dynamics (0.20), Long-term Market Trajectory (0.10)
 
 From Narrative:
 - narrativeSummary → 3-4 paragraph assessment (450-650 words)

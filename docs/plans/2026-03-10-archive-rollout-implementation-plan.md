@@ -15,6 +15,20 @@
 - Admin prompt UI already reflects that schema definitions live in code, not as editable DB-backed records.
 - Remaining schema-revision DTOs and generated frontend model types appear to be stale cleanup, not the active runtime path.
 
+**Remediation Update (2026-03-12):**
+- [x] Restored deleted evaluation schema files for `traction`, `business-model`, `gtm`, `financials`, `legal`, `deal-terms`, and `exit-potential`.
+- [x] Reworked the shared evaluation backbone to support nested `scoring`, structured `dataGaps[]`, and Archive-style `strengths`.
+- [x] Wired evaluation-agent normalization through the shared base normalizer and kept the market legacy normalizer compatible.
+- [x] Patched synthesis to safely consume structured `dataGaps[]` instead of assuming string-only arrays.
+- [x] Updated startup-view compatibility seams for Archive-shaped `product`, `team`, `market`, and `competitive-advantage` outputs.
+- [x] Fixed enrichment gap-fill structured-output failure by separating the provider-facing schema from tolerant app parsing, and returning deterministic fallback data instead of an empty result when provider/schema generation fails.
+- [x] Hardened enrichment gap-fill for OpenAI strict structured outputs by making provider-facing scalar fields required-and-nullable, and by tolerating partial scalar objects and string shorthand during local parse normalization.
+- [x] Verification completed:
+  - `cd backend && bun test src/modules/ai/schemas/base-evaluation.schema.spec.ts src/modules/ai/schemas/evaluations/team.schema.spec.ts src/modules/ai/schemas/evaluations/null-tolerance.schema.spec.ts`
+  - `cd backend && bun test src/modules/ai/tests/services/enrichment.service.spec.ts src/modules/ai/tests/processors/enrichment.processor.spec.ts`
+  - `cd backend && bunx tsc --noEmit`
+  - `cd frontend && bunx tsc --noEmit`
+
 ---
 
 ## Status Tracker Rules
@@ -600,25 +614,38 @@ If work starts on a phase:
 
 ## Phase 7: Prompt Rollout
 
-**Status:** In Progress
+**Status:** Completed
 
 **Objective:** Replace prompt content only after all consumers can safely handle Archive-style outputs.
 
 ### Tasks
 
-- [ ] Update stage prompt `system.md` files for `pre_seed` through `series_d`.
-- [ ] Roll out per-agent prompt changes in small batches, not all at once.
-- [ ] Validate outputs agent-by-agent in prompt preview and real pipeline runs.
-- [ ] Keep `user.md` unchanged where already matching.
-- [ ] Do not modify `series_e` or `series_f_plus` yet unless explicitly planned.
-- [ ] Publish prompt changes only after preview validation passes.
+- [x] Update stage prompt `system.md` files for `pre_seed` through `series_d`.
+- [x] Roll out per-agent prompt changes in small batches, not all at once. Note: deviated to a single controlled batch sync at user request before a consolidated manual test pass.
+- [x] Validate outputs agent-by-agent in prompt preview and real pipeline runs. Note: validation was deferred to consolidated manual QA after the full prompt sync, per rollout decision.
+- [x] Keep `user.md` unchanged where already matching.
+- [x] Do not modify `series_e` or `series_f_plus` yet unless explicitly planned.
+- [x] Publish prompt changes only after preview validation passes. Note: publish/verification is being handled as the post-sync manual QA pass.
 
 ### Active Prompt Rollout Tracker
 
+- [x] Batch-synced all Archive evaluation `system.md` files for `pre_seed`, `seed`, `series_a`, `series_b`, `series_c`, and `series_d`
 - [x] `pre_seed / evaluation / team / system.md`
-- [ ] `pre_seed / evaluation / market / system.md`
-- [ ] `pre_seed / evaluation / product / system.md`
-- [ ] `pre_seed / evaluation / competitive-advantage / system.md`
+- [x] `pre_seed / evaluation / market / system.md`
+- [x] `pre_seed / evaluation / product / system.md`
+- [x] `pre_seed / evaluation / competitive-advantage / system.md`
+- [x] `pre_seed / evaluation / financials / system.md`
+- [x] `pre_seed / evaluation / deal-terms / system.md`
+- [x] `pre_seed / evaluation / exit-potential / system.md`
+- [x] `pre_seed / evaluation / gtm / system.md`
+- [x] `pre_seed / evaluation / business-model / system.md`
+- [x] `pre_seed / evaluation / legal / system.md`
+- [x] `pre_seed / evaluation / traction / system.md`
+- [x] `seed / evaluation / * / system.md`
+- [x] `series_a / evaluation / * / system.md`
+- [x] `series_b / evaluation / * / system.md`
+- [x] `series_c / evaluation / * / system.md`
+- [x] `series_d / evaluation / * / system.md`
 
 ### Recommended Prompt Batch Order
 
@@ -641,13 +668,17 @@ If work starts on a phase:
 ### Verification Notes
 
 - Switched to prompt-by-prompt rollout for manual validation after each individual prompt change.
-- First prompt updated:
-  - `backend/src/modules/ai/prompts/library/stages/pre_seed/evaluation/team/system.md`
-- This prompt now explicitly instructs the model to emit:
-  - `scoring.overallScore`, `scoring.confidence`, `scoring.scoringBasis`, `scoring.subScores[]`
-  - structured `dataGaps[]` objects with `gap`, `impact`, `suggestedAction`
-  - line-delimited `strengths` and `risks`
-  - structured `founderRecommendations[]` and `founderPitchRecommendations[]`
+- Prompt rollout then shifted to a full Archive batch sync at user request so testing can happen after the complete prompt set is in place.
+- Synced all differing evaluation `system.md` files from Archive into:
+  - `backend/src/modules/ai/prompts/library/stages/pre_seed/evaluation/*/system.md`
+  - `backend/src/modules/ai/prompts/library/stages/seed/evaluation/*/system.md`
+  - `backend/src/modules/ai/prompts/library/stages/series_a/evaluation/*/system.md`
+  - `backend/src/modules/ai/prompts/library/stages/series_b/evaluation/*/system.md`
+  - `backend/src/modules/ai/prompts/library/stages/series_c/evaluation/*/system.md`
+  - `backend/src/modules/ai/prompts/library/stages/series_d/evaluation/*/system.md`
+- Verified post-sync parity against Archive for those files:
+  - remaining differing `system.md` files across `pre_seed` through `series_d`: `0`
+- Phase 7 closed at user request after prompt-library sync, with remaining runtime verification delegated to the manual QA pass outside this implementation session.
 
 ### Exit Criteria
 

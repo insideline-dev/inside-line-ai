@@ -58,80 +58,287 @@ const CRITICAL_ENRICHMENT_FIELDS = new Set([
   "stage",
 ]);
 
-const enrichmentOutputSchema = z.object({
-  companyName: z.object({ value: z.string(), confidence: z.number(), source: z.string() }).optional(),
-  companyDescription: z.object({ value: z.string(), confidence: z.number(), source: z.string() }).optional(),
-  tagline: z.object({ value: z.string(), confidence: z.number(), source: z.string() }).optional(),
-  industry: z.object({ value: z.string(), confidence: z.number(), source: z.string() }).optional(),
-  stage: z.object({ value: z.string(), confidence: z.number(), source: z.string() }).optional(),
-  website: z.object({ value: z.string(), confidence: z.number(), source: z.string() }).optional(),
-  foundingDate: z.object({ value: z.string(), confidence: z.number(), source: z.string() }).optional(),
-  headquarters: z.object({ value: z.string(), confidence: z.number(), source: z.string() }).optional(),
-  fundingTarget: z.object({ value: z.number(), confidence: z.number(), source: z.string() }).optional(),
-  contactName: z.object({ value: z.string(), confidence: z.number(), source: z.string() }).optional(),
-  contactEmail: z.object({ value: z.string(), confidence: z.number(), source: z.string() }).optional(),
-  sectorIndustry: z.object({ value: z.string(), confidence: z.number(), source: z.string() }).optional(),
-  sectorIndustryGroup: z.object({ value: z.string(), confidence: z.number(), source: z.string() }).optional(),
-  productDescription: z.object({ value: z.string(), confidence: z.number(), source: z.string() }).optional(),
-  discoveredFounders: z.array(z.object({
-    name: z.string(),
-    role: z.string().optional(),
-    linkedinUrl: z.string().optional(),
-    email: z.string().optional(),
-    twitterUrl: z.string().optional(),
-    confidence: z.number(),
-  })).default([]),
-  fundingHistory: z.array(z.object({
-    round: z.string(),
-    amount: z.number().optional(),
-    currency: z.string().optional(),
-    date: z.string().optional(),
-    investors: z.array(z.string()).optional(),
-    source: z.string(),
-  })).default([]),
-  pitchDeckUrls: z.array(z.object({
-    url: z.string(),
-    source: z.string(),
-    confidence: z.number(),
-  })).default([]),
-  socialProfiles: z.preprocess(
-    (value) => (Array.isArray(value) ? {} : value ?? {}),
-    z.object({
-      crunchbaseUrl: z.string().optional(),
-      angelListUrl: z.string().optional(),
-      twitterUrl: z.string().optional(),
-      linkedinCompanyUrl: z.string().optional(),
-      githubUrl: z.string().optional(),
-    }),
-  ).default({}),
-  productSignals: z.object({
-    pricing: z.string().optional(),
-    customers: z.array(z.string()).optional(),
-    techStack: z.array(z.string()).optional(),
-    integrations: z.array(z.string()).optional(),
-  }).default({}),
-  tractionSignals: z.object({
-    employeeCount: z.number().optional(),
-    webTrafficEstimate: z.string().optional(),
-    appStoreRating: z.string().optional(),
-    socialFollowers: z.record(z.string(), z.number()).optional(),
-  }).default({}),
+const DEFAULT_INFERRED_FIELD_CONFIDENCE = 0.5;
+
+const nullToUndefined = (value: unknown): unknown =>
+  value === null ? undefined : value;
+
+const providerNullableString = z.string().nullable().default(null);
+const providerNullableNumber = z.number().nullable().default(null);
+
+const optionalStringFromUnknown = z.preprocess(
+  nullToUndefined,
+  z.string().optional(),
+);
+
+const optionalNumberFromUnknown = z.preprocess(
+  (value) => {
+    if (value === null || value === undefined || value === "") {
+      return undefined;
+    }
+    if (typeof value === "number") {
+      return value;
+    }
+    return undefined;
+  },
+  z.number().optional(),
+);
+
+const tolerantStringFieldInputSchema = z.preprocess((value) => {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+  if (typeof value === "string") {
+    return {
+      value,
+      confidence: undefined,
+      source: undefined,
+    };
+  }
+  if (typeof value === "object" && !Array.isArray(value)) {
+    return value;
+  }
+  return undefined;
+}, z.object({
+  value: optionalStringFromUnknown,
+  confidence: optionalNumberFromUnknown,
+  source: optionalStringFromUnknown,
+}).optional());
+
+const tolerantNumberFieldInputSchema = z.preprocess((value) => {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+  if (typeof value === "number") {
+    return {
+      value,
+      confidence: undefined,
+      source: undefined,
+    };
+  }
+  if (typeof value === "object" && !Array.isArray(value)) {
+    return value;
+  }
+  return undefined;
+}, z.object({
+  value: optionalNumberFromUnknown,
+  confidence: optionalNumberFromUnknown,
+  source: optionalStringFromUnknown,
+}).optional());
+
+const enrichmentStringFieldSchema = tolerantStringFieldInputSchema;
+
+const enrichmentNumberFieldSchema = tolerantNumberFieldInputSchema;
+
+const providerStringFieldSchema = z.object({
+  value: z.string(),
+  confidence: z.number(),
+  source: z.string(),
+});
+
+const providerNumberFieldSchema = z.object({
+  value: z.number(),
+  confidence: z.number(),
+  source: z.string(),
+});
+
+const enrichmentDiscoveredFounderSchema = z.object({
+  name: z.string(),
+  role: optionalStringFromUnknown,
+  linkedinUrl: optionalStringFromUnknown,
+  email: optionalStringFromUnknown,
+  twitterUrl: optionalStringFromUnknown,
+  confidence: z.number(),
+});
+
+const providerDiscoveredFounderSchema = z.object({
+  name: z.string(),
+  role: providerNullableString,
+  linkedinUrl: providerNullableString,
+  email: providerNullableString,
+  twitterUrl: providerNullableString,
+  confidence: z.number(),
+});
+
+const enrichmentFundingHistorySchema = z.object({
+  round: z.string(),
+  amount: optionalNumberFromUnknown,
+  currency: optionalStringFromUnknown,
+  date: optionalStringFromUnknown,
+  investors: z.preprocess(
+    (value) => (Array.isArray(value) ? value : value == null ? undefined : value),
+    z.array(z.string()).optional(),
+  ),
+  source: z.string(),
+});
+
+const providerFundingHistorySchema = z.object({
+  round: z.string(),
+  amount: providerNullableNumber,
+  currency: providerNullableString,
+  date: providerNullableString,
+  investors: z.array(z.string()).default([]),
+  source: z.string(),
+});
+
+const enrichmentPitchDeckUrlSchema = z.object({
+  url: z.string(),
+  source: z.string(),
+  confidence: z.number(),
+});
+
+const enrichmentSourcesSchema = z.object({
+  url: z.string(),
+  title: z.string(),
+  type: z.string(),
+});
+
+const enrichmentCorrectionDetailSchema = z.object({
+  field: z.string(),
+  oldValue: z.string(),
+  newValue: z.string(),
+  confidence: z.number(),
+  reason: z.string(),
+});
+
+const enrichmentSocialProfilesSchema = z.preprocess(
+  (value) => (Array.isArray(value) ? {} : value ?? {}),
+  z.object({
+    crunchbaseUrl: optionalStringFromUnknown,
+    angelListUrl: optionalStringFromUnknown,
+    twitterUrl: optionalStringFromUnknown,
+    linkedinCompanyUrl: optionalStringFromUnknown,
+    githubUrl: optionalStringFromUnknown,
+  }),
+).default({});
+
+const providerSocialProfilesSchema = z.preprocess(
+  (value) => (Array.isArray(value) ? {} : value ?? {}),
+  z.object({
+    crunchbaseUrl: providerNullableString,
+    angelListUrl: providerNullableString,
+    twitterUrl: providerNullableString,
+    linkedinCompanyUrl: providerNullableString,
+    githubUrl: providerNullableString,
+  }),
+).default({
+  crunchbaseUrl: null,
+  angelListUrl: null,
+  twitterUrl: null,
+  linkedinCompanyUrl: null,
+  githubUrl: null,
+});
+
+const enrichmentProductSignalsSchema = z.object({
+  pricing: optionalStringFromUnknown,
+  customers: z.preprocess(
+    (value) => (Array.isArray(value) ? value : value == null ? undefined : value),
+    z.array(z.string()).optional(),
+  ),
+  techStack: z.preprocess(
+    (value) => (Array.isArray(value) ? value : value == null ? undefined : value),
+    z.array(z.string()).optional(),
+  ),
+  integrations: z.preprocess(
+    (value) => (Array.isArray(value) ? value : value == null ? undefined : value),
+    z.array(z.string()).optional(),
+  ),
+}).default({});
+
+const providerProductSignalsSchema = z.object({
+  pricing: providerNullableString,
+  customers: z.array(z.string()).default([]),
+  techStack: z.array(z.string()).default([]),
+  integrations: z.array(z.string()).default([]),
+}).default({
+  pricing: null,
+  customers: [],
+  techStack: [],
+  integrations: [],
+});
+
+const enrichmentTractionSignalsSchema = z.object({
+  employeeCount: optionalNumberFromUnknown,
+  webTrafficEstimate: optionalStringFromUnknown,
+  appStoreRating: optionalStringFromUnknown,
+  socialFollowers: z.preprocess(
+    (value) => (value && typeof value === "object" && !Array.isArray(value) ? value : value == null ? undefined : value),
+    z.record(z.string(), z.number()).optional(),
+  ),
+}).default({});
+
+const providerTractionSignalsSchema = z.object({
+  employeeCount: providerNullableNumber,
+  webTrafficEstimate: providerNullableString,
+  appStoreRating: providerNullableString,
+  socialFollowers: z.record(z.string(), z.number()).default({}),
+}).default({
+  employeeCount: null,
+  webTrafficEstimate: null,
+  appStoreRating: null,
+  socialFollowers: {},
+});
+
+const enrichmentCandidateSchema = z.object({
+  companyName: enrichmentStringFieldSchema,
+  companyDescription: enrichmentStringFieldSchema,
+  tagline: enrichmentStringFieldSchema,
+  industry: enrichmentStringFieldSchema,
+  stage: enrichmentStringFieldSchema,
+  website: enrichmentStringFieldSchema,
+  foundingDate: enrichmentStringFieldSchema,
+  headquarters: enrichmentStringFieldSchema,
+  fundingTarget: enrichmentNumberFieldSchema,
+  contactName: enrichmentStringFieldSchema,
+  contactEmail: enrichmentStringFieldSchema,
+  sectorIndustry: enrichmentStringFieldSchema,
+  sectorIndustryGroup: enrichmentStringFieldSchema,
+  productDescription: enrichmentStringFieldSchema,
+  discoveredFounders: z.array(enrichmentDiscoveredFounderSchema).default([]),
+  fundingHistory: z.array(enrichmentFundingHistorySchema).default([]),
+  pitchDeckUrls: z.array(enrichmentPitchDeckUrlSchema).default([]),
+  socialProfiles: enrichmentSocialProfilesSchema,
+  productSignals: enrichmentProductSignalsSchema,
+  tractionSignals: enrichmentTractionSignalsSchema,
   fieldsEnriched: z.array(z.string()).default([]),
   fieldsStillMissing: z.array(z.string()).default([]),
   fieldsCorrected: z.array(z.string()).default([]),
-  correctionDetails: z.array(z.object({
-    field: z.string(),
-    oldValue: z.string(),
-    newValue: z.string(),
-    confidence: z.number(),
-    reason: z.string(),
-  })).default([]),
-  sources: z.array(z.object({
-    url: z.string(),
-    title: z.string(),
-    type: z.string(),
-  })).default([]),
+  correctionDetails: z.array(enrichmentCorrectionDetailSchema).default([]),
+  sources: z.array(enrichmentSourcesSchema).default([]),
 });
+
+const providerNullableStringFieldSchema = providerStringFieldSchema.nullable();
+const providerNullableNumberFieldSchema = providerNumberFieldSchema.nullable();
+
+const enrichmentProviderOutputSchema = z.object({
+  companyName: providerNullableStringFieldSchema,
+  companyDescription: providerNullableStringFieldSchema,
+  tagline: providerNullableStringFieldSchema,
+  industry: providerNullableStringFieldSchema,
+  stage: providerNullableStringFieldSchema,
+  website: providerNullableStringFieldSchema,
+  foundingDate: providerNullableStringFieldSchema,
+  headquarters: providerNullableStringFieldSchema,
+  fundingTarget: providerNullableNumberFieldSchema,
+  contactName: providerNullableStringFieldSchema,
+  contactEmail: providerNullableStringFieldSchema,
+  sectorIndustry: providerNullableStringFieldSchema,
+  sectorIndustryGroup: providerNullableStringFieldSchema,
+  productDescription: providerNullableStringFieldSchema,
+  discoveredFounders: z.array(providerDiscoveredFounderSchema).default([]),
+  fundingHistory: z.array(providerFundingHistorySchema).default([]),
+  pitchDeckUrls: z.array(enrichmentPitchDeckUrlSchema).default([]),
+  socialProfiles: providerSocialProfilesSchema,
+  productSignals: providerProductSignalsSchema,
+  tractionSignals: providerTractionSignalsSchema,
+  fieldsEnriched: z.array(z.string()).default([]),
+  fieldsStillMissing: z.array(z.string()).default([]),
+  fieldsCorrected: z.array(z.string()).default([]),
+  correctionDetails: z.array(enrichmentCorrectionDetailSchema).default([]),
+  sources: z.array(enrichmentSourcesSchema).default([]),
+});
+
+type EnrichmentCandidate = z.infer<typeof enrichmentCandidateSchema>;
 
 type StartupRecord = typeof startup.$inferSelect;
 
@@ -1303,7 +1510,10 @@ export class EnrichmentService {
     return {
       prompt,
       systemPrompt: ENRICHMENT_GAP_ANALYSIS_SYSTEM_PROMPT,
-      output: this.buildEmptyResult(),
+      output: {
+        ...deterministicFallback,
+        dbFieldsUpdated: [],
+      },
       usedFallback: true,
       usedTextFallback: false,
       attempt: maxAttempts,
@@ -2639,7 +2849,7 @@ export class EnrichmentService {
           model: input.model,
           system: ENRICHMENT_GAP_ANALYSIS_SYSTEM_PROMPT,
           prompt: input.prompt,
-          output: Output.object({ schema: enrichmentOutputSchema }),
+          output: Output.object({ schema: enrichmentProviderOutputSchema }),
           tools: input.canUseGoogleSearchTool
             ? {
                 google_search: google.tools.googleSearch({}),
@@ -2652,7 +2862,7 @@ export class EnrichmentService {
         "[Enrichment] AI synthesis timed out",
       );
 
-      const parsed = enrichmentOutputSchema.safeParse(response.output);
+      const parsed = this.parseEnrichmentCandidate(response.output);
       if (parsed.success) {
         return {
           success: true,
@@ -2677,10 +2887,9 @@ export class EnrichmentService {
         };
       }
 
-      const issues = this.formatSchemaIssues(parsed.error);
       const reason =
-        issues.length > 0
-          ? `Schema validation failed: ${issues}; ${reparsed.error}`
+        parsed.error.length > 0
+          ? `Schema validation failed: ${parsed.error}; ${reparsed.error}`
           : `Schema validation failed: ${reparsed.error}`;
       return { success: false, error: reason };
     } catch (error) {
@@ -2746,19 +2955,137 @@ export class EnrichmentService {
       };
     }
 
-    const parsed = enrichmentOutputSchema.safeParse(candidate);
+    return this.parseEnrichmentCandidate(candidate);
+  }
+
+  private parseEnrichmentCandidate(
+    candidate: unknown,
+  ): { success: true; data: Omit<EnrichmentResult, "dbFieldsUpdated"> } | { success: false; error: string } {
+    const parsed = enrichmentCandidateSchema.safeParse(candidate);
     if (!parsed.success) {
       const issues = this.formatSchemaIssues(parsed.error);
       return {
         success: false,
         error:
           issues.length > 0
-            ? `Schema validation failed: ${issues}`
+            ? issues
             : "Schema validation failed",
       };
     }
 
-    return { success: true, data: parsed.data };
+    return {
+      success: true,
+      data: this.toAppEnrichmentCandidate(parsed.data),
+    };
+  }
+
+  private toAppEnrichmentCandidate(
+    candidate: EnrichmentCandidate,
+  ): Omit<EnrichmentResult, "dbFieldsUpdated"> {
+    return {
+      companyName: this.normalizeStringConfidenceField(candidate.companyName),
+      companyDescription: this.normalizeStringConfidenceField(candidate.companyDescription),
+      tagline: this.normalizeStringConfidenceField(candidate.tagline),
+      industry: this.normalizeStringConfidenceField(candidate.industry),
+      stage: this.normalizeStringConfidenceField(candidate.stage),
+      website: this.normalizeStringConfidenceField(candidate.website),
+      foundingDate: this.normalizeStringConfidenceField(candidate.foundingDate),
+      headquarters: this.normalizeStringConfidenceField(candidate.headquarters),
+      fundingTarget: this.normalizeNumberConfidenceField(candidate.fundingTarget),
+      contactName: this.normalizeStringConfidenceField(candidate.contactName),
+      contactEmail: this.normalizeStringConfidenceField(candidate.contactEmail),
+      sectorIndustry: this.normalizeStringConfidenceField(candidate.sectorIndustry),
+      sectorIndustryGroup: this.normalizeStringConfidenceField(candidate.sectorIndustryGroup),
+      productDescription: this.normalizeStringConfidenceField(candidate.productDescription),
+      discoveredFounders: candidate.discoveredFounders.map((founder) => ({
+        name: founder.name,
+        ...(founder.role ? { role: founder.role } : {}),
+        ...(founder.linkedinUrl ? { linkedinUrl: founder.linkedinUrl } : {}),
+        ...(founder.email ? { email: founder.email } : {}),
+        ...(founder.twitterUrl ? { twitterUrl: founder.twitterUrl } : {}),
+        confidence: founder.confidence,
+      })),
+      fundingHistory: candidate.fundingHistory.map((entry) => ({
+        round: entry.round,
+        ...(typeof entry.amount === "number" ? { amount: entry.amount } : {}),
+        ...(entry.currency ? { currency: entry.currency } : {}),
+        ...(entry.date ? { date: entry.date } : {}),
+        ...(entry.investors && entry.investors.length > 0
+          ? { investors: entry.investors }
+          : {}),
+        source: entry.source,
+      })),
+      pitchDeckUrls: candidate.pitchDeckUrls,
+      socialProfiles: candidate.socialProfiles,
+      productSignals: candidate.productSignals,
+      tractionSignals: candidate.tractionSignals,
+      fieldsEnriched: candidate.fieldsEnriched,
+      fieldsStillMissing: candidate.fieldsStillMissing,
+      fieldsCorrected: candidate.fieldsCorrected,
+      correctionDetails: candidate.correctionDetails,
+      sources: candidate.sources,
+    };
+  }
+
+  private normalizeStringConfidenceField(
+    field:
+      | {
+          value?: string;
+          confidence?: number;
+          source?: string;
+        }
+      | undefined,
+  ): EnrichmentResult["companyName"] | undefined {
+    if (!field) {
+      return undefined;
+    }
+    const rawValue = typeof field.value === "string" ? field.value : "";
+    const value = rawValue.trim();
+    if (value.length === 0) {
+      return undefined;
+    }
+    return {
+      value,
+      confidence:
+        typeof field.confidence === "number" && Number.isFinite(field.confidence)
+          ? field.confidence
+          : DEFAULT_INFERRED_FIELD_CONFIDENCE,
+      source: this.normalizeEnrichmentFieldSource(field.source),
+    };
+  }
+
+  private normalizeNumberConfidenceField(
+    field:
+      | {
+          value?: number;
+          confidence?: number;
+          source?: string;
+        }
+      | undefined,
+  ): EnrichmentResult["fundingTarget"] | undefined {
+    if (
+      !field ||
+      typeof field.value !== "number" ||
+      !Number.isFinite(field.value)
+    ) {
+      return undefined;
+    }
+    const value = field.value;
+    return {
+      value,
+      confidence:
+        typeof field.confidence === "number" && Number.isFinite(field.confidence)
+          ? field.confidence
+          : DEFAULT_INFERRED_FIELD_CONFIDENCE,
+      source: this.normalizeEnrichmentFieldSource(field.source),
+    };
+  }
+
+  private normalizeEnrichmentFieldSource(source: string | undefined): string {
+    if (typeof source === "string" && source.trim().length > 0) {
+      return source.trim();
+    }
+    return "AI synthesis (source unspecified)";
   }
 
   private extractJsonCandidate(text: string): unknown {
@@ -2929,6 +3256,8 @@ export class EnrichmentService {
       normalized.includes("429") ||
       normalized.includes("503") ||
       normalized.includes("502") ||
+      normalized.includes("response_format") ||
+      normalized.includes("invalid schema") ||
       normalized.includes("provider") ||
       normalized.includes("model")
     ) {

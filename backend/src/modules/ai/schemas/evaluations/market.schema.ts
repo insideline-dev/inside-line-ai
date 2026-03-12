@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   BaseEvaluationSchema,
+  BaseScoringSchema,
   EvaluationConfidenceSchema,
   requiredStringFromNull,
   stringArray,
@@ -19,10 +20,9 @@ const optionalUrl = z.preprocess(
 
 const MarketSourceSchema = z.object({
   name: requiredStringFromNull("Unknown source"),
-  tier: z.number().int().min(1).max(3).default(3),
+  tier: requiredStringFromNull("Tier 3"),
   date: requiredStringFromNull("Unknown date"),
-  value: requiredStringFromNull("Unknown value"),
-  url: optionalUrl,
+  geography: requiredStringFromNull("Unknown geography"),
 });
 
 const TamSchema = z.object({
@@ -49,16 +49,16 @@ const SomSchema = z.object({
 
 const BottomUpSanityCheckSchema = z.object({
   calculation: requiredStringFromNull("Not performed"),
-  plausible: z.boolean().default(false),
+  plausible: requiredStringFromNull("unknown"),
   notes: requiredStringFromNull("No notes"),
-}).default({ calculation: "Not performed", plausible: false, notes: "No notes" });
+}).default({ calculation: "Not performed", plausible: "unknown", notes: "No notes" });
 
 const DeckVsResearchSchema = z.object({
   tamClaimed: requiredStringFromNull("Unknown"),
   tamResearched: requiredStringFromNull("Unknown"),
-  discrepancyFlag: z.boolean().default(false),
-  discrepancyNotes: requiredStringFromNull("No discrepancy noted"),
-}).default({ tamClaimed: "Unknown", tamResearched: "Unknown", discrepancyFlag: false, discrepancyNotes: "No discrepancy noted" });
+  discrepancyFlag: requiredStringFromNull("unknown"),
+  notes: requiredStringFromNull("No discrepancy noted"),
+}).default({ tamClaimed: "Unknown", tamResearched: "Unknown", discrepancyFlag: "unknown", notes: "No discrepancy noted" });
 
 const MarketSizingRawSchema = z.object({
   tam: TamSchema,
@@ -79,8 +79,16 @@ const GrowthRateSchema = z.object({
   period: requiredStringFromNull("Unknown"),
   source: requiredStringFromNull("Unknown"),
   deckClaimed: requiredStringFromNull("Unknown"),
-  discrepancyFlag: z.boolean().default(false),
-}).default({ cagr: "Unknown", period: "Unknown", source: "Unknown", deckClaimed: "Unknown", discrepancyFlag: false });
+  discrepancyFlag: requiredStringFromNull("unknown"),
+  trajectory: z.enum(["accelerating", "stable", "decelerating"]).default("stable"),
+}).default({
+  cagr: "Unknown",
+  period: "Unknown",
+  source: "Unknown",
+  deckClaimed: "Unknown",
+  discrepancyFlag: "unknown",
+  trajectory: "stable",
+});
 
 const WhyNowSchema = z.object({
   thesis: requiredStringFromNull("Unknown"),
@@ -97,7 +105,6 @@ const MarketGrowthAndTimingRawSchema = z.object({
   growthRate: GrowthRateSchema,
   whyNow: WhyNowSchema,
   timingAssessment: z.enum(["too_early", "slightly_early", "right_time", "slightly_late", "too_late"]).default("right_time"),
-  timingRationale: requiredStringFromNull("Timing assessment pending"),
   marketLifecycle: MarketLifecycleSchema,
 });
 const MarketGrowthAndTimingSchema = z.preprocess(
@@ -108,6 +115,7 @@ const MarketGrowthAndTimingSchema = z.preprocess(
 // --- Market Structure ---
 
 const ImpactLevel = z.enum(["high", "medium", "low"]);
+const EntrySeveritySchema = z.enum(["low", "moderate", "high"]);
 
 const MarketForceSchema = z.object({
   factor: requiredStringFromNull("Unknown"),
@@ -120,15 +128,16 @@ const ConcentrationTrendSchema = z.object({
   evidence: requiredStringFromNull("Unknown"),
 }).default({ direction: "stable", evidence: "Unknown" });
 
-const EntryConditionsSchema = z.object({
-  assessment: z.enum(["favorable", "neutral", "challenging"]).default("neutral"),
-  rationale: requiredStringFromNull("Unknown"),
-}).default({ assessment: "neutral", rationale: "Unknown" });
+const EntryConditionSchema = z.object({
+  factor: requiredStringFromNull("Unknown factor"),
+  severity: EntrySeveritySchema.default("moderate"),
+  note: requiredStringFromNull("Unknown"),
+});
 
 const MarketStructureRawSchema = z.object({
   structureType: z.enum(["fragmented", "consolidating", "emerging", "concentrated"]).default("emerging"),
   concentrationTrend: ConcentrationTrendSchema,
-  entryConditions: EntryConditionsSchema,
+  entryConditions: z.array(EntryConditionSchema).default([]),
   tailwinds: z.array(MarketForceSchema).default([]),
   headwinds: z.array(MarketForceSchema).default([]),
 });
@@ -137,23 +146,22 @@ const MarketStructureSchema = z.preprocess(
   MarketStructureRawSchema,
 ).default({} as z.output<typeof MarketStructureRawSchema>);
 
-const ScoringSchema = z.object({
-  overallScore: z.number().int().min(0).max(100).default(50),
-  confidence: EvaluationConfidenceSchema.default("low"),
-  scoringBasis: requiredStringFromNull("Scoring basis pending"),
-}).default({
-  overallScore: 50,
-  confidence: "low",
-  scoringBasis: "Score calibrated from market sizing, timing, and structure evidence.",
-});
-
 // --- Main Schema ---
 
 export const MarketEvaluationSchema = BaseEvaluationSchema.extend({
   marketSizing: MarketSizingSchema,
   marketGrowthAndTiming: MarketGrowthAndTimingSchema,
   marketStructure: MarketStructureSchema,
-  scoring: ScoringSchema,
+  scoring: z.preprocess(
+    (value) =>
+      value ?? {
+        overallScore: 50,
+        confidence: "low",
+        scoringBasis: "Score calibrated from market sizing, timing, and structure evidence.",
+        subScores: [],
+      },
+    BaseScoringSchema,
+  ),
   diligenceItems: stringArray,
   founderPitchRecommendations: z.array(FounderPitchRecommendationSchema).default([]),
 });

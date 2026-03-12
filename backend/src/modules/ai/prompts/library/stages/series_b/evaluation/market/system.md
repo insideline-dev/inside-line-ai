@@ -47,10 +47,15 @@ Assess the market's structural characteristics:
 - Market consolidating or fragmenting? (research)
 - Structure favorable for scaled players? (research)
 - Concentration trends — are incumbents gaining or losing share overall? (research)
-- Entry barriers and competitive dynamics at market level
+- Entry conditions — assess each barrier individually:
+  - Regulatory barriers (low / moderate / high)
+  - Capital requirements (low / moderate / high)
+  - Incumbent lock-in (low / moderate / high)
+  - Distribution access (easy / moderate / difficult)
+  - Technology barriers (low / moderate / high)
 - Tailwinds and headwinds with sources
 
-Produce a marketStructure summary covering: structure type, concentration trend, entry conditions, tailwinds, and headwinds.
+Produce a marketStructure summary covering: structure type, concentration trend, entry conditions scorecard, tailwinds, and headwinds.
 
 3. MARKET DYNAMICS (25%)
 
@@ -94,15 +99,16 @@ Market growth rate insufficient for venture-scale outcomes
 
 Based on your evaluation, synthesize:
 
-Key findings: The most important takeaways from the market analysis — what stands out about this market at Series B scale?
+Strengths: The most important takeaways from the market analysis — what stands out about this market at Series B scale?
 
 Risks: What are the specific market risks? (e.g., market smaller than positioned, consolidation favoring incumbents, no expansion path, growth deceleration)
 
-Data gaps: Where was research inconclusive or unavailable? (e.g., adjacent market sizing unverifiable, international data missing, segment-level growth unavailable)
+Data gaps: Where was research inconclusive or unavailable? For each gap, assess:
+- Gap description (e.g., adjacent market sizing unverifiable, international data missing, segment-level growth unavailable)
+- Impact if unresolved: "critical" (would change score/recommendation), "important" (would change confidence), "minor" (contextual, nice-to-have)
+- Suggested diligence action to resolve it (e.g., "Validate adjacent market sizing with segment data", "Confirm international expansion TAM", "Assess market concentration trends with recent M&A data")
 
 Sources: List the primary sources used — which research reports, what tier, how recent, what came only from the deck.
-
-Diligence items: What needs further investigation beyond desk research? (e.g., "Validate adjacent market sizing with segment data", "Confirm international expansion TAM", "Assess market concentration trends with recent M&A data")
 
 --- PITCH DECK RECOMMENDATIONS ---
 
@@ -161,14 +167,13 @@ Your evaluation above should populate these structured output fields:
 From the Evaluation Framework:
 - marketSizing → TAM/SAM/SOM analysis, adjacent market sizing, source attribution with tiers, deck-vs-research discrepancies, expansion potential
 - marketGrowthAndTiming → growth rate with source, key dynamics, timing assessment, market lifecycle position
-- marketStructure → structure type, concentration trend, entry conditions, tailwinds, headwinds
+- marketStructure → structure type, concentration trend, entry conditions scorecard (per-barrier severity), tailwinds, headwinds
 
 From Strengths, Risks & Data Gaps:
-- keyFindings → most important market analysis takeaways
+- strengths → specific market strengths
 - risks → specific market risks
-- dataGaps → where research was inconclusive or unavailable
+- dataGaps → where research was inconclusive or unavailable, with impact level (critical/important/minor) and suggested diligence action per gap
 - sources → primary sources used with tiers
-- diligenceItems → what needs further investigation beyond desk research
 
 From Pitch Deck Recommendations:
 - founderPitchRecommendations[] → what's missing from the deck about the market
@@ -177,6 +182,7 @@ From Scoring:
 - scoring.overallScore → 0-100 overall score
 - scoring.confidence → "high", "mid", or "low"
 - scoring.scoringBasis → one-sentence explanation of what drove the score
+- scoring.subScores[] → array of sub-dimension scores, one per evaluation dimension. Each entry: { dimension (name), weight (decimal), score (0-100) }. Dimensions for this stage: Market Size & Expansion (0.35), Market Structure (0.25), Market Dynamics (0.25), Market Maturity & Trajectory (0.15)
 
 From Narrative:
 - narrativeSummary → 3-4 paragraph assessment (450-650 words)

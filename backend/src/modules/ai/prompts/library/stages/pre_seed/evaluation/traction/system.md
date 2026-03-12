@@ -46,11 +46,14 @@ Bad: Deck makes claims without any supporting numbers
 
 Based on your evaluation, synthesize:
 
-Key findings: The most important takeaways from the traction analysis — what stands out about this startup's traction at pre-seed?
+Strengths: The most important takeaways from the traction analysis — what stands out about this startup's traction at pre-seed?
 
 Risks: What are the specific traction risks? (e.g., qualitative claims without numbers, no demand validation despite time spent, metrics weaker than implied by narrative)
 
-Data gaps: What metrics are missing from the deck? At pre-seed, most will be missing — flag but don't penalize. Note what diligence should verify once data exists. (e.g., no user metrics, no revenue data, no retention signal, no growth trend)
+Data gaps: What metrics are missing from the deck? For each gap, assess:
+- Gap description (e.g., no user metrics, no revenue data, no retention signal, no growth trend)
+- Impact if unresolved: "critical" (would change score/recommendation), "important" (would change confidence), "minor" (contextual, nice-to-have)
+- Suggested diligence action to resolve it
 
 Sources: List what data was available — what metrics came from the deck, what was absent.
 
@@ -116,18 +119,29 @@ STAY IN SCOPE: Evaluate the traction metrics the deck provides, assess them agai
 
 Your evaluation above should populate these structured output fields:
 
-From Strengths, Risks & Data Gaps:
-- keyFindings → most important traction analysis takeaways
-- risks → specific traction risks
-- dataGaps → what metrics are missing from the deck
-- sources → what data was available and where it came from
+Scoring:
+- scoring.overallScore → your 0-100 score from the scoring rubric
+- scoring.confidence → "high", "mid", or "low" from the scoring rubric
+- scoring.scoringBasis → one-sentence explanation of what drove the score
+- scoring.subScores[] → array of sub-dimension scores, one per evaluation dimension. Each entry: { dimension (name), weight (decimal), score (0-100) }. Dimensions for this stage: Metrics Provided (0.40), Metrics vs Stage Expectations (0.30), Data Gaps (0.30)
 
-From Pitch Deck Recommendations:
-- founderPitchRecommendations[] → what's missing from the deck about traction
+Traction Overview:
+- tractionOverview.metricsDepth → "comprehensive", "partial", "minimal", or "none" — how much traction data does the deck provide?
+- tractionOverview.stageFit → "strong", "adequate", "weak", or "insufficient" — do the metrics justify this stage of investment?
+- tractionOverview.hasRevenue → true/false — does the deck show revenue data?
+- tractionOverview.hasGrowthRate → true/false — does the deck show growth rate?
+- tractionOverview.hasRetention → true/false — does the deck show retention or churn metrics?
+- tractionOverview.hasUnitEconomics → true/false — does the deck show unit economics?
+- tractionOverview.hasCohortData → true/false — does the deck show cohort analysis?
 
-From Scoring:
-- score → 0-100 overall score
-- confidence → "high", "mid", or "low"
+Strengths & Risks:
+- strengths → specific traction strengths (string, one per line)
+- risks → specific traction risks (string, one per line)
 
-From Narrative:
-- narrativeSummary → 3-4 paragraph assessment (450-650 words)
+Data Gaps:
+- dataGaps[] → array of { gap, impact ("critical", "important", "minor"), suggestedAction }
+
+Narrative & Recommendations (not rendered on a tab):
+- narrativeSummary → the 3-4 paragraph narrative (450-650 words)
+- sources → primary sources used
+- founderPitchRecommendations[] → array of { deckMissingElement, whyItMatters, recommendation }

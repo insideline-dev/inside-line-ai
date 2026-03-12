@@ -86,7 +86,10 @@ Strengths: What specifically makes this team compelling for this startup? (e.g.,
 
 Risks: What are the specific team risks? (e.g., missing technical co-founder, no domain connection, co-founder dynamics concerns, research red flags)
 
-Data gaps: What couldn't be verified or assessed from the available inputs? (e.g., incomplete LinkedIn profiles, no research data on a founder, claims in deck not verifiable)
+Data gaps: What couldn't be verified or assessed from the available inputs? For each gap, assess:
+- Gap description (e.g., incomplete LinkedIn profiles, no research data on a founder, claims in deck not verifiable)
+- Impact if unresolved: "critical" (would change score/recommendation), "important" (would change confidence), "minor" (contextual, nice-to-have)
+- Suggested diligence action to resolve it
 
 Sources: List the primary sources used — which LinkedIn profiles were available, what the research agent verified, what came only from the deck.
 
@@ -146,10 +149,13 @@ STAY IN SCOPE: Evaluate only the team — who they are, why they're the right pe
 
 Your evaluation above should populate these structured output fields:
 
-From the Evaluation Framework:
-- founderMarketFit.score → 0-100 sub-score reflecting the founder-problem connection
-- founderMarketFit.why → two-sentence explanation of the founderMarketFit score
-- teamMembers[] → for each team member: name, role, relevance, strengths, risks/gaps
+Scoring:
+- scoring.overallScore → your 0-100 score from the scoring rubric
+- scoring.confidence → "high", "mid", or "low" from the scoring rubric
+- scoring.scoringBasis → one-sentence explanation of what drove the score
+- scoring.subScores[] → array of sub-dimension scores, one per evaluation dimension. Each entry: { dimension (name), weight (decimal), score (0-100) }. Dimensions for this stage: Founder Quality & Founder-Market Fit (0.40), Team Composition & Gaps (0.30), Co-Founder Dynamics & Red Flags (0.30)
+
+Team Composition:
 - teamComposition.businessLeadership → true/false
 - teamComposition.technicalCapability → true/false
 - teamComposition.domainExpertise → true/false
@@ -157,21 +163,22 @@ From the Evaluation Framework:
 - teamComposition.sentence → two-sentence summary of overall team composition
 - teamComposition.reason → key gap or strength explanation
 
-From Strengths, Risks & Data Gaps:
-- strengths → specific team strengths from the evaluation
-- risks → specific team risks
-- dataGaps → what couldn't be verified or assessed
+Founder-Market Fit:
+- founderMarketFit.score → 0-100 sub-score reflecting the founder-problem connection
+- founderMarketFit.why → two-sentence explanation of the founderMarketFit score
+
+Team Members:
+- teamMembers[] → array of team member assessments. For each member: { name (string), role (string), relevance (one-line: why this person matters for this startup/stage), strengths (key strengths from LinkedIn + research), risks (key risks or gaps from research) }
+
+Strengths & Risks:
+- strengths → specific team strengths from the evaluation (string, one strength per line)
+- risks → specific team risks from the evaluation (string, one risk per line)
+
+Data Gaps:
+- dataGaps[] → array of gaps. For each: { gap (description), impact ("critical", "important", or "minor"), suggestedAction (diligence step to resolve) }
+
+Narrative & Recommendations (used by other tabs, not rendered on Team tab):
+- narrativeSummary → the 3-4 paragraph narrative from the Narrative Structure section (450-650 words)
 - sources → primary sources used
-
-From Founder Recommendations:
-- founderRecommendations[] → actionable team-building recommendations
-
-From Pitch Deck Recommendations:
-- founderPitchRecommendations[] → what's missing from the deck about the team
-
-From Scoring:
-- score → 0-100 overall score
-- confidence → "high", "mid", or "low"
-
-From Narrative:
-- narrativeSummary → 3-4 paragraph assessment (450-650 words)
+- founderRecommendations[] → actionable team-building recommendations. For each: { action (type, e.g., "Hire", "Reframe", "Add"), recommendation (specific recommendation) }
+- founderPitchRecommendations[] → what's missing from the deck about the team. For each: { deckMissingElement (what's absent), whyItMatters (why investors care), recommendation (what to add/clarify) }

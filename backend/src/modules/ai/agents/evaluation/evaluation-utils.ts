@@ -24,14 +24,29 @@ export function baseEvaluation(
   return {
     score: normalized,
     confidence: "low" as const,
+    scoring: {
+      overallScore: normalized,
+      confidence: "low" as const,
+      scoringBasis:
+        "Deterministic fallback score because automated evaluation did not complete successfully.",
+      subScores: [],
+    },
     narrativeSummary: [
       `Current signal quality is limited. This dimension is provisionally scored at ${normalized}/100 with low confidence because automated analysis did not complete successfully.`,
       `${finding}. Automated evaluation could not be completed — this section requires manual review by the investment team.`,
       "The investment team should review primary materials manually before using this dimension in an IC decision, and should resolve the listed data gaps to restore confidence in this section.",
     ].join("\n\n"),
     keyFindings: [finding, "Automated evaluation failed — requires manual review"],
+    strengths: [finding],
     risks: ["Unable to complete automated assessment"],
-    dataGaps: ["Evaluation failed — used heuristic fallback"],
+    dataGaps: [
+      {
+        gap: "Evaluation failed — used heuristic fallback",
+        impact: "important",
+        suggestedAction:
+          "Review source materials manually and rerun the automated evaluation if needed.",
+      },
+    ],
     sources: [source],
   };
 }

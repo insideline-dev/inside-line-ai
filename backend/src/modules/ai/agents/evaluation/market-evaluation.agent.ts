@@ -7,6 +7,7 @@ import { AiModelExecutionService } from "../../services/ai-model-execution.servi
 import { AiProviderService } from "../../providers/ai-provider.service";
 import { BaseEvaluationAgent } from "./base-evaluation.agent";
 import { baseEvaluation } from "./evaluation-utils";
+import { normalizeBaseEvaluationCandidate } from "../../schemas";
 
 @Injectable()
 export class MarketEvaluationAgent extends BaseEvaluationAgent<MarketEvaluation> {
@@ -99,7 +100,9 @@ export class MarketEvaluationAgent extends BaseEvaluationAgent<MarketEvaluation>
   }
 
   protected override normalizeOutputCandidate(candidate: unknown): unknown {
-    return this.normalizeLegacyMarketPayload(candidate);
+    return normalizeBaseEvaluationCandidate(
+      this.normalizeLegacyMarketPayload(candidate),
+    );
   }
 
   private normalizeLegacyMarketPayload(candidate: unknown): unknown {

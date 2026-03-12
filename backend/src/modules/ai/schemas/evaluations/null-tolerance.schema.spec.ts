@@ -16,18 +16,21 @@ const base = {
 };
 
 describe("evaluation schema null tolerance", () => {
-  it("accepts null optional numeric values in deal terms", () => {
+  it("accepts null optional scalar values in deal terms", () => {
     const parsed = DealTermsEvaluationSchema.parse({
       ...base,
-      valuation: null,
-      askAmount: null,
-      equity: null,
-      termsQuality: "Standard terms for stage.",
+      dealOverview: {
+        impliedMultiple: null,
+        comparableRange: null,
+        premiumDiscount: "insufficient_data",
+        roundType: "SAFE",
+        raiseSizeAssessment: "insufficient_data",
+        valuationProvided: false,
+      },
     });
 
-    expect(parsed.valuation).toBeUndefined();
-    expect(parsed.askAmount).toBeUndefined();
-    expect(parsed.equity).toBeUndefined();
+    expect(parsed.dealOverview.impliedMultiple).toBeNull();
+    expect(parsed.dealOverview.comparableRange).toBeNull();
   });
 
   it("accepts minimal market evaluation and applies top-level defaults", () => {
@@ -54,14 +57,13 @@ describe("evaluation schema null tolerance", () => {
     expect(parsed.marketStructure.structureType).toBeDefined();
   });
 
-  it("traction schema is SimpleEvaluationSchema with no metrics field", () => {
+  it("traction schema defaults archive overview fields", () => {
     const parsed = TractionEvaluationSchema.parse({ ...base });
 
-    // Traction is now SimpleEvaluationSchema — no metrics, customerValidation, etc.
     expect(parsed.score).toBe(80);
     expect(parsed.confidence).toBe("mid");
     expect(parsed.narrativeSummary).toBeTruthy();
-    expect("metrics" in parsed).toBe(false);
+    expect(parsed.tractionOverview.metricsDepth).toBeDefined();
   });
 
   it("traction schema rejects invalid score", () => {
@@ -113,14 +115,13 @@ describe("evaluation schema null tolerance", () => {
     expect(parsed.competitors.indirect[0]?.threatLevel).toBeUndefined();
   });
 
-  it("financials schema is SimpleEvaluationWithRecs — no burnRate/runway/fundingHistory", () => {
+  it("financials schema defaults archive financial structures", () => {
     const parsed = FinancialsEvaluationSchema.parse({ ...base });
 
     expect(parsed.score).toBe(80);
     expect(parsed.confidence).toBe("mid");
-    expect("burnRate" in parsed).toBe(false);
-    expect("runway" in parsed).toBe(false);
-    expect("fundingHistory" in parsed).toBe(false);
+    expect(parsed.keyMetrics.raiseAmount).toBeNull();
+    expect(parsed.capitalPlan.summary.length).toBeGreaterThan(0);
   });
 
   it("financials schema accepts founderPitchRecommendations", () => {

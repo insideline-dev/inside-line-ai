@@ -35,7 +35,7 @@ Do NOT re-research what the Market Deep Research Agent already provided. Focus o
 Assess and summarize the market sizing based on research and deck claims:
 - Do research sources confirm the claimed TAM/SAM? (research vs deck claims)
 - Are multiple independent sources aligned on market size?
-- Bottom-up sizing sanity check — does research data support it?
+- Bottom-up sizing sanity check — does research data support it? Write the calculation as a labeled formula showing each input with its value multiplied together to produce the result. The formula structure will vary by industry and product type — use whatever inputs are appropriate for this market.
 - Compare deck claims against research findings — flag discrepancies
 
 Produce a marketSizing summary covering: TAM/SAM/SOM analysis, source attribution with tiers, deck-vs-research discrepancies, and bottom-up sanity check.
@@ -56,10 +56,15 @@ Assess the market's structural characteristics:
 - Market structure favorable? (fragmented, growing, accessible)
 - Concentration trends from research data
 - Category maturity — growth phase, mature, declining? (research)
-- Entry conditions and barriers
+- Entry conditions — assess each barrier individually:
+  - Regulatory barriers (low / moderate / high)
+  - Capital requirements (low / moderate / high)
+  - Incumbent lock-in (low / moderate / high)
+  - Distribution access (easy / moderate / difficult)
+  - Technology barriers (low / moderate / high)
 - Tailwinds and headwinds with sources
 
-Produce a marketStructure summary covering: structure type, concentration trend, entry conditions, tailwinds, and headwinds.
+Produce a marketStructure summary covering: structure type, concentration trend, entry conditions scorecard, tailwinds, and headwinds.
 
 4. MARKET MOMENTUM (15%)
 - Tailwinds supporting growth? (research trends)
@@ -93,15 +98,16 @@ Market growth decelerating per research
 
 Based on your evaluation, synthesize:
 
-Key findings: The most important takeaways from the market analysis — what stands out about this market at Series A?
+Strengths: The most important takeaways from the market analysis — what stands out about this market at Series A?
 
 Risks: What are the specific market risks? (e.g., deck-vs-research misalignment, category headwinds, growth deceleration, concentration concerns)
 
-Data gaps: Where was research inconclusive or unavailable? (e.g., segment-level data missing, international sizing unavailable, growth projections stale)
+Data gaps: Where was research inconclusive or unavailable? For each gap, assess:
+- Gap description (e.g., segment-level data missing, international sizing unavailable, growth projections stale)
+- Impact if unresolved: "critical" (would change score/recommendation), "important" (would change confidence), "minor" (contextual, nice-to-have)
+- Suggested diligence action to resolve it (e.g., "Validate SAM with customer cohort analysis", "Get segment-level sizing from [source]", "Confirm category growth trajectory with recent data")
 
 Sources: List the primary sources used — which research reports, what tier, how recent, what came only from the deck.
-
-Diligence items: What needs further investigation beyond desk research? (e.g., "Validate SAM with customer cohort analysis", "Get segment-level sizing from [source]", "Confirm category growth trajectory with recent data")
 
 --- PITCH DECK RECOMMENDATIONS ---
 
@@ -161,14 +167,13 @@ Your evaluation above should populate these structured output fields:
 From the Evaluation Framework:
 - marketSizing → TAM/SAM/SOM analysis, source attribution with tiers, deck-vs-research discrepancies, bottom-up sanity check
 - marketGrowthAndTiming → growth rate with source, category momentum, timing assessment, market lifecycle position
-- marketStructure → structure type, concentration trend, entry conditions, tailwinds, headwinds
+- marketStructure → structure type, concentration trend, entry conditions scorecard (per-barrier severity), tailwinds, headwinds
 
 From Strengths, Risks & Data Gaps:
-- keyFindings → most important market analysis takeaways
+- strengths → specific market strengths
 - risks → specific market risks
-- dataGaps → where research was inconclusive or unavailable
+- dataGaps → where research was inconclusive or unavailable, with impact level (critical/important/minor) and suggested diligence action per gap
 - sources → primary sources used with tiers
-- diligenceItems → what needs further investigation beyond desk research
 
 From Pitch Deck Recommendations:
 - founderPitchRecommendations[] → what's missing from the deck about the market
@@ -177,6 +182,7 @@ From Scoring:
 - scoring.overallScore → 0-100 overall score
 - scoring.confidence → "high", "mid", or "low"
 - scoring.scoringBasis → one-sentence explanation of what drove the score
+- scoring.subScores[] → array of sub-dimension scores, one per evaluation dimension. Each entry: { dimension (name), weight (decimal), score (0-100) }. Dimensions for this stage: Market Size Validation (0.35), Market Size & Growth (0.30), Market Structure & Dynamics (0.20), Market Momentum (0.15)
 
 From Narrative:
 - narrativeSummary → 3-4 paragraph assessment (450-650 words)

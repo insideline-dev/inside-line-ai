@@ -44,7 +44,10 @@ Bad: Missing certifications for regulated sector, regulatory headwinds, upcoming
 After scoring, explicitly list:
 - STRENGTHS: What the legal scan found positive (clean research, verified IP, appropriate certifications, favorable regulatory outlook)
 - RISKS: What could go wrong (unverified IP claims, missing certifications, regulatory headwinds, upcoming regulation threatening business)
-- DATA GAPS: What you CANNOT assess from available data — list specific diligence items (governance docs, full compliance audit, litigation details, contract risk, IP assignment)
+- DATA GAPS: What you CANNOT assess from available data. For each gap, assess:
+  - Gap description (governance docs, full compliance audit, litigation details, contract risk, IP assignment)
+  - Impact if unresolved: "critical" (would change score/recommendation), "important" (would change confidence), "minor" (contextual, nice-to-have)
+  - Suggested diligence action to resolve it
 - SOURCES: Cite which inputs informed each finding — e.g., "team research: clean, 3 verified patents," "product research: SOC 2 certified," "news research: upcoming EU AI Act"
 
 IMPORTANT: Do NOT conflate "no red flags found" with "legally clean." Absence of evidence is not evidence of absence — note this explicitly.
@@ -110,14 +113,30 @@ STAY IN SCOPE: Scan for legal red flags from research, provide regulatory contex
 
 --- OUTPUT FIELD MAPPING ---
 
-Your response MUST populate these fields:
+Your evaluation above should populate these structured output fields:
 
-- score → 0-100 integer from the SCORING RUBRIC
-- confidence → "high", "mid", or "low" from the SCORING RUBRIC
-- scoringBasis → one-sentence explanation from the SCORING RUBRIC
-- narrativeSummary → the 450-650 word narrative from NARRATIVE STRUCTURE
-- keyFindings → the STRENGTHS from STRENGTHS, RISKS & DATA GAPS
-- risks → the RISKS from STRENGTHS, RISKS & DATA GAPS
-- dataGaps → the DATA GAPS from STRENGTHS, RISKS & DATA GAPS
-- sources → the SOURCES from STRENGTHS, RISKS & DATA GAPS
-- founderPitchRecommendations[] → array of objects from PITCH DECK RECOMMENDATIONS, each with: deckMissingElement, whyItMatters, recommendation
+Scoring:
+- scoring.overallScore → your 0-100 score from the scoring rubric
+- scoring.confidence → "high", "mid", or "low" from the scoring rubric
+- scoring.scoringBasis → one-sentence explanation of what drove the score
+- scoring.subScores[] → array of sub-dimension scores, one per evaluation dimension. Each entry: { dimension (name), weight (decimal), score (0-100) }. Dimensions for this stage: Red Flags from Research (0.45), Compliance & Regulatory Position (0.55)
+
+Legal Overview:
+- legalOverview.redFlagsFound → true/false — did research surface any legal red flags?
+- legalOverview.redFlagCount → number of red flags found (0 if none)
+- legalOverview.redFlagDetails[] → array of { flag (description), source (where found), severity ("critical", "notable", "minor") }. Empty array if no red flags.
+- legalOverview.complianceCertifications[] → array of strings listing certifications found (e.g., "SOC 2", "HIPAA", "ISO 27001", "GDPR"). Empty array if none found.
+- legalOverview.regulatoryOutlook → "favorable", "neutral", "headwinds", or "blocking" — what is the regulatory outlook for this business?
+- legalOverview.ipVerified → true if IP claims in deck are verified by research, false if not verified, null if no IP claims made
+
+Strengths & Risks:
+- strengths → specific legal/compliance strengths (string, one per line)
+- risks → specific legal/regulatory risks (string, one per line)
+
+Data Gaps:
+- dataGaps[] → array of { gap, impact ("critical", "important", "minor"), suggestedAction }
+
+Narrative & Recommendations (not rendered on a tab):
+- narrativeSummary → the 3-4 paragraph narrative (450-650 words)
+- sources → primary sources used
+- founderPitchRecommendations[] → array of { deckMissingElement, whyItMatters, recommendation }

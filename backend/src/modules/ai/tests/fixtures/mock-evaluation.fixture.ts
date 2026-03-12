@@ -1,19 +1,33 @@
 import type { EvaluationResult } from "../../interfaces/phase-results.interface";
 
+const base = {
+  score: 78,
+  confidence: "mid" as const,
+  scoring: {
+    overallScore: 78,
+    confidence: "mid" as const,
+    scoringBasis:
+      "Archive-aligned mock score derived from available evidence quality.",
+    subScores: [],
+  },
+  narrativeSummary:
+    "This dimension shows solid performance with moderate confidence. The evidence supports the assessment, though additional third-party validation would strengthen the analysis.",
+  keyFindings: ["Signal is acceptable"],
+  strengths: ["Signal is acceptable"],
+  risks: ["Evidence depth is moderate"],
+  dataGaps: [
+    {
+      gap: "More third-party benchmarks needed",
+      impact: "important" as const,
+      suggestedAction: "Validate assumptions against external market data.",
+    },
+  ],
+  sources: ["internal://pipeline-state"],
+};
+
 export function createMockEvaluationResult(
   overrides?: Partial<EvaluationResult>,
 ): EvaluationResult {
-  const base = {
-    score: 78,
-    confidence: "mid" as const,
-    narrativeSummary:
-      "This dimension shows solid performance with moderate confidence. The evidence supports the assessment, though additional third-party validation would strengthen the analysis.",
-    keyFindings: ["Signal is acceptable"],
-    risks: ["Evidence depth is moderate"],
-    dataGaps: ["More third-party benchmarks needed"],
-    sources: ["internal://pipeline-state"],
-  };
-
   const result: EvaluationResult = {
     team: {
       ...base,
@@ -26,14 +40,13 @@ export function createMockEvaluationResult(
         sentence: "Core leadership and technical depth are present, with a GTM gap.",
         reason: "No dedicated GTM owner yet; function covered by founders part-time.",
       },
-      strengths: ["Domain depth", "Operator-founder profile"],
       teamMembers: [
         {
           name: "Amina Rao",
           role: "CEO",
-          background: "Industrial software operator",
+          relevance: "Industrial software operator with deep buyer context",
           strengths: ["Domain depth"],
-          concerns: [],
+          risks: [],
         },
       ],
       founderRecommendations: [],
@@ -42,65 +55,165 @@ export function createMockEvaluationResult(
     market: {
       ...base,
       marketSizing: {
-        tam: { value: "$8.5B", methodology: "top-down", sources: [], confidence: "mid" },
-        sam: { value: "$2B", methodology: "Industry segment filter", filters: [], sources: [], confidence: "mid" },
-        som: { value: "$200M", methodology: "Win rate model", assumptions: "10% capture in 5 years", confidence: "low" },
-        bottomUpSanityCheck: { calculation: "Not performed", plausible: false, notes: "Pending" },
-        deckVsResearch: { tamClaimed: "$8.5B", tamResearched: "$8B", discrepancyFlag: false, discrepancyNotes: "Aligned" },
+        tam: {
+          value: "$8.5B",
+          methodology: "top-down",
+          sources: [{ name: "IDC", tier: "tier_1", date: "2025", geography: "US" }],
+          confidence: "mid",
+        },
+        sam: {
+          value: "$2B",
+          methodology: "Industry segment filter",
+          filters: [],
+          sources: [{ name: "Gartner", tier: "tier_1", date: "2025", geography: "US" }],
+          confidence: "mid",
+        },
+        som: {
+          value: "$200M",
+          methodology: "Win rate model",
+          assumptions: "10% capture in 5 years",
+          confidence: "low",
+        },
+        bottomUpSanityCheck: {
+          calculation: "Not performed",
+          plausible: "unknown",
+          notes: "Pending",
+        },
+        deckVsResearch: {
+          tamClaimed: "$8.5B",
+          tamResearched: "$8B",
+          discrepancyFlag: "none",
+          notes: "Aligned",
+        },
       },
       marketGrowthAndTiming: {
-        growthRate: { cagr: "18%", period: "2024-2029", source: "IDC", deckClaimed: "20%", discrepancyFlag: false },
-        whyNow: { thesis: "Regulatory cycle accelerating adoption", supportedByResearch: true, evidence: ["OSHA updates"] },
+        growthRate: {
+          cagr: "18%",
+          period: "2024-2029",
+          source: "IDC",
+          deckClaimed: "20%",
+          discrepancyFlag: "none",
+          trajectory: "stable",
+        },
+        whyNow: {
+          thesis: "Regulatory cycle accelerating adoption",
+          supportedByResearch: true,
+          evidence: ["OSHA updates"],
+        },
         timingAssessment: "right_time",
-        timingRationale: "Favorable regulatory and tooling cycle",
         marketLifecycle: { position: "early_growth", evidence: "Growing vendor count" },
       },
       marketStructure: {
         structureType: "fragmented",
         concentrationTrend: { direction: "consolidating", evidence: "M&A activity rising" },
-        entryConditions: { assessment: "favorable", rationale: "Low capital barrier for SaaS" },
+        entryConditions: [
+          { factor: "Capital intensity", severity: "low", note: "Low capital barrier for SaaS" },
+        ],
         tailwinds: [],
         headwinds: [],
-      },
-      scoring: {
-        overallScore: 74,
-        confidence: "mid",
-        scoringBasis: "Scored on TAM quality, timing evidence, and structure favorability.",
       },
       diligenceItems: ["Validate SAM assumptions"],
       founderPitchRecommendations: [],
     },
     product: {
       ...base,
-      productSummary: { description: "AI copilots for industrial workflows", techStage: "mvp" },
       productOverview: {
         whatItDoes: "Automates compliance workflows",
         targetUser: "Industrial operations managers",
         productCategory: "Workflow automation",
         coreValueProp: "Audit-ready outputs with minimal manual effort",
+        description: "AI copilots for industrial workflows",
+        techStage: "mvp",
       },
-      productStrengthsAndRisks: {
-        strengths: ["Clear workflow automation wedge", "Strong compliance narrative"],
-        risks: ["Depth of integrations not fully demonstrated"],
-      },
-      strengths: ["Compliance automation", "Audit generation"],
-      keyFeatures: ["Workflow automation", "Audit generation"],
-      technologyStack: ["TypeScript", "PostgreSQL"],
+      stageFitAssessment: "on_track",
+      claimsAssessment: [],
+      keyFeatures: [
+        { feature: "Workflow automation", verifiedBy: ["deck", "website"] },
+        { feature: "Audit generation", verifiedBy: ["deck"] },
+      ],
+      technologyStack: [
+        { technology: "TypeScript", source: "website" },
+        { technology: "PostgreSQL", source: "website" },
+      ],
       founderPitchRecommendations: [],
     },
     traction: {
       ...base,
+      tractionOverview: {
+        metricsDepth: "partial",
+        stageFit: "adequate",
+        hasRevenue: true,
+        hasGrowthRate: true,
+        hasRetention: false,
+        hasUnitEconomics: false,
+        hasCohortData: false,
+      },
+      founderPitchRecommendations: [],
     },
     businessModel: {
       ...base,
+      modelOverview: {
+        modelType: "SaaS",
+        pricingVisible: true,
+        expansionMechanism: true,
+        scalabilityAssessment: "moderate",
+        marginStructureDescribed: false,
+      },
       founderPitchRecommendations: [],
     },
     gtm: {
       ...base,
+      gtmOverview: {
+        strategyType: "sales-led",
+        evidenceAlignment: "partial",
+        channelDiversification: false,
+        scalabilityAssessment: "moderate",
+      },
       founderPitchRecommendations: [],
     },
     financials: {
       ...base,
+      financialModelProvided: false,
+      keyMetrics: {
+        raiseAmount: "$2.0M",
+        monthlyBurn: null,
+        runway: null,
+        runwayMonths: null,
+      },
+      capitalPlan: {
+        burnPlanDescribed: false,
+        useOfFundsDescribed: true,
+        runwayEstimated: false,
+        raiseJustified: true,
+        milestoneTied: false,
+        capitalEfficiencyAddressed: false,
+        milestoneAlignment: "partial",
+        useOfFundsBreakdown: [],
+        summary: "Use of funds is partially described.",
+      },
+      projections: {
+        provided: false,
+        assumptionsStated: false,
+        internallyConsistent: false,
+        credibility: "none",
+        summary: "No model provided.",
+        scenarioAnalysis: false,
+        scenarioDetail: "Not provided",
+        assumptionAssessment: "Not provided",
+        assumptions: [],
+        profitabilityPath: "pre-revenue",
+      },
+      charts: {
+        revenueProjection: [],
+        burnProjection: [],
+        scenarioComparison: [],
+        marginProgression: [],
+      },
+      financialPlanning: {
+        sophisticationLevel: "basic",
+        diligenceFlags: [],
+        summary: "Planning maturity is basic.",
+      },
       founderPitchRecommendations: [],
     },
     competitiveAdvantage: {
@@ -116,36 +229,73 @@ export function createMockEvaluationResult(
         moatStage: "forming",
         moatEvidence: ["Operational data loops"],
         selfReinforcing: true,
-        timeToReplicate: "2-3 years",
+        timeToReplicate: "1-2 years",
       },
-      barriersToEntry: { technical: true, capital: false, network: false, regulatory: true },
+      barriersToEntry: {
+        technical: true,
+        capital: false,
+        network: false,
+        regulatory: true,
+      },
       competitivePosition: {
-        currentGap: "widening",
+        currentGap: "competitive",
         gapEvidence: "Deeper integrations than incumbents",
         vulnerabilities: ["Well-funded entrant risk"],
         defensibleAgainstFunded: true,
         defensibilityRationale: "Integration depth is hard to replicate quickly",
       },
       competitors: {
-        direct: [{ name: "FactoryCloud", description: "Industrial workflow SaaS" }],
-        indirect: [{ name: "Internal ERP custom workflows", description: "Custom-built alternatives" }],
+        direct: [
+          {
+            name: "FactoryCloud",
+            description: "Industrial workflow SaaS",
+          },
+        ],
+        indirect: [
+          {
+            name: "Internal ERP custom workflows",
+            description: "Custom-built alternatives",
+          },
+        ],
         advantages: ["Deeper workflow specialization"],
         risks: ["ERP vendors can bundle adjacent functionality"],
         details: ["Current incumbents rely on manual audit processes"],
       },
-      strengths: ["Integration depth", "Operational data loops"],
       founderPitchRecommendations: [],
     },
     legal: {
       ...base,
+      legalOverview: {
+        redFlagsFound: false,
+        redFlagCount: 0,
+        redFlagDetails: [],
+        complianceCertifications: [],
+        regulatoryOutlook: "neutral",
+        ipVerified: null,
+      },
       founderPitchRecommendations: [],
     },
     dealTerms: {
       ...base,
+      dealOverview: {
+        impliedMultiple: null,
+        comparableRange: null,
+        premiumDiscount: "insufficient_data",
+        roundType: "SAFE",
+        raiseSizeAssessment: "typical",
+        valuationProvided: false,
+      },
     },
     exitPotential: {
       ...base,
       exitScenarios: [],
+      returnAssessment: {
+        moderateReturnsAdequate: false,
+        conservativeReturnsCapital: false,
+        impliedGrowthRealistic: false,
+        grossReturnsDisclaimer:
+          "Return analysis is directional and gross of fees, dilution, and liquidation preferences.",
+      },
     },
     summary: {
       completedAgents: 11,

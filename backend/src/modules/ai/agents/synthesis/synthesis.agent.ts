@@ -1224,9 +1224,10 @@ Citation rules:
     // If we ended inside a string, close it
     if (inString) json += '"';
 
-    // Remove any trailing incomplete value after a colon (partial string, number, etc.)
-    // e.g. `"key": "incomplete` → already closed above
-    // e.g. `"key": [1, 2, ` → needs array/object closing
+    // Strip dangling incomplete key-value patterns that would produce invalid JSON:
+    // e.g. `"key1": "val", "ke"` or `"key1": "val", "key2":`
+    json = json.replace(/,\s*"[^"]*"\s*:\s*$/, "");
+    json = json.replace(/,\s*"[^"]*"\s*$/, "");
     json = json.replace(/,\s*$/, "");
 
     // Close all remaining open brackets/braces in reverse order

@@ -135,11 +135,11 @@ export class AiConfigService {
   getEvaluationAttemptTimeoutMs(): number {
     const explicit = this.config.get<number>("AI_EVALUATION_ATTEMPT_TIMEOUT_MS");
     if (typeof explicit === "number" && Number.isFinite(explicit)) {
-      return this.toPositiveInt(explicit, 90_000);
+      return this.toPositiveInt(explicit, 300_000);
     }
 
-    const legacy = this.config.get<number>("AI_EVALUATION_TIMEOUT_MS", 90_000);
-    return this.toPositiveInt(legacy, 90_000);
+    const legacy = this.config.get<number>("AI_EVALUATION_TIMEOUT_MS", 300_000);
+    return this.toPositiveInt(legacy, 300_000);
   }
 
   getEvaluationMaxAttempts(): number {
@@ -152,17 +152,17 @@ export class AiConfigService {
       "AI_EVALUATION_AGENT_HARD_TIMEOUT_MS",
     );
     if (typeof explicit === "number" && Number.isFinite(explicit)) {
-      return this.toPositiveInt(explicit, 210_000);
+      return this.toPositiveInt(explicit, 660_000);
     }
 
     const computed =
       this.getEvaluationAttemptTimeoutMs() * this.getEvaluationMaxAttempts() +
-      30_000;
-    return this.toPositiveInt(computed, 210_000);
+      60_000;
+    return this.toPositiveInt(computed, 660_000);
   }
 
   getSynthesisMaxOutputTokens(): number {
-    return this.config.get<number>("AI_SYNTHESIS_MAX_OUTPUT_TOKENS", 200000);
+    return this.config.get<number>("AI_SYNTHESIS_MAX_OUTPUT_TOKENS", 50000);
   }
 
   getSynthesisTimeoutMs(): number {

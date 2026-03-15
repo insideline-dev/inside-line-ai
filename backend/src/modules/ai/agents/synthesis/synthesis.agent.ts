@@ -122,6 +122,9 @@ export class SynthesisAgent {
       const model =
         execution?.generateTextOptions.model ??
         this.providers.resolveModelForPurpose(ModelPurpose.SYNTHESIS);
+      const useTextOnlyStructuredMode = this.shouldUseTextOnlyStructuredMode(
+        execution?.resolvedConfig.provider,
+      );
       const rewrittenSections = await this.rewriteEvaluationSections({
         input,
         model,
@@ -142,7 +145,7 @@ export class SynthesisAgent {
       ].join("\n");
 
       this.logger.debug(
-        `[Synthesis] Starting synthesis | Company: ${input.extraction.companyName} | Stage: ${input.extraction.stage}`,
+        `[Synthesis] Starting synthesis | Company: ${input.extraction.companyName} | Stage: ${input.extraction.stage} | textOnlyMode=${useTextOnlyStructuredMode} | maxOutputTokens=${this.aiConfig.getSynthesisMaxOutputTokens()} | provider=${execution?.resolvedConfig.provider ?? "unknown"} | model=${execution?.resolvedConfig.modelName ?? "default"}`,
       );
 
       for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
@@ -161,24 +164,41 @@ export class SynthesisAgent {
         }
         const attemptTimeoutMs = this.getSynthesisAttemptTimeoutMs(remainingBudgetMs);
         try {
+          const synthesisPrompt = useTextOnlyStructuredMode
+            ? this.buildJsonObjectPrompt(renderedPrompt)
+            : renderedPrompt;
+          // For text-only mode (reasoning models): set reasoningEffort to "low" so the model
+          // spends its token budget on the large JSON output rather than hidden reasoning.
+          // Stripping entirely defaults to "medium" which still consumes ~45K tokens.
+          const synthesisProviderOptions = useTextOnlyStructuredMode
+            ? this.overrideReasoningEffort(
+                execution?.generateTextOptions.providerOptions as Record<string, unknown> | undefined,
+                "low",
+              )
+            : execution?.generateTextOptions.providerOptions;
           const response = await this.withTimeout(
             (abortSignal) =>
               generateText({
                 model: model as Parameters<typeof generateText>[0]["model"],
-                output: Output.object({ schema: SynthesisSchema }),
+                ...(useTextOnlyStructuredMode
+                  ? {}
+                  : { output: Output.object({ schema: SynthesisSchema }) }),
                 temperature: this.aiConfig.getSynthesisTemperature(),
                 maxOutputTokens: this.aiConfig.getSynthesisMaxOutputTokens(),
                 system: systemPrompt,
-                prompt: renderedPrompt,
+                prompt: synthesisPrompt,
                 tools: execution?.generateTextOptions.tools,
                 toolChoice: execution?.generateTextOptions.toolChoice,
-                providerOptions: execution?.generateTextOptions.providerOptions,
+                providerOptions:
+                  synthesisProviderOptions as Parameters<typeof generateText>[0]["providerOptions"],
                 abortSignal,
               }),
             attemptTimeoutMs,
             "Synthesis agent timed out",
           );
-          const output = SynthesisSchema.parse(response.output);
+          const output = useTextOnlyStructuredMode
+            ? this.parseTextOnlyResponse(response)
+            : SynthesisSchema.parse(response.output);
           const composedSections = this.composeInvestorMemoSections(
             output.investorMemo.sections,
             rewrittenSections,
@@ -542,6 +562,11 @@ export class SynthesisAgent {
     const prompt = this.buildSectionRewritePrompt(section, input);
 
     try {
+      // Strip reasoningEffort for section rewrites — simple paraphrasing doesn't need it,
+      // and reasoning tokens consume the output budget causing finishReason: "length"
+      const rewriteProviderOptions = this.stripReasoningEffort(
+        providerOptions as Record<string, unknown> | undefined,
+      );
       const response = await this.withTimeout(
         (abortSignal) =>
           generateText({
@@ -558,7 +583,7 @@ export class SynthesisAgent {
             ].join("\n"),
             prompt,
             providerOptions:
-              providerOptions as Parameters<typeof generateText>[0]["providerOptions"],
+              rewriteProviderOptions as Parameters<typeof generateText>[0]["providerOptions"],
             abortSignal,
           }),
         timeoutMs,
@@ -670,17 +695,17 @@ Citation rules:
     existing: Array<{
       title: string;
       content: string;
-      highlights?: string[];
-      concerns?: string[];
-      sources?: Array<{ label: string; url: string }>;
+      highlights: string[];
+      concerns: string[];
+      sources: Array<{ label: string; url: string }>;
     }>,
     rewritten: RewrittenMemoSection[],
   ): Array<{
     title: string;
     content: string;
-    highlights?: string[];
-    concerns?: string[];
-    sources?: Array<{ label: string; url: string }>;
+    highlights: string[];
+    concerns: string[];
+    sources: Array<{ label: string; url: string }>;
   }> {
     const rewrittenByKey = new Map(
       rewritten.map((section) => [section.sectionKey, section] as const),
@@ -693,9 +718,9 @@ Citation rules:
         {
           title: section.title,
           content: section.memoNarrative,
-          highlights: section.highlights.length > 0 ? section.highlights : undefined,
-          concerns: section.concerns.length > 0 ? section.concerns : undefined,
-          sources: section.sources.length > 0 ? section.sources : undefined,
+          highlights: section.highlights,
+          concerns: section.concerns,
+          sources: section.sources,
         },
       ];
     });
@@ -775,12 +800,25 @@ Citation rules:
         sections: output.investorMemo.sections.map((section) => ({
           ...section,
           content: sanitizeNarrativeText(section.content),
-          highlights: section.highlights
-            ? this.sanitizeStringArray(section.highlights)
-            : undefined,
-          concerns: section.concerns
-            ? this.sanitizeStringArray(section.concerns)
-            : undefined,
+          highlights: this.sanitizeStringArray(section.highlights ?? []),
+          concerns: this.sanitizeStringArray(section.concerns ?? []),
+          sources: Array.isArray(section.sources)
+            ? section.sources
+                .filter(
+                  (source): source is { label: string; url: string } =>
+                    Boolean(
+                      source &&
+                        typeof source.label === "string" &&
+                        source.label.trim().length > 0 &&
+                        typeof source.url === "string" &&
+                        source.url.trim().length > 0,
+                    ),
+                )
+                .map((source) => ({
+                  label: source.label.trim(),
+                  url: source.url.trim(),
+                }))
+            : [],
         })),
         keyDueDiligenceAreas: diligenceAreas,
       },
@@ -887,8 +925,43 @@ Citation rules:
 
   private getSectionRewriteMaxOutputTokens(): number {
     const overall = this.aiConfig.getSynthesisMaxOutputTokens();
-    const derived = Math.floor(overall / 6);
-    return Math.max(900, Math.min(2400, derived));
+    const derived = Math.floor(overall / 4);
+    return Math.max(2000, Math.min(4000, derived));
+  }
+
+  private stripReasoningEffort(
+    opts: Record<string, unknown> | undefined,
+  ): Record<string, unknown> | undefined {
+    if (!opts) return opts;
+    const result: Record<string, unknown> = {};
+    for (const [provider, config] of Object.entries(opts)) {
+      if (config && typeof config === "object" && "reasoningEffort" in config) {
+        const { reasoningEffort: _, ...rest } = config as Record<string, unknown>;
+        result[provider] = Object.keys(rest).length > 0 ? rest : undefined;
+      } else {
+        result[provider] = config;
+      }
+    }
+    return Object.values(result).some((v) => v != null) ? result : undefined;
+  }
+
+  private overrideReasoningEffort(
+    opts: Record<string, unknown> | undefined,
+    effort: "low" | "medium" | "high",
+  ): Record<string, unknown> {
+    if (!opts) return { openai: { reasoningEffort: effort } };
+    const result: Record<string, unknown> = {};
+    for (const [provider, config] of Object.entries(opts)) {
+      if (provider === "openai" && config && typeof config === "object") {
+        result[provider] = { ...(config as Record<string, unknown>), reasoningEffort: effort };
+      } else {
+        result[provider] = config;
+      }
+    }
+    if (!("openai" in result)) {
+      result.openai = { reasoningEffort: effort };
+    }
+    return result;
   }
 
   private getRemainingBudgetMs(startedAt: number, hardTimeoutMs: number): number {
@@ -1056,6 +1129,113 @@ Citation rules:
 
   private shouldUseTextOnlyStructuredMode(provider: string | undefined): boolean {
     return provider === "openai";
+  }
+
+  private parseTextOnlyResponse(
+    response: Awaited<ReturnType<typeof generateText>>,
+  ): z.infer<typeof SynthesisSchema> {
+    const outputText = this.resolveRawOutputText(response);
+    const finishReason = (response as unknown as Record<string, unknown>).finishReason;
+    this.logger.debug(
+      `[Synthesis] Text-only response | textLength=${response.text?.length ?? 0} | finishReason=${finishReason} | textPreview=${(outputText || "").substring(0, 300)}`,
+    );
+    let candidate = this.extractJsonCandidate(outputText);
+    // If JSON parsing failed and the output was truncated, attempt repair
+    if (!candidate && finishReason === "length" && outputText.trimStart().startsWith("{")) {
+      this.logger.debug("[Synthesis] Attempting truncated JSON repair");
+      candidate = this.repairTruncatedJson(outputText);
+      if (candidate) {
+        this.logger.debug("[Synthesis] JSON repair succeeded, backfilling missing fields");
+        candidate = this.backfillSynthesisDefaults(candidate as Record<string, unknown>);
+      }
+    }
+    if (!candidate) {
+      throw new Error("Text-only structured mode produced no parseable JSON object");
+    }
+    return SynthesisSchema.parse(candidate);
+  }
+
+  /**
+   * Fill in missing top-level fields with safe defaults so SynthesisSchema.parse() succeeds
+   * on truncated-but-repaired JSON.
+   */
+  private backfillSynthesisDefaults(obj: Record<string, unknown>): Record<string, unknown> {
+    if (!obj.dealSnapshot) obj.dealSnapshot = "Deal snapshot unavailable (output truncated).";
+    if (!Array.isArray(obj.keyStrengths) || obj.keyStrengths.length === 0)
+      obj.keyStrengths = ["Data available in evaluation sections"];
+    if (!Array.isArray(obj.keyRisks) || obj.keyRisks.length === 0)
+      obj.keyRisks = ["Synthesis output was truncated — review evaluation data"];
+    if (!obj.investorMemo || typeof obj.investorMemo !== "object") {
+      obj.investorMemo = {
+        executiveSummary: "Investor memo partially generated (output truncated).",
+        sections: [],
+        keyDueDiligenceAreas: [],
+      };
+    }
+    if (!obj.founderReport || typeof obj.founderReport !== "object") {
+      obj.founderReport = {
+        summary: "Founder report could not be generated (output truncated).",
+        whatsWorking: [],
+        pathToInevitability: [],
+      };
+    }
+    if (!obj.dataConfidenceNotes)
+      obj.dataConfidenceNotes = "Output was truncated — some sections may be incomplete.";
+    return obj;
+  }
+
+  /**
+   * Attempts to repair JSON that was truncated due to token limits.
+   * Closes open strings, arrays, and objects so JSON.parse succeeds.
+   */
+  private repairTruncatedJson(text: string): unknown {
+    let json = text.trim();
+    // Strip trailing incomplete key-value (e.g. `"someKey": "incomplete...`)
+    // Remove trailing comma + whitespace
+    json = json.replace(/,\s*$/, "");
+
+    // Track open brackets/braces (ignore those inside strings)
+    const stack: string[] = [];
+    let inString = false;
+    let escape = false;
+    for (let i = 0; i < json.length; i++) {
+      const ch = json[i];
+      if (escape) {
+        escape = false;
+        continue;
+      }
+      if (ch === "\\") {
+        escape = true;
+        continue;
+      }
+      if (ch === '"') {
+        inString = !inString;
+        continue;
+      }
+      if (inString) continue;
+      if (ch === "{" || ch === "[") stack.push(ch);
+      else if (ch === "}") {
+        if (stack.length > 0 && stack[stack.length - 1] === "{") stack.pop();
+      } else if (ch === "]") {
+        if (stack.length > 0 && stack[stack.length - 1] === "[") stack.pop();
+      }
+    }
+
+    // If we ended inside a string, close it
+    if (inString) json += '"';
+
+    // Remove any trailing incomplete value after a colon (partial string, number, etc.)
+    // e.g. `"key": "incomplete` → already closed above
+    // e.g. `"key": [1, 2, ` → needs array/object closing
+    json = json.replace(/,\s*$/, "");
+
+    // Close all remaining open brackets/braces in reverse order
+    while (stack.length > 0) {
+      const open = stack.pop();
+      json += open === "{" ? "}" : "]";
+    }
+
+    return this.tryParseJsonObject(json);
   }
 
   private buildJsonObjectPrompt(renderedPrompt: string): string {

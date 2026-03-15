@@ -162,7 +162,7 @@ export class AiConfigService {
   }
 
   getSynthesisMaxOutputTokens(): number {
-    return this.config.get<number>("AI_SYNTHESIS_MAX_OUTPUT_TOKENS", 16000);
+    return this.config.get<number>("AI_SYNTHESIS_MAX_OUTPUT_TOKENS", 200000);
   }
 
   getSynthesisTimeoutMs(): number {
@@ -172,11 +172,11 @@ export class AiConfigService {
   getSynthesisAttemptTimeoutMs(): number {
     const explicit = this.config.get<number>("AI_SYNTHESIS_ATTEMPT_TIMEOUT_MS");
     if (typeof explicit === "number" && Number.isFinite(explicit)) {
-      return this.toPositiveInt(explicit, 90_000);
+      return this.toPositiveInt(explicit, 300_000);
     }
 
-    const legacy = this.config.get<number>("AI_SYNTHESIS_TIMEOUT_MS", 90_000);
-    return this.toPositiveInt(legacy, 90_000);
+    const legacy = this.config.get<number>("AI_SYNTHESIS_TIMEOUT_MS", 300_000);
+    return this.toPositiveInt(legacy, 300_000);
   }
 
   getSynthesisMaxAttempts(): number {

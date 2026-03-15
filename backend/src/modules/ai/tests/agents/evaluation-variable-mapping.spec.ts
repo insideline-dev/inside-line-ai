@@ -324,6 +324,31 @@ describe("Evaluation variable mapping", () => {
       expect(vars.roundSize).toBe("2500000");
     });
 
+    it("exitPotential: derives provisional valuation from round size when valuation is missing", () => {
+      const agent = makeAgent(ExitPotentialEvaluationAgent) as unknown as {
+        getAgentTemplateVariables: (d: typeof pipelineData) => Record<string, string>;
+      };
+      const missingValuationPipeline = {
+        ...pipelineData,
+        extraction: {
+          ...pipelineData.extraction,
+          stage: "seed",
+          valuation: null,
+          fundingAsk: 600000,
+          startupContext: {
+            ...pipelineData.extraction.startupContext,
+            valuationType: null,
+          },
+        },
+      };
+
+      const vars = agent.getAgentTemplateVariables(missingValuationPipeline);
+
+      expect(vars.valuation).toBe("4000000");
+      expect(vars.valuationType).toContain("provisional post_money assumption");
+      expect(vars.valuationType).toContain("15% typical seed dilution");
+    });
+
     it("common: companyName and sector resolve from extraction", () => {
       const agent = makeAgent(TeamEvaluationAgent) as unknown as {
         buildCommonTemplateVariables: (

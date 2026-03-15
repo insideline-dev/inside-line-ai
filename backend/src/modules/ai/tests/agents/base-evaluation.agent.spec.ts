@@ -56,8 +56,18 @@ type NarrativeOutput = {
   narrativeSummary: string;
   keyFindings: string[];
   risks: string[];
-  dataGaps: string[];
+  dataGaps: Array<{
+    gap: string;
+    impact: "critical" | "important" | "minor";
+    suggestedAction: string;
+  }>;
 };
+
+const narrativeDataGapSchema = z.object({
+  gap: z.string().min(1),
+  impact: z.enum(["critical", "important", "minor"]),
+  suggestedAction: z.string().min(1),
+});
 
 const SCORE_CONFIDENCE_PATTERN = /\b\d{1,3}\s*\/\s*100\b[\s\S]*\bconfidence\b/i;
 
@@ -104,7 +114,7 @@ class NarrativeEvaluationAgent extends BaseEvaluationAgent<NarrativeOutput> {
     ),
     keyFindings: z.array(z.string()).default([]),
     risks: z.array(z.string()).default([]),
-    dataGaps: z.array(z.string()).default([]),
+    dataGaps: z.array(narrativeDataGapSchema).default([]),
   });
   protected readonly systemPrompt = "Narrative evaluator";
 
@@ -118,7 +128,13 @@ class NarrativeEvaluationAgent extends BaseEvaluationAgent<NarrativeOutput> {
     narrativeSummary: "Fallback summary.",
     keyFindings: ["Insufficient evidence"],
     risks: ["Low confidence"],
-    dataGaps: ["Missing primary data"],
+    dataGaps: [
+      {
+        gap: "Missing primary data",
+        impact: "important" as const,
+        suggestedAction: "Collect primary diligence evidence.",
+      },
+    ],
   }));
 }
 
@@ -265,7 +281,43 @@ describe("BaseEvaluationAgent", () => {
     });
     const call = generateTextMock.mock.calls[0]?.[0];
     expect(call?.output).toBeUndefined();
+    expect(call).not.toHaveProperty("temperature");
     expect(String(call?.prompt ?? "")).toContain("JSON OUTPUT CONTRACT");
+  });
+
+  it("parses string output payloads in OpenAI text-only mode", async () => {
+    modelExecution.resolveForPrompt.mockResolvedValueOnce({
+      resolvedConfig: {
+        source: "published",
+        revisionId: "rev-openai",
+        stage: "seed",
+        purpose: "evaluation",
+        modelName: "gpt-5.2",
+        provider: "openai",
+        searchMode: "off",
+        supportedSearchModes: ["off"],
+      },
+      generateTextOptions: {
+        model: modelInstance,
+        tools: undefined,
+        toolChoice: undefined,
+        providerOptions: undefined,
+      },
+    });
+    generateTextMock.mockResolvedValueOnce({
+      output: JSON.stringify({
+        score: 73,
+        verdict: "String payload success",
+      }),
+    });
+
+    const result = await agent.run(pipelineData);
+
+    expect(result).toEqual({
+      key: "team",
+      output: { score: 73, verdict: "String payload success" },
+      usedFallback: false,
+    });
   });
 
   it("prepends Startup Snapshot baseline before agent-specific sections", async () => {
@@ -335,7 +387,7 @@ describe("BaseEvaluationAgent", () => {
     expect(prompt).toContain("Website: https://clipaf.com");
     expect(prompt).toContain("Sector: Industrial SaaS");
     expect(prompt).toContain("Team Report:");
-    expect(prompt).toContain("Admin: Verify market assumptions.");
+    expect(prompt).toContain("Admin: [phase] Verify market assumptions.");
     expect(prompt).not.toContain("{{companyName}}");
   });
 
@@ -380,8 +432,8 @@ describe("BaseEvaluationAgent", () => {
   it("uses fallback when model output fails schema validation", async () => {
     generateTextMock.mockResolvedValue({
       output: {
-        score: 999,
-        verdict: "Invalid",
+        score: 88,
+        verdict: 123,
       },
     });
 
@@ -394,7 +446,7 @@ describe("BaseEvaluationAgent", () => {
       "Model returned schema-invalid structured output; fallback result generated.",
     );
     expect(result.fallbackReason).toBe("SCHEMA_OUTPUT_INVALID");
-    expect(result.rawProviderError).toContain("Too big");
+    expect(result.rawProviderError).toContain("verdict");
   });
 
   it("emits failed trace events for retry attempts and fallback on terminal failure", async () => {
@@ -466,7 +518,7 @@ describe("BaseEvaluationAgent", () => {
     );
   });
 
-  it("captures raw recovery text when schema parse fails during retry path", async () => {
+  it("normalizes raw recovery text into a valid result on the same attempt", async () => {
     generateTextMock
       .mockRejectedValueOnce(new Error("No output generated."))
       .mockResolvedValueOnce({
@@ -483,14 +535,18 @@ describe("BaseEvaluationAgent", () => {
     const result = await agent.run(pipelineData, { onTrace });
 
     expect(result.usedFallback).toBe(false);
+    expect(result.output).toEqual({
+      score: 50,
+      verdict: "candidate from text",
+    });
     expect(onTrace).toHaveBeenCalledWith(
       expect.objectContaining({
-        status: "failed",
+        status: "completed",
         attempt: 1,
-        retryCount: 1,
+        retryCount: 0,
         outputText: '{"score":"bad","verdict":"candidate from text"}',
         outputJson: {
-          score: "bad",
+          score: 50,
           verdict: "candidate from text",
         },
       }),
@@ -673,7 +729,13 @@ describe("BaseEvaluationAgent", () => {
         narrativeSummary: "Strong signal with remaining diligence needs.",
         keyFindings: ["Founder has category experience", "Evidence of commercial demand"],
         risks: ["Execution concentration risk"],
-        dataGaps: ["No verified retention cohorts"],
+        dataGaps: [
+          {
+            gap: "No verified retention cohorts",
+            impact: "important",
+            suggestedAction: "Verify retention with cohort data.",
+          },
+        ],
       },
     });
 
@@ -713,7 +775,13 @@ describe("BaseEvaluationAgent", () => {
         narrativeSummary: longNarrative,
         keyFindings: ["Signal one"],
         risks: ["Risk one"],
-        dataGaps: ["Gap one"],
+        dataGaps: [
+          {
+            gap: "Gap one",
+            impact: "important",
+            suggestedAction: "Investigate gap one.",
+          },
+        ],
       },
     });
 
@@ -743,7 +811,13 @@ describe("BaseEvaluationAgent", () => {
         narrativeSummary: longNarrativeWithScoring,
         keyFindings: ["Signal one"],
         risks: ["Risk one"],
-        dataGaps: ["Gap one"],
+        dataGaps: [
+          {
+            gap: "Gap one",
+            impact: "important",
+            suggestedAction: "Investigate gap one.",
+          },
+        ],
       },
     });
 
@@ -771,7 +845,13 @@ describe("BaseEvaluationAgent", () => {
         narrativeSummary: longSingleParagraph,
         keyFindings: ["Founder has deep category exposure", "Early paid demand validated"],
         risks: ["Execution concentration risk"],
-        dataGaps: ["No segmented retention cohorts"],
+        dataGaps: [
+          {
+            gap: "No segmented retention cohorts",
+            impact: "important",
+            suggestedAction: "Validate segmented retention cohorts.",
+          },
+        ],
       },
     });
 

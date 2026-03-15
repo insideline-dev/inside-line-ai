@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, jest, mock } from "bun:test";
-import { ResearchParametersService } from "../../services/research-parameters.service";
+import { zodResponseFormat } from "openai/helpers/zod";
+import {
+  ResearchParametersSchema,
+  ResearchParametersService,
+} from "../../services/research-parameters.service";
 import type { AiProviderService } from "../../providers/ai-provider.service";
 import type { AiConfigService } from "../../services/ai-config.service";
 import type {
@@ -201,5 +205,36 @@ describe("ResearchParametersService", () => {
     expect(typeof result.fundingStage).toBe("string");
     expect(Array.isArray(result.teamMembers)).toBe(true);
     expect(typeof result.claimedMetrics).toBe("object");
+  });
+
+  it("uses an OpenAI-strict schema for claimed metrics structured output", () => {
+    expect(() => zodResponseFormat(ResearchParametersSchema, "response")).not.toThrow();
+  });
+
+  it("reports fallback metadata when provider schema generation fails", async () => {
+    mockGenerateText.mockRejectedValueOnce(
+      new Error(
+        "Invalid schema for response_format 'response': In context=('properties', 'claimedMetrics'), 'required' is required to be supplied and to be an array including every key in properties. Missing 'tam'.",
+      ),
+    );
+
+    let meta:
+      | {
+          usedFallback: boolean;
+          error?: string;
+          fallbackReason?: string;
+          rawProviderError?: string;
+        }
+      | undefined;
+
+    await service.generate(extraction, scraping, undefined, {
+      onComplete: (payload) => {
+        meta = payload;
+      },
+    });
+
+    expect(meta?.usedFallback).toBe(true);
+    expect(meta?.fallbackReason).toBe("MODEL_OR_PROVIDER_ERROR");
+    expect(meta?.rawProviderError).toContain("Missing 'tam'");
   });
 });

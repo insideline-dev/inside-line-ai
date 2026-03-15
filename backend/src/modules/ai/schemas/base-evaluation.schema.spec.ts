@@ -1,7 +1,12 @@
 import { describe, expect, it } from "bun:test";
+import { zodResponseFormat } from "openai/helpers/zod";
 import { BaseEvaluationSchema } from "./base-evaluation.schema";
 
 describe("BaseEvaluationSchema", () => {
+  it("uses an OpenAI-strict schema for base evaluation structured output", () => {
+    expect(() => zodResponseFormat(BaseEvaluationSchema, "response")).not.toThrow();
+  });
+
   it("parses valid data with string confidence", () => {
     const parsed = BaseEvaluationSchema.parse({
       score: 85,

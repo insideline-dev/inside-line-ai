@@ -65,7 +65,7 @@ export const EvaluationConfidenceSchema = z.preprocess(
 export const stringArray = z.preprocess(
   normalizeStringArrayInput,
   z.array(z.string()),
-).default([]);
+);
 
 export const requiredStringFromNull = (fallback: string) =>
   z.preprocess(
@@ -146,7 +146,7 @@ export function normalizeStructuredDataGapInput(
 export const structuredDataGapArray = z.preprocess(
   normalizeStructuredDataGapInput,
   z.array(StructuredDataGapSchema),
-).default([]);
+);
 
 export const BaseScoringSubScoreSchema = z.object({
   dimension: requiredStringFromNull("Dimension not specified"),

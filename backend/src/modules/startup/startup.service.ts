@@ -183,6 +183,7 @@ export class StartupService {
     "resolve_website",
     "resolve_email",
     "web_search",
+    "research_parameters",
     "ai_synthesis",
     "db_writes",
     "cache_check",

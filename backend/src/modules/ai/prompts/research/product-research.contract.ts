@@ -28,7 +28,7 @@ const PRODUCT_RESEARCH_REQUIRED_HEADINGS: Array<{ label: string; pattern: RegExp
   { label: "Research Gaps", pattern: /(^|\n)\s*(?:\*\*)?\s*Research Gaps\s*(?:\*\*)?\s*:/i },
   {
     label: "Notably Absent / Risk Signals",
-    pattern: /(^|\n)\s*(?:\*\*)?\s*Notably Absent\s*\/\s*Risk Signals\s*(?:\*\*)?\s*:/i,
+    pattern: /(^|\n)\s*(?:\*\*)?\s*(?:Notably Absent\s*[\/&]\s*Risk Signals|Risk Signals\s*[\/&]\s*Notably Absent|Notable Absences|Risk Signals|Notably Absent)\s*(?:\*\*)?\s*:/i,
   },
 ];
 

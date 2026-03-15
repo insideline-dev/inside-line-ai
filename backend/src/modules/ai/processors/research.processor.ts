@@ -87,6 +87,65 @@ export class ResearchProcessor
           {
             ...(agentKey ? { agentKey } : {}),
             phaseRetryCount,
+            onResearchParametersStart: () => {
+              this.pipelineService
+                .onAgentProgress({
+                  startupId,
+                  userId,
+                  pipelineRunId,
+                  phase: PipelinePhase.RESEARCH,
+                  key: "research_parameters",
+                  status: "running",
+                  progress: 0,
+                  phaseRetryCount,
+                  attempt: 1,
+                  retryCount: 0,
+                  lifecycleEvent: "started",
+                })
+                .catch((progressError) => {
+                  this.logger.warn(
+                    `Failed to mark research parameters running: ${
+                      progressError instanceof Error
+                        ? progressError.message
+                        : String(progressError)
+                    }`,
+                  );
+                });
+            },
+            onResearchParametersComplete: ({
+              usedFallback,
+              error,
+              fallbackReason,
+              rawProviderError,
+            }) => {
+              this.pipelineService
+                .onAgentProgress({
+                  startupId,
+                  userId,
+                  pipelineRunId,
+                  phase: PipelinePhase.RESEARCH,
+                  key: "research_parameters",
+                  status: "completed",
+                  progress: 100,
+                  error,
+                  attempt: 1,
+                  retryCount: 0,
+                  phaseRetryCount,
+                  usedFallback,
+                  fallbackReason,
+                  rawProviderError,
+                  lifecycleEvent: usedFallback ? "fallback" : "completed",
+                })
+                .catch((progressError) => {
+                  this.logger.warn(
+                    `Failed to update research parameters progress: ${
+                      progressError instanceof Error
+                        ? progressError.message
+                        : String(progressError)
+                    }`,
+                  );
+                });
+            },
             onAgentStart: (agent) => {
               const attemptId = this.buildAgentAttemptId(
                 pipelineRunId,

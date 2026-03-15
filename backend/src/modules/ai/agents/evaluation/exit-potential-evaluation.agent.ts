@@ -91,11 +91,11 @@ export class ExitPotentialEvaluationAgent extends BaseEvaluationAgent<ExitPotent
   }
 
   protected override getEvaluationAttemptTimeoutMs(): number {
-    return 1_200_000; // 20 minutes per attempt (needs large research data)
+    return 300_000; // 5 minutes per attempt (3 research inputs + complex schema)
   }
 
   protected override getEvaluationAgentHardTimeoutMs(): number {
-    return 3_600_000; // 1 hour hard limit for entire agent
+    return 900_000; // 15 minutes hard limit for entire agent
   }
 
   private buildEntryValuationContext(

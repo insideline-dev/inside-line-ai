@@ -261,6 +261,40 @@ describe("ProgressTrackerService", () => {
     );
   });
 
+  it("ignores late agent updates after a phase is already terminal", async () => {
+    await service.initProgress({
+      startupId: "startup-1",
+      userId: "user-1",
+      pipelineRunId: "run-1",
+      phases: Object.values(PipelinePhase),
+    });
+
+    await service.updatePhaseProgress({
+      startupId: "startup-1",
+      userId: "user-1",
+      pipelineRunId: "run-1",
+      phase: PipelinePhase.EVALUATION,
+      status: PhaseStatus.FAILED,
+      error: "market fallback parse failed",
+    });
+
+    await service.updateAgentProgress({
+      startupId: "startup-1",
+      userId: "user-1",
+      pipelineRunId: "run-1",
+      phase: PipelinePhase.EVALUATION,
+      key: "exitPotential",
+      status: "completed",
+      progress: 100,
+      lifecycleEvent: "completed",
+    });
+
+    const progress = await service.getProgress("startup-1");
+
+    expect(progress?.phases.evaluation.status).toBe(PhaseStatus.FAILED);
+    expect(progress?.phases.evaluation.agents.exitPotential).toBeUndefined();
+  });
+
   it("deduplicates repeated lifecycle events for the same agent attempt", async () => {
     await service.initProgress({
       startupId: "startup-1",

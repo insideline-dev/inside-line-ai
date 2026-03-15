@@ -1,52 +1,79 @@
 import { z } from "zod";
 import { ExitScenarioSchema } from "./evaluations/exit-potential.schema";
 
+const requiredString = (fallback: string) =>
+  z.preprocess(
+    (value) => {
+      if (value == null) return fallback;
+      if (typeof value === "string" && value.trim().length === 0) return fallback;
+      return value;
+    },
+    z.string().min(1),
+  );
+
+const stringArrayWithFallback = z.preprocess(
+  (value) => (Array.isArray(value) ? value : []),
+  z.array(z.string()),
+);
+
 const MemoSectionSourceSchema = z.object({
-  label: z.string(),
-  url: z.string(),
+  label: requiredString("Unknown source"),
+  url: requiredString("deck://"),
 });
 
 const MemoSectionSchema = z.object({
-  title: z.string(),
-  content: z.string(),
-  highlights: z.array(z.string()).optional(),
-  concerns: z.array(z.string()).optional(),
-  sources: z.array(MemoSectionSourceSchema).optional(),
+  title: requiredString("Untitled section"),
+  content: requiredString("Narrative unavailable."),
+  highlights: stringArrayWithFallback,
+  concerns: stringArrayWithFallback,
+  sources: z.preprocess(
+    (value) => (Array.isArray(value) ? value : []),
+    z.array(MemoSectionSourceSchema),
+  ),
 });
 
 const InvestorMemoSchema = z.object({
-  executiveSummary: z.string(),
-  sections: z.array(MemoSectionSchema).default([]),
-  keyDueDiligenceAreas: z.array(z.string()).default([]),
+  executiveSummary: requiredString("Investor memo summary unavailable."),
+  sections: z.preprocess(
+    (value) => (Array.isArray(value) ? value : []),
+    z.array(MemoSectionSchema),
+  ),
+  keyDueDiligenceAreas: stringArrayWithFallback,
 });
 
 const FounderReportSchema = z.object({
-  summary: z.string(),
-  whatsWorking: z.array(z.string()).default([]),
-  pathToInevitability: z.array(z.string()).default([]),
+  summary: requiredString("Founder report summary unavailable."),
+  whatsWorking: stringArrayWithFallback,
+  pathToInevitability: stringArrayWithFallback,
 });
 
 export const SynthesisSectionRewriteSchema = z.object({
-  sectionKey: z.string().min(1),
-  title: z.string().min(1),
-  memoNarrative: z.string().min(1),
-  highlights: z.array(z.string()).default([]),
-  concerns: z.array(z.string()).default([]),
-  diligenceItems: z.array(z.string()).default([]),
-  sources: z.array(MemoSectionSourceSchema).default([]),
+  sectionKey: requiredString("unknown"),
+  title: requiredString("Untitled section"),
+  memoNarrative: requiredString("Narrative unavailable."),
+  highlights: stringArrayWithFallback,
+  concerns: stringArrayWithFallback,
+  diligenceItems: stringArrayWithFallback,
+  sources: z.preprocess(
+    (value) => (Array.isArray(value) ? value : []),
+    z.array(MemoSectionSourceSchema),
+  ),
 });
 
 export const SynthesisSchema = z.object({
-  dealSnapshot: z.string().min(1),
+  dealSnapshot: requiredString("Deal snapshot unavailable."),
   keyStrengths: z.array(z.string()).min(1),
   keyRisks: z.array(z.string()).min(1),
   investorMemo: InvestorMemoSchema,
   founderReport: FounderReportSchema,
-  dataConfidenceNotes: z.string().min(1),
+  dataConfidenceNotes: requiredString("Confidence notes unavailable."),
 });
 
 export const SynthesisFinalCombineSchema = SynthesisSchema.extend({
-  exitScenarios: z.array(ExitScenarioSchema).default([]),
+  exitScenarios: z.preprocess(
+    (value) => (Array.isArray(value) ? value : []),
+    z.array(ExitScenarioSchema),
+  ),
 });
 
 export type Synthesis = z.infer<typeof SynthesisSchema>;

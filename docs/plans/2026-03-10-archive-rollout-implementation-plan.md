@@ -23,6 +23,7 @@
 - [x] Updated startup-view compatibility seams for Archive-shaped `product`, `team`, `market`, and `competitive-advantage` outputs.
 - [x] Fixed enrichment gap-fill structured-output failure by separating the provider-facing schema from tolerant app parsing, and returning deterministic fallback data instead of an empty result when provider/schema generation fails.
 - [x] Hardened enrichment gap-fill for OpenAI strict structured outputs by making provider-facing scalar fields required-and-nullable, and by tolerating partial scalar objects and string shorthand during local parse normalization.
+- [x] Hardened research-parameters generation for OpenAI strict structured outputs by making `claimedMetrics` fully required-and-nullable, and surfaced research-parameter failures as a tracked `research_parameters` phase-step so the live UI reflects provider/schema failures instead of only logging them to `AppLogger`.
 - [x] Verification completed:
   - `cd backend && bun test src/modules/ai/schemas/base-evaluation.schema.spec.ts src/modules/ai/schemas/evaluations/team.schema.spec.ts src/modules/ai/schemas/evaluations/null-tolerance.schema.spec.ts`
   - `cd backend && bun test src/modules/ai/tests/services/enrichment.service.spec.ts src/modules/ai/tests/processors/enrichment.processor.spec.ts`
@@ -679,6 +680,22 @@ If work starts on a phase:
 - Verified post-sync parity against Archive for those files:
   - remaining differing `system.md` files across `pre_seed` through `series_d`: `0`
 - Phase 7 closed at user request after prompt-library sync, with remaining runtime verification delegated to the manual QA pass outside this implementation session.
+- Manual QA hardening on March 12, 2026 fixed additional OpenAI structured-output compatibility issues in pipeline services, including:
+  - `research_parameters.claimedMetrics.*`
+  - enrichment scalar/provider schema split
+  - scraping `deck_team_discovery.members[*].linkedinUrl`
+  - evaluation `exitPotential.exitScenarios[*].exitValuation/timeline/researchBasis`
+  - evaluation `exitPotential.returnAssessment.*`
+  - evaluation `market.marketSizing.*` and related nested market objects
+  - evaluation local-parse tolerance for market fallback payloads
+  - evaluation base schema top-level arrays (`keyFindings/strengths/risks/dataGaps/sources`)
+  - evaluation runner architecture change: OpenAI-backed evaluation agents now use text-only JSON generation with local parse/normalization instead of provider-enforced `response_format` schemas
+  - evaluation text-mode parser hardening: root string outputs are now treated as recovery text and JSON-extracted locally instead of failing immediately as `(root): expected object, received string`
+  - exit potential input-gap hardening: when valuation is missing but round size exists, the agent now supplies a clearly labeled provisional stage-based post-money assumption so MOIC/IRR math has a cost basis instead of a blank input
+  - market and exit-potential prompt-budget hardening: agent-specific template variables no longer bypass the base runner’s truncation with raw research blobs, preventing oversized prompts that were returning `No output generated`
+  - progress-tracker guard against late agent updates after a phase is already terminal
+  - synthesis section rewrite schema (`highlights/concerns/sources`)
+  - synthesis final memo section schema (`investorMemo.sections[*]`)
 
 ### Exit Criteria
 

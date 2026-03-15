@@ -341,6 +341,15 @@ export class ProgressTrackerService {
         0,
         Math.floor(phase.retryCount ?? 0),
       );
+      if (
+        isPhaseTerminal(phase.status) &&
+        incomingPhaseRetryCount === currentPhaseRetryCount
+      ) {
+        this.logger.debug(
+          `[Pipeline] Ignoring agent update for ${params.key} in terminal phase ${params.phase} (status=${phase.status}, phaseRetry=${currentPhaseRetryCount})`,
+        );
+        return;
+      }
       if (incomingPhaseRetryCount < currentPhaseRetryCount) {
         this.logger.debug(
           `[Pipeline] Ignoring stale agent update for ${params.key} in ${params.phase}: incoming phase retry ${incomingPhaseRetryCount} < current ${currentPhaseRetryCount}`,

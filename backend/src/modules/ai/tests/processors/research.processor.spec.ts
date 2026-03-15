@@ -277,4 +277,76 @@ describe("ResearchProcessor", () => {
       }),
     );
   });
+
+  it("tracks research parameters generation as a phase-step style progress entry", async () => {
+    researchService.run.mockImplementationOnce(
+      async (_startupId, options?: unknown) => {
+        const callbacks = options as {
+          onResearchParametersStart?: () => void;
+          onResearchParametersComplete?: (payload: {
+            usedFallback: boolean;
+            error?: string;
+            fallbackReason?:
+              | "EMPTY_STRUCTURED_OUTPUT"
+              | "TIMEOUT"
+              | "SCHEMA_OUTPUT_INVALID"
+              | "MODEL_OR_PROVIDER_ERROR"
+              | "UNHANDLED_AGENT_EXCEPTION"
+              | "MISSING_PROVIDER_EVIDENCE"
+              | "MISSING_BRAVE_TOOL_CALL";
+            rawProviderError?: string;
+          }) => void;
+        };
+
+        callbacks.onResearchParametersStart?.();
+        callbacks.onResearchParametersComplete?.({
+          usedFallback: true,
+          error: "Invalid schema for response_format 'response': Missing 'tam'.",
+          fallbackReason: "MODEL_OR_PROVIDER_ERROR",
+          rawProviderError: "Invalid schema for response_format 'response': Missing 'tam'.",
+        });
+
+        return {
+          team: null,
+          market: null,
+          product: null,
+          news: null,
+          competitor: null,
+          sources: [],
+          errors: [],
+        };
+      },
+    );
+
+    const job = {
+      id: "job-1",
+      data: {
+        type: "ai_research",
+        startupId: "startup-1",
+        pipelineRunId: "run-1",
+        userId: "user-1",
+      } satisfies AiResearchJobData,
+    } as unknown as Job<AiResearchJobData>;
+
+    await (processor as unknown as { process: (job: typeof job) => Promise<unknown> }).process(job);
+
+    expect(pipelineService.onAgentProgress).toHaveBeenCalledWith(
+      expect.objectContaining({
+        key: "research_parameters",
+        phase: PipelinePhase.RESEARCH,
+        status: "running",
+        lifecycleEvent: "started",
+      }),
+    );
+    expect(pipelineService.onAgentProgress).toHaveBeenCalledWith(
+      expect.objectContaining({
+        key: "research_parameters",
+        phase: PipelinePhase.RESEARCH,
+        status: "completed",
+        usedFallback: true,
+        lifecycleEvent: "fallback",
+        fallbackReason: "MODEL_OR_PROVIDER_ERROR",
+      }),
+    );
+  });
 });

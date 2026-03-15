@@ -106,6 +106,7 @@ const STEP_LABELS: Record<string, string> = {
   resolve_website: "Resolve Website",
   resolve_email: "Resolve Email",
   web_search: "Web Search",
+  research_parameters: "Research Parameters",
   ai_synthesis: "AI Synthesis",
   db_writes: "DB Writes",
 };
@@ -150,6 +151,7 @@ const PHASE_STEP_AGENT_KEYS = new Set([
   "resolve_website",
   "resolve_email",
   "web_search",
+  "research_parameters",
   "ai_synthesis",
   "db_writes",
   "cache_check",

@@ -74,7 +74,11 @@ export class MarketEvaluationAgent extends BaseEvaluationAgent<MarketEvaluation>
       this.extractClaimLine(rawText, growthPattern);
 
     return {
-      marketResearchOutput: pipelineData.research.market ?? "Not provided",
+      marketResearchOutput:
+        this.truncatePromptText(
+          this.normalizePromptText(pipelineData.research.market),
+          8_000,
+        ) || "Not provided",
       claimedTAM,
       claimedSAM,
       claimedGrowthRate,
@@ -737,5 +741,13 @@ export class MarketEvaluationAgent extends BaseEvaluationAgent<MarketEvaluation>
     } catch {
       return String(value).trim();
     }
+  }
+
+  protected override getEvaluationAttemptTimeoutMs(): number {
+    return 150_000; // 2.5 minutes per attempt (market research data is large)
+  }
+
+  protected override getEvaluationAgentHardTimeoutMs(): number {
+    return 600_000; // 10 minutes hard limit
   }
 }

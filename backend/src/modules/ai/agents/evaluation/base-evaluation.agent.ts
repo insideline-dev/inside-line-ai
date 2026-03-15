@@ -224,6 +224,13 @@ export abstract class BaseEvaluationAgent<TOutput>
     let composedSystemPrompt: string;
     let renderedPrompt: string;
     let execution: Awaited<ReturnType<NonNullable<typeof this.modelExecution>["resolveForPrompt"]>> | null = null;
+    let useTextOnlyStructuredMode = false;
+    let evaluationTemperature: number | undefined;
+    let resolvedModel:
+      | NonNullable<
+          Awaited<ReturnType<NonNullable<typeof this.modelExecution>["resolveForPrompt"]>>
+        >["generateTextOptions"]["model"]
+      | ReturnType<AiProviderService["resolveModelForPurpose"]>;
     try {
       context = this.buildContext(pipelineData);
       const feedbackNotes = options?.feedbackNotes ?? [];
@@ -246,6 +253,17 @@ export abstract class BaseEvaluationAgent<TOutput>
             stage: pipelineData.extraction.stage,
           })
         : null;
+      useTextOnlyStructuredMode = this.shouldUseTextOnlyStructuredMode(
+        execution?.resolvedConfig.provider,
+      );
+      resolvedModel =
+        execution?.generateTextOptions.model ??
+        this.providers.resolveModelForPurpose(ModelPurpose.EVALUATION);
+      evaluationTemperature = this.resolveTemperatureOption({
+        provider: execution?.resolvedConfig.provider,
+        modelName: execution?.resolvedConfig.modelName,
+        configuredTemperature: this.aiConfig.getEvaluationTemperature(),
+      });
       const contextSections = this.formatContext(promptContext);
       const contextJson = JSON.stringify(promptContext);
       const commonVars = this.buildCommonTemplateVariables(pipelineData, feedbackNotes);
@@ -311,26 +329,30 @@ export abstract class BaseEvaluationAgent<TOutput>
       try {
         const response = await this.withTimeout(
           (abortSignal) =>
-            generateText({
-              model:
-                execution?.generateTextOptions.model ??
-                this.providers.resolveModelForPurpose(ModelPurpose.EVALUATION),
-              output: Output.object({ schema: this.schema }),
-              system: composedSystemPrompt,
-              prompt: renderedPrompt,
-              temperature: this.aiConfig.getEvaluationTemperature(),
-              maxOutputTokens: this.aiConfig.getEvaluationMaxOutputTokens(),
-              tools: execution?.generateTextOptions.tools,
-              toolChoice: execution?.generateTextOptions.toolChoice,
-              providerOptions: execution?.generateTextOptions.providerOptions,
-              abortSignal,
-            }),
+            generateText(
+              this.buildGenerateTextInput({
+                model: resolvedModel,
+                system: composedSystemPrompt,
+                prompt: useTextOnlyStructuredMode
+                  ? this.buildJsonObjectPrompt(renderedPrompt)
+                  : renderedPrompt,
+                schema: useTextOnlyStructuredMode ? null : this.schema,
+                temperature: evaluationTemperature,
+                maxOutputTokens: this.getMaxOutputTokens(),
+                tools: execution?.generateTextOptions.tools,
+                toolChoice: execution?.generateTextOptions.toolChoice,
+                providerOptions: execution?.generateTextOptions.providerOptions,
+                abortSignal,
+              }),
+            ),
           attemptTimeoutMs,
           `${this.key} evaluation timed out`,
         );
 
         const normalizedOutput = this.normalizeNarrativeFields(
-          this.schema.parse(this.normalizeOutputCandidate(response.output)),
+          useTextOnlyStructuredMode
+            ? this.parseTextOnlyStructuredResponse(response)
+            : this.schema.parse(this.normalizeOutputCandidate(response.output)),
         );
 
         this.emitTraceEvent(options, {
@@ -364,12 +386,11 @@ export abstract class BaseEvaluationAgent<TOutput>
             systemPrompt: composedSystemPrompt,
             renderedPrompt,
             timeoutMs: attemptTimeoutMs,
-            model:
-              execution?.generateTextOptions.model ??
-              this.providers.resolveModelForPurpose(ModelPurpose.EVALUATION),
+            model: resolvedModel,
             tools: execution?.generateTextOptions.tools,
             toolChoice: execution?.generateTextOptions.toolChoice,
             providerOptions: execution?.generateTextOptions.providerOptions,
+            temperature: evaluationTemperature,
           });
           if (recovered.success) {
             const normalizedOutput = this.normalizeNarrativeFields(
@@ -668,6 +689,7 @@ export abstract class BaseEvaluationAgent<TOutput>
     narrativeText: string,
     model: Parameters<typeof generateText>[0]["model"],
     timeoutMs: number,
+    temperature?: number,
   ): Promise<
     | { success: true; output: TOutput; outputText: string }
     | { success: false; error: string }
@@ -686,14 +708,17 @@ export abstract class BaseEvaluationAgent<TOutput>
 
       const response = await this.withTimeout(
         (abortSignal) =>
-          generateText({
-            model,
-            system: "You are a JSON extraction assistant. Convert narrative analysis text into structured JSON. Return ONLY a valid JSON object, nothing else.",
-            prompt: conversionPrompt,
-            temperature: 0,
-            maxOutputTokens: this.aiConfig.getEvaluationMaxOutputTokens(),
-            abortSignal,
-          }),
+          generateText(
+            this.buildGenerateTextInput({
+              model,
+              system:
+                "You are a JSON extraction assistant. Convert narrative analysis text into structured JSON. Return ONLY a valid JSON object, nothing else.",
+              prompt: conversionPrompt,
+              temperature,
+              maxOutputTokens: this.getMaxOutputTokens(),
+              abortSignal,
+            }),
+          ),
         timeoutMs,
         `${this.key} narrative-to-JSON conversion timed out`,
       );
@@ -728,6 +753,7 @@ export abstract class BaseEvaluationAgent<TOutput>
     tools?: Parameters<typeof generateText>[0]["tools"];
     toolChoice?: Parameters<typeof generateText>[0]["toolChoice"];
     providerOptions?: Parameters<typeof generateText>[0]["providerOptions"];
+    temperature?: number;
   }): Promise<
     | { success: true; output: TOutput; outputText: string }
     | { success: false; error: string; outputText?: string }
@@ -737,34 +763,47 @@ export abstract class BaseEvaluationAgent<TOutput>
 
       const response = await this.withTimeout(
         (abortSignal) =>
-          generateText({
-            model: input.model,
-            system: recoverySystemPrompt,
-            prompt: input.renderedPrompt,
-            temperature: this.aiConfig.getEvaluationTemperature(),
-            maxOutputTokens: this.aiConfig.getEvaluationMaxOutputTokens(),
-            tools: input.tools,
-            toolChoice: input.toolChoice,
-            providerOptions: input.providerOptions,
-            abortSignal,
-          }),
+          generateText(
+            this.buildGenerateTextInput({
+              model: input.model,
+              system: recoverySystemPrompt,
+              prompt: input.renderedPrompt,
+              temperature: input.temperature,
+              maxOutputTokens: this.getMaxOutputTokens(),
+              tools: input.tools,
+              toolChoice: input.toolChoice,
+              providerOptions: input.providerOptions,
+              abortSignal,
+            }),
+          ),
         input.timeoutMs,
         `${this.key} evaluation timed out`,
       );
       const responseOutput = (response as { output?: unknown }).output;
+      let outputText = this.resolveRawOutputText(response);
       if (responseOutput !== undefined) {
-        const direct = this.schema.safeParse(
-          this.normalizeOutputCandidate(responseOutput),
-        );
-        if (direct.success) {
-          return {
-            success: true,
-            output: direct.data,
-            outputText: this.resolveRawOutputText(response, direct.data),
-          };
+        if (
+          responseOutput !== null &&
+          typeof responseOutput === "object" &&
+          !Array.isArray(responseOutput)
+        ) {
+          const direct = this.schema.safeParse(
+            this.normalizeOutputCandidate(responseOutput),
+          );
+          if (direct.success) {
+            return {
+              success: true,
+              output: direct.data,
+              outputText: this.resolveRawOutputText(response, direct.data),
+            };
+          }
+        } else if (
+          typeof responseOutput === "string" &&
+          responseOutput.trim().length > 0
+        ) {
+          outputText = responseOutput;
         }
       }
-      const outputText = this.resolveRawOutputText(response);
       const candidate = this.extractJsonCandidate(outputText);
       if (!candidate) {
         // Last resort: try converting the narrative text to JSON
@@ -773,6 +812,7 @@ export abstract class BaseEvaluationAgent<TOutput>
           outputText,
           input.model,
           Math.min(input.timeoutMs, 60_000),
+          input.temperature,
         );
         if (narrativeResult.success) {
           return narrativeResult;
@@ -955,6 +995,68 @@ export abstract class BaseEvaluationAgent<TOutput>
       "JSON Schema reference:",
       jsonSchema,
     ].join("\n");
+  }
+
+  private buildGenerateTextInput(params: {
+    model: Parameters<typeof generateText>[0]["model"];
+    system: string;
+    prompt: string;
+    temperature?: number;
+    maxOutputTokens: number;
+    tools?: Parameters<typeof generateText>[0]["tools"];
+    toolChoice?: Parameters<typeof generateText>[0]["toolChoice"];
+    providerOptions?: Parameters<typeof generateText>[0]["providerOptions"];
+    abortSignal?: AbortSignal;
+    schema?: z.ZodTypeAny | null;
+  }): Parameters<typeof generateText>[0] {
+    const input: Parameters<typeof generateText>[0] = {
+      model: params.model,
+      system: params.system,
+      prompt: params.prompt,
+      maxOutputTokens: params.maxOutputTokens,
+      tools: params.tools,
+      toolChoice: params.toolChoice,
+      providerOptions: params.providerOptions,
+      abortSignal: params.abortSignal,
+    };
+
+    if (params.schema) {
+      input.output = Output.object({ schema: params.schema });
+    }
+
+    if (typeof params.temperature === "number") {
+      input.temperature = params.temperature;
+    }
+
+    return input;
+  }
+
+  private parseTextOnlyStructuredResponse(
+    response: Awaited<ReturnType<typeof generateText>>,
+  ): TOutput {
+    const responseOutput = (response as { output?: unknown }).output;
+    let outputText = this.resolveRawOutputText(response);
+    if (responseOutput !== undefined) {
+      if (
+        responseOutput !== null &&
+        typeof responseOutput === "object" &&
+        !Array.isArray(responseOutput)
+      ) {
+        return this.schema.parse(this.normalizeOutputCandidate(responseOutput));
+      }
+      if (typeof responseOutput === "string" && responseOutput.trim().length > 0) {
+        outputText = responseOutput;
+      } else {
+        return this.schema.parse(this.normalizeOutputCandidate(responseOutput));
+      }
+    }
+
+    const candidate = this.extractJsonCandidate(outputText);
+    if (!candidate) {
+      throw new Error("Text-only structured mode produced no parseable JSON object");
+    }
+
+    return this.schema.parse(this.normalizeOutputCandidate(candidate));
   }
 
   private normalizeNarrativeFields(output: TOutput): TOutput {
@@ -1153,6 +1255,28 @@ export abstract class BaseEvaluationAgent<TOutput>
     return provider === "openai";
   }
 
+  private resolveTemperatureOption(params: {
+    provider?: string;
+    modelName?: string;
+    configuredTemperature: number;
+  }): number | undefined {
+    if (!params.provider || params.provider !== "openai") {
+      return params.configuredTemperature;
+    }
+
+    const normalizedModel = params.modelName?.trim().toLowerCase() ?? "";
+    if (
+      normalizedModel.startsWith("gpt-5") ||
+      normalizedModel.startsWith("o1") ||
+      normalizedModel.startsWith("o3") ||
+      normalizedModel.startsWith("o4")
+    ) {
+      return undefined;
+    }
+
+    return params.configuredTemperature;
+  }
+
   private normalizeFallbackError(
     reason: EvaluationFallbackReason,
     message: string,
@@ -1223,7 +1347,11 @@ export abstract class BaseEvaluationAgent<TOutput>
     return hardTimeoutMs - (Date.now() - startedAtMs);
   }
 
-  private getEvaluationAttemptTimeoutMs(): number {
+  protected getMaxOutputTokens(): number {
+    return this.aiConfig.getEvaluationMaxOutputTokens();
+  }
+
+  protected getEvaluationAttemptTimeoutMs(): number {
     const config = this.aiConfig as Partial<AiConfigService> & {
       getEvaluationTimeoutMs?: () => number;
     };
@@ -1236,7 +1364,7 @@ export abstract class BaseEvaluationAgent<TOutput>
     return 90_000;
   }
 
-  private getEvaluationMaxAttempts(): number {
+  protected getEvaluationMaxAttempts(): number {
     const config = this.aiConfig as Partial<AiConfigService>;
     if (typeof config.getEvaluationMaxAttempts === "function") {
       return config.getEvaluationMaxAttempts();
@@ -1244,7 +1372,7 @@ export abstract class BaseEvaluationAgent<TOutput>
     return 3;
   }
 
-  private getEvaluationAgentHardTimeoutMs(): number {
+  protected getEvaluationAgentHardTimeoutMs(): number {
     const config = this.aiConfig as Partial<AiConfigService>;
     if (typeof config.getEvaluationAgentHardTimeoutMs === "function") {
       return config.getEvaluationAgentHardTimeoutMs();
@@ -1474,7 +1602,7 @@ export abstract class BaseEvaluationAgent<TOutput>
     return "";
   }
 
-  private normalizePromptText(value: unknown): string {
+  protected normalizePromptText(value: unknown): string {
     if (typeof value === "string") {
       return value.trim();
     }
@@ -1490,7 +1618,7 @@ export abstract class BaseEvaluationAgent<TOutput>
     return this.safeStringify(value).trim();
   }
 
-  private truncatePromptText(
+  protected truncatePromptText(
     value: string,
     maxChars: number = LEGACY_PROMPT_TEXT_MAX_CHARS,
   ): string {

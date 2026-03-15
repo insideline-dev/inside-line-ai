@@ -37,6 +37,13 @@ export interface ResearchRunOptions {
   agentKey?: ResearchAgentKey;
   phaseRetryCount?: number;
   onAgentStart?: (agent: ResearchAgentKey) => void;
+  onResearchParametersStart?: () => void;
+  onResearchParametersComplete?: (payload: {
+    usedFallback: boolean;
+    error?: string;
+    fallbackReason?: PipelineFallbackReason;
+    rawProviderError?: string;
+  }) => void;
   onAgentComplete?: (payload: {
     agent: ResearchAgentKey;
     output?: ResearchAgentOutput;
@@ -101,6 +108,10 @@ export class ResearchService {
       extraction,
       scraping,
       enrichment ?? undefined,
+      {
+        onStart: options?.onResearchParametersStart,
+        onComplete: options?.onResearchParametersComplete,
+      },
     );
     this.logger.log(`[Research] Generated research parameters for ${extraction.companyName}`);
     const pipelineRunId = await this.resolvePipelineRunId(startupId);

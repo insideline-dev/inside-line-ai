@@ -8,13 +8,16 @@ import type {
 } from "../interfaces/phase-results.interface";
 import type { ResearchParameters } from "../interfaces/research-parameters.interface";
 import { ModelPurpose } from "../interfaces/pipeline.interface";
+import type { PipelineFallbackReason } from "../interfaces/agent.interface";
 import { AiConfigService } from "./ai-config.service";
 import { AiProviderService } from "../providers/ai-provider.service";
 
 const WEBSITE_TEXT_LIMIT = 12_000;
 const DECK_CONTENT_LIMIT = 15_000;
 
-const ResearchParametersSchema = z.object({
+const requiredNullableMetricSchema = z.string().nullable();
+
+export const ResearchParametersSchema = z.object({
   specificMarket: z.string(),
   productDescription: z.string(),
   targetCustomers: z.string(),
@@ -23,12 +26,24 @@ const ResearchParametersSchema = z.object({
   businessModel: z.string(),
   fundingStage: z.string(),
   claimedMetrics: z.object({
-    tam: z.string().nullable().optional(),
-    growthRate: z.string().nullable().optional(),
-    revenue: z.string().nullable().optional(),
-    customers: z.string().nullable().optional(),
+    tam: requiredNullableMetricSchema,
+    growthRate: requiredNullableMetricSchema,
+    revenue: requiredNullableMetricSchema,
+    customers: requiredNullableMetricSchema,
   }),
 });
+
+export interface ResearchParametersGenerationMeta {
+  usedFallback: boolean;
+  error?: string;
+  fallbackReason?: PipelineFallbackReason;
+  rawProviderError?: string;
+}
+
+export interface ResearchParametersGenerationOptions {
+  onStart?: () => void;
+  onComplete?: (meta: ResearchParametersGenerationMeta) => void;
+}
 
 @Injectable()
 export class ResearchParametersService {
@@ -43,11 +58,18 @@ export class ResearchParametersService {
     extraction: ExtractionResult,
     scraping: ScrapingResult,
     enrichment?: EnrichmentResult,
+    options?: ResearchParametersGenerationOptions,
   ): Promise<ResearchParameters> {
     const teamMembers = this.buildTeamMembers(extraction, scraping, enrichment);
+    options?.onStart?.();
 
     if (!this.aiProvider || !this.aiConfig) {
       this.logger.warn("[ResearchParameters] AI provider not available; returning fallback");
+      options?.onComplete?.({
+        usedFallback: true,
+        error: "AI provider not available",
+        fallbackReason: "UNHANDLED_AGENT_EXCEPTION",
+      });
       return this.buildFallback(extraction, teamMembers);
     }
 
@@ -91,13 +113,44 @@ export class ResearchParametersService {
       this.logger.log(
         `[ResearchParameters] Generated successfully | market=${result.specificMarket.substring(0, 60)} | competitors=${result.knownCompetitors.length}`,
       );
+      options?.onComplete?.({
+        usedFallback: false,
+      });
 
       return result;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.error(`[ResearchParameters] AI generation failed: ${message}`);
+      options?.onComplete?.({
+        usedFallback: true,
+        error: message,
+        fallbackReason: this.classifyFallbackReason(message),
+        rawProviderError: this.sanitizeRawProviderError(message),
+      });
       return this.buildFallback(extraction, teamMembers);
     }
+  }
+
+  private classifyFallbackReason(message: string): PipelineFallbackReason {
+    const normalized = message.toLowerCase();
+    if (normalized.includes("response_format") || normalized.includes("invalid schema")) {
+      return "MODEL_OR_PROVIDER_ERROR";
+    }
+    if (normalized.includes("timed out") || normalized.includes("timeout")) {
+      return "TIMEOUT";
+    }
+    if (normalized.includes("schema validation")) {
+      return "SCHEMA_OUTPUT_INVALID";
+    }
+    if (normalized.includes("no object generated") || normalized.includes("empty")) {
+      return "EMPTY_STRUCTURED_OUTPUT";
+    }
+    return "UNHANDLED_AGENT_EXCEPTION";
+  }
+
+  private sanitizeRawProviderError(message: string): string | undefined {
+    const trimmed = message.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
   }
 
   private buildPrompt(

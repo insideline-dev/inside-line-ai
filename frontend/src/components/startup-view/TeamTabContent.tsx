@@ -71,6 +71,27 @@ interface FounderRecommendationItem {
   bullet: string;
 }
 
+interface SubScoreItem {
+  dimension: string;
+  weight: number;
+  score: number;
+}
+
+function toSubScores(value: unknown): SubScoreItem[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item): SubScoreItem | null => {
+      if (!item || typeof item !== "object") return null;
+      const r = item as Record<string, unknown>;
+      const dimension = typeof r.dimension === "string" ? r.dimension.trim() : "";
+      const weight = typeof r.weight === "number" ? r.weight : null;
+      const score = typeof r.score === "number" ? r.score : null;
+      if (!dimension || weight === null || score === null) return null;
+      return { dimension, weight, score };
+    })
+    .filter((item): item is SubScoreItem => item !== null);
+}
+
 function normalizeKey(value?: string) {
   return value?.trim().toLowerCase() || "";
 }
@@ -621,6 +642,14 @@ export function TeamTabContent({
 
     return "unknown";
   }, [teamData]);
+  const teamSubScores = useMemo(() => {
+    const scoring = teamData?.scoring as Record<string, unknown> | undefined;
+    return toSubScores(scoring?.subScores);
+  }, [teamData]);
+  const teamScoringBasis = useMemo(() => {
+    const scoring = teamData?.scoring as Record<string, unknown> | undefined;
+    return typeof scoring?.scoringBasis === "string" ? scoring.scoringBasis.trim() : undefined;
+  }, [teamData]);
 
   return (
     <div className="space-y-6" data-testid="container-team-tab">
@@ -636,6 +665,8 @@ export function TeamTabContent({
             score: founderMarketFitScore,
             why: founderMarketFitWhy,
           }}
+          subScores={teamSubScores}
+          scoringBasis={teamScoringBasis}
         />
       )}
 

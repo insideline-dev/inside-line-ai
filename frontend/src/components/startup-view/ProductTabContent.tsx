@@ -12,6 +12,27 @@ interface ProductTabContentProps {
   productWeight?: number;
 }
 
+interface SubScoreItem {
+  dimension: string;
+  weight: number;
+  score: number;
+}
+
+function toSubScores(value: unknown): SubScoreItem[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item): SubScoreItem | null => {
+      if (!item || typeof item !== "object") return null;
+      const r = item as Record<string, unknown>;
+      const dimension = typeof r.dimension === "string" ? r.dimension.trim() : "";
+      const weight = typeof r.weight === "number" ? r.weight : null;
+      const score = typeof r.score === "number" ? r.score : null;
+      if (!dimension || weight === null || score === null) return null;
+      return { dimension, weight, score };
+    })
+    .filter((item): item is SubScoreItem => item !== null);
+}
+
 function toStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value
@@ -99,6 +120,86 @@ function normalizeTrlStage(value?: string): string | undefined {
   return undefined;
 }
 
+const PRODUCT_LIFECYCLE_STAGES = ["Concept", "Prototype", "MVP", "Beta", "Production", "Scaling"] as const;
+
+function normalizeTechStageToLifecycle(techStage: string | undefined): number {
+  if (!techStage) return -1;
+  const n = techStage.toLowerCase().trim();
+  if (n.includes("concept") || n === "idea") return 0;
+  if (n.includes("prototype")) return 1;
+  if (n.includes("mvp")) return 2;
+  if (n.includes("beta")) return 3;
+  if (n.includes("production") || n.includes("ga") || n === "mature") return 4;
+  if (n.includes("scaling")) return 5;
+  return -1;
+}
+
+function ProductLifecycleBar({ techStage, stageFit }: { techStage?: string; stageFit?: string }) {
+  const activeIdx = normalizeTechStageToLifecycle(techStage);
+  const fitColor = (() => {
+    const fit = (stageFit || "").toLowerCase();
+    if (fit === "behind") return "bg-rose-500";
+    return "bg-violet-500";
+  })();
+
+  return (
+    <div className="flex items-center gap-0.5">
+      {PRODUCT_LIFECYCLE_STAGES.map((stage, idx) => {
+        const isActive = idx === activeIdx;
+        const isPast = idx < activeIdx;
+        return (
+          <div key={stage} className="flex-1 text-center">
+            <div
+              className={`h-2.5 rounded-full ${
+                isActive
+                  ? fitColor
+                  : isPast
+                    ? "bg-violet-300 dark:bg-violet-700"
+                    : "bg-muted"
+              }`}
+            />
+            <p className={`mt-1 text-[10px] ${isActive ? "font-semibold text-violet-600 dark:text-violet-400" : "text-muted-foreground"}`}>
+              {stage}
+            </p>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+interface ClaimAssessmentItem {
+  claim: string;
+  deckSays: string;
+  evidence: string;
+  verdict: string;
+}
+
+function toClaimsAssessment(value: unknown): ClaimAssessmentItem[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item): ClaimAssessmentItem | null => {
+      if (!item || typeof item !== "object") return null;
+      const r = item as Record<string, unknown>;
+      const claim = typeof r.claim === "string" ? r.claim.trim() : "";
+      const deckSays = typeof r.deckSays === "string" ? r.deckSays.trim() : "";
+      const evidence = typeof r.evidence === "string" ? r.evidence.trim() : "";
+      const verdict = typeof r.verdict === "string" ? r.verdict.trim() : "";
+      if (!claim && !deckSays) return null;
+      return { claim, deckSays, evidence, verdict };
+    })
+    .filter((item): item is ClaimAssessmentItem => item !== null);
+}
+
+function verdictBadgeClass(verdict: string): string {
+  switch (verdict.toLowerCase()) {
+    case "verified": return "border-emerald-300 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400";
+    case "partially_verified": return "border-amber-300 bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400";
+    case "contradicted": return "border-rose-300 bg-rose-50 text-rose-700 dark:bg-rose-950/30 dark:text-rose-400";
+    default: return "border-slate-300 bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-400";
+  }
+}
+
 export function ProductTabContent({ startup, evaluation, showScores = true, productWeight }: ProductTabContentProps) {
   const founderScreenshots = (startup.productScreenshots as string[]) || [];
 
@@ -153,6 +254,17 @@ export function ProductTabContent({ startup, evaluation, showScores = true, prod
   const technologyStack = toStructuredTextArray(productData?.technologyStack, "technology");
   // New schema: founderPitchRecommendations
   const founderPitchRecommendations = toPitchRecommendations(productData?.founderPitchRecommendations);
+  const productSubScores = toSubScores(productData?.scoring?.subScores);
+  const productScoringBasis = typeof productData?.scoring?.scoringBasis === "string" ? productData.scoring.scoringBasis.trim() : undefined;
+  const rawTechStage = productOverview?.techStage as string | undefined ?? productData?.technologyStage as string | undefined;
+  const stageFitAssessment = productData?.stageFitAssessment as string | undefined;
+  const claimsAssessment = toClaimsAssessment(productData?.claimsAssessment);
+  // Cross-reference moat from competitive advantage agent
+  const compAdvData = (evaluation?.competitiveAdvantageData as Record<string, unknown> | undefined) ?? {};
+  const moatAssessment = compAdvData.moatAssessment as Record<string, unknown> | undefined;
+  const moatStage = typeof moatAssessment?.moatStage === "string" ? moatAssessment.moatStage : undefined;
+  const moatEvidence2 = typeof moatAssessment?.moatEvidence === "string" ? moatAssessment.moatEvidence : undefined;
+  const moatSelfReinforcing = typeof moatAssessment?.selfReinforcing === "boolean" ? moatAssessment.selfReinforcing : undefined;
 
   const hasContent =
     founderScreenshots.length > 0 ||
@@ -189,6 +301,8 @@ export function ProductTabContent({ startup, evaluation, showScores = true, prod
           keyRisks={productRisks}
           weight={productWeight}
           confidence={productConfidence}
+          subScores={productSubScores}
+          scoringBasis={productScoringBasis}
         />
       )}
 
@@ -249,6 +363,84 @@ export function ProductTabContent({ startup, evaluation, showScores = true, prod
                   {(productOverview?.coreValueProp as string) || productData.uniqueValue}
                 </p>
               </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {rawTechStage && (
+        <Card className="border-primary/15" data-testid="card-product-lifecycle">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Layers className="w-5 h-5" />
+              <span>Product Lifecycle</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ProductLifecycleBar techStage={rawTechStage} stageFit={stageFitAssessment} />
+          </CardContent>
+        </Card>
+      )}
+
+      {claimsAssessment.length > 0 && (
+        <Card className="border-primary/15" data-testid="card-claims-credibility">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Package className="w-5 h-5" />
+              <span>Claims Credibility</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b text-muted-foreground">
+                    <th className="pb-2 pr-3 text-left font-medium">Claim</th>
+                    <th className="pb-2 pr-3 text-left font-medium">Deck Says</th>
+                    <th className="pb-2 pr-3 text-left font-medium">Evidence</th>
+                    <th className="pb-2 text-left font-medium">Verdict</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {claimsAssessment.map((item, idx) => (
+                    <tr key={idx} className="border-b border-border/40 last:border-0">
+                      <td className="py-2 pr-3 font-medium">{item.claim}</td>
+                      <td className="py-2 pr-3 text-muted-foreground">{item.deckSays}</td>
+                      <td className="py-2 pr-3 text-muted-foreground">{item.evidence}</td>
+                      <td className="py-2">
+                        <Badge variant="outline" className={verdictBadgeClass(item.verdict)}>
+                          {item.verdict.replace(/_/g, " ")}
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {moatStage && (
+        <Card className="border-primary/15" data-testid="card-moat-assessment">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Layers className="w-5 h-5" />
+              <span>Moat Assessment</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex items-center gap-3 flex-wrap">
+              {moatType && <Badge variant="secondary" className="capitalize">{moatType.replace(/_/g, " ")}</Badge>}
+              <Badge variant="outline" className="capitalize">{moatStage.replace(/_/g, " ")}</Badge>
+              {moatSelfReinforcing !== undefined && (
+                <Badge variant={moatSelfReinforcing ? "default" : "secondary"}>
+                  {moatSelfReinforcing ? "Self-reinforcing" : "Not self-reinforcing"}
+                </Badge>
+              )}
+            </div>
+            {moatEvidence2 && (
+              <p className="text-sm text-muted-foreground">{moatEvidence2}</p>
             )}
           </CardContent>
         </Card>

@@ -174,6 +174,8 @@ interface CompetitorAnalysisProps {
   competitiveAdvantageScore?: number | null;
   competitiveAdvantageWeight?: number;
   competitiveAdvantageConfidence?: string;
+  subScores?: Array<{ dimension: string; weight: number; score: number }>;
+  scoringBasis?: string;
 }
 
 function getThreatBadgeVariant(
@@ -973,6 +975,8 @@ function BasicCompetitorLandscapeCard({
   score,
   weight,
   confidence,
+  subScores,
+  scoringBasis,
 }: {
   landscape: BasicCompetitorLandscape;
   positioning?: {
@@ -987,6 +991,8 @@ function BasicCompetitorLandscapeCard({
   score?: number | null;
   weight?: number;
   confidence?: string;
+  subScores?: Array<{ dimension: string; weight: number; score: number }>;
+  scoringBasis?: string;
 }) {
   const directNames = landscape?.directCompetitors || [];
   const indirectNames = landscape?.indirectCompetitors || [];
@@ -1074,6 +1080,35 @@ function BasicCompetitorLandscapeCard({
                 <span className="text-lg text-muted-foreground">/100</span>
               </div>
             </div>
+
+            {(scoringBasis || (subScores && subScores.length > 0)) && (
+              <div className="mt-5 space-y-4 border-t border-border/60 pt-4">
+                {scoringBasis && <p className="text-sm text-muted-foreground">{scoringBasis}</p>}
+              </div>
+            )}
+            {subScores && subScores.length > 0 && (
+              <div className="mt-3 space-y-3">
+                {subScores.map((item) => {
+                  const pct = item.weight <= 1 ? item.weight * 100 : item.weight;
+                  const pctLabel = `${Number.isInteger(pct) ? pct.toFixed(0) : pct.toFixed(1)}%`;
+                  const barColor = item.score >= 80 ? "bg-emerald-500" : item.score >= 60 ? "bg-amber-500" : "bg-rose-500";
+                  return (
+                    <div key={item.dimension} className="grid grid-cols-[minmax(0,1fr)_48px] gap-3">
+                      <div>
+                        <div className="mb-1 flex items-center justify-between gap-3 text-xs">
+                          <span className="font-medium">{item.dimension}</span>
+                          <span className="text-muted-foreground">{pctLabel}</span>
+                        </div>
+                        <div className="h-2.5 rounded-full bg-muted">
+                          <div className={`h-full rounded-full ${barColor}`} style={{ width: `${Math.max(0, Math.min(100, item.score))}%` }} />
+                        </div>
+                      </div>
+                      <div className="text-right text-xs font-medium">{Math.round(item.score)}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -1476,6 +1511,8 @@ export function CompetitorAnalysis({
   competitiveAdvantageScore,
   competitiveAdvantageWeight,
   competitiveAdvantageConfidence = "unknown",
+  subScores,
+  scoringBasis,
 }: CompetitorAnalysisProps) {
   const hasDetailedCompetitorData =
     directCompetitors.length > 0 ||
@@ -1550,6 +1587,8 @@ export function CompetitorAnalysis({
           score={competitiveAdvantageScore ?? undefined}
           weight={competitiveAdvantageWeight}
           confidence={competitiveAdvantageConfidence}
+          subScores={subScores}
+          scoringBasis={scoringBasis}
         />
       )}
 

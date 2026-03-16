@@ -536,6 +536,32 @@ If work starts on a phase:
   - unified `Data Gaps & Diligence` rendering for structured competitive data gaps
   - backward-compatible preservation of the existing competitor landscape and detail cards
 
+### Additional UI Features (2026-03-16)
+
+Following a full audit against the Archive UI specs (`Downloads/Archive/ui/*.md`), the following features were added:
+
+**All Score Cards (Team, Product, Competitors, Market):**
+- [x] Sub-score breakdown bars — `scoring.subScores[]` rendered as color-coded progress bars with dimension name, weight %, and score value (same pattern as Financials)
+- [x] Scoring basis one-liner — `scoring.scoringBasis` displayed as muted text below the score
+
+**Market Tab:**
+- [x] Entry conditions scorecard — upgraded from plain text to a proper table with traffic-light severity badges (green/amber/red) per barrier factor
+- [x] Market lifecycle visual bar — Introduction → Growth → Maturity → Decline progression with active position marker
+
+**Product Tab:**
+- [x] Product lifecycle progression bar — Concept → Prototype → MVP → Beta → Production → Scaling with stage-fit coloring
+- [x] Claims credibility table — structured comparison table from `claimsAssessment[]` with claim, deck says, evidence, and color-coded verdict badges (Verified/Partially Verified/Unverified/Contradicted)
+- [x] Moat assessment card — cross-referenced from competitive advantage agent output with moat type badge, moat stage badge, self-reinforcing indicator, and evidence text
+
+**Remaining spec items not yet implemented (lower priority / complex charts):**
+- [ ] TAM Funnel visual (Market — currently renders as 3 side-by-side cards, spec wants funnel/concentric shape)
+- [ ] Deck vs Research horizontal bar chart (Market — currently text comparison)
+- [ ] Source Attribution Table with tier/geography columns (Market — currently basic source list)
+- [ ] Concentration Spectrum bar visual (Market — currently just text)
+- [ ] Financials Section 7 recharts (revenue, burn, scenario, margin — requires actual chart data from financial model upload)
+- [ ] Feature source attribution badges per feature (Product — `keyFeatures[].verifiedBy[]`)
+- [ ] Structured Data Gaps with impact badges across all tabs (partially done in Financials, not yet in Team/Product/Competitors/Market)
+
 ### Rollback Safety
 
 - isolated UI surfaces

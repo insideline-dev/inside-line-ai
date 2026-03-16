@@ -149,6 +149,146 @@ function AgentBadge({
   );
 }
 
+interface ContextBadgeData {
+  id: string;
+  label: string;
+  topLine: string;
+  bottomLine?: string;
+  score: number;
+  tab: string;
+}
+
+function badgeBorderColor(score: number): string {
+  if (score >= 75) return "border-l-emerald-500";
+  if (score >= 50) return "border-l-amber-500";
+  return "border-l-rose-500";
+}
+
+function safeStr(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function safeNum(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function rec(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
+function buildContextBadges(data: {
+  marketData: Record<string, unknown>;
+  productData: Record<string, unknown>;
+  teamData: Record<string, unknown>;
+  competitiveData: Record<string, unknown>;
+  financialsData: Record<string, unknown>;
+  dealTermsData: Record<string, unknown>;
+  marketScore?: number;
+  productScore?: number;
+  teamScore?: number;
+  competitiveScore?: number;
+  financialsScore?: number;
+  dealTermsScore?: number;
+}): ContextBadgeData[] {
+  const badges: ContextBadgeData[] = [];
+
+  // 1. Market — TAM + timing
+  const marketSizing = rec(data.marketData.marketSizing);
+  const tam = rec(marketSizing.tam);
+  const tamValue = safeStr(tam.value);
+  const timing = rec(data.marketData.marketGrowthAndTiming);
+  const timingAssessment = safeStr(timing.timingAssessment);
+  if (tamValue || timingAssessment) {
+    badges.push({
+      id: "market", label: "Market",
+      topLine: tamValue || "—",
+      bottomLine: timingAssessment?.replace(/_/g, " "),
+      score: data.marketScore ?? 0,
+      tab: "market",
+    });
+  }
+
+  // 2. Product — tech stage
+  const productOverview = rec(data.productData.productOverview);
+  const techStage = safeStr(productOverview.techStage) ?? safeStr(data.productData.technologyStage);
+  if (techStage) {
+    badges.push({
+      id: "product", label: "Product",
+      topLine: techStage.charAt(0).toUpperCase() + techStage.slice(1),
+      score: data.productScore ?? 0,
+      tab: "product",
+    });
+  }
+
+  // 3. Team — composition + FMF
+  const teamComp = rec(data.teamData.teamComposition ?? data.teamData.functionalCoverage);
+  const coverage = [
+    teamComp.businessLeadership, teamComp.technicalCapability,
+    teamComp.domainExpertise, teamComp.gtmCapability,
+  ].filter((v) => {
+    if (typeof v === "boolean") return v;
+    if (v && typeof v === "object") return (v as Record<string, unknown>).covered === true;
+    return false;
+  }).length;
+  const fmf = rec(data.teamData.founderMarketFit);
+  const fmfScore = safeNum(fmf.score);
+  if (coverage > 0 || fmfScore !== undefined) {
+    badges.push({
+      id: "team", label: "Team",
+      topLine: `${coverage}/4 capabilities`,
+      bottomLine: fmfScore !== undefined ? `FMF: ${Math.round(fmfScore)}` : undefined,
+      score: data.teamScore ?? 0,
+      tab: "team",
+    });
+  }
+
+  // 4. Competitors — gap + moat
+  const compPos = rec(data.competitiveData.competitivePosition);
+  const currentGap = safeStr(compPos.currentGap);
+  const moat = rec(data.competitiveData.moatAssessment);
+  const moatType = safeStr(moat.moatType);
+  if (currentGap || moatType) {
+    badges.push({
+      id: "competitors", label: "Competitors",
+      topLine: currentGap?.replace(/_/g, " ") || "—",
+      bottomLine: moatType?.replace(/_/g, " "),
+      score: data.competitiveScore ?? 0,
+      tab: "competitors",
+    });
+  }
+
+  // 5. Financials — runway + credibility
+  const keyMetrics = rec(data.financialsData.keyMetrics);
+  const runway = safeStr(keyMetrics.runway);
+  const projections = rec(data.financialsData.projections);
+  const credibility = safeStr(projections.credibility);
+  if (runway || credibility) {
+    badges.push({
+      id: "financials", label: "Financials",
+      topLine: runway || "—",
+      bottomLine: credibility?.replace(/_/g, " "),
+      score: data.financialsScore ?? 0,
+      tab: "financials",
+    });
+  }
+
+  // 6. Deal — multiple + premium
+  const dealOverview = rec(data.dealTermsData.dealOverview);
+  const impliedMultiple = safeStr(dealOverview.impliedMultiple);
+  const premiumDiscount = safeStr(dealOverview.premiumDiscount);
+  if (impliedMultiple || premiumDiscount) {
+    badges.push({
+      id: "deal", label: "Deal",
+      topLine: impliedMultiple || "—",
+      bottomLine: premiumDiscount?.replace(/_/g, " "),
+      score: data.dealTermsScore ?? 0,
+      tab: "memo",
+    });
+  }
+
+  return badges;
+}
+
 export function AdminSummaryTab({
   startup,
   evaluation,
@@ -185,6 +325,24 @@ export function AdminSummaryTab({
   const crossRisks = getCrossAgentRisks(evaluation);
   const criticalGaps = getCriticalDataGaps(evaluation);
   const plainGaps = getCrossAgentDataGaps(evaluation);
+
+  // Context Badges data
+  const marketData = (evaluation?.marketData as Record<string, unknown> | undefined) ?? {};
+  const productData = (evaluation?.productData as Record<string, unknown> | undefined) ?? {};
+  const teamData = (evaluation?.teamData as Record<string, unknown> | undefined) ?? {};
+  const competitiveData = (evaluation?.competitiveAdvantageData as Record<string, unknown> | undefined) ?? {};
+  const financialsData = (evaluation?.financialsData as Record<string, unknown> | undefined) ?? {};
+  const dealTermsData = (evaluation?.dealTermsData as Record<string, unknown> | undefined) ?? {};
+
+  const contextBadges = evaluation ? buildContextBadges({
+    marketData, productData, teamData, competitiveData, financialsData, dealTermsData,
+    marketScore: evaluation.marketScore,
+    productScore: evaluation.productScore,
+    teamScore: evaluation.teamScore,
+    competitiveScore: evaluation.competitiveAdvantageScore,
+    financialsScore: evaluation.financialsScore,
+    dealTermsScore: evaluation.dealTermsScore,
+  }) : [];
 
   const RADAR_SHORT_LABELS: Record<string, string> = {
     "Competitive Advantage": "Comp. Adv.",
@@ -247,20 +405,29 @@ export function AdminSummaryTab({
             </CardTitle>
             <p className="text-xs text-muted-foreground">Top highlights for a quick pitch</p>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent>
             <p className="text-sm leading-relaxed">{dealSnapshot}</p>
-            {strengths.length > 0 && (
-              <ul className="space-y-1.5 text-sm">
-                {strengths.slice(0, 4).map((item, idx) => (
-                  <li key={idx} className="flex items-start gap-2">
-                    <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                    <span>{item}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
           </CardContent>
         </Card>
+
+        {contextBadges.length > 0 && (
+          <div className="flex gap-2.5 overflow-x-auto pb-1">
+            {contextBadges.map((badge) => (
+              <button
+                key={badge.id}
+                type="button"
+                onClick={() => onNavigateTab?.(badge.tab)}
+                className={`shrink-0 rounded-lg border border-l-4 ${badgeBorderColor(badge.score)} bg-muted/20 px-3.5 py-2.5 text-left transition-colors hover:bg-muted/40 cursor-pointer min-w-[120px]`}
+              >
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{badge.label}</p>
+                <p className="mt-1 text-sm font-medium leading-tight">{badge.topLine}</p>
+                {badge.bottomLine && (
+                  <p className="mt-0.5 text-[11px] capitalize text-muted-foreground">{badge.bottomLine}</p>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
 
         <Card>
           <CardHeader className="pb-2">

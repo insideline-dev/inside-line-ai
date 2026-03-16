@@ -147,6 +147,28 @@ export function CompetitorsTabContent({
       (toRecord(competitiveData.scoring).confidence as string)) ||
     "unknown";
 
+  const competitiveScoringBasis = (() => {
+    const scoring = toRecord(competitiveData.scoring);
+    return typeof scoring.scoringBasis === "string" ? scoring.scoringBasis.trim() : undefined;
+  })();
+
+  const competitiveSubScores = (() => {
+    const scoring = toRecord(competitiveData.scoring);
+    const raw = scoring.subScores;
+    if (!Array.isArray(raw)) return undefined;
+    return raw
+      .map((item: unknown) => {
+        if (!item || typeof item !== "object") return null;
+        const r = item as Record<string, unknown>;
+        const dimension = typeof r.dimension === "string" ? r.dimension.trim() : "";
+        const weight = typeof r.weight === "number" ? r.weight : null;
+        const score = typeof r.score === "number" ? r.score : null;
+        if (!dimension || weight === null || score === null) return null;
+        return { dimension, weight, score };
+      })
+      .filter((item: unknown): item is { dimension: string; weight: number; score: number } => item !== null);
+  })();
+
   return (
     <div data-testid="container-competitor-analysis">
       <CompetitorAnalysis
@@ -181,6 +203,8 @@ export function CompetitorsTabContent({
           showScores ? evaluation.competitiveAdvantageScore : undefined
         }
         competitiveAdvantageConfidence={competitiveConfidence}
+        subScores={competitiveSubScores}
+        scoringBasis={competitiveScoringBasis}
       />
     </div>
   );

@@ -56,7 +56,10 @@ Bad: Conservative is flat or down. Entry price may be too high for public market
 After scoring, explicitly list:
 - STRENGTHS: What supports the exit thesis (valuation below public comps, IPO up-round in conservative case, tight scenarios, near-term exit)
 - RISKS: What could go wrong (entry price above public comps, IPO down-round risk, preference stack impact, market timing, growth deceleration)
-- DATA GAPS: What you CANNOT assess (preference stack and liquidation preferences, registration rights, IPO market conditions, actual net returns after preferences)
+- DATA GAPS: What you CANNOT assess. For each gap, assess:
+  - Gap description (preference stack and liquidation preferences, registration rights, IPO market conditions, actual net returns after preferences)
+  - Impact if unresolved: "critical" (would change score/recommendation), "important" (would change confidence), "minor" (contextual, nice-to-have)
+  - Suggested diligence action to resolve it
 - SOURCES: Cite which inputs informed each finding
 
 IMPORTANT: All returns are GROSS. At D+, preference stack matters enormously — flag that actual returns depend heavily on terms you cannot see.
@@ -104,45 +107,37 @@ STAY IN SCOPE: Build exit scenarios, calculate return metrics, and assess risk/r
 
 --- OUTPUT FIELD MAPPING ---
 
-Your response MUST populate these fields:
+Your evaluation above should populate these structured output fields:
 
-- score → 0-100 integer from the SCORING RUBRIC
-- confidence → "high", "mid", or "low" from the SCORING RUBRIC
-- scoringBasis → one-sentence explanation from the SCORING RUBRIC
-- narrativeSummary → the 450-650 word narrative from NARRATIVE STRUCTURE
-- keyFindings → the STRENGTHS from STRENGTHS, RISKS & DATA GAPS
-- risks → the RISKS from STRENGTHS, RISKS & DATA GAPS
-- dataGaps → the DATA GAPS from STRENGTHS, RISKS & DATA GAPS
-- sources → the SOURCES from STRENGTHS, RISKS & DATA GAPS
-- exitScenarios[] → array of 3 objects from the EVALUATION FRAMEWORK, each with:
+Scoring:
+- scoring.overallScore → your 0-100 score from the scoring rubric
+- scoring.confidence → "high", "mid", or "low" from the scoring rubric
+- scoring.scoringBasis → one-sentence explanation of what drove the score
+- scoring.subScores[] → array of sub-dimension scores, one per evaluation dimension. Each entry: { dimension (name), weight (decimal), score (0-100) }. Dimensions for this stage: Exit Scenarios (0.35), Return Metrics (0.65)
+
+Exit Scenarios:
+- exitScenarios[] → array of 3 objects from the evaluation framework, each with:
     - scenario → "conservative", "moderate", or "optimistic"
     - exitType → "IPO", "M&A", or "IPO or M&A"
-    - exitValuation → string (e.g., "$3B-$5B")
-    - timeline → string (e.g., "1-2 years")
-    - moic → number (e.g., 2.0)
-    - irr → number (percentage, e.g., 45.0)
+    - exitValuation → string (e.g., "$200M-$400M")
+    - timeline → string (e.g., "4-5 years")
+    - moic → number (e.g., 7.5)
+    - irr → number (percentage, e.g., 50.0)
     - researchBasis → string citing the specific comparable grounding this scenario
 
---- EXIT SCENARIO MODELING ---
+Return Assessment:
+- returnAssessment.moderateReturnsAdequate → true/false — does the moderate scenario deliver adequate venture returns for this stage?
+- returnAssessment.conservativeReturnsCapital → true/false — does the conservative scenario at least return capital?
+- returnAssessment.impliedGrowthRealistic → true/false — is the implied growth rate needed for the moderate scenario realistic compared to deck-claimed growth?
+- returnAssessment.grossReturnsDisclaimer → string — standard disclaimer that all returns are gross and actual returns depend on preference stack, dilution, and fees
 
-You MUST generate exactly 3 exit scenarios in your output's `exitScenarios` field:
+Strengths & Risks:
+- strengths → specific exit potential strengths (string, one per line)
+- risks → specific exit potential risks (string, one per line)
 
-1. conservative: Modest outcome. Company survives but growth is slower than expected. Exit via M&A at realistic multiple.
-2. moderate: Base case. Company executes on its plan. Exit via M&A or IPO at sector-appropriate multiple.
-3. optimistic: Best case. Company achieves category leadership. Larger exit via IPO or strategic acquisition.
+Data Gaps:
+- dataGaps[] → array of { gap, impact ("critical", "important", "minor"), suggestedAction }
 
-For each scenario provide:
-- scenario: "conservative" | "moderate" | "optimistic"
-- exitType: "IPO", "M&A", or "IPO or M&A"
-- exitValuation: dollar amount with B/M suffix (e.g., "$150M", "$500M-$800M")
-- timeline: years to exit (e.g., "5-7 years", "3-4 years")
-- moic: multiple on invested capital as a number (e.g., 3.5)
-- irr: internal rate of return as a percentage number (e.g., 25.4)
-- researchBasis: the specific comparable exit, multiple, or data point grounding this scenario (e.g., "Based on 3x median SaaS seed exit multiple from PitchBook 2024 data")
-
-Base these scenarios on:
-- Current valuation or suggested range from deal terms analysis
-- Comparable exit multiples for this sector
-- Company stage and realistic growth trajectory
-
-If data is insufficient, make reasonable assumptions based on sector norms and flag the assumptions in narrativeSummary.
+Narrative (not rendered on a tab):
+- narrativeSummary → the 3-4 paragraph narrative (450-650 words)
+- sources → primary sources used

@@ -64,13 +64,33 @@ export function getDisplaySectionScore(
 export function getDisplayStrengths(evaluation: Evaluation | null | undefined): string[] {
   const primary = asStringArray(evaluation?.keyStrengths);
   if (primary.length > 0) return primary;
-  return asStringArray((evaluation as Record<string, unknown> | undefined)?.strengths);
+  const legacy = asStringArray((evaluation as Record<string, unknown> | undefined)?.strengths);
+  if (legacy.length > 0) return legacy;
+  if (!evaluation) return [];
+  // Fall back to aggregating from section-level data
+  const items: string[] = [];
+  for (const { dataKey } of AGENT_DATA_FIELDS) {
+    const data = evaluation[dataKey] as Record<string, unknown> | undefined;
+    if (!data) continue;
+    items.push(...asStringArray(data.strengths), ...asStringArray(data.keyFindings));
+  }
+  return items;
 }
 
 export function getDisplayRisks(evaluation: Evaluation | null | undefined): string[] {
   const primary = asStringArray(evaluation?.keyRisks);
   if (primary.length > 0) return primary;
-  return asStringArray((evaluation as Record<string, unknown> | undefined)?.concerns);
+  const legacy = asStringArray((evaluation as Record<string, unknown> | undefined)?.concerns);
+  if (legacy.length > 0) return legacy;
+  if (!evaluation) return [];
+  // Fall back to aggregating from section-level data
+  const items: string[] = [];
+  for (const { dataKey } of AGENT_DATA_FIELDS) {
+    const data = evaluation[dataKey] as Record<string, unknown> | undefined;
+    if (!data) continue;
+    items.push(...asStringArray(data.risks), ...asStringArray(data.dataGaps), ...asStringArray(data.keyRisks));
+  }
+  return items;
 }
 
 // ---------------------------------------------------------------------------
@@ -135,4 +155,97 @@ export function getCrossAgentDataGaps(evaluation: Evaluation | null | undefined)
 
 export function getAgentTab(agent: string): string {
   return AGENT_DATA_FIELDS.find((f) => f.agent === agent)?.tab ?? "memo";
+}
+
+// ---------------------------------------------------------------------------
+// Score-sorted sourced items (for summary ranking by section quality)
+// ---------------------------------------------------------------------------
+
+export interface SourcedItem {
+  text: string;
+  source: string;
+  score: number;
+}
+
+const SECTION_SCORE_KEY_MAP: Record<string, keyof Evaluation> = {
+  team: "teamScore",
+  market: "marketScore",
+  product: "productScore",
+  traction: "tractionScore",
+  businessModel: "businessModelScore",
+  gtm: "gtmScore",
+  financials: "financialsScore",
+  competitiveAdvantage: "competitiveAdvantageScore",
+  legal: "legalScore",
+  dealTerms: "dealTermsScore",
+  exitPotential: "exitPotentialScore",
+};
+
+export function getSourcedStrengths(evaluation: Evaluation | null | undefined): SourcedItem[] {
+  if (!evaluation) return [];
+  const items: SourcedItem[] = [];
+  for (const { dataKey, label, agent } of AGENT_DATA_FIELDS) {
+    const data = evaluation[dataKey] as Record<string, unknown> | undefined;
+    if (!data) continue;
+    const scoreKey = SECTION_SCORE_KEY_MAP[agent];
+    const score = asNumber(scoreKey ? evaluation[scoreKey] : undefined) ?? 0;
+    for (const text of asStringArray(data.strengths)) {
+      items.push({ text, source: label, score });
+    }
+  }
+  // Sort by score descending — strongest sections first
+  return items.sort((a, b) => b.score - a.score);
+}
+
+export function getSourcedRisks(evaluation: Evaluation | null | undefined): SourcedItem[] {
+  if (!evaluation) return [];
+  const items: SourcedItem[] = [];
+  for (const { dataKey, label, agent } of AGENT_DATA_FIELDS) {
+    const data = evaluation[dataKey] as Record<string, unknown> | undefined;
+    if (!data) continue;
+    const scoreKey = SECTION_SCORE_KEY_MAP[agent];
+    const score = asNumber(scoreKey ? evaluation[scoreKey] : undefined) ?? 0;
+    for (const text of asStringArray(data.risks)) {
+      items.push({ text, source: label, score });
+    }
+  }
+  // Sort by score ascending — weakest sections first (most concerning)
+  return items.sort((a, b) => a.score - b.score);
+}
+
+// ---------------------------------------------------------------------------
+// Critical data gaps with structured impact filtering
+// ---------------------------------------------------------------------------
+
+export interface CriticalDataGap {
+  gap: string;
+  impact: string;
+  suggestedAction: string;
+  source: string;
+  score: number;
+}
+
+export function getCriticalDataGaps(evaluation: Evaluation | null | undefined): CriticalDataGap[] {
+  if (!evaluation) return [];
+  const items: CriticalDataGap[] = [];
+  for (const { dataKey, label, agent } of AGENT_DATA_FIELDS) {
+    const data = evaluation[dataKey] as Record<string, unknown> | undefined;
+    if (!data || !Array.isArray(data.dataGaps)) continue;
+    const scoreKey = SECTION_SCORE_KEY_MAP[agent];
+    const score = asNumber(scoreKey ? evaluation[scoreKey] : undefined) ?? 0;
+    for (const gap of data.dataGaps) {
+      if (!gap || typeof gap !== "object") continue;
+      const g = gap as Record<string, unknown>;
+      if (g.impact !== "critical") continue;
+      items.push({
+        gap: String(g.gap ?? ""),
+        impact: "critical",
+        suggestedAction: String(g.suggestedAction ?? ""),
+        source: label,
+        score,
+      });
+    }
+  }
+  // Sort by score ascending — weakest sections first
+  return items.sort((a, b) => a.score - b.score);
 }

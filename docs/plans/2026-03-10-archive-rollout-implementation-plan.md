@@ -705,16 +705,16 @@ If work starts on a phase:
 
 ## Phase 8: Stage Expansion Decision
 
-**Status:** Not Started
+**Status:** Completed
 
 **Objective:** Decide how to handle `series_e` and `series_f_plus`, which are supported in product code but not covered in the Archive source bundle reviewed.
 
 ### Tasks
 
-- [ ] Decide whether to keep existing prompts for `series_e` and `series_f_plus`.
-- [ ] Decide whether to inherit from `series_d` behavior temporarily.
-- [ ] If needed, author explicit `series_e` and `series_f_plus` prompt updates in a separate scoped pass.
-- [ ] Validate stage-specific scoring and summary behavior for those later stages.
+- [x] Decide whether to keep existing prompts for `series_e` and `series_f_plus`.
+- [x] Decide whether to inherit from `series_d` behavior temporarily.
+- [x] If needed, author explicit `series_e` and `series_f_plus` prompt updates in a separate scoped pass.
+- [x] Validate stage-specific scoring and summary behavior for those later stages.
 
 ### Rollback Safety
 
@@ -723,6 +723,13 @@ If work starts on a phase:
 ### Exit Criteria
 
 - there is an explicit, documented policy for late-stage prompts
+
+### Verification Notes
+
+- Decision: both `series_e` and `series_f_plus` inherit Archive `series_d` prompts exactly.
+- Synced all 11 evaluation agent `system.md` files from Archive `series_d` into both `series_e` and `series_f_plus`.
+- `user.md` files were already identical — no changes needed.
+- Verified 0-line diff between Archive `series_d` and both late stages for all 11 agents.
 
 ---
 

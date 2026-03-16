@@ -14,6 +14,7 @@ import {
   getCrossAgentStrengths,
   getCrossAgentRisks,
   getCrossAgentDataGaps,
+  getCriticalDataGaps,
   getAgentTab,
 } from "@/lib/evaluation-display";
 import {
@@ -182,7 +183,8 @@ export function AdminSummaryTab({
 
   const crossStrengths = getCrossAgentStrengths(evaluation);
   const crossRisks = getCrossAgentRisks(evaluation);
-  const dataGaps = getCrossAgentDataGaps(evaluation);
+  const criticalGaps = getCriticalDataGaps(evaluation);
+  const plainGaps = getCrossAgentDataGaps(evaluation);
 
   const RADAR_SHORT_LABELS: Record<string, string> = {
     "Competitive Advantage": "Comp. Adv.",
@@ -402,7 +404,7 @@ export function AdminSummaryTab({
           </Card>
         </div>
 
-        {dataGaps.length > 0 && (
+        {(criticalGaps.length > 0 || plainGaps.length > 0) && (
           <Card className="border-orange-200/80 dark:border-orange-900/50">
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center gap-2 text-base text-orange-700 dark:text-orange-400">
@@ -415,13 +417,27 @@ export function AdminSummaryTab({
             </CardHeader>
             <CardContent>
               <ul className="space-y-2 text-sm">
-                {dataGaps.map((item, idx) => (
-                  <li key={idx} className="flex items-start gap-2">
-                    <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-orange-500" />
-                    <span className="flex-1">{item.text}</span>
-                    <AgentBadge label={item.agentLabel} agent={item.agent} onClick={onNavigateTab} />
-                  </li>
-                ))}
+                {criticalGaps.length > 0
+                  ? criticalGaps.map((item, idx) => (
+                      <li key={idx} className="flex items-start gap-2">
+                        <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-orange-500" />
+                        <div className="flex-1">
+                          <span>{item.gap}</span>
+                          {item.suggestedAction && (
+                            <p className="mt-0.5 text-xs text-muted-foreground">{item.suggestedAction}</p>
+                          )}
+                        </div>
+                        <span className="shrink-0 text-[10px] font-medium text-muted-foreground">{item.source}</span>
+                      </li>
+                    ))
+                  : plainGaps.map((item, idx) => (
+                      <li key={idx} className="flex items-start gap-2">
+                        <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-orange-500" />
+                        <span className="flex-1">{item.text}</span>
+                        <AgentBadge label={item.agentLabel} agent={item.agent} onClick={onNavigateTab} />
+                      </li>
+                    ))
+                }
               </ul>
             </CardContent>
           </Card>

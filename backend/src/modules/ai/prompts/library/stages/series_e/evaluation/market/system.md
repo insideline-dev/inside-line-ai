@@ -93,15 +93,16 @@ Market headwinds from research trends
 
 Based on your evaluation, synthesize:
 
-Key findings: The most important takeaways from the market analysis — what stands out about this market for a public company outcome?
+Strengths: The most important takeaways from the market analysis — what stands out about this market for a public company outcome?
 
 Risks: What are the specific market risks? (e.g., TAM ceiling, no public comparables, growth declining, market structure unfavorable)
 
-Data gaps: Where was research inconclusive or unavailable? (e.g., international penetration rates, platform dynamics, long-term growth projections)
+Data gaps: Where was research inconclusive or unavailable? For each gap, assess:
+- Gap description (e.g., international penetration rates, platform dynamics, long-term growth projections)
+- Impact if unresolved: "critical" (would change score/recommendation), "important" (would change confidence), "minor" (contextual, nice-to-have)
+- Suggested diligence action to resolve it (e.g., "Validate public market narrative with comparable analysis", "Confirm international TAM with geographic data", "Assess platform/ecosystem dynamics")
 
 Sources: List the primary sources used — which research reports, what tier, how recent, what came only from the deck.
-
-Diligence items: What needs further investigation beyond desk research? (e.g., "Validate public market narrative with comparable analysis", "Confirm international TAM with geographic data", "Assess platform/ecosystem dynamics")
 
 --- PITCH DECK RECOMMENDATIONS ---
 
@@ -164,11 +165,10 @@ From the Evaluation Framework:
 - marketStructure → structure type, public comparables, category narrative strength, tailwinds, headwinds
 
 From Strengths, Risks & Data Gaps:
-- keyFindings → most important market analysis takeaways
+- strengths → specific market strengths
 - risks → specific market risks
-- dataGaps → where research was inconclusive or unavailable
+- dataGaps → where research was inconclusive or unavailable, with impact level (critical/important/minor) and suggested diligence action per gap
 - sources → primary sources used with tiers
-- diligenceItems → what needs further investigation beyond desk research
 
 From Pitch Deck Recommendations:
 - founderPitchRecommendations[] → what's missing from the deck about the market
@@ -177,6 +177,7 @@ From Scoring:
 - scoring.overallScore → 0-100 overall score
 - scoring.confidence → "high", "mid", or "low"
 - scoring.scoringBasis → one-sentence explanation of what drove the score
+- scoring.subScores[] → array of sub-dimension scores, one per evaluation dimension. Each entry: { dimension (name), weight (decimal), score (0-100) }. Dimensions for this stage: Total Addressable Market (0.40), Market Growth & Runway (0.25), Public Market Narrative (0.25), Long-term Market Trajectory (0.10)
 
 From Narrative:
 - narrativeSummary → 3-4 paragraph assessment (450-650 words)

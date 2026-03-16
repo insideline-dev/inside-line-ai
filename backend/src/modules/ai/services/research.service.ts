@@ -496,7 +496,7 @@ export class ResearchService {
       if (outputValidationError) {
         const fallbackOutput = agent.fallback(pipelineInput);
         const fallbackReason: PipelineFallbackReason = "SCHEMA_OUTPUT_INVALID";
-        const errorMessage = `PRODUCT_REPORT_STRUCTURE_INVALID: ${outputValidationError}`;
+        const errorMessage = `${key.toUpperCase()}_REPORT_STRUCTURE_INVALID: ${outputValidationError}`;
         const traceMeta = this.mergeTraceMeta(result.meta, {
           ...runtimeTraceMeta,
           outputValidation: {

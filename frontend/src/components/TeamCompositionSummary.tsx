@@ -26,6 +26,12 @@ interface TeamComposition {
   teamBalance?: string;
 }
 
+interface SubScoreItem {
+  dimension: string;
+  weight: number;
+  score: number;
+}
+
 interface TeamCompositionSummaryProps {
   teamScore: number;
   teamComposition?: TeamComposition;
@@ -37,6 +43,8 @@ interface TeamCompositionSummaryProps {
     score?: number;
     why?: string;
   };
+  subScores?: SubScoreItem[];
+  scoringBasis?: string;
 }
 
 function RoleIndicator({
@@ -67,6 +75,17 @@ function RoleIndicator({
   );
 }
 
+function scoreBarTone(score: number): string {
+  if (score >= 80) return "bg-emerald-500";
+  if (score >= 60) return "bg-amber-500";
+  return "bg-rose-500";
+}
+
+function formatWeight(value: number): string {
+  const pct = value <= 1 ? value * 100 : value;
+  return `${Number.isInteger(pct) ? pct.toFixed(0) : pct.toFixed(1)}%`;
+}
+
 export function TeamCompositionSummary({
   teamScore,
   teamComposition,
@@ -75,6 +94,8 @@ export function TeamCompositionSummary({
   weight,
   confidence = "unknown",
   founderMarketFit,
+  subScores,
+  scoringBasis,
 }: TeamCompositionSummaryProps) {
   const founderMarketFitScore =
     typeof founderMarketFit?.score === "number" ? Math.round(founderMarketFit.score) : null;
@@ -121,6 +142,30 @@ export function TeamCompositionSummary({
               <span className="text-lg text-muted-foreground">/100</span>
             </div>
           </div>
+
+          {(scoringBasis || (subScores && subScores.length > 0)) && (
+            <div className="mt-5 space-y-4 border-t border-border/60 pt-4">
+              {scoringBasis && <p className="text-sm text-muted-foreground">{scoringBasis}</p>}
+              {subScores && subScores.length > 0 && (
+                <div className="space-y-3">
+                  {subScores.map((item) => (
+                <div key={item.dimension} className="grid grid-cols-[minmax(0,1fr)_48px] gap-3">
+                  <div>
+                    <div className="mb-1 flex items-center justify-between gap-3 text-xs">
+                      <span className="font-medium">{item.dimension}</span>
+                      <span className="text-muted-foreground">{formatWeight(item.weight)}</span>
+                    </div>
+                    <div className="h-2.5 rounded-full bg-muted">
+                      <div className={`h-full rounded-full ${scoreBarTone(item.score)}`} style={{ width: `${Math.max(0, Math.min(100, item.score))}%` }} />
+                    </div>
+                  </div>
+                  <div className="text-right text-xs font-medium">{Math.round(item.score)}</div>
+                </div>
+              ))}
+                </div>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 

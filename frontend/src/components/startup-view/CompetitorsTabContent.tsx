@@ -1,5 +1,6 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { CompetitorAnalysis } from "@/components/CompetitorAnalysis";
+import { DataGapsSection, parseDataGapItems } from "@/components/DataGapsSection";
 import { Swords } from "lucide-react";
 import type { Evaluation } from "@/types/evaluation";
 
@@ -169,8 +170,10 @@ export function CompetitorsTabContent({
       .filter((item: unknown): item is { dimension: string; weight: number; score: number } => item !== null);
   })();
 
+  const competitiveDataGaps = parseDataGapItems(competitiveData.dataGaps);
+
   return (
-    <div data-testid="container-competitor-analysis">
+    <div data-testid="container-competitor-analysis" className="space-y-6">
       <CompetitorAnalysis
         directCompetitors={normalizedDirectCompetitors}
         indirectCompetitors={indirectCompetitors}
@@ -206,6 +209,7 @@ export function CompetitorsTabContent({
         subScores={competitiveSubScores}
         scoringBasis={competitiveScoringBasis}
       />
+      <DataGapsSection gaps={competitiveDataGaps} />
     </div>
   );
 }

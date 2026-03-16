@@ -553,14 +553,32 @@ Following a full audit against the Archive UI specs (`Downloads/Archive/ui/*.md`
 - [x] Claims credibility table — structured comparison table from `claimsAssessment[]` with claim, deck says, evidence, and color-coded verdict badges (Verified/Partially Verified/Unverified/Contradicted)
 - [x] Moat assessment card — cross-referenced from competitive advantage agent output with moat type badge, moat stage badge, self-reinforcing indicator, and evidence text
 
-**Remaining spec items not yet implemented (lower priority / complex charts):**
-- [ ] TAM Funnel visual (Market — currently renders as 3 side-by-side cards, spec wants funnel/concentric shape)
-- [ ] Deck vs Research horizontal bar chart (Market — currently text comparison)
-- [ ] Source Attribution Table with tier/geography columns (Market — currently basic source list)
-- [ ] Concentration Spectrum bar visual (Market — currently just text)
-- [ ] Financials Section 7 recharts (revenue, burn, scenario, margin — requires actual chart data from financial model upload)
-- [ ] Feature source attribution badges per feature (Product — `keyFeatures[].verifiedBy[]`)
-- [ ] Structured Data Gaps with impact badges across all tabs (partially done in Financials, not yet in Team/Product/Competitors/Market)
+**Final UI Feature Implementation (2026-03-16, second pass):**
+
+**Data Gaps with Impact Badges (all tabs):**
+- [x] Created shared `DataGapsSection` component (`components/DataGapsSection.tsx`) with `parseDataGapItems` parser and impact badge color coding (Critical=red, Important=amber, Minor=grey)
+- [x] Market tab — replaced flat text gap list with structured `DataGapsSection`
+- [x] Team tab — added `DataGapsSection` after team grid
+- [x] Product tab — added `DataGapsSection` after pitch recommendations
+- [x] Competitors tab — added `DataGapsSection` after competitor analysis
+
+**Product Tab:**
+- [x] Feature source attribution badges — new `toFeaturesWithSources()` parser extracting `verifiedBy[]` per feature, with color-coded source badges (deck=grey, website=blue, research=green) and "Deck only" warning badge
+
+**Market Tab:**
+- [x] TAM Funnel visual — replaced 3 flat cards with vertically stacked narrowing bars (TAM=100%, SAM=70%, SOM=40%) communicating step-down relationship, with methodology and source attribution
+- [x] Source Attribution Table — dedicated table with Estimate, Source, Tier, Date, Geography columns for TAM and SAM sources
+- [x] Concentration Spectrum bar — horizontal gradient bar (Fragmented → Consolidated) with positioned marker dot based on `structureType`, direction arrow, and evidence text
+- [x] Deck vs Research comparison — visual comparison card with paired bars per metric (TAM, Growth Rate), color-coded border (green=aligned, red=discrepancy), and discrepancy badge
+
+**Financials Tab:**
+- [x] Financial Projections charts (recharts) — 4 charts in a responsive 2x2 grid, only rendered when `financialModelProvided` and data arrays are non-empty:
+  - Revenue Projection: `LineChart` with period on X, revenue on Y
+  - Burn & Cash Runway: `ComposedChart` with bar (burn) and line (cash balance), dual Y-axis, zero reference line
+  - Scenario Comparison: `LineChart` with dynamic lines per scenario key from `scenarios` object
+  - Margin Progression: `AreaChart` with gross margin and operating margin lines, zero reference line
+
+**All Archive UI spec items are now implemented.**
 
 ### Rollback Safety
 

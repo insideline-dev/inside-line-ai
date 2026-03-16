@@ -11,6 +11,24 @@ import {
   FileSpreadsheet,
   BarChart3,
 } from "lucide-react";
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  AreaChart,
+  Area,
+  ComposedChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ReferenceLine,
+  PieChart,
+  Pie,
+  Cell,
+} from "recharts";
 import type { Evaluation } from "@/types/evaluation";
 
 interface FinancialsTabContentProps {
@@ -173,6 +191,81 @@ function parseDataGapItems(value: unknown): Array<{ gap: string; impact: string;
 function countTrue(values: Array<boolean | null>): number {
   return values.filter((value) => value === true).length;
 }
+
+function formatCompactCurrency(value: number): string {
+  if (Math.abs(value) >= 1_000_000_000) return `$${(value / 1_000_000_000).toFixed(1)}B`;
+  if (Math.abs(value) >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`;
+  if (Math.abs(value) >= 1_000) return `$${Math.round(value / 1_000)}K`;
+  return `$${Math.round(value)}`;
+}
+
+interface RevenuePoint { period: string; revenue: number }
+interface BurnPoint { period: string; burn: number; cashBalance: number }
+interface ScenarioPoint { period: string; [scenario: string]: string | number }
+interface MarginPoint { period: string; grossMargin: number; operatingMargin: number }
+
+function parseRevenueProjection(raw: unknown[]): RevenuePoint[] {
+  return raw
+    .map((item) => {
+      const r = toRecord(item);
+      const period = toString(r.period);
+      const revenue = toNumber(r.revenue);
+      if (!period || revenue === null) return null;
+      return { period, revenue };
+    })
+    .filter((item): item is RevenuePoint => item !== null);
+}
+
+function parseBurnProjection(raw: unknown[]): BurnPoint[] {
+  return raw
+    .map((item) => {
+      const r = toRecord(item);
+      const period = toString(r.period);
+      const burn = toNumber(r.burn);
+      const cashBalance = toNumber(r.cashBalance) ?? 0;
+      if (!period || burn === null) return null;
+      return { period, burn, cashBalance };
+    })
+    .filter((item): item is BurnPoint => item !== null);
+}
+
+function parseScenarioComparison(raw: unknown[]): { data: ScenarioPoint[]; scenarioNames: string[] } {
+  const scenarioNames = new Set<string>();
+  const data = raw
+    .map((item) => {
+      const r = toRecord(item);
+      const period = toString(r.period);
+      if (!period) return null;
+      const scenarios = toRecord(r.scenarios);
+      const point: ScenarioPoint = { period };
+      for (const [key, val] of Object.entries(scenarios)) {
+        const num = toNumber(val);
+        if (num !== null) {
+          point[key] = num;
+          scenarioNames.add(key);
+        }
+      }
+      return point;
+    })
+    .filter((item): item is ScenarioPoint => item !== null);
+  return { data, scenarioNames: Array.from(scenarioNames) };
+}
+
+function parseMarginProgression(raw: unknown[]): MarginPoint[] {
+  return raw
+    .map((item) => {
+      const r = toRecord(item);
+      const period = toString(r.period);
+      const grossMargin = toNumber(r.grossMargin);
+      const operatingMargin = toNumber(r.operatingMargin);
+      if (!period) return null;
+      return { period, grossMargin: grossMargin ?? 0, operatingMargin: operatingMargin ?? 0 };
+    })
+    .filter((item): item is MarginPoint => item !== null);
+}
+
+const SCENARIO_COLORS = ["#8b5cf6", "#3b82f6", "#10b981", "#f59e0b", "#ef4444"];
+const DONUT_COLORS = ["#8b5cf6", "#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#ec4899", "#06b6d4", "#84cc16"];
 
 function Gauge({
   label,
@@ -465,36 +558,57 @@ export function FinancialsTabContent({ evaluation, financialsWeight }: Financial
                 )}
               </div>
 
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                <CoverageCell label="Burn Plan Described" value={capitalCoverage.burnPlanDescribed} />
-                <CoverageCell label="Use of Funds Breakdown" value={capitalCoverage.useOfFundsDescribed} />
-                <CoverageCell label="Runway Estimated" value={capitalCoverage.runwayEstimated} />
-                <CoverageCell label="Raise Justified" value={capitalCoverage.raiseJustified} />
-                <CoverageCell label="Milestones Tied to Capital" value={capitalCoverage.milestoneTied} />
-                <CoverageCell label="Capital Efficiency Addressed" value={capitalCoverage.capitalEfficiencyAddressed} />
-              </div>
-
-              {useOfFundsBreakdown.length > 0 && (
-                <div className="space-y-3 rounded-xl border bg-muted/20 p-4">
-                  <div className="flex items-center gap-2">
-                    <Target className="h-4 w-4 text-primary" />
-                    <p className="text-sm font-medium">Use of Funds Breakdown</p>
-                  </div>
-                  <div className="space-y-3">
-                    {useOfFundsBreakdown.map((item) => (
-                      <div key={item.category} className="space-y-1.5">
-                        <div className="flex items-center justify-between gap-3 text-xs">
-                          <span>{item.category}</span>
-                          <span className="font-medium">{formatPercent(item.percentage)}</span>
-                        </div>
-                        <div className="h-2 rounded-full bg-background">
-                          <div className="h-full rounded-full bg-primary" style={{ width: `${Math.max(0, Math.min(100, item.percentage))}%` }} />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+              <div className={`grid gap-4 ${useOfFundsBreakdown.length > 0 ? "md:grid-cols-2" : ""}`}>
+                <div className="grid gap-3 grid-cols-2 xl:grid-cols-3 content-start">
+                  <CoverageCell label="Burn Plan Described" value={capitalCoverage.burnPlanDescribed} />
+                  <CoverageCell label="Use of Funds Breakdown" value={capitalCoverage.useOfFundsDescribed} />
+                  <CoverageCell label="Runway Estimated" value={capitalCoverage.runwayEstimated} />
+                  <CoverageCell label="Raise Justified" value={capitalCoverage.raiseJustified} />
+                  <CoverageCell label="Milestones Tied to Capital" value={capitalCoverage.milestoneTied} />
+                  <CoverageCell label="Capital Efficiency Addressed" value={capitalCoverage.capitalEfficiencyAddressed} />
                 </div>
-              )}
+
+                {useOfFundsBreakdown.length > 0 && (
+                  <div className="space-y-3 rounded-xl border bg-muted/20 p-4">
+                    <div className="flex items-center gap-2">
+                      <Target className="h-4 w-4 text-primary" />
+                      <p className="text-sm font-medium">Use of Funds Breakdown</p>
+                    </div>
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="w-[180px] h-[180px] shrink-0">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie
+                              data={useOfFundsBreakdown}
+                              dataKey="percentage"
+                              nameKey="category"
+                              cx="50%"
+                              cy="50%"
+                              innerRadius={45}
+                              outerRadius={75}
+                              paddingAngle={2}
+                            >
+                              {useOfFundsBreakdown.map((_, idx) => (
+                                <Cell key={idx} fill={DONUT_COLORS[idx % DONUT_COLORS.length]} />
+                              ))}
+                            </Pie>
+                            <Tooltip formatter={(value) => `${Number(value).toFixed(0)}%`} />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                      <div className="w-full space-y-1.5">
+                        {useOfFundsBreakdown.map((item, idx) => (
+                          <div key={item.category} className="flex items-center gap-2 text-xs">
+                            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: DONUT_COLORS[idx % DONUT_COLORS.length] }} />
+                            <span className="flex-1">{item.category}</span>
+                            <span className="font-medium">{formatPercent(item.percentage)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
 
               {capitalPlanSummary && (
                 <p className="text-sm leading-relaxed text-muted-foreground">{capitalPlanSummary}</p>
@@ -523,8 +637,26 @@ export function FinancialsTabContent({ evaluation, financialsWeight }: Financial
                 <div className="space-y-2">
                   <p className="font-medium">Upload Financial Model for Full Analysis</p>
                   <p className="text-sm text-muted-foreground">
-                    A spreadsheet model unlocks deeper projection, scenario, and planning analysis. This tab is already ready to render that data when it becomes available.
+                    A spreadsheet model unlocks deeper projection, scenario, and planning analysis.
                   </p>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <div className="rounded-lg border bg-background p-2.5 text-xs">
+                      <TrendingUp className="h-3.5 w-3.5 text-primary mb-1" />
+                      <span className="font-medium">Revenue Projections</span>
+                    </div>
+                    <div className="rounded-lg border bg-background p-2.5 text-xs">
+                      <BarChart3 className="h-3.5 w-3.5 text-primary mb-1" />
+                      <span className="font-medium">Burn & Runway Charts</span>
+                    </div>
+                    <div className="rounded-lg border bg-background p-2.5 text-xs">
+                      <Target className="h-3.5 w-3.5 text-primary mb-1" />
+                      <span className="font-medium">Scenario Comparison</span>
+                    </div>
+                    <div className="rounded-lg border bg-background p-2.5 text-xs">
+                      <Wallet className="h-3.5 w-3.5 text-primary mb-1" />
+                      <span className="font-medium">Margin Progression</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -634,6 +766,99 @@ export function FinancialsTabContent({ evaluation, financialsWeight }: Financial
 
       {financialModelProvided && (
         <>
+          {(() => {
+            const revData = parseRevenueProjection(revenueProjection);
+            const burnData = parseBurnProjection(burnProjection);
+            const { data: scenarioData, scenarioNames } = parseScenarioComparison(scenarioComparison);
+            const marginData = parseMarginProgression(marginProgression);
+            const hasCharts = revData.length > 0 || burnData.length > 0 || scenarioData.length > 0 || marginData.length > 0;
+            if (!hasCharts) return null;
+            return (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <BarChart3 className="h-5 w-5 text-primary" />
+                    Financial Projections
+                  </CardTitle>
+                  <CardDescription>Charts derived from the uploaded financial model.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid gap-6 lg:grid-cols-2">
+                    {revData.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-xs font-medium text-muted-foreground">Revenue Projection</p>
+                        <ResponsiveContainer width="100%" height={220}>
+                          <LineChart data={revData}>
+                            <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                            <XAxis dataKey="period" tick={{ fontSize: 10 }} />
+                            <YAxis tickFormatter={formatCompactCurrency} tick={{ fontSize: 10 }} width={60} />
+                            <Tooltip formatter={(value) => formatCompactCurrency(Number(value))} />
+                            <Line type="monotone" dataKey="revenue" stroke="#8b5cf6" strokeWidth={2} dot={{ r: 3 }} />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+
+                    {burnData.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-xs font-medium text-muted-foreground">Burn & Cash Runway</p>
+                        <ResponsiveContainer width="100%" height={220}>
+                          <ComposedChart data={burnData}>
+                            <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                            <XAxis dataKey="period" tick={{ fontSize: 10 }} />
+                            <YAxis yAxisId="left" tickFormatter={formatCompactCurrency} tick={{ fontSize: 10 }} width={60} />
+                            <YAxis yAxisId="right" orientation="right" tickFormatter={formatCompactCurrency} tick={{ fontSize: 10 }} width={60} />
+                            <Tooltip formatter={(value) => formatCompactCurrency(Number(value))} />
+                            <Legend wrapperStyle={{ fontSize: 10 }} />
+                            <Bar yAxisId="left" dataKey="burn" fill="#ef4444" opacity={0.7} name="Monthly Burn" />
+                            <Line yAxisId="right" type="monotone" dataKey="cashBalance" stroke="#3b82f6" strokeWidth={2} dot={{ r: 3 }} name="Cash Balance" />
+                            <ReferenceLine yAxisId="right" y={0} stroke="#94a3b8" strokeDasharray="4 4" label={{ value: "Zero Cash", position: "right", fontSize: 10, fill: "#94a3b8" }} />
+                          </ComposedChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+
+                    {scenarioData.length > 0 && scenarioNames.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-xs font-medium text-muted-foreground">Scenario Comparison</p>
+                        <ResponsiveContainer width="100%" height={220}>
+                          <LineChart data={scenarioData}>
+                            <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                            <XAxis dataKey="period" tick={{ fontSize: 10 }} />
+                            <YAxis tickFormatter={formatCompactCurrency} tick={{ fontSize: 10 }} width={60} />
+                            <Tooltip formatter={(value) => formatCompactCurrency(Number(value))} />
+                            <Legend wrapperStyle={{ fontSize: 10 }} />
+                            {scenarioNames.map((name, idx) => (
+                              <Line key={name} type="monotone" dataKey={name} stroke={SCENARIO_COLORS[idx % SCENARIO_COLORS.length]} strokeWidth={2} dot={{ r: 2 }} />
+                            ))}
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+
+                    {marginData.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-xs font-medium text-muted-foreground">Margin Progression</p>
+                        <ResponsiveContainer width="100%" height={220}>
+                          <AreaChart data={marginData}>
+                            <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                            <XAxis dataKey="period" tick={{ fontSize: 10 }} />
+                            <YAxis tickFormatter={(v: number) => `${v}%`} tick={{ fontSize: 10 }} width={45} />
+                            <Tooltip formatter={(value) => `${Number(value).toFixed(1)}%`} />
+                            <Legend wrapperStyle={{ fontSize: 10 }} />
+                            <Area type="monotone" dataKey="grossMargin" stroke="#10b981" fill="#10b981" fillOpacity={0.15} strokeWidth={2} name="Gross Margin" />
+                            <Area type="monotone" dataKey="operatingMargin" stroke="#f59e0b" fill="#f59e0b" fillOpacity={0.15} strokeWidth={2} name="Operating Margin" />
+                            <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="4 4" />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })()}
+
           <Card>
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
@@ -642,25 +867,13 @@ export function FinancialsTabContent({ evaluation, financialsWeight }: Financial
               </CardTitle>
               <CardDescription>Structured output unlocked by uploaded model data.</CardDescription>
             </CardHeader>
-            <CardContent className="grid gap-4 lg:grid-cols-2">
-              <div className="rounded-lg border bg-muted/20 p-4">
-                <p className="text-sm font-medium">Projection Datasets</p>
-                <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
-                  <li>Revenue projection points: {revenueProjection.length}</li>
-                  <li>Burn projection points: {burnProjection.length}</li>
-                  <li>Scenario comparison points: {scenarioComparison.length}</li>
-                  <li>Margin progression points: {marginProgression.length}</li>
-                </ul>
-              </div>
-              <div className="rounded-lg border bg-muted/20 p-4">
-                <p className="text-sm font-medium">Model Commentary</p>
-                <div className="mt-3 space-y-2 text-sm text-muted-foreground">
-                  {scenarioDetail && <p>Scenario detail: {scenarioDetail}</p>}
-                  {assumptionAssessment && <p>Assumption assessment: {assumptionAssessment}</p>}
-                  {!scenarioDetail && !assumptionAssessment && (
-                    <p>No additional model commentary was returned for this run.</p>
-                  )}
-                </div>
+            <CardContent>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                {scenarioDetail && <p>Scenario detail: {scenarioDetail}</p>}
+                {assumptionAssessment && <p>Assumption assessment: {assumptionAssessment}</p>}
+                {!scenarioDetail && !assumptionAssessment && (
+                  <p>No additional model commentary was returned for this run.</p>
+                )}
               </div>
             </CardContent>
           </Card>

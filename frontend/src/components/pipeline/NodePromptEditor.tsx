@@ -55,6 +55,44 @@ function resolvePublishedForStage(
   return stageSpecific ?? globalFallback ?? null;
 }
 
+interface RevisionItem {
+  id: string;
+  status: string;
+  stage: Stage | null;
+  systemPrompt: string;
+  userPrompt: string;
+  version: number;
+  notes?: string;
+  createdAt: string;
+  publishedAt?: string;
+}
+
+interface RevisionsPayload {
+  revisions: RevisionItem[];
+  allowedVariables: string[];
+  requiredVariables: string[];
+}
+
+const EMPTY_PAYLOAD: RevisionsPayload = {
+  revisions: [],
+  allowedVariables: [],
+  requiredVariables: [],
+};
+
+function extractRevisionsPayload(data: unknown): RevisionsPayload {
+  if (!data || typeof data !== "object") return EMPTY_PAYLOAD;
+  const raw = "data" in data && (data as Record<string, unknown>).data
+    ? (data as Record<string, unknown>).data
+    : data;
+  if (!raw || typeof raw !== "object") return EMPTY_PAYLOAD;
+  const obj = raw as Record<string, unknown>;
+  return {
+    revisions: Array.isArray(obj.revisions) ? (obj.revisions as RevisionItem[]) : [],
+    allowedVariables: Array.isArray(obj.allowedVariables) ? (obj.allowedVariables as string[]) : [],
+    requiredVariables: Array.isArray(obj.requiredVariables) ? (obj.requiredVariables as string[]) : [],
+  };
+}
+
 export function NodePromptEditor({ promptKey }: NodePromptEditorProps) {
   const STAGE_OPTIONS = Object.values(CreateAiPromptRevisionDtoStage);
 
@@ -62,25 +100,7 @@ export function NodePromptEditor({ promptKey }: NodePromptEditorProps) {
   const [promptMode, setPromptMode] = useState<"system" | "user">("system");
   const { data, isLoading } = useAdminControllerGetAiPromptRevisions(promptKey);
 
-  const payload = (data as unknown as {
-    revisions: Array<{
-      id: string;
-      status: string;
-      stage: Stage | null;
-      systemPrompt: string;
-      userPrompt: string;
-      version: number;
-      notes?: string;
-      createdAt: string;
-      publishedAt?: string;
-    }>;
-    allowedVariables: string[];
-    requiredVariables: string[];
-  }) ?? {
-    revisions: [],
-    allowedVariables: [],
-    requiredVariables: [],
-  };
+  const payload = extractRevisionsPayload(data);
 
   const published = useMemo(
     () => resolvePublishedForStage(payload.revisions, selectedStage),

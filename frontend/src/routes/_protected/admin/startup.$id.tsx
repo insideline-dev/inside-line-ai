@@ -767,6 +767,7 @@ function AdminReviewPage() {
                   startup={startup}
                   evaluation={evaluation}
                   weights={stageWeights}
+                  onNavigateTab={(tab) => setActiveTab(tab as AdminStartupTab)}
                 />
               </TabsContent>
 

@@ -784,6 +784,7 @@ function AdminReviewPage() {
                 <MarketTabContent
                   evaluation={evaluation}
                   marketWeight={stageWeights?.market}
+                  fundingStage={startup.stage}
                 />
               </TabsContent>
 

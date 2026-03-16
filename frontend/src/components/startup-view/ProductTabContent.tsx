@@ -4,6 +4,7 @@ import { Package, Image, Code, Layers } from "lucide-react";
 import type { Startup } from "@/types/startup";
 import type { Evaluation } from "@/types/evaluation";
 import { ProductScoreSummary } from "@/components/ProductScoreSummary";
+import { DataGapsSection, parseDataGapItems } from "@/components/DataGapsSection";
 
 interface ProductTabContentProps {
   startup: Startup;
@@ -56,6 +57,36 @@ function toStructuredTextArray(
     .filter(Boolean);
 }
 
+interface FeatureWithSources {
+  feature: string;
+  verifiedBy: string[];
+}
+
+function toFeaturesWithSources(value: unknown): FeatureWithSources[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item): FeatureWithSources | null => {
+      if (typeof item === "string") return item.trim() ? { feature: item.trim(), verifiedBy: [] } : null;
+      if (!item || typeof item !== "object") return null;
+      const record = item as Record<string, unknown>;
+      const feature = typeof record.feature === "string" ? record.feature.trim() : "";
+      if (!feature) return null;
+      const verifiedBy = Array.isArray(record.verifiedBy)
+        ? (record.verifiedBy as unknown[]).filter((v): v is string => typeof v === "string" && v.trim().length > 0).map((v) => v.trim().toLowerCase())
+        : [];
+      return { feature, verifiedBy };
+    })
+    .filter((item): item is FeatureWithSources => item !== null);
+}
+
+function sourceBadgeClass(source: string): string {
+  switch (source) {
+    case "website": return "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-400";
+    case "research": return "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400";
+    default: return "border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400";
+  }
+}
+
 function toDataGapStrings(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value
@@ -82,35 +113,6 @@ function dedupeStrings(values: string[]): string[] {
   return output;
 }
 
-interface PitchRecommendationItem {
-  deckMissingElement: string;
-  whyItMatters: string;
-  recommendation: string;
-}
-
-function toPitchRecommendations(value: unknown): PitchRecommendationItem[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map((item): PitchRecommendationItem | null => {
-      if (!item || typeof item !== "object") return null;
-      const record = item as Record<string, unknown>;
-      const deckMissingElement =
-        typeof record.deckMissingElement === "string"
-          ? record.deckMissingElement.trim()
-          : "";
-      const whyItMatters =
-        typeof record.whyItMatters === "string"
-          ? record.whyItMatters.trim()
-          : "";
-      const recommendation =
-        typeof record.recommendation === "string"
-          ? record.recommendation.trim()
-          : "";
-      if (!deckMissingElement && !recommendation) return null;
-      return { deckMissingElement, whyItMatters, recommendation };
-    })
-    .filter((item): item is PitchRecommendationItem => item !== null);
-}
 
 function normalizeTrlStage(value?: string): string | undefined {
   if (!value) return undefined;
@@ -191,6 +193,44 @@ function toClaimsAssessment(value: unknown): ClaimAssessmentItem[] {
     .filter((item): item is ClaimAssessmentItem => item !== null);
 }
 
+const MOAT_STAGES = ["None", "Emerging", "Developing", "Established", "Dominant"] as const;
+
+function moatStageToIndex(stage: string): number {
+  const n = stage.toLowerCase().trim();
+  if (n.includes("none")) return 0;
+  if (n.includes("emerg")) return 1;
+  if (n.includes("develop")) return 2;
+  if (n.includes("establish")) return 3;
+  if (n.includes("dominan")) return 4;
+  return -1;
+}
+
+function MoatStageIndicator({ stage }: { stage: string }) {
+  const activeIdx = moatStageToIndex(stage);
+  return (
+    <div className="flex items-center gap-1">
+      {MOAT_STAGES.map((s, idx) => {
+        const isActive = idx === activeIdx;
+        const isPast = idx < activeIdx;
+        return (
+          <div key={s} className="flex-1 text-center">
+            <div
+              className={`h-2 rounded-full ${
+                isActive
+                  ? idx >= 3 ? "bg-emerald-500" : idx >= 1 ? "bg-amber-400" : "bg-slate-400"
+                  : isPast
+                    ? "bg-emerald-200 dark:bg-emerald-800"
+                    : "bg-muted"
+              }`}
+            />
+            <p className={`mt-0.5 text-[9px] ${isActive ? "font-semibold" : "text-muted-foreground"}`}>{s}</p>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function verdictBadgeClass(verdict: string): string {
   switch (verdict.toLowerCase()) {
     case "verified": return "border-emerald-300 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400";
@@ -251,9 +291,8 @@ export function ProductTabContent({ startup, evaluation, showScores = true, prod
   // New schema: productOverview fields
   const productOverview = productData?.productOverview as Record<string, unknown> | undefined;
   const keyFeatures = toStructuredTextArray(productData?.keyFeatures, "feature");
+  const keyFeaturesWithSources = toFeaturesWithSources(productData?.keyFeatures);
   const technologyStack = toStructuredTextArray(productData?.technologyStack, "technology");
-  // New schema: founderPitchRecommendations
-  const founderPitchRecommendations = toPitchRecommendations(productData?.founderPitchRecommendations);
   const productSubScores = toSubScores(productData?.scoring?.subScores);
   const productScoringBasis = typeof productData?.scoring?.scoringBasis === "string" ? productData.scoring.scoringBasis.trim() : undefined;
   const rawTechStage = productOverview?.techStage as string | undefined ?? productData?.technologyStage as string | undefined;
@@ -265,6 +304,7 @@ export function ProductTabContent({ startup, evaluation, showScores = true, prod
   const moatStage = typeof moatAssessment?.moatStage === "string" ? moatAssessment.moatStage : undefined;
   const moatEvidence2 = typeof moatAssessment?.moatEvidence === "string" ? moatAssessment.moatEvidence : undefined;
   const moatSelfReinforcing = typeof moatAssessment?.selfReinforcing === "boolean" ? moatAssessment.selfReinforcing : undefined;
+  const productDataGaps = parseDataGapItems(productData?.dataGaps);
 
   const hasContent =
     founderScreenshots.length > 0 ||
@@ -332,7 +372,21 @@ export function ProductTabContent({ startup, evaluation, showScores = true, prod
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* New schema: productOverview.whatItDoes > legacy productDescription */}
+            {/* Product Identity Bar — 3 inline badges */}
+            {(productOverview?.productCategory || productOverview?.targetUser || rawTechStage) && (
+              <div className="flex flex-wrap gap-2">
+                {productOverview?.productCategory ? (
+                  <Badge variant="secondary">{String(productOverview.productCategory)}</Badge>
+                ) : null}
+                {productOverview?.targetUser ? (
+                  <Badge variant="outline">{String(productOverview.targetUser)}</Badge>
+                ) : null}
+                {rawTechStage && (
+                  <Badge variant="outline" className="border-primary/30 text-primary">{rawTechStage}</Badge>
+                )}
+              </div>
+            )}
+            {/* Description */}
             {(productOverview?.whatItDoes || productData?.productDescription) && (
               <div>
                 <h4 className="text-sm font-medium mb-1">Description</h4>
@@ -341,25 +395,11 @@ export function ProductTabContent({ startup, evaluation, showScores = true, prod
                 </p>
               </div>
             )}
-            {/* New schema: productOverview.targetUser */}
-            {productOverview?.targetUser && (
-              <div>
-                <h4 className="text-sm font-medium mb-1">Target User</h4>
-                <p className="text-sm text-muted-foreground leading-relaxed">{productOverview.targetUser as string}</p>
-              </div>
-            )}
-            {/* New schema: productOverview.productCategory */}
-            {productOverview?.productCategory && (
-              <div>
-                <h4 className="text-sm font-medium mb-1">Category</h4>
-                <p className="text-sm text-muted-foreground leading-relaxed">{productOverview.productCategory as string}</p>
-              </div>
-            )}
-            {/* New schema: productOverview.coreValueProp > legacy uniqueValue */}
+            {/* Core Value Prop — callout box */}
             {(productOverview?.coreValueProp || productData?.uniqueValue) && (
-              <div>
-                <h4 className="text-sm font-medium mb-1">Unique Value</h4>
-                <p className="text-sm text-muted-foreground leading-relaxed">
+              <div className="rounded-lg border-l-4 border-primary bg-primary/5 p-4">
+                <h4 className="text-sm font-semibold mb-1">Core Value Proposition</h4>
+                <p className="text-sm leading-relaxed">
                   {(productOverview?.coreValueProp as string) || productData.uniqueValue}
                 </p>
               </div>
@@ -432,13 +472,13 @@ export function ProductTabContent({ startup, evaluation, showScores = true, prod
           <CardContent className="space-y-3">
             <div className="flex items-center gap-3 flex-wrap">
               {moatType && <Badge variant="secondary" className="capitalize">{moatType.replace(/_/g, " ")}</Badge>}
-              <Badge variant="outline" className="capitalize">{moatStage.replace(/_/g, " ")}</Badge>
               {moatSelfReinforcing !== undefined && (
                 <Badge variant={moatSelfReinforcing ? "default" : "secondary"}>
                   {moatSelfReinforcing ? "Self-reinforcing" : "Not self-reinforcing"}
                 </Badge>
               )}
             </div>
+            <MoatStageIndicator stage={moatStage} />
             {moatEvidence2 && (
               <p className="text-sm text-muted-foreground">{moatEvidence2}</p>
             )}
@@ -474,7 +514,41 @@ export function ProductTabContent({ startup, evaluation, showScores = true, prod
         </Card>
       )}
 
-      {keyFeatures.length > 0 && (
+      {keyFeaturesWithSources.length > 0 ? (
+        <Card className="border-primary/15" data-testid="card-key-features">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Layers className="w-5 h-5" />
+              <span>Key Features</span>
+            </CardTitle>
+            <CardDescription>Core capabilities identified from analysis</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-2">
+              {keyFeaturesWithSources.map((item, idx) => (
+                <div key={idx} className="flex items-start gap-2 text-sm">
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary mt-2 shrink-0" />
+                  <span className="flex-1">{item.feature}</span>
+                  {item.verifiedBy.length > 0 && (
+                    <div className="flex gap-1 shrink-0">
+                      {item.verifiedBy.map((source) => (
+                        <Badge key={source} variant="outline" className={`text-[10px] px-1.5 py-0 ${sourceBadgeClass(source)}`}>
+                          {source}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                  {item.verifiedBy.length === 1 && item.verifiedBy[0] === "deck" && (
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-orange-200 bg-orange-50 text-orange-600 dark:border-orange-800 dark:bg-orange-950/30 dark:text-orange-400">
+                      Deck only
+                    </Badge>
+                  )}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      ) : keyFeatures.length > 0 ? (
         <Card className="border-primary/15" data-testid="card-key-features">
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
@@ -494,7 +568,7 @@ export function ProductTabContent({ startup, evaluation, showScores = true, prod
             </div>
           </CardContent>
         </Card>
-      )}
+      ) : null}
 
       {technologyStack.length > 0 && (
         <Card className="border-primary/15" data-testid="card-tech-stack">
@@ -517,34 +591,7 @@ export function ProductTabContent({ startup, evaluation, showScores = true, prod
         </Card>
       )}
 
-      {founderPitchRecommendations.length > 0 && (
-        <Card className="border-primary/15" data-testid="card-pitch-recommendations">
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <Layers className="w-5 h-5" />
-              <span>Pitch Recommendations</span>
-            </CardTitle>
-            <CardDescription>Actionable suggestions to strengthen the product narrative</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ul className="space-y-2">
-              {founderPitchRecommendations.map((rec, idx) => (
-                <li key={idx} className="rounded-md border border-border/60 p-3 text-sm" data-testid={`item-pitch-rec-${idx}`}>
-                  {rec.deckMissingElement ? (
-                    <p className="font-medium">{rec.deckMissingElement}</p>
-                  ) : null}
-                  {rec.whyItMatters ? (
-                    <p className="mt-1 text-muted-foreground">{rec.whyItMatters}</p>
-                  ) : null}
-                  {rec.recommendation ? (
-                    <p className="mt-2">{rec.recommendation}</p>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-      )}
+      <DataGapsSection gaps={productDataGaps} />
     </div>
   );
 }

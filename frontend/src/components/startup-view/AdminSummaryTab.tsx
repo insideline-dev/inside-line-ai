@@ -38,6 +38,7 @@ interface SectionScoreRow {
   label: string;
   score: number;
   weight: number;
+  pending: boolean;
 }
 
 const EXIT_SCENARIO_DISPLAY_ORDER = {
@@ -75,9 +76,23 @@ function formatMoic(value: number): string {
   return `${Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1)}X`;
 }
 
+function moicColor(value: number): string {
+  if (!Number.isFinite(value)) return "";
+  if (value >= 5) return "text-emerald-600 dark:text-emerald-400";
+  if (value >= 3) return "text-amber-600 dark:text-amber-400";
+  return "text-rose-600 dark:text-rose-400";
+}
+
 function formatPercent(value: number): string {
   if (!Number.isFinite(value)) return "N/A";
   return `${Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1)}%`;
+}
+
+function irrColor(value: number): string {
+  if (!Number.isFinite(value)) return "";
+  if (value >= 30) return "text-emerald-600 dark:text-emerald-400";
+  if (value >= 15) return "text-amber-600 dark:text-amber-400";
+  return "text-rose-600 dark:text-rose-400";
 }
 
 function scoreBarClass(score: number): string {
@@ -88,24 +103,24 @@ function scoreBarClass(score: number): string {
   return "bg-rose-500";
 }
 
+function buildRow(evaluation: Evaluation, id: string, label: string, key: Parameters<typeof getDisplaySectionScore>[1], weight: number): SectionScoreRow {
+  const raw = getDisplaySectionScore(evaluation, key);
+  return { id, label, score: raw ?? 0, weight, pending: raw === null };
+}
+
 function getSectionRows(evaluation: Evaluation, weights?: ScoringWeights | null): SectionScoreRow[] {
   return [
-    { id: "team", label: "Team", score: getDisplaySectionScore(evaluation, "team") ?? 0, weight: weights?.team ?? 0 },
-    { id: "market", label: "Market", score: getDisplaySectionScore(evaluation, "market") ?? 0, weight: weights?.market ?? 0 },
-    { id: "product", label: "Product", score: getDisplaySectionScore(evaluation, "product") ?? 0, weight: weights?.product ?? 0 },
-    { id: "traction", label: "Traction", score: getDisplaySectionScore(evaluation, "traction") ?? 0, weight: weights?.traction ?? 0 },
-    { id: "businessModel", label: "Business Model", score: getDisplaySectionScore(evaluation, "businessModel") ?? 0, weight: weights?.businessModel ?? 0 },
-    { id: "gtm", label: "GTM", score: getDisplaySectionScore(evaluation, "gtm") ?? 0, weight: weights?.gtm ?? 0 },
-    {
-      id: "competitiveAdvantage",
-      label: "Competitive Advantage",
-      score: getDisplaySectionScore(evaluation, "competitiveAdvantage") ?? 0,
-      weight: weights?.competitiveAdvantage ?? 0,
-    },
-    { id: "financials", label: "Financials", score: getDisplaySectionScore(evaluation, "financials") ?? 0, weight: weights?.financials ?? 0 },
-    { id: "legal", label: "Legal", score: getDisplaySectionScore(evaluation, "legal") ?? 0, weight: weights?.legal ?? 0 },
-    { id: "dealTerms", label: "Deal Terms", score: getDisplaySectionScore(evaluation, "dealTerms") ?? 0, weight: weights?.dealTerms ?? 0 },
-    { id: "exitPotential", label: "Exit Potential", score: getDisplaySectionScore(evaluation, "exitPotential") ?? 0, weight: weights?.exitPotential ?? 0 },
+    buildRow(evaluation, "team", "Team", "team", weights?.team ?? 0),
+    buildRow(evaluation, "market", "Market", "market", weights?.market ?? 0),
+    buildRow(evaluation, "product", "Product", "product", weights?.product ?? 0),
+    buildRow(evaluation, "traction", "Traction", "traction", weights?.traction ?? 0),
+    buildRow(evaluation, "businessModel", "Business Model", "businessModel", weights?.businessModel ?? 0),
+    buildRow(evaluation, "gtm", "GTM", "gtm", weights?.gtm ?? 0),
+    buildRow(evaluation, "competitiveAdvantage", "Competitive Advantage", "competitiveAdvantage", weights?.competitiveAdvantage ?? 0),
+    buildRow(evaluation, "financials", "Financials", "financials", weights?.financials ?? 0),
+    buildRow(evaluation, "legal", "Legal", "legal", weights?.legal ?? 0),
+    buildRow(evaluation, "dealTerms", "Deal Terms", "dealTerms", weights?.dealTerms ?? 0),
+    buildRow(evaluation, "exitPotential", "Exit Potential", "exitPotential", weights?.exitPotential ?? 0),
   ];
 }
 
@@ -353,8 +368,8 @@ export function AdminSummaryTab({
   };
 
   const radarData = sectionRows.map((row) => ({
-    label: RADAR_SHORT_LABELS[row.label] ?? row.label,
-    score: row.score,
+    label: row.pending ? `${RADAR_SHORT_LABELS[row.label] ?? row.label} ⏳` : (RADAR_SHORT_LABELS[row.label] ?? row.label),
+    score: row.pending ? 0 : row.score,
     fullMark: 100,
   }));
 
@@ -465,7 +480,7 @@ export function AdminSummaryTab({
                         <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
                           MOIC
                         </p>
-                        <p className="mt-1 text-4xl font-bold tracking-tight">
+                        <p className={`mt-1 text-4xl font-bold tracking-tight ${moicColor(scenario.moic)}`}>
                           {formatMoic(scenario.moic)}
                         </p>
                       </div>
@@ -473,7 +488,7 @@ export function AdminSummaryTab({
                         <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
                           IRR
                         </p>
-                        <p className="mt-1 text-sm font-medium">
+                        <p className={`mt-1 text-sm font-medium ${irrColor(scenario.irr)}`}>
                           {formatPercent(scenario.irr)}
                         </p>
                       </div>
@@ -654,12 +669,16 @@ export function AdminSummaryTab({
                       className="grid w-full grid-cols-[95px_36px_minmax(0,1fr)_32px] items-center gap-3 rounded-md px-1 py-0.5 text-left hover:bg-muted/40 transition-colors cursor-pointer"
                       onClick={() => onNavigateTab?.(getAgentTab(row.id))}
                     >
-                      <span className="text-xs">{row.label}</span>
+                      <span className={`text-xs ${row.pending ? "text-muted-foreground" : ""}`}>{row.label}</span>
                       <span className="text-[11px] text-muted-foreground">{row.weight}%</span>
                       <div className="h-2.5 rounded-full bg-muted">
-                        <div className={`h-full rounded-full ${scoreBarClass(row.score)}`} style={{ width: `${row.score}%` }} />
+                        {row.pending ? (
+                          <div className="h-full rounded-full bg-muted-foreground/20 animate-pulse" style={{ width: "100%" }} />
+                        ) : (
+                          <div className={`h-full rounded-full ${scoreBarClass(row.score)}`} style={{ width: `${row.score}%` }} />
+                        )}
                       </div>
-                      <span className="text-right text-xs font-medium">{Math.round(row.score)}</span>
+                      <span className="text-right text-xs font-medium">{row.pending ? <span className="text-muted-foreground text-[10px]">—</span> : Math.round(row.score)}</span>
                     </button>
                   ))}
                 </div>

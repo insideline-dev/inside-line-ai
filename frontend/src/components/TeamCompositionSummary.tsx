@@ -24,6 +24,7 @@ interface TeamComposition {
   hasIndustryExpert?: boolean;
   hasOperationsLeader?: boolean;
   teamBalance?: string;
+  functionalCoverage?: string;
 }
 
 interface SubScoreItem {
@@ -178,6 +179,12 @@ export function TeamCompositionSummary({
           <CardDescription>Key role coverage assessment</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
+          {(() => {
+            const covered = [teamComposition?.hasBusinessLeader, teamComposition?.hasTechnicalLeader, teamComposition?.hasIndustryExpert, teamComposition?.hasOperationsLeader].filter(Boolean).length;
+            return (
+              <p className="text-xs font-medium text-muted-foreground">{covered}/4 capabilities covered</p>
+            );
+          })()}
           <div className="grid gap-2 md:grid-cols-2">
             <RoleIndicator
               label="Business/CEO Leader"
@@ -204,6 +211,11 @@ export function TeamCompositionSummary({
           {teamComposition?.teamBalance && (
             <p className="text-sm text-muted-foreground mt-2">
               {teamComposition.teamBalance}
+            </p>
+          )}
+          {teamComposition?.functionalCoverage && teamComposition.functionalCoverage !== teamComposition.teamBalance && (
+            <p className="text-xs text-muted-foreground italic">
+              {teamComposition.functionalCoverage}
             </p>
           )}
 

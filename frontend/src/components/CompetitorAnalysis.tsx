@@ -1005,7 +1005,6 @@ function BasicCompetitorLandscapeCard({
     landscape?.competitiveDisadvantages ||
     [];
   const vulnerabilities = competitivePositioning?.vulnerabilities || [];
-  const moatEvidence = competitivePositioning?.moatEvidence || [];
 
   const getScoreColor = (s: number) => {
     if (s >= 80) return "text-green-600";
@@ -1246,23 +1245,6 @@ function BasicCompetitorLandscapeCard({
                 )}
               </p>
             </div>
-            <div className="rounded-lg border bg-muted/30 p-3">
-              <p className="text-xs font-medium text-muted-foreground mb-1">
-                Moat Stage
-              </p>
-              <p className="text-sm text-pretty" data-testid="text-moat-stage">
-                {renderTextValue(competitivePositioning?.moatStage)}
-              </p>
-            </div>
-            <div className="rounded-lg border bg-muted/30 p-3">
-              <p className="text-xs font-medium text-muted-foreground mb-2">
-                Self-Reinforcing Moat
-              </p>
-              {renderBooleanBadge(competitivePositioning?.moatSelfReinforcing, {
-                trueLabel: "Yes",
-                falseLabel: "No",
-              })}
-            </div>
             <div className="rounded-lg border bg-muted/30 p-3 md:col-span-2">
               <p className="text-xs font-medium text-muted-foreground mb-1">
                 Current Competitive Gap
@@ -1305,27 +1287,6 @@ function BasicCompetitorLandscapeCard({
             </div>
           </div>
 
-          <div className="rounded-lg border bg-muted/20 p-3">
-            <p className="text-xs font-medium text-muted-foreground mb-2">
-              Moat Evidence
-            </p>
-            {moatEvidence.length > 0 ? (
-              <ul className="space-y-1 text-sm text-muted-foreground">
-                {moatEvidence.slice(0, 5).map((item, index) => (
-                  <li
-                    key={`${item}-${index}`}
-                    className="flex items-start gap-2 text-pretty"
-                    data-testid={`text-moat-evidence-${index}`}
-                  >
-                    <CheckCircle className="h-3.5 w-3.5 mt-0.5 text-green-600 shrink-0" />
-                    <span>{item}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-muted-foreground">No moat evidence provided</p>
-            )}
-          </div>
         </CardContent>
       </Card>
 
@@ -1345,6 +1306,9 @@ function BasicCompetitorLandscapeCard({
               </p>
             </CardHeader>
             <CardContent>
+              <p className="text-xs font-medium text-muted-foreground mb-3">
+                {[barriersToEntry.technical, barriersToEntry.capital, barriersToEntry.network, barriersToEntry.regulatory].filter(Boolean).length}/4 barriers identified
+              </p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {barriersToEntry.technical && (
                   <div className="p-3 bg-muted/50 rounded-lg">

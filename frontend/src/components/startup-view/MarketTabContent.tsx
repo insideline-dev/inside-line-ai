@@ -1,12 +1,14 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ConfidenceBadge } from "@/components/ConfidenceBadge";
+import { DataGapsSection, parseDataGapItems } from "@/components/DataGapsSection";
 import { ChartNoAxesColumn } from "lucide-react";
 import type { Evaluation } from "@/types/evaluation";
 
 interface MarketTabContentProps {
   evaluation: Evaluation | null;
   marketWeight?: number;
+  fundingStage?: string;
 }
 
 function toRecord(value: unknown): Record<string, unknown> {
@@ -19,28 +21,14 @@ function toStringArray(value: unknown): string[] {
   return value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
 }
 
-function toStructuredGapStrings(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .flatMap((item) => {
-      if (typeof item === "string" && item.trim().length > 0) return [item.trim()];
-      if (!item || typeof item !== "object") return [];
-      const record = item as Record<string, unknown>;
-      const gap = typeof record.gap === "string" ? record.gap.trim() : "";
-      const description = typeof record.description === "string" ? record.description.trim() : "";
-      const impact = typeof record.impact === "string" ? record.impact.trim() : "";
-      const text = [gap, description].filter(Boolean).join(": ");
-      if (!text) return [];
-      return impact ? [`${text} (${impact} impact)`] : [text];
-    })
-    .filter((item) => item.length > 0);
-}
 
 interface MarketSourceView {
   name: string;
   date: string;
   value: string;
   url?: string;
+  tier?: string;
+  geography?: string;
 }
 
 function toMarketSources(value: unknown): MarketSourceView[] {
@@ -54,7 +42,10 @@ function toMarketSources(value: unknown): MarketSourceView[] {
       const sourceValue =
         typeof record.value === "string" && record.value.trim() ? record.value.trim() : "Unknown value";
       const url = typeof record.url === "string" && record.url.trim() ? record.url.trim() : undefined;
-      return { name, date, value: sourceValue, url };
+      const tier = typeof record.tier === "string" && record.tier.trim() ? record.tier.trim()
+        : typeof record.tier === "number" ? `Tier ${record.tier}` : undefined;
+      const geography = typeof record.geography === "string" && record.geography.trim() ? record.geography.trim() : undefined;
+      return { name, date, value: sourceValue, url, tier, geography };
     })
     .filter((item): item is MarketSourceView => item !== null);
 }
@@ -137,20 +128,66 @@ function inferStructureType(text: string): string {
   return "emerging";
 }
 
+function structureTypeToPosition(type: string): number {
+  switch (type.toLowerCase()) {
+    case "fragmented": return 10;
+    case "emerging": return 33;
+    case "consolidating": return 66;
+    case "concentrated": return 90;
+    default: return 33;
+  }
+}
+
+function ConcentrationSpectrum({ structureType, direction, evidence }: { structureType: string; direction: string; evidence: string }) {
+  const position = structureTypeToPosition(structureType);
+  const isConsolidating = direction.toLowerCase().includes("consolidat");
+  const isFragmenting = direction.toLowerCase().includes("fragment");
+
+  return (
+    <div className="space-y-3">
+      <div className="relative pt-1 pb-4">
+        <div className="h-3 rounded-full bg-gradient-to-r from-blue-200 via-amber-200 to-rose-300 dark:from-blue-900 dark:via-amber-900 dark:to-rose-900" />
+        <div
+          className="absolute top-0 w-4 h-5 rounded-full border-2 border-foreground bg-background shadow-sm"
+          style={{ left: `calc(${position}% - 8px)` }}
+        />
+        <div className="flex justify-between mt-1 text-[10px] text-muted-foreground">
+          <span>Fragmented</span>
+          <span>Consolidated</span>
+        </div>
+      </div>
+      {direction !== "Not provided" && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span>Direction:</span>
+          <span className="font-medium">
+            {isConsolidating ? "→ Consolidating" : isFragmenting ? "← Fragmenting" : direction}
+          </span>
+        </div>
+      )}
+      {evidence !== "Not provided" && (
+        <p className="text-xs text-muted-foreground">{evidence}</p>
+      )}
+    </div>
+  );
+}
+
 const LIFECYCLE_STAGES = ["Introduction", "Growth", "Maturity", "Decline"] as const;
 
 function LifecycleBar({ position }: { position: string }) {
   const normalized = position.toLowerCase().trim();
   const matchIdx = LIFECYCLE_STAGES.findIndex((s) => normalized.includes(s.toLowerCase()));
   const activeIdx = matchIdx >= 0 ? matchIdx : -1;
+  // Sweet-spot = Growth stage (index 1)
+  const sweetSpotIdx = 1;
 
   return (
     <div className="flex items-center gap-0.5">
       {LIFECYCLE_STAGES.map((stage, idx) => {
         const isActive = idx === activeIdx;
         const isPast = idx < activeIdx;
+        const isSweetSpot = idx === sweetSpotIdx;
         return (
-          <div key={stage} className="flex-1 text-center">
+          <div key={stage} className={`flex-1 text-center ${isSweetSpot ? "rounded-md ring-1 ring-emerald-300/50 ring-offset-1 bg-emerald-50/30 dark:bg-emerald-950/20 dark:ring-emerald-700/40" : ""}`}>
             <div
               className={`h-2.5 rounded-full ${
                 isActive
@@ -162,6 +199,7 @@ function LifecycleBar({ position }: { position: string }) {
             />
             <p className={`mt-1 text-[10px] ${isActive ? "font-semibold text-violet-600 dark:text-violet-400" : "text-muted-foreground"}`}>
               {stage}
+              {isSweetSpot && <span className="block text-[8px] text-emerald-600 dark:text-emerald-400">sweet spot</span>}
             </p>
           </div>
         );
@@ -170,7 +208,7 @@ function LifecycleBar({ position }: { position: string }) {
   );
 }
 
-export function MarketTabContent({ evaluation, marketWeight }: MarketTabContentProps) {
+export function MarketTabContent({ evaluation, marketWeight, fundingStage }: MarketTabContentProps) {
   if (!evaluation) {
     return (
       <Card className="border-dashed" data-testid="card-market-empty">
@@ -290,6 +328,7 @@ export function MarketTabContent({ evaluation, marketWeight }: MarketTabContentP
   const growthRatePeriod = getMeaningful(growthRate.period) || "Not provided";
   const growthRateSource = getMeaningful(growthRate.source) || "Not provided";
   const growthRateDeckClaimed = getMeaningful(growthRate.deckClaimed) || "Not provided";
+  const growthTrajectory = getMeaningful(growthRate.trajectory) || getMeaningful(growthTiming.trajectory);
   const growthRateDiscrepancyFlag = toBoolean(growthRate.discrepancyFlag);
   const lifecyclePosition = getMeaningful(marketLifecycle.position) || "Not provided";
   const lifecycleEvidence = getMeaningful(marketLifecycle.evidence) || "Not provided";
@@ -307,14 +346,20 @@ export function MarketTabContent({ evaluation, marketWeight }: MarketTabContentP
   const concentrationDirection = getMeaningful(concentrationTrend.direction) || "Not provided";
   const concentrationEvidence = getMeaningful(concentrationTrend.evidence) || "Not provided";
 
-  const dataGaps = [
-    ...toStructuredGapStrings(marketData.dataGaps),
-    ...toStructuredGapStrings(marketData.marketResearchGaps),
-    ...toStructuredGapStrings(marketData.researchGaps),
-  ].filter((item, index, arr) => arr.findIndex((x) => x.toLowerCase() === item.toLowerCase()) === index);
-  const diligenceItems = toStringArray(marketData.diligenceItems).length > 0
-    ? toStringArray(marketData.diligenceItems)
-    : dataGaps;
+  const dataGapItems = (() => {
+    const all = [
+      ...parseDataGapItems(marketData.dataGaps),
+      ...parseDataGapItems(marketData.marketResearchGaps),
+      ...parseDataGapItems(marketData.researchGaps),
+    ];
+    const seen = new Set<string>();
+    return all.filter((item) => {
+      const key = item.gap.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  })();
   const founderPitchRecommendations = Array.isArray(marketData.founderPitchRecommendations)
     ? (marketData.founderPitchRecommendations as Array<Record<string, unknown>>)
     : [];
@@ -403,70 +448,130 @@ export function MarketTabContent({ evaluation, marketWeight }: MarketTabContentP
           <CardTitle className="text-base">Market Sizing</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-3 md:grid-cols-3">
+          <div className="space-y-2">
             {[
-              { label: "TAM", value: tamValue, methodology: tamMethodology, confidence: tamConfidence, sources: tamSources },
-              { label: "SAM", value: samValue, methodology: samMethodology, confidence: samConfidence, sources: samSources },
-              { label: "SOM", value: somValue, methodology: somMethodology, confidence: somConfidence, sources: [] as MarketSourceView[] },
+              { label: "TAM", value: tamValue, methodology: tamMethodology, confidence: tamConfidence, sources: tamSources, width: "100%", bg: "bg-violet-100 dark:bg-violet-900/40 border-violet-200 dark:border-violet-800" },
+              { label: "SAM", value: samValue, methodology: samMethodology, confidence: samConfidence, sources: samSources, width: "70%", bg: "bg-violet-200 dark:bg-violet-800/40 border-violet-300 dark:border-violet-700" },
+              { label: "SOM", value: somValue, methodology: somMethodology, confidence: somConfidence, sources: [] as MarketSourceView[], width: "40%", bg: "bg-violet-300 dark:bg-violet-700/40 border-violet-400 dark:border-violet-600" },
             ].map((item) => (
-              <div key={item.label} className="rounded-lg border border-primary/10 bg-muted/20 p-3 space-y-2">
-                <div className="flex items-start justify-between gap-2">
-                  <p className="text-xs font-semibold tracking-wide text-muted-foreground">{item.label}</p>
-                  <ConfidenceBadge confidence={item.confidence} dataTestId={`badge-market-${item.label.toLowerCase()}-confidence`} />
+              <div key={item.label} className="mx-auto" style={{ width: item.width }}>
+                <div className={`rounded-lg border p-3 ${item.bg}`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold tracking-wide">{item.label}</span>
+                      <span className="text-sm font-semibold">{item.value}</span>
+                    </div>
+                    <ConfidenceBadge confidence={item.confidence} dataTestId={`badge-market-${item.label.toLowerCase()}-confidence`} />
+                  </div>
+                  <div className="mt-1 flex items-center gap-3 text-[10px] text-muted-foreground">
+                    <span>{item.methodology}</span>
+                    {item.sources.length > 0 && (
+                      <span>{item.sources.map((s) => s.name).join(", ")}</span>
+                    )}
+                  </div>
                 </div>
-                <p className="text-sm font-medium break-words">{item.value}</p>
-                <p className="text-xs text-muted-foreground">Methodology: {item.methodology}</p>
-                {item.sources.length > 0 ? (
-                  <ul className="space-y-1">
-                    {item.sources.slice(0, 3).map((source, index) => (
-                      <li key={`${source.name}-${index}`} className="text-xs text-muted-foreground">
-                        {source.url ? (
-                          <a
-                            href={source.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="underline decoration-dotted underline-offset-2"
-                          >
-                            {source.name}
-                          </a>
-                        ) : (
-                          source.name
-                        )}{" "}
-                        · {source.date}
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-xs text-muted-foreground">No sources provided</p>
-                )}
               </div>
             ))}
           </div>
 
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
-              <p className="text-sm font-medium">Bottom-Up Sanity Check</p>
-              <p className="text-xs text-muted-foreground">Calculation: {bottomUpCalculation}</p>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Plausible:</span>
-                <Badge variant={bottomUpPlausible === true ? "default" : bottomUpPlausible === false ? "secondary" : "outline"}>
-                  {bottomUpPlausible === null ? "Not provided" : bottomUpPlausible ? "Yes" : "No"}
-                </Badge>
+          {(tamSources.length > 0 || samSources.length > 0) && (
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">Source Attribution</p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b text-muted-foreground">
+                      <th className="pb-1 pr-3 text-left font-medium">Estimate</th>
+                      <th className="pb-1 pr-3 text-left font-medium">Source</th>
+                      <th className="pb-1 pr-3 text-left font-medium">Tier</th>
+                      <th className="pb-1 pr-3 text-left font-medium">Date</th>
+                      <th className="pb-1 text-left font-medium">Geography</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tamSources.map((source, idx) => (
+                      <tr key={`tam-${idx}`} className="border-b border-border/40 last:border-0">
+                        <td className="py-1.5 pr-3 font-medium">TAM</td>
+                        <td className="py-1.5 pr-3">{source.url ? <a href={source.url} target="_blank" rel="noopener noreferrer" className="underline decoration-dotted underline-offset-2">{source.name}</a> : source.name}</td>
+                        <td className="py-1.5 pr-3 text-muted-foreground">{source.tier || "—"}</td>
+                        <td className="py-1.5 pr-3 text-muted-foreground">{source.date}</td>
+                        <td className="py-1.5 text-muted-foreground">{source.geography || "—"}</td>
+                      </tr>
+                    ))}
+                    {samSources.map((source, idx) => (
+                      <tr key={`sam-${idx}`} className="border-b border-border/40 last:border-0">
+                        <td className="py-1.5 pr-3 font-medium">SAM</td>
+                        <td className="py-1.5 pr-3">{source.url ? <a href={source.url} target="_blank" rel="noopener noreferrer" className="underline decoration-dotted underline-offset-2">{source.name}</a> : source.name}</td>
+                        <td className="py-1.5 pr-3 text-muted-foreground">{source.tier || "—"}</td>
+                        <td className="py-1.5 pr-3 text-muted-foreground">{source.date}</td>
+                        <td className="py-1.5 text-muted-foreground">{source.geography || "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-              <p className="text-xs text-muted-foreground">Notes: {bottomUpNotes}</p>
             </div>
+          )}
 
-            <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
-              <p className="text-sm font-medium">Deck vs Research</p>
-              <p className="text-xs text-muted-foreground">TAM Claimed: {deckTamClaimed}</p>
-              <p className="text-xs text-muted-foreground">TAM Researched: {deckTamResearched}</p>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Discrepancy:</span>
+          <div className={`grid gap-3 ${!fundingStage || /pre.?seed|seed|series.?a/i.test(fundingStage) ? "md:grid-cols-2" : ""}`}>
+            {(!fundingStage || /pre.?seed|seed|series.?a/i.test(fundingStage)) && (
+              <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
+                <p className="text-sm font-medium">Bottom-Up Sanity Check</p>
+                <p className="text-xs text-muted-foreground">Calculation: {bottomUpCalculation}</p>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">Plausible:</span>
+                  <Badge variant={bottomUpPlausible === true ? "default" : bottomUpPlausible === false ? "secondary" : "outline"}>
+                    {bottomUpPlausible === null ? "Not provided" : bottomUpPlausible ? "Yes" : "No"}
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">Notes: {bottomUpNotes}</p>
+              </div>
+            )}
+
+            <div className={`rounded-lg border p-3 space-y-3 ${deckDiscrepancyFlag === true ? "border-l-4 border-l-rose-400 bg-rose-50/30 dark:bg-rose-950/10" : deckDiscrepancyFlag === false ? "border-l-4 border-l-emerald-400 bg-emerald-50/30 dark:bg-emerald-950/10" : "bg-muted/20"}`}>
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium">Deck vs Research</p>
                 <Badge variant={deckDiscrepancyFlag === true ? "destructive" : deckDiscrepancyFlag === false ? "secondary" : "outline"}>
-                  {deckDiscrepancyFlag === null ? "Not provided" : deckDiscrepancyFlag ? "Yes" : "No"}
+                  {deckDiscrepancyFlag === null ? "No data" : deckDiscrepancyFlag ? "Discrepancy" : "Aligned"}
                 </Badge>
               </div>
-              <p className="text-xs text-muted-foreground">Notes: {deckDiscrepancyNotes}</p>
+              <div className="space-y-2">
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                    <span>TAM — Deck claim</span>
+                    <span className="font-medium text-foreground">{deckTamClaimed}</span>
+                  </div>
+                  <div className="h-2 rounded-full bg-slate-200 dark:bg-slate-700" />
+                </div>
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                    <span>TAM — Research finding</span>
+                    <span className="font-medium text-foreground">{deckTamResearched}</span>
+                  </div>
+                  <div className={`h-2 rounded-full ${deckDiscrepancyFlag === true ? "bg-rose-400" : "bg-emerald-400"}`} />
+                </div>
+              </div>
+              {growthRateDeckClaimed !== "Not provided" && (
+                <div className="space-y-2 border-t border-border/40 pt-2">
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                      <span>Growth — Deck claim</span>
+                      <span className="font-medium text-foreground">{growthRateDeckClaimed}</span>
+                    </div>
+                    <div className="h-2 rounded-full bg-slate-200 dark:bg-slate-700" />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                      <span>Growth — Research CAGR</span>
+                      <span className="font-medium text-foreground">{growthRateCagr}</span>
+                    </div>
+                    <div className={`h-2 rounded-full ${growthRateDiscrepancyFlag === true ? "bg-rose-400" : "bg-emerald-400"}`} />
+                  </div>
+                </div>
+              )}
+              {deckDiscrepancyNotes !== "Not provided" && (
+                <p className="text-[10px] text-muted-foreground border-t border-border/40 pt-2">{deckDiscrepancyNotes}</p>
+              )}
             </div>
           </div>
         </CardContent>
@@ -486,7 +591,15 @@ export function MarketTabContent({ evaluation, marketWeight }: MarketTabContentP
 
           <div className="grid gap-3 md:grid-cols-2">
             <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
-              <p className="text-sm font-medium">Growth Rate</p>
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium">Growth Rate</p>
+                {growthTrajectory && (
+                  <Badge variant="outline" className="text-[10px]">
+                    {growthTrajectory.toLowerCase().includes("accel") ? "↑ " : growthTrajectory.toLowerCase().includes("decel") ? "↓ " : "→ "}
+                    {growthTrajectory}
+                  </Badge>
+                )}
+              </div>
               <p className="text-xs text-muted-foreground">CAGR: {growthRateCagr}</p>
               <p className="text-xs text-muted-foreground">Period: {growthRatePeriod}</p>
               <p className="text-xs text-muted-foreground">Source: {growthRateSource}</p>
@@ -582,10 +695,9 @@ export function MarketTabContent({ evaluation, marketWeight }: MarketTabContentP
             )}
           </div>
 
-          <div className="rounded-lg border bg-muted/20 p-3 space-y-1">
+          <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
             <p className="text-sm font-medium">Concentration Trend</p>
-            <p className="text-xs text-muted-foreground">Direction: {concentrationDirection}</p>
-            <p className="text-xs text-muted-foreground">Evidence: {concentrationEvidence}</p>
+            <ConcentrationSpectrum structureType={structureType} direction={concentrationDirection} evidence={concentrationEvidence} />
           </div>
 
           <div className="grid gap-3 md:grid-cols-2">
@@ -654,35 +766,7 @@ export function MarketTabContent({ evaluation, marketWeight }: MarketTabContentP
         </Card>
       )}
 
-      {(dataGaps.length > 0 || diligenceItems.length > 0) && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Data Gaps & Diligence</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {dataGaps.length > 0 && (
-              <div>
-                <h4 className="mb-1 text-sm font-medium">Data Gaps</h4>
-                <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-                  {dataGaps.map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {diligenceItems.length > 0 && (
-              <div>
-                <h4 className="mb-1 text-sm font-medium">Diligence Items</h4>
-                <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-                  {diligenceItems.map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
+      <DataGapsSection gaps={dataGapItems} />
 
       {founderPitchRecommendations.length > 0 && (
         <Card>

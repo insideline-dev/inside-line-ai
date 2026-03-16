@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScoreRing } from "@/components/analysis/ScoreRing";
 import { ConfidenceBadge } from "@/components/ConfidenceBadge";
-import { CheckCircle2, AlertTriangle, ChevronRight, Sparkles, TrendingUp, ArrowRight } from "lucide-react";
+import { CheckCircle2, AlertTriangle, ChevronRight, Sparkles, TrendingUp, ArrowRight, AlertCircle } from "lucide-react";
 import type { Startup } from "@/types/startup";
 import type { Evaluation, ExitScenario, FounderReport } from "@/types/evaluation";
 import type { ScoringWeights } from "@/lib/score-utils";
@@ -11,12 +11,25 @@ import {
   getDisplayRisks,
   getDisplaySectionScore,
   getDisplayStrengths,
+  getCrossAgentStrengths,
+  getCrossAgentRisks,
+  getCrossAgentDataGaps,
+  getAgentTab,
 } from "@/lib/evaluation-display";
+import {
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+  Radar,
+  ResponsiveContainer,
+} from "recharts";
 
 interface AdminSummaryTabProps {
   startup: Startup;
   evaluation?: Evaluation;
   weights?: ScoringWeights | null;
+  onNavigateTab?: (tab: string) => void;
 }
 
 interface SectionScoreRow {
@@ -114,10 +127,32 @@ function InfoMetric({
   );
 }
 
+function AgentBadge({
+  label,
+  agent,
+  onClick,
+}: {
+  label: string;
+  agent: string;
+  onClick?: (tab: string) => void;
+}) {
+  const tab = getAgentTab(agent);
+  return (
+    <button
+      type="button"
+      onClick={() => onClick?.(tab)}
+      className="inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-medium text-violet-700 hover:bg-violet-200 transition-colors cursor-pointer dark:bg-violet-900/40 dark:text-violet-300 dark:hover:bg-violet-900/60"
+    >
+      {label}
+    </button>
+  );
+}
+
 export function AdminSummaryTab({
   startup,
   evaluation,
   weights,
+  onNavigateTab,
 }: AdminSummaryTabProps) {
   const score = getDisplayOverallScore(evaluation, startup.overallScore);
   const percentileRank = getDisplayPercentileRank(evaluation, startup.percentileRank);
@@ -144,6 +179,24 @@ export function AdminSummaryTab({
       EXIT_SCENARIO_DISPLAY_ORDER[left.scenario] -
       EXIT_SCENARIO_DISPLAY_ORDER[right.scenario],
   );
+
+  const crossStrengths = getCrossAgentStrengths(evaluation);
+  const crossRisks = getCrossAgentRisks(evaluation);
+  const dataGaps = getCrossAgentDataGaps(evaluation);
+
+  const RADAR_SHORT_LABELS: Record<string, string> = {
+    "Competitive Advantage": "Comp. Adv.",
+    "Business Model": "Biz Model",
+    "Exit Potential": "Exit",
+    "Deal Terms": "Deal",
+    Financials: "Finance",
+  };
+
+  const radarData = sectionRows.map((row) => ({
+    label: RADAR_SHORT_LABELS[row.label] ?? row.label,
+    score: row.score,
+    fullMark: 100,
+  }));
 
   return (
     <div className="space-y-6">
@@ -288,16 +341,29 @@ export function AdminSummaryTab({
                 <CheckCircle2 className="h-4 w-4" />
                 Key Strengths
               </CardTitle>
+              <p className="text-xs text-muted-foreground">
+                {crossStrengths.length > 0 ? "Sourced across evaluation agents" : "Top-level synthesis highlights"}
+              </p>
             </CardHeader>
             <CardContent>
               <ul className="space-y-2 text-sm">
-                {strengths.length === 0 && <li className="text-muted-foreground">No strengths available yet.</li>}
-                {strengths.map((item, idx) => (
-                  <li key={idx} className="flex items-start gap-2">
-                    <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                    <span>{item}</span>
-                  </li>
-                ))}
+                {crossStrengths.length > 0
+                  ? crossStrengths.map((item, idx) => (
+                      <li key={idx} className="flex items-start gap-2">
+                        <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                        <span className="flex-1">{item.text}</span>
+                        <AgentBadge label={item.agentLabel} agent={item.agent} onClick={onNavigateTab} />
+                      </li>
+                    ))
+                  : strengths.length > 0
+                    ? strengths.map((item, idx) => (
+                        <li key={idx} className="flex items-start gap-2">
+                          <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                          <span>{item}</span>
+                        </li>
+                      ))
+                    : <li className="text-muted-foreground">No strengths available yet.</li>
+                }
               </ul>
             </CardContent>
           </Card>
@@ -308,37 +374,113 @@ export function AdminSummaryTab({
                 <AlertTriangle className="h-4 w-4" />
                 Key Risks
               </CardTitle>
+              <p className="text-xs text-muted-foreground">
+                {crossRisks.length > 0 ? "Sourced across evaluation agents" : "Top-level synthesis highlights"}
+              </p>
             </CardHeader>
             <CardContent>
               <ul className="space-y-2 text-sm">
-                {risks.length === 0 && <li className="text-muted-foreground">No risks available yet.</li>}
-                {risks.map((item, idx) => (
+                {crossRisks.length > 0
+                  ? crossRisks.map((item, idx) => (
+                      <li key={idx} className="flex items-start gap-2">
+                        <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-500" />
+                        <span className="flex-1">{item.text}</span>
+                        <AgentBadge label={item.agentLabel} agent={item.agent} onClick={onNavigateTab} />
+                      </li>
+                    ))
+                  : risks.length > 0
+                    ? risks.map((item, idx) => (
+                        <li key={idx} className="flex items-start gap-2">
+                          <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-500" />
+                          <span>{item}</span>
+                        </li>
+                      ))
+                    : <li className="text-muted-foreground">No risks available yet.</li>
+                }
+              </ul>
+            </CardContent>
+          </Card>
+        </div>
+
+        {dataGaps.length > 0 && (
+          <Card className="border-orange-200/80 dark:border-orange-900/50">
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-base text-orange-700 dark:text-orange-400">
+                <AlertCircle className="h-4 w-4" />
+                Critical Data Gaps
+              </CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Information gaps flagged by evaluation agents — may require follow-up diligence
+              </p>
+            </CardHeader>
+            <CardContent>
+              <ul className="space-y-2 text-sm">
+                {dataGaps.map((item, idx) => (
                   <li key={idx} className="flex items-start gap-2">
-                    <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-500" />
-                    <span>{item}</span>
+                    <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-orange-500" />
+                    <span className="flex-1">{item.text}</span>
+                    <AgentBadge label={item.agentLabel} agent={item.agent} onClick={onNavigateTab} />
                   </li>
                 ))}
               </ul>
             </CardContent>
           </Card>
-        </div>
+        )}
 
         {evaluation && (
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Section Scores</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
-              {sectionRows.map((row) => (
-                <div key={row.id} className="grid grid-cols-[95px_36px_minmax(0,1fr)_32px] items-center gap-3">
-                  <span className="text-xs">{row.label}</span>
-                  <span className="text-[11px] text-muted-foreground">{row.weight}%</span>
-                  <div className="h-2.5 rounded-full bg-muted">
-                    <div className={`h-full rounded-full ${scoreBarClass(row.score)}`} style={{ width: `${row.score}%` }} />
+            <CardContent>
+              <div className="grid gap-6 lg:grid-cols-[340px_minmax(0,1fr)]">
+                {radarData.length > 0 && (
+                  <div className="flex items-center justify-center">
+                    <ResponsiveContainer width="100%" height={320}>
+                      <RadarChart data={radarData} cx="50%" cy="50%" outerRadius="55%">
+                        <PolarGrid stroke="currentColor" strokeOpacity={0.15} />
+                        <PolarAngleAxis
+                          dataKey="label"
+                          tick={{ fontSize: 11, fill: "currentColor" }}
+                          tickLine={false}
+                        />
+                        <PolarRadiusAxis
+                          angle={90}
+                          domain={[0, 100]}
+                          tick={false}
+                          axisLine={false}
+                          tickCount={5}
+                        />
+                        <Radar
+                          dataKey="score"
+                          stroke="hsl(262, 83%, 58%)"
+                          fill="hsl(262, 83%, 58%)"
+                          fillOpacity={0.15}
+                          strokeWidth={2}
+                          dot={{ r: 3, fill: "hsl(262, 83%, 58%)", strokeWidth: 0 }}
+                        />
+                      </RadarChart>
+                    </ResponsiveContainer>
                   </div>
-                  <span className="text-right text-xs font-medium">{Math.round(row.score)}</span>
+                )}
+                <div className="space-y-3">
+                  {sectionRows.map((row) => (
+                    <button
+                      type="button"
+                      key={row.id}
+                      className="grid w-full grid-cols-[95px_36px_minmax(0,1fr)_32px] items-center gap-3 rounded-md px-1 py-0.5 text-left hover:bg-muted/40 transition-colors cursor-pointer"
+                      onClick={() => onNavigateTab?.(getAgentTab(row.id))}
+                    >
+                      <span className="text-xs">{row.label}</span>
+                      <span className="text-[11px] text-muted-foreground">{row.weight}%</span>
+                      <div className="h-2.5 rounded-full bg-muted">
+                        <div className={`h-full rounded-full ${scoreBarClass(row.score)}`} style={{ width: `${row.score}%` }} />
+                      </div>
+                      <span className="text-right text-xs font-medium">{Math.round(row.score)}</span>
+                    </button>
+                  ))}
                 </div>
-              ))}
+              </div>
             </CardContent>
           </Card>
         )}

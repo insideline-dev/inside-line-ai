@@ -137,6 +137,39 @@ function inferStructureType(text: string): string {
   return "emerging";
 }
 
+const LIFECYCLE_STAGES = ["Introduction", "Growth", "Maturity", "Decline"] as const;
+
+function LifecycleBar({ position }: { position: string }) {
+  const normalized = position.toLowerCase().trim();
+  const matchIdx = LIFECYCLE_STAGES.findIndex((s) => normalized.includes(s.toLowerCase()));
+  const activeIdx = matchIdx >= 0 ? matchIdx : -1;
+
+  return (
+    <div className="flex items-center gap-0.5">
+      {LIFECYCLE_STAGES.map((stage, idx) => {
+        const isActive = idx === activeIdx;
+        const isPast = idx < activeIdx;
+        return (
+          <div key={stage} className="flex-1 text-center">
+            <div
+              className={`h-2.5 rounded-full ${
+                isActive
+                  ? "bg-violet-500"
+                  : isPast
+                    ? "bg-violet-300 dark:bg-violet-700"
+                    : "bg-muted"
+              }`}
+            />
+            <p className={`mt-1 text-[10px] ${isActive ? "font-semibold text-violet-600 dark:text-violet-400" : "text-muted-foreground"}`}>
+              {stage}
+            </p>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function MarketTabContent({ evaluation, marketWeight }: MarketTabContentProps) {
   if (!evaluation) {
     return (
@@ -167,6 +200,22 @@ export function MarketTabContent({ evaluation, marketWeight }: MarketTabContentP
   const concentrationTrend = toRecord(marketStructure.concentrationTrend);
   const entryConditions = toEntryConditions(marketStructure.entryConditions);
   const scoring = toRecord(marketData.scoring);
+  const marketSubScores = (() => {
+    const raw = scoring.subScores;
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .map((item: unknown) => {
+        if (!item || typeof item !== "object") return null;
+        const r = item as Record<string, unknown>;
+        const dimension = typeof r.dimension === "string" ? r.dimension.trim() : "";
+        const weight = typeof r.weight === "number" ? r.weight : null;
+        const score = typeof r.score === "number" ? r.score : null;
+        if (!dimension || weight === null || score === null) return null;
+        return { dimension, weight, score };
+      })
+      .filter((item: unknown): item is { dimension: string; weight: number; score: number } => item !== null);
+  })();
+  const scoringBasis = typeof scoring.scoringBasis === "string" ? scoring.scoringBasis.trim() : null;
 
   const confidence =
     (typeof scoring.confidence === "string" && scoring.confidence) ||
@@ -255,12 +304,6 @@ export function MarketTabContent({ evaluation, marketWeight }: MarketTabContentP
     (typeof evaluation?.marketScore === "number" && evaluation.marketScore >= 75
       ? "favorable"
       : "neutral");
-  const entryRationale =
-    (entryConditions.length > 0
-      ? entryConditions.map((item) => item.note).join(" ")
-      : null) ||
-    getMeaningful(legacyStructure.rationale) ||
-    "Not provided";
   const concentrationDirection = getMeaningful(concentrationTrend.direction) || "Not provided";
   const concentrationEvidence = getMeaningful(concentrationTrend.evidence) || "Not provided";
 
@@ -323,6 +366,35 @@ export function MarketTabContent({ evaluation, marketWeight }: MarketTabContentP
               </div>
             )}
           </div>
+
+          {(scoringBasis || marketSubScores.length > 0) && (
+            <div className="mt-5 space-y-4 border-t border-border/60 pt-4">
+              {scoringBasis && <p className="text-sm text-muted-foreground">{scoringBasis}</p>}
+              {marketSubScores.length > 0 && (
+                <div className="space-y-3">
+                  {marketSubScores.map((item) => {
+                    const pct = item.weight <= 1 ? item.weight * 100 : item.weight;
+                    const pctLabel = `${Number.isInteger(pct) ? pct.toFixed(0) : pct.toFixed(1)}%`;
+                    const barColor = item.score >= 80 ? "bg-emerald-500" : item.score >= 60 ? "bg-amber-500" : "bg-rose-500";
+                    return (
+                      <div key={item.dimension} className="grid grid-cols-[minmax(0,1fr)_48px] gap-3">
+                        <div>
+                          <div className="mb-1 flex items-center justify-between gap-3 text-xs">
+                            <span className="font-medium">{item.dimension}</span>
+                            <span className="text-muted-foreground">{pctLabel}</span>
+                          </div>
+                          <div className="h-2.5 rounded-full bg-muted">
+                            <div className={`h-full rounded-full ${barColor}`} style={{ width: `${Math.max(0, Math.min(100, item.score))}%` }} />
+                          </div>
+                        </div>
+                        <div className="text-right text-xs font-medium">{Math.round(item.score)}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -448,10 +520,12 @@ export function MarketTabContent({ evaluation, marketWeight }: MarketTabContentP
             </div>
           </div>
 
-          <div className="rounded-lg border bg-muted/20 p-3 space-y-1">
+          <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
             <p className="text-sm font-medium">Market Lifecycle</p>
-            <p className="text-xs text-muted-foreground">Position: {lifecyclePosition}</p>
-            <p className="text-xs text-muted-foreground">Evidence: {lifecycleEvidence}</p>
+            <LifecycleBar position={lifecyclePosition} />
+            {lifecycleEvidence !== "Not provided" && (
+              <p className="text-xs text-muted-foreground">{lifecycleEvidence}</p>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -461,14 +535,51 @@ export function MarketTabContent({ evaluation, marketWeight }: MarketTabContentP
           <CardTitle className="text-base">Market Structure</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 text-sm">
-          <div className="rounded-lg border bg-muted/20 p-3 space-y-1">
-            <p>
-              <span className="font-medium">Structure:</span> {structureType}
-            </p>
-            <p>
-              <span className="font-medium">Entry Conditions:</span> {entryAssessment}
-            </p>
-            <p className="text-muted-foreground">{entryRationale}</p>
+          <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">Structure:</span>
+              <Badge variant="outline" className="capitalize">{structureType}</Badge>
+            </div>
+            {entryConditions.length > 0 ? (
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground">Entry Conditions</p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b text-muted-foreground">
+                        <th className="pb-1 pr-3 text-left font-medium">Factor</th>
+                        <th className="pb-1 pr-3 text-left font-medium">Severity</th>
+                        <th className="pb-1 text-left font-medium">Note</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {entryConditions.map((item, idx) => (
+                        <tr key={idx} className="border-b border-border/40 last:border-0">
+                          <td className="py-1.5 pr-3 font-medium">{item.factor}</td>
+                          <td className="py-1.5 pr-3">
+                            <Badge
+                              variant="outline"
+                              className={
+                                item.severity.toLowerCase() === "high"
+                                  ? "border-rose-300 bg-rose-50 text-rose-700 dark:bg-rose-950/30 dark:text-rose-400"
+                                  : item.severity.toLowerCase() === "moderate"
+                                    ? "border-amber-300 bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
+                                    : "border-emerald-300 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400"
+                              }
+                            >
+                              {item.severity}
+                            </Badge>
+                          </td>
+                          <td className="py-1.5 text-muted-foreground">{item.note}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">Entry Conditions: {entryAssessment}</p>
+            )}
           </div>
 
           <div className="rounded-lg border bg-muted/20 p-3 space-y-1">

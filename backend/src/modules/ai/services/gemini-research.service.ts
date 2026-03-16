@@ -845,6 +845,11 @@ export class GeminiResearchService {
       "connection",
       "socket",
       "temporarily unavailable",
+      "operation was aborted",
+      "aborted",
+      "invalid json",
+      "econnreset",
+      "fetch failed",
     ];
     return retryablePatterns.some((pattern) => normalized.includes(pattern));
   }
@@ -855,7 +860,8 @@ export class GeminiResearchService {
       normalized.includes("schema validation failed") ||
       normalized.includes("parseable json payload") ||
       normalized.includes("no output generated") ||
-      normalized.includes("no object generated")
+      normalized.includes("no object generated") ||
+      normalized.includes("invalid json response")
     );
   }
 

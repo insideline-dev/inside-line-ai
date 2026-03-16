@@ -98,9 +98,23 @@ export function NodePromptEditor({ promptKey }: NodePromptEditorProps) {
 
   const [selectedStage, setSelectedStage] = useState<Stage>(STAGE_OPTIONS[0]);
   const [promptMode, setPromptMode] = useState<"system" | "user">("system");
-  const { data, isLoading } = useAdminControllerGetAiPromptRevisions(promptKey);
+  const { data, isLoading } = useAdminControllerGetAiPromptRevisions(promptKey, {
+    query: { staleTime: 0 },
+  });
 
   const payload = extractRevisionsPayload(data);
+
+  // Debug: remove after verifying
+  if (import.meta.env.DEV && data) {
+    console.log("[PromptEditor]", promptKey, {
+      rawDataType: typeof data,
+      rawDataKeys: data && typeof data === "object" ? Object.keys(data as Record<string, unknown>) : "N/A",
+      revisionsCount: payload.revisions.length,
+      selectedStage,
+      stages: payload.revisions.map((r) => r.stage),
+      matchingRevision: payload.revisions.find((r) => r.stage === selectedStage),
+    });
+  }
 
   const published = useMemo(
     () => resolvePublishedForStage(payload.revisions, selectedStage),

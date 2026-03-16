@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/card";
 import { TeamGrid } from "@/components/TeamProfile";
 import { TeamCompositionSummary } from "@/components/TeamCompositionSummary";
+import { DataGapsSection, parseDataGapItems } from "@/components/DataGapsSection";
 import { Users } from "lucide-react";
 import type { Evaluation } from "@/types/evaluation";
 import type { TeamMemberSource } from "@/components/TeamProfile";
@@ -650,6 +651,7 @@ export function TeamTabContent({
     const scoring = teamData?.scoring as Record<string, unknown> | undefined;
     return typeof scoring?.scoringBasis === "string" ? scoring.scoringBasis.trim() : undefined;
   }, [teamData]);
+  const teamDataGaps = useMemo(() => parseDataGapItems(teamData?.dataGaps), [teamData]);
 
   return (
     <div className="space-y-6" data-testid="container-team-tab">
@@ -728,6 +730,8 @@ export function TeamTabContent({
           </CardContent>
         </Card>
       )}
+
+      <DataGapsSection gaps={teamDataGaps} />
     </div>
   );
 }

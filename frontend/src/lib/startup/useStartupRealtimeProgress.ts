@@ -50,7 +50,7 @@ function calculateAgentProgress(agent: PipelineAgentProgress): number {
     return 100;
   }
   if (agent.status === "running") {
-    return 50;
+    return 5;
   }
   return 0;
 }
@@ -62,7 +62,7 @@ function calculatePhaseProgress(phase: PipelinePhaseProgress): number {
 
   const agents = Object.values(phase.agents ?? {});
   if (!agents.length) {
-    return phase.status === "running" ? 50 : 0;
+    return phase.status === "running" ? 2 : 0;
   }
 
   const total = agents.reduce((sum, agent) => sum + calculateAgentProgress(agent), 0);
@@ -246,13 +246,8 @@ function resetProgressForIncomingRun(
       }
 
       next.phases[phaseKey] = {
-        ...next.phases[phaseKey],
-        status: previousPhase.status,
+        ...previousPhase,
         progress: 100,
-        retryCount:
-          typeof previousPhase.retryCount === "number"
-            ? previousPhase.retryCount
-            : next.phases[phaseKey].retryCount,
       };
     }
 

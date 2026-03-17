@@ -15,17 +15,17 @@ import {
 import { useAdminControllerGetAiPromptRevisions } from "@/api/generated/admin/admin";
 import {
   CreateAiPromptRevisionDtoStage,
-  type CreateAiPromptRevisionDtoStage as PromptStage,
 } from "@/api/generated/model";
 import { OutputSchemaViewer } from "./prompt-editor/OutputSchemaViewer";
+
+type Stage = NonNullable<typeof CreateAiPromptRevisionDtoStage[keyof typeof CreateAiPromptRevisionDtoStage]>;
 
 interface NodePromptEditorProps {
   promptKey: string;
   upstreamPaths?: string[];
 }
 
-function stageLabel(stage: PromptStage | null): string {
-  if (!stage) return "Global";
+function stageLabel(stage: Stage): string {
   return stage
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
@@ -36,54 +36,73 @@ function resolvePublishedForStage(
   revisions:
     | Array<{
         status: string;
-        stage: PromptStage | null;
+        stage: Stage | null;
         systemPrompt: string;
         userPrompt: string;
       }>
     | undefined,
-  stage: PromptStage | null,
+  stage: Stage,
 ) {
   if (!revisions) return null;
 
-  const stageSpecific =
-    stage === null
-      ? null
-      : revisions.find(
-          (revision) => revision.status === "published" && revision.stage === stage,
-        );
-  const globalPublished = revisions.find(
+  const stageSpecific = revisions.find(
+    (revision) => revision.status === "published" && revision.stage === stage,
+  );
+  const globalFallback = revisions.find(
     (revision) => revision.status === "published" && revision.stage === null,
   );
 
-  return stageSpecific ?? globalPublished ?? null;
+  return stageSpecific ?? globalFallback ?? null;
+}
+
+interface RevisionItem {
+  id: string;
+  status: string;
+  stage: Stage | null;
+  systemPrompt: string;
+  userPrompt: string;
+  version: number;
+  notes?: string;
+  createdAt: string;
+  publishedAt?: string;
+}
+
+interface RevisionsPayload {
+  revisions: RevisionItem[];
+  allowedVariables: string[];
+  requiredVariables: string[];
+}
+
+const EMPTY_PAYLOAD: RevisionsPayload = {
+  revisions: [],
+  allowedVariables: [],
+  requiredVariables: [],
+};
+
+function extractRevisionsPayload(data: unknown): RevisionsPayload {
+  if (!data || typeof data !== "object") return EMPTY_PAYLOAD;
+  const raw = "data" in data && (data as Record<string, unknown>).data
+    ? (data as Record<string, unknown>).data
+    : data;
+  if (!raw || typeof raw !== "object") return EMPTY_PAYLOAD;
+  const obj = raw as Record<string, unknown>;
+  return {
+    revisions: Array.isArray(obj.revisions) ? (obj.revisions as RevisionItem[]) : [],
+    allowedVariables: Array.isArray(obj.allowedVariables) ? (obj.allowedVariables as string[]) : [],
+    requiredVariables: Array.isArray(obj.requiredVariables) ? (obj.requiredVariables as string[]) : [],
+  };
 }
 
 export function NodePromptEditor({ promptKey }: NodePromptEditorProps) {
   const STAGE_OPTIONS = Object.values(CreateAiPromptRevisionDtoStage);
 
-  const [selectedStage, setSelectedStage] = useState<PromptStage | null>(null);
+  const [selectedStage, setSelectedStage] = useState<Stage>(STAGE_OPTIONS[0]);
   const [promptMode, setPromptMode] = useState<"system" | "user">("system");
-  const { data, isLoading } = useAdminControllerGetAiPromptRevisions(promptKey);
+  const { data, isLoading } = useAdminControllerGetAiPromptRevisions(promptKey, {
+    query: { staleTime: 0 },
+  });
 
-  const payload = (data as unknown as {
-    revisions: Array<{
-      id: string;
-      status: string;
-      stage: PromptStage | null;
-      systemPrompt: string;
-      userPrompt: string;
-      version: number;
-      notes?: string;
-      createdAt: string;
-      publishedAt?: string;
-    }>;
-    allowedVariables: string[];
-    requiredVariables: string[];
-  }) ?? {
-    revisions: [],
-    allowedVariables: [],
-    requiredVariables: [],
-  };
+  const payload = extractRevisionsPayload(data);
 
   const published = useMemo(
     () => resolvePublishedForStage(payload.revisions, selectedStage),
@@ -112,7 +131,7 @@ export function NodePromptEditor({ promptKey }: NodePromptEditorProps) {
         </Badge>
         {published?.stage !== selectedStage ? (
           <Badge variant="outline" className="text-xs">
-            effective: {stageLabel(published?.stage ?? null)}
+            effective: {published?.stage ? stageLabel(published.stage) : "Global fallback"}
           </Badge>
         ) : null}
       </div>
@@ -122,9 +141,9 @@ export function NodePromptEditor({ promptKey }: NodePromptEditorProps) {
           Stage Preview
         </Label>
         <Select
-          value={selectedStage ?? STAGE_OPTIONS[0]}
+          value={selectedStage}
           onValueChange={(value) =>
-            setSelectedStage(value as PromptStage)
+            setSelectedStage(value as Stage)
           }
         >
           <SelectTrigger className="h-8 text-xs">
@@ -192,7 +211,7 @@ export function NodePromptEditor({ promptKey }: NodePromptEditorProps) {
 
       <Separator />
 
-      <OutputSchemaViewer promptKey={promptKey} />
+      <OutputSchemaViewer nodeId={promptKey.replace(/\./g, "_")} />
     </div>
   );
 }

@@ -26,6 +26,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { AiPromptFlowResponseDtoFlowsItemNodesItem } from "@/api/generated/model";
 import { customFetch } from "@/api/client";
 import { NodePromptEditor } from "./NodePromptEditor";
+import { OutputSchemaViewer } from "./prompt-editor/OutputSchemaViewer";
 import { AddAgentDialog } from "./dialogs/AddAgentDialog";
 import { OrchestratorAgentManager } from "./dialogs/OrchestratorAgentManager";
 
@@ -450,9 +451,7 @@ export function NodeConfigSheet({
               </div>
             ) : null}
 
-            <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
-              Output schema and upstream field resolution are configured in code.
-            </div>
+            <OutputSchemaViewer nodeId={node.id} />
           </TabsContent>
 
           {/* ── Prompts ── */}

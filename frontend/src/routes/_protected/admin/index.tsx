@@ -264,10 +264,10 @@ function AdminDashboard() {
       label: "Pending Review",
       count: (byStatus?.pending_review ?? 0) + (byStatus?.submitted ?? 0),
     },
-    { value: "analyzing", label: "Analyzing", count: byStatus?.analyzing },
-    { value: "approved", label: "Approved", count: 0 },
-    { value: "rejected", label: "Rejected", count: 0 },
-    { value: "all", label: "All", count: 0 },
+    { value: "analyzing", label: "Analyzing", count: byStatus?.analyzing ?? 0 },
+    { value: "approved", label: "Approved", count: byStatus?.approved ?? 0 },
+    { value: "rejected", label: "Rejected", count: byStatus?.rejected ?? 0 },
+    { value: "all", label: "All", count: statsData?.startups?.total ?? 0 },
   ];
 
   return (

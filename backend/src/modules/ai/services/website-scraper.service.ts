@@ -80,7 +80,10 @@ export class WebsiteScraperService {
     this.batchDelayMs = this.validatePositiveInt(
       this.config?.get<number>("SCRAPING_BATCH_DELAY_MS", 500) ?? 500, 0, 10000,
     );
-    this.userAgent = this.config?.get<string>("SCRAPER_USER_AGENT", "InsideLine-Bot/1.0") ?? "InsideLine-Bot/1.0";
+    this.userAgent = this.config?.get<string>(
+      "SCRAPER_USER_AGENT",
+      "Mozilla/5.0 (compatible; InsideLine/1.0; +https://insideline.ai)",
+    ) ?? "Mozilla/5.0 (compatible; InsideLine/1.0; +https://insideline.ai)";
   }
 
   private validatePositiveInt(value: number, min: number, max: number): number {
@@ -583,6 +586,9 @@ export class WebsiteScraperService {
       const response = await fetch(fetchUrl, {
         headers: {
           "User-Agent": this.userAgent,
+          Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "Accept-Language": "en-US,en;q=0.9",
+          "Accept-Encoding": "gzip, deflate, br",
           Host: hostHeader,
         },
         redirect: "follow",
@@ -919,7 +925,10 @@ export class WebsiteScraperService {
     try {
       const response = await fetch(sitemapUrl, {
         signal: AbortSignal.timeout(10000),
-        headers: { "User-Agent": this.userAgent },
+        headers: {
+          "User-Agent": this.userAgent,
+          Accept: "application/xml,text/xml,*/*;q=0.8",
+        },
       });
       if (!response.ok) return [];
       const xml = await response.text();

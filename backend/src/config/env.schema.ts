@@ -135,7 +135,7 @@ export const envSchema = z.object({
   SCRAPING_MAX_LINKS_PER_PAGE: z.coerce.number().default(100),
   SCRAPING_MAX_PATH_DEPTH: z.coerce.number().default(4),
   SCRAPING_BATCH_DELAY_MS: z.coerce.number().default(500),
-  SCRAPER_USER_AGENT: z.string().default("InsideLine-Bot/1.0"),
+  SCRAPER_USER_AGENT: z.string().default("Mozilla/5.0 (compatible; InsideLine/1.0; +https://insideline.ai)"),
   SCRAPING_MEMORY_CACHE_MAX_ENTRIES: z.coerce.number().default(5000),
   SCRAPING_CACHE_REDIS_RECOVERY_INTERVAL_MS: z.coerce.number().default(30000),
 

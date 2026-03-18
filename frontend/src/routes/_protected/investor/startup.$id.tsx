@@ -46,6 +46,7 @@ import {
   CompetitorsTabContent,
   ProductTabContent,
   InsightsTabContent,
+  FinancialsTabContent,
 } from "@/components/startup-view";
 import { getDisplayOverallScore } from "@/lib/evaluation-display";
 
@@ -332,6 +333,7 @@ function InvestorStartupDetailPage() {
           <TabsTrigger value="memo">Investment Memo</TabsTrigger>
           <TabsTrigger value="product">Product</TabsTrigger>
           <TabsTrigger value="team">Team</TabsTrigger>
+          <TabsTrigger value="financials">Financials</TabsTrigger>
           <TabsTrigger value="competitors">Competitors</TabsTrigger>
           <TabsTrigger value="insights">Insights</TabsTrigger>
         </TabsList>
@@ -472,6 +474,10 @@ function InvestorStartupDetailPage() {
             teamMembers={teamMembersForSave as any}
             companyName={startup.name as string}
           />
+        </TabsContent>
+
+        <TabsContent value="financials">
+          <FinancialsTabContent evaluation={(evaluation as any) ?? null} />
         </TabsContent>
 
         <TabsContent value="competitors">

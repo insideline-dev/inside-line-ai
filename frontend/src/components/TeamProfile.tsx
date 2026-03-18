@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Briefcase,
   GraduationCap,
@@ -9,7 +11,9 @@ import {
   Building2,
   Calendar,
   ExternalLink,
+  ChevronDown,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
 interface Experience {
@@ -62,6 +66,8 @@ export function TeamProfileCard({
   member,
   showTimelines = true,
 }: TeamProfileCardProps) {
+  const [expanded, setExpanded] = useState(false);
+
   const getInitials = (name: string) => {
     return name
       .split(" ")
@@ -81,132 +87,154 @@ export function TeamProfileCard({
   const hasExperience = member.experience && member.experience.length > 0;
   const hasEducation = member.education && member.education.length > 0;
   const hasSkills = member.skills && member.skills.length > 0;
+  const hasExpandableContent =
+    !!(member.summary || member.background) ||
+    !!member.relevantExperience ||
+    (showTimelines && (hasExperience || hasEducation)) ||
+    hasSkills;
 
   return (
     <Card className="overflow-hidden">
-      <CardContent className="p-0">
-        <div className="p-6 border-b bg-linear-to-br from-primary/5 to-transparent">
-          <div className="flex items-start gap-4">
-            <Avatar className="w-20 h-20 border-2 border-background shadow-lg">
-              <AvatarImage src={member.profilePictureUrl} alt={member.name} />
-              <AvatarFallback className="text-lg font-semibold bg-primary/10">
-                {getInitials(member.name)}
-              </AvatarFallback>
-            </Avatar>
+      <Collapsible open={expanded} onOpenChange={setExpanded}>
+        <CardContent className="p-0">
+          {/* Preview — always visible */}
+          <div className="p-6 bg-linear-to-br from-primary/5 to-transparent">
+            <div className="flex items-start gap-4">
+              <Avatar className="w-16 h-16 border-2 border-background shadow-lg">
+                <AvatarImage src={member.profilePictureUrl} alt={member.name} />
+                <AvatarFallback className="text-lg font-semibold bg-primary/10">
+                  {getInitials(member.name)}
+                </AvatarFallback>
+              </Avatar>
 
-            <div className="flex-1 min-w-0">
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <h3 className="text-lg font-semibold">{member.name}</h3>
-                  <div className="mt-0.5 flex items-center gap-2">
-                    <p className="text-sm text-primary font-medium">{member.role}</p>
-                    {member.discovered && (
-                      <Badge variant="secondary" className="h-5 px-2 text-[10px] uppercase tracking-wide">
-                        Discovered
-                      </Badge>
-                    )}
-                    {member.source && member.source !== "submitted" && (
-                      <Badge variant="outline" className="h-5 px-2 text-[10px] uppercase tracking-wide text-muted-foreground">
-                        {member.source}
-                      </Badge>
-                    )}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <h3 className="text-lg font-semibold">{member.name}</h3>
+                    <div className="mt-0.5 flex items-center gap-2">
+                      <p className="text-sm text-primary font-medium">{member.role}</p>
+                      {member.discovered && (
+                        <Badge variant="secondary" className="h-5 px-2 text-[10px] uppercase tracking-wide">
+                          Discovered
+                        </Badge>
+                      )}
+                      {member.source && member.source !== "submitted" && (
+                        <Badge variant="outline" className="h-5 px-2 text-[10px] uppercase tracking-wide text-muted-foreground">
+                          {member.source}
+                        </Badge>
+                      )}
+                    </div>
                   </div>
-                </div>
-                {member.fmfScore !== undefined && member.fmfScore !== null && (
-                  <Badge
-                    className={`${getScoreColor(member.fmfScore)} border-0 shrink-0`}
-                  >
-                    FMF: {member.fmfScore}/100
-                  </Badge>
-                )}
-              </div>
-
-              {member.headline && (
-                <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                  {member.headline}
-                </p>
-              )}
-
-              <div className="flex items-center gap-3 mt-2 flex-wrap">
-                {member.location && (
-                  <span className="text-xs text-muted-foreground flex items-center gap-1">
-                    <MapPin className="w-3 h-3" />
-                    {member.location}
-                  </span>
-                )}
-                {member.linkedinUrl && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 px-2 text-xs"
-                    asChild
-                  >
-                    <a
-                      href={member.linkedinUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1"
+                  {member.fmfScore !== undefined && member.fmfScore !== null && (
+                    <Badge
+                      className={`${getScoreColor(member.fmfScore)} border-0 shrink-0`}
                     >
-                      <Linkedin className="w-3 h-3" />
-                      LinkedIn
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
-                  </Button>
+                      FMF: {member.fmfScore}/100
+                    </Badge>
+                  )}
+                </div>
+
+                {member.headline && (
+                  <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                    {member.headline}
+                  </p>
                 )}
+
+                <div className="flex items-center gap-3 mt-2 flex-wrap">
+                  {member.location && (
+                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                      <MapPin className="w-3 h-3" />
+                      {member.location}
+                    </span>
+                  )}
+                  {member.linkedinUrl && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-xs"
+                      asChild
+                    >
+                      <a
+                        href={member.linkedinUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1"
+                      >
+                        <Linkedin className="w-3 h-3" />
+                        LinkedIn
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
 
-          {(member.summary || member.background) && (
-            <p className="text-sm text-muted-foreground mt-4 leading-relaxed">
-              {member.summary || member.background}
-            </p>
+          {/* Expand trigger */}
+          {hasExpandableContent && (
+            <CollapsibleTrigger className="w-full">
+              <div className="flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer border-t">
+                <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", expanded && "rotate-180")} />
+                {expanded ? "Show less" : "Show full profile"}
+              </div>
+            </CollapsibleTrigger>
           )}
 
-          {member.relevantExperience && (
-            <div className="mt-4 p-3 bg-primary/5 rounded-lg">
-              <p className="text-sm">
-                <span className="font-medium text-primary">
-                  Relevant Experience:
-                </span>{" "}
-                <span className="text-muted-foreground">
-                  {member.relevantExperience}
-                </span>
-              </p>
-            </div>
-          )}
-        </div>
-
-        {showTimelines && (hasExperience || hasEducation) && (
-          <div className="p-6 space-y-6">
-            <ExperienceTimeline experiences={member.experience || []} />
-
-            {hasEducation && (
-              <EducationTimeline education={member.education!} />
+          {/* Expanded content */}
+          <CollapsibleContent>
+            {(member.summary || member.background) && (
+              <div className="px-6 pt-4">
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  {member.summary || member.background}
+                </p>
+              </div>
             )}
-          </div>
-        )}
 
-        {hasSkills && (
-          <div className="px-6 pb-6">
-            <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
-              Key Skills
-            </h4>
-            <div className="flex flex-wrap gap-1.5">
-              {member.skills!.slice(0, 10).map((skill, idx) => (
-                <Badge key={idx} variant="secondary" className="text-xs">
-                  {skill}
-                </Badge>
-              ))}
-              {member.skills!.length > 10 && (
-                <Badge variant="outline" className="text-xs">
-                  +{member.skills!.length - 10} more
-                </Badge>
-              )}
-            </div>
-          </div>
-        )}
-      </CardContent>
+            {member.relevantExperience && (
+              <div className="mx-6 mt-4 p-3 bg-primary/5 rounded-lg">
+                <p className="text-sm">
+                  <span className="font-medium text-primary">
+                    Relevant Experience:
+                  </span>{" "}
+                  <span className="text-muted-foreground">
+                    {member.relevantExperience}
+                  </span>
+                </p>
+              </div>
+            )}
+
+            {showTimelines && (hasExperience || hasEducation) && (
+              <div className="p-6 space-y-6">
+                <ExperienceTimeline experiences={member.experience || []} />
+                {hasEducation && (
+                  <EducationTimeline education={member.education!} />
+                )}
+              </div>
+            )}
+
+            {hasSkills && (
+              <div className="px-6 pb-6">
+                <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                  Key Skills
+                </h4>
+                <div className="flex flex-wrap gap-1.5">
+                  {member.skills!.slice(0, 10).map((skill, idx) => (
+                    <Badge key={idx} variant="secondary" className="text-xs">
+                      {skill}
+                    </Badge>
+                  ))}
+                  {member.skills!.length > 10 && (
+                    <Badge variant="outline" className="text-xs">
+                      +{member.skills!.length - 10} more
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            )}
+          </CollapsibleContent>
+        </CardContent>
+      </Collapsible>
     </Card>
   );
 }

@@ -27,6 +27,7 @@ import { SourcesTabContent } from "@/components/startup-view/SourcesTabContent";
 import { AdminEditTab } from "@/components/startup-view/AdminEditTab";
 import { AdminPipelineLivePanel } from "@/components/startup-view/AdminPipelineLivePanel";
 import { FounderRecommendationsTab } from "@/components/startup-view/FounderRecommendationsTab";
+import { FinancialsTabContent } from "@/components/startup-view/FinancialsTabContent";
 import {
   RefreshCw,
   Download,
@@ -102,6 +103,7 @@ type AdminStartupTab =
   | "market"
   | "product"
   | "team"
+  | "financials"
   | "competitors"
   | "sources"
   | "recommendations"
@@ -732,6 +734,7 @@ function AdminReviewPage() {
                 <TabsTrigger value="market" className="w-full sm:w-auto">Market</TabsTrigger>
                 <TabsTrigger value="product" className="w-full sm:w-auto">Product</TabsTrigger>
                 <TabsTrigger value="team" className="w-full sm:w-auto">Team</TabsTrigger>
+                <TabsTrigger value="financials" className="w-full sm:w-auto">Financials</TabsTrigger>
                 <TabsTrigger value="competitors" className="w-full sm:w-auto">Competitors</TabsTrigger>
                 <TabsTrigger value="sources" className="w-full sm:w-auto">Sources</TabsTrigger>
                 <TabsTrigger value="recommendations" className="w-full sm:w-auto">Recommendations</TabsTrigger>
@@ -777,6 +780,13 @@ function AdminReviewPage() {
                   teamMembers={startup.teamMembers || []}
                   teamWeight={stageWeights?.team}
                   companyName={startup.name}
+                />
+              </TabsContent>
+
+              <TabsContent value="financials" className="mt-6">
+                <FinancialsTabContent
+                  evaluation={evaluation}
+                  financialsWeight={stageWeights?.financials}
                 />
               </TabsContent>
 

@@ -12,7 +12,6 @@ export { AnalysisProgressBar } from "./AnalysisProgressBar";
 
 // Memo Components
 export { MemoSection, CompetitorCard, FundingRoundCard } from "./MemoSection";
-export { ProductScoreSummary } from "./ProductScoreSummary";
 
 // Search and Filters
 export { SearchAndFilters, useFilteredStartups, defaultFilters, REGIONS } from "./SearchAndFilters";

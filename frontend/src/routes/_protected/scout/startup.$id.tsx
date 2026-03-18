@@ -11,6 +11,7 @@ import {
   InsightsTabContent,
   ProductTabContent,
   TeamTabContent,
+  FinancialsTabContent,
 } from "@/components/startup-view";
 import {
   useScoutControllerGetMySubmissionStartup,
@@ -188,11 +189,12 @@ function ScoutStartupDetail() {
       </Card>
 
       <Tabs defaultValue="summary" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="summary" data-testid="tab-summary">Summary</TabsTrigger>
           <TabsTrigger value="insights" data-testid="tab-insights">Insights</TabsTrigger>
           <TabsTrigger value="product" data-testid="tab-product">Product</TabsTrigger>
           <TabsTrigger value="team" data-testid="tab-team">Team</TabsTrigger>
+          <TabsTrigger value="financials" data-testid="tab-financials">Financials</TabsTrigger>
         </TabsList>
 
         <TabsContent value="summary" className="space-y-6">
@@ -262,6 +264,20 @@ function ScoutStartupDetail() {
               <CardContent className="p-12 text-center">
                 <p className="text-muted-foreground">
                   Team analysis will be available once evaluation completes.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        <TabsContent value="financials" className="space-y-6">
+          {evaluation ? (
+            <FinancialsTabContent evaluation={evaluation} />
+          ) : (
+            <Card className="border-dashed">
+              <CardContent className="p-12 text-center">
+                <p className="text-muted-foreground">
+                  Financial analysis will be available once evaluation completes.
                 </p>
               </CardContent>
             </Card>

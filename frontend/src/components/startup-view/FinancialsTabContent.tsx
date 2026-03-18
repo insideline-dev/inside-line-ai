@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ConfidenceBadge } from "@/components/ConfidenceBadge";
+import { SectionScoreCard } from "@/components/SectionScoreCard";
+import { MarkdownText } from "@/components/MarkdownText";
 import {
   PiggyBank,
   TrendingUp,
@@ -54,6 +55,12 @@ function toString(value: unknown): string | undefined {
 }
 
 function toStringArray(value: unknown): string[] {
+  if (typeof value === "string") {
+    return value
+      .split(/\r?\n/)
+      .map((s) => s.replace(/^[\s\-*•]+/, "").trim())
+      .filter((s) => s.length > 0);
+  }
   if (!Array.isArray(value)) return [];
   return value
     .map((item) => (typeof item === "string" ? item.trim() : ""))
@@ -97,21 +104,6 @@ function formatPercent(value: number): string {
   return `${Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1)}%`;
 }
 
-function formatWeight(value: number): string {
-  return value <= 1 ? formatPercent(value * 100) : formatPercent(value);
-}
-
-function scoreTone(score: number): string {
-  if (score >= 80) return "text-emerald-600";
-  if (score >= 60) return "text-amber-600";
-  return "text-rose-600";
-}
-
-function scoreBarTone(score: number): string {
-  if (score >= 80) return "bg-emerald-500";
-  if (score >= 60) return "bg-amber-500";
-  return "bg-rose-500";
-}
 
 function impactBadgeClass(value: string): string {
   switch (value) {
@@ -396,8 +388,6 @@ export function FinancialsTabContent({ evaluation, financialsWeight }: Financial
   const internallyConsistent = toBoolean(projections.internallyConsistent);
   const projectionsSummary = toString(projections.summary);
   const projectionsCredibility = toString(projections.credibility) ?? "none";
-  const scenarioDetail = toString(projections.scenarioDetail);
-  const assumptionAssessment = toString(projections.assumptionAssessment);
   const assumptions = Array.isArray(projections.assumptions)
     ? (projections.assumptions as unknown[]).map((item) => {
         const record = toRecord(item);
@@ -432,61 +422,23 @@ export function FinancialsTabContent({ evaluation, financialsWeight }: Financial
 
   return (
     <div className="space-y-6" data-testid="financials-tab-content">
-      <Card className="border-primary/20 bg-gradient-to-br from-primary/10 via-background to-background">
-        <CardContent className="py-6">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="rounded-full bg-primary/10 p-3">
-                <PiggyBank className="h-6 w-6 text-primary" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold">Financial Plan Score</h3>
-                <p className="text-sm text-muted-foreground">
-                  {typeof financialsWeight === "number" ? `${financialsWeight}%` : ""} weight in overall evaluation
-                </p>
-                <ConfidenceBadge confidence={confidence} className="mt-2" dataTestId="badge-financials-confidence" />
-              </div>
-            </div>
-            <div className="text-right">
-              <span className={`text-4xl font-bold ${scoreTone(score)}`}>{Math.round(score)}</span>
-              <span className="text-lg text-muted-foreground">/100</span>
-            </div>
-          </div>
-
-          {(scoringBasis || subScores.length > 0 || confidence === "low" || confidence === "mid") && (
-            <div className="mt-5 space-y-4 border-t border-border/60 pt-4">
-              {scoringBasis && <p className="text-sm text-muted-foreground">{scoringBasis}</p>}
-
-              {subScores.length > 0 && (
-                <div className="space-y-3">
-                  {subScores.map((item) => (
-                    <div key={item.dimension} className="grid grid-cols-[minmax(0,1fr)_48px] gap-3">
-                      <div>
-                        <div className="mb-1 flex items-center justify-between gap-3 text-xs">
-                          <span className="font-medium">{item.dimension}</span>
-                          <span className="text-muted-foreground">{formatWeight(item.weight)}</span>
-                        </div>
-                        <div className="h-2.5 rounded-full bg-muted">
-                          <div className={`h-full rounded-full ${scoreBarTone(item.score)}`} style={{ width: `${Math.max(0, Math.min(100, item.score))}%` }} />
-                        </div>
-                      </div>
-                      <div className="text-right text-xs font-medium">{Math.round(item.score)}</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {(confidence === "low" || confidence === "mid") && (
-                <p className="text-xs text-muted-foreground">
-                  {confidence === "low"
-                    ? "Limited financial data available. The score is based on partial deck information."
-                    : "Partial financial data available. Uploading a financial model would improve analysis confidence."}
-                </p>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <SectionScoreCard
+        title="Financial Plan Score"
+        score={score}
+        weight={typeof financialsWeight === "number" ? financialsWeight : undefined}
+        confidence={confidence}
+        scoringBasis={
+          scoringBasis ??
+          (confidence === "low"
+            ? "Limited financial data available — score based on partial deck information."
+            : confidence === "mid"
+              ? "Partial financial data — upload a financial model for higher-confidence analysis."
+              : undefined)
+        }
+        subScores={subScores}
+        dataTestId="card-financials-score"
+        confidenceTestId="badge-financials-confidence"
+      />
 
       {(raiseAmount || monthlyBurn || runway || useOfFundsBreakdown.length > 0) && (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -611,12 +563,14 @@ export function FinancialsTabContent({ evaluation, financialsWeight }: Financial
               </div>
 
               {capitalPlanSummary && (
-                <p className="text-sm leading-relaxed text-muted-foreground">{capitalPlanSummary}</p>
+                <MarkdownText className="text-sm leading-relaxed text-muted-foreground [&>p]:mb-0">
+                  {capitalPlanSummary}
+                </MarkdownText>
               )}
             </>
           ) : (
             <div className="rounded-xl border border-dashed bg-muted/10 p-5 text-sm text-muted-foreground">
-              Capital planning is not covered in the current deck. This gap should also appear in the diligence list below.
+              Capital plan not covered in this deck. This has been flagged in Data Gaps below.
             </div>
           )}
         </CardContent>
@@ -637,24 +591,24 @@ export function FinancialsTabContent({ evaluation, financialsWeight }: Financial
                 <div className="space-y-2">
                   <p className="font-medium">Upload Financial Model for Full Analysis</p>
                   <p className="text-sm text-muted-foreground">
-                    A spreadsheet model unlocks deeper projection, scenario, and planning analysis.
+                    Upload a financial model or projections spreadsheet to unlock detailed analysis.
                   </p>
                   <div className="mt-3 grid grid-cols-2 gap-2">
                     <div className="rounded-lg border bg-background p-2.5 text-xs">
                       <TrendingUp className="h-3.5 w-3.5 text-primary mb-1" />
-                      <span className="font-medium">Revenue Projections</span>
+                      <span className="font-medium">Revenue & burn projection charts</span>
                     </div>
                     <div className="rounded-lg border bg-background p-2.5 text-xs">
                       <BarChart3 className="h-3.5 w-3.5 text-primary mb-1" />
-                      <span className="font-medium">Burn & Runway Charts</span>
+                      <span className="font-medium">Assumption-by-assumption stress test</span>
                     </div>
                     <div className="rounded-lg border bg-background p-2.5 text-xs">
                       <Target className="h-3.5 w-3.5 text-primary mb-1" />
-                      <span className="font-medium">Scenario Comparison</span>
+                      <span className="font-medium">Scenario comparison visualization</span>
                     </div>
                     <div className="rounded-lg border bg-background p-2.5 text-xs">
                       <Wallet className="h-3.5 w-3.5 text-primary mb-1" />
-                      <span className="font-medium">Margin Progression</span>
+                      <span className="font-medium">Profitability path & margin trajectory</span>
                     </div>
                   </div>
                 </div>
@@ -676,14 +630,12 @@ export function FinancialsTabContent({ evaluation, financialsWeight }: Financial
                 </div>
               </div>
               {projectionsSummary && (
-                <p className="text-sm leading-relaxed text-muted-foreground">{projectionsSummary}</p>
+                <MarkdownText className="text-sm leading-relaxed text-muted-foreground [&>p]:mb-0">
+                  {projectionsSummary}
+                </MarkdownText>
               )}
             </>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              No projections were provided in the deck, and no financial model has been uploaded yet.
-            </p>
-          )}
+          ) : null}
         </CardContent>
       </Card>
 
@@ -861,57 +813,47 @@ export function FinancialsTabContent({ evaluation, financialsWeight }: Financial
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <BarChart3 className="h-5 w-5 text-primary" />
-                Financial Model Analysis
-              </CardTitle>
-              <CardDescription>Structured output unlocked by uploaded model data.</CardDescription>
+              <CardTitle className="text-base">Assumption Deep Dive</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="space-y-2 text-sm text-muted-foreground">
-                {scenarioDetail && <p>Scenario detail: {scenarioDetail}</p>}
-                {assumptionAssessment && <p>Assumption assessment: {assumptionAssessment}</p>}
-                {!scenarioDetail && !assumptionAssessment && (
-                  <p>No additional model commentary was returned for this run.</p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          {assumptions.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Assumption Deep Dive</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {assumptions.map((item, index) => (
-                  <div key={`${item.assumption}-${index}`} className="rounded-lg border bg-muted/20 p-4">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-medium">{item.assumption}</p>
-                        <p className="text-xs text-muted-foreground">Value: {item.value}</p>
+            <CardContent className="space-y-5">
+              {assumptions.length > 0 ? (
+                <div className="space-y-3">
+                  {assumptions.map((item, index) => (
+                    <div key={`${item.assumption}-${index}`} className="rounded-lg border bg-muted/20 p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-medium">{item.assumption}</p>
+                          <p className="text-xs text-muted-foreground">Value: {item.value}</p>
+                        </div>
+                        <Badge variant="outline" className={labelBadgeClass(item.verdict)}>
+                          {formatEnumLabel(item.verdict)}
+                        </Badge>
                       </div>
-                      <Badge variant="outline" className={labelBadgeClass(item.verdict)}>
-                        {formatEnumLabel(item.verdict)}
-                      </Badge>
+                      <MarkdownText className="mt-2 text-sm text-muted-foreground [&>p]:mb-0">
+                        {item.assessment}
+                      </MarkdownText>
                     </div>
-                    <p className="mt-2 text-sm text-muted-foreground">{item.assessment}</p>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          )}
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No structured assumptions were extracted from the model.
+                </p>
+              )}
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Profitability & Planning Maturity</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
               <Gauge
                 label="Profitability Path"
                 steps={["pre_revenue", "revenue_not_profitable", "path_described", "path_clear", "profitable"]}
                 activeValue={profitabilityPath}
               />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Financial Planning Maturity</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
               <Gauge
                 label="Planning Sophistication"
                 steps={["basic", "developing", "solid", "advanced", "ipo_grade"]}
@@ -933,7 +875,9 @@ export function FinancialsTabContent({ evaluation, financialsWeight }: Financial
               )}
 
               {planningSummary && (
-                <p className="text-sm text-muted-foreground">{planningSummary}</p>
+                <MarkdownText className="text-sm text-muted-foreground [&>p]:mb-0">
+                  {planningSummary}
+                </MarkdownText>
               )}
             </CardContent>
           </Card>

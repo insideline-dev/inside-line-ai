@@ -90,6 +90,9 @@ export function CompetitorsTabContent({
   const barriers = toBarrierStrings(
     competitiveData.barriersToEntry ?? competitiveData.barriers,
   );
+  const barrierBooleans = toBarrierBooleans(
+    competitiveData.barriersToEntry ?? competitiveData.barriers,
+  );
   const strategicPositioning = toRecord(competitiveData.strategicPositioning);
   const competitivePositionObj = toRecord(competitiveData.competitivePosition);
   const moatAssessment = toRecord(competitiveData.moatAssessment);
@@ -102,6 +105,11 @@ export function CompetitorsTabContent({
   );
   const differentiationType = toString(strategicPositioning.differentiationType);
   const differentiationDurability = toString(strategicPositioning.durability);
+  const differentiationSummary = toString(strategicPositioning.differentiation);
+  const uniqueValueProposition = toString(strategicPositioning.uniqueValueProposition);
+  const gapEvidence = toString(competitivePositionObj.gapEvidence);
+  const defensibilityRationale = toString(competitivePositionObj.defensibilityRationale);
+  const timeToReplicate = toString(moatAssessment.timeToReplicate);
   const moatStage = toString(moatAssessment.moatStage);
   const moatEvidence = toStringArray(moatAssessment.moatEvidence);
   const moatSelfReinforcing = toNullableBoolean(moatAssessment.selfReinforcing);
@@ -109,11 +117,11 @@ export function CompetitorsTabContent({
   const competitivePosition =
     toString(competitiveData.competitivePosition) ??
     [
-      toString(strategicPositioning.differentiation),
-      toString(strategicPositioning.uniqueValueProposition),
-      toString(competitivePositionObj.gapEvidence),
-      toString(competitivePositionObj.defensibilityRationale),
-      toString(moatAssessment.timeToReplicate),
+      differentiationSummary,
+      uniqueValueProposition,
+      gapEvidence,
+      defensibilityRationale,
+      timeToReplicate,
     ]
       .filter((value): value is string => Boolean(value))
       .join(". ");
@@ -189,17 +197,22 @@ export function CompetitorsTabContent({
           differentiationStrength: getDifferentiationStrength(
             evaluation.competitiveAdvantageScore,
           ),
-          positioningRecommendation: toStringArray(evaluation.keyStrengths)[0],
           currentGap: competitiveCurrentGap,
           vulnerabilities: competitiveVulnerabilities,
           defensibleAgainstFunded,
           differentiationType,
           differentiationDurability,
+          gapEvidence,
+          defensibilityRationale,
+          timeToReplicate,
+          differentiationSummary,
+          uniqueValueProposition,
           moatStage,
           moatEvidence,
           moatSelfReinforcing,
         }}
         barriersToEntry={barriersToEntry}
+        barrierBooleans={barrierBooleans}
         keyStrengths={keyFindings}
         keyRisks={risks}
         competitiveAdvantageScore={
@@ -281,6 +294,32 @@ function toStringArray(value: unknown): string[] {
   return value
     .map((item) => (typeof item === "string" ? item.trim() : ""))
     .filter((item) => item.length > 0);
+}
+
+function toBarrierBooleans(value: unknown): {
+  technical: boolean;
+  capital: boolean;
+  network: boolean;
+  regulatory: boolean;
+} {
+  const result = { technical: false, capital: false, network: false, regulatory: false };
+  if (!value) return result;
+  if (Array.isArray(value)) {
+    const joined = value.join(" ").toLowerCase();
+    if (joined.includes("technical") || joined.includes("technology")) result.technical = true;
+    if (joined.includes("capital") || joined.includes("infrastructure")) result.capital = true;
+    if (joined.includes("network") || joined.includes("switching")) result.network = true;
+    if (joined.includes("regulat") || joined.includes("license")) result.regulatory = true;
+    return result;
+  }
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    result.technical = record.technical === true;
+    result.capital = record.capital === true;
+    result.network = record.network === true;
+    result.regulatory = record.regulatory === true;
+  }
+  return result;
 }
 
 function toBarrierStrings(value: unknown): string[] {

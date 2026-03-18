@@ -9,3 +9,4 @@ export { FounderInsightCard } from "./FounderInsightCard";
 export { InsightsTabContent } from "./InsightsTabContent";
 export { SourcesTabContent } from "./SourcesTabContent";
 export { FounderRecommendationsTab } from "./FounderRecommendationsTab";
+export { FinancialsTabContent } from "./FinancialsTabContent";

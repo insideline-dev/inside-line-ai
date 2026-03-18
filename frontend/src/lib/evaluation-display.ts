@@ -249,3 +249,34 @@ export function getCriticalDataGaps(evaluation: Evaluation | null | undefined): 
   // Sort by score ascending — weakest sections first
   return items.sort((a, b) => a.score - b.score);
 }
+
+const IMPACT_ORDER: Record<string, number> = { critical: 0, important: 1, minor: 2 };
+
+export function getAllStructuredDataGaps(evaluation: Evaluation | null | undefined): CriticalDataGap[] {
+  if (!evaluation) return [];
+  const items: CriticalDataGap[] = [];
+  for (const { dataKey, label, agent } of AGENT_DATA_FIELDS) {
+    const data = evaluation[dataKey] as Record<string, unknown> | undefined;
+    if (!data || !Array.isArray(data.dataGaps)) continue;
+    const scoreKey = SECTION_SCORE_KEY_MAP[agent];
+    const score = asNumber(scoreKey ? evaluation[scoreKey] : undefined) ?? 0;
+    for (const gap of data.dataGaps) {
+      if (!gap || typeof gap !== "object") continue;
+      const g = gap as Record<string, unknown>;
+      const impact = typeof g.impact === "string" ? g.impact : "minor";
+      items.push({
+        gap: String(g.gap ?? ""),
+        impact,
+        suggestedAction: String(g.suggestedAction ?? ""),
+        source: label,
+        score,
+      });
+    }
+  }
+  // Sort by impact priority (critical first), then by score ascending
+  return items.sort((a, b) => {
+    const impactDiff = (IMPACT_ORDER[a.impact] ?? 3) - (IMPACT_ORDER[b.impact] ?? 3);
+    if (impactDiff !== 0) return impactDiff;
+    return a.score - b.score;
+  });
+}

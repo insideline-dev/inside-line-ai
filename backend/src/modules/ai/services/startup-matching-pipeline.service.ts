@@ -233,6 +233,7 @@ export class StartupMatchingPipelineService {
         startupId: jobData.startupId,
         startup: {
           industry: startupRecord.industry,
+          sectorIndustryGroup: startupRecord.sectorIndustryGroup,
           stage: startupRecord.stage,
           fundingTarget: startupRecord.fundingTarget,
           location: startupRecord.location ?? "",
@@ -377,6 +378,7 @@ export class StartupMatchingPipelineService {
     id: string;
     status: StartupStatus;
     industry: string;
+    sectorIndustryGroup: string | null;
     stage: string;
     fundingTarget: number;
     location: string;
@@ -387,6 +389,7 @@ export class StartupMatchingPipelineService {
         id: startup.id,
         status: startup.status,
         industry: startup.industry,
+        sectorIndustryGroup: startup.sectorIndustryGroup,
         stage: startup.stage,
         fundingTarget: startup.fundingTarget,
         location: startup.location,
@@ -403,6 +406,7 @@ export class StartupMatchingPipelineService {
     return {
       ...found,
       status: found.status as StartupStatus,
+      sectorIndustryGroup: found.sectorIndustryGroup ?? null,
       geoPath: found.geoPath ?? null,
     };
   }

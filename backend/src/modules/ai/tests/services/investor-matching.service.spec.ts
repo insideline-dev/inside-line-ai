@@ -119,7 +119,8 @@ describe("InvestorMatchingService", () => {
     const result = await service.matchStartup({
       startupId: "startup-1",
       startup: {
-        industry: "Industrial SaaS",
+        industry: "saas",
+        sectorIndustryGroup: "software",
         stage: StartupStage.SEED,
         fundingTarget: 2_500_000,
         location: "San Francisco, CA",
@@ -165,7 +166,8 @@ describe("InvestorMatchingService", () => {
     const result = await service.matchStartup({
       startupId: "startup-2",
       startup: {
-        industry: "Industrial SaaS",
+        industry: "saas",
+        sectorIndustryGroup: "software",
         stage: StartupStage.SEED,
         fundingTarget: 2_000_000,
         location: "San Francisco, CA",
@@ -189,7 +191,8 @@ describe("InvestorMatchingService", () => {
     await service.matchStartup({
       startupId: "startup-fallback",
       startup: {
-        industry: "Industrial SaaS",
+        industry: "saas",
+        sectorIndustryGroup: "software",
         stage: StartupStage.SEED,
         fundingTarget: 2_500_000,
         location: "San Francisco, CA",
@@ -201,5 +204,81 @@ describe("InvestorMatchingService", () => {
     expect(insertValues).toHaveBeenCalledWith(
       expect.objectContaining({ thesisFitFallback: true }),
     );
+  });
+
+  it("matches via sectorIndustryGroup when industry is a specific value", async () => {
+    generateTextMock.mockResolvedValue({
+      output: {
+        thesisFitScore: 90,
+        fitRationale: "Great group-level fit.",
+      },
+    });
+
+    // Startup has specific industry "saas" with group "software"
+    // Investor fixtures have industries: ["software"]
+    const result = await service.matchStartup({
+      startupId: "startup-group-match",
+      startup: {
+        industry: "saas",
+        sectorIndustryGroup: "software",
+        stage: StartupStage.SEED,
+        fundingTarget: 2_500_000,
+        location: "San Francisco, CA",
+      },
+      synthesis: createMockSynthesisResult(),
+    });
+
+    expect(result.candidatesEvaluated).toBe(2);
+  });
+
+  it("falls back to direct industry comparison when sectorIndustryGroup is null", async () => {
+    generateTextMock.mockResolvedValue({
+      output: {
+        thesisFitScore: 90,
+        fitRationale: "Direct match.",
+      },
+    });
+
+    // Startup industry directly matches an investor industry value (legacy path)
+    const result = await service.matchStartup({
+      startupId: "startup-direct-match",
+      startup: {
+        industry: "software",
+        sectorIndustryGroup: null,
+        stage: StartupStage.SEED,
+        fundingTarget: 2_500_000,
+        location: "San Francisco, CA",
+      },
+      synthesis: createMockSynthesisResult(),
+    });
+
+    expect(result.candidatesEvaluated).toBe(2);
+  });
+
+  it("filters out candidates when industries do not overlap at any level", async () => {
+    generateTextMock.mockResolvedValue({
+      output: {
+        thesisFitScore: 90,
+        fitRationale: "Would match but filtered first.",
+      },
+    });
+
+    // No investor has "food_beverage" in their industries
+    const result = await service.matchStartup({
+      startupId: "startup-no-match",
+      startup: {
+        industry: "organic_food",
+        sectorIndustryGroup: "food_beverage",
+        stage: StartupStage.SEED,
+        fundingTarget: 2_500_000,
+        location: "San Francisco, CA",
+      },
+      synthesis: createMockSynthesisResult(),
+    });
+
+    // Only generalist (global, multi-stage) should pass — but their industries
+    // are ["software", "health_care", "artificial_intelligence"], no food_beverage
+    expect(result.candidatesEvaluated).toBe(0);
+    expect(generateTextMock).not.toHaveBeenCalled();
   });
 });

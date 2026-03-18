@@ -21,6 +21,26 @@ import {
 
 const TERMINAL_PIPELINE_STATUSES = new Set(["completed", "failed", "cancelled"]);
 
+const PHASE_WEIGHTS: Record<string, number> = {
+  extraction: 0.08,
+  enrichment: 0.07,
+  scraping: 0.10,
+  research: 0.25,
+  evaluation: 0.35,
+  synthesis: 0.15,
+};
+
+const EXPECTED_AGENT_RUNTIME_MS: Record<string, number> = {
+  extraction: 3 * 60_000,
+  enrichment: 2 * 60_000,
+  scraping: 5 * 60_000,
+  research: 8 * 60_000,
+  evaluation: 6 * 60_000,
+  synthesis: 4 * 60_000,
+};
+
+const MAX_RUNNING_PROGRESS = 85;
+
 function unwrapApiResponse<T>(payload: unknown): T {
   if (
     payload &&
@@ -41,21 +61,30 @@ function normalizePercent(value: number): number {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
 
-function calculateAgentProgress(agent: PipelineAgentProgress): number {
-  if (typeof agent.progress === "number") {
-    return normalizePercent(agent.progress);
-  }
-
+function calculateAgentProgress(agent: PipelineAgentProgress, phaseKey?: string): number {
   if (agent.status === "completed") {
     return 100;
   }
+  if (agent.status === "failed") {
+    return 0;
+  }
+
   if (agent.status === "running") {
+    if (typeof agent.progress === "number" && agent.progress > 0) {
+      return normalizePercent(Math.min(agent.progress, MAX_RUNNING_PROGRESS));
+    }
+    if (agent.startedAt) {
+      const elapsed = Date.now() - new Date(agent.startedAt).getTime();
+      const expected = EXPECTED_AGENT_RUNTIME_MS[phaseKey ?? ""] ?? 5 * 60_000;
+      return normalizePercent(Math.floor(Math.min(1, elapsed / expected) * MAX_RUNNING_PROGRESS));
+    }
     return 5;
   }
+
   return 0;
 }
 
-function calculatePhaseProgress(phase: PipelinePhaseProgress): number {
+function calculatePhaseProgress(phase: PipelinePhaseProgress, phaseKey?: string): number {
   if (phase.status === "completed" || phase.status === "skipped") {
     return 100;
   }
@@ -65,7 +94,7 @@ function calculatePhaseProgress(phase: PipelinePhaseProgress): number {
     return phase.status === "running" ? 2 : 0;
   }
 
-  const total = agents.reduce((sum, agent) => sum + calculateAgentProgress(agent), 0);
+  const total = agents.reduce((sum, agent) => sum + calculateAgentProgress(agent, phaseKey), 0);
   return normalizePercent(total / agents.length);
 }
 
@@ -110,7 +139,7 @@ function normalizeTerminalAgentStates(progress: PipelineProgressData): void {
   );
   const now = new Date().toISOString();
 
-  for (const phase of Object.values(progress.phases)) {
+  for (const [phaseKey, phase] of Object.entries(progress.phases)) {
     const phaseTerminal = isTerminalPhaseStatus(phase.status);
     if (!pipelineTerminal && !phaseTerminal) {
       continue;
@@ -158,7 +187,7 @@ function normalizeTerminalAgentStates(progress: PipelineProgressData): void {
       }
     }
 
-    phase.progress = calculatePhaseProgress(phase);
+    phase.progress = calculatePhaseProgress(phase, phaseKey);
   }
 }
 
@@ -168,9 +197,9 @@ function normalizeCompletedPipelinePhases(progress: PipelineProgressData): void 
   }
 
   const now = new Date().toISOString();
-  for (const phase of Object.values(progress.phases)) {
+  for (const [phaseKey, phase] of Object.entries(progress.phases)) {
     if (isTerminalPhaseStatus(phase.status)) {
-      phase.progress = calculatePhaseProgress(phase);
+      phase.progress = calculatePhaseProgress(phase, phaseKey);
       continue;
     }
 
@@ -187,18 +216,23 @@ function recomputeProgress(progress: PipelineProgressData): PipelineProgressData
   normalizeTerminalAgentStates(progress);
 
   const phaseEntries = Object.entries(progress.phases);
-  const phaseCount = Math.max(phaseEntries.length, 1);
-  const overall = phaseEntries.reduce((sum, [, phase]) => {
-    return sum + normalizePercent(phase.progress);
-  }, 0);
+
+  let totalWeight = 0;
+  let weightedSum = 0;
+  for (const [phaseKey, phase] of phaseEntries) {
+    const weight = PHASE_WEIGHTS[phaseKey] ?? (1 / Math.max(phaseEntries.length, 1));
+    totalWeight += weight;
+    weightedSum += weight * normalizePercent(phase.progress);
+  }
 
   progress.phasesCompleted = phaseEntries
     .filter(([, phase]) => phase.status === "completed" || phase.status === "skipped")
     .map(([phase]) => phase);
+  const rawOverall = totalWeight > 0 ? weightedSum / totalWeight : 0;
   progress.overallProgress =
     progress.pipelineStatus === "completed"
       ? 100
-      : normalizePercent(overall / phaseCount);
+      : normalizePercent(Math.min(rawOverall, MAX_RUNNING_PROGRESS));
   progress.updatedAt = new Date().toISOString();
   return progress;
 }
@@ -570,7 +604,7 @@ export function useStartupRealtimeProgress(
             delete phase.error;
           }
 
-          phase.progress = calculatePhaseProgress(phase);
+          phase.progress = calculatePhaseProgress(phase, data.phase);
           const hasTerminalPipelineStatus =
             typeof next.pipelineStatus === "string" &&
             TERMINAL_PIPELINE_STATUSES.has(next.pipelineStatus);
@@ -720,7 +754,7 @@ export function useStartupRealtimeProgress(
             delete phase.error;
           }
 
-          phase.progress = calculatePhaseProgress(phase);
+          phase.progress = calculatePhaseProgress(phase, data.phase);
           next.currentPhase = data.phase;
 
           return recomputeProgress(next);

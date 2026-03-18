@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ConfidenceBadge } from "@/components/ConfidenceBadge";
+import { SectionScoreCard } from "@/components/SectionScoreCard";
+import { MarkdownText } from "@/components/MarkdownText";
 import {
   Building2,
   Globe,
@@ -17,7 +18,9 @@ import {
   Zap,
   Shield,
   Link as LinkIcon,
-  Lightbulb,
+  Cpu,
+  Scale,
+  XCircle,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -113,15 +116,26 @@ interface CompetitivePositioning {
   startupAdvantages?: string[];
   startupDisadvantages?: string[];
   differentiationStrength?: "strong" | "moderate" | "weak";
-  positioningRecommendation?: string;
   currentGap?: string;
   vulnerabilities?: string[];
   defensibleAgainstFunded?: boolean | null;
   differentiationType?: string;
   differentiationDurability?: string;
+  gapEvidence?: string;
+  defensibilityRationale?: string;
+  timeToReplicate?: string;
+  differentiationSummary?: string;
+  uniqueValueProposition?: string;
   moatStage?: string;
   moatEvidence?: string[];
   moatSelfReinforcing?: boolean | null;
+}
+
+interface BarrierBooleans {
+  technical: boolean;
+  capital: boolean;
+  network: boolean;
+  regulatory: boolean;
 }
 
 interface BarriersToEntry {
@@ -169,6 +183,7 @@ interface CompetitorAnalysisProps {
   } | null;
   competitivePositioning?: CompetitivePositioning | null;
   barriersToEntry?: BarriersToEntry | null;
+  barrierBooleans?: BarrierBooleans | null;
   keyStrengths?: string[];
   keyRisks?: string[];
   competitiveAdvantageScore?: number | null;
@@ -228,18 +243,18 @@ export function ProductDefinitionCard({
           <p className="text-sm font-medium text-muted-foreground mb-1">
             Core Offering
           </p>
-          <p className="text-sm text-pretty" data-testid="text-core-offering">
+          <MarkdownText className="text-sm text-pretty [&>p]:mb-0" data-testid="text-core-offering">
             {definition?.coreOffering || "Not specified"}
-          </p>
+          </MarkdownText>
         </div>
 
         <div>
           <p className="text-sm font-medium text-muted-foreground mb-1">
             Value Proposition
           </p>
-          <p className="text-sm text-pretty" data-testid="text-value-proposition">
+          <MarkdownText className="text-sm text-pretty [&>p]:mb-0" data-testid="text-value-proposition">
             {definition?.valueProposition || "Not specified"}
-          </p>
+          </MarkdownText>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
@@ -347,12 +362,12 @@ export function DirectCompetitorCard({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <p
-          className="text-sm text-muted-foreground text-pretty"
+        <MarkdownText
+          className="text-sm text-muted-foreground text-pretty [&>p]:mb-0"
           data-testid={`text-competitor-description-${index}`}
         >
           {competitor?.description || "No description available"}
-        </p>
+        </MarkdownText>
 
         <div className="grid grid-cols-3 gap-3 text-sm">
           {competitor?.foundingYear && (
@@ -618,12 +633,12 @@ export function IndirectCompetitorCard({
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
-        <p
-          className="text-sm text-muted-foreground text-pretty"
+        <MarkdownText
+          className="text-sm text-muted-foreground text-pretty [&>p]:mb-0"
           data-testid={`text-indirect-description-${index}`}
         >
           {competitor?.description || "No description available"}
-        </p>
+        </MarkdownText>
 
         <div className="p-2 bg-muted/50 rounded text-xs text-pretty">
           <span className="font-medium">Why indirect: </span>
@@ -918,58 +933,97 @@ function getCompetitorWebsite(name: string): string {
   return `https://${cleanName}.com`;
 }
 
-function CompetitorLink({ name, index }: { name: string; index: number }) {
-  const websiteUrl = getCompetitorWebsite(name);
+function getFundingBadgeColor(amount: string | null): string {
+  if (!amount) return "bg-muted text-muted-foreground";
+  const lower = amount.toLowerCase();
+  if (lower.includes("b")) return "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400";
+  if (lower.includes("m")) {
+    const num = parseFloat(lower.replace(/[^0-9.]/g, ""));
+    if (num >= 100) return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400";
+    if (num >= 10) return "bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-400";
+    return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400";
+  }
+  return "bg-muted text-muted-foreground";
+}
+
+function getThreatLevelColor(level: string): string {
+  switch (level) {
+    case "high":
+      return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400";
+    case "medium":
+      return "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400";
+    case "low":
+      return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400";
+    default:
+      return "bg-muted text-muted-foreground";
+  }
+}
+
+function CompactCompetitorCard({
+  name,
+  description,
+  funding,
+  website,
+  index,
+  whyIndirect,
+  threatLevel,
+}: {
+  name: string;
+  description: string;
+  funding: string | null;
+  website: string;
+  index: number;
+  whyIndirect?: string;
+  threatLevel?: "high" | "medium" | "low";
+}) {
+  const href = website || getCompetitorWebsite(name);
   return (
-    <a
-      href={websiteUrl}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted hover:bg-muted/80 transition-colors text-sm"
-      data-testid={`link-competitor-${index}`}
+    <div
+      className="min-w-[220px] max-w-[280px] shrink-0 rounded-lg border bg-card p-3 space-y-2"
+      data-testid={`compact-competitor-${index}`}
     >
-      <Globe className="h-3.5 w-3.5 text-muted-foreground" />
-      <span>{name}</span>
-      <ExternalLink className="h-3 w-3 text-muted-foreground" />
-    </a>
-  );
-}
-
-function renderTextValue(value?: string | null): string {
-  if (!value || value.trim().length === 0) return "Not provided";
-  return value;
-}
-
-function renderBooleanBadge(
-  value: boolean | null | undefined,
-  labels: { trueLabel: string; falseLabel: string; unknownLabel?: string },
-) {
-  if (value === true) {
-    return (
-      <Badge variant="default" className="text-xs">
-        {labels.trueLabel}
-      </Badge>
-    );
-  }
-  if (value === false) {
-    return (
-      <Badge variant="secondary" className="text-xs">
-        {labels.falseLabel}
-      </Badge>
-    );
-  }
-  return (
-    <Badge variant="outline" className="text-xs">
-      {labels.unknownLabel ?? "Not provided"}
-    </Badge>
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-center gap-1.5 font-semibold text-sm hover:underline"
+      >
+        {name}
+        <ExternalLink className="h-3 w-3 text-muted-foreground" />
+      </a>
+      {description && (
+        <p className="text-xs text-muted-foreground line-clamp-2 text-pretty">
+          {description}
+        </p>
+      )}
+      <div className="flex flex-wrap items-center gap-1.5">
+        {funding && (
+          <Badge className={cn("text-xs", getFundingBadgeColor(funding))}>
+            <DollarSign className="h-3 w-3 mr-0.5" />
+            {funding}
+          </Badge>
+        )}
+        {threatLevel && (
+          <Badge className={cn("text-xs capitalize", getThreatLevelColor(threatLevel))}>
+            {threatLevel} threat
+          </Badge>
+        )}
+      </div>
+      {whyIndirect && (
+        <p className="text-xs text-muted-foreground/80 line-clamp-2 text-pretty">
+          {whyIndirect}
+        </p>
+      )}
+    </div>
   );
 }
 
 function BasicCompetitorLandscapeCard({
   landscape,
-  positioning,
   competitivePositioning,
-  barriersToEntry,
+  barrierBooleans,
+  directCompetitors = [],
+  indirectCompetitors = [],
   keyStrengths = [],
   keyRisks = [],
   score,
@@ -979,13 +1033,10 @@ function BasicCompetitorLandscapeCard({
   scoringBasis,
 }: {
   landscape: BasicCompetitorLandscape;
-  positioning?: {
-    strategy?: string;
-    differentiation?: string;
-    uniqueValueProp?: string;
-  } | null;
   competitivePositioning?: CompetitivePositioning | null;
-  barriersToEntry?: BarriersToEntry | null;
+  barrierBooleans?: BarrierBooleans | null;
+  directCompetitors?: DirectCompetitor[];
+  indirectCompetitors?: (IndirectCompetitor | AlternativeIndirectCompetitor)[];
   keyStrengths?: string[];
   keyRisks?: string[];
   score?: number | null;
@@ -1006,113 +1057,132 @@ function BasicCompetitorLandscapeCard({
     [];
   const vulnerabilities = competitivePositioning?.vulnerabilities || [];
 
-  const getScoreColor = (s: number) => {
-    if (s >= 80) return "text-green-600";
-    if (s >= 60) return "text-amber-600";
-    return "text-red-600";
+
+  const getDifferentiationTypeColor = (type?: string) => {
+    switch (type?.toLowerCase()) {
+      case "technology":
+        return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400";
+      case "network_effects":
+        return "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400";
+      case "data":
+        return "bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-400";
+      case "brand":
+        return "bg-pink-100 text-pink-800 dark:bg-pink-900/30 dark:text-pink-400";
+      case "cost":
+        return "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400";
+      case "regulatory":
+        return "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-400";
+      default:
+        return "bg-muted text-muted-foreground";
+    }
   };
 
-  const getDifferentiationColor = (strength?: string) => {
-    switch (strength) {
+  const getDurabilityColor = (durability?: string) => {
+    switch (durability?.toLowerCase()) {
       case "strong":
+      case "high":
         return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400";
       case "moderate":
+      case "medium":
         return "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400";
       case "weak":
+      case "low":
         return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400";
       default:
         return "bg-muted text-muted-foreground";
     }
   };
 
-  const getStrategyDescription = (strategy?: string) => {
-    switch (strategy?.toLowerCase()) {
-      case "blue ocean":
-        return "Creating new market space with little to no direct competition";
-      case "red ocean":
-        return "Competing in existing markets with established players";
-      case "niche":
-        return "Focusing on a specific segment within a larger market";
+  const getGapColor = (gap?: string) => {
+    switch (gap?.toLowerCase()) {
+      case "leading":
+        return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400";
+      case "competitive":
+        return "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400";
+      case "behind":
+        return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400";
       default:
-        return null;
+        return "bg-muted text-muted-foreground";
     }
   };
 
+  const timeToReplicateSteps = ["Months", "1-2 Years", "3-5 Years", "5+ Years"] as const;
+
+  const getTimeToReplicateIndex = (time?: string): number => {
+    if (!time) return -1;
+    const lower = time.toLowerCase();
+    if (lower.includes("month") || lower.includes("week")) return 0;
+    if (lower.includes("5+") || lower.includes("5 +") || lower.includes("five+") || lower.includes("decade")) return 3;
+    if (lower.includes("3") || lower.includes("three") || lower.includes("several")) return 2;
+    if (lower.includes("1") || lower.includes("year") || lower.includes("two")) return 1;
+    return -1;
+  };
+
+  const timeIndex = getTimeToReplicateIndex(competitivePositioning?.timeToReplicate);
+
+  const barriers = barrierBooleans ?? { technical: false, capital: false, network: false, regulatory: false };
+  const barrierItems = [
+    { key: "technical" as const, label: "Technical", icon: Cpu },
+    { key: "capital" as const, label: "Capital", icon: DollarSign },
+    { key: "network" as const, label: "Network", icon: Users },
+    { key: "regulatory" as const, label: "Regulatory", icon: Scale },
+  ];
+  const barrierCount = barrierItems.filter((b) => barriers[b.key]).length;
+
+  // Build compact competitor cards from detailed data, falling back to names
+  const directCards = directCompetitors.length > 0
+    ? directCompetitors
+    : directNames.map((name) => ({
+        name,
+        website: "",
+        description: "",
+        foundingYear: null,
+        headquarters: null,
+        employeeCount: null,
+        funding: { totalRaised: null, lastRound: null, lastRoundDate: null, keyInvestors: [] },
+        product: { keyFeatures: [], pricingTiers: null, targetSegment: "" },
+        marketPosition: { estimatedRevenue: null, customerBase: null, marketShare: null },
+        recentActivity: [],
+        strengths: [],
+        weaknesses: [],
+        sources: [],
+      }));
+
+  const indirectCards = indirectCompetitors.length > 0
+    ? indirectCompetitors.filter((c): c is IndirectCompetitor => "name" in c && "threatLevel" in c)
+    : indirectNames.map((name) => ({
+        name,
+        website: "",
+        description: "",
+        threatLevel: "medium" as const,
+        whyIndirect: "",
+        funding: null,
+        strengths: [],
+        sources: [],
+      }));
+
   return (
     <div className="space-y-6" data-testid="section-basic-landscape">
+      {/* Score Card */}
       {score !== null && score !== undefined && (
-        <Card
-          className="border-primary/20 bg-gradient-to-br from-primary/10 via-background to-background"
-          data-testid="card-competitive-score"
-        >
-          <CardContent className="py-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="p-3 rounded-full bg-primary/10">
-                  <Target className="h-6 w-6 text-primary" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-balance">
-                    Competitive Advantage Score
-                  </h3>
-                  <p className="text-sm text-muted-foreground text-pretty">
-                    {weight !== undefined ? `${weight}%` : ""} weight in overall
-                    evaluation
-                  </p>
-                  <ConfidenceBadge
-                    confidence={confidence ?? "unknown"}
-                    className="mt-2"
-                    dataTestId="badge-competitive-confidence"
-                  />
-                </div>
-              </div>
-              <div className="text-right">
-                <span
-                  className={cn(
-                    "text-4xl font-bold tabular-nums",
-                    getScoreColor(score),
-                  )}
-                  data-testid="text-competitive-score"
-                >
-                  {score}
-                </span>
-                <span className="text-lg text-muted-foreground">/100</span>
-              </div>
-            </div>
-
-            {(scoringBasis || (subScores && subScores.length > 0)) && (
-              <div className="mt-5 space-y-4 border-t border-border/60 pt-4">
-                {scoringBasis && <p className="text-sm text-muted-foreground">{scoringBasis}</p>}
-              </div>
-            )}
-            {subScores && subScores.length > 0 && (
-              <div className="mt-3 space-y-3">
-                {subScores.map((item) => {
-                  const pct = item.weight <= 1 ? item.weight * 100 : item.weight;
-                  const pctLabel = `${Number.isInteger(pct) ? pct.toFixed(0) : pct.toFixed(1)}%`;
-                  const barColor = item.score >= 80 ? "bg-emerald-500" : item.score >= 60 ? "bg-amber-500" : "bg-rose-500";
-                  return (
-                    <div key={item.dimension} className="grid grid-cols-[minmax(0,1fr)_48px] gap-3">
-                      <div>
-                        <div className="mb-1 flex items-center justify-between gap-3 text-xs">
-                          <span className="font-medium">{item.dimension}</span>
-                          <span className="text-muted-foreground">{pctLabel}</span>
-                        </div>
-                        <div className="h-2.5 rounded-full bg-muted">
-                          <div className={`h-full rounded-full ${barColor}`} style={{ width: `${Math.max(0, Math.min(100, item.score))}%` }} />
-                        </div>
-                      </div>
-                      <div className="text-right text-xs font-medium">{Math.round(item.score)}</div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <SectionScoreCard
+          title="Competitive Advantage Score"
+          score={score}
+          weight={weight}
+          confidence={confidence ?? "unknown"}
+          scoringBasis={scoringBasis}
+          subScores={subScores}
+          dataTestId="card-competitive-score"
+          scoreTestId="text-competitive-score"
+          confidenceTestId="badge-competitive-confidence"
+        />
       )}
 
-      {positioning && (
+      {/* Fix #1: Strategic Positioning with differentiationType + durability badges */}
+      {(competitivePositioning?.differentiationType ||
+        competitivePositioning?.differentiationDurability ||
+        competitivePositioning?.differentiationSummary ||
+        competitivePositioning?.uniqueValueProposition) && (
         <Card data-testid="card-positioning">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-lg text-balance">
@@ -1121,303 +1191,274 @@ function BasicCompetitorLandscapeCard({
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {positioning.strategy && (
-                <div className="p-3 bg-muted/50 rounded-lg">
-                  <p className="text-xs font-medium text-muted-foreground mb-1">
-                    Market Strategy
-                  </p>
-                  <Badge
-                    variant="outline"
-                    className="capitalize mb-2"
-                    data-testid="badge-strategy"
-                  >
-                    {positioning.strategy}
-                  </Badge>
-                  {getStrategyDescription(positioning.strategy) && (
-                    <p className="text-xs text-muted-foreground mt-1 text-pretty">
-                      {getStrategyDescription(positioning.strategy)}
-                    </p>
+            <div className="flex flex-wrap items-center gap-2">
+              {competitivePositioning?.differentiationType && (
+                <Badge
+                  className={cn(
+                    "capitalize text-xs",
+                    getDifferentiationTypeColor(competitivePositioning.differentiationType),
                   )}
-                </div>
+                  data-testid="badge-differentiation-type"
+                >
+                  {competitivePositioning.differentiationType.replace(/_/g, " ")}
+                </Badge>
               )}
-              {competitivePositioning?.differentiationStrength && (
-                <div className="p-3 bg-muted/50 rounded-lg">
-                  <p className="text-xs font-medium text-muted-foreground mb-1">
-                    Differentiation Strength
-                  </p>
-                  <Badge
-                    className={cn(
-                      "capitalize",
-                      getDifferentiationColor(
-                        competitivePositioning.differentiationStrength,
-                      ),
-                    )}
-                    data-testid="badge-differentiation-strength"
-                  >
-                    {competitivePositioning.differentiationStrength}
-                  </Badge>
-                </div>
+              {competitivePositioning?.differentiationDurability && (
+                <Badge
+                  className={cn(
+                    "capitalize text-xs",
+                    getDurabilityColor(competitivePositioning.differentiationDurability),
+                  )}
+                  data-testid="badge-durability"
+                >
+                  {competitivePositioning.differentiationDurability} durability
+                </Badge>
               )}
             </div>
-            {positioning.differentiation && (
+            {competitivePositioning?.differentiationSummary && (
               <div>
                 <p className="text-sm font-medium text-muted-foreground mb-1">
                   Differentiation
                 </p>
-                <p className="text-sm text-pretty" data-testid="text-differentiation">
-                  {positioning.differentiation}
-                </p>
+                <MarkdownText className="text-sm text-pretty [&>p]:mb-0" data-testid="text-differentiation">
+                  {competitivePositioning.differentiationSummary}
+                </MarkdownText>
               </div>
             )}
-            {positioning.uniqueValueProp && (
+            {competitivePositioning?.uniqueValueProposition && (
               <div>
                 <p className="text-sm font-medium text-muted-foreground mb-1">
                   Unique Value Proposition
                 </p>
-                <p className="text-sm text-pretty" data-testid="text-value-prop">
-                  {positioning.uniqueValueProp}
-                </p>
+                <MarkdownText className="text-sm text-pretty [&>p]:mb-0" data-testid="text-value-prop">
+                  {competitivePositioning.uniqueValueProposition}
+                </MarkdownText>
               </div>
             )}
           </CardContent>
         </Card>
       )}
 
-      {competitivePositioning?.positioningRecommendation && (
-        <Card
-          className="border-primary/30 bg-primary/5"
-          data-testid="card-strategic-recommendation"
-        >
-          <CardHeader className="pb-2">
+      {/* Fix #6: Direct Competitors — compact cards */}
+      {directCards.length > 0 && (
+        <Card data-testid="card-direct-competitors-basic">
+          <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base text-balance">
-              <Lightbulb className="h-5 w-5 text-primary" />
-              Strategic Recommendation
+              <Target className="h-4 w-4 text-destructive" />
+              Direct Competitors ({directCards.length})
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p
-              className="text-sm leading-relaxed text-pretty"
-              data-testid="text-strategic-recommendation"
-            >
-              {competitivePositioning.positioningRecommendation}
-            </p>
+            <div className="flex gap-3 overflow-x-auto pb-2" data-testid="list-direct-competitor-names">
+              {directCards.map((c, i) => (
+                <CompactCompetitorCard key={`${c.name}-${i}`} name={c.name} description={c.description} funding={c.funding.totalRaised} website={c.website} index={i} />
+              ))}
+            </div>
           </CardContent>
         </Card>
       )}
 
-      <Card
-        className="border-primary/15"
-        data-testid="card-competitive-signals"
-      >
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base text-balance">
-            <Shield className="h-5 w-5 text-primary" />
-            Competitive Signals
-          </CardTitle>
-          <p className="text-xs text-muted-foreground">
-            Detailed moat and positioning indicators from competitive evaluation
-          </p>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="rounded-lg border bg-muted/30 p-3">
-              <p className="text-xs font-medium text-muted-foreground mb-1">
-                Differentiation Type
-              </p>
-              <p
-                className="text-sm capitalize text-pretty"
-                data-testid="text-differentiation-type"
-              >
-                {renderTextValue(competitivePositioning?.differentiationType)}
-              </p>
+      {/* Fix #6: Indirect Competitors — compact cards with threat level */}
+      {indirectCards.length > 0 && (
+        <Card data-testid="card-indirect-competitors-basic">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base text-balance">
+              <Shield className="h-4 w-4 text-amber-500" />
+              Indirect Competitors ({indirectCards.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex gap-3 overflow-x-auto pb-2" data-testid="list-indirect-competitor-names">
+              {indirectCards.map((c, i) => (
+                <CompactCompetitorCard
+                  key={`${c.name}-${i}`}
+                  name={c.name}
+                  description={c.description}
+                  funding={c.funding}
+                  website={c.website}
+                  index={i + 100}
+                  whyIndirect={c.whyIndirect}
+                  threatLevel={c.threatLevel}
+                />
+              ))}
             </div>
-            <div className="rounded-lg border bg-muted/30 p-3">
-              <p className="text-xs font-medium text-muted-foreground mb-1">
-                Differentiation Durability
-              </p>
-              <p
-                className="text-sm text-pretty"
-                data-testid="text-differentiation-durability"
-              >
-                {renderTextValue(
-                  competitivePositioning?.differentiationDurability,
-                )}
-              </p>
-            </div>
-            <div className="rounded-lg border bg-muted/30 p-3 md:col-span-2">
-              <p className="text-xs font-medium text-muted-foreground mb-1">
-                Current Competitive Gap
-              </p>
-              <p className="text-sm text-pretty" data-testid="text-current-gap">
-                {renderTextValue(competitivePositioning?.currentGap)}
-              </p>
-            </div>
-            <div className="rounded-lg border bg-muted/30 p-3">
-              <p className="text-xs font-medium text-muted-foreground mb-2">
-                Defensible Against Funded Competitors
-              </p>
-              {renderBooleanBadge(
-                competitivePositioning?.defensibleAgainstFunded,
-                {
-                  trueLabel: "Defensible",
-                  falseLabel: "Not defensible",
-                },
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Fix #5: Competitive Position Summary */}
+      {(competitivePositioning?.currentGap ||
+        competitivePositioning?.defensibleAgainstFunded != null ||
+        competitivePositioning?.timeToReplicate) && (
+        <Card data-testid="card-competitive-position-summary">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base text-balance">
+              <Shield className="h-5 w-5 text-primary" />
+              Competitive Position Summary
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-wrap items-start gap-4">
+              {competitivePositioning?.currentGap && (
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-1.5">
+                    Current Gap
+                  </p>
+                  <Badge
+                    className={cn("text-xs capitalize", getGapColor(competitivePositioning.currentGap))}
+                    data-testid="badge-current-gap"
+                  >
+                    {competitivePositioning.currentGap}
+                  </Badge>
+                </div>
+              )}
+              {competitivePositioning?.defensibleAgainstFunded != null && (
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-1.5">
+                    Defensible Against Funded Entrant
+                  </p>
+                  {competitivePositioning.defensibleAgainstFunded ? (
+                    <Badge className="text-xs bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400" data-testid="badge-defensible">
+                      <CheckCircle className="h-3 w-3 mr-1" />
+                      Yes
+                    </Badge>
+                  ) : (
+                    <Badge className="text-xs bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400" data-testid="badge-defensible">
+                      <XCircle className="h-3 w-3 mr-1" />
+                      No
+                    </Badge>
+                  )}
+                </div>
+              )}
+              {competitivePositioning?.timeToReplicate && timeIndex >= 0 && (
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-1.5">
+                    Time to Replicate
+                  </p>
+                  <div className="flex items-center gap-1" data-testid="indicator-time-to-replicate">
+                    {timeToReplicateSteps.map((step, i) => {
+                      const filled = i <= timeIndex;
+                      const stepColors = [
+                        "bg-red-400 dark:bg-red-500",
+                        "bg-amber-400 dark:bg-amber-500",
+                        "bg-lime-400 dark:bg-lime-500",
+                        "bg-green-500 dark:bg-green-600",
+                      ];
+                      return (
+                        <Tooltip key={step}>
+                          <TooltipTrigger asChild>
+                            <div
+                              className={cn(
+                                "h-5 w-8 rounded-sm",
+                                filled ? stepColors[i] : "bg-muted",
+                              )}
+                            />
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p className="text-xs">{step}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      );
+                    })}
+                    <span className="ml-2 text-xs text-muted-foreground">{competitivePositioning.timeToReplicate}</span>
+                  </div>
+                </div>
               )}
             </div>
-            <div className="rounded-lg border bg-muted/30 p-3">
-              <p className="text-xs font-medium text-muted-foreground mb-2">
-                Vulnerabilities
-              </p>
-              {vulnerabilities.length > 0 ? (
-                <ul className="space-y-1 text-sm text-muted-foreground">
-                  {vulnerabilities.slice(0, 4).map((item, index) => (
+            {competitivePositioning?.gapEvidence && (
+              <div>
+                <p className="text-sm font-medium text-muted-foreground mb-1">
+                  Gap Evidence
+                </p>
+                <MarkdownText className="text-sm text-pretty [&>p]:mb-0" data-testid="text-gap-evidence">
+                  {competitivePositioning.gapEvidence}
+                </MarkdownText>
+              </div>
+            )}
+            {competitivePositioning?.defensibilityRationale && (
+              <div>
+                <p className="text-sm font-medium text-muted-foreground mb-1">
+                  Defensibility Rationale
+                </p>
+                <MarkdownText className="text-sm text-pretty [&>p]:mb-0" data-testid="text-defensibility-rationale">
+                  {competitivePositioning.defensibilityRationale}
+                </MarkdownText>
+              </div>
+            )}
+            {vulnerabilities.length > 0 && (
+              <div>
+                <p className="text-sm font-medium text-muted-foreground mb-2">
+                  Vulnerabilities
+                </p>
+                <ul className="space-y-1.5 text-sm">
+                  {vulnerabilities.map((item, index) => (
                     <li
                       key={`${item}-${index}`}
                       className="flex items-start gap-2 text-pretty"
                     >
                       <AlertTriangle className="h-3.5 w-3.5 mt-0.5 text-amber-500 shrink-0" />
-                      <span>{item}</span>
+                      <span className="text-muted-foreground">{item}</span>
                     </li>
                   ))}
                 </ul>
-              ) : (
-                <p className="text-sm text-muted-foreground">Not provided</p>
-              )}
-            </div>
-          </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
+      {/* Section 4: Barriers to Entry — 2x2 grid with checkmark/X */}
+      <Card data-testid="card-barriers-to-entry">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base text-balance">
+            <Shield className="h-5 w-5 text-primary" />
+            Barriers to Entry
+          </CardTitle>
+          <p className="text-xs text-muted-foreground text-pretty">
+            What protects this company from new competition
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-xs font-medium text-muted-foreground">
+            <span className="tabular-nums">{barrierCount}/4</span> barriers present
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            {barrierItems.map((b) => {
+              const present = barriers[b.key];
+              const Icon = b.icon;
+              return (
+                <div
+                  key={b.key}
+                  className={cn(
+                    "flex items-center gap-3 rounded-lg border p-3",
+                    present ? "bg-green-50 border-green-200 dark:bg-green-950/20 dark:border-green-900/40" : "bg-muted/30",
+                  )}
+                  data-testid={`barrier-${b.key}`}
+                >
+                  <Icon className={cn("h-4 w-4 shrink-0", present ? "text-green-600 dark:text-green-400" : "text-muted-foreground/50")} />
+                  <span className={cn("text-sm font-medium", present ? "text-foreground" : "text-muted-foreground/60")}>
+                    {b.label}
+                  </span>
+                  {present ? (
+                    <CheckCircle className="h-4 w-4 ml-auto text-green-600 dark:text-green-400 shrink-0" />
+                  ) : (
+                    <XCircle className="h-4 w-4 ml-auto text-muted-foreground/30 shrink-0" />
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </CardContent>
       </Card>
 
-      {barriersToEntry &&
-        (barriersToEntry.technical ||
-          barriersToEntry.regulatory ||
-          barriersToEntry.capital ||
-          barriersToEntry.network) && (
-          <Card data-testid="card-barriers-to-entry">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-base text-balance">
-                <Shield className="h-5 w-5 text-primary" />
-                Barriers to Entry
-              </CardTitle>
-              <p className="text-xs text-muted-foreground text-pretty">
-                What protects this company from new competition
-              </p>
-            </CardHeader>
-            <CardContent>
-              <p className="text-xs font-medium text-muted-foreground mb-3">
-                {[barriersToEntry.technical, barriersToEntry.capital, barriersToEntry.network, barriersToEntry.regulatory].filter(Boolean).length}/4 barriers identified
-              </p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {barriersToEntry.technical && (
-                  <div className="p-3 bg-muted/50 rounded-lg">
-                    <p className="text-xs font-medium text-muted-foreground mb-1">
-                      Technical
-                    </p>
-                    <p
-                      className="text-sm text-pretty"
-                      data-testid="text-barrier-technical"
-                    >
-                      {barriersToEntry.technical}
-                    </p>
-                  </div>
-                )}
-                {barriersToEntry.capital && (
-                  <div className="p-3 bg-muted/50 rounded-lg">
-                    <p className="text-xs font-medium text-muted-foreground mb-1">
-                      Capital Requirements
-                    </p>
-                    <p
-                      className="text-sm text-pretty"
-                      data-testid="text-barrier-capital"
-                    >
-                      {barriersToEntry.capital}
-                    </p>
-                  </div>
-                )}
-                {barriersToEntry.network && (
-                  <div className="p-3 bg-muted/50 rounded-lg">
-                    <p className="text-xs font-medium text-muted-foreground mb-1">
-                      Network Effects
-                    </p>
-                    <p
-                      className="text-sm text-pretty"
-                      data-testid="text-barrier-network"
-                    >
-                      {barriersToEntry.network}
-                    </p>
-                  </div>
-                )}
-                {barriersToEntry.regulatory && (
-                  <div className="p-3 bg-muted/50 rounded-lg">
-                    <p className="text-xs font-medium text-muted-foreground mb-1">
-                      Regulatory
-                    </p>
-                    <p
-                      className="text-sm text-pretty"
-                      data-testid="text-barrier-regulatory"
-                    >
-                      {barriersToEntry.regulatory}
-                    </p>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {directNames.length > 0 && (
-          <Card data-testid="card-direct-competitors-basic">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-base text-balance">
-                <Target className="h-4 w-4 text-destructive" />
-                Direct Competitors ({directNames.length})
-              </CardTitle>
-              <p className="text-xs text-muted-foreground mt-1 text-pretty">
-                Click to search for more information
-              </p>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap gap-2" data-testid="list-direct-competitor-names">
-                {directNames.map((name, i) => (
-                  <CompetitorLink key={i} name={name} index={i} />
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {indirectNames.length > 0 && (
-          <Card data-testid="card-indirect-competitors-basic">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-base text-balance">
-                <Shield className="h-4 w-4 text-amber-500" />
-                Indirect Competitors ({indirectNames.length})
-              </CardTitle>
-              <p className="text-xs text-muted-foreground mt-1 text-pretty">
-                Click to search for more information
-              </p>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap gap-2" data-testid="list-indirect-competitor-names">
-                {indirectNames.map((name, i) => (
-                  <CompetitorLink key={i} name={name} index={i + 100} />
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-      </div>
-
+      {/* Section 5: Key Strengths & Key Risks */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {(advantages.length > 0 || keyStrengths.length > 0) && (
           <Card data-testid="card-advantages">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-base text-balance">
                 <CheckCircle className="h-4 w-4 text-green-600" />
-                Competitive Advantages
+                Key Strengths
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -1438,7 +1479,7 @@ function BasicCompetitorLandscapeCard({
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-base text-balance">
                 <AlertTriangle className="h-4 w-4 text-amber-500" />
-                Competitive Risks
+                Key Risks
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -1469,7 +1510,7 @@ export function CompetitorAnalysis({
   basicLandscape,
   positioning,
   competitivePositioning,
-  barriersToEntry,
+  barrierBooleans,
   keyStrengths = [],
   keyRisks = [],
   competitiveAdvantageScore,
@@ -1509,43 +1550,30 @@ export function CompetitorAnalysis({
     );
   }
 
-  const competitiveData = {
-    productDefinition,
-    competitorProfiles: directCompetitors,
-    indirectCompetitorProfiles: indirectCompetitors,
-    marketLandscape,
-    sourceSummary,
-    competitorLandscape: basicLandscape,
-    positioning,
-    competitivePositioning,
-    barriersToEntry,
-    keyStrengths,
-    keyRisks,
-  };
-
   return (
     <div className="space-y-6">
-      {competitiveData.productDefinition && (
+      {productDefinition && (
         <ProductDefinitionCard
-          definition={competitiveData.productDefinition}
+          definition={productDefinition}
           companyName={companyName}
         />
       )}
 
-      {competitiveData.marketLandscape && (
-        <MarketLandscapeCard landscape={competitiveData.marketLandscape} />
+      {marketLandscape && (
+        <MarketLandscapeCard landscape={marketLandscape} />
       )}
 
-      {competitiveData.sourceSummary && (
-        <SourcesCard sources={competitiveData.sourceSummary} />
+      {sourceSummary && (
+        <SourcesCard sources={sourceSummary} />
       )}
 
       {basicLandscape && (
         <BasicCompetitorLandscapeCard
           landscape={basicLandscape}
-          positioning={positioning}
           competitivePositioning={competitivePositioning}
-          barriersToEntry={barriersToEntry}
+          barrierBooleans={barrierBooleans}
+          directCompetitors={directCompetitors as DirectCompetitor[]}
+          indirectCompetitors={indirectCompetitors}
           keyStrengths={keyStrengths}
           keyRisks={keyRisks}
           score={competitiveAdvantageScore ?? undefined}
@@ -1554,50 +1582,6 @@ export function CompetitorAnalysis({
           subScores={subScores}
           scoringBasis={scoringBasis}
         />
-      )}
-
-      {directCompetitors.length > 0 && (
-        <section className="space-y-4" data-testid="section-direct-competitor-details">
-          <h3 className="text-xl font-semibold flex items-center gap-2">
-            <Target className="h-5 w-5 text-destructive" />
-            Direct Competitor Details
-          </h3>
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-            {directCompetitors.map((competitor, index) => (
-              <DirectCompetitorCard
-                key={`${competitor.name}-${index}`}
-                competitor={competitor as DirectCompetitor}
-                index={index}
-              />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {indirectCompetitors.length > 0 ? (
-        <section className="space-y-4" data-testid="section-indirect-competitor-details">
-          <h3 className="text-xl font-semibold flex items-center gap-2">
-            <Shield className="h-5 w-5 text-amber-500" />
-            Indirect Competitor Details
-          </h3>
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-            {indirectCompetitors.map((competitor, index) => (
-              <IndirectCompetitorCard
-                key={`${(competitor as IndirectCompetitor).name || (competitor as AlternativeIndirectCompetitor).category || "indirect"}-${index}`}
-                competitor={competitor as IndirectCompetitor}
-                index={index}
-              />
-            ))}
-          </div>
-        </section>
-      ) : (
-        <Card data-testid="card-no-indirect-competitors">
-          <CardContent className="py-5">
-            <p className="text-sm text-muted-foreground">
-              No indirect competitor profiles were returned in this analysis run.
-            </p>
-          </CardContent>
-        </Card>
       )}
     </div>
   );

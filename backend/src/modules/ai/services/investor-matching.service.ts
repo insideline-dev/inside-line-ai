@@ -30,6 +30,7 @@ interface StartupMatchInput {
   startupId: string;
   startup: {
     industry: string;
+    sectorIndustryGroup?: string | null;
     stage: string;
     fundingTarget?: number;
     location: string;
@@ -123,6 +124,13 @@ export class InvestorMatchingService {
       this.passesFirstFilter(candidate, input, startupGeoPath),
     );
 
+    this.logger.log(
+      `Matching ${input.startupId}: industry="${input.startup.industry}" ` +
+        `group="${input.startup.sectorIndustryGroup ?? "null"}" ` +
+        `stage="${input.startup.stage}" ` +
+        `total=${candidates.length} passed=${firstFilterPassed.length}`,
+    );
+
     type EvaluatedCandidate = InvestorMatchResult & {
       isMatch: boolean;
       usedFallback: boolean;
@@ -196,10 +204,16 @@ export class InvestorMatchingService {
     const industries = candidate.industries ?? [];
     const stages = candidate.stages ?? [];
     const startupIndustry = input.startup.industry.trim().toLowerCase();
+    const startupGroup =
+      input.startup.sectorIndustryGroup?.trim().toLowerCase() || null;
 
     const industryOk =
       industries.length === 0 ||
-      industries.some((industry) => industry.trim().toLowerCase() === startupIndustry);
+      industries.some((inv) => {
+        const investorIndustry = inv.trim().toLowerCase();
+        if (startupGroup && investorIndustry === startupGroup) return true;
+        return investorIndustry === startupIndustry;
+      });
 
     const stageOk =
       stages.length === 0 ||

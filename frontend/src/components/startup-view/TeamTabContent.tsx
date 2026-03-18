@@ -6,12 +6,28 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { TeamGrid } from "@/components/TeamProfile";
-import { TeamCompositionSummary } from "@/components/TeamCompositionSummary";
+import { SectionScoreCard } from "@/components/SectionScoreCard";
 import { DataGapsSection, parseDataGapItems } from "@/components/DataGapsSection";
-import { Users } from "lucide-react";
+import { MarkdownText } from "@/components/MarkdownText";
+import {
+  Users,
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
+  Briefcase,
+  Code,
+  Globe,
+  Megaphone,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
 import type { Evaluation } from "@/types/evaluation";
 import type { TeamMemberSource } from "@/components/TeamProfile";
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
 interface TeamMember {
   name: string;
@@ -58,24 +74,28 @@ interface TeamTabContentProps {
   companyName?: string;
 }
 
-interface TeamCompositionShape {
-  hasBusinessLeader?: boolean;
-  hasTechnicalLeader?: boolean;
-  hasIndustryExpert?: boolean;
-  hasOperationsLeader?: boolean;
-  teamBalance?: string;
-  functionalCoverage?: string;
-}
-
-interface FounderRecommendationItem {
-  type: "hire" | "reframe" | "recommendation";
-  bullet: string;
-}
-
 interface SubScoreItem {
   dimension: string;
   weight: number;
   score: number;
+}
+
+interface TeamComposition {
+  businessLeadership: boolean;
+  technicalCapability: boolean;
+  domainExpertise: boolean;
+  gtmCapability: boolean;
+  sentence?: string;
+  reason?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Safe accessors
+// ---------------------------------------------------------------------------
+
+function toRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return value as Record<string, unknown>;
 }
 
 function toSubScores(value: unknown): SubScoreItem[] {
@@ -97,171 +117,58 @@ function normalizeKey(value?: string) {
   return value?.trim().toLowerCase() || "";
 }
 
-function toStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map((item) => (typeof item === "string" ? item.trim() : ""))
-    .filter(Boolean);
-}
-
-function toStructuredGapStrings(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map((item) => {
-      if (typeof item === "string") return item.trim();
-      if (!item || typeof item !== "object") return "";
-      const record = item as Record<string, unknown>;
-      const gap = typeof record.gap === "string" ? record.gap.trim() : "";
-      const impact = typeof record.impact === "string" ? record.impact.trim() : "";
-      return gap ? (impact ? `${gap} (${impact} impact)` : gap) : "";
-    })
-    .filter(Boolean);
-}
-
-function dedupeStrings(values: string[]): string[] {
-  const seen = new Set<string>();
-  const output: string[] = [];
-  for (const value of values) {
-    const key = value.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    output.push(value);
+/** Parse a string into individual items by splitting on newlines / bullet chars. */
+function parseStringItems(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => (typeof item === "string" ? item.trim() : ""))
+      .filter(Boolean);
   }
-  return output;
+  if (typeof value !== "string" || !value.trim()) return [];
+  return value
+    .split(/[\n\r]+/)
+    .map((line) => line.replace(/^[\s•\-*]+/, "").trim())
+    .filter(Boolean);
 }
 
-function normalizeBoolean(value: unknown): boolean | undefined {
-  if (typeof value === "boolean") return value;
-  if (typeof value === "number") return value > 0;
-  if (typeof value === "string") {
-    const normalized = value.trim().toLowerCase();
-    if (["true", "yes", "present", "filled"].includes(normalized)) return true;
-    if (["false", "no", "missing", "absent"].includes(normalized)) return false;
+// ---------------------------------------------------------------------------
+// Data extraction
+// ---------------------------------------------------------------------------
+
+function extractTeamComposition(teamData: Record<string, unknown>): TeamComposition | undefined {
+  const raw = toRecord(teamData.teamComposition);
+  if (!raw || Object.keys(raw).length === 0) return undefined;
+  return {
+    businessLeadership: raw.businessLeadership === true,
+    technicalCapability: raw.technicalCapability === true,
+    domainExpertise: raw.domainExpertise === true,
+    gtmCapability: raw.gtmCapability === true,
+    sentence: typeof raw.sentence === "string" ? raw.sentence.trim() : undefined,
+    reason: typeof raw.reason === "string" ? raw.reason.trim() : undefined,
+  };
+}
+
+function extractFounderMarketFitScore(teamData: Record<string, unknown> | undefined): number | undefined {
+  if (!teamData) return undefined;
+  const fmf = toRecord(teamData.founderMarketFit);
+  if (typeof fmf.score === "number") return fmf.score;
+  if (typeof fmf.score === "string" && fmf.score.trim()) {
+    const parsed = Number(fmf.score);
+    if (Number.isFinite(parsed)) return parsed;
   }
   return undefined;
 }
 
-function extractTeamStrengths(evaluation: Evaluation | null): string[] {
-  if (!evaluation) return [];
-  const teamData = (evaluation.teamData as Record<string, unknown>) || {};
-  const memberEvals = (evaluation.teamMemberEvaluations as unknown as any[]) || [];
-
-  // New schema: strengths > keyStrengths > keyFindings (backward compat)
-  const explicit =
-    toStringArray((teamData as any).strengths).length > 0
-      ? toStringArray((teamData as any).strengths)
-      : toStringArray((teamData as any).keyStrengths).length > 0
-        ? toStringArray((teamData as any).keyStrengths)
-        : toStringArray((teamData as any).keyFindings);
-  if (explicit.length > 0) {
-    return dedupeStrings(explicit).slice(0, 5);
-  }
-
-  const memberStrengths = memberEvals.flatMap((member) =>
-    toStringArray((member as any).strengths),
-  );
-  return dedupeStrings(memberStrengths).slice(0, 5);
+function extractFounderMarketFitWhy(teamData: Record<string, unknown> | undefined): string | undefined {
+  if (!teamData) return undefined;
+  const fmf = toRecord(teamData.founderMarketFit);
+  if (typeof fmf.why === "string" && fmf.why.trim()) return fmf.why.trim();
+  return undefined;
 }
 
-function extractTeamRisks(evaluation: Evaluation | null): string[] {
-  if (!evaluation) return [];
-  const teamData = (evaluation.teamData as Record<string, unknown>) || {};
-  const memberEvals = (evaluation.teamMemberEvaluations as unknown as any[]) || [];
-
-  const explicit =
-    toStringArray((teamData as any).keyRisks).length > 0
-      ? toStringArray((teamData as any).keyRisks)
-      : toStringArray((teamData as any).risks);
-  if (explicit.length > 0) {
-    return dedupeStrings(explicit).slice(0, 5);
-  }
-
-  const memberConcerns = memberEvals.flatMap((member) => [
-    ...toStringArray((member as any).concerns),
-    ...toStringArray((member as any).risks),
-  ]);
-  const dataGaps = toStructuredGapStrings((teamData as any).dataGaps);
-  return dedupeStrings([...memberConcerns, ...dataGaps]).slice(0, 5);
-}
-
-function inferRoleCoverage(members: TeamMember[]): Omit<TeamCompositionShape, "teamBalance"> {
-  const combined = members
-    .map((member) => `${member.role || ""} ${member.headline || ""}`.toLowerCase())
-    .join(" ");
-
-  const hasBusinessLeader =
-    /\b(ceo|chief executive|founder|co-founder|president|business|commercial|growth|sales)\b/.test(
-      combined,
-    );
-  const hasTechnicalLeader =
-    /\b(cto|chief technology|technical|engineering|engineer|architect|product|tech)\b/.test(
-      combined,
-    );
-  const hasOperationsLeader =
-    /\b(coo|chief operating|operations|ops|supply chain|logistics|general manager)\b/.test(
-      combined,
-    );
-  const hasIndustryExpert =
-    /\b(industry|domain|sector|advisor|expert|veteran|former)\b/.test(combined);
-
-  return {
-    hasBusinessLeader,
-    hasTechnicalLeader,
-    hasIndustryExpert,
-    hasOperationsLeader,
-  };
-}
-
-function resolveTeamComposition(
-  evaluation: Evaluation | null,
-  members: TeamMember[],
-): TeamCompositionShape | undefined {
-  if (!evaluation) return undefined;
-  const teamData = (evaluation.teamData as Record<string, unknown>) || {};
-  const raw =
-    (teamData as any).teamComposition ||
-    (teamData as any).functionalCoverage ||
-    (evaluation.teamComposition as Record<string, unknown> | undefined);
-
-  const getCovered = (candidate: unknown): boolean | undefined => {
-    if (candidate && typeof candidate === "object") {
-      return normalizeBoolean((candidate as Record<string, unknown>).covered);
-    }
-    return normalizeBoolean(candidate);
-  };
-
-  const inferred = inferRoleCoverage(members);
-  const teamBalance =
-    (typeof (raw as any)?.sentence === "string" && (raw as any).sentence.trim()) ||
-    (typeof (raw as any)?.reason === "string" && (raw as any).reason.trim()) ||
-    (typeof (raw as any)?.teamBalance === "string" && (raw as any).teamBalance.trim()) ||
-    (typeof (teamData as any).executionCapability === "string" &&
-      (teamData as any).executionCapability.trim()) ||
-    (typeof (teamData as any).founderQuality === "string" &&
-      (teamData as any).founderQuality.trim()) ||
-    undefined;
-
-  return {
-    hasBusinessLeader:
-      getCovered((raw as any)?.businessLeadership) ??
-      normalizeBoolean((raw as any)?.hasBusinessLeader) ??
-      inferred.hasBusinessLeader,
-    hasTechnicalLeader:
-      getCovered((raw as any)?.technicalCapability) ??
-      normalizeBoolean((raw as any)?.hasTechnicalLeader) ??
-      inferred.hasTechnicalLeader,
-    hasIndustryExpert:
-      getCovered((raw as any)?.domainExpertise) ??
-      normalizeBoolean((raw as any)?.hasIndustryExpert) ??
-      inferred.hasIndustryExpert,
-    hasOperationsLeader:
-      getCovered((raw as any)?.gtmCapability) ??
-      normalizeBoolean((raw as any)?.hasOperationsLeader) ??
-      inferred.hasOperationsLeader,
-    teamBalance,
-    functionalCoverage: extractFunctionalCoverage(teamData),
-  };
-}
+// ---------------------------------------------------------------------------
+// Team member merge (5-layer resolution)
+// ---------------------------------------------------------------------------
 
 function parseDuration(duration?: string) {
   if (!duration) return { startDate: undefined, endDate: undefined, isCurrent: undefined };
@@ -279,7 +186,6 @@ function normalizeExperienceItems(
   experience: Array<Record<string, unknown>> | undefined,
 ) {
   if (!experience || experience.length === 0) return [];
-
   return experience.map((item) => {
     const duration = typeof item.duration === "string" ? item.duration : undefined;
     const parsed = parseDuration(duration);
@@ -301,7 +207,6 @@ function normalizeEducationItems(
   education: Array<Record<string, unknown>> | undefined,
 ) {
   if (!education || education.length === 0) return [];
-
   return education.map((item) => ({
     school: (item.school as string) || "",
     degree: (item.degree as string) || "",
@@ -315,7 +220,6 @@ function normalizeEducationItems(
   }));
 }
 
-/** Safely access teamData fields without `as any` on every line. */
 function getTeamDataField<T>(teamData: Record<string, unknown> | undefined, ...keys: string[]): T | undefined {
   if (!teamData) return undefined;
   for (const key of keys) {
@@ -324,90 +228,47 @@ function getTeamDataField<T>(teamData: Record<string, unknown> | undefined, ...k
   return undefined;
 }
 
-/** Extract founder-market fit score: new founderMarketFit.score > legacy founderMarketFitScore */
-function extractFounderMarketFitScore(teamData: Record<string, unknown> | undefined): number | undefined {
-  if (!teamData) return undefined;
-  const fmf = teamData.founderMarketFit as Record<string, unknown> | undefined;
-  if (fmf && typeof fmf.score === "number") return fmf.score;
-  if (fmf && typeof fmf.score === "string" && fmf.score.trim()) {
-    const parsed = Number(fmf.score);
-    if (Number.isFinite(parsed)) return parsed;
-  }
-  const legacy = teamData.founderMarketFitScore;
-  if (typeof legacy === "number") return legacy;
-  if (typeof legacy === "string" && legacy.trim()) {
-    const parsed = Number(legacy);
-    if (Number.isFinite(parsed)) return parsed;
-  }
-  return undefined;
-}
-
-/** Extract founder-market fit rationale: new founderMarketFit.why > legacy fields */
-function extractFounderMarketFitWhy(teamData: Record<string, unknown> | undefined): string | undefined {
-  if (!teamData) return undefined;
-  const fmf = teamData.founderMarketFit as Record<string, unknown> | undefined;
-  if (fmf && typeof fmf.why === "string" && fmf.why.trim()) return fmf.why.trim();
-  const legacy = teamData.founderMarketFitRationale ?? teamData.founderMarketFitReason;
-  if (typeof legacy === "string" && legacy.trim()) return legacy.trim();
-  return undefined;
-}
-
-/** Extract founderRecommendations array (new schema field). */
-function extractFounderRecommendations(teamData: Record<string, unknown> | undefined): FounderRecommendationItem[] {
-  if (!teamData) return [];
-  const raw = teamData.founderRecommendations;
-  if (!Array.isArray(raw)) return [];
-
-  return raw
-    .map((item): FounderRecommendationItem | null => {
-      if (typeof item === "string") {
-        const bullet = item.trim();
-        return bullet.length > 0 ? { type: "recommendation", bullet } : null;
-      }
-      if (!item || typeof item !== "object") return null;
-
-      const record = item as Record<string, unknown>;
-      const bullet =
-        typeof record.recommendation === "string"
-          ? record.recommendation.trim()
-          : typeof record.bullet === "string"
-            ? record.bullet.trim()
-            : "";
-      if (!bullet) return null;
-
-      const rawType =
-        typeof record.action === "string"
-          ? record.action.toLowerCase().trim()
-          : typeof record.type === "string"
-            ? record.type.toLowerCase().trim()
-            : "";
-      const type: FounderRecommendationItem["type"] =
-        rawType === "hire" || rawType === "reframe" ? rawType : "recommendation";
-      return { type, bullet };
-    })
-    .filter((item): item is FounderRecommendationItem => item !== null);
-}
-
-/** Extract functionalCoverage string/object from teamData. */
-function extractFunctionalCoverage(teamData: Record<string, unknown> | undefined): string | undefined {
-  if (!teamData) return undefined;
-  const raw = teamData.teamComposition ?? teamData.functionalCoverage;
-  if (typeof raw === "string" && raw.trim()) return raw.trim();
-  if (raw && typeof raw === "object") {
-    // If it's a structured object, pull a summary key or stringify the keys
-    const obj = raw as Record<string, unknown>;
-    const summary =
-      obj.sentence ??
-      obj.reason ??
-      obj.summary ??
-      obj.assessment ??
-      obj.overview;
-    if (typeof summary === "string" && summary.trim()) return summary.trim();
-  }
-  return undefined;
-}
-
 type RawMember = Record<string, unknown> & { name?: string; role?: string };
+
+function resolveExperience(
+  li: Record<string, unknown>,
+  member: Record<string, unknown>,
+  memberEval: Record<string, unknown> | undefined,
+  founderData: RawMember | undefined,
+  companyName?: string,
+): TeamMember["experience"] {
+  const expDetails = li.experienceDetails as Array<Record<string, unknown>> | undefined;
+  const positions = li.positions as Array<Record<string, unknown>> | undefined;
+  const experience = li.experience as Array<Record<string, unknown>> | undefined;
+  const currentCompany = li.currentCompany as { name?: string; title?: string } | null | undefined;
+
+  if (expDetails?.length) return normalizeExperienceItems(expDetails);
+  if (positions?.length) return normalizeExperienceItems(positions);
+  if (experience?.length) return normalizeExperienceItems(experience);
+  if (currentCompany?.name || currentCompany?.title) {
+    return [{
+      title: currentCompany.title || (member.role as string) || "Current role",
+      company: currentCompany.name || "",
+      isCurrent: true,
+    }];
+  }
+  if (member.role) {
+    return [{
+      title: member.role as string,
+      company: companyName || "Current Company",
+      isCurrent: true,
+    }];
+  }
+  const evalPrevious = memberEval?.previousCompanies as string[] | undefined;
+  if (evalPrevious?.length) {
+    return evalPrevious.map((c) => ({ title: "Role", company: c }));
+  }
+  const founderPrevious = founderData?.previousCompanies as string[] | undefined;
+  if (founderPrevious?.length) {
+    return founderPrevious.map((c) => ({ title: "Role", company: c }));
+  }
+  return [];
+}
 
 function buildTeamMembers(
   evaluation: Evaluation | null,
@@ -421,14 +282,12 @@ function buildTeamMembers(
   const teamEvalMembers = (getTeamDataField<RawMember[]>(teamData, "teamMembers", "members") ??
     ((teamData.teamEvaluation as Record<string, unknown> | undefined)?.members as RawMember[] | undefined) ?? []) as RawMember[];
 
-  // Fix: actually populate research members from evaluation teamData
   const researchTeamMembers = teamEvalMembers;
 
   const submittedKeys = new Set(
     (submittedMembers ?? []).map((m) => normalizeKey(m.name)).filter(Boolean),
   );
 
-  // Allow ALL named members through - don't restrict to submitted-only
   const shouldInclude = (name?: string) => Boolean(normalizeKey(name));
 
   const memberMap = new Map<string, Record<string, unknown> & { source: TeamMemberSource }>();
@@ -472,8 +331,7 @@ function buildTeamMembers(
     }
   }
 
-  // Layer 4 (highest priority): enriched / LinkedIn data already on teamEvals
-  // (handled during final merge below via linkedinAnalysis)
+  // Layer 4 (highest priority): enriched / LinkedIn data via linkedinAnalysis on teamEvals
 
   // Layer 5 (top): submitted members always win
   for (const member of submittedMembers ?? []) {
@@ -506,10 +364,8 @@ function buildTeamMembers(
 
     const linkedinAnalysis = (memberEval?.linkedinAnalysis ?? {}) as Record<string, unknown>;
     const linkedinData = (memberEval?.linkedinData ?? linkedinAnalysis) as Record<string, unknown>;
-    // Merge linkedin sources: prefer linkedinAnalysis, fall back to linkedinData, then memberEval
     const li = { ...memberEval, ...linkedinData, ...linkedinAnalysis } as Record<string, unknown>;
 
-    // Determine display source: enriched if LinkedIn data exists, otherwise track origin
     const resolvedSource: TeamMemberSource = isSubmittedMember
       ? (hasEnrichment ? "enriched" : "submitted")
       : member.source;
@@ -567,45 +423,59 @@ function buildTeamMembers(
   });
 }
 
-function resolveExperience(
-  li: Record<string, unknown>,
-  member: Record<string, unknown>,
-  memberEval: Record<string, unknown> | undefined,
-  founderData: RawMember | undefined,
-  companyName?: string,
-): TeamMember["experience"] {
-  const expDetails = li.experienceDetails as Array<Record<string, unknown>> | undefined;
-  const positions = li.positions as Array<Record<string, unknown>> | undefined;
-  const experience = li.experience as Array<Record<string, unknown>> | undefined;
-  const currentCompany = li.currentCompany as { name?: string; title?: string } | null | undefined;
+// ---------------------------------------------------------------------------
+// Inline sub-components
+// ---------------------------------------------------------------------------
 
-  if (expDetails?.length) return normalizeExperienceItems(expDetails);
-  if (positions?.length) return normalizeExperienceItems(positions);
-  if (experience?.length) return normalizeExperienceItems(experience);
-  if (currentCompany?.name || currentCompany?.title) {
-    return [{
-      title: currentCompany.title || (member.role as string) || "Current role",
-      company: currentCompany.name || "",
-      isCurrent: true,
-    }];
-  }
-  if (member.role) {
-    return [{
-      title: member.role as string,
-      company: companyName || "Current Company",
-      isCurrent: true,
-    }];
-  }
-  const evalPrevious = memberEval?.previousCompanies as string[] | undefined;
-  if (evalPrevious?.length) {
-    return evalPrevious.map((c) => ({ title: "Role", company: c }));
-  }
-  const founderPrevious = founderData?.previousCompanies as string[] | undefined;
-  if (founderPrevious?.length) {
-    return founderPrevious.map((c) => ({ title: "Role", company: c }));
-  }
-  return [];
+const CAPABILITY_ITEMS: Array<{
+  key: keyof Pick<TeamComposition, "businessLeadership" | "technicalCapability" | "domainExpertise" | "gtmCapability">;
+  label: string;
+  icon: typeof Briefcase;
+}> = [
+  { key: "businessLeadership", label: "Business Leadership", icon: Briefcase },
+  { key: "technicalCapability", label: "Technical Capability", icon: Code },
+  { key: "domainExpertise", label: "Domain Expertise", icon: Globe },
+  { key: "gtmCapability", label: "GTM Capability", icon: Megaphone },
+];
+
+function CapabilityBadge({
+  label,
+  covered,
+  icon: Icon,
+}: {
+  label: string;
+  covered: boolean;
+  icon: typeof Briefcase;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-2 rounded-lg border p-3",
+        covered
+          ? "border-emerald-400/35 bg-emerald-500/10"
+          : "border-muted bg-muted/30",
+      )}
+    >
+      <Icon className={cn("h-4 w-4 shrink-0", covered ? "text-emerald-600" : "text-muted-foreground")} />
+      <span className="flex-1 text-sm font-medium">{label}</span>
+      {covered ? (
+        <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+      ) : (
+        <XCircle className="h-4 w-4 shrink-0 text-muted-foreground" />
+      )}
+    </div>
+  );
 }
+
+function fmfScoreColor(score: number): string {
+  if (score > 75) return "text-emerald-600 dark:text-emerald-400";
+  if (score >= 50) return "text-amber-500 dark:text-amber-400";
+  return "text-rose-600 dark:text-rose-400";
+}
+
+// ---------------------------------------------------------------------------
+// Main component
+// ---------------------------------------------------------------------------
 
 export function TeamTabContent({
   evaluation,
@@ -614,114 +484,154 @@ export function TeamTabContent({
   teamWeight,
   companyName,
 }: TeamTabContentProps) {
+  const teamData = useMemo(
+    () => toRecord(evaluation?.teamData),
+    [evaluation],
+  );
+
   const mergedMembers = useMemo(
     () => buildTeamMembers(evaluation, teamMembers, companyName),
     [evaluation, teamMembers, companyName],
   );
-  const teamComposition = useMemo(
-    () => resolveTeamComposition(evaluation, mergedMembers),
-    [evaluation, mergedMembers],
-  );
-  const teamStrengths = useMemo(() => extractTeamStrengths(evaluation), [evaluation]);
-  const teamRisks = useMemo(() => extractTeamRisks(evaluation), [evaluation]);
-  const teamData = useMemo(
-    () => (evaluation?.teamData as Record<string, unknown> | undefined) ?? undefined,
-    [evaluation],
-  );
-  const founderMarketFitScore = useMemo(() => extractFounderMarketFitScore(teamData), [teamData]);
-  const founderMarketFitWhy = useMemo(() => extractFounderMarketFitWhy(teamData), [teamData]);
-  const founderRecommendations = useMemo(() => extractFounderRecommendations(teamData), [teamData]);
+
+  const scoring = useMemo(() => toRecord(teamData.scoring), [teamData]);
+
   const teamConfidence = useMemo(() => {
-    const directConfidence = teamData?.confidence;
-    if (typeof directConfidence === "string") return directConfidence;
-
-    const scoring = teamData?.scoring;
-    if (scoring && typeof scoring === "object") {
-      const scoringConfidence = (scoring as Record<string, unknown>).confidence;
-      if (typeof scoringConfidence === "string") return scoringConfidence;
-    }
-
+    if (typeof scoring.confidence === "string") return scoring.confidence;
+    if (typeof teamData.confidence === "string") return teamData.confidence;
     return "unknown";
-  }, [teamData]);
-  const teamSubScores = useMemo(() => {
-    const scoring = teamData?.scoring as Record<string, unknown> | undefined;
-    return toSubScores(scoring?.subScores);
-  }, [teamData]);
-  const teamScoringBasis = useMemo(() => {
-    const scoring = teamData?.scoring as Record<string, unknown> | undefined;
-    return typeof scoring?.scoringBasis === "string" ? scoring.scoringBasis.trim() : undefined;
-  }, [teamData]);
-  const teamDataGaps = useMemo(() => parseDataGapItems(teamData?.dataGaps), [teamData]);
+  }, [scoring, teamData]);
+
+  const teamSubScores = useMemo(() => toSubScores(scoring.subScores), [scoring]);
+
+  const teamScoringBasis = useMemo(
+    () => (typeof scoring.scoringBasis === "string" ? scoring.scoringBasis.trim() : undefined),
+    [scoring],
+  );
+
+  const teamComposition = useMemo(() => extractTeamComposition(teamData), [teamData]);
+
+  const coverageCount = useMemo(() => {
+    if (!teamComposition) return 0;
+    return CAPABILITY_ITEMS.filter((c) => teamComposition[c.key]).length;
+  }, [teamComposition]);
+
+  const fmfScore = useMemo(() => extractFounderMarketFitScore(teamData), [teamData]);
+  const fmfWhy = useMemo(() => extractFounderMarketFitWhy(teamData), [teamData]);
+  const roundedFmfScore = fmfScore !== undefined ? Math.round(fmfScore) : null;
+
+  const strengths = useMemo(() => parseStringItems(teamData.strengths), [teamData]);
+  const risks = useMemo(() => parseStringItems(teamData.risks), [teamData]);
+
+  const dataGaps = useMemo(() => parseDataGapItems(teamData.dataGaps), [teamData]);
 
   return (
     <div className="space-y-6" data-testid="container-team-tab">
+      {/* Section 1: Score Card */}
       {evaluation && showScores && (
-        <TeamCompositionSummary
-          teamScore={evaluation.teamScore || 0}
-          teamComposition={teamComposition}
-          keyStrengths={teamStrengths}
-          keyRisks={teamRisks}
+        <SectionScoreCard
+          title="Team Score"
+          score={evaluation.teamScore || 0}
           weight={teamWeight}
           confidence={teamConfidence}
-          founderMarketFit={{
-            score: founderMarketFitScore,
-            why: founderMarketFitWhy,
-          }}
-          subScores={teamSubScores}
           scoringBasis={teamScoringBasis}
+          subScores={teamSubScores}
+          dataTestId="card-team-score"
+          scoreTestId="text-team-score"
+          confidenceTestId="badge-team-confidence"
         />
       )}
 
-      {founderRecommendations.length > 0 && (
-        <Card className="border-primary/20 bg-gradient-to-br from-primary/5 via-background to-background" data-testid="card-founder-recommendations">
-          <CardHeader>
+      {/* Section 2: Team Composition */}
+      {teamComposition && (
+        <Card className="border-primary/15" data-testid="card-team-composition">
+          <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
-              <Users className="w-5 h-5" />
-              <span data-testid="text-founder-recommendations-title">Recommendations for Founders</span>
+              <Users className="h-5 w-5 text-primary" />
+              Team Composition
             </CardTitle>
-            <CardDescription>Actionable guidance from the team evaluation</CardDescription>
+            <CardDescription>
+              {coverageCount}/4 covered
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <ul className="space-y-2" data-testid="container-founder-recommendations">
-              {founderRecommendations.map((rec, i) => (
-                <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground" data-testid={`item-founder-rec-${i}`}>
-                  <span className="w-1.5 h-1.5 rounded-full bg-primary mt-2 shrink-0" />
-                  <span>
-                    {rec.type === "hire"
-                      ? "Hire: "
-                      : rec.type === "reframe"
-                        ? "Reframe: "
-                        : ""}
-                    {rec.bullet}
-                  </span>
-                </li>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {CAPABILITY_ITEMS.map((item) => (
+                <CapabilityBadge
+                  key={item.key}
+                  label={item.label}
+                  covered={teamComposition[item.key]}
+                  icon={item.icon}
+                />
               ))}
-            </ul>
+            </div>
+
+            {teamComposition.sentence && (
+              <MarkdownText className="text-sm text-muted-foreground [&>p]:mb-0">
+                {teamComposition.sentence}
+              </MarkdownText>
+            )}
+            {teamComposition.reason && teamComposition.reason !== teamComposition.sentence && (
+              <p className="text-xs text-muted-foreground italic">
+                {teamComposition.reason}
+              </p>
+            )}
           </CardContent>
         </Card>
       )}
 
-      <Card className="border-primary/15" data-testid="card-team-profiles">
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <Users className="w-5 h-5" />
-            <span data-testid="text-team-profiles-title">Team Member Profiles</span>
-          </CardTitle>
-          <CardDescription data-testid="text-team-profiles-description">
-            LinkedIn-enriched profiles with experience timelines
-          </CardDescription>
-        </CardHeader>
-      </Card>
+      {/* Section 3: Founder-Market Fit */}
+      {(roundedFmfScore !== null || fmfWhy) && (
+        <Card className="border-primary/15" data-testid="card-founder-market-fit">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Users className="h-5 w-5 text-primary" />
+              Founder-Market Fit
+              {roundedFmfScore !== null && (
+                <Badge
+                  variant="secondary"
+                  className={cn("ml-auto tabular-nums", fmfScoreColor(roundedFmfScore))}
+                  data-testid="text-fmf-score"
+                >
+                  {roundedFmfScore}/100
+                </Badge>
+              )}
+            </CardTitle>
+          </CardHeader>
+          {fmfWhy && (
+            <CardContent>
+              <MarkdownText
+                className="text-sm text-muted-foreground leading-relaxed [&>p]:mb-0"
+                data-testid="text-fmf-why"
+              >
+                {fmfWhy}
+              </MarkdownText>
+            </CardContent>
+          )}
+        </Card>
+      )}
 
+      {/* Section 4: Team Member Cards */}
       {mergedMembers.length > 0 ? (
         <div data-testid="container-team-grid">
+          <Card className="border-primary/15 mb-6" data-testid="card-team-profiles">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Users className="h-5 w-5" />
+                <span data-testid="text-team-profiles-title">Team Members</span>
+              </CardTitle>
+              <CardDescription data-testid="text-team-profiles-description">
+                LinkedIn-enriched profiles with experience timelines
+              </CardDescription>
+            </CardHeader>
+          </Card>
           <TeamGrid members={mergedMembers} showTimelines={true} />
         </div>
       ) : (
         <Card className="border-dashed" data-testid="card-no-team-data">
           <CardContent className="p-12 text-center">
-            <Users className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-            <h3 className="font-semibold mb-2" data-testid="text-no-team-title">
+            <Users className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
+            <h3 className="mb-2 font-semibold" data-testid="text-no-team-title">
               No team data
             </h3>
             <p className="text-muted-foreground" data-testid="text-no-team-message">
@@ -731,7 +641,63 @@ export function TeamTabContent({
         </Card>
       )}
 
-      <DataGapsSection gaps={teamDataGaps} />
+      {/* Section 5: Strengths & Risks */}
+      {(strengths.length > 0 || risks.length > 0) && (
+        <div className="grid gap-6 md:grid-cols-2" data-testid="container-strengths-risks">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                Team Strengths
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {strengths.length > 0 ? (
+                <ul className="space-y-2">
+                  {strengths.map((item, idx) => (
+                    <li key={idx} className="flex items-start gap-2 text-sm">
+                      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No team strengths were identified in this run.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-rose-500" />
+                Team Risks
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {risks.length > 0 ? (
+                <ul className="space-y-2">
+                  {risks.map((item, idx) => (
+                    <li key={idx} className="flex items-start gap-2 text-sm">
+                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-rose-500" />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No explicit team risks were identified in this run.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Section 6: Data Gaps */}
+      <DataGapsSection gaps={dataGaps} />
     </div>
   );
 }

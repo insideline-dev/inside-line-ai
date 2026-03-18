@@ -16,7 +16,8 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { ConfidenceBadge } from "@/components/ConfidenceBadge";
+import { SectionScoreCard } from "@/components/SectionScoreCard";
+import { MarkdownText } from "@/components/MarkdownText";
 
 interface TeamComposition {
   hasBusinessLeader?: boolean;
@@ -76,16 +77,6 @@ function RoleIndicator({
   );
 }
 
-function scoreBarTone(score: number): string {
-  if (score >= 80) return "bg-emerald-500";
-  if (score >= 60) return "bg-amber-500";
-  return "bg-rose-500";
-}
-
-function formatWeight(value: number): string {
-  const pct = value <= 1 ? value * 100 : value;
-  return `${Number.isInteger(pct) ? pct.toFixed(0) : pct.toFixed(1)}%`;
-}
 
 export function TeamCompositionSummary({
   teamScore,
@@ -104,71 +95,17 @@ export function TeamCompositionSummary({
 
   return (
     <div className="space-y-6">
-      <Card
-        className="border-primary/20 bg-gradient-to-br from-primary/10 via-background to-background"
-        data-testid="card-team-score"
-      >
-        <CardContent className="py-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-3 rounded-full bg-primary/10">
-                <Users className="h-6 w-6 text-primary" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold">Team Score</h3>
-                <p className="text-sm text-muted-foreground">
-                  {weight !== undefined ? `${weight}%` : ""} weight in overall
-                  evaluation
-                </p>
-                <ConfidenceBadge
-                  confidence={confidence}
-                  className="mt-2"
-                  dataTestId="badge-team-confidence"
-                />
-              </div>
-            </div>
-            <div className="text-right">
-              <span
-                className={`text-4xl font-bold ${
-                  teamScore >= 80
-                    ? "text-green-600"
-                    : teamScore >= 60
-                    ? "text-amber-600"
-                    : "text-red-600"
-                }`}
-                data-testid="text-team-score"
-              >
-                {teamScore}
-              </span>
-              <span className="text-lg text-muted-foreground">/100</span>
-            </div>
-          </div>
-
-          {(scoringBasis || (subScores && subScores.length > 0)) && (
-            <div className="mt-5 space-y-4 border-t border-border/60 pt-4">
-              {scoringBasis && <p className="text-sm text-muted-foreground">{scoringBasis}</p>}
-              {subScores && subScores.length > 0 && (
-                <div className="space-y-3">
-                  {subScores.map((item) => (
-                <div key={item.dimension} className="grid grid-cols-[minmax(0,1fr)_48px] gap-3">
-                  <div>
-                    <div className="mb-1 flex items-center justify-between gap-3 text-xs">
-                      <span className="font-medium">{item.dimension}</span>
-                      <span className="text-muted-foreground">{formatWeight(item.weight)}</span>
-                    </div>
-                    <div className="h-2.5 rounded-full bg-muted">
-                      <div className={`h-full rounded-full ${scoreBarTone(item.score)}`} style={{ width: `${Math.max(0, Math.min(100, item.score))}%` }} />
-                    </div>
-                  </div>
-                  <div className="text-right text-xs font-medium">{Math.round(item.score)}</div>
-                </div>
-              ))}
-                </div>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <SectionScoreCard
+        title="Team Score"
+        score={teamScore}
+        weight={weight}
+        confidence={confidence}
+        scoringBasis={scoringBasis}
+        subScores={subScores}
+        dataTestId="card-team-score"
+        scoreTestId="text-team-score"
+        confidenceTestId="badge-team-confidence"
+      />
 
       <Card className="border-primary/15">
         <CardHeader className="pb-3">
@@ -209,38 +146,43 @@ export function TeamCompositionSummary({
           </div>
 
           {teamComposition?.teamBalance && (
-            <p className="text-sm text-muted-foreground mt-2">
+            <MarkdownText className="text-sm text-muted-foreground mt-2 [&>p]:mb-0">
               {teamComposition.teamBalance}
-            </p>
+            </MarkdownText>
           )}
           {teamComposition?.functionalCoverage && teamComposition.functionalCoverage !== teamComposition.teamBalance && (
-            <p className="text-xs text-muted-foreground italic">
+            <MarkdownText className="text-xs text-muted-foreground italic [&>p]:mb-0">
               {teamComposition.functionalCoverage}
-            </p>
+            </MarkdownText>
           )}
 
-          {(founderMarketFitScore !== null || founderMarketFitWhy) && (
-            <div
-              className="rounded-lg border border-primary/20 bg-primary/5 p-4 space-y-2"
-              data-testid="card-founder-market-fit-inline"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-semibold">Founder-Market Fit</p>
-                {founderMarketFitScore !== null && (
-                  <Badge variant="secondary" data-testid="text-fmf-score">
-                    {founderMarketFitScore}/100
-                  </Badge>
-                )}
-              </div>
-              {founderMarketFitWhy && (
-                <p className="text-sm text-muted-foreground leading-relaxed" data-testid="text-fmf-why">
-                  {founderMarketFitWhy}
-                </p>
-              )}
-            </div>
-          )}
         </CardContent>
       </Card>
+
+      {(founderMarketFitScore !== null || founderMarketFitWhy) && (
+        <Card className="border-primary/15" data-testid="card-founder-market-fit">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Users className="w-5 h-5 text-primary" />
+              Founder-Market Fit
+              {founderMarketFitScore !== null && (
+                <Badge variant="secondary" className="ml-auto" data-testid="text-fmf-score">
+                  {founderMarketFitScore}/100
+                </Badge>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {founderMarketFitWhy && (
+              <div data-testid="text-fmf-why">
+                <MarkdownText className="text-sm text-muted-foreground leading-relaxed [&>p]:mb-0">
+                  {founderMarketFitWhy}
+                </MarkdownText>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-6 md:grid-cols-2">
         <Card>

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ConfidenceBadge } from "@/components/ConfidenceBadge";
+import { MarkdownText } from "@/components/MarkdownText";
 import { ScoreRing } from "@/components/analysis/ScoreRing";
 import {
   CheckCircle,
@@ -209,7 +210,7 @@ export function SummaryCard({
                 {strengths.map((strength, i) => (
                   <li key={i} className="flex items-start gap-2" data-testid={`item-strength-${i}`}>
                     <ChevronRight className="w-4 h-4 text-chart-2 mt-0.5 shrink-0" />
-                    <span>{strength}</span>
+                    <MarkdownText className="flex-1 [&>p]:mb-0">{strength}</MarkdownText>
                   </li>
                 ))}
               </ul>
@@ -227,7 +228,7 @@ export function SummaryCard({
                 {risks.map((risk, i) => (
                   <li key={i} className="flex items-start gap-2" data-testid={`item-risk-${i}`}>
                     <ChevronRight className="w-4 h-4 text-chart-4 mt-0.5 shrink-0" />
-                    <span>{risk}</span>
+                    <MarkdownText className="flex-1 [&>p]:mb-0">{risk}</MarkdownText>
                   </li>
                 ))}
               </ul>

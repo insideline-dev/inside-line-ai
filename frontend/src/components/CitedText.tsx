@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { MarkdownText } from "./MarkdownText";
 
 interface Source {
   label: string;
@@ -10,6 +11,11 @@ interface CitedTextProps {
   text: string;
   sources?: Source[];
   className?: string;
+}
+
+/** Check if text contains citation markers like [1], [2] */
+function hasCitations(text: string): boolean {
+  return /\[\d+\]/.test(text);
 }
 
 function parseCitations(paragraph: string, sources: Source[]): ReactNode[] {
@@ -63,13 +69,26 @@ function parseCitations(paragraph: string, sources: Source[]): ReactNode[] {
 }
 
 export function CitedText({ text, sources, className }: CitedTextProps) {
+  const sourcesList = sources ?? [];
+  const textHasCitations = hasCitations(text) && sourcesList.length > 0;
+
+  // If text has citations, use the citation parser (preserves tooltip behavior)
+  if (textHasCitations) {
+    return (
+      <div className={className}>
+        {text.split("\n\n").map((paragraph, idx) => (
+          <p key={idx} className="mb-2 last:mb-0">
+            {parseCitations(paragraph, sourcesList)}
+          </p>
+        ))}
+      </div>
+    );
+  }
+
+  // Otherwise render as markdown
   return (
-    <div className={className}>
-      {text.split("\n\n").map((paragraph, idx) => (
-        <p key={idx} className="mb-2 last:mb-0">
-          {parseCitations(paragraph, sources ?? [])}
-        </p>
-      ))}
-    </div>
+    <MarkdownText className={className}>
+      {text}
+    </MarkdownText>
   );
 }

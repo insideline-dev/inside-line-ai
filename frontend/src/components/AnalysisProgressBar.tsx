@@ -281,7 +281,6 @@ export function AnalysisProgressBar({
               <div className="space-y-1">
                 {section.agents.map(([agentKey, agent]) => {
                   const status = agent.status ?? "pending";
-                  const agentProgress = typeof agent.progress === "number" ? Math.round(agent.progress) : undefined;
                   const label = agent.key || agentKey;
                   const statusClass =
                     status === "completed"
@@ -306,9 +305,6 @@ export function AnalysisProgressBar({
                           <Clock3 className="w-3 h-3" />
                         )}
                         <span className="capitalize">{status}</span>
-                        {agentProgress !== undefined && (
-                          <span className="text-muted-foreground">{agentProgress}%</span>
-                        )}
                       </span>
                     </div>
                   );

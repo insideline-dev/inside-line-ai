@@ -516,7 +516,7 @@ describe("Evaluation variable mapping", () => {
           tam: { value: "Unknown", methodology: "top-down", sources: [], confidence: "low" },
           sam: { value: "Unknown", methodology: "Unknown", filters: [], sources: [], confidence: "low" },
           som: { value: "Unknown", methodology: "Unknown", assumptions: "Unknown", confidence: "low" },
-          bottomUpSanityCheck: { calculation: "Not performed", plausible: false, notes: "No notes" },
+          bottomUpSanityCheck: { calculation: "Not performed", notes: "No notes" },
           deckVsResearch: {
             tamClaimed: "Unknown",
             tamResearched: "Unknown",

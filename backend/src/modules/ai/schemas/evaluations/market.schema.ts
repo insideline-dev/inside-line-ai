@@ -81,7 +81,6 @@ const SomSchema = z.object({
 
 const BottomUpSanityCheckSchema = z.object({
   calculation: requiredStringFromNull("Not performed"),
-  plausible: requiredStringFromNull("unknown"),
   notes: requiredStringFromNull("No notes"),
 });
 

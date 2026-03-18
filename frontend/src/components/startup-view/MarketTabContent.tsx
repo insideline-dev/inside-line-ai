@@ -303,7 +303,6 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage }: Mar
   const samSources = toMarketSources(sam.sources);
 
   const bottomUpCalculation = getMeaningful(bottomUpSanityCheck.calculation) || "Not provided";
-  const bottomUpPlausible = toBoolean(bottomUpSanityCheck.plausible);
   const bottomUpNotes = getMeaningful(bottomUpSanityCheck.notes) || "Not provided";
 
   const deckTamClaimed = getMeaningful(deckVsResearch.tamClaimed) || "Not provided";
@@ -414,7 +413,7 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage }: Mar
           </div>
 
           {(tamSources.length > 0 || samSources.length > 0) && (
-            <div className="space-y-2">
+            <div className="space-y-3">
               <p className="text-xs font-medium text-muted-foreground">Source Attribution</p>
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
@@ -449,75 +448,124 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage }: Mar
                   </tbody>
                 </table>
               </div>
+
+              {/* Deck vs Research alignment rows — inline below the table */}
+              {(deckTamClaimed !== "Not provided" || deckTamResearched !== "Not provided") && (
+                <div className="space-y-3 rounded-lg border bg-muted/10 p-3">
+                  {/* TAM alignment */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-4 text-xs">
+                      <div className="space-y-0.5">
+                        <p className="text-muted-foreground">Deck claim</p>
+                        <p className="font-medium">{deckTamClaimed}</p>
+                      </div>
+                      <Badge
+                        variant="outline"
+                        className={
+                          deckDiscrepancyFlag === true
+                            ? "border-amber-300 bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
+                            : deckDiscrepancyFlag === false
+                              ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400"
+                              : ""
+                        }
+                      >
+                        {deckDiscrepancyFlag === null ? "Insufficient Data" : deckDiscrepancyFlag ? "Overstated" : "Aligned"}
+                      </Badge>
+                      <div className="space-y-0.5 text-right">
+                        <p className="text-muted-foreground">Research finding</p>
+                        <p className="font-medium">{deckTamResearched}</p>
+                      </div>
+                    </div>
+                    {/* Balance indicator bar */}
+                    <div className="relative h-1.5 rounded-full bg-muted">
+                      <div
+                        className={`absolute top-0 h-full rounded-full ${
+                          deckDiscrepancyFlag === true
+                            ? "bg-amber-400 dark:bg-amber-500"
+                            : deckDiscrepancyFlag === false
+                              ? "bg-emerald-400 dark:bg-emerald-500"
+                              : "bg-slate-300 dark:bg-slate-600"
+                        }`}
+                        style={{
+                          left: deckDiscrepancyFlag === true ? "50%" : "25%",
+                          width: deckDiscrepancyFlag === true ? "40%" : deckDiscrepancyFlag === false ? "50%" : "50%",
+                        }}
+                      />
+                      <div className="absolute left-1/2 top-1/2 h-3 w-0.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-foreground/30" />
+                    </div>
+                  </div>
+
+                  {/* Growth alignment (if available) */}
+                  {growthRateDeckClaimed !== "Not provided" && (
+                    <div className="space-y-2 border-t border-border/40 pt-3">
+                      <div className="flex items-center justify-between gap-4 text-xs">
+                        <div className="space-y-0.5">
+                          <p className="text-muted-foreground">Growth — Deck</p>
+                          <p className="font-medium">{growthRateDeckClaimed}</p>
+                        </div>
+                        <Badge
+                          variant="outline"
+                          className={
+                            growthRateDiscrepancyFlag === true
+                              ? "border-amber-300 bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
+                              : growthRateDiscrepancyFlag === false
+                                ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400"
+                                : ""
+                          }
+                        >
+                          {growthRateDiscrepancyFlag === null ? "Insufficient Data" : growthRateDiscrepancyFlag ? "Overstated" : "Aligned"}
+                        </Badge>
+                        <div className="space-y-0.5 text-right">
+                          <p className="text-muted-foreground">Research CAGR</p>
+                          <p className="font-medium">{growthRateCagr}</p>
+                        </div>
+                      </div>
+                      <div className="relative h-1.5 rounded-full bg-muted">
+                        <div
+                          className={`absolute top-0 h-full rounded-full ${
+                            growthRateDiscrepancyFlag === true
+                              ? "bg-amber-400 dark:bg-amber-500"
+                              : growthRateDiscrepancyFlag === false
+                                ? "bg-emerald-400 dark:bg-emerald-500"
+                                : "bg-slate-300 dark:bg-slate-600"
+                          }`}
+                          style={{
+                            left: growthRateDiscrepancyFlag === true ? "50%" : "25%",
+                            width: growthRateDiscrepancyFlag === true ? "40%" : "50%",
+                          }}
+                        />
+                        <div className="absolute left-1/2 top-1/2 h-3 w-0.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-foreground/30" />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Discrepancy notes */}
+                  {deckDiscrepancyNotes !== "Not provided" && (
+                    <MarkdownText className="text-xs text-muted-foreground border-t border-border/40 pt-2 [&>p]:mb-0">
+                      {deckDiscrepancyNotes}
+                    </MarkdownText>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
-          <div className={`grid gap-3 ${!fundingStage || /pre.?seed|seed|series.?a/i.test(fundingStage) ? "md:grid-cols-2" : ""}`}>
-            {(!fundingStage || /pre.?seed|seed|series.?a/i.test(fundingStage)) && (
-              <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
-                <p className="text-sm font-medium">Bottom-Up Sanity Check</p>
-                <p className="text-xs text-muted-foreground">Calculation: {bottomUpCalculation}</p>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">Plausible:</span>
-                  <Badge variant={bottomUpPlausible === true ? "default" : bottomUpPlausible === false ? "secondary" : "outline"}>
-                    {bottomUpPlausible === null ? "Not provided" : bottomUpPlausible ? "Yes" : "No"}
-                  </Badge>
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  <span className="font-medium">Notes: </span>
-                  <MarkdownText className="inline [&>p]:inline [&>p]:mb-0">{bottomUpNotes}</MarkdownText>
-                </div>
+          {/* Bottom-Up Sanity Check — full width */}
+          {(!fundingStage || /pre.?seed|seed|series.?a/i.test(fundingStage)) && bottomUpCalculation !== "Not provided" && (
+            <div className="rounded-lg border bg-muted/10 p-4 space-y-3">
+              <p className="text-sm font-medium">Bottom-Up Sanity Check</p>
+              <div className="rounded-lg bg-muted/30 p-3">
+                <MarkdownText className="text-sm font-mono leading-relaxed [&>p]:mb-0">
+                  {bottomUpCalculation}
+                </MarkdownText>
               </div>
-            )}
-
-            <div className={`rounded-lg border p-3 space-y-3 ${deckDiscrepancyFlag === true ? "border-l-4 border-l-rose-400 bg-rose-50/30 dark:bg-rose-950/10" : deckDiscrepancyFlag === false ? "border-l-4 border-l-emerald-400 bg-emerald-50/30 dark:bg-emerald-950/10" : "bg-muted/20"}`}>
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-medium">Deck vs Research</p>
-                <Badge variant={deckDiscrepancyFlag === true ? "destructive" : deckDiscrepancyFlag === false ? "secondary" : "outline"}>
-                  {deckDiscrepancyFlag === null ? "No data" : deckDiscrepancyFlag ? "Discrepancy" : "Aligned"}
-                </Badge>
-              </div>
-              <div className="space-y-2">
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-                    <span>TAM — Deck claim</span>
-                    <span className="font-medium text-foreground">{deckTamClaimed}</span>
-                  </div>
-                  <div className="h-2 rounded-full bg-slate-200 dark:bg-slate-700" />
-                </div>
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-                    <span>TAM — Research finding</span>
-                    <span className="font-medium text-foreground">{deckTamResearched}</span>
-                  </div>
-                  <div className={`h-2 rounded-full ${deckDiscrepancyFlag === true ? "bg-rose-400" : "bg-emerald-400"}`} />
-                </div>
-              </div>
-              {growthRateDeckClaimed !== "Not provided" && (
-                <div className="space-y-2 border-t border-border/40 pt-2">
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-                      <span>Growth — Deck claim</span>
-                      <span className="font-medium text-foreground">{growthRateDeckClaimed}</span>
-                    </div>
-                    <div className="h-2 rounded-full bg-slate-200 dark:bg-slate-700" />
-                  </div>
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-                      <span>Growth — Research CAGR</span>
-                      <span className="font-medium text-foreground">{growthRateCagr}</span>
-                    </div>
-                    <div className={`h-2 rounded-full ${growthRateDiscrepancyFlag === true ? "bg-rose-400" : "bg-emerald-400"}`} />
-                  </div>
-                </div>
-              )}
-              {deckDiscrepancyNotes !== "Not provided" && (
-                <MarkdownText className="text-[10px] text-muted-foreground border-t border-border/40 pt-2 [&>p]:mb-0">
-                  {deckDiscrepancyNotes}
+              {bottomUpNotes !== "Not provided" && (
+                <MarkdownText className="text-sm text-muted-foreground leading-relaxed [&>p]:mb-0">
+                  {bottomUpNotes}
                 </MarkdownText>
               )}
             </div>
-          </div>
+          )}
         </CardContent>
       </Card>
 

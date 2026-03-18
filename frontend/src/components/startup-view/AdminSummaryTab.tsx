@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ScoreRing } from "@/components/analysis/ScoreRing";
 import { ConfidenceBadge } from "@/components/ConfidenceBadge";
 import { MarkdownText } from "@/components/MarkdownText";
 import { CheckCircle2, AlertTriangle, ChevronRight, Sparkles, TrendingUp, AlertCircle, ChevronDown, ChevronUp } from "lucide-react";
@@ -369,6 +368,169 @@ function DataGapsCard({
   );
 }
 
+const METRIC_ROWS = [
+  { key: "moic", label: "MOIC" },
+  { key: "irr", label: "IRR" },
+  { key: "valuation", label: "Valuation" },
+  { key: "timeline", label: "Timeline" },
+] as const;
+
+function ExitScenariosCard({ scenarios }: { scenarios: ExitScenario[] }) {
+  const [showBasis, setShowBasis] = useState(false);
+  const hasBasis = scenarios.some((s) => s.researchBasis);
+
+  if (scenarios.length === 0) {
+    return (
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <TrendingUp className="h-4 w-4 text-primary" />
+            Exit Scenarios
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground/60 italic text-center py-4">
+            Exit scenarios will be available after re-analysis
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const getValue = (s: ExitScenario, key: (typeof METRIC_ROWS)[number]["key"]) => {
+    switch (key) {
+      case "moic":
+        return { text: formatMoic(s.moic), className: `font-bold tabular-nums ${moicColor(s.moic)}` };
+      case "irr":
+        return { text: formatPercent(s.irr), className: `font-medium tabular-nums ${irrColor(s.irr)}` };
+      case "valuation":
+        return { text: s.exitValuation || "N/A", className: "font-medium" };
+      case "timeline":
+        return { text: s.timeline || "N/A", className: "text-muted-foreground" };
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <TrendingUp className="h-4 w-4 text-primary" />
+          Exit Scenarios
+        </CardTitle>
+        <p className="text-xs text-muted-foreground">
+          Return scenarios from exit potential analysis
+        </p>
+      </CardHeader>
+      <CardContent>
+        {/* Desktop: comparison table */}
+        <div className="hidden md:block">
+          <div className="grid grid-cols-[100px_1fr_1fr_1fr] text-sm">
+            {/* Header row */}
+            <div />
+            {scenarios.map((s) => (
+              <div key={s.scenario} className="px-4 pb-3 text-center">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  {s.scenario}
+                </p>
+                <span className="mt-1 inline-block rounded-full border px-2 py-0.5 text-[10px] text-muted-foreground">
+                  {s.exitType}
+                </span>
+              </div>
+            ))}
+            {/* Metric rows */}
+            {METRIC_ROWS.map((row, ri) => (
+              <div key={row.key} className="contents">
+                <div className={cn(
+                  "flex items-center text-xs font-medium text-muted-foreground py-3 pr-3",
+                  ri > 0 && "border-t border-border/50",
+                )}>
+                  {row.label}
+                </div>
+                {scenarios.map((s) => {
+                  const v = getValue(s, row.key);
+                  return (
+                    <div
+                      key={s.scenario}
+                      className={cn(
+                        "flex items-center justify-center px-4 py-3 text-center",
+                        ri > 0 && "border-t border-border/50",
+                        row.key === "moic" ? "text-2xl" : "text-sm",
+                        v.className,
+                      )}
+                    >
+                      {v.text}
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Mobile: stacked cards */}
+        <div className="grid grid-cols-1 gap-3 md:hidden">
+          {scenarios.map((s) => (
+            <div key={s.scenario} className="rounded-lg border p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  {s.scenario}
+                </p>
+                <span className="rounded-full border px-2 py-0.5 text-[10px] text-muted-foreground">
+                  {s.exitType}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-y-2 gap-x-4 pt-1">
+                {METRIC_ROWS.map((row) => {
+                  const v = getValue(s, row.key);
+                  return (
+                    <div key={row.key}>
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{row.label}</p>
+                      <p className={cn(
+                        row.key === "moic" ? "text-lg" : "text-sm",
+                        v.className,
+                      )}>
+                        {v.text}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Research basis toggle */}
+        {hasBasis && (
+          <div className="mt-4">
+            <button
+              type="button"
+              onClick={() => setShowBasis((p) => !p)}
+              className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+            >
+              {showBasis ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+              Research basis
+            </button>
+            {showBasis && (
+              <div className="mt-3 space-y-3">
+                {scenarios.filter((s) => s.researchBasis).map((s) => (
+                  <div key={s.scenario}>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                      {s.scenario}
+                    </p>
+                    <MarkdownText className="text-xs leading-relaxed text-muted-foreground [&>p]:mb-0">
+                      {s.researchBasis}
+                    </MarkdownText>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export function AdminSummaryTab({
   startup,
   evaluation,
@@ -439,92 +601,119 @@ export function AdminSummaryTab({
   return (
     <div className="space-y-6">
         <Card>
-          <CardContent className="p-4 sm:p-5">
+          <CardContent className="p-5 sm:p-6">
             <div className={cn(
-              "grid gap-5",
+              "grid items-center gap-0",
               sectionRows.length > 0
-                ? "md:grid-cols-[140px_1fr_200px]"
-                : "md:grid-cols-[140px_1fr]",
+                ? "md:grid-cols-[auto_1px_260px_1px_1fr]"
+                : "md:grid-cols-[auto_1px_1fr]",
             )}>
-              {/* Score */}
-              <div className="flex flex-col items-center justify-center">
-                <ScoreRing score={score} size="lg" showLabel={false} variant="secondary" />
-                <ConfidenceBadge
-                  confidence={overallConfidence}
-                  className="mt-2"
-                  dataTestId="badge-overall-confidence"
-                />
-                <div className="mt-2 rounded-xl border bg-background px-3 py-1">
-                  <p className="text-[13px] font-semibold tabular-nums">{percentile}</p>
+              {/* Col 1: Score */}
+              <div className="flex flex-col items-center justify-center px-5 py-2">
+                <div className="flex items-baseline gap-1">
+                  <span className={cn(
+                    "text-5xl font-bold tabular-nums tracking-tight",
+                    score >= 80 ? "text-emerald-600 dark:text-emerald-400" :
+                    score >= 65 ? "text-green-500 dark:text-green-400" :
+                    score >= 51 ? "text-orange-500 dark:text-orange-400" :
+                    "text-rose-600 dark:text-rose-400",
+                  )}>
+                    {Math.round(score)}
+                  </span>
+                  <span className="text-lg text-muted-foreground tabular-nums">/100</span>
+                </div>
+                <div className="mt-2 flex flex-col items-center gap-1.5">
+                  <ConfidenceBadge
+                    confidence={overallConfidence}
+                    dataTestId="badge-overall-confidence"
+                  />
+                  <span className="rounded-md border bg-muted/50 px-2 py-0.5 text-xs font-medium tabular-nums">
+                    {percentile}
+                  </span>
                 </div>
               </div>
 
-              {/* Radar */}
+              {/* Divider 1 */}
+              <div className="hidden md:block self-stretch bg-border" />
+
+              {/* Col 2: Radar */}
               {sectionRows.length > 0 && (
-                <div className="flex items-center justify-center">
-                  <ResponsiveContainer width="100%" height={300}>
-                    <RadarChart data={radarData} cx="50%" cy="50%" outerRadius="50%">
-                      <PolarGrid stroke="currentColor" strokeOpacity={0.15} />
-                      <PolarAngleAxis
-                        dataKey="label"
-                        tick={(tickProps: Record<string, unknown>) => {
-                          const x = tickProps.x as number;
-                          const y = tickProps.y as number;
-                          const anchor = tickProps.textAnchor as "start" | "middle" | "end";
-                          const pl = tickProps.payload as { value: string };
-                          const entry = radarData.find((d) => d.label === pl.value);
-                          const scoreVal = entry && !entry.pending ? Math.round(entry.score) : null;
-                          return (
-                            <g>
-                              <text x={x} y={y - 4} textAnchor={anchor} fontSize={10} fill="currentColor" opacity={0.6}>
-                                {pl.value}
-                              </text>
-                              {scoreVal !== null && (
-                                <text x={x} y={y + 10} textAnchor={anchor} fontSize={12} fontWeight={600} fill="hsl(262, 83%, 58%)">
-                                  {scoreVal}
+                <>
+                  <div className="border-t md:border-t-0 py-2 md:py-0">
+                    <ResponsiveContainer width="100%" height={240}>
+                      <RadarChart data={radarData} cx="50%" cy="50%" outerRadius="60%">
+                        <PolarGrid stroke="currentColor" strokeOpacity={0.1} />
+                        <PolarAngleAxis
+                          dataKey="label"
+                          tick={(tickProps: Record<string, unknown>) => {
+                            const x = tickProps.x as number;
+                            const y = tickProps.y as number;
+                            const anchor = tickProps.textAnchor as "start" | "middle" | "end";
+                            const pl = tickProps.payload as { value: string };
+                            const entry = radarData.find((d) => d.label === pl.value);
+                            const scoreVal = entry && !entry.pending ? Math.round(entry.score) : null;
+                            const fillColor = scoreVal !== null
+                              ? scoreVal >= 80 ? "#059669" : scoreVal >= 65 ? "#22c55e" : scoreVal >= 51 ? "#f97316" : "#e11d48"
+                              : "currentColor";
+                            // Center the score under the label regardless of text anchor direction
+                            const CHAR_W = 5.5;
+                            const halfW = (pl.value.length * CHAR_W) / 2;
+                            const cx = anchor === "start" ? x + halfW : anchor === "end" ? x - halfW : x;
+                            return (
+                              <g>
+                                <text x={cx} y={y - 3} textAnchor="middle" fontSize={10} fill="currentColor" opacity={0.6}>
+                                  {pl.value}
                                 </text>
-                              )}
-                            </g>
-                          );
-                        }}
-                        tickLine={false}
-                      />
-                      <PolarRadiusAxis angle={90} domain={[0, 100]} tick={false} axisLine={false} tickCount={5} />
-                      <Radar
-                        dataKey="score"
-                        stroke="hsl(262, 83%, 58%)"
-                        fill="hsl(262, 83%, 58%)"
-                        fillOpacity={0.15}
-                        strokeWidth={2}
-                        dot={{ r: 3, fill: "hsl(262, 83%, 58%)", strokeWidth: 0 }}
-                      />
-                      <Tooltip
-                        content={({ active, payload: tp }) => {
-                          if (!active || !tp?.length) return null;
-                          const d = tp[0].payload as (typeof radarData)[number];
-                          if (d.pending) return null;
-                          return (
-                            <div className="rounded-md border bg-popover px-3 py-2 shadow-md text-popover-foreground">
-                              <p className="text-sm font-medium">{d.fullLabel}</p>
-                              <div className="mt-1 space-y-0.5">
-                                <p className="text-xs text-muted-foreground">
-                                  Score: <span className="font-medium text-foreground tabular-nums">{Math.round(d.score)}/100</span>
-                                </p>
-                                <p className="text-xs text-muted-foreground">
-                                  Weight: <span className="font-medium text-foreground tabular-nums">{d.weight}%</span>
-                                </p>
+                                {scoreVal !== null && (
+                                  <text x={cx} y={y + 10} textAnchor="middle" fontSize={11} fontWeight={700} fill={fillColor}>
+                                    {scoreVal}
+                                  </text>
+                                )}
+                              </g>
+                            );
+                          }}
+                          tickLine={false}
+                        />
+                        <PolarRadiusAxis angle={90} domain={[0, 100]} tick={false} axisLine={false} tickCount={5} />
+                        <Radar
+                          dataKey="score"
+                          stroke="hsl(var(--primary))"
+                          fill="hsl(var(--primary))"
+                          fillOpacity={0.1}
+                          strokeWidth={1.5}
+                          dot={{ r: 2.5, fill: "hsl(var(--primary))", strokeWidth: 0 }}
+                        />
+                        <Tooltip
+                          content={({ active, payload: tp }) => {
+                            if (!active || !tp?.length) return null;
+                            const d = tp[0].payload as (typeof radarData)[number];
+                            if (d.pending) return null;
+                            return (
+                              <div className="rounded-md border bg-popover px-3 py-2 shadow-md text-popover-foreground">
+                                <p className="text-sm font-medium text-balance">{d.fullLabel}</p>
+                                <div className="mt-1 space-y-0.5">
+                                  <p className="text-xs text-muted-foreground">
+                                    Score: <span className="font-medium text-foreground tabular-nums">{Math.round(d.score)}/100</span>
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    Weight: <span className="font-medium text-foreground tabular-nums">{d.weight}%</span>
+                                  </p>
+                                </div>
                               </div>
-                            </div>
-                          );
-                        }}
-                      />
-                    </RadarChart>
-                  </ResponsiveContainer>
-                </div>
+                            );
+                          }}
+                        />
+                      </RadarChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* Divider 2 */}
+                  <div className="hidden md:block self-stretch bg-border" />
+                </>
               )}
 
-              {/* Metadata */}
-              <div className="flex flex-col justify-center space-y-1.5">
+              {/* Col 3: Metadata */}
+              <div className="grid grid-cols-2 gap-x-5 gap-y-3 border-t md:border-t-0 pt-4 md:pt-0 md:pl-5">
                 {[
                   { label: "Stage", value: formatStage(startup.stage), accent: false },
                   { label: "Sector", value: startup.sectorIndustryGroup || "N/A", accent: false },
@@ -535,14 +724,14 @@ export function AdminSummaryTab({
                   { label: "Raise", value: formatRaiseType(startup.raiseType), accent: false },
                   { label: "Lead", value: startup.leadInvestorName || "No", accent: false },
                 ].map((item) => (
-                  <div key={item.label} className="flex items-baseline justify-between gap-3">
-                    <span className="text-[11px] text-muted-foreground shrink-0">{item.label}</span>
-                    <span className={cn(
-                      "text-sm font-medium text-right truncate",
-                      item.accent && "text-violet-600",
+                  <div key={item.label}>
+                    <p className="text-[11px] text-muted-foreground">{item.label}</p>
+                    <p className={cn(
+                      "text-sm font-medium text-pretty",
+                      item.accent && "text-primary",
                     )}>
                       {item.value}
-                    </span>
+                    </p>
                   </div>
                 ))}
               </div>
@@ -564,13 +753,13 @@ export function AdminSummaryTab({
         </Card>
 
         {contextBadges.length > 0 && (
-          <div className="flex gap-2.5 overflow-x-auto pb-1">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
             {contextBadges.map((badge) => (
               <button
                 key={badge.id}
                 type="button"
                 onClick={() => onNavigateTab?.(badge.tab)}
-                className={`shrink-0 rounded-lg border border-l-4 ${badgeBorderColor(badge.score)} bg-muted/20 px-3.5 py-2.5 text-left transition-colors hover:bg-muted/40 cursor-pointer min-w-[120px]`}
+                className={`rounded-lg border border-l-4 ${badgeBorderColor(badge.score)} bg-muted/20 px-3.5 py-2.5 text-left transition-colors hover:bg-muted/40 cursor-pointer`}
               >
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{badge.label}</p>
                 <p className="mt-1 text-sm font-medium leading-tight">{badge.topLine}</p>
@@ -582,84 +771,7 @@ export function AdminSummaryTab({
           </div>
         )}
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <TrendingUp className="h-4 w-4 text-primary" />
-              Exit Scenarios
-            </CardTitle>
-            <p className="text-xs text-muted-foreground">
-              Return scenarios from exit potential analysis
-            </p>
-          </CardHeader>
-          <CardContent>
-            {exitScenarios.length > 0 ? (
-              <div className="grid gap-0 md:grid-cols-[1fr_auto_1fr_auto_1fr] items-stretch">
-                {exitScenarios.map((scenario, idx) => (
-                  <div key={scenario.scenario} className="contents">
-                    <div
-                      className={`rounded-xl border px-4 py-4 ${
-                        scenario.scenario === "optimistic"
-                          ? "border-violet-200 bg-violet-50/60 dark:border-violet-900/50 dark:bg-violet-950/20"
-                          : scenario.scenario === "moderate"
-                            ? "border-indigo-200 bg-indigo-50/60 dark:border-indigo-900/50 dark:bg-indigo-950/20"
-                            : "border-slate-200 bg-slate-50/80 dark:border-slate-800 dark:bg-slate-950/30"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                          {scenario.scenario}
-                        </p>
-                        <span className="rounded-full bg-background/80 px-2 py-1 text-[10px] font-medium text-muted-foreground">
-                          {scenario.exitType}
-                        </span>
-                      </div>
-                      <div className="mt-5">
-                        <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-                          MOIC
-                        </p>
-                        <p className={`mt-1 text-4xl font-bold tracking-tight ${moicColor(scenario.moic)}`}>
-                          {formatMoic(scenario.moic)}
-                        </p>
-                      </div>
-                      <div className="mt-4 border-t border-border/60 pt-3">
-                        <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
-                          IRR
-                        </p>
-                        <p className={`mt-1 text-sm font-medium ${irrColor(scenario.irr)}`}>
-                          {formatPercent(scenario.irr)}
-                        </p>
-                      </div>
-                      <div className="mt-4 border-t border-border/60 pt-3">
-                        <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
-                          Exit valuation
-                        </p>
-                        <p className="mt-1 text-sm font-medium">
-                          {scenario.exitValuation}
-                          {scenario.timeline ? ` · ${scenario.timeline}` : ""}
-                        </p>
-                      </div>
-                      {scenario.researchBasis && (
-                        <MarkdownText className="mt-2 text-[11px] leading-tight text-muted-foreground/70 italic [&>p]:mb-0">
-                          {scenario.researchBasis}
-                        </MarkdownText>
-                      )}
-                    </div>
-                    {idx < exitScenarios.length - 1 && (
-                      <div className="hidden md:flex items-center justify-center px-2">
-                        <ChevronRight className="h-5 w-5 text-muted-foreground/40" />
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground/60 italic text-center py-4">
-                Exit scenarios will be available after re-analysis
-              </p>
-            )}
-          </CardContent>
-        </Card>
+        <ExitScenariosCard scenarios={exitScenarios} />
 
         <div className="grid gap-4 md:grid-cols-2">
           <Card className="bg-primary/[0.04] border-primary/15">

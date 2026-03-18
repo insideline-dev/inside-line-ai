@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ConfidenceBadge } from "@/components/ConfidenceBadge";
+import { SectionScoreCard } from "@/components/SectionScoreCard";
+import { MarkdownText } from "@/components/MarkdownText";
 import {
   Package,
   CheckCircle2,
@@ -28,17 +29,6 @@ interface ProductScoreSummaryProps {
   confidence?: string;
   subScores?: SubScoreItem[];
   scoringBasis?: string;
-}
-
-function scoreBarTone(score: number): string {
-  if (score >= 80) return "bg-emerald-500";
-  if (score >= 60) return "bg-amber-500";
-  return "bg-rose-500";
-}
-
-function formatSubWeight(value: number): string {
-  const pct = value <= 1 ? value * 100 : value;
-  return `${Number.isInteger(pct) ? pct.toFixed(0) : pct.toFixed(1)}%`;
 }
 
 function getTRLLabel(trl: string | null | undefined): { label: string; color: string } {
@@ -76,61 +66,17 @@ export function ProductScoreSummary({
 
   return (
     <div className="space-y-6">
-      <Card
-        className="border-primary/20 bg-gradient-to-br from-primary/10 via-background to-background"
-        data-testid="card-product-score"
-      >
-        <CardContent className="py-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-3 rounded-full bg-primary/10">
-                <Package className="h-6 w-6 text-primary" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold">Product Score</h3>
-                <p className="text-sm text-muted-foreground">{weight !== undefined ? `${weight}%` : ''} weight in overall evaluation</p>
-                <ConfidenceBadge
-                  confidence={confidence}
-                  className="mt-2"
-                  dataTestId="badge-product-confidence"
-                />
-              </div>
-            </div>
-            <div className="text-right">
-              <span className={`text-4xl font-bold ${
-                productScore >= 80 ? "text-green-600" :
-                productScore >= 60 ? "text-amber-600" :
-                "text-red-600"
-              }`} data-testid="text-product-score">{Math.round(productScore)}</span>
-              <span className="text-lg text-muted-foreground">/100</span>
-            </div>
-          </div>
-
-          {(scoringBasis || (subScores && subScores.length > 0)) && (
-            <div className="mt-5 space-y-4 border-t border-border/60 pt-4">
-              {scoringBasis && <p className="text-sm text-muted-foreground">{scoringBasis}</p>}
-              {subScores && subScores.length > 0 && (
-                <div className="space-y-3">
-                  {subScores.map((item) => (
-                <div key={item.dimension} className="grid grid-cols-[minmax(0,1fr)_48px] gap-3">
-                  <div>
-                    <div className="mb-1 flex items-center justify-between gap-3 text-xs">
-                      <span className="font-medium">{item.dimension}</span>
-                      <span className="text-muted-foreground">{formatSubWeight(item.weight)}</span>
-                    </div>
-                    <div className="h-2.5 rounded-full bg-muted">
-                      <div className={`h-full rounded-full ${scoreBarTone(item.score)}`} style={{ width: `${Math.max(0, Math.min(100, item.score))}%` }} />
-                    </div>
-                  </div>
-                  <div className="text-right text-xs font-medium">{Math.round(item.score)}</div>
-                </div>
-              ))}
-                </div>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <SectionScoreCard
+        title="Product Score"
+        score={productScore}
+        weight={weight}
+        confidence={confidence}
+        scoringBasis={scoringBasis}
+        subScores={subScores}
+        dataTestId="card-product-score"
+        scoreTestId="text-product-score"
+        confidenceTestId="badge-product-confidence"
+      />
 
       {productSummary && (
         <Card className="border-primary/20">
@@ -142,9 +88,11 @@ export function ProductScoreSummary({
             <CardDescription>What this product does</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-sm leading-relaxed" data-testid="text-product-summary">
-              {productSummary}
-            </p>
+            <div data-testid="text-product-summary">
+              <MarkdownText className="text-sm leading-relaxed [&>p]:mb-0">
+                {productSummary}
+              </MarkdownText>
+            </div>
           </CardContent>
         </Card>
       )}

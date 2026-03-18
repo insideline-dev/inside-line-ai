@@ -20,7 +20,7 @@ export function createMockInvestorCandidates(): MockInvestorCandidate[] {
     {
       userId: "investor-us-seed",
       thesisId: "thesis-us-seed",
-      industries: ["Industrial SaaS", "B2B SaaS"],
+      industries: ["software"],
       stages: [StartupStage.SEED],
       checkSizeMin: 500_000,
       checkSizeMax: 3_000_000,
@@ -35,7 +35,7 @@ export function createMockInvestorCandidates(): MockInvestorCandidate[] {
     {
       userId: "investor-eu-series-a",
       thesisId: "thesis-eu-a",
-      industries: ["Climate", "Fintech"],
+      industries: ["sustainability", "financial_services"],
       stages: [StartupStage.SERIES_A],
       checkSizeMin: 3_000_000,
       checkSizeMax: 8_000_000,
@@ -49,7 +49,7 @@ export function createMockInvestorCandidates(): MockInvestorCandidate[] {
     {
       userId: "investor-global-generalist",
       thesisId: "thesis-global-generalist",
-      industries: ["Industrial SaaS", "Healthcare", "AI"],
+      industries: ["software", "health_care", "artificial_intelligence"],
       stages: [StartupStage.PRE_SEED, StartupStage.SEED, StartupStage.SERIES_A],
       checkSizeMin: 250_000,
       checkSizeMax: 5_000_000,

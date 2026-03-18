@@ -1,7 +1,9 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ConfidenceBadge } from "@/components/ConfidenceBadge";
+import { SectionScoreCard } from "@/components/SectionScoreCard";
 import { DataGapsSection, parseDataGapItems } from "@/components/DataGapsSection";
+import { MarkdownText } from "@/components/MarkdownText";
 import { ChartNoAxesColumn } from "lucide-react";
 import type { Evaluation } from "@/types/evaluation";
 
@@ -165,7 +167,7 @@ function ConcentrationSpectrum({ structureType, direction, evidence }: { structu
         </div>
       )}
       {evidence !== "Not provided" && (
-        <p className="text-xs text-muted-foreground">{evidence}</p>
+        <MarkdownText className="text-xs text-muted-foreground [&>p]:mb-0">{evidence}</MarkdownText>
       )}
     </div>
   );
@@ -360,9 +362,6 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage }: Mar
       return true;
     });
   })();
-  const founderPitchRecommendations = Array.isArray(marketData.founderPitchRecommendations)
-    ? (marketData.founderPitchRecommendations as Array<Record<string, unknown>>)
-    : [];
   const tailwinds = Array.isArray(marketStructure.tailwinds)
     ? (marketStructure.tailwinds as Array<Record<string, unknown>>)
     : [];
@@ -372,76 +371,16 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage }: Mar
 
   return (
     <div className="space-y-6">
-      <Card
-        className="border-primary/20 bg-gradient-to-br from-primary/10 via-background to-background"
-        data-testid="card-market-score"
-      >
-        <CardContent className="py-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="rounded-full bg-primary/10 p-3">
-                <ChartNoAxesColumn className="h-6 w-6 text-primary" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold">Market Score</h3>
-                <p className="text-sm text-muted-foreground">
-                  {typeof marketWeight === "number" ? `${marketWeight}%` : ""} weight in overall evaluation
-                </p>
-                <ConfidenceBadge
-                  confidence={confidence}
-                  className="mt-2"
-                  dataTestId="badge-market-confidence"
-                />
-              </div>
-            </div>
-            {typeof evaluation?.marketScore === "number" && (
-              <div className="text-right">
-                <span
-                  className={`text-4xl font-bold ${
-                    evaluation.marketScore >= 80
-                      ? "text-green-600"
-                      : evaluation.marketScore >= 60
-                        ? "text-amber-600"
-                        : "text-red-600"
-                  }`}
-                >
-                  {Math.round(evaluation.marketScore)}
-                </span>
-                <span className="text-lg text-muted-foreground">/100</span>
-              </div>
-            )}
-          </div>
-
-          {(scoringBasis || marketSubScores.length > 0) && (
-            <div className="mt-5 space-y-4 border-t border-border/60 pt-4">
-              {scoringBasis && <p className="text-sm text-muted-foreground">{scoringBasis}</p>}
-              {marketSubScores.length > 0 && (
-                <div className="space-y-3">
-                  {marketSubScores.map((item) => {
-                    const pct = item.weight <= 1 ? item.weight * 100 : item.weight;
-                    const pctLabel = `${Number.isInteger(pct) ? pct.toFixed(0) : pct.toFixed(1)}%`;
-                    const barColor = item.score >= 80 ? "bg-emerald-500" : item.score >= 60 ? "bg-amber-500" : "bg-rose-500";
-                    return (
-                      <div key={item.dimension} className="grid grid-cols-[minmax(0,1fr)_48px] gap-3">
-                        <div>
-                          <div className="mb-1 flex items-center justify-between gap-3 text-xs">
-                            <span className="font-medium">{item.dimension}</span>
-                            <span className="text-muted-foreground">{pctLabel}</span>
-                          </div>
-                          <div className="h-2.5 rounded-full bg-muted">
-                            <div className={`h-full rounded-full ${barColor}`} style={{ width: `${Math.max(0, Math.min(100, item.score))}%` }} />
-                          </div>
-                        </div>
-                        <div className="text-right text-xs font-medium">{Math.round(item.score)}</div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <SectionScoreCard
+        title="Market Score"
+        score={typeof evaluation?.marketScore === "number" ? evaluation.marketScore : 0}
+        weight={typeof marketWeight === "number" ? marketWeight : undefined}
+        confidence={confidence}
+        scoringBasis={scoringBasis ?? undefined}
+        subScores={marketSubScores}
+        dataTestId="card-market-score"
+        confidenceTestId="badge-market-confidence"
+      />
 
       <Card className="border-primary/15">
         <CardHeader>
@@ -524,7 +463,10 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage }: Mar
                     {bottomUpPlausible === null ? "Not provided" : bottomUpPlausible ? "Yes" : "No"}
                   </Badge>
                 </div>
-                <p className="text-xs text-muted-foreground">Notes: {bottomUpNotes}</p>
+                <div className="text-xs text-muted-foreground">
+                  <span className="font-medium">Notes: </span>
+                  <MarkdownText className="inline [&>p]:inline [&>p]:mb-0">{bottomUpNotes}</MarkdownText>
+                </div>
               </div>
             )}
 
@@ -570,7 +512,9 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage }: Mar
                 </div>
               )}
               {deckDiscrepancyNotes !== "Not provided" && (
-                <p className="text-[10px] text-muted-foreground border-t border-border/40 pt-2">{deckDiscrepancyNotes}</p>
+                <MarkdownText className="text-[10px] text-muted-foreground border-t border-border/40 pt-2 [&>p]:mb-0">
+                  {deckDiscrepancyNotes}
+                </MarkdownText>
               )}
             </div>
           </div>
@@ -586,7 +530,7 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage }: Mar
             <p>
               <span className="font-medium">Timing:</span> {timingAssessment}
             </p>
-            <p className="text-muted-foreground">{timingRationale}</p>
+            <MarkdownText className="text-muted-foreground [&>p]:mb-0">{timingRationale}</MarkdownText>
           </div>
 
           <div className="grid gap-3 md:grid-cols-2">
@@ -614,7 +558,7 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage }: Mar
 
             <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
               <p className="text-sm font-medium">Why Now</p>
-              <p className="text-xs text-muted-foreground">{whyNowThesis}</p>
+              <MarkdownText className="text-xs text-muted-foreground [&>p]:mb-0">{whyNowThesis}</MarkdownText>
               <div className="flex items-center gap-2">
                 <span className="text-xs text-muted-foreground">Supported by research:</span>
                 <Badge variant={whyNowSupportedByResearch === true ? "default" : whyNowSupportedByResearch === false ? "secondary" : "outline"}>
@@ -637,7 +581,7 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage }: Mar
             <p className="text-sm font-medium">Market Lifecycle</p>
             <LifecycleBar position={lifecyclePosition} />
             {lifecycleEvidence !== "Not provided" && (
-              <p className="text-xs text-muted-foreground">{lifecycleEvidence}</p>
+              <MarkdownText className="text-xs text-muted-foreground [&>p]:mb-0">{lifecycleEvidence}</MarkdownText>
             )}
           </div>
         </CardContent>
@@ -768,26 +712,6 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage }: Mar
 
       <DataGapsSection gaps={dataGapItems} />
 
-      {founderPitchRecommendations.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Founder Pitch Recommendations</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {founderPitchRecommendations.map((item, index) => (
-              <div key={`${String(item.deckMissingElement ?? "rec")}-${index}`} className="rounded-md border p-3">
-                <p className="text-sm font-medium">{String(item.deckMissingElement ?? "Recommendation")}</p>
-                {typeof item.whyItMatters === "string" && item.whyItMatters.trim().length > 0 && (
-                  <p className="mt-1 text-sm text-muted-foreground">{item.whyItMatters}</p>
-                )}
-                {typeof item.recommendation === "string" && item.recommendation.trim().length > 0 && (
-                  <p className="mt-2 text-sm">{item.recommendation}</p>
-                )}
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }

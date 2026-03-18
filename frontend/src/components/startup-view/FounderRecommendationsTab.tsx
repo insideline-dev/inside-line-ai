@@ -1,7 +1,8 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Lightbulb } from "lucide-react";
-import type { Evaluation, FounderPitchRecommendation, FounderRecommendation } from "@/types/evaluation";
+import { Lightbulb, CheckCircle2, ArrowRight } from "lucide-react";
+import type { Evaluation, FounderPitchRecommendation, FounderRecommendation, FounderReport } from "@/types/evaluation";
+import { MarkdownText } from "@/components/MarkdownText";
 
 interface FounderRecommendationsTabProps {
   evaluation: Evaluation | null;
@@ -87,8 +88,63 @@ export function FounderRecommendationsTab({ evaluation }: FounderRecommendations
     );
   }
 
+  const founderReportData = (evaluation?.founderReport ?? null) as FounderReport | null;
+  const whatsWorking = founderReportData?.whatsWorking?.filter((s) => s.trim().length > 0) ?? [];
+  const pathToInevitability = founderReportData?.pathToInevitability?.filter((s) => s.trim().length > 0) ?? [];
+
   return (
     <div className="space-y-8">
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Founder Report</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <MarkdownText className="text-sm text-muted-foreground [&>p]:mb-0">
+            {founderReportData?.summary || "Founder report summary is not available yet."}
+          </MarkdownText>
+
+          {whatsWorking.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-1.5 text-sm font-medium text-emerald-700 dark:text-emerald-400">
+                <CheckCircle2 className="h-4 w-4" />
+                What&apos;s Working
+              </div>
+              <ul className="space-y-1.5">
+                {whatsWorking.map((item, index) => (
+                  <li key={`w-${index}`} className="flex items-start gap-2 text-sm text-muted-foreground">
+                    <span className="mt-2 h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {pathToInevitability.length > 0 && (
+            <div className="space-y-2 border-t pt-3">
+              <div className="flex items-center gap-1.5 text-sm font-medium text-violet-700 dark:text-violet-400">
+                <ArrowRight className="h-4 w-4" />
+                Path to Inevitability
+              </div>
+              <ul className="space-y-1.5">
+                {pathToInevitability.map((item, index) => (
+                  <li key={`p-${index}`} className="flex items-start gap-2 text-sm text-muted-foreground">
+                    <span className="mt-2 h-1.5 w-1.5 rounded-full bg-violet-500 shrink-0" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {whatsWorking.length === 0 && pathToInevitability.length === 0 && !founderReportData?.summary && (
+            <p className="text-sm text-muted-foreground">
+              Founder report details are not available yet.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
       {sections.map(({ key, label, pitchRecs, founderRecs }) => (
         <div key={key} className="space-y-4">
           <h3 className="text-base font-semibold">{label}</h3>
@@ -100,13 +156,13 @@ export function FounderRecommendationsTab({ evaluation }: FounderRecommendations
               </CardHeader>
               <CardContent className="space-y-3 pt-0">
                 {rec.whyItMatters && (
-                  <p className="text-sm text-muted-foreground leading-relaxed">
+                  <MarkdownText className="text-sm text-muted-foreground leading-relaxed [&>p]:mb-0">
                     {rec.whyItMatters}
-                  </p>
+                  </MarkdownText>
                 )}
                 {rec.recommendation && (
                   <div className="rounded-md bg-muted/50 px-3 py-2">
-                    <p className="text-sm leading-relaxed">{rec.recommendation}</p>
+                    <MarkdownText className="text-sm leading-relaxed [&>p]:mb-0">{rec.recommendation}</MarkdownText>
                   </div>
                 )}
               </CardContent>
@@ -122,7 +178,7 @@ export function FounderRecommendationsTab({ evaluation }: FounderRecommendations
                 >
                   {rec.type}
                 </Badge>
-                <p className="text-sm leading-relaxed">{rec.bullet}</p>
+                <MarkdownText className="text-sm leading-relaxed [&>p]:mb-0">{rec.bullet}</MarkdownText>
               </CardContent>
             </Card>
           ))}

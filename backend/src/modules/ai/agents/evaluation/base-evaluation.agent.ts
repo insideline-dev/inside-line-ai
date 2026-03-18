@@ -304,6 +304,14 @@ export abstract class BaseEvaluationAgent<TOutput>
         "- Keep narrative claims strictly aligned with provided evidence (no invented facts).",
         "- Prefer concise analytical writing over marketing language.",
         "- Never include score/confidence phrasing in narrative text (for example `88/100` or `high confidence`).",
+        "",
+        "## Text Formatting (applies to ALL string fields: narratives, summaries, rationales, feedback, recommendations, evidence, etc.)",
+        "- Use **bold** to highlight key conclusions, company names, metric names, and important terms.",
+        "- Use **bold** for all monetary values (e.g., **$2.5M**), percentages (e.g., **45%**), multiples (e.g., **3.2x**), and other numeric data points.",
+        "- Use *italics* for source attributions, caveats, and qualifiers.",
+        "- Use inline `code` formatting for specific product names, technical terms, or ticker symbols when appropriate.",
+        "- Keep paragraphs focused — one key insight per paragraph.",
+        "- Do NOT use headings (#), bullet lists (- or *), or block-level markdown — only inline formatting (**bold**, *italic*, `code`).",
       ].join("\n");
     } catch (setupError) {
       const msg = setupError instanceof Error ? setupError.message : String(setupError);

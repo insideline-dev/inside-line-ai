@@ -1,9 +1,12 @@
+import { useState } from "react";
+import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScoreRing } from "@/components/analysis/ScoreRing";
 import { ConfidenceBadge } from "@/components/ConfidenceBadge";
-import { CheckCircle2, AlertTriangle, ChevronRight, Sparkles, TrendingUp, ArrowRight, AlertCircle } from "lucide-react";
+import { MarkdownText } from "@/components/MarkdownText";
+import { CheckCircle2, AlertTriangle, ChevronRight, Sparkles, TrendingUp, AlertCircle, ChevronDown, ChevronUp } from "lucide-react";
 import type { Startup } from "@/types/startup";
-import type { Evaluation, ExitScenario, FounderReport } from "@/types/evaluation";
+import type { Evaluation, ExitScenario } from "@/types/evaluation";
 import type { ScoringWeights } from "@/lib/score-utils";
 import {
   getDisplayOverallScore,
@@ -11,10 +14,8 @@ import {
   getDisplayRisks,
   getDisplaySectionScore,
   getDisplayStrengths,
-  getCrossAgentStrengths,
-  getCrossAgentRisks,
+  getAllStructuredDataGaps,
   getCrossAgentDataGaps,
-  getCriticalDataGaps,
   getAgentTab,
 } from "@/lib/evaluation-display";
 import {
@@ -23,6 +24,7 @@ import {
   PolarAngleAxis,
   PolarRadiusAxis,
   Radar,
+  Tooltip,
   ResponsiveContainer,
 } from "recharts";
 
@@ -95,14 +97,6 @@ function irrColor(value: number): string {
   return "text-rose-600 dark:text-rose-400";
 }
 
-function scoreBarClass(score: number): string {
-  if (score >= 85) return "bg-fuchsia-500";
-  if (score >= 70) return "bg-violet-600";
-  if (score >= 55) return "bg-indigo-600";
-  if (score >= 40) return "bg-amber-500";
-  return "bg-rose-500";
-}
-
 function buildRow(evaluation: Evaluation, id: string, label: string, key: Parameters<typeof getDisplaySectionScore>[1], weight: number): SectionScoreRow {
   const raw = getDisplaySectionScore(evaluation, key);
   return { id, label, score: raw ?? 0, weight, pending: raw === null };
@@ -122,25 +116,6 @@ function getSectionRows(evaluation: Evaluation, weights?: ScoringWeights | null)
     buildRow(evaluation, "dealTerms", "Deal Terms", "dealTerms", weights?.dealTerms ?? 0),
     buildRow(evaluation, "exitPotential", "Exit Potential", "exitPotential", weights?.exitPotential ?? 0),
   ];
-}
-
-function InfoMetric({
-  label,
-  value,
-  accent = false,
-}: {
-  label: string;
-  value: string;
-  accent?: boolean;
-}) {
-  return (
-    <div className="rounded-md border bg-muted/20 px-3 py-2.5">
-      <p className="text-[11px] text-muted-foreground">{label}</p>
-      <p className={`mt-1 text-sm leading-tight font-medium break-words ${accent ? "text-violet-600" : ""}`}>
-        {value}
-      </p>
-    </div>
-  );
 }
 
 function AgentBadge({
@@ -304,6 +279,96 @@ function buildContextBadges(data: {
   return badges;
 }
 
+const GAPS_INITIAL_COUNT = 5;
+
+const IMPACT_BADGE_STYLES: Record<string, string> = {
+  critical: "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300",
+  important: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+  minor: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400",
+};
+
+function DataGapsCard({
+  allGaps,
+  plainGaps,
+  onNavigateTab,
+}: {
+  allGaps: import("@/lib/evaluation-display").CriticalDataGap[];
+  plainGaps: import("@/lib/evaluation-display").AgentTaggedItem[];
+  onNavigateTab?: (tab: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const hasStructured = allGaps.length > 0;
+  const items = hasStructured ? allGaps : [];
+  const visibleItems = expanded ? items : items.slice(0, GAPS_INITIAL_COUNT);
+  const hiddenCount = items.length - GAPS_INITIAL_COUNT;
+
+  return (
+    <Card className="border-orange-200/80 dark:border-orange-900/50">
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-base text-orange-700 dark:text-orange-400">
+          <AlertCircle className="h-4 w-4" />
+          Critical Data Gaps
+        </CardTitle>
+        <p className="text-xs text-muted-foreground">
+          Information gaps flagged by evaluation agents — may require follow-up diligence
+        </p>
+      </CardHeader>
+      <CardContent>
+        <ul className="space-y-2 text-sm">
+          {hasStructured
+            ? visibleItems.map((item, idx) => (
+                <li key={idx} className="flex items-start gap-2">
+                  <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-orange-500" />
+                  <div className="flex-1">
+                    <span>{item.gap}</span>
+                    {item.suggestedAction && (
+                      <p className="mt-0.5 text-xs text-muted-foreground">{item.suggestedAction}</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className={cn(
+                      "rounded-full px-1.5 py-0.5 text-[10px] font-medium capitalize",
+                      IMPACT_BADGE_STYLES[item.impact] ?? IMPACT_BADGE_STYLES.minor,
+                    )}>
+                      {item.impact}
+                    </span>
+                    <span className="text-[10px] font-medium text-muted-foreground">{item.source}</span>
+                  </div>
+                </li>
+              ))
+            : plainGaps.map((item, idx) => (
+                <li key={idx} className="flex items-start gap-2">
+                  <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-orange-500" />
+                  <span className="flex-1">{item.text}</span>
+                  <AgentBadge label={item.agentLabel} agent={item.agent} onClick={onNavigateTab} />
+                </li>
+              ))
+          }
+        </ul>
+        {hasStructured && hiddenCount > 0 && (
+          <button
+            type="button"
+            onClick={() => setExpanded((prev) => !prev)}
+            className="mt-3 flex items-center gap-1 text-xs font-medium text-orange-600 hover:text-orange-700 dark:text-orange-400 dark:hover:text-orange-300 transition-colors cursor-pointer"
+          >
+            {expanded ? (
+              <>
+                <ChevronUp className="h-3.5 w-3.5" />
+                Show less
+              </>
+            ) : (
+              <>
+                <ChevronDown className="h-3.5 w-3.5" />
+                View {hiddenCount} more gap{hiddenCount > 1 ? "s" : ""}
+              </>
+            )}
+          </button>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export function AdminSummaryTab({
   startup,
   evaluation,
@@ -323,9 +388,6 @@ export function AdminSummaryTab({
     evaluation?.investorMemo?.executiveSummary ||
     startup.description ||
     "No summary generated yet.";
-  const founderReportData = (evaluation?.founderReport ?? null) as FounderReport | null;
-  const whatsWorking = founderReportData?.whatsWorking?.filter((s) => s.trim().length > 0) ?? [];
-  const pathToInevitability = founderReportData?.pathToInevitability?.filter((s) => s.trim().length > 0) ?? [];
   const exitScenarioSource: ExitScenario[] =
     (evaluation?.exitScenarios as ExitScenario[] | undefined) ??
     ((evaluation?.exitPotentialData as Record<string, unknown> | undefined)?.exitScenarios as ExitScenario[] | undefined) ??
@@ -336,9 +398,7 @@ export function AdminSummaryTab({
       EXIT_SCENARIO_DISPLAY_ORDER[right.scenario],
   );
 
-  const crossStrengths = getCrossAgentStrengths(evaluation);
-  const crossRisks = getCrossAgentRisks(evaluation);
-  const criticalGaps = getCriticalDataGaps(evaluation);
+  const allGaps = getAllStructuredDataGaps(evaluation);
   const plainGaps = getCrossAgentDataGaps(evaluation);
 
   // Context Badges data
@@ -369,7 +429,10 @@ export function AdminSummaryTab({
 
   const radarData = sectionRows.map((row) => ({
     label: row.pending ? `${RADAR_SHORT_LABELS[row.label] ?? row.label} ⏳` : (RADAR_SHORT_LABELS[row.label] ?? row.label),
+    fullLabel: row.label,
     score: row.pending ? 0 : row.score,
+    weight: row.weight,
+    pending: row.pending,
     fullMark: 100,
   }));
 
@@ -377,36 +440,111 @@ export function AdminSummaryTab({
     <div className="space-y-6">
         <Card>
           <CardContent className="p-4 sm:p-5">
-            <div className="grid gap-5 md:grid-cols-[220px_minmax(0,1fr)]">
-              <div className="flex flex-col items-center justify-center rounded-xl border bg-muted/15 px-4 py-6">
+            <div className={cn(
+              "grid gap-5",
+              sectionRows.length > 0
+                ? "md:grid-cols-[140px_1fr_200px]"
+                : "md:grid-cols-[140px_1fr]",
+            )}>
+              {/* Score */}
+              <div className="flex flex-col items-center justify-center">
                 <ScoreRing score={score} size="lg" showLabel={false} variant="secondary" />
                 <ConfidenceBadge
                   confidence={overallConfidence}
-                  className="mt-3"
+                  className="mt-2"
                   dataTestId="badge-overall-confidence"
                 />
-                <div className="mt-3 rounded-xl border bg-background px-3 py-1">
-                  <p className="text-[13px] font-semibold">{percentile}</p>
+                <div className="mt-2 rounded-xl border bg-background px-3 py-1">
+                  <p className="text-[13px] font-semibold tabular-nums">{percentile}</p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
-                <InfoMetric label="Stage" value={formatStage(startup.stage)} />
-                <InfoMetric label="Industry Group" value={startup.sectorIndustryGroup || "N/A"} />
-                <InfoMetric label="Industry" value={startup.sectorIndustry || startup.industry || "N/A"} />
-                <InfoMetric label="Location" value={startup.location || "N/A"} />
-                <InfoMetric
-                  label="Round Size"
-                  value={formatCompactCurrency(startup.fundingTarget)}
-                  accent
-                />
-                <InfoMetric
-                  label="Valuation (Post-money)"
-                  value={formatCompactCurrency(startup.valuation)}
-                  accent
-                />
-                <InfoMetric label="Raise Type" value={formatRaiseType(startup.raiseType)} />
-                <InfoMetric label="Lead Investor" value={startup.leadInvestorName || "No"} />
+              {/* Radar */}
+              {sectionRows.length > 0 && (
+                <div className="flex items-center justify-center">
+                  <ResponsiveContainer width="100%" height={300}>
+                    <RadarChart data={radarData} cx="50%" cy="50%" outerRadius="50%">
+                      <PolarGrid stroke="currentColor" strokeOpacity={0.15} />
+                      <PolarAngleAxis
+                        dataKey="label"
+                        tick={(tickProps: Record<string, unknown>) => {
+                          const x = tickProps.x as number;
+                          const y = tickProps.y as number;
+                          const anchor = tickProps.textAnchor as "start" | "middle" | "end";
+                          const pl = tickProps.payload as { value: string };
+                          const entry = radarData.find((d) => d.label === pl.value);
+                          const scoreVal = entry && !entry.pending ? Math.round(entry.score) : null;
+                          return (
+                            <g>
+                              <text x={x} y={y - 4} textAnchor={anchor} fontSize={10} fill="currentColor" opacity={0.6}>
+                                {pl.value}
+                              </text>
+                              {scoreVal !== null && (
+                                <text x={x} y={y + 10} textAnchor={anchor} fontSize={12} fontWeight={600} fill="hsl(262, 83%, 58%)">
+                                  {scoreVal}
+                                </text>
+                              )}
+                            </g>
+                          );
+                        }}
+                        tickLine={false}
+                      />
+                      <PolarRadiusAxis angle={90} domain={[0, 100]} tick={false} axisLine={false} tickCount={5} />
+                      <Radar
+                        dataKey="score"
+                        stroke="hsl(262, 83%, 58%)"
+                        fill="hsl(262, 83%, 58%)"
+                        fillOpacity={0.15}
+                        strokeWidth={2}
+                        dot={{ r: 3, fill: "hsl(262, 83%, 58%)", strokeWidth: 0 }}
+                      />
+                      <Tooltip
+                        content={({ active, payload: tp }) => {
+                          if (!active || !tp?.length) return null;
+                          const d = tp[0].payload as (typeof radarData)[number];
+                          if (d.pending) return null;
+                          return (
+                            <div className="rounded-md border bg-popover px-3 py-2 shadow-md text-popover-foreground">
+                              <p className="text-sm font-medium">{d.fullLabel}</p>
+                              <div className="mt-1 space-y-0.5">
+                                <p className="text-xs text-muted-foreground">
+                                  Score: <span className="font-medium text-foreground tabular-nums">{Math.round(d.score)}/100</span>
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  Weight: <span className="font-medium text-foreground tabular-nums">{d.weight}%</span>
+                                </p>
+                              </div>
+                            </div>
+                          );
+                        }}
+                      />
+                    </RadarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+
+              {/* Metadata */}
+              <div className="flex flex-col justify-center space-y-1.5">
+                {[
+                  { label: "Stage", value: formatStage(startup.stage), accent: false },
+                  { label: "Sector", value: startup.sectorIndustryGroup || "N/A", accent: false },
+                  { label: "Industry", value: startup.sectorIndustry || startup.industry || "N/A", accent: false },
+                  { label: "Location", value: startup.location || "N/A", accent: false },
+                  { label: "Round", value: formatCompactCurrency(startup.fundingTarget), accent: true },
+                  { label: "Valuation", value: formatCompactCurrency(startup.valuation), accent: true },
+                  { label: "Raise", value: formatRaiseType(startup.raiseType), accent: false },
+                  { label: "Lead", value: startup.leadInvestorName || "No", accent: false },
+                ].map((item) => (
+                  <div key={item.label} className="flex items-baseline justify-between gap-3">
+                    <span className="text-[11px] text-muted-foreground shrink-0">{item.label}</span>
+                    <span className={cn(
+                      "text-sm font-medium text-right truncate",
+                      item.accent && "text-violet-600",
+                    )}>
+                      {item.value}
+                    </span>
+                  </div>
+                ))}
               </div>
             </div>
           </CardContent>
@@ -421,7 +559,7 @@ export function AdminSummaryTab({
             <p className="text-xs text-muted-foreground">Top highlights for a quick pitch</p>
           </CardHeader>
           <CardContent>
-            <p className="text-sm leading-relaxed">{dealSnapshot}</p>
+            <MarkdownText className="text-sm leading-relaxed [&>p]:mb-0">{dealSnapshot}</MarkdownText>
           </CardContent>
         </Card>
 
@@ -492,14 +630,19 @@ export function AdminSummaryTab({
                           {formatPercent(scenario.irr)}
                         </p>
                       </div>
-                      <p className="mt-4 text-xs text-muted-foreground">
-                        {scenario.exitValuation}
-                        {scenario.timeline ? ` · ${scenario.timeline}` : ""}
-                      </p>
-                      {scenario.researchBasis && (
-                        <p className="mt-2 text-[11px] leading-tight text-muted-foreground/70 italic">
-                          {scenario.researchBasis}
+                      <div className="mt-4 border-t border-border/60 pt-3">
+                        <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+                          Exit valuation
                         </p>
+                        <p className="mt-1 text-sm font-medium">
+                          {scenario.exitValuation}
+                          {scenario.timeline ? ` · ${scenario.timeline}` : ""}
+                        </p>
+                      </div>
+                      {scenario.researchBasis && (
+                        <MarkdownText className="mt-2 text-[11px] leading-tight text-muted-foreground/70 italic [&>p]:mb-0">
+                          {scenario.researchBasis}
+                        </MarkdownText>
                       )}
                     </div>
                     {idx < exitScenarios.length - 1 && (
@@ -525,28 +668,18 @@ export function AdminSummaryTab({
                 <CheckCircle2 className="h-4 w-4" />
                 Key Strengths
               </CardTitle>
-              <p className="text-xs text-muted-foreground">
-                {crossStrengths.length > 0 ? "Sourced across evaluation agents" : "Top-level synthesis highlights"}
-              </p>
+              <p className="text-xs text-muted-foreground">Synthesis highlights</p>
             </CardHeader>
             <CardContent>
               <ul className="space-y-2 text-sm">
-                {crossStrengths.length > 0
-                  ? crossStrengths.map((item, idx) => (
+                {strengths.length > 0
+                  ? strengths.map((item, idx) => (
                       <li key={idx} className="flex items-start gap-2">
                         <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                        <span className="flex-1">{item.text}</span>
-                        <AgentBadge label={item.agentLabel} agent={item.agent} onClick={onNavigateTab} />
+                        <MarkdownText className="flex-1 [&>p]:mb-0">{item}</MarkdownText>
                       </li>
                     ))
-                  : strengths.length > 0
-                    ? strengths.map((item, idx) => (
-                        <li key={idx} className="flex items-start gap-2">
-                          <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                          <span>{item}</span>
-                        </li>
-                      ))
-                    : <li className="text-muted-foreground">No strengths available yet.</li>
+                  : <li className="text-muted-foreground">No strengths available yet.</li>
                 }
               </ul>
             </CardContent>
@@ -558,185 +691,32 @@ export function AdminSummaryTab({
                 <AlertTriangle className="h-4 w-4" />
                 Key Risks
               </CardTitle>
-              <p className="text-xs text-muted-foreground">
-                {crossRisks.length > 0 ? "Sourced across evaluation agents" : "Top-level synthesis highlights"}
-              </p>
+              <p className="text-xs text-muted-foreground">Synthesis highlights</p>
             </CardHeader>
             <CardContent>
               <ul className="space-y-2 text-sm">
-                {crossRisks.length > 0
-                  ? crossRisks.map((item, idx) => (
+                {risks.length > 0
+                  ? risks.map((item, idx) => (
                       <li key={idx} className="flex items-start gap-2">
                         <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-500" />
-                        <span className="flex-1">{item.text}</span>
-                        <AgentBadge label={item.agentLabel} agent={item.agent} onClick={onNavigateTab} />
+                        <MarkdownText className="flex-1 [&>p]:mb-0">{item}</MarkdownText>
                       </li>
                     ))
-                  : risks.length > 0
-                    ? risks.map((item, idx) => (
-                        <li key={idx} className="flex items-start gap-2">
-                          <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-500" />
-                          <span>{item}</span>
-                        </li>
-                      ))
-                    : <li className="text-muted-foreground">No risks available yet.</li>
+                  : <li className="text-muted-foreground">No risks available yet.</li>
                 }
               </ul>
             </CardContent>
           </Card>
         </div>
 
-        {(criticalGaps.length > 0 || plainGaps.length > 0) && (
-          <Card className="border-orange-200/80 dark:border-orange-900/50">
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-base text-orange-700 dark:text-orange-400">
-                <AlertCircle className="h-4 w-4" />
-                Critical Data Gaps
-              </CardTitle>
-              <p className="text-xs text-muted-foreground">
-                Information gaps flagged by evaluation agents — may require follow-up diligence
-              </p>
-            </CardHeader>
-            <CardContent>
-              <ul className="space-y-2 text-sm">
-                {criticalGaps.length > 0
-                  ? criticalGaps.map((item, idx) => (
-                      <li key={idx} className="flex items-start gap-2">
-                        <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-orange-500" />
-                        <div className="flex-1">
-                          <span>{item.gap}</span>
-                          {item.suggestedAction && (
-                            <p className="mt-0.5 text-xs text-muted-foreground">{item.suggestedAction}</p>
-                          )}
-                        </div>
-                        <span className="shrink-0 text-[10px] font-medium text-muted-foreground">{item.source}</span>
-                      </li>
-                    ))
-                  : plainGaps.map((item, idx) => (
-                      <li key={idx} className="flex items-start gap-2">
-                        <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-orange-500" />
-                        <span className="flex-1">{item.text}</span>
-                        <AgentBadge label={item.agentLabel} agent={item.agent} onClick={onNavigateTab} />
-                      </li>
-                    ))
-                }
-              </ul>
-            </CardContent>
-          </Card>
+        {(allGaps.length > 0 || plainGaps.length > 0) && (
+          <DataGapsCard
+            allGaps={allGaps}
+            plainGaps={plainGaps}
+            onNavigateTab={onNavigateTab}
+          />
         )}
 
-        {evaluation && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Section Scores</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-6 lg:grid-cols-[340px_minmax(0,1fr)]">
-                {radarData.length > 0 && (
-                  <div className="flex items-center justify-center">
-                    <ResponsiveContainer width="100%" height={320}>
-                      <RadarChart data={radarData} cx="50%" cy="50%" outerRadius="55%">
-                        <PolarGrid stroke="currentColor" strokeOpacity={0.15} />
-                        <PolarAngleAxis
-                          dataKey="label"
-                          tick={{ fontSize: 11, fill: "currentColor" }}
-                          tickLine={false}
-                        />
-                        <PolarRadiusAxis
-                          angle={90}
-                          domain={[0, 100]}
-                          tick={false}
-                          axisLine={false}
-                          tickCount={5}
-                        />
-                        <Radar
-                          dataKey="score"
-                          stroke="hsl(262, 83%, 58%)"
-                          fill="hsl(262, 83%, 58%)"
-                          fillOpacity={0.15}
-                          strokeWidth={2}
-                          dot={{ r: 3, fill: "hsl(262, 83%, 58%)", strokeWidth: 0 }}
-                        />
-                      </RadarChart>
-                    </ResponsiveContainer>
-                  </div>
-                )}
-                <div className="space-y-3">
-                  {sectionRows.map((row) => (
-                    <button
-                      type="button"
-                      key={row.id}
-                      className="grid w-full grid-cols-[95px_36px_minmax(0,1fr)_32px] items-center gap-3 rounded-md px-1 py-0.5 text-left hover:bg-muted/40 transition-colors cursor-pointer"
-                      onClick={() => onNavigateTab?.(getAgentTab(row.id))}
-                    >
-                      <span className={`text-xs ${row.pending ? "text-muted-foreground" : ""}`}>{row.label}</span>
-                      <span className="text-[11px] text-muted-foreground">{row.weight}%</span>
-                      <div className="h-2.5 rounded-full bg-muted">
-                        {row.pending ? (
-                          <div className="h-full rounded-full bg-muted-foreground/20 animate-pulse" style={{ width: "100%" }} />
-                        ) : (
-                          <div className={`h-full rounded-full ${scoreBarClass(row.score)}`} style={{ width: `${row.score}%` }} />
-                        )}
-                      </div>
-                      <span className="text-right text-xs font-medium">{row.pending ? <span className="text-muted-foreground text-[10px]">—</span> : Math.round(row.score)}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Founder Report</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              {founderReportData?.summary || "Founder report summary is not available yet."}
-            </p>
-
-            {whatsWorking.length > 0 && (
-              <div className="space-y-2">
-                <div className="flex items-center gap-1.5 text-sm font-medium text-emerald-700 dark:text-emerald-400">
-                  <CheckCircle2 className="h-4 w-4" />
-                  What&apos;s Working
-                </div>
-                <ul className="space-y-1.5">
-                  {whatsWorking.map((item, index) => (
-                    <li key={`w-${index}`} className="flex items-start gap-2 text-sm text-muted-foreground">
-                      <span className="mt-2 h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {pathToInevitability.length > 0 && (
-              <div className="space-y-2 border-t pt-3">
-                <div className="flex items-center gap-1.5 text-sm font-medium text-violet-700 dark:text-violet-400">
-                  <ArrowRight className="h-4 w-4" />
-                  Path to Inevitability
-                </div>
-                <ul className="space-y-1.5">
-                  {pathToInevitability.map((item, index) => (
-                    <li key={`p-${index}`} className="flex items-start gap-2 text-sm text-muted-foreground">
-                      <span className="mt-2 h-1.5 w-1.5 rounded-full bg-violet-500 shrink-0" />
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {whatsWorking.length === 0 && pathToInevitability.length === 0 && !founderReportData?.summary && (
-              <p className="text-sm text-muted-foreground">
-                Founder report details are not available yet.
-              </p>
-            )}
-          </CardContent>
-        </Card>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
-import { ConfidenceBadge } from "@/components/ConfidenceBadge";
+import { MarkdownText } from "@/components/MarkdownText";
 import { MemoSection } from "@/components/MemoSection";
 import {
   FileText,
@@ -18,7 +18,6 @@ import {
   Swords,
   Search,
   Download,
-  ExternalLink,
 } from "lucide-react";
 import type { Startup } from "@/types/startup";
 import type { Evaluation } from "@/types/evaluation";
@@ -315,8 +314,6 @@ export function MemoTabContent({
   }
 
   const dueDiligenceAreas = toStringArray(memo?.keyDueDiligenceAreas);
-  const synthesisConfidence = (evaluation as unknown as Record<string, unknown>).confidenceScore as string | undefined ?? "unknown";
-
   const getAdminFeedbackProps = (sectionKey: string) => {
     if (!adminFeedback) return undefined;
     const evalAny = evaluation as unknown as Record<string, unknown>;
@@ -368,29 +365,6 @@ export function MemoTabContent({
         </div>
       </CardHeader>
       <CardContent className="space-y-6" data-testid="container-memo-sections">
-        <Card
-          className="border-primary/20 bg-gradient-to-br from-primary/10 via-background to-background"
-          data-testid="card-synthesis-verdict"
-        >
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Synthesis Quality</CardTitle>
-            <CardDescription>
-              Confidence level and data-quality notes
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <ConfidenceBadge
-                confidence={synthesisConfidence}
-                dataTestId="badge-synthesis-confidence"
-              />
-            </div>
-            <p className="text-sm text-muted-foreground leading-relaxed" data-testid="text-synthesis-confidence-notes">
-              {evaluation.dataConfidenceNotes || "No data confidence notes were provided by synthesis."}
-            </p>
-          </CardContent>
-        </Card>
-
         <MemoSection
           title="Executive Summary"
           icon={FileText}
@@ -412,7 +386,7 @@ export function MemoTabContent({
                     <h4 className="mb-1 text-sm font-medium">Highlights</h4>
                     <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
                       {sectionHighlights.slice(0, 4).map((item, index) => (
-                        <li key={`${item}-${index}`}>{item}</li>
+                        <li key={`${item}-${index}`}><MarkdownText className="inline [&>p]:inline [&>p]:mb-0">{item}</MarkdownText></li>
                       ))}
                     </ul>
                   </div>
@@ -422,38 +396,9 @@ export function MemoTabContent({
                     <h4 className="mb-1 text-sm font-medium">Concerns</h4>
                     <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
                       {sectionConcerns.slice(0, 4).map((item, index) => (
-                        <li key={`${item}-${index}`}>{item}</li>
+                        <li key={`${item}-${index}`}><MarkdownText className="inline [&>p]:inline [&>p]:mb-0">{item}</MarkdownText></li>
                       ))}
                     </ul>
-                  </div>
-                )}
-                {sectionSources.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 pt-1 border-t">
-                    {sectionSources.map((source, index) => {
-                      const isExternalLink = source.url.startsWith("http");
-                      const pillClass =
-                        "inline-flex items-center gap-1 rounded-full border bg-muted/40 px-2 py-0.5 text-[11px] text-muted-foreground transition-colors";
-                      return isExternalLink ? (
-                        <a
-                          key={`${source.url}-${index}`}
-                          href={source.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className={`${pillClass} hover:bg-muted hover:text-foreground`}
-                        >
-                          <ExternalLink className="h-2.5 w-2.5 shrink-0" />
-                          {source.label}
-                        </a>
-                      ) : (
-                        <span
-                          key={`${source.url}-${index}`}
-                          className={`${pillClass} cursor-default`}
-                        >
-                          <FileText className="h-2.5 w-2.5 shrink-0" />
-                          {source.label}
-                        </span>
-                      );
-                    })}
                   </div>
                 )}
               </div>
@@ -468,7 +413,7 @@ export function MemoTabContent({
               score={showScores ? getScore(evaluation, config.scoreKey) : undefined}
               weight={`${weights?.[config.weightKey] ?? 0}%`}
               summary={section?.content || "Synthesis section is not available yet for this dimension."}
-              sources={sectionSources}
+              sources={undefined}
               details={sectionDetails}
               evaluationNote={config.evaluationNote}
               adminFeedback={getAdminFeedbackProps(config.key)}
@@ -486,7 +431,7 @@ export function MemoTabContent({
               {dueDiligenceAreas.map((area, i) => (
                 <li key={`${area}-${i}`} className="flex items-start gap-3 text-sm text-muted-foreground">
                   <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground shrink-0 mt-2" />
-                  <span>{area}</span>
+                  <MarkdownText className="flex-1 [&>p]:mb-0">{area}</MarkdownText>
                 </li>
               ))}
             </ul>

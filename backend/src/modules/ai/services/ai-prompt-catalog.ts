@@ -530,7 +530,7 @@ export const AI_PROMPT_CATALOG: Record<AiPromptKey, PromptCatalogEntry> = {
       "  - tam: { value (string range e.g. \"$15B-$20B\"), methodology (\"top-down\" | \"bottom-up\" | \"blended\"), sources: [{ name, tier (1=primary research, 2=industry report, 3=secondary), date, value, url }], confidence (\"high\" | \"mid\" | \"low\") }",
       "  - sam: { value (string range), methodology (string), filters: [] (filters applied to narrow from TAM), sources: [], confidence (\"high\" | \"mid\" | \"low\") }",
       "  - som: { value (string range), methodology (string), assumptions (string), confidence (\"high\" | \"mid\" | \"low\") }",
-      "  - bottomUpSanityCheck: { calculation (string showing pricing x addressable accounts), plausible (boolean), notes (string) }",
+      "  - bottomUpSanityCheck: { calculation (string showing pricing x addressable accounts), notes (string) }",
       "  - deckVsResearch: { tamClaimed (string), tamResearched (string), discrepancyFlag (boolean), discrepancyNotes (string) }",
       "- marketGrowthAndTiming: Object containing growth and timing analysis:",
       "  - growthRate: { cagr (string), period (string), source (string), deckClaimed (string), discrepancyFlag (boolean) }",

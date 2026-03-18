@@ -76,7 +76,6 @@ export function createMockEvaluationResult(
         },
         bottomUpSanityCheck: {
           calculation: "Not performed",
-          plausible: "unknown",
           notes: "Pending",
         },
         deckVsResearch: {

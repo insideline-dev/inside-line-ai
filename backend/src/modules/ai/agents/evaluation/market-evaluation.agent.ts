@@ -528,7 +528,6 @@ export class MarketEvaluationAgent extends BaseEvaluationAgent<MarketEvaluation>
           somValue != null
             ? `Legacy memo indicates SOM estimate of ${somValue} under inferred share assumptions.`
             : "Not performed",
-        plausible: somValue != null,
         notes:
           somValue != null
             ? "Legacy output included SOM-like estimate references."

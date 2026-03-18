@@ -16,7 +16,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useStartupRealtimeProgress } from "@/lib/startup/useStartupRealtimeProgress";
@@ -131,14 +130,6 @@ const SURFACE_TONE_CLASS: Record<SignalTone, string> = {
   info: "border-sky-500/30 bg-sky-500/5",
   warning: "border-amber-500/30 bg-amber-500/5",
   danger: "border-destructive/40 bg-destructive/5",
-};
-
-const PROGRESS_TONE_CLASS: Record<SignalTone, string> = {
-  neutral: "",
-  success: "[&>div]:bg-emerald-500",
-  info: "[&>div]:bg-sky-500",
-  warning: "[&>div]:bg-amber-500",
-  danger: "[&>div]:bg-destructive",
 };
 
 const PHASE_STEP_AGENT_KEYS = new Set([
@@ -1291,13 +1282,9 @@ export function AdminPipelineLivePanel({
         <div className="grid gap-3 md:grid-cols-4">
           <div className="rounded-lg border p-3">
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Overall</p>
-            <p className="mt-1 text-2xl font-semibold">
+            <p className="mt-1 text-2xl font-semibold tabular-nums">
               {normalizePercent(progress?.overallProgress)}%
             </p>
-            <Progress
-              value={normalizePercent(progress?.overallProgress)}
-              className="mt-2 h-1.5"
-            />
           </div>
           <div className="rounded-lg border p-3">
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Current phase</p>
@@ -1326,101 +1313,88 @@ export function AdminPipelineLivePanel({
           </div>
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           <h3 className="text-sm font-semibold">Stages</h3>
-          <div className="grid gap-2 md:grid-cols-2">
-            {phaseEntries.map((entry) => (
-              <div
-                key={entry.phase}
-                className={`rounded-lg border p-3 ${SURFACE_TONE_CLASS[entry.tone]}`}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <p className="flex items-center gap-2 font-medium">
+          <div className="rounded-lg border divide-y">
+            {phaseEntries.map((entry) => {
+              const runningAgents = Object.entries(entry.data.agents ?? {})
+                .filter(([k, a]) => a.status === "running" && !PHASE_STEP_AGENT_KEYS.has(k));
+              const hasSignals = entry.failedAgentCount > 0 || entry.fallbackAgentCount > 0 || entry.retriedAgentCount > 0 || entry.retryingAgentCount > 0;
+              return (
+                <div key={entry.phase} className={cn("px-3 py-2.5", SURFACE_TONE_CLASS[entry.tone])}>
+                  <div className="flex items-center gap-2">
                     {statusIcon(entry.data.status)}
-                    {formatLabel(entry.phase)}
-                  </p>
-                  <Badge variant="outline" className={statusClass(entry.data.status)}>
-                    {entry.data.status}
-                  </Badge>
-                </div>
-                <Progress
-                  value={entry.percent}
-                  className={`mt-2 h-1.5 ${PROGRESS_TONE_CLASS[entry.tone]}`}
-                />
-                <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted-foreground">
-                  <span>{entry.percent}%</span>
-                  <span>Agents: {entry.agentCount}</span>
-                  {(entry.data.retryCount ?? 0) > 0 && (
-                    <span>Retries: {entry.data.retryCount}</span>
+                    <span className="text-sm font-medium">{formatLabel(entry.phase)}</span>
+                    {entry.agentCount > 0 && (
+                      <span className="text-xs text-muted-foreground tabular-nums">{entry.agentCount} agents</span>
+                    )}
+                    <div className="ml-auto flex items-center gap-1.5">
+                      {hasSignals && (
+                        <>
+                          {entry.retryingAgentCount > 0 && (
+                            <Badge variant="outline" className="h-5 px-1.5 text-[10px] bg-sky-500/10 text-sky-700 border-sky-500/30 dark:text-sky-300">
+                              retrying {entry.retryingAgentCount}
+                            </Badge>
+                          )}
+                          {entry.failedAgentCount > 0 && (
+                            <Badge variant="outline" className="h-5 px-1.5 text-[10px] bg-destructive/10 text-destructive border-destructive/30">
+                              failed {entry.failedAgentCount}
+                            </Badge>
+                          )}
+                          {entry.fallbackAgentCount > 0 && (
+                            <Badge variant="outline" className="h-5 px-1.5 text-[10px] bg-amber-500/10 text-amber-700 border-amber-500/30 dark:text-amber-300">
+                              fallback {entry.fallbackAgentCount}
+                            </Badge>
+                          )}
+                          {entry.retriedAgentCount > 0 && (
+                            <Badge variant="outline" className={cn("h-5 px-1.5 text-[10px]", RETRIED_BADGE_CLASS)}>
+                              retried {entry.retriedAgentCount}
+                            </Badge>
+                          )}
+                        </>
+                      )}
+                      <Badge variant="outline" className={cn("h-5 px-1.5 text-[10px]", statusClass(entry.data.status))}>
+                        {entry.data.status}
+                      </Badge>
+                    </div>
+                  </div>
+
+                  {runningAgents.length > 0 && (
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      {runningAgents.map(([agentKey, agent]) => (
+                        <span key={agentKey} className="inline-flex items-center gap-1 text-xs text-sky-700 dark:text-sky-300">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          {formatLabel(agent.key ?? agentKey)}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  <DataFlowBadges phase={entry.phase} agents={entry.data.agents} />
+
+                  {entry.phase === "scraping" && entry.data.status === "completed" && (() => {
+                    const website = (progress?.phaseResults?.scraping as Record<string, unknown>)?.website as
+                      | { url: string; title: string; fullText?: string; subpages?: Array<{ url: string; title: string; content: string }> }
+                      | undefined;
+                    if (!website?.subpages?.length) return null;
+                    return (
+                      <ScrapeLogTable
+                        websiteUrl={website.url}
+                        homepageTitle={website.title}
+                        fullText={website.fullText ?? ""}
+                        subpages={website.subpages}
+                      />
+                    );
+                  })()}
+
+                  {entry.data.error && (
+                    <p className={cn("mt-1.5 text-xs truncate", entry.data.status === "failed" ? "text-destructive" : "text-amber-700 dark:text-amber-300")}>
+                      {entry.data.error}
+                    </p>
                   )}
                 </div>
-                <DataFlowBadges phase={entry.phase} agents={entry.data.agents} />
-                {entry.phase === "scraping" && entry.data.status === "completed" && (() => {
-                  const website = (progress?.phaseResults?.scraping as Record<string, unknown>)?.website as
-                    | { url: string; title: string; fullText?: string; subpages?: Array<{ url: string; title: string; content: string }> }
-                    | undefined;
-                  if (!website?.subpages?.length) return null;
-                  return (
-                    <ScrapeLogTable
-                      websiteUrl={website.url}
-                      homepageTitle={website.title}
-                      fullText={website.fullText ?? ""}
-                      subpages={website.subpages}
-                    />
-                  );
-                })()}
-                {(entry.failedAgentCount > 0 ||
-                  entry.fallbackAgentCount > 0 ||
-                  entry.retriedAgentCount > 0 ||
-                  entry.retryingAgentCount > 0) && (
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {entry.retryingAgentCount > 0 && (
-                      <Badge
-                        variant="outline"
-                        className="bg-sky-500/10 text-sky-700 border-sky-500/30 dark:text-sky-300"
-                      >
-                        retrying {entry.retryingAgentCount}
-                      </Badge>
-                    )}
-                    {entry.failedAgentCount > 0 && (
-                      <Badge
-                        variant="outline"
-                        className="bg-destructive/10 text-destructive border-destructive/30"
-                      >
-                        failed {entry.failedAgentCount}
-                      </Badge>
-                    )}
-                    {entry.fallbackAgentCount > 0 && (
-                      <Badge
-                        variant="outline"
-                        className="bg-amber-500/10 text-amber-700 border-amber-500/30 dark:text-amber-300"
-                      >
-                        fallback {entry.fallbackAgentCount}
-                      </Badge>
-                    )}
-                    {entry.retriedAgentCount > 0 && (
-                      <Badge
-                        variant="outline"
-                        className={RETRIED_BADGE_CLASS}
-                      >
-                        retried {entry.retriedAgentCount}
-                      </Badge>
-                    )}
-                  </div>
-                )}
-                {entry.data.error && (
-                  <p
-                    className={`mt-2 text-xs ${
-                      entry.data.status === "failed"
-                        ? "text-destructive"
-                        : "text-amber-700 dark:text-amber-300"
-                    }`}
-                  >
-                    {entry.data.error}
-                  </p>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 

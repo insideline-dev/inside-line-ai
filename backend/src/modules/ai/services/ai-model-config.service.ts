@@ -35,6 +35,7 @@ export class AiModelConfigService {
   async resolveConfig(params: {
     key: AiPromptKey;
     stage?: StartupStage | string | null;
+    enableWebSearch?: boolean;
   }): Promise<ResolvedModelConfig> {
     const normalizedStage = this.normalizeStage(params.stage);
     const purpose = resolveModelPurposeForPromptKey(params.key);
@@ -47,22 +48,24 @@ export class AiModelConfigService {
         purpose,
         override.modelName,
         override.searchMode,
+        params.enableWebSearch,
       );
     }
 
-    return this.buildDefaultResolvedConfig(params.key, normalizedStage, purpose);
+    return this.buildDefaultResolvedConfig(params.key, normalizedStage, purpose, params.enableWebSearch);
   }
 
   private buildDefaultResolvedConfig(
     key: AiPromptKey,
     stage: StartupStage | null,
     purpose: ModelPurpose,
+    enableWebSearch?: boolean,
   ): ResolvedModelConfig {
     const modelName = isResearchPromptKey(key)
       ? "gemini-3-flash-preview"
       : this.aiConfig.getModelForPurpose(purpose);
     const provider = resolveProviderForModelName(modelName);
-    const supportedSearchModes = this.getSupportedSearchModes(key, provider, modelName);
+    const supportedSearchModes = this.getSupportedSearchModes(key, provider, modelName, enableWebSearch);
 
     return {
       source: "default",
@@ -86,9 +89,10 @@ export class AiModelConfigService {
     purpose: ModelPurpose,
     modelName: string,
     searchModeOverride: string | null,
+    enableWebSearch?: boolean,
   ): ResolvedModelConfig {
     const provider = resolveProviderForModelName(modelName);
-    const supportedSearchModes = this.getSupportedSearchModes(key, provider, modelName);
+    const supportedSearchModes = this.getSupportedSearchModes(key, provider, modelName, enableWebSearch);
 
     const searchMode: AiRuntimeSearchMode =
       searchModeOverride && supportedSearchModes.includes(searchModeOverride as AiRuntimeSearchMode)
@@ -115,12 +119,26 @@ export class AiModelConfigService {
     key: AiPromptKey,
     provider: string,
     modelName: string,
+    enableWebSearch?: boolean,
   ): AiRuntimeSearchMode[] {
     if (isResearchPromptKey(key)) {
       if (isOpenAiDeepResearchModel(modelName)) {
         return ["off", "provider_grounded_search"];
       }
 
+      if (provider === "google" || provider === "openai") {
+        return [
+          "off",
+          "provider_grounded_search",
+          "brave_tool_search",
+          "provider_and_brave_search",
+        ];
+      }
+
+      return ["off", "brave_tool_search"];
+    }
+
+    if (enableWebSearch === true) {
       if (provider === "google" || provider === "openai") {
         return [
           "off",

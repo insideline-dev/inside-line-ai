@@ -7,7 +7,7 @@ import { ResearchAgentKey } from "../interfaces/agent.interface";
 import { AiModelOverrideService } from "./ai-model-override.service";
 
 const DEFAULT_RESEARCH_ATTEMPT_TIMEOUT_MS = 3_600_000;
-const DEFAULT_RESEARCH_AGENT_HARD_TIMEOUT_MS = 3_600_000;
+const DEFAULT_RESEARCH_AGENT_HARD_TIMEOUT_MS = 10_860_000;
 
 @Injectable()
 export class AiConfigService {
@@ -43,37 +43,19 @@ export class AiConfigService {
   }
 
   getResearchTimeoutMs(): number {
-    return this.getResearchAttemptTimeoutMs();
+    return DEFAULT_RESEARCH_ATTEMPT_TIMEOUT_MS;
   }
 
   getResearchAttemptTimeoutMs(): number {
-    const explicit = this.config.get<number>("AI_RESEARCH_ATTEMPT_TIMEOUT_MS");
-    if (typeof explicit === "number" && Number.isFinite(explicit)) {
-      return this.toPositiveInt(explicit, DEFAULT_RESEARCH_ATTEMPT_TIMEOUT_MS);
-    }
-
-    const legacy = this.config.get<number>(
-      "AI_RESEARCH_TIMEOUT_MS",
-      DEFAULT_RESEARCH_ATTEMPT_TIMEOUT_MS,
-    );
-    return this.toPositiveInt(legacy, DEFAULT_RESEARCH_ATTEMPT_TIMEOUT_MS);
+    return DEFAULT_RESEARCH_ATTEMPT_TIMEOUT_MS;
   }
 
   getResearchMaxAttempts(): number {
-    const explicit = this.config.get<number>("AI_RESEARCH_MAX_ATTEMPTS", 2);
-    return this.toPositiveInt(explicit, 2);
+    return 3;
   }
 
   getResearchAgentHardTimeoutMs(): number {
-    const explicit = this.config.get<number>("AI_RESEARCH_AGENT_HARD_TIMEOUT_MS");
-    if (typeof explicit === "number" && Number.isFinite(explicit)) {
-      return this.toPositiveInt(explicit, DEFAULT_RESEARCH_AGENT_HARD_TIMEOUT_MS);
-    }
-
-    const computed =
-      this.getResearchAttemptTimeoutMs() * this.getResearchMaxAttempts() +
-      30_000;
-    return this.toPositiveInt(computed, DEFAULT_RESEARCH_AGENT_HARD_TIMEOUT_MS);
+    return DEFAULT_RESEARCH_AGENT_HARD_TIMEOUT_MS;
   }
 
   getResearchAttemptTimeoutMsForAgent(_agent: ResearchAgentKey): number {
@@ -133,32 +115,15 @@ export class AiConfigService {
   }
 
   getEvaluationAttemptTimeoutMs(): number {
-    const explicit = this.config.get<number>("AI_EVALUATION_ATTEMPT_TIMEOUT_MS");
-    if (typeof explicit === "number" && Number.isFinite(explicit)) {
-      return this.toPositiveInt(explicit, 300_000);
-    }
-
-    const legacy = this.config.get<number>("AI_EVALUATION_TIMEOUT_MS", 300_000);
-    return this.toPositiveInt(legacy, 300_000);
+    return 300_000;
   }
 
   getEvaluationMaxAttempts(): number {
-    const explicit = this.config.get<number>("AI_EVALUATION_MAX_ATTEMPTS", 2);
-    return this.toPositiveInt(explicit, 2);
+    return 3;
   }
 
   getEvaluationAgentHardTimeoutMs(): number {
-    const explicit = this.config.get<number>(
-      "AI_EVALUATION_AGENT_HARD_TIMEOUT_MS",
-    );
-    if (typeof explicit === "number" && Number.isFinite(explicit)) {
-      return this.toPositiveInt(explicit, 660_000);
-    }
-
-    const computed =
-      this.getEvaluationAttemptTimeoutMs() * this.getEvaluationMaxAttempts() +
-      60_000;
-    return this.toPositiveInt(computed, 660_000);
+    return 960_000;
   }
 
   getSynthesisMaxOutputTokens(): number {
@@ -170,30 +135,15 @@ export class AiConfigService {
   }
 
   getSynthesisAttemptTimeoutMs(): number {
-    const explicit = this.config.get<number>("AI_SYNTHESIS_ATTEMPT_TIMEOUT_MS");
-    if (typeof explicit === "number" && Number.isFinite(explicit)) {
-      return this.toPositiveInt(explicit, 300_000);
-    }
-
-    const legacy = this.config.get<number>("AI_SYNTHESIS_TIMEOUT_MS", 300_000);
-    return this.toPositiveInt(legacy, 300_000);
+    return 300_000;
   }
 
   getSynthesisMaxAttempts(): number {
-    const explicit = this.config.get<number>("AI_SYNTHESIS_MAX_ATTEMPTS", 2);
-    return this.toPositiveInt(explicit, 2);
+    return 3;
   }
 
   getSynthesisAgentHardTimeoutMs(): number {
-    const explicit = this.config.get<number>("AI_SYNTHESIS_AGENT_HARD_TIMEOUT_MS");
-    if (typeof explicit === "number" && Number.isFinite(explicit)) {
-      return this.toPositiveInt(explicit, 210_000);
-    }
-
-    const computed =
-      this.getSynthesisAttemptTimeoutMs() * this.getSynthesisMaxAttempts() +
-      30_000;
-    return this.toPositiveInt(computed, 210_000);
+    return 960_000;
   }
 
   getModelForPurpose(purpose: ModelPurpose): string {

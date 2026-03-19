@@ -170,6 +170,8 @@ export function NodeConfigSheet({
   const [activePromptKey, setActivePromptKey] = useState<string | null>(null);
   const [scrapeDiscoveryEnabled, setScrapeDiscoveryEnabled] = useState(false);
   const [scrapeManualPathsInput, setScrapeManualPathsInput] = useState("");
+  const [evalWebSearchEnabled, setEvalWebSearchEnabled] = useState(false);
+  const [evalBraveSearchEnabled, setEvalBraveSearchEnabled] = useState(false);
 
   const { data: overridesData } = useAiModelOverrides();
   const setOverride = useSetModelOverride();
@@ -177,6 +179,9 @@ export function NodeConfigSheet({
 
   const isSystem = node?.kind === "system";
   const isScrapeWebsiteNode = node?.id === "scrape_website";
+  const isEvalAgentNode = node?.id?.startsWith("evaluation_") ?? false;
+  const isResearchAgentNode = node?.id?.startsWith("research_") && node?.kind === "prompt";
+  const hasSearchToggles = isEvalAgentNode || isResearchAgentNode;
   const selectedKey = activePromptKey ?? node?.promptKeys[0] ?? null;
 
   const allowedModels = overridesData?.allowedModels ?? [
@@ -234,6 +239,27 @@ export function NodeConfigSheet({
     setScrapeDiscoveryEnabled(parsed.discoveryEnabled);
     setScrapeManualPathsInput(parsed.manualPaths.join("\n"));
   }, [isScrapeWebsiteNode, node?.id, nodeConfig]);
+
+  useEffect(() => {
+    if (!hasSearchToggles) {
+      setEvalWebSearchEnabled(false);
+      setEvalBraveSearchEnabled(false);
+      return;
+    }
+    const config = nodeConfig as { webSearchEnabled?: boolean; braveSearchEnabled?: boolean } | undefined;
+    setEvalWebSearchEnabled(config?.webSearchEnabled === true);
+    setEvalBraveSearchEnabled(config?.braveSearchEnabled === true);
+  }, [hasSearchToggles, node?.id, nodeConfig]);
+
+  const handleEvalSearchToggle = (field: "webSearchEnabled" | "braveSearchEnabled", enabled: boolean) => {
+    const updated = {
+      webSearchEnabled: field === "webSearchEnabled" ? enabled : evalWebSearchEnabled,
+      braveSearchEnabled: field === "braveSearchEnabled" ? enabled : evalBraveSearchEnabled,
+    };
+    if (field === "webSearchEnabled") setEvalWebSearchEnabled(enabled);
+    if (field === "braveSearchEnabled") setEvalBraveSearchEnabled(enabled);
+    onNodeConfigChange?.(updated);
+  };
 
   const applyScrapeConfig = () => {
     if (!isScrapeWebsiteNode) {
@@ -575,6 +601,44 @@ export function NodeConfigSheet({
                   ) : (
                     <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
                       No model configuration available for this node.
+                    </div>
+                  )}
+
+                  {hasSearchToggles && (
+                    <div className="space-y-3 rounded-md border border-border/70 p-3">
+                      <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        Search Tools
+                      </Label>
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <Label className="text-xs font-medium">Provider Web Search</Label>
+                          <p className="text-[11px] text-muted-foreground">
+                            Use the model provider's native web search.
+                          </p>
+                        </div>
+                        <Switch
+                          checked={evalWebSearchEnabled}
+                          onCheckedChange={(v) => handleEvalSearchToggle("webSearchEnabled", v)}
+                        />
+                      </div>
+                      <Separator />
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <Label className="text-xs font-medium">Brave Deep Search</Label>
+                          <p className="text-[11px] text-muted-foreground">
+                            Additional search via Brave for deeper evidence.
+                          </p>
+                        </div>
+                        <Switch
+                          checked={evalBraveSearchEnabled}
+                          onCheckedChange={(v) => handleEvalSearchToggle("braveSearchEnabled", v)}
+                        />
+                      </div>
+                      {(evalWebSearchEnabled || evalBraveSearchEnabled) && (
+                        <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                          Adds latency and cost to this agent's execution.
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>

@@ -30,6 +30,25 @@ const components: Components = {
   ),
 };
 
+/**
+ * Fix orphaned markdown bold/italic markers from LLM output.
+ * The LLM sometimes drops the leading ** from bold text, producing
+ * "Leadership** with experience" instead of "**Leadership** with experience".
+ * This scans for unmatched ** and strips them to avoid raw symbols in the UI.
+ */
+function sanitizeMarkdown(text: string): string {
+  // Process each line independently to handle multi-line content
+  return text.split("\n").map(line => {
+    const markers = [...line.matchAll(/\*\*/g)];
+    if (markers.length === 0) return line;
+    // If even count, all ** are paired — leave as-is
+    if (markers.length % 2 === 0) return line;
+    // Odd count: strip the first orphaned ** (the one missing its opening pair)
+    const firstIdx = markers[0].index!;
+    return line.slice(0, firstIdx) + line.slice(firstIdx + 2);
+  }).join("\n");
+}
+
 export function MarkdownText({ children, className }: MarkdownTextProps) {
   return (
     <div className={className}>
@@ -37,7 +56,7 @@ export function MarkdownText({ children, className }: MarkdownTextProps) {
         remarkPlugins={[remarkGfm]}
         components={components}
       >
-        {children}
+        {sanitizeMarkdown(children)}
       </ReactMarkdown>
     </div>
   );

@@ -43,20 +43,32 @@ export class AiModelExecutionService {
     key: AiPromptKey;
     stage?: StartupStage | string | null;
     revisionId?: string;
+    enableWebSearch?: boolean;
+    enableBraveSearch?: boolean;
   }): Promise<ModelExecutionResolution> {
-    const resolvedConfig = await this.modelConfig.resolveConfig(params);
+    const resolvedConfig = await this.modelConfig.resolveConfig({
+      key: params.key,
+      stage: params.stage,
+      enableWebSearch: params.enableWebSearch || params.enableBraveSearch,
+    });
     const model = this.providers.resolveModel(resolvedConfig.modelName) as GenerateTextCall["model"];
     const providerOptions = this.resolveProviderOptions(resolvedConfig.provider);
 
     const isResearchKey = isResearchPromptKey(params.key);
-    const requiresProviderEvidence =
-      isResearchKey &&
-      (resolvedConfig.searchMode === "provider_grounded_search" ||
-        resolvedConfig.searchMode === "provider_and_brave_search");
-    const requiresBraveToolCall =
-      isResearchKey &&
-      (resolvedConfig.searchMode === "brave_tool_search" ||
-        resolvedConfig.searchMode === "provider_and_brave_search");
+    const needsSearchTools = isResearchKey || params.enableWebSearch === true || params.enableBraveSearch === true;
+
+    // For eval agents, derive search needs directly from the per-agent toggles
+    const isEvalSearch = !isResearchKey && needsSearchTools;
+    const requiresProviderEvidence = isEvalSearch
+      ? params.enableWebSearch === true
+      : needsSearchTools &&
+        (resolvedConfig.searchMode === "provider_grounded_search" ||
+          resolvedConfig.searchMode === "provider_and_brave_search");
+    const requiresBraveToolCall = isEvalSearch
+      ? params.enableBraveSearch === true
+      : needsSearchTools &&
+        (resolvedConfig.searchMode === "brave_tool_search" ||
+          resolvedConfig.searchMode === "provider_and_brave_search");
 
     if (!requiresProviderEvidence && !requiresBraveToolCall) {
       return {
@@ -120,13 +132,20 @@ export class AiModelExecutionService {
       });
     }
 
+    // Eval agents use "auto" tool choice (optional search), research agents use "required"
+    const isEvalWebSearch = params.enableWebSearch === true && !isResearchKey;
+    const toolChoice = isEvalWebSearch ? ("auto" as const) : ("required" as const);
+    const stopWhen = isEvalWebSearch
+      ? stepCountIs(4)
+      : stepCountIs(requiresProviderEvidence && requiresBraveToolCall ? 8 : 6);
+
     return {
       resolvedConfig,
       generateTextOptions: {
         model,
         tools,
-        toolChoice: "required",
-        stopWhen: stepCountIs(requiresProviderEvidence && requiresBraveToolCall ? 8 : 6),
+        toolChoice,
+        stopWhen,
         providerOptions,
       },
       searchEnforcement: {

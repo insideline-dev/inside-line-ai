@@ -251,6 +251,8 @@ export abstract class BaseEvaluationAgent<TOutput>
         ? await this.modelExecution.resolveForPrompt({
             key: EVALUATION_PROMPT_KEY_BY_AGENT[this.key],
             stage: pipelineData.extraction.stage,
+            enableWebSearch: options?.webSearchEnabled,
+            enableBraveSearch: options?.braveSearchEnabled,
           })
         : null;
       useTextOnlyStructuredMode = this.shouldUseTextOnlyStructuredMode(

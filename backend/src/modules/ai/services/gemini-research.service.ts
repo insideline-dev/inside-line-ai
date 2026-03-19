@@ -827,8 +827,8 @@ export class GeminiResearchService {
   }
 
   private getRetryDelayMs(attempt: number): number {
-    const baseMs = 750 * 2 ** Math.max(0, attempt - 1);
-    const jitter = Math.floor(Math.random() * 250);
+    const baseMs = 3_000 * 2 ** Math.max(0, attempt - 1);
+    const jitter = Math.floor(Math.random() * 2_000);
     return baseMs + jitter;
   }
 

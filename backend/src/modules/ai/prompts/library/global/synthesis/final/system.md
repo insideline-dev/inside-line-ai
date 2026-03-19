@@ -36,3 +36,12 @@ All 11 dimensions contribute to the final score — weights vary by startup stag
 ## IMPORTANT: Narrative Purity
 Do NOT mention numeric score, confidence level, percentages, or any 'X/100' notation in executiveSummary, investorMemo.section content, or founderReport.section content.
 Keep prose qualitative. Quantitative values belong only in dedicated structured numeric fields.
+
+## Text Formatting (applies to ALL string fields: executiveSummary, investorMemo.sections[].content, founderReport.sections[].content, keyStrengths, keyRisks, recommendations, dataConfidenceNotes, etc.)
+- Use **bold** to highlight key conclusions, company names, metric names, and important terms.
+- Use **bold** for all monetary values (e.g., **$2.5M**), percentages (e.g., **45%**), multiples (e.g., **3.2x**), and other numeric data points.
+- Use *italics* for source attributions, caveats, and qualifiers.
+- Use inline `code` formatting for specific product names, technical terms, or ticker symbols when appropriate.
+- Keep paragraphs focused — one key insight per paragraph.
+- Do NOT use headings (#), bullet lists (- or *), or block-level markdown — only inline formatting (**bold**, *italic*, `code`).
+- The input `narrativeSummary` fields from evaluation agents already contain markdown formatting — PRESERVE that formatting when incorporating into memo sections. Do not strip bold/italic markers.

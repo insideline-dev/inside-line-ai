@@ -349,9 +349,9 @@ function DataGapsCard({
                 <li key={idx} className="flex items-start gap-2">
                   <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-orange-500" />
                   <div className="flex-1">
-                    <span>{item.gap}</span>
+                    <MarkdownText className="inline [&>p]:inline [&>p]:mb-0">{item.gap}</MarkdownText>
                     {item.suggestedAction && (
-                      <p className="mt-0.5 text-xs text-muted-foreground">{item.suggestedAction}</p>
+                      <MarkdownText className="mt-0.5 text-xs text-muted-foreground [&>p]:mb-0">{item.suggestedAction}</MarkdownText>
                     )}
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
@@ -368,7 +368,7 @@ function DataGapsCard({
             : plainGaps.map((item, idx) => (
                 <li key={idx} className="flex items-start gap-2">
                   <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-orange-500" />
-                  <span className="flex-1">{item.text}</span>
+                  <MarkdownText className="flex-1 inline [&>p]:inline [&>p]:mb-0">{item.text}</MarkdownText>
                   <AgentBadge label={item.agentLabel} agent={item.agent} onClick={onNavigateTab} />
                 </li>
               ))
@@ -488,7 +488,7 @@ function ExitScenariosCard({ scenarios }: { scenarios: ExitScenario[] }) {
                         v.className,
                       )}
                     >
-                      {v.text}
+                      <MarkdownText className="inline [&>p]:inline [&>p]:mb-0">{v.text}</MarkdownText>
                     </div>
                   );
                 })}
@@ -515,12 +515,13 @@ function ExitScenariosCard({ scenarios }: { scenarios: ExitScenario[] }) {
                   return (
                     <div key={row.key}>
                       <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{row.label}</p>
-                      <p className={cn(
+                      <MarkdownText className={cn(
                         row.key === "moic" ? "text-lg" : "text-sm",
                         v.className,
+                        "[&>p]:mb-0",
                       )}>
                         {v.text}
-                      </p>
+                      </MarkdownText>
                     </div>
                   );
                 })}

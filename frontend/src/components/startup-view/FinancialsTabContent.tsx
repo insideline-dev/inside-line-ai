@@ -860,7 +860,7 @@ export function FinancialsTabContent({ evaluation, financialsWeight }: Financial
                         <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-[10px] font-bold text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-400">
                           {index + 1}
                         </span>
-                        <span className="text-sm">{item}</span>
+                        <MarkdownText className="inline text-sm [&>p]:inline [&>p]:mb-0">{item}</MarkdownText>
                       </div>
                     ))}
                   </div>
@@ -885,7 +885,7 @@ export function FinancialsTabContent({ evaluation, financialsWeight }: Financial
                         <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-rose-100 text-[10px] font-bold text-rose-700 dark:bg-rose-900/50 dark:text-rose-400">
                           {index + 1}
                         </span>
-                        <span className="text-sm">{item}</span>
+                        <MarkdownText className="inline text-sm [&>p]:inline [&>p]:mb-0">{item}</MarkdownText>
                       </div>
                     ))}
                   </div>

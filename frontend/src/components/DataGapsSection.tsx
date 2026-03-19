@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { AlertTriangle } from "lucide-react";
+import { MarkdownText } from "@/components/MarkdownText";
 
 export interface DataGapItem {
   gap: string;
@@ -77,15 +78,15 @@ export function DataGapsSection({
             {gaps.map((item, index) => (
               <div key={`${item.gap}-${index}`} className="rounded-lg border bg-muted/20 p-4">
                 <div className="flex flex-wrap items-start justify-between gap-2">
-                  <p className="text-sm font-medium">{item.gap}</p>
+                  <MarkdownText className="text-sm font-medium [&>p]:mb-0">{item.gap}</MarkdownText>
                   <Badge variant="outline" className={impactBadgeClass(item.impact)}>
                     {formatImpactLabel(item.impact)}
                   </Badge>
                 </div>
                 {item.suggestedAction && (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Suggested action: {item.suggestedAction}
-                  </p>
+                  <MarkdownText className="mt-2 text-xs text-muted-foreground [&>p]:mb-0">
+                    {`Suggested action: ${item.suggestedAction}`}
+                  </MarkdownText>
                 )}
               </div>
             ))}

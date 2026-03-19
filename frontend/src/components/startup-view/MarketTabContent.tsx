@@ -1,10 +1,16 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { ConfidenceBadge } from "@/components/ConfidenceBadge";
 import { SectionScoreCard } from "@/components/SectionScoreCard";
 import { DataGapsSection, parseDataGapItems } from "@/components/DataGapsSection";
 import { MarkdownText } from "@/components/MarkdownText";
-import { ChartNoAxesColumn } from "lucide-react";
+import { ChartNoAxesColumn, Info } from "lucide-react";
+import { cn } from "@/lib/utils";
 import type { Evaluation } from "@/types/evaluation";
 
 interface MarketTabContentProps {
@@ -22,7 +28,6 @@ function toStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
 }
-
 
 interface MarketSourceView {
   name: string;
@@ -122,6 +127,49 @@ function extractFirstMoney(text: string): string | null {
   return match?.[0]?.replace(/\s+/g, " ").trim() ?? null;
 }
 
+/** Extract a money range like "$500M-$1B" or "$500M to $1B" or just a single value */
+function extractMoneyRange(text: string): string | null {
+  if (!text || isPlaceholder(text)) return null;
+  // Range pattern: $X - $Y or $X to $Y
+  const rangeMatch = text.match(
+    /(\$\s?\d+(?:[.,]\d+)?\s?(?:[kmbt]|bn|million|billion|trillion))\s*(?:[-–—]|to)\s*(\$\s?\d+(?:[.,]\d+)?\s?(?:[kmbt]|bn|million|billion|trillion))/i,
+  );
+  if (rangeMatch) return `${rangeMatch[1].trim()} – ${rangeMatch[2].trim()}`;
+  // Single money value
+  const singleMatch = text.match(
+    /\$\s?\d+(?:[.,]\d+)?\s?(?:[kmbt]|bn|million|billion|trillion)/i,
+  );
+  if (singleMatch) return singleMatch[0].replace(/\s+/g, " ").trim();
+  // Numeric-only fallback: "100 billion", "50M", etc.
+  const numericMatch = text.match(
+    /\d+(?:[.,]\d+)?\s?(?:[kmbt]|bn|million|billion|trillion)/i,
+  );
+  if (numericMatch) return `$${numericMatch[0].replace(/\s+/g, " ").trim()}`;
+  return null;
+}
+
+/** Try to extract a clean numeric display from a sizing value */
+function cleanSizingValue(raw: string): string {
+  if (raw === "Not provided") return raw;
+  const extracted = extractMoneyRange(raw);
+  return extracted ?? raw;
+}
+
+/** Extract just the CAGR percentage from a verbose string like "Cloud: ~19.9% CAGR (public cloud...)" */
+function extractCagrNumber(raw: string): { number: string; detail: string | null } {
+  if (!raw || raw === "Not provided") return { number: raw, detail: null };
+  // Try to find percentage patterns like "~19.9%", "17.5%-19.2%", "19.9% CAGR"
+  const rangeMatch = raw.match(/~?(\d+(?:\.\d+)?)\s*%?\s*[-–—]\s*~?(\d+(?:\.\d+)?)\s*%/);
+  if (rangeMatch) {
+    return { number: `${rangeMatch[1]}% – ${rangeMatch[2]}%`, detail: raw };
+  }
+  const singleMatch = raw.match(/~?(\d+(?:\.\d+)?)\s*%/);
+  if (singleMatch) {
+    return { number: `~${singleMatch[1]}%`, detail: raw !== `~${singleMatch[1]}%` ? raw : null };
+  }
+  return { number: raw, detail: null };
+}
+
 function inferStructureType(text: string): string {
   const lower = text.toLowerCase();
   if (lower.includes("fragment")) return "fragmented";
@@ -173,40 +221,96 @@ function ConcentrationSpectrum({ structureType, direction, evidence }: { structu
   );
 }
 
-const LIFECYCLE_STAGES = ["Introduction", "Growth", "Maturity", "Decline"] as const;
+// --- Market Lifecycle S-Curve ---
 
-function LifecycleBar({ position }: { position: string }) {
-  const normalized = position.toLowerCase().trim();
-  const matchIdx = LIFECYCLE_STAGES.findIndex((s) => normalized.includes(s.toLowerCase()));
-  const activeIdx = matchIdx >= 0 ? matchIdx : -1;
-  // Sweet-spot = Growth stage (index 1)
-  const sweetSpotIdx = 1;
+const LIFECYCLE_POSITIONS: Record<string, { x: number; y: number; label: string }> = {
+  emerging:     { x: 20,  y: 58, label: "Emerging" },
+  introduction: { x: 20,  y: 58, label: "Introduction" },
+  early_growth: { x: 55,  y: 38, label: "Early Growth" },
+  growth:       { x: 90,  y: 12, label: "Growth" },
+  mature:       { x: 130, y: 10, label: "Maturity" },
+  maturity:     { x: 130, y: 10, label: "Maturity" },
+  declining:    { x: 172, y: 40, label: "Decline" },
+  decline:      { x: 172, y: 40, label: "Decline" },
+};
+
+function LifecycleSCurve({ position }: { position: string }) {
+  const normalized = position.toLowerCase().trim().replace(/\s+/g, "_");
+  const pos = LIFECYCLE_POSITIONS[normalized] ?? LIFECYCLE_POSITIONS.emerging;
 
   return (
-    <div className="flex items-center gap-0.5">
-      {LIFECYCLE_STAGES.map((stage, idx) => {
-        const isActive = idx === activeIdx;
-        const isPast = idx < activeIdx;
-        const isSweetSpot = idx === sweetSpotIdx;
-        return (
-          <div key={stage} className={`flex-1 text-center ${isSweetSpot ? "rounded-md ring-1 ring-emerald-300/50 ring-offset-1 bg-emerald-50/30 dark:bg-emerald-950/20 dark:ring-emerald-700/40" : ""}`}>
-            <div
-              className={`h-2.5 rounded-full ${
-                isActive
-                  ? "bg-violet-500"
-                  : isPast
-                    ? "bg-violet-300 dark:bg-violet-700"
-                    : "bg-muted"
-              }`}
-            />
-            <p className={`mt-1 text-[10px] ${isActive ? "font-semibold text-violet-600 dark:text-violet-400" : "text-muted-foreground"}`}>
-              {stage}
-              {isSweetSpot && <span className="block text-[8px] text-emerald-600 dark:text-emerald-400">sweet spot</span>}
-            </p>
-          </div>
-        );
-      })}
+    <div className="flex flex-col items-center gap-2 w-full">
+      <svg viewBox="0 0 400 120" className="w-full max-w-md h-auto" aria-label={`Market lifecycle: ${pos.label}`}>
+        {/* Background fill under curve */}
+        <path
+          d="M 10,110 C 50,110 80,105 110,75 C 140,45 160,15 200,12 C 240,9 270,14 300,32 C 330,50 356,80 390,100 L 390,110 Z"
+          className="fill-muted-foreground/5"
+        />
+        {/* Curve path */}
+        <path
+          d="M 10,110 C 50,110 80,105 110,75 C 140,45 160,15 200,12 C 240,9 270,14 300,32 C 330,50 356,80 390,100"
+          fill="none"
+          stroke="currentColor"
+          className="text-muted-foreground/40"
+          strokeWidth="3"
+          strokeLinecap="round"
+        />
+        {/* Sweet spot region (growth area) */}
+        <rect x="136" y="4" width="90" height="106" rx="6" className="fill-emerald-500/10 dark:fill-emerald-500/12" />
+        {/* Active dot */}
+        <circle
+          cx={pos.x * 2}
+          cy={pos.y * (110 / 62)}
+          r="8"
+          className="fill-violet-500 dark:fill-violet-400"
+          stroke="white"
+          strokeWidth="3"
+        />
+        {/* Stage labels */}
+        {Object.entries(LIFECYCLE_POSITIONS)
+          .filter(([key]) => ["emerging", "early_growth", "growth", "mature", "declining"].includes(key))
+          .map(([key, val]) => (
+            <text
+              key={key}
+              x={val.x * 2}
+              y={116}
+              textAnchor="middle"
+              className={cn(
+                "text-[10px]",
+                normalized === key || (key === "mature" && normalized === "maturity")
+                  ? "fill-violet-600 dark:fill-violet-400 font-bold"
+                  : "fill-muted-foreground/50",
+              )}
+            >
+              {val.label}
+            </text>
+          ))}
+      </svg>
     </div>
+  );
+}
+
+// --- Source Info Tooltip ---
+
+function SourceInfoTooltip({ sources }: { sources: MarketSourceView[] }) {
+  const hasExtra = sources.some((s) => s.date !== "Unknown date" || s.geography);
+  if (!hasExtra || sources.length === 0) return null;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Info className="h-3 w-3 text-muted-foreground/50 cursor-help shrink-0" />
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-xs text-xs space-y-1">
+        {sources.map((s, i) => (
+          <div key={i}>
+            <span className="font-medium">{s.name}</span>
+            {s.date !== "Unknown date" && <span className="text-muted-foreground"> · {s.date}</span>}
+            {s.geography && <span className="text-muted-foreground"> · {s.geography}</span>}
+          </div>
+        ))}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -224,6 +328,8 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage }: Mar
       </Card>
     );
   }
+
+  // --- Data extraction ---
 
   const marketData = toRecord(evaluation?.marketData);
   const marketSizing = toRecord(marketData.marketSizing);
@@ -293,17 +399,12 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage }: Mar
     extractLabeledMoney(textCorpus, "som") ||
     "Not provided";
 
-  const tamMethodology = getMeaningful(tam.methodology) || "derived";
-  const samMethodology = getMeaningful(sam.methodology) || "derived";
-  const somMethodology = getMeaningful(som.methodology) || "derived";
   const tamConfidence = typeof tam.confidence === "string" ? tam.confidence : "unknown";
   const samConfidence = typeof sam.confidence === "string" ? sam.confidence : "unknown";
   const somConfidence = typeof som.confidence === "string" ? som.confidence : "unknown";
   const tamSources = toMarketSources(tam.sources);
-  const samSources = toMarketSources(sam.sources);
 
   const bottomUpCalculation = getMeaningful(bottomUpSanityCheck.calculation) || "Not provided";
-  const bottomUpNotes = getMeaningful(bottomUpSanityCheck.notes) || "Not provided";
 
   const deckTamClaimed = getMeaningful(deckVsResearch.tamClaimed) || "Not provided";
   const deckTamResearched = getMeaningful(deckVsResearch.tamResearched) || "Not provided";
@@ -311,7 +412,7 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage }: Mar
   const deckDiscrepancyNotes =
     getMeaningful(deckVsResearch.notes) ||
     getMeaningful(deckVsResearch.discrepancyNotes) ||
-    "Not provided";
+    null;
 
   const whyNowThesis =
     getMeaningful(whyNow.thesis) ||
@@ -319,18 +420,9 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage }: Mar
     "Not provided";
   const whyNowSupportedByResearch = toBoolean(whyNow.supportedByResearch);
   const whyNowEvidence = toStringArray(whyNow.evidence);
-  const timingAssessment =
-    getMeaningful(growthTiming.timingAssessment) ||
-    (typeof evaluation?.marketScore === "number" && evaluation.marketScore >= 75
-      ? "right_time"
-      : "slightly_early");
-  const timingRationale = getMeaningful(legacySizeGrowth.rationale) || "Not provided";
   const growthRateCagr = getMeaningful(growthRate.cagr) || "Not provided";
-  const growthRatePeriod = getMeaningful(growthRate.period) || "Not provided";
-  const growthRateSource = getMeaningful(growthRate.source) || "Not provided";
   const growthRateDeckClaimed = getMeaningful(growthRate.deckClaimed) || "Not provided";
   const growthTrajectory = getMeaningful(growthRate.trajectory) || getMeaningful(growthTiming.trajectory);
-  const growthRateDiscrepancyFlag = toBoolean(growthRate.discrepancyFlag);
   const lifecyclePosition = getMeaningful(marketLifecycle.position) || "Not provided";
   const lifecycleEvidence = getMeaningful(marketLifecycle.evidence) || "Not provided";
 
@@ -368,6 +460,14 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage }: Mar
     ? (marketStructure.headwinds as Array<Record<string, unknown>>)
     : [];
 
+  // Sort entry conditions: High → Moderate → Low
+  const severityOrder: Record<string, number> = { high: 0, moderate: 1, low: 2 };
+  const sortedEntryConditions = [...entryConditions].sort(
+    (a, b) => (severityOrder[a.severity.toLowerCase()] ?? 1) - (severityOrder[b.severity.toLowerCase()] ?? 1),
+  );
+
+
+
   return (
     <div className="space-y-6">
       <SectionScoreCard
@@ -381,229 +481,173 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage }: Mar
         confidenceTestId="badge-market-confidence"
       />
 
+      {/* --- Market Sizing Inverted Triangle --- */}
       <Card className="border-primary/15">
         <CardHeader>
           <CardTitle className="text-base">Market Sizing</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="space-y-2">
-            {[
-              { label: "TAM", value: tamValue, methodology: tamMethodology, confidence: tamConfidence, sources: tamSources, width: "100%", bg: "bg-violet-100 dark:bg-violet-900/40 border-violet-200 dark:border-violet-800" },
-              { label: "SAM", value: samValue, methodology: samMethodology, confidence: samConfidence, sources: samSources, width: "70%", bg: "bg-violet-200 dark:bg-violet-800/40 border-violet-300 dark:border-violet-700" },
-              { label: "SOM", value: somValue, methodology: somMethodology, confidence: somConfidence, sources: [] as MarketSourceView[], width: "40%", bg: "bg-violet-300 dark:bg-violet-700/40 border-violet-400 dark:border-violet-600" },
-            ].map((item) => (
-              <div key={item.label} className="mx-auto" style={{ width: item.width }}>
-                <div className={`rounded-lg border p-3 ${item.bg}`}>
-                  <div className="flex items-center justify-between gap-2">
+          {(() => {
+            const tamDisplay = cleanSizingValue(tamValue);
+            const samDisplay = cleanSizingValue(samValue);
+            const somDisplay = cleanSizingValue(somValue);
+            const allEmpty = tamDisplay === "Not provided" && samDisplay === "Not provided" && somDisplay === "Not provided";
+
+            if (allEmpty) {
+              return (
+                <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
+                  Market sizing data not available
+                </div>
+              );
+            }
+
+            const tiers = [
+              { label: "TAM", value: tamDisplay, confidence: tamConfidence, color: "bg-blue-100 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800", text: "text-blue-800 dark:text-blue-300", labelColor: "text-blue-600 dark:text-blue-400", width: "w-full" },
+              { label: "SAM", value: samDisplay, confidence: samConfidence, color: "bg-emerald-100 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800", text: "text-emerald-800 dark:text-emerald-300", labelColor: "text-emerald-600 dark:text-emerald-400", width: "w-[75%]" },
+              { label: "SOM", value: somDisplay, confidence: somConfidence, color: "bg-amber-100 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800", text: "text-amber-800 dark:text-amber-300", labelColor: "text-amber-600 dark:text-amber-400", width: "w-[50%]" },
+            ];
+
+            return (
+              <div className="flex flex-col items-center gap-2">
+                {tiers.map((tier) => (
+                  <div key={tier.label} className={cn("rounded-lg border-2 px-4 py-3 flex items-center justify-between transition-all", tier.color, tier.width)}>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold tracking-wide">{item.label}</span>
-                      <span className="text-sm font-semibold">{item.value}</span>
+                      <span className={cn("text-xs font-bold", tier.labelColor)}>{tier.label}</span>
+                      <ConfidenceBadge confidence={tier.confidence} />
                     </div>
-                    <ConfidenceBadge confidence={item.confidence} dataTestId={`badge-market-${item.label.toLowerCase()}-confidence`} />
+                    <p className={cn("text-lg font-bold tabular-nums", tier.text)}>
+                      {tier.value}
+                    </p>
                   </div>
-                  <div className="mt-1 flex items-center gap-3 text-[10px] text-muted-foreground">
-                    <span>{item.methodology}</span>
-                    {item.sources.length > 0 && (
-                      <span>{item.sources.map((s) => s.name).join(", ")}</span>
+                ))}
+
+                {/* Source info */}
+                {tamSources.length > 0 && (
+                  <div className="mt-1">
+                    <SourceInfoTooltip sources={tamSources} />
+                  </div>
+                )}
+
+                {/* Deck vs Research comparison table */}
+                {(deckTamClaimed !== "Not provided" || deckTamResearched !== "Not provided" || tamSources.length > 0) && (
+                  <div className="w-full mt-2 rounded-lg border text-xs">
+                    <div className="grid grid-cols-[50px_1fr_1fr_1fr] border-b bg-muted/30">
+                      <div className="px-2 py-1.5 font-medium text-muted-foreground" />
+                      <div className="px-2 py-1.5 font-medium text-muted-foreground">Value</div>
+                      <div className="px-2 py-1.5 font-medium text-muted-foreground">Sources</div>
+                      <div className="px-2 py-1.5 font-medium text-muted-foreground text-center">Deck vs Research</div>
+                    </div>
+                    {[
+                      { label: "TAM", value: cleanSizingValue(tamValue), sources: tamSources, hasDeck: true },
+                      { label: "SAM", value: cleanSizingValue(samValue), sources: [], hasDeck: false },
+                      { label: "SOM", value: cleanSizingValue(somValue), sources: [], hasDeck: false },
+                    ].map((row) => (
+                      <div key={row.label} className="grid grid-cols-[50px_1fr_1fr_1fr] border-b last:border-b-0">
+                        <div className="px-2 py-2 font-bold">{row.label}</div>
+                        <div className="px-2 py-2 font-semibold tabular-nums">{row.value}</div>
+                        <div className="px-2 py-2 text-muted-foreground">
+                          {row.sources.length > 0 ? row.sources.map((s, si) => (
+                            <div key={si}>
+                              {s.url ? (
+                                <a href={s.url} target="_blank" rel="noopener noreferrer" className="underline decoration-dotted underline-offset-2">{s.name}</a>
+                              ) : s.name}
+                              {s.tier && <span className="text-[10px] text-muted-foreground/60 ml-1">({s.tier})</span>}
+                            </div>
+                          )) : "—"}
+                        </div>
+                        <div className="px-2 py-2 flex items-center justify-center">
+                          {row.hasDeck && deckDiscrepancyFlag !== null ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="flex flex-col items-center gap-1 cursor-help">
+                                  {/* Balance bar */}
+                                  <div className="relative w-16 h-2 rounded-full bg-muted overflow-hidden">
+                                    <div
+                                      className={cn(
+                                        "absolute inset-y-0 left-0 rounded-full transition-all",
+                                        deckDiscrepancyFlag
+                                          ? "w-[35%] bg-amber-400"
+                                          : "w-full bg-emerald-400",
+                                      )}
+                                    />
+                                  </div>
+                                  <span className={cn(
+                                    "text-[9px] font-medium",
+                                    deckDiscrepancyFlag ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400",
+                                  )}>
+                                    {deckDiscrepancyFlag ? "Overstated" : "Aligned"}
+                                  </span>
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-xs text-xs">
+                                {deckDiscrepancyFlag
+                                  ? "Deck claims exceed research findings"
+                                  : "Deck claims are consistent with research"}
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : "—"}
+                        </div>
+                      </div>
+                    ))}
+                    {deckDiscrepancyNotes && (
+                      <div className="px-3 py-2 bg-muted/20 text-[11px] text-muted-foreground border-t">
+                        {deckDiscrepancyNotes}
+                      </div>
                     )}
                   </div>
-                </div>
+                )}
               </div>
-            ))}
-          </div>
+            );
+          })()}
 
-          {(tamSources.length > 0 || samSources.length > 0) && (
-            <div className="space-y-3">
-              <p className="text-xs font-medium text-muted-foreground">Source Attribution</p>
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b text-muted-foreground">
-                      <th className="pb-1 pr-3 text-left font-medium">Estimate</th>
-                      <th className="pb-1 pr-3 text-left font-medium">Source</th>
-                      <th className="pb-1 pr-3 text-left font-medium">Tier</th>
-                      <th className="pb-1 pr-3 text-left font-medium">Date</th>
-                      <th className="pb-1 text-left font-medium">Geography</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {tamSources.map((source, idx) => (
-                      <tr key={`tam-${idx}`} className="border-b border-border/40 last:border-0">
-                        <td className="py-1.5 pr-3 font-medium">TAM</td>
-                        <td className="py-1.5 pr-3">{source.url ? <a href={source.url} target="_blank" rel="noopener noreferrer" className="underline decoration-dotted underline-offset-2">{source.name}</a> : source.name}</td>
-                        <td className="py-1.5 pr-3 text-muted-foreground">{source.tier || "—"}</td>
-                        <td className="py-1.5 pr-3 text-muted-foreground">{source.date}</td>
-                        <td className="py-1.5 text-muted-foreground">{source.geography || "—"}</td>
-                      </tr>
-                    ))}
-                    {samSources.map((source, idx) => (
-                      <tr key={`sam-${idx}`} className="border-b border-border/40 last:border-0">
-                        <td className="py-1.5 pr-3 font-medium">SAM</td>
-                        <td className="py-1.5 pr-3">{source.url ? <a href={source.url} target="_blank" rel="noopener noreferrer" className="underline decoration-dotted underline-offset-2">{source.name}</a> : source.name}</td>
-                        <td className="py-1.5 pr-3 text-muted-foreground">{source.tier || "—"}</td>
-                        <td className="py-1.5 pr-3 text-muted-foreground">{source.date}</td>
-                        <td className="py-1.5 text-muted-foreground">{source.geography || "—"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Deck vs Research alignment rows — inline below the table */}
-              {(deckTamClaimed !== "Not provided" || deckTamResearched !== "Not provided") && (
-                <div className="space-y-3 rounded-lg border bg-muted/10 p-3">
-                  {/* TAM alignment */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between gap-4 text-xs">
-                      <div className="space-y-0.5">
-                        <p className="text-muted-foreground">Deck claim</p>
-                        <p className="font-medium">{deckTamClaimed}</p>
-                      </div>
-                      <Badge
-                        variant="outline"
-                        className={
-                          deckDiscrepancyFlag === true
-                            ? "border-amber-300 bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
-                            : deckDiscrepancyFlag === false
-                              ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400"
-                              : ""
-                        }
-                      >
-                        {deckDiscrepancyFlag === null ? "Insufficient Data" : deckDiscrepancyFlag ? "Overstated" : "Aligned"}
-                      </Badge>
-                      <div className="space-y-0.5 text-right">
-                        <p className="text-muted-foreground">Research finding</p>
-                        <p className="font-medium">{deckTamResearched}</p>
-                      </div>
-                    </div>
-                    {/* Balance indicator bar */}
-                    <div className="relative h-1.5 rounded-full bg-muted">
-                      <div
-                        className={`absolute top-0 h-full rounded-full ${
-                          deckDiscrepancyFlag === true
-                            ? "bg-amber-400 dark:bg-amber-500"
-                            : deckDiscrepancyFlag === false
-                              ? "bg-emerald-400 dark:bg-emerald-500"
-                              : "bg-slate-300 dark:bg-slate-600"
-                        }`}
-                        style={{
-                          left: deckDiscrepancyFlag === true ? "50%" : "25%",
-                          width: deckDiscrepancyFlag === true ? "40%" : deckDiscrepancyFlag === false ? "50%" : "50%",
-                        }}
-                      />
-                      <div className="absolute left-1/2 top-1/2 h-3 w-0.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-foreground/30" />
-                    </div>
-                  </div>
-
-                  {/* Growth alignment (if available) */}
-                  {growthRateDeckClaimed !== "Not provided" && (
-                    <div className="space-y-2 border-t border-border/40 pt-3">
-                      <div className="flex items-center justify-between gap-4 text-xs">
-                        <div className="space-y-0.5">
-                          <p className="text-muted-foreground">Growth — Deck</p>
-                          <p className="font-medium">{growthRateDeckClaimed}</p>
-                        </div>
-                        <Badge
-                          variant="outline"
-                          className={
-                            growthRateDiscrepancyFlag === true
-                              ? "border-amber-300 bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
-                              : growthRateDiscrepancyFlag === false
-                                ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400"
-                                : ""
-                          }
-                        >
-                          {growthRateDiscrepancyFlag === null ? "Insufficient Data" : growthRateDiscrepancyFlag ? "Overstated" : "Aligned"}
-                        </Badge>
-                        <div className="space-y-0.5 text-right">
-                          <p className="text-muted-foreground">Research CAGR</p>
-                          <p className="font-medium">{growthRateCagr}</p>
-                        </div>
-                      </div>
-                      <div className="relative h-1.5 rounded-full bg-muted">
-                        <div
-                          className={`absolute top-0 h-full rounded-full ${
-                            growthRateDiscrepancyFlag === true
-                              ? "bg-amber-400 dark:bg-amber-500"
-                              : growthRateDiscrepancyFlag === false
-                                ? "bg-emerald-400 dark:bg-emerald-500"
-                                : "bg-slate-300 dark:bg-slate-600"
-                          }`}
-                          style={{
-                            left: growthRateDiscrepancyFlag === true ? "50%" : "25%",
-                            width: growthRateDiscrepancyFlag === true ? "40%" : "50%",
-                          }}
-                        />
-                        <div className="absolute left-1/2 top-1/2 h-3 w-0.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-foreground/30" />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Discrepancy notes */}
-                  {deckDiscrepancyNotes !== "Not provided" && (
-                    <MarkdownText className="text-xs text-muted-foreground border-t border-border/40 pt-2 [&>p]:mb-0">
-                      {deckDiscrepancyNotes}
-                    </MarkdownText>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Bottom-Up Sanity Check — full width */}
+          {/* Bottom-Up Sanity Check — compact row */}
           {(!fundingStage || /pre.?seed|seed|series.?a/i.test(fundingStage)) && bottomUpCalculation !== "Not provided" && (
-            <div className="rounded-lg border bg-muted/10 p-4 space-y-3">
-              <p className="text-sm font-medium">Bottom-Up Sanity Check</p>
-              <div className="rounded-lg bg-muted/30 p-3">
-                <MarkdownText className="text-sm font-mono leading-relaxed [&>p]:mb-0">
-                  {bottomUpCalculation}
-                </MarkdownText>
-              </div>
-              {bottomUpNotes !== "Not provided" && (
-                <MarkdownText className="text-sm text-muted-foreground leading-relaxed [&>p]:mb-0">
-                  {bottomUpNotes}
-                </MarkdownText>
-              )}
+            <div className="flex items-start gap-2 rounded-md border border-dashed px-3 py-2 text-xs">
+              <span className="font-medium text-muted-foreground shrink-0">Bottom-up check:</span>
+              <span className="font-mono">{bottomUpCalculation}</span>
             </div>
           )}
         </CardContent>
       </Card>
 
+      {/* --- Growth Section --- */}
       <Card className="border-primary/15">
         <CardHeader>
-          <CardTitle className="text-base">Growth & Timing</CardTitle>
+          <CardTitle className="text-base">Growth</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 text-sm">
-          <div className="rounded-lg border bg-muted/20 p-3 space-y-1">
-            <p>
-              <span className="font-medium">Timing:</span> {timingAssessment}
-            </p>
-            <MarkdownText className="text-muted-foreground [&>p]:mb-0">{timingRationale}</MarkdownText>
-          </div>
-
           <div className="grid gap-3 md:grid-cols-2">
-            <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-medium">Growth Rate</p>
-                {growthTrajectory && (
-                  <Badge variant="outline" className="text-[10px]">
-                    {growthTrajectory.toLowerCase().includes("accel") ? "↑ " : growthTrajectory.toLowerCase().includes("decel") ? "↓ " : "→ "}
-                    {growthTrajectory}
-                  </Badge>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground">CAGR: {growthRateCagr}</p>
-              <p className="text-xs text-muted-foreground">Period: {growthRatePeriod}</p>
-              <p className="text-xs text-muted-foreground">Source: {growthRateSource}</p>
-              <p className="text-xs text-muted-foreground">Deck Claimed: {growthRateDeckClaimed}</p>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Discrepancy:</span>
-                <Badge variant={growthRateDiscrepancyFlag === true ? "destructive" : growthRateDiscrepancyFlag === false ? "secondary" : "outline"}>
-                  {growthRateDiscrepancyFlag === null ? "Not provided" : growthRateDiscrepancyFlag ? "Yes" : "No"}
-                </Badge>
-              </div>
-            </div>
+            {/* CAGR Hero */}
+            {(() => {
+              const cagr = extractCagrNumber(growthRateCagr);
+              return (
+                <div className="rounded-lg border bg-muted/20 p-4 flex flex-col items-center justify-center gap-2">
+                  <p className="text-3xl font-bold tracking-tight tabular-nums">
+                    {cagr.number}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">CAGR</span>
+                    {growthTrajectory && (
+                      <Badge variant="outline" className="text-[10px]">
+                        {growthTrajectory.toLowerCase().includes("accel") ? "↑ " : growthTrajectory.toLowerCase().includes("decel") ? "↓ " : "→ "}
+                        {growthTrajectory}
+                      </Badge>
+                    )}
+                  </div>
+                  {cagr.detail && (
+                    <p className="text-[11px] text-muted-foreground text-center max-w-xs mt-1">{cagr.detail}</p>
+                  )}
+                  {growthRateDeckClaimed !== "Not provided" && growthRateDeckClaimed !== growthRateCagr && (
+                    <div className="flex items-center gap-4 text-xs mt-1">
+                      <span className="text-muted-foreground">Deck: <span className="font-medium text-foreground">{extractCagrNumber(growthRateDeckClaimed).number}</span></span>
+                      <span className="text-muted-foreground">Research: <span className="font-medium text-foreground">{cagr.number}</span></span>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
+            {/* Why Now */}
             <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
               <p className="text-sm font-medium">Why Now</p>
               <MarkdownText className="text-xs text-muted-foreground [&>p]:mb-0">{whyNowThesis}</MarkdownText>
@@ -625,16 +669,20 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage }: Mar
             </div>
           </div>
 
-          <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
-            <p className="text-sm font-medium">Market Lifecycle</p>
-            <LifecycleBar position={lifecyclePosition} />
-            {lifecycleEvidence !== "Not provided" && (
-              <MarkdownText className="text-xs text-muted-foreground [&>p]:mb-0">{lifecycleEvidence}</MarkdownText>
-            )}
-          </div>
+          {/* Market Lifecycle S-Curve */}
+          {lifecyclePosition !== "Not provided" && (
+            <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
+              <p className="text-sm font-medium">Market Lifecycle</p>
+              <LifecycleSCurve position={lifecyclePosition} />
+              {lifecycleEvidence !== "Not provided" && (
+                <MarkdownText className="text-xs text-muted-foreground [&>p]:mb-0">{lifecycleEvidence}</MarkdownText>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
+      {/* --- Market Structure --- */}
       <Card className="border-primary/15">
         <CardHeader>
           <CardTitle className="text-base">Market Structure</CardTitle>
@@ -645,7 +693,7 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage }: Mar
               <span className="text-sm font-medium">Structure:</span>
               <Badge variant="outline" className="capitalize">{structureType}</Badge>
             </div>
-            {entryConditions.length > 0 ? (
+            {sortedEntryConditions.length > 0 ? (
               <div className="space-y-2">
                 <p className="text-xs font-medium text-muted-foreground">Entry Conditions</p>
                 <div className="overflow-x-auto">
@@ -658,7 +706,7 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage }: Mar
                       </tr>
                     </thead>
                     <tbody>
-                      {entryConditions.map((item, idx) => (
+                      {sortedEntryConditions.map((item, idx) => (
                         <tr key={idx} className="border-b border-border/40 last:border-0">
                           <td className="py-1.5 pr-3 font-medium">{item.factor}</td>
                           <td className="py-1.5 pr-3">
@@ -692,34 +740,41 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage }: Mar
             <ConcentrationSpectrum structureType={structureType} direction={concentrationDirection} evidence={concentrationEvidence} />
           </div>
 
+          {/* Tailwinds & Headwinds — card per item */}
           <div className="grid gap-3 md:grid-cols-2">
-            <div className="rounded-lg border bg-muted/20 p-3">
-              <p className="text-sm font-medium mb-2">Tailwinds</p>
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Tailwinds</p>
               {tailwinds.length > 0 ? (
-                <ul className="space-y-1">
+                <div className="space-y-2">
                   {tailwinds.slice(0, 4).map((item, index) => (
-                    <li key={`${String(item.factor)}-${index}`} className="text-xs text-muted-foreground">
-                      {String(item.factor || "Unknown")} ({String(item.impact || "n/a")})
-                      {typeof item.source === "string" && item.source.trim().length > 0 ? ` · ${item.source}` : ""}
-                    </li>
+                    <div key={`tw-${index}`} className="rounded-lg border bg-emerald-50/30 dark:bg-emerald-950/10 p-2.5 space-y-1">
+                      <p className="text-xs font-medium">{String(item.factor || "Unknown")}</p>
+                      <p className="text-xs text-muted-foreground">{String(item.impact || "n/a")}</p>
+                      {typeof item.source === "string" && item.source.trim().length > 0 && (
+                        <p className="text-[10px] text-muted-foreground/60">{item.source}</p>
+                      )}
+                    </div>
                   ))}
-                </ul>
+                </div>
               ) : (
                 <p className="text-xs text-muted-foreground">No tailwinds provided</p>
               )}
             </div>
 
-            <div className="rounded-lg border bg-muted/20 p-3">
-              <p className="text-sm font-medium mb-2">Headwinds</p>
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Headwinds</p>
               {headwinds.length > 0 ? (
-                <ul className="space-y-1">
+                <div className="space-y-2">
                   {headwinds.slice(0, 4).map((item, index) => (
-                    <li key={`${String(item.factor)}-${index}`} className="text-xs text-muted-foreground">
-                      {String(item.factor || "Unknown")} ({String(item.impact || "n/a")})
-                      {typeof item.source === "string" && item.source.trim().length > 0 ? ` · ${item.source}` : ""}
-                    </li>
+                    <div key={`hw-${index}`} className="rounded-lg border bg-rose-50/30 dark:bg-rose-950/10 p-2.5 space-y-1">
+                      <p className="text-xs font-medium">{String(item.factor || "Unknown")}</p>
+                      <p className="text-xs text-muted-foreground">{String(item.impact || "n/a")}</p>
+                      {typeof item.source === "string" && item.source.trim().length > 0 && (
+                        <p className="text-[10px] text-muted-foreground/60">{item.source}</p>
+                      )}
+                    </div>
                   ))}
-                </ul>
+                </div>
               ) : (
                 <p className="text-xs text-muted-foreground">No headwinds provided</p>
               )}
@@ -728,6 +783,7 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage }: Mar
         </CardContent>
       </Card>
 
+      {/* --- Key Findings & Risks --- */}
       {(keyFindings.length > 0 || risks.length > 0) && (
         <Card>
           <CardHeader>
@@ -759,7 +815,6 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage }: Mar
       )}
 
       <DataGapsSection gaps={dataGapItems} />
-
     </div>
   );
 }

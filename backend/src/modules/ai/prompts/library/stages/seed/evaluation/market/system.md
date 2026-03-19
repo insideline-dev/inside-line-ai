@@ -39,6 +39,7 @@ Assess and summarize the market sizing based on research and deck claims:
 - Sources triangulated? (compare Tier 1 vs Tier 2/3)
 - Compare deck claims (claimed TAM, SAM, growth rate) against research findings — flag discrepancies
 - Perform a bottom-up sanity check on TAM. Write the calculation as a labeled formula showing each input with its value multiplied together to produce the result. The formula structure will vary by industry and product type — use whatever inputs are appropriate for this market.
+Use a single calculation path with the most credible inputs — prefer Tier 1 sources and recent data. Do not provide multiple scenarios or "plausible" judgments.
 
 Produce a marketSizing summary covering: TAM/SAM/SOM analysis, source attribution with tiers, deck-vs-research discrepancies, and bottom-up sanity check.
 
@@ -51,7 +52,7 @@ Assess whether this is a real paying market and the timing thesis:
 - What's changed enabling this opportunity? (deck narrative + research trends)
 - Timing thesis backed by evidence?
 
-Produce a marketGrowthAndTiming summary covering: growth rate with source, "why now" thesis and whether research supports it, timing assessment, and market lifecycle position.
+Produce a marketGrowthAndTiming summary covering: growth rate with source, "why now" thesis and whether research supports it, and market lifecycle position.
 
 3. MARKET STRUCTURE (35%)
 
@@ -162,8 +163,13 @@ STAY IN SCOPE: Evaluate only the market — size, growth, timing, structure, and
 Your evaluation above should populate these structured output fields:
 
 From the Evaluation Framework:
-- marketSizing → TAM/SAM/SOM analysis, source attribution with tiers, deck-vs-research discrepancies, bottom-up sanity check
-- marketGrowthAndTiming → growth rate with source, "why now" thesis, timing assessment, market lifecycle position
+- marketSizing → TAM/SAM/SOM analysis, source attribution with tiers, bottom-up sanity check, and deckVsResearch comparison
+  - marketSizing.deckVsResearch.tamClaimed → The TAM figure the pitch deck claims (e.g. "$10B"). Extract verbatim from deck.
+  - marketSizing.deckVsResearch.tamResearched → The TAM figure your independent research supports (e.g. "$6-8B"). Use your best research estimate.
+  - marketSizing.deckVsResearch.discrepancyFlag → "true" if deck materially overstates vs research, "false" if aligned, "unknown" if insufficient data
+  - marketSizing.deckVsResearch.notes → One-sentence explanation of the alignment or discrepancy between deck claims and research findings
+IMPORTANT: TAM/SAM/SOM `value` fields must be concise numeric ranges only. Examples: "$5-8B", "$500M-1B", "$200M". Never output prose like "The global TAM is estimated at..." — just the number or range.
+- marketGrowthAndTiming → growth rate with source, "why now" thesis, market lifecycle position
 - marketStructure → structure type, concentration trend, entry conditions scorecard (per-barrier severity), tailwinds, headwinds
 
 From Strengths, Risks & Data Gaps:

@@ -217,6 +217,7 @@ function PrivateStartupCard({
             <AnalysisProgressBar
               startupId={startup.id}
               onTerminalStatus={handleTerminalStatus}
+              compact
             />
           </div>
         )}

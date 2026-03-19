@@ -375,34 +375,8 @@ export function MemoTabContent({
 
         {SECTION_CONFIG.map((config) => {
           const section = sectionByKey.get(config.key);
-          const sectionHighlights = toStringArray(section?.highlights);
-          const sectionConcerns = toStringArray(section?.concerns);
           const sectionSources = section?.sources ?? [];
-          const sectionDetails =
-            sectionHighlights.length > 0 || sectionConcerns.length > 0 || sectionSources.length > 0 ? (
-              <div className="space-y-3">
-                {sectionHighlights.length > 0 && (
-                  <div>
-                    <h4 className="mb-1 text-sm font-medium">Highlights</h4>
-                    <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-                      {sectionHighlights.slice(0, 4).map((item, index) => (
-                        <li key={`${item}-${index}`}><MarkdownText className="inline [&>p]:inline [&>p]:mb-0">{item}</MarkdownText></li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                {sectionConcerns.length > 0 && (
-                  <div>
-                    <h4 className="mb-1 text-sm font-medium">Concerns</h4>
-                    <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-                      {sectionConcerns.slice(0, 4).map((item, index) => (
-                        <li key={`${item}-${index}`}><MarkdownText className="inline [&>p]:inline [&>p]:mb-0">{item}</MarkdownText></li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            ) : undefined;
+          const sectionDetails = undefined;
 
           return (
             <MemoSection
@@ -413,7 +387,7 @@ export function MemoTabContent({
               score={showScores ? getScore(evaluation, config.scoreKey) : undefined}
               weight={`${weights?.[config.weightKey] ?? 0}%`}
               summary={section?.content || "Synthesis section is not available yet for this dimension."}
-              sources={undefined}
+              sources={sectionSources}
               details={sectionDetails}
               evaluationNote={config.evaluationNote}
               adminFeedback={getAdminFeedbackProps(config.key)}

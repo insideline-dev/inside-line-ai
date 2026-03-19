@@ -165,7 +165,12 @@ STAY IN SCOPE: Evaluate only the market — size, growth, expansion potential, s
 Your evaluation above should populate these structured output fields:
 
 From the Evaluation Framework:
-- marketSizing → TAM/SAM/SOM analysis, source attribution with tiers, deck-vs-research discrepancies, IPO-scale viability
+- marketSizing → TAM/SAM/SOM analysis, source attribution with tiers, bottom-up sanity check, and deckVsResearch comparison
+  - marketSizing.deckVsResearch.tamClaimed → The TAM figure the pitch deck claims (e.g. "$10B"). Extract verbatim from deck.
+  - marketSizing.deckVsResearch.tamResearched → The TAM figure your independent research supports (e.g. "$6-8B"). Use your best research estimate.
+  - marketSizing.deckVsResearch.discrepancyFlag → "true" if deck materially overstates vs research, "false" if aligned, "unknown" if insufficient data
+  - marketSizing.deckVsResearch.notes → One-sentence explanation of the alignment or discrepancy between deck claims and research findings
+IMPORTANT: TAM/SAM/SOM `value` fields must be concise numeric ranges only. Examples: "$5-8B", "$500M-1B", "$200M". Never output prose like "The global TAM is estimated at..." — just the number or range.
 - marketGrowthAndTiming → growth rate with source, expansion trajectory, adjacent market sizing, market lifecycle position
 - marketStructure → structure type, concentration trend, entry conditions scorecard (per-barrier severity), regulatory dynamics, tailwinds, headwinds
 

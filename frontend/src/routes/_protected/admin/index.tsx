@@ -135,6 +135,7 @@ function AdminStartupRow({ startup }: { startup: StartupItem }) {
               <AnalysisProgressBar
                 startupId={startup.id}
                 onTerminalStatus={handleTerminalStatus}
+                compact
               />
             )}
           </div>

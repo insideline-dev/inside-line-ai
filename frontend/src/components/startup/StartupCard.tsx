@@ -108,6 +108,7 @@ export function StartupCard({ startup, basePath, showScore = true, showActions =
           <AnalysisProgressBar
             startupId={startup.id}
             onTerminalStatus={handleTerminalStatus}
+            compact
           />
         )}
 

@@ -10,6 +10,7 @@ interface AnalysisProgressBarProps {
   startupId: number | string;
   onTerminalStatus?: (status: "pending_review" | "submitted") => void;
   showAgentDetails?: boolean;
+  compact?: boolean;
 }
 
 const PHASE_ORDER = [
@@ -73,6 +74,7 @@ export function AnalysisProgressBar({
   startupId,
   onTerminalStatus,
   showAgentDetails = true,
+  compact = false,
 }: AnalysisProgressBarProps) {
   const queryClient = useQueryClient();
   const terminalNotified = useRef(false);
@@ -202,6 +204,23 @@ export function AnalysisProgressBar({
     if (hasWarnings) {
       statusLabel = `${statusLabel} (warnings)`;
     }
+  }
+
+  if (compact) {
+    return (
+      <div className="flex items-center gap-2 text-xs" data-testid={`progress-bar-startup-${startupId}`}>
+        {isFailed ? (
+          <AlertTriangle className="h-3.5 w-3.5 text-destructive" />
+        ) : isCancelled ? (
+          <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+        ) : isComplete ? (
+          <Check className="h-3.5 w-3.5 text-emerald-500" />
+        ) : (
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+        )}
+        <span className={cn("truncate", statusColor)}>{statusLabel}</span>
+      </div>
+    );
   }
 
   return (

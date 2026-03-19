@@ -1,12 +1,12 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { and, eq, isNotNull } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { DrizzleService } from "../../../database";
 import {
   investorScoringPreference,
   stageScoringWeight,
   type ScoringWeights,
 } from "../../investor/entities";
-import { startup, StartupStage } from "../../startup/entities";
+import { StartupStage } from "../../startup/entities";
 
 export interface SectionScores {
   team: number;
@@ -241,24 +241,6 @@ export class ScoreComputationService {
 
     const stageWeights = await this.getWeightsForStage(stage);
     return this.computeWeightedScore(sectionScores, stageWeights);
-  }
-
-  async computePercentileRank(overallScore: number): Promise<number> {
-    const rows = await this.drizzle.db
-      .select({ overallScore: startup.overallScore })
-      .from(startup)
-      .where(isNotNull(startup.overallScore));
-
-    const scores = rows
-      .map((row) => row.overallScore)
-      .filter((value): value is number => typeof value === "number");
-
-    if (scores.length === 0) {
-      return 100;
-    }
-
-    const atOrBelow = scores.filter((score) => score <= overallScore).length;
-    return Number(((atOrBelow / scores.length) * 100).toFixed(1));
   }
 
   computeConfidenceScore(

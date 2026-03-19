@@ -131,10 +131,6 @@ const MarketLifecycleSchema = z.object({
 const MarketGrowthAndTimingRawSchema = z.object({
   growthRate: objectWithFallback(GrowthRateSchema),
   whyNow: objectWithFallback(WhyNowSchema),
-  timingAssessment: enumWithFallback(
-    ["too_early", "slightly_early", "right_time", "slightly_late", "too_late"],
-    "right_time",
-  ),
   marketLifecycle: objectWithFallback(MarketLifecycleSchema),
 });
 const MarketGrowthAndTimingSchema = z.preprocess(

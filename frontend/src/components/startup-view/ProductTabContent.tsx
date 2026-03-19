@@ -1,6 +1,7 @@
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Package, Image, Code, Layers, CheckCircle2, AlertTriangle, Shield } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Package, Image, Code, Layers, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MarkdownText } from "@/components/MarkdownText";
 import { SectionScoreCard } from "@/components/SectionScoreCard";
@@ -132,7 +133,7 @@ function toTechStack(value: unknown): TechStackItem[] {
 }
 
 // ---------------------------------------------------------------------------
-// Source badge styling
+// Styling helpers
 // ---------------------------------------------------------------------------
 
 function sourceBadgeClass(source: string): string {
@@ -157,6 +158,15 @@ function verdictBadgeClass(verdict: string): string {
     default:
       return "border-slate-300 bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-400";
   }
+}
+
+/** Extract all parenthetical content from tech names → tooltip */
+function parseTechBrackets(tech: string): { name: string; detail?: string } {
+  const parts = tech.match(/\(([^)]+)\)/g);
+  if (!parts || parts.length === 0) return { name: tech };
+  const detail = parts.map((p) => p.slice(1, -1)).join(", ");
+  const name = tech.replace(/\s*\([^)]+\)/g, "").trim();
+  return { name, detail };
 }
 
 // ---------------------------------------------------------------------------
@@ -274,14 +284,14 @@ export function ProductTabContent({ startup, evaluation, showScores = true, prod
   const compAdvData = (evaluation?.competitiveAdvantageData ?? {}) as Record<string, unknown>;
   const moatAssessment = (compAdvData.moatAssessment ?? {}) as Record<string, unknown>;
 
-  // Section 1: Score
+  // Score
   const productScore = evaluation?.productScore ?? 0;
   const scoring = (productData.scoring ?? {}) as Record<string, unknown>;
   const confidence = str(scoring.confidence) ?? "unknown";
   const scoringBasis = str(scoring.scoringBasis);
   const subScores = toSubScores(scoring.subScores);
 
-  // Section 2: Product Overview
+  // Product Overview
   const productCategory = str(productOverview.productCategory);
   const targetUser = str(productOverview.targetUser);
   const techStage = str(productOverview.techStage);
@@ -290,30 +300,31 @@ export function ProductTabContent({ startup, evaluation, showScores = true, prod
   const whatItDoes = str(productOverview.whatItDoes);
   const keyFeatures = toFeaturesWithSources(productData.keyFeatures);
 
-  // Section 3: Product Maturity & Defensibility
+  // Maturity & Defensibility
   const stageFitAssessment = str(productData.stageFitAssessment);
   const claimsAssessment = toClaimsAssessment(productData.claimsAssessment);
   const moatType = str(moatAssessment.moatType);
   const moatStage = str(moatAssessment.moatStage);
-  const moatEvidence = str(moatAssessment.moatEvidence);
+  const moatEvidence = toStringArray(moatAssessment.moatEvidence);
   const moatSelfReinforcing = bool(moatAssessment.selfReinforcing);
+  const timeToReplicate = str(moatAssessment.timeToReplicate);
 
-  // Section 5: Technology Stack
+  // Technology Stack
   const technologyStack = toTechStack(productData.technologyStack);
 
-  // Section 6: Strengths & Risks
-  const strengths = toStringArray(productData.strengths);
-  const risks = toStringArray(productData.risks);
-
-  // Section 7: Data Gaps
+  // Data Gaps
   const dataGaps = parseDataGapItems(productData.dataGaps);
 
   // Product Showcase
   const founderScreenshots = (startup.productScreenshots as string[]) || [];
 
-  const hasOverview = productCategory || targetUser || techStage || coreValueProp || description || whatItDoes || keyFeatures.length > 0;
-  const hasMaturity = techStage || claimsAssessment.length > 0 || moatStage;
-  const hasContent = hasOverview || hasMaturity || technologyStack.length > 0 || strengths.length > 0 || risks.length > 0 || dataGaps.length > 0 || founderScreenshots.length > 0 || productData;
+  // Unified description — prefer description, fallback to coreValueProp then whatItDoes
+  const productDescription = description || coreValueProp || whatItDoes;
+
+  const hasOverview = productCategory || targetUser || techStage || productDescription || keyFeatures.length > 0;
+  const hasMoat = !!(moatStage || moatType);
+  const hasMaturity = techStage || claimsAssessment.length > 0 || hasMoat;
+  const hasContent = hasOverview || hasMaturity || technologyStack.length > 0 || dataGaps.length > 0 || founderScreenshots.length > 0 || productData;
 
   if (!hasContent) {
     return (
@@ -332,7 +343,7 @@ export function ProductTabContent({ startup, evaluation, showScores = true, prod
   return (
     <div className="space-y-6" data-testid="product-tab-content">
       {/* ================================================================= */}
-      {/* Section 1: Score Card                                             */}
+      {/* Score Card                                                        */}
       {/* ================================================================= */}
       {evaluation && showScores && (
         <SectionScoreCard
@@ -349,7 +360,7 @@ export function ProductTabContent({ startup, evaluation, showScores = true, prod
       )}
 
       {/* ================================================================= */}
-      {/* Section 2: Product Overview                                       */}
+      {/* Product Overview                                                  */}
       {/* ================================================================= */}
       {hasOverview && (
         <Card data-testid="card-product-overview">
@@ -360,50 +371,57 @@ export function ProductTabContent({ startup, evaluation, showScores = true, prod
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Product Identity Bar */}
+            {/* Labeled stat cards for key fields */}
             {(productCategory || targetUser || techStage) && (
-              <div className="flex flex-wrap gap-2">
-                {productCategory && <Badge variant="secondary">{productCategory}</Badge>}
-                {targetUser && <Badge variant="outline">{targetUser}</Badge>}
-                {techStage && (
-                  <Badge variant="outline" className="border-primary/30 capitalize text-primary">
-                    {techStage}
-                  </Badge>
-                )}
+              <TooltipProvider>
+                <div className="grid grid-cols-3 gap-3">
+                  {productCategory && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="rounded-lg border bg-muted/50 px-3 py-2 cursor-default">
+                          <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Category</p>
+                          <p className="text-sm font-medium line-clamp-2">{productCategory}</p>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" className="max-w-xs">
+                        <p className="text-xs">{productCategory}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+                  {targetUser && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="rounded-lg border bg-muted/50 px-3 py-2 cursor-default">
+                          <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Target User</p>
+                          <p className="text-sm font-medium line-clamp-2">{targetUser}</p>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" className="max-w-xs">
+                        <p className="text-xs">{targetUser}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+                  {techStage && (
+                    <div className="rounded-lg border bg-muted/50 px-3 py-2">
+                      <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Tech Stage</p>
+                      <p className="text-sm font-medium capitalize">{techStage}</p>
+                    </div>
+                  )}
               </div>
+              </TooltipProvider>
             )}
 
-            {/* Core Value Prop — callout box */}
-            {coreValueProp && (
-              <div className="rounded-lg border-l-4 border-primary bg-primary/5 p-4">
-                <h4 className="mb-1 text-sm font-semibold">Core Value Proposition</h4>
-                <MarkdownText className="text-sm leading-relaxed [&>p]:mb-0">
-                  {coreValueProp}
-                </MarkdownText>
-              </div>
-            )}
-
-            {/* Product Description */}
-            {description && (
+            {/* Description — unified display */}
+            {productDescription && (
               <div>
-                <h4 className="mb-1 text-sm font-medium">Product Description</h4>
+                <h4 className="mb-1 text-sm font-medium">Description</h4>
                 <MarkdownText className="text-sm leading-relaxed text-muted-foreground [&>p]:mb-0">
-                  {description}
+                  {productDescription}
                 </MarkdownText>
               </div>
             )}
 
-            {/* What It Does */}
-            {whatItDoes && (
-              <div>
-                <h4 className="mb-1 text-sm font-medium">What It Does</h4>
-                <MarkdownText className="text-sm leading-relaxed text-muted-foreground [&>p]:mb-0">
-                  {whatItDoes}
-                </MarkdownText>
-              </div>
-            )}
-
-            {/* Key Features (inside overview card) */}
+            {/* Key Features — within description area */}
             {keyFeatures.length > 0 && (
               <div>
                 <h4 className="mb-2 text-sm font-medium">Key Features</h4>
@@ -445,7 +463,7 @@ export function ProductTabContent({ startup, evaluation, showScores = true, prod
       )}
 
       {/* ================================================================= */}
-      {/* Section 3: Product Maturity & Defensibility                       */}
+      {/* Product Maturity & Defensibility                                  */}
       {/* ================================================================= */}
       {hasMaturity && (
         <Card data-testid="card-product-maturity">
@@ -461,6 +479,44 @@ export function ProductTabContent({ startup, evaluation, showScores = true, prod
               <div>
                 <h4 className="mb-2 text-sm font-medium">Product Lifecycle Position</h4>
                 <ProductLifecycleBar techStage={techStage} stageFit={stageFitAssessment} />
+              </div>
+            )}
+
+            {/* Moat Assessment — right after lifecycle */}
+            {hasMoat && (
+              <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Shield className="h-4 w-4 text-muted-foreground" />
+                  <h4 className="text-sm font-medium">Moat Assessment</h4>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {moatType && moatType !== "none" && (
+                    <Badge variant="secondary" className="capitalize">
+                      {moatType.replace(/_/g, " ")}
+                    </Badge>
+                  )}
+                  {moatSelfReinforcing !== undefined && (
+                    <Badge variant={moatSelfReinforcing ? "default" : "outline"}>
+                      {moatSelfReinforcing ? "Self-reinforcing" : "Not self-reinforcing"}
+                    </Badge>
+                  )}
+                  {timeToReplicate && (
+                    <Badge variant="outline" className="text-muted-foreground">
+                      Replication: {timeToReplicate}
+                    </Badge>
+                  )}
+                </div>
+                {moatStage && <MoatStageIndicator stage={moatStage} />}
+                {moatEvidence.length > 0 && (
+                  <ul className="space-y-1 pt-1">
+                    {moatEvidence.map((item, idx) => (
+                      <li key={idx} className="flex items-start gap-2 text-sm text-muted-foreground">
+                        <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             )}
 
@@ -496,40 +552,12 @@ export function ProductTabContent({ startup, evaluation, showScores = true, prod
                 </div>
               </div>
             )}
-
-            {/* Moat Assessment (cross-referenced from competitive advantage agent) */}
-            {moatStage && (
-              <div>
-                <h4 className="mb-2 text-sm font-medium">Moat Assessment</h4>
-                <div className="space-y-3">
-                  <div className="flex flex-wrap items-center gap-3">
-                    {moatType && (
-                      <Badge variant="secondary" className="capitalize">
-                        <Shield className="mr-1 h-3 w-3" />
-                        {moatType.replace(/_/g, " ")}
-                      </Badge>
-                    )}
-                    {moatSelfReinforcing !== undefined && (
-                      <Badge variant={moatSelfReinforcing ? "default" : "secondary"}>
-                        {moatSelfReinforcing ? "Self-reinforcing" : "Not self-reinforcing"}
-                      </Badge>
-                    )}
-                  </div>
-                  <MoatStageIndicator stage={moatStage} />
-                  {moatEvidence && (
-                    <MarkdownText className="text-sm text-muted-foreground [&>p]:mb-0">
-                      {moatEvidence}
-                    </MarkdownText>
-                  )}
-                </div>
-              </div>
-            )}
           </CardContent>
         </Card>
       )}
 
       {/* ================================================================= */}
-      {/* Section 5: Technology Stack                                       */}
+      {/* Technology Stack                                                  */}
       {/* ================================================================= */}
       {technologyStack.length > 0 && (
         <Card data-testid="card-tech-stack">
@@ -538,85 +566,45 @@ export function ProductTabContent({ startup, evaluation, showScores = true, prod
               <Code className="h-5 w-5" />
               <span>Technology Stack</span>
             </CardTitle>
-            <CardDescription>Technologies and frameworks used</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex flex-wrap gap-2">
-              {technologyStack.map((item, idx) => (
-                <Badge
-                  key={idx}
-                  variant="secondary"
-                  className="px-3 py-1"
-                  title={item.source ? `Source: ${item.source}` : undefined}
-                >
-                  {item.technology}
-                </Badge>
-              ))}
-            </div>
+            <TooltipProvider>
+              <div className="flex flex-wrap gap-2">
+                {technologyStack.map((item, idx) => {
+                  const { name, detail } = parseTechBrackets(item.technology);
+                  const tooltipText = [detail, item.source ? `Source: ${item.source}` : ""]
+                    .filter(Boolean)
+                    .join(" \u00b7 ");
+                  return tooltipText ? (
+                    <Tooltip key={idx}>
+                      <TooltipTrigger asChild>
+                        <Badge variant="secondary" className="px-3 py-1 cursor-default">
+                          {name}
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="text-xs">{tooltipText}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  ) : (
+                    <Badge key={idx} variant="secondary" className="px-3 py-1">
+                      {name}
+                    </Badge>
+                  );
+                })}
+              </div>
+            </TooltipProvider>
           </CardContent>
         </Card>
       )}
 
       {/* ================================================================= */}
-      {/* Section 6: Strengths & Risks                                      */}
-      {/* ================================================================= */}
-      {(strengths.length > 0 || risks.length > 0) && (
-        <div className="grid gap-6 md:grid-cols-2">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-                Product Strengths
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {strengths.length > 0 ? (
-                <ul className="space-y-2">
-                  {strengths.map((item, index) => (
-                    <li key={`${item}-${index}`} className="flex items-start gap-2 text-sm">
-                      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-muted-foreground">No explicit product strengths were captured in this run.</p>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <AlertTriangle className="h-5 w-5 text-rose-500" />
-                Product Risks
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {risks.length > 0 ? (
-                <ul className="space-y-2">
-                  {risks.map((item, index) => (
-                    <li key={`${item}-${index}`} className="flex items-start gap-2 text-sm">
-                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-rose-500" />
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-muted-foreground">No explicit product risks were captured in this run.</p>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* ================================================================= */}
-      {/* Section 7: Data Gaps                                              */}
+      {/* Data Gaps                                                         */}
       {/* ================================================================= */}
       <DataGapsSection gaps={dataGaps} />
 
       {/* ================================================================= */}
-      {/* Product Showcase (founder screenshots — after data gaps)           */}
+      {/* Product Showcase (founder screenshots)                            */}
       {/* ================================================================= */}
       {founderScreenshots.length > 0 && (
         <Card data-testid="card-product-showcase">
@@ -625,9 +613,6 @@ export function ProductTabContent({ startup, evaluation, showScores = true, prod
               <Image className="h-5 w-5" />
               <span data-testid="text-product-showcase-title">Product Showcase</span>
             </CardTitle>
-            <CardDescription data-testid="text-product-showcase-description">
-              Screenshots submitted by founder
-            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

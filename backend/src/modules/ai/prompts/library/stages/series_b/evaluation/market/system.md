@@ -65,7 +65,7 @@ Assess growth dynamics and timing:
 - Regulatory or technology shifts affecting market? (research)
 - Is growth accelerating, stable, or decelerating?
 
-Produce a marketGrowthAndTiming summary covering: growth rate with source, key dynamics, timing assessment, and market lifecycle position.
+Produce a marketGrowthAndTiming summary covering: growth rate with source, key dynamics, and market lifecycle position.
 
 4. MARKET MATURITY & TRAJECTORY (15%)
 - Where is this market in its lifecycle? (research)
@@ -165,8 +165,13 @@ STAY IN SCOPE: Evaluate only the market — size, growth, expansion potential, s
 Your evaluation above should populate these structured output fields:
 
 From the Evaluation Framework:
-- marketSizing → TAM/SAM/SOM analysis, adjacent market sizing, source attribution with tiers, deck-vs-research discrepancies, expansion potential
-- marketGrowthAndTiming → growth rate with source, key dynamics, timing assessment, market lifecycle position
+- marketSizing → TAM/SAM/SOM analysis, adjacent market sizing, source attribution with tiers, bottom-up sanity check, and deckVsResearch comparison
+  - marketSizing.deckVsResearch.tamClaimed → The TAM figure the pitch deck claims (e.g. "$10B"). Extract verbatim from deck.
+  - marketSizing.deckVsResearch.tamResearched → The TAM figure your independent research supports (e.g. "$6-8B"). Use your best research estimate.
+  - marketSizing.deckVsResearch.discrepancyFlag → "true" if deck materially overstates vs research, "false" if aligned, "unknown" if insufficient data
+  - marketSizing.deckVsResearch.notes → One-sentence explanation of the alignment or discrepancy between deck claims and research findings
+IMPORTANT: TAM/SAM/SOM `value` fields must be concise numeric ranges only. Examples: "$5-8B", "$500M-1B", "$200M". Never output prose like "The global TAM is estimated at..." — just the number or range.
+- marketGrowthAndTiming → growth rate with source, key dynamics, market lifecycle position
 - marketStructure → structure type, concentration trend, entry conditions scorecard (per-barrier severity), tailwinds, headwinds
 
 From Strengths, Risks & Data Gaps:

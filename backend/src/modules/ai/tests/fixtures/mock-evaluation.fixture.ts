@@ -99,7 +99,6 @@ export function createMockEvaluationResult(
           supportedByResearch: true,
           evidence: ["OSHA updates"],
         },
-        timingAssessment: "right_time",
         marketLifecycle: { position: "early_growth", evidence: "Growing vendor count" },
       },
       marketStructure: {

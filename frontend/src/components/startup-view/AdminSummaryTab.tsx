@@ -165,6 +165,36 @@ function rec(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
+/** Extract short numeric value from verbose AI text. Tries ranges, multiples, money, fractions. */
+function extractShortValue(raw: string | undefined): string {
+  if (!raw || raw === "—") return raw ?? "—";
+  // Already short (under 30 chars) — keep as-is
+  if (raw.length <= 30) return raw;
+  // Money range: $1.1T–$1.6T or $500M to $1B
+  const moneyRange = raw.match(
+    /~?(\$\s?\d+(?:[.,]\d+)?\s?(?:[kmbt]|bn|million|billion|trillion))\s*[-–—]\s*~?(\$\s?\d+(?:[.,]\d+)?\s?(?:[kmbt]|bn|million|billion|trillion))/i,
+  );
+  if (moneyRange) return `${moneyRange[1].trim()} – ${moneyRange[2].trim()}`;
+  // Single money: ~$1.1T
+  const singleMoney = raw.match(/~?\$\s?\d+(?:[.,]\d+)?\s?(?:[kmbt]|bn|million|billion|trillion)/i);
+  if (singleMoney) return singleMoney[0].replace(/\s+/g, "");
+  // Multiple range: ~15x–40x or 24x
+  const multipleRange = raw.match(/~?(\d+(?:\.\d+)?x)\s*[-–—]\s*~?(\d+(?:\.\d+)?x)/i);
+  if (multipleRange) return `${multipleRange[1]} – ${multipleRange[2]}`;
+  const singleMultiple = raw.match(/~?\d+(?:\.\d+)?x/i);
+  if (singleMultiple) return singleMultiple[0];
+  // Percentage range
+  const pctRange = raw.match(/~?(\d+(?:\.\d+)?%)\s*[-–—]\s*~?(\d+(?:\.\d+)?%)/);
+  if (pctRange) return `${pctRange[1]} – ${pctRange[2]}`;
+  const singlePct = raw.match(/~?\d+(?:\.\d+)?%/);
+  if (singlePct) return singlePct[0];
+  // Fraction like 3/4
+  const fraction = raw.match(/\d+\/\d+/);
+  if (fraction) return fraction[0];
+  // Fallback: first 25 chars + ellipsis
+  return raw.slice(0, 25) + "…";
+}
+
 function buildContextBadges(data: {
   marketData: Record<string, unknown>;
   productData: Record<string, unknown>;
@@ -190,7 +220,7 @@ function buildContextBadges(data: {
   if (tamValue || timingAssessment) {
     badges.push({
       id: "market", label: "Market",
-      topLine: tamValue || "—",
+      topLine: extractShortValue(tamValue) || "—",
       bottomLine: timingAssessment?.replace(/_/g, " "),
       score: data.marketScore ?? 0,
       tab: "market",
@@ -254,7 +284,7 @@ function buildContextBadges(data: {
   if (runway || credibility) {
     badges.push({
       id: "financials", label: "Financials",
-      topLine: runway || "—",
+      topLine: extractShortValue(runway) || "—",
       bottomLine: credibility?.replace(/_/g, " "),
       score: data.financialsScore ?? 0,
       tab: "financials",
@@ -268,7 +298,7 @@ function buildContextBadges(data: {
   if (impliedMultiple || premiumDiscount) {
     badges.push({
       id: "deal", label: "Deal",
-      topLine: impliedMultiple || "—",
+      topLine: extractShortValue(impliedMultiple) || "—",
       bottomLine: premiumDiscount?.replace(/_/g, " "),
       score: data.dealTermsScore ?? 0,
       tab: "memo",

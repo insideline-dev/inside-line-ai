@@ -88,7 +88,6 @@ export function TeamProfileCard({
   const hasEducation = member.education && member.education.length > 0;
   const hasSkills = member.skills && member.skills.length > 0;
   const hasExpandableContent =
-    !!(member.summary || member.background) ||
     !!member.relevantExperience ||
     (showTimelines && (hasExperience || hasEducation)) ||
     hasSkills;
@@ -167,6 +166,12 @@ export function TeamProfileCard({
                     </Button>
                   )}
                 </div>
+
+                {(member.summary || member.background) && (
+                  <p className="text-sm text-muted-foreground leading-relaxed mt-3">
+                    {member.summary || member.background}
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -183,14 +188,6 @@ export function TeamProfileCard({
 
           {/* Expanded content */}
           <CollapsibleContent>
-            {(member.summary || member.background) && (
-              <div className="px-6 pt-4">
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  {member.summary || member.background}
-                </p>
-              </div>
-            )}
-
             {member.relevantExperience && (
               <div className="mx-6 mt-4 p-3 bg-primary/5 rounded-lg">
                 <p className="text-sm">

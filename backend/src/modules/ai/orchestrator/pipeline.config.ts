@@ -33,7 +33,7 @@ export const PIPELINE_TERMINAL_STATUSES: ReadonlySet<PhaseStatus> = new Set([
 ]);
 
 export const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
-  maxPipelineTimeoutMs: 45 * 60 * 1000,
+  maxPipelineTimeoutMs: 180 * 60 * 1000,
   minimumEvaluationAgents: 8,
   defaultRetryPolicy: {
     maxRetries: 3,
@@ -72,7 +72,7 @@ export const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
       phase: PipelinePhase.RESEARCH,
       dependsOn: [PipelinePhase.ENRICHMENT, PipelinePhase.SCRAPING],
       canRunParallelWith: [],
-      timeoutMs: 10 * 60 * 1000,
+      timeoutMs: 15 * 60 * 1000,
       maxRetries: 2,
       required: false,
       queue: QUEUE_NAMES.AI_RESEARCH,
@@ -81,7 +81,7 @@ export const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
       phase: PipelinePhase.EVALUATION,
       dependsOn: [PipelinePhase.RESEARCH],
       canRunParallelWith: [],
-      timeoutMs: 12 * 60 * 1000,
+      timeoutMs: 30 * 60 * 1000,
       maxRetries: 2,
       required: true,
       queue: QUEUE_NAMES.AI_EVALUATION,
@@ -90,7 +90,7 @@ export const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
       phase: PipelinePhase.SYNTHESIS,
       dependsOn: [PipelinePhase.EVALUATION],
       canRunParallelWith: [],
-      timeoutMs: 8 * 60 * 1000,
+      timeoutMs: 20 * 60 * 1000,
       maxRetries: 2,
       required: true,
       queue: QUEUE_NAMES.AI_SYNTHESIS,

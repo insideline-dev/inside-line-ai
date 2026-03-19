@@ -491,7 +491,7 @@ export function DirectCompetitorCard({
             >
               {strengths.slice(0, 3).map((s, i) => (
                 <li key={i} className="text-muted-foreground">
-                  • {s}
+                  • <MarkdownText className="inline [&>p]:inline [&>p]:mb-0">{s}</MarkdownText>
                 </li>
               ))}
               {strengths.length === 0 && (
@@ -512,7 +512,7 @@ export function DirectCompetitorCard({
             >
               {weaknesses.slice(0, 3).map((w, i) => (
                 <li key={i} className="text-muted-foreground">
-                  • {w}
+                  • <MarkdownText className="inline [&>p]:inline [&>p]:mb-0">{w}</MarkdownText>
                 </li>
               ))}
               {weaknesses.length === 0 && (
@@ -536,7 +536,7 @@ export function DirectCompetitorCard({
             >
               {recentActivity.slice(0, 2).map((activity, i) => (
                 <li key={i} className="text-muted-foreground">
-                  • {activity}
+                  • <MarkdownText className="inline [&>p]:inline [&>p]:mb-0">{activity}</MarkdownText>
                 </li>
               ))}
             </ul>
@@ -666,7 +666,7 @@ export function IndirectCompetitorCard({
             >
               {strengths.slice(0, 2).map((s, i) => (
                 <li key={i} className="text-muted-foreground">
-                  • {s}
+                  • <MarkdownText className="inline [&>p]:inline [&>p]:mb-0">{s}</MarkdownText>
                 </li>
               ))}
             </ul>
@@ -784,9 +784,9 @@ export function MarketLandscapeCard({
               {marketTrends.slice(0, 4).map((trend, i) => (
                 <li key={i} className="flex items-start gap-2">
                   <TrendingUp className="h-3.5 w-3.5 text-primary mt-0.5 flex-shrink-0" />
-                  <span className="text-muted-foreground text-pretty">
+                  <MarkdownText className="inline text-muted-foreground text-pretty [&>p]:inline [&>p]:mb-0">
                     {trend}
-                  </span>
+                  </MarkdownText>
                 </li>
               ))}
             </ul>
@@ -825,9 +825,9 @@ export function MarketLandscapeCard({
               {emergingThreats.slice(0, 3).map((threat, i) => (
                 <li key={i} className="flex items-start gap-2">
                   <AlertTriangle className="h-3.5 w-3.5 text-amber-500 mt-0.5 flex-shrink-0" />
-                  <span className="text-muted-foreground text-pretty">
+                  <MarkdownText className="inline text-muted-foreground text-pretty [&>p]:inline [&>p]:mb-0">
                     {threat}
-                  </span>
+                  </MarkdownText>
                 </li>
               ))}
             </ul>
@@ -893,9 +893,9 @@ export function SourcesCard({ sources }: { sources: SourceSummary }) {
               {primarySources.map((source, i) => (
                 <li key={i} className="flex items-start gap-2">
                   <Shield className="h-3.5 w-3.5 text-primary mt-0.5 flex-shrink-0" />
-                  <span className="text-muted-foreground text-pretty">
+                  <MarkdownText className="inline text-muted-foreground text-pretty [&>p]:inline [&>p]:mb-0">
                     {source}
-                  </span>
+                  </MarkdownText>
                 </li>
               ))}
             </ul>
@@ -911,9 +911,9 @@ export function SourcesCard({ sources }: { sources: SourceSummary }) {
               {dataGaps.map((gap, i) => (
                 <li key={i} className="flex items-start gap-2">
                   <AlertTriangle className="h-3.5 w-3.5 text-amber-500 mt-0.5 flex-shrink-0" />
-                  <span className="text-muted-foreground text-pretty">
+                  <MarkdownText className="inline text-muted-foreground text-pretty [&>p]:inline [&>p]:mb-0">
                     {gap}
-                  </span>
+                  </MarkdownText>
                 </li>
               ))}
             </ul>
@@ -1476,7 +1476,7 @@ function BasicCompetitorLandscapeCard({
                 {(advantages.length > 0 ? advantages : keyStrengths).map((item, i) => (
                   <li key={i} className="flex items-start gap-2">
                     <CheckCircle className="h-3.5 w-3.5 text-green-600 mt-0.5 flex-shrink-0" />
-                    <span className="text-muted-foreground text-pretty">{item}</span>
+                    <MarkdownText className="inline text-muted-foreground text-pretty [&>p]:inline [&>p]:mb-0">{item}</MarkdownText>
                   </li>
                 ))}
               </ul>
@@ -1497,7 +1497,7 @@ function BasicCompetitorLandscapeCard({
                 {(disadvantages.length > 0 ? disadvantages : keyRisks).map((item, i) => (
                   <li key={i} className="flex items-start gap-2">
                     <AlertTriangle className="h-3.5 w-3.5 text-amber-500 mt-0.5 flex-shrink-0" />
-                    <span className="text-muted-foreground text-pretty">{item}</span>
+                    <MarkdownText className="inline text-muted-foreground text-pretty [&>p]:inline [&>p]:mb-0">{item}</MarkdownText>
                   </li>
                 ))}
               </ul>

@@ -34,9 +34,17 @@ export interface PipelineFlowDefinition {
   nodeConfigs?: PipelineFlowNodeConfigs;
 }
 
+export interface PipelineFlowAgentSearchConfig {
+  webSearchEnabled?: boolean;
+  braveSearchEnabled?: boolean;
+}
+
+/** @deprecated Use PipelineFlowAgentSearchConfig */
+export type PipelineFlowEvalAgentConfig = PipelineFlowAgentSearchConfig;
+
 export interface PipelineFlowNodeConfigs {
   scrape_website?: PipelineFlowScrapeWebsiteConfig;
-  [nodeId: string]: unknown;
+  [nodeId: string]: PipelineFlowScrapeWebsiteConfig | PipelineFlowAgentSearchConfig | unknown;
 }
 
 export interface PipelineFlowScrapeWebsiteConfig {
@@ -151,6 +159,11 @@ export class PipelineGraphCompilerService {
         continue;
       }
 
+      if (nodeId.startsWith("evaluation_") || nodeId.startsWith("research_")) {
+        parsed[nodeId] = this.parseAgentSearchConfig(rawNodeConfig);
+        continue;
+      }
+
       parsed[nodeId] = rawNodeConfig;
     }
 
@@ -254,6 +267,20 @@ export class PipelineGraphCompilerService {
       return "/";
     }
     return collapsed.endsWith("/") ? collapsed.slice(0, -1) : collapsed;
+  }
+
+  private parseAgentSearchConfig(value: unknown): PipelineFlowAgentSearchConfig {
+    if (value === undefined || value === null) {
+      return {};
+    }
+    if (typeof value !== "object" || Array.isArray(value)) {
+      return {};
+    }
+    const record = value as Record<string, unknown>;
+    return {
+      webSearchEnabled: record.webSearchEnabled === true,
+      braveSearchEnabled: record.braveSearchEnabled === true,
+    };
   }
 
   private parseEdgeMapping(

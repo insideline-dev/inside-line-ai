@@ -588,6 +588,8 @@ export class SynthesisAgent {
               "Preserve factual meaning from the source narrative. Improve coherence and readability only.",
               "Do not invent new facts. Do not include score/confidence phrasing in prose.",
               "Embed inline citation markers [N] next to specific factual claims (numbers, stats, dates). N is the 1-based index into the sources[] array you return.",
+              "Use **bold** for key conclusions, company names, metrics, monetary values, percentages, and important terms. Use *italics* for source attributions and caveats. Do NOT use headings or bullet lists — only inline markdown formatting.",
+              "PRESERVE existing markdown formatting (**bold**, *italic*) from the source narrative. Do not strip formatting markers.",
             ].join("\n"),
             prompt,
             providerOptions:

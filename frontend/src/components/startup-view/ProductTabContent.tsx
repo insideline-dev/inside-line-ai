@@ -431,7 +431,7 @@ export function ProductTabContent({ startup, evaluation, showScores = true, prod
                     return (
                       <div key={idx} className="flex items-start gap-2 text-sm">
                         <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
-                        <span className="flex-1">{item.feature}</span>
+                        <MarkdownText className="flex-1 inline [&>p]:inline [&>p]:mb-0">{item.feature}</MarkdownText>
                         <div className="flex shrink-0 gap-1">
                           {isDeckOnly ? (
                             <Badge
@@ -512,7 +512,7 @@ export function ProductTabContent({ startup, evaluation, showScores = true, prod
                     {moatEvidence.map((item, idx) => (
                       <li key={idx} className="flex items-start gap-2 text-sm text-muted-foreground">
                         <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
-                        <span>{item}</span>
+                        <MarkdownText className="inline [&>p]:inline [&>p]:mb-0">{item}</MarkdownText>
                       </li>
                     ))}
                   </ul>
@@ -537,9 +537,9 @@ export function ProductTabContent({ startup, evaluation, showScores = true, prod
                     <tbody>
                       {claimsAssessment.map((item, idx) => (
                         <tr key={idx} className="border-b border-border/40 last:border-0">
-                          <td className="py-2 pr-3 font-medium">{item.claim}</td>
-                          <td className="py-2 pr-3 text-muted-foreground">{item.deckSays}</td>
-                          <td className="py-2 pr-3 text-muted-foreground">{item.evidence}</td>
+                          <td className="py-2 pr-3 font-medium"><MarkdownText className="inline [&>p]:inline [&>p]:mb-0">{item.claim}</MarkdownText></td>
+                          <td className="py-2 pr-3 text-muted-foreground"><MarkdownText className="inline [&>p]:inline [&>p]:mb-0">{item.deckSays}</MarkdownText></td>
+                          <td className="py-2 pr-3 text-muted-foreground"><MarkdownText className="inline [&>p]:inline [&>p]:mb-0">{item.evidence}</MarkdownText></td>
                           <td className="py-2">
                             <Badge variant="outline" className={verdictBadgeClass(item.verdict)}>
                               {item.verdict.replace(/_/g, " ")}

@@ -1,4 +1,4 @@
-import { Injectable, Logger, Optional } from "@nestjs/common";
+import { Inject, Injectable, Logger, Optional, forwardRef } from "@nestjs/common";
 import type {
   EvaluationAgent,
   EvaluationAgentCompletion,
@@ -38,6 +38,8 @@ import {
   type ResolvedEvaluationInput,
 } from "./evaluation-input-resolver.service";
 import { AiConfigService } from "./ai-config.service";
+import { PipelineFlowConfigService } from "./pipeline-flow-config.service";
+import type { PipelineFlowNodeConfigs } from "./pipeline-graph-compiler.service";
 
 type PersistedEvaluationTraceEvent = EvaluationAgentTraceEvent & {
   meta?: Record<string, unknown>;
@@ -70,6 +72,7 @@ export class EvaluationAgentRegistryService {
     @Optional() private pipelineAgentTrace?: PipelineAgentTraceService,
     @Optional() private evaluationInputResolver?: EvaluationInputResolverService,
     @Optional() private aiConfig?: AiConfigService,
+    @Optional() @Inject(forwardRef(() => PipelineFlowConfigService)) private flowConfigService?: PipelineFlowConfigService,
   ) {
     this.agents = [
       this.team,
@@ -105,6 +108,14 @@ export class EvaluationAgentRegistryService {
     const fallbackKeys: EvaluationAgentKey[] = [];
     const warnings: Array<{ agent: string; message: string }> = [];
     const fallbackReasonCounts: Partial<Record<EvaluationFallbackReason, number>> = {};
+    const nodeConfigs = await this.loadNodeConfigs();
+    const getEvalAgentConfig = (agentKey: string) => {
+      const config = nodeConfigs?.[`evaluation_${agentKey}`];
+      if (typeof config !== 'object' || config === null) return { webSearchEnabled: false, braveSearchEnabled: false };
+      const c = config as { webSearchEnabled?: boolean; braveSearchEnabled?: boolean };
+      return { webSearchEnabled: c.webSearchEnabled === true, braveSearchEnabled: c.braveSearchEnabled === true };
+    };
+
     const evaluationAgentStaggerMs = Math.max(
       0,
       this.aiConfig?.getEvaluationAgentStaggerMs() ?? 0,
@@ -127,6 +138,7 @@ export class EvaluationAgentRegistryService {
           const feedbackNotes = await this.loadFeedbackNotes(startupId, agent.key);
           const result = await agent.run(resolvedInput.pipelineData, {
             feedbackNotes,
+            ...getEvalAgentConfig(agent.key),
             onLifecycle: (event) =>
               this.emitAgentLifecycle(onAgentLifecycle, event),
             onTrace: (event) => {
@@ -329,6 +341,14 @@ export class EvaluationAgentRegistryService {
       throw new Error(`Unsupported evaluation agent "${key}"`);
     }
 
+    const nodeConfigs = await this.loadNodeConfigs();
+    const getEvalAgentConfig = (agentKey: string) => {
+      const config = nodeConfigs?.[`evaluation_${agentKey}`];
+      if (typeof config !== 'object' || config === null) return { webSearchEnabled: false, braveSearchEnabled: false };
+      const c = config as { webSearchEnabled?: boolean; braveSearchEnabled?: boolean };
+      return { webSearchEnabled: c.webSearchEnabled === true, braveSearchEnabled: c.braveSearchEnabled === true };
+    };
+
     const startedAt = new Date();
     this.emitAgentStart(onAgentStart, key);
     const resolvedInput = await this.resolvePipelineInputForAgent(
@@ -340,6 +360,7 @@ export class EvaluationAgentRegistryService {
       const feedbackNotes = await this.loadFeedbackNotes(startupId, key);
       const result = await agent.run(resolvedInput.pipelineData, {
         feedbackNotes,
+        ...getEvalAgentConfig(key),
         onLifecycle: (event) =>
           this.emitAgentLifecycle(onAgentLifecycle, event),
         onTrace: (event) => {
@@ -769,6 +790,17 @@ export class EvaluationAgentRegistryService {
         fallbackUsed: true,
         reason: "resolver_error",
       };
+    }
+  }
+
+  private async loadNodeConfigs(): Promise<PipelineFlowNodeConfigs | undefined> {
+    try {
+      const result = await this.flowConfigService?.getPublishedParsedFlowDefinition();
+      return result?.flowDefinition?.nodeConfigs ?? undefined;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Failed to load flow node configs: ${message}`);
+      return undefined;
     }
   }
 

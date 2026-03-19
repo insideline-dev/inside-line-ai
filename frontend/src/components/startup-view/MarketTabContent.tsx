@@ -591,7 +591,7 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage }: Mar
                     ))}
                     {deckDiscrepancyNotes && (
                       <div className="px-3 py-2 bg-muted/20 text-[11px] text-muted-foreground border-t">
-                        {deckDiscrepancyNotes}
+                        <MarkdownText className="inline [&>p]:inline [&>p]:mb-0">{deckDiscrepancyNotes}</MarkdownText>
                       </div>
                     )}
                   </div>
@@ -635,7 +635,7 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage }: Mar
                     )}
                   </div>
                   {cagr.detail && (
-                    <p className="text-[11px] text-muted-foreground text-center max-w-xs mt-1">{cagr.detail}</p>
+                    <MarkdownText className="text-[11px] text-muted-foreground text-center max-w-xs mt-1 [&>p]:mb-0">{cagr.detail}</MarkdownText>
                   )}
                   {growthRateDeckClaimed !== "Not provided" && growthRateDeckClaimed !== growthRateCagr && (
                     <div className="flex items-center gap-4 text-xs mt-1">
@@ -660,7 +660,7 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage }: Mar
               {whyNowEvidence.length > 0 ? (
                 <ul className="list-disc pl-5 space-y-1">
                   {whyNowEvidence.slice(0, 4).map((item) => (
-                    <li key={item} className="text-xs text-muted-foreground">{item}</li>
+                    <li key={item} className="text-xs text-muted-foreground"><MarkdownText className="inline [&>p]:inline [&>p]:mb-0">{item}</MarkdownText></li>
                   ))}
                 </ul>
               ) : (
@@ -723,7 +723,7 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage }: Mar
                               {item.severity}
                             </Badge>
                           </td>
-                          <td className="py-1.5 text-muted-foreground">{item.note}</td>
+                          <td className="py-1.5 text-muted-foreground"><MarkdownText className="inline [&>p]:inline [&>p]:mb-0">{item.note}</MarkdownText></td>
                         </tr>
                       ))}
                     </tbody>
@@ -731,7 +731,7 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage }: Mar
                 </div>
               </div>
             ) : (
-              <p className="text-xs text-muted-foreground">Entry Conditions: {entryAssessment}</p>
+              <p className="text-xs text-muted-foreground">Entry Conditions: <MarkdownText className="inline [&>p]:inline [&>p]:mb-0">{entryAssessment}</MarkdownText></p>
             )}
           </div>
 
@@ -748,10 +748,10 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage }: Mar
                 <div className="space-y-2">
                   {tailwinds.slice(0, 4).map((item, index) => (
                     <div key={`tw-${index}`} className="rounded-lg border bg-emerald-50/30 dark:bg-emerald-950/10 p-2.5 space-y-1">
-                      <p className="text-xs font-medium">{String(item.factor || "Unknown")}</p>
-                      <p className="text-xs text-muted-foreground">{String(item.impact || "n/a")}</p>
+                      <MarkdownText className="text-xs font-medium [&>p]:mb-0">{String(item.factor || "Unknown")}</MarkdownText>
+                      <MarkdownText className="text-xs text-muted-foreground [&>p]:mb-0">{String(item.impact || "n/a")}</MarkdownText>
                       {typeof item.source === "string" && item.source.trim().length > 0 && (
-                        <p className="text-[10px] text-muted-foreground/60">{item.source}</p>
+                        <MarkdownText className="text-[10px] text-muted-foreground/60 [&>p]:mb-0">{item.source}</MarkdownText>
                       )}
                     </div>
                   ))}
@@ -767,10 +767,10 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage }: Mar
                 <div className="space-y-2">
                   {headwinds.slice(0, 4).map((item, index) => (
                     <div key={`hw-${index}`} className="rounded-lg border bg-rose-50/30 dark:bg-rose-950/10 p-2.5 space-y-1">
-                      <p className="text-xs font-medium">{String(item.factor || "Unknown")}</p>
-                      <p className="text-xs text-muted-foreground">{String(item.impact || "n/a")}</p>
+                      <MarkdownText className="text-xs font-medium [&>p]:mb-0">{String(item.factor || "Unknown")}</MarkdownText>
+                      <MarkdownText className="text-xs text-muted-foreground [&>p]:mb-0">{String(item.impact || "n/a")}</MarkdownText>
                       {typeof item.source === "string" && item.source.trim().length > 0 && (
-                        <p className="text-[10px] text-muted-foreground/60">{item.source}</p>
+                        <MarkdownText className="text-[10px] text-muted-foreground/60 [&>p]:mb-0">{item.source}</MarkdownText>
                       )}
                     </div>
                   ))}
@@ -795,7 +795,7 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage }: Mar
                 <h4 className="mb-1 text-sm font-medium">Findings</h4>
                 <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
                   {keyFindings.slice(0, 4).map((item) => (
-                    <li key={item}>{item}</li>
+                    <li key={item}><MarkdownText className="inline [&>p]:inline [&>p]:mb-0">{item}</MarkdownText></li>
                   ))}
                 </ul>
               </div>
@@ -805,7 +805,7 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage }: Mar
                 <h4 className="mb-1 text-sm font-medium">Risks</h4>
                 <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
                   {risks.slice(0, 4).map((item) => (
-                    <li key={item}>{item}</li>
+                    <li key={item}><MarkdownText className="inline [&>p]:inline [&>p]:mb-0">{item}</MarkdownText></li>
                   ))}
                 </ul>
               </div>

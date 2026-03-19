@@ -571,9 +571,9 @@ export function TeamTabContent({
               </MarkdownText>
             )}
             {teamComposition.reason && teamComposition.reason !== teamComposition.sentence && (
-              <p className="text-xs text-muted-foreground italic">
+              <MarkdownText className="text-xs text-muted-foreground italic [&>p]:mb-0">
                 {teamComposition.reason}
-              </p>
+              </MarkdownText>
             )}
           </CardContent>
         </Card>
@@ -655,7 +655,7 @@ export function TeamTabContent({
                   {strengths.map((item, idx) => (
                     <li key={idx} className="flex items-start gap-2 text-sm">
                       <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
-                      <span>{item}</span>
+                      <MarkdownText className="inline [&>p]:inline [&>p]:mb-0">{item}</MarkdownText>
                     </li>
                   ))}
                 </ul>
@@ -680,7 +680,7 @@ export function TeamTabContent({
                   {risks.map((item, idx) => (
                     <li key={idx} className="flex items-start gap-2 text-sm">
                       <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-rose-500" />
-                      <span>{item}</span>
+                      <MarkdownText className="inline [&>p]:inline [&>p]:mb-0">{item}</MarkdownText>
                     </li>
                   ))}
                 </ul>

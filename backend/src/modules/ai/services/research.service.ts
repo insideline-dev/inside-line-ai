@@ -1,4 +1,4 @@
-import { Injectable, Logger, Optional } from "@nestjs/common";
+import { Injectable, Logger, Optional, Inject, forwardRef } from "@nestjs/common";
 import { ALL_RESEARCH_AGENTS, PHASE_2_RESEARCH_AGENTS, RESEARCH_AGENTS } from "../agents/research";
 import type {
   PipelineFallbackReason,
@@ -24,6 +24,8 @@ import { buildResearchPromptVariables } from "./research-prompt-variables";
 import { AgentConfigService } from "./agent-config.service";
 import { AiModelExecutionService } from "./ai-model-execution.service";
 import { AiConfigService } from "./ai-config.service";
+import { PipelineFlowConfigService } from "./pipeline-flow-config.service";
+import type { PipelineFlowNodeConfigs } from "./pipeline-graph-compiler.service";
 import { validateProductResearchReportContract } from "../prompts/research/product-research.contract";
 
 type ResearchAgentOutput =
@@ -84,7 +86,28 @@ export class ResearchService {
     @Optional() private modelExecution?: AiModelExecutionService,
     @Optional() private aiDebugLog?: AiDebugLogService,
     @Optional() private pipelineAgentTrace?: PipelineAgentTraceService,
+    @Optional() @Inject(forwardRef(() => PipelineFlowConfigService)) private flowConfigService?: PipelineFlowConfigService,
   ) {}
+
+  private async loadNodeConfigs(): Promise<PipelineFlowNodeConfigs | undefined> {
+    try {
+      const published = await this.flowConfigService?.getPublishedParsedFlowDefinition();
+      return published?.flowDefinition?.nodeConfigs;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private getAgentSearchConfig(nodeConfigs: PipelineFlowNodeConfigs | undefined, agentKey: string) {
+    const config = nodeConfigs?.[`research_${agentKey}`];
+    if (typeof config !== 'object' || config === null) return { enableWebSearch: undefined, enableBraveSearch: undefined };
+    const c = config as { webSearchEnabled?: boolean; braveSearchEnabled?: boolean };
+    // Only pass true values — undefined lets the global config remain in control
+    return {
+      enableWebSearch: c.webSearchEnabled === true ? true : undefined,
+      enableBraveSearch: c.braveSearchEnabled === true ? true : undefined,
+    };
+  }
 
   async run(startupId: string, options?: ResearchRunOptions): Promise<ResearchResult> {
     const extraction = await this.pipelineState.getPhaseResult(
@@ -131,6 +154,7 @@ export class ResearchService {
       researchParameters,
       orchestratorGuidance,
     };
+    const nodeConfigs = await this.loadNodeConfigs();
     const currentResult = options?.agentKey
       ? await this.pipelineState.getPhaseResult(startupId, PipelinePhase.RESEARCH)
       : null;
@@ -168,6 +192,7 @@ export class ResearchService {
           onAgentStart: options?.onAgentStart,
           startDelayMs: 0,
           phaseRetryCount,
+          ...this.getAgentSearchConfig(nodeConfigs, key),
         },
       );
       options?.onAgentComplete?.({
@@ -227,6 +252,7 @@ export class ResearchService {
               onAgentStart: options?.onAgentStart,
               startDelayMs: index * researchAgentStaggerMs,
               phaseRetryCount,
+              ...this.getAgentSearchConfig(nodeConfigs, key),
             },
           ),
         );
@@ -260,6 +286,7 @@ export class ResearchService {
               onAgentStart: options?.onAgentStart,
               startDelayMs: index * researchAgentStaggerMs,
               phaseRetryCount,
+              ...this.getAgentSearchConfig(nodeConfigs, key),
             },
           ),
         );
@@ -323,6 +350,8 @@ export class ResearchService {
       onAgentStart?: (agent: ResearchAgentKey) => void;
       startDelayMs?: number;
       phaseRetryCount?: number;
+      enableWebSearch?: boolean;
+      enableBraveSearch?: boolean;
     },
   ): Promise<AgentRunResult> {
     try {
@@ -379,6 +408,8 @@ export class ResearchService {
       onAgentStart?: (agent: ResearchAgentKey) => void;
       startDelayMs?: number;
       phaseRetryCount?: number;
+      enableWebSearch?: boolean;
+      enableBraveSearch?: boolean;
     },
   ): Promise<AgentRunResult> {
     const promptKey = RESEARCH_PROMPT_KEY_BY_AGENT[key];
@@ -390,6 +421,8 @@ export class ResearchService {
       ? await this.modelExecution.resolveForPrompt({
           key: promptKey,
           stage: pipelineInput.extraction.stage,
+          enableWebSearch: options?.enableWebSearch,
+          enableBraveSearch: options?.enableBraveSearch,
         })
       : null;
     const runtimeTraceMeta: Record<string, unknown> = {};

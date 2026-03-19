@@ -6,8 +6,8 @@ import { ModelPurpose } from "../interfaces/pipeline.interface";
 import { ResearchAgentKey } from "../interfaces/agent.interface";
 import { AiModelOverrideService } from "./ai-model-override.service";
 
-const DEFAULT_RESEARCH_ATTEMPT_TIMEOUT_MS = 3_600_000;
-const DEFAULT_RESEARCH_AGENT_HARD_TIMEOUT_MS = 10_860_000;
+const DEFAULT_RESEARCH_ATTEMPT_TIMEOUT_MS = 600_000; // 10 minutes per attempt
+const DEFAULT_RESEARCH_AGENT_HARD_TIMEOUT_MS = 1_500_000; // 25 minutes hard ceiling per agent
 
 @Injectable()
 export class AiConfigService {
@@ -65,12 +65,12 @@ export class AiConfigService {
   getResearchAgentStaggerMs(): number {
     const configured = this.config.get<number>("AI_RESEARCH_AGENT_STAGGER_MS");
     if (typeof configured !== "number" || !Number.isFinite(configured)) {
-      return 5_000;
+      return 180_000; // 3 minutes between each agent start
     }
 
     const normalized = Math.floor(configured);
     if (normalized < 0) {
-      return 5_000;
+      return 180_000;
     }
 
     return normalized;

@@ -86,10 +86,6 @@ export class ExitPotentialEvaluationAgent extends BaseEvaluationAgent<ExitPotent
     });
   }
 
-  protected override getMaxOutputTokens(): number {
-    return 16_000; // needs more room for reasoning tokens + 3 research inputs
-  }
-
   protected override getEvaluationAttemptTimeoutMs(): number {
     return 300_000; // 5 minutes per attempt (3 research inputs + complex schema)
   }

@@ -1,5 +1,5 @@
 import { Injectable, Logger, Optional, Inject, forwardRef } from "@nestjs/common";
-import { ALL_RESEARCH_AGENTS, PHASE_2_RESEARCH_AGENTS, RESEARCH_AGENTS } from "../agents/research";
+import { ALL_RESEARCH_AGENTS } from "../agents/research";
 import type {
   PipelineFallbackReason,
   ResearchAgentConfig,
@@ -60,8 +60,7 @@ export interface ResearchRunOptions {
   }) => void;
 }
 
-const PHASE_1_KEYS = Object.keys(RESEARCH_AGENTS) as Array<keyof typeof RESEARCH_AGENTS>;
-const PHASE_2_KEYS = Object.keys(PHASE_2_RESEARCH_AGENTS) as Array<keyof typeof PHASE_2_RESEARCH_AGENTS>;
+const ALL_RESEARCH_KEYS = Object.keys(ALL_RESEARCH_AGENTS) as Array<keyof typeof ALL_RESEARCH_AGENTS>;
 const MIN_RESEARCH_REPORT_LENGTH = 2500;
 const RESEARCH_ORCHESTRATOR_FALLBACK_GUIDANCE =
   "Focus research on high-confidence evidence for team execution, market timing, product differentiation, and material risks.";
@@ -170,7 +169,7 @@ export class ResearchService {
     const fallbackByAgent = new Map<ResearchAgentKey, boolean>();
 
     const dedupeSources = new Map<string, SourceEntry>();
-    const { phase1Keys, phase2Keys } = await this.resolveResearchKeys();
+    const allKeys = await this.resolveAllResearchKeys();
     for (const source of result.sources) {
       const sourceKey = this.getSourceKey(source);
       if (!dedupeSources.has(sourceKey)) {
@@ -237,51 +236,17 @@ export class ResearchService {
       return result;
     }
 
-    // ── Phase 1: team, market, product, news (parallel) ──
+    // ── All agents in a single staggered wave ──
     await Promise.all(
-      phase1Keys.map(async (key, index) => {
+      allKeys.map(async (key, index) => {
         const settledResult = await this.settleAgentRun(
           key,
           this.runSingleAgentSafe(
             startupId,
             pipelineRunId,
             key,
-            RESEARCH_AGENTS[key],
+            ALL_RESEARCH_AGENTS[key],
             pipelineInput,
-            {
-              onAgentStart: options?.onAgentStart,
-              startDelayMs: index * researchAgentStaggerMs,
-              phaseRetryCount,
-              ...this.getAgentSearchConfig(nodeConfigs, key),
-            },
-          ),
-        );
-        const agentResult = this.unwrapSettled(key, settledResult);
-        await this.handleAgentResult({
-          startupId,
-          pipelineRunId,
-          key,
-          agentResult,
-          result,
-          dedupeSources,
-          onAgentComplete: options?.onAgentComplete,
-        });
-        fallbackByAgent.set(key, agentResult.usedFallback);
-      }),
-    );
-
-    // ── Phase 2: competitor (sequential, receives phase 1 context) ──
-    const competitorInput = this.buildCompetitorInput(pipelineInput, result);
-    await Promise.all(
-      phase2Keys.map(async (key, index) => {
-        const settledResult = await this.settleAgentRun(
-          key,
-          this.runSingleAgentSafe(
-            startupId,
-            pipelineRunId,
-            key,
-            PHASE_2_RESEARCH_AGENTS[key],
-            competitorInput,
             {
               onAgentStart: options?.onAgentStart,
               startDelayMs: index * researchAgentStaggerMs,
@@ -309,35 +274,11 @@ export class ResearchService {
     result.researchParameters = researchParameters;
     result.researchFallbackSummary = this.buildResearchFallbackSummary(
       fallbackByAgent,
-      [...phase1Keys, ...phase2Keys],
+      allKeys,
     );
     this.logResearchFallbackSummaryIfNeeded(startupId, result.researchFallbackSummary);
 
     return result;
-  }
-
-  private buildCompetitorInput(
-    base: ResearchPipelineInput,
-    phase1Result: ResearchResult,
-  ): ResearchPipelineInput {
-    const phase1Narrative = this.buildCombinedReportText({
-      ...phase1Result,
-      competitor: null,
-    });
-
-    return {
-      ...base,
-      extraction: {
-        ...base.extraction,
-        // Inject phase 1 narrative report context for competitor sequencing.
-        rawText: [
-          base.extraction.rawText,
-          phase1Narrative ? `\n[Phase 1 Research Reports]\n${phase1Narrative}` : "",
-        ]
-          .filter(Boolean)
-          .join(""),
-      },
-    };
   }
 
   private async runSingleAgentSafe(
@@ -1159,15 +1100,9 @@ export class ResearchService {
     return merged;
   }
 
-  private async resolveResearchKeys(): Promise<{
-    phase1Keys: Array<keyof typeof RESEARCH_AGENTS>;
-    phase2Keys: Array<keyof typeof PHASE_2_RESEARCH_AGENTS>;
-  }> {
+  private async resolveAllResearchKeys(): Promise<Array<keyof typeof ALL_RESEARCH_AGENTS>> {
     if (!this.agentConfigService) {
-      return {
-        phase1Keys: [...PHASE_1_KEYS],
-        phase2Keys: [...PHASE_2_KEYS],
-      };
+      return [...ALL_RESEARCH_KEYS];
     }
 
     const configs = await this.agentConfigService.getEnabled(
@@ -1176,42 +1111,15 @@ export class ResearchService {
     );
 
     if (configs.length === 0) {
-      return {
-        phase1Keys: [...PHASE_1_KEYS],
-        phase2Keys: [...PHASE_2_KEYS],
-      };
+      return [...ALL_RESEARCH_KEYS];
     }
 
-    const allKeys = new Set(Object.keys(ALL_RESEARCH_AGENTS));
-    const configured = configs
-      .map((config) => ({
-        key: config.agentKey,
-        executionPhase: config.executionPhase,
-      }))
-      .filter((item): item is { key: ResearchAgentKey; executionPhase: number } =>
-        allKeys.has(item.key),
-      );
+    const knownKeys = new Set(Object.keys(ALL_RESEARCH_AGENTS));
+    const enabled = configs
+      .map((config) => config.agentKey)
+      .filter((key): key is keyof typeof ALL_RESEARCH_AGENTS => knownKeys.has(key));
 
-    if (configured.length === 0) {
-      return {
-        phase1Keys: [...PHASE_1_KEYS],
-        phase2Keys: [...PHASE_2_KEYS],
-      };
-    }
-
-    const phase1Keys = configured
-      .filter((item) => item.executionPhase <= 1)
-      .map((item) => item.key)
-      .filter((key): key is keyof typeof RESEARCH_AGENTS => key in RESEARCH_AGENTS);
-    const phase2Keys = configured
-      .filter((item) => item.executionPhase > 1)
-      .map((item) => item.key)
-      .filter((key): key is keyof typeof PHASE_2_RESEARCH_AGENTS => key in PHASE_2_RESEARCH_AGENTS);
-
-    return {
-      phase1Keys: phase1Keys.length > 0 ? phase1Keys : [...PHASE_1_KEYS],
-      phase2Keys,
-    };
+    return enabled.length > 0 ? enabled : [...ALL_RESEARCH_KEYS];
   }
 }
 

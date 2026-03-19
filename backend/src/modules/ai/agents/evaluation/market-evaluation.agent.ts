@@ -104,9 +104,9 @@ export class MarketEvaluationAgent extends BaseEvaluationAgent<MarketEvaluation>
   }
 
   protected override normalizeOutputCandidate(candidate: unknown): unknown {
-    return normalizeBaseEvaluationCandidate(
-      this.normalizeLegacyMarketPayload(candidate),
-    );
+    const legacyNormalized = this.normalizeLegacyMarketPayload(candidate);
+    const enriched = this.enrichEmptyStructuredFields(legacyNormalized);
+    return normalizeBaseEvaluationCandidate(enriched);
   }
 
   private normalizeLegacyMarketPayload(candidate: unknown): unknown {
@@ -694,6 +694,344 @@ export class MarketEvaluationAgent extends BaseEvaluationAgent<MarketEvaluation>
     if (!text) return null;
     const match = text.match(/\d+(?:\.\d+)?%/);
     return match?.[0] ?? null;
+  }
+
+  /**
+   * When the model generates rich narrative but leaves structured objects empty,
+   * extract data from the narrative/keyFindings/risks to populate them.
+   */
+  private enrichEmptyStructuredFields(candidate: unknown): unknown {
+    if (!this.isRecord(candidate)) return candidate;
+
+    const corpus = [
+      this.toString(candidate.narrativeSummary),
+      ...this.toStringArray(candidate.keyFindings),
+      ...this.toStringArray(candidate.risks),
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    if (!corpus || corpus.length < 100) return candidate;
+
+    const sources = this.toStringArray(candidate.sources);
+    const structuredSources = this.buildStructuredMarketSources(
+      sources,
+      this.toString(candidate.narrativeSummary) ?? "",
+    );
+    const confidence = this.normalizeConfidence([candidate.confidence]);
+    const score = this.toNumber(candidate.score) ?? 50;
+
+    // Enrich marketSizing if empty
+    if (!this.hasPopulatedNestedFields(candidate.marketSizing)) {
+      const tamValue = this.extractLabeledMarketValue(corpus, "tam")
+        ?? this.extractMoneyRange(corpus, /(?:tam|total addressable market)[^.]{0,200}?(\$[\d.,]+\s?(?:[KMBT]|bn|million|billion|trillion)(?:\s*[-–to]+\s*\$[\d.,]+\s?(?:[KMBT]|bn|million|billion|trillion))?)/i)
+        ?? this.extractFirstMoneyValue(corpus);
+      const samValue = this.extractLabeledMarketValue(corpus, "sam")
+        ?? this.extractMoneyRange(corpus, /(?:sam|serviceable)[^.]{0,200}?(\$[\d.,]+\s?(?:[KMBT]|bn|million|billion|trillion)(?:\s*[-–to]+\s*\$[\d.,]+\s?(?:[KMBT]|bn|million|billion|trillion))?)/i);
+      const somValue = this.extractLabeledMarketValue(corpus, "som");
+      const bottomUpCalc = this.extractBottomUpCalculation(corpus);
+      const deckTam = this.extractDeckClaim(corpus, /deck(?:'s|'s)?\s+(?:claims?|cites?|states?)?[^.]{0,200}?(\$[\d.,]+\s?(?:[KMBT]|bn|million|billion|trillion)[^.]{0,50})/i);
+
+      candidate.marketSizing = {
+        tam: {
+          value: tamValue ?? "Unknown",
+          methodology: "blended",
+          sources: structuredSources,
+          confidence,
+        },
+        sam: {
+          value: samValue ?? "Unknown",
+          methodology: samValue ? "top-down" : "Unknown",
+          filters: samValue ? ["Inferred from narrative analysis"] : [],
+          sources: structuredSources,
+          confidence,
+        },
+        som: {
+          value: somValue ?? "Unknown",
+          methodology: somValue ? "bottom-up" : "Unknown",
+          assumptions: somValue ? "Derived from narrative analysis" : "Unknown",
+          confidence,
+        },
+        bottomUpSanityCheck: {
+          calculation: bottomUpCalc ?? "Not performed",
+          notes: bottomUpCalc ? "Extracted from narrative bottom-up analysis" : "No notes",
+        },
+        deckVsResearch: {
+          tamClaimed: deckTam ?? "Unknown",
+          tamResearched: tamValue ?? "Unknown",
+          discrepancyFlag: deckTam && tamValue ? "true" : "unknown",
+          notes: deckTam ? "Deck claim extracted from narrative analysis" : "No discrepancy noted",
+        },
+      };
+    }
+
+    // Enrich marketGrowthAndTiming if empty
+    if (!this.hasPopulatedNestedFields(candidate.marketGrowthAndTiming)) {
+      const cagr = this.extractPercent(corpus) ?? "Unknown";
+      const whyNowThesis = this.extractWhyNow(corpus);
+      const lifecycle = score >= 80 ? "growth" : score >= 65 ? "early_growth" : "emerging";
+      const trajectory = corpus.toLowerCase().includes("accelerat") ? "accelerating"
+        : corpus.toLowerCase().includes("decelerat") ? "decelerating"
+        : "stable";
+
+      candidate.marketGrowthAndTiming = {
+        growthRate: {
+          cagr,
+          period: this.extractPeriod(corpus) ?? "Unknown",
+          source: sources[0] ?? "Extracted from narrative",
+          deckClaimed: this.extractDeckGrowthClaim(corpus) ?? "Unknown",
+          discrepancyFlag: "unknown",
+          trajectory,
+        },
+        whyNow: {
+          thesis: whyNowThesis ?? "Unknown",
+          supportedByResearch: whyNowThesis !== null,
+          evidence: this.extractWhyNowEvidence(corpus),
+        },
+        marketLifecycle: {
+          position: lifecycle,
+          evidence: this.extractLifecycleEvidence(corpus) ?? "Unknown",
+        },
+      };
+    }
+
+    // Enrich marketStructure if empty
+    if (!this.hasPopulatedNestedFields(candidate.marketStructure)) {
+      const lower = corpus.toLowerCase();
+      const structureType = lower.includes("fragment") ? "fragmented"
+        : lower.includes("concentrat") ? "concentrated"
+        : lower.includes("consolidat") ? "consolidating"
+        : "emerging";
+
+      candidate.marketStructure = {
+        structureType,
+        concentrationTrend: {
+          direction: lower.includes("consolidat") ? "consolidating"
+            : lower.includes("fragment") ? "fragmenting"
+            : "stable",
+          evidence: this.extractStructureEvidence(corpus) ?? "Unknown",
+        },
+        entryConditions: this.extractEntryConditions(corpus),
+        tailwinds: this.extractMarketForces(corpus, "tailwind"),
+        headwinds: this.extractMarketForces(corpus, "headwind"),
+      };
+    }
+
+    // Enrich scoring if empty
+    if (!this.hasPopulatedNestedFields(candidate.scoring)) {
+      candidate.scoring = {
+        overallScore: score,
+        confidence,
+        scoringBasis: this.extractScoringBasis(corpus) ?? `Score of ${score} based on market analysis.`,
+        subScores: this.extractSubScores(corpus, score),
+      };
+    }
+
+    // Enrich founderPitchRecommendations from dataGaps if empty
+    if (!Array.isArray(candidate.founderPitchRecommendations) || candidate.founderPitchRecommendations.length === 0) {
+      const gaps = this.toStringArray(candidate.dataGaps);
+      candidate.founderPitchRecommendations = gaps.slice(0, 3).map((gap) => ({
+        deckMissingElement: gap.slice(0, 120),
+        whyItMatters: "Investors need this data to validate market opportunity",
+        recommendation: "Add this to the pitch deck with supporting evidence",
+      }));
+    }
+
+    // Enrich diligenceItems from dataGaps if empty
+    if (!Array.isArray(candidate.diligenceItems) || candidate.diligenceItems.length === 0) {
+      candidate.diligenceItems = this.toStringArray(candidate.dataGaps).slice(0, 5);
+    }
+
+    return candidate;
+  }
+
+  private hasPopulatedNestedFields(obj: unknown): boolean {
+    if (!this.isRecord(obj)) return false;
+    const keys = Object.keys(obj);
+    if (keys.length === 0) return false;
+    return keys.some((key) => {
+      const val = obj[key];
+      if (typeof val === "string") {
+        const lower = val.trim().toLowerCase();
+        return lower.length > 0 && !["unknown", "not performed", "no notes", "no discrepancy noted", "scoring basis pending"].includes(lower);
+      }
+      if (typeof val === "number") return true;
+      if (typeof val === "boolean") return true;
+      if (Array.isArray(val)) return val.length > 0;
+      if (this.isRecord(val)) return this.hasPopulatedNestedFields(val);
+      return false;
+    });
+  }
+
+  private extractMoneyRange(_corpus: string, pattern: RegExp): string | null {
+    const match = _corpus.match(pattern);
+    return match?.[1]?.replace(/\s+/g, " ").trim() ?? null;
+  }
+
+  private extractFirstMoneyValue(text: string): string | null {
+    const match = text.match(/\$[\d.,]+\s?(?:[KMBT]|bn|million|billion|trillion)/i);
+    return match?.[0]?.replace(/\s+/g, " ").trim() ?? null;
+  }
+
+  private extractBottomUpCalculation(text: string): string | null {
+    const patterns = [
+      /bottom[- ]up[^.]*?(?:=|:)\s*([^.]{20,200})/i,
+      /sanity check[^.]*?(?:=|:)\s*([^.]{20,200})/i,
+      /(\$[\d.,]+[KMBT]?\s*×\s*[\d.,]+[^.]{10,150}=\s*[~$\d.,]+[^.]{0,50})/i,
+    ];
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match?.[1]) return match[1].replace(/\s+/g, " ").trim().slice(0, 300);
+    }
+    return null;
+  }
+
+  private extractDeckClaim(text: string, pattern: RegExp): string | null {
+    const match = text.match(pattern);
+    return match?.[1]?.replace(/\s+/g, " ").trim() ?? null;
+  }
+
+  private extractWhyNow(text: string): string | null {
+    const patterns = [
+      /why now[^.]*?[:]\s*([^.]{30,300}\.)/i,
+      /timing[^.]*?[:]\s*([^.]{30,300}\.)/i,
+      /what(?:'s|'s)?\s+changed[^.]*?([^.]{30,300}\.)/i,
+    ];
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match?.[1]) return match[1].trim().slice(0, 300);
+    }
+    // Fallback: look for sentences with timing/momentum keywords
+    const sentences = text.split(/[.!]\s+/);
+    for (const sentence of sentences) {
+      if (/momentum|accelerat|tailwind|catalyst|enabling|shift/i.test(sentence) && sentence.length > 40) {
+        return sentence.trim().slice(0, 300);
+      }
+    }
+    return null;
+  }
+
+  private extractWhyNowEvidence(text: string): string[] {
+    const evidence: string[] = [];
+    const sentences = text.split(/[.!]\s+/);
+    for (const sentence of sentences) {
+      if (/tailwind|catalyst|regulatory|technology shift|macro|enabling|adoption|demand/i.test(sentence) && sentence.length > 30) {
+        evidence.push(sentence.trim().slice(0, 200));
+        if (evidence.length >= 3) break;
+      }
+    }
+    return evidence;
+  }
+
+  private extractPeriod(text: string): string | null {
+    const match = text.match(/(\d{4})\s*[-–to]+\s*(\d{4})/);
+    return match ? `${match[1]}–${match[2]}` : null;
+  }
+
+  private extractDeckGrowthClaim(text: string): string | null {
+    const match = text.match(/deck(?:'s|'s)?[^.]*?(\d+(?:\.\d+)?%\s*(?:CAGR|growth|YoY)?)/i);
+    return match?.[1]?.trim() ?? null;
+  }
+
+  private extractLifecycleEvidence(text: string): string | null {
+    const sentences = text.split(/[.!]\s+/);
+    for (const sentence of sentences) {
+      if (/lifecycle|growth stage|emerging|mature|early|nascent/i.test(sentence) && sentence.length > 30) {
+        return sentence.trim().slice(0, 200);
+      }
+    }
+    return null;
+  }
+
+  private extractStructureEvidence(text: string): string | null {
+    const sentences = text.split(/[.!]\s+/);
+    for (const sentence of sentences) {
+      if (/fragment|consolidat|concentrat|contested|competitive|structure/i.test(sentence) && sentence.length > 30) {
+        return sentence.trim().slice(0, 200);
+      }
+    }
+    return null;
+  }
+
+  private extractEntryConditions(text: string): Array<{ factor: string; severity: string; note: string }> {
+    const conditions: Array<{ factor: string; severity: string; note: string }> = [];
+    const barriers = [
+      { pattern: /regulatory\s+barrier/i, factor: "Regulatory barriers" },
+      { pattern: /capital\s+requirement/i, factor: "Capital requirements" },
+      { pattern: /incumbent\s+lock/i, factor: "Incumbent lock-in" },
+      { pattern: /distribution\s+access/i, factor: "Distribution access" },
+      { pattern: /technology\s+barrier/i, factor: "Technology barriers" },
+      { pattern: /hyperscaler\s+bundl/i, factor: "Hyperscaler bundling" },
+      { pattern: /commoditiz/i, factor: "Commoditization risk" },
+      { pattern: /export\s+control/i, factor: "Export controls" },
+    ];
+    for (const barrier of barriers) {
+      if (barrier.pattern.test(text)) {
+        const sentences = text.split(/[.!]\s+/);
+        const relevantSentence = sentences.find((s) => barrier.pattern.test(s));
+        conditions.push({
+          factor: barrier.factor,
+          severity: "moderate",
+          note: relevantSentence?.trim().slice(0, 200) ?? barrier.factor,
+        });
+      }
+    }
+    return conditions;
+  }
+
+  private extractMarketForces(text: string, type: "tailwind" | "headwind"): Array<{ factor: string; source: string; impact: string }> {
+    const forces: Array<{ factor: string; source: string; impact: string }> = [];
+    const isHeadwind = type === "headwind";
+    const keywords = isHeadwind
+      ? /headwind|risk|barrier|compression|bundling|commoditiz|regulatory|constraint|challenge/i
+      : /tailwind|momentum|growth|catalyst|expansion|demand|adoption|accelerat/i;
+
+    const sentences = text.split(/[.!]\s+/);
+    for (const sentence of sentences) {
+      if (keywords.test(sentence) && sentence.length > 30) {
+        // Try to extract source attribution
+        const sourceMatch = sentence.match(/\*(?:Source:?\s*)?([^*]+)\*/);
+        forces.push({
+          factor: sentence.replace(/\*[^*]*\*/g, "").trim().slice(0, 200),
+          source: sourceMatch?.[1]?.trim() ?? "Narrative analysis",
+          impact: sentence.length > 100 ? "high" : "medium",
+        });
+        if (forces.length >= 4) break;
+      }
+    }
+    return forces;
+  }
+
+  private extractScoringBasis(text: string): string | null {
+    const sentences = text.split(/[.!]\s+/);
+    for (const sentence of sentences) {
+      if (/score|rating|assessment|overall/i.test(sentence) && sentence.length > 30) {
+        return sentence.trim().slice(0, 200);
+      }
+    }
+    return null;
+  }
+
+  private extractSubScores(text: string, overallScore: number): Array<{ name: string; score: number; rationale: string }> {
+    const lower = text.toLowerCase();
+    const hasStrongSizing = /tier[- ]?1|multiple sources|triangulat/i.test(text);
+    const hasWeakSizing = /single source|no.*source|limited/i.test(text);
+    const hasStrongTiming = /right time|favorable timing|accelerat/i.test(text);
+    const hasRisks = /headwind|risk|barrier|challenge/i.test(text);
+
+    const sizingScore = hasStrongSizing ? Math.min(overallScore + 5, 100)
+      : hasWeakSizing ? Math.max(overallScore - 10, 0)
+      : overallScore;
+    const timingScore = hasStrongTiming ? Math.min(overallScore + 3, 100) : overallScore;
+    const structureScore = hasRisks
+      ? Math.max(overallScore - 5, 0)
+      : lower.includes("favorable") ? Math.min(overallScore + 5, 100) : overallScore;
+
+    return [
+      { name: "Market Size & Growth", score: sizingScore, rationale: `Based on available sizing evidence and source quality` },
+      { name: "Market Reality Check & Why Now", score: timingScore, rationale: `Based on timing thesis and demand validation` },
+      { name: "Market Structure", score: structureScore, rationale: `Based on competitive dynamics and entry conditions` },
+    ];
   }
 
   fallback({ extraction: _extraction }: EvaluationPipelineInput): MarketEvaluation {

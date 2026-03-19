@@ -7,7 +7,7 @@ import { TeamResearchAgent } from "./team-research.agent";
 
 export type ResearchAgentOutput = string;
 
-/** Phase 1 agents run in parallel */
+/** @deprecated Use ALL_RESEARCH_AGENTS — all agents now run in a single staggered wave */
 export const RESEARCH_AGENTS: Record<
   "team" | "market" | "product" | "news",
   ResearchAgentConfig<ResearchAgentOutput>
@@ -18,7 +18,7 @@ export const RESEARCH_AGENTS: Record<
   news: NewsResearchAgent,
 };
 
-/** Phase 2 agents run after phase 1 completes */
+/** @deprecated Use ALL_RESEARCH_AGENTS — all agents now run in a single staggered wave */
 export const PHASE_2_RESEARCH_AGENTS: Record<
   "competitor",
   ResearchAgentConfig<ResearchAgentOutput>

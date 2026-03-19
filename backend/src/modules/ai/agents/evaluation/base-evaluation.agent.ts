@@ -1012,7 +1012,7 @@ export abstract class BaseEvaluationAgent<TOutput>
     system: string;
     prompt: string;
     temperature?: number;
-    maxOutputTokens: number;
+    maxOutputTokens?: number;
     tools?: Parameters<typeof generateText>[0]["tools"];
     toolChoice?: Parameters<typeof generateText>[0]["toolChoice"];
     providerOptions?: Parameters<typeof generateText>[0]["providerOptions"];
@@ -1023,12 +1023,15 @@ export abstract class BaseEvaluationAgent<TOutput>
       model: params.model,
       system: params.system,
       prompt: params.prompt,
-      maxOutputTokens: params.maxOutputTokens,
       tools: params.tools,
       toolChoice: params.toolChoice,
       providerOptions: params.providerOptions,
       abortSignal: params.abortSignal,
     };
+
+    if (typeof params.maxOutputTokens === "number" && params.maxOutputTokens > 0) {
+      input.maxOutputTokens = params.maxOutputTokens;
+    }
 
     if (params.schema) {
       input.output = Output.object({ schema: params.schema });
@@ -1357,8 +1360,8 @@ export abstract class BaseEvaluationAgent<TOutput>
     return hardTimeoutMs - (Date.now() - startedAtMs);
   }
 
-  protected getMaxOutputTokens(): number {
-    return this.aiConfig.getEvaluationMaxOutputTokens();
+  protected getMaxOutputTokens(): number | undefined {
+    return undefined; // Let the model use its full output capacity
   }
 
   protected getEvaluationAttemptTimeoutMs(): number {

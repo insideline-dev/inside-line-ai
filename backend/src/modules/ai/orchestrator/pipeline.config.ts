@@ -72,7 +72,7 @@ export const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
       phase: PipelinePhase.RESEARCH,
       dependsOn: [PipelinePhase.ENRICHMENT, PipelinePhase.SCRAPING],
       canRunParallelWith: [],
-      timeoutMs: 15 * 60 * 1000,
+      timeoutMs: 40 * 60 * 1000, // 40 minutes — accommodates 5 staggered agents + hard timeout
       maxRetries: 2,
       required: false,
       queue: QUEUE_NAMES.AI_RESEARCH,

@@ -172,7 +172,7 @@ export function FounderRecommendationsTab({ evaluation }: FounderRecommendations
           </MarkdownText>
 
           {(whatsWorking.length > 0 || pathToInevitability.length > 0) && (
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-4">
               {whatsWorking.length > 0 && (
                 <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-4 dark:border-emerald-900 dark:bg-emerald-950/30">
                   <div className="flex items-center gap-2 mb-3">

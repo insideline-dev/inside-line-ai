@@ -102,9 +102,6 @@ export class SynthesisService {
       evaluation,
     );
 
-    const percentileRank = await this.scoreComputation.computePercentileRank(synthesis.overallScore);
-    synthesis.percentileRank = percentileRank;
-
     const confidenceScore = this.scoreComputation.computeConfidenceScore(
       evaluation as unknown as Record<string, unknown>,
       normalizedWeights,
@@ -202,8 +199,6 @@ export class SynthesisService {
     research: ResearchResult,
   ): Promise<void> {
     const { overallScore, sectionScores } = synthesis;
-    const percentileRank =
-      await this.scoreComputation.computePercentileRank(overallScore);
     const evaluationWithMemoNarratives = this.applyMemoNarrativesFromSynthesis(
       evaluation,
       synthesis.investorMemo,
@@ -243,7 +238,6 @@ export class SynthesisService {
       exitPotentialScore: evaluationWithMemoNarratives.exitPotential.score,
       sectionScores,
       overallScore,
-      percentileRank,
       confidenceScore: synthesis.confidenceScore ?? null,
       keyStrengths: synthesis.keyStrengths,
       keyRisks: synthesis.keyRisks,
@@ -265,7 +259,7 @@ export class SynthesisService {
 
       await tx
         .update(startup)
-        .set({ overallScore, percentileRank })
+        .set({ overallScore })
         .where(eq(startup.id, startupId));
     });
   }

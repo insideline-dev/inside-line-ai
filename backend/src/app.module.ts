@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { ScheduleModule } from "@nestjs/schedule";
 import { ConfigModule } from "./config";
 import { DatabaseModule } from "./database";
 import { HealthModule } from "./health/health.module";
@@ -21,6 +22,7 @@ import { ClaraModule } from "./modules/clara/clara.module";
 @Module({
   imports: [
     ConfigModule,
+    ScheduleModule.forRoot(),
     DatabaseModule,
     QueueModule,
     StorageModule,

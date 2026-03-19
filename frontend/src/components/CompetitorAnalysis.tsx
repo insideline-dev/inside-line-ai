@@ -979,7 +979,7 @@ function CompactCompetitorCard({
   const href = website || getCompetitorWebsite(name);
   return (
     <div
-      className="min-w-[220px] max-w-[280px] shrink-0 rounded-lg border bg-card p-3 space-y-2"
+      className="rounded-lg border bg-card p-3 space-y-2"
       data-testid={`compact-competitor-${index}`}
     >
       <a
@@ -1058,39 +1058,34 @@ function BasicCompetitorLandscapeCard({
   const vulnerabilities = competitivePositioning?.vulnerabilities || [];
 
 
-  const getDifferentiationTypeColor = (type?: string) => {
+  const getDifferentiationBorderColor = (type?: string) => {
     switch (type?.toLowerCase()) {
-      case "technology":
-        return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400";
-      case "network_effects":
-        return "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400";
-      case "data":
-        return "bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-400";
-      case "brand":
-        return "bg-pink-100 text-pink-800 dark:bg-pink-900/30 dark:text-pink-400";
-      case "cost":
-        return "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400";
-      case "regulatory":
-        return "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-400";
-      default:
-        return "bg-muted text-muted-foreground";
+      case "technology": return "border-l-blue-500";
+      case "network_effects": return "border-l-purple-500";
+      case "data": return "border-l-cyan-500";
+      case "brand": return "border-l-pink-500";
+      case "cost": return "border-l-orange-500";
+      case "regulatory": return "border-l-indigo-500";
+      default: return "border-l-muted-foreground";
     }
   };
 
-  const getDurabilityColor = (durability?: string) => {
+  const getDurabilityBorderColor = (durability?: string) => {
     switch (durability?.toLowerCase()) {
-      case "strong":
-      case "high":
-        return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400";
-      case "moderate":
-      case "medium":
-        return "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400";
-      case "weak":
-      case "low":
-        return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400";
-      default:
-        return "bg-muted text-muted-foreground";
+      case "strong": case "high": return "border-l-green-500";
+      case "moderate": case "medium": return "border-l-amber-500";
+      case "weak": case "low": return "border-l-red-500";
+      default: return "border-l-muted-foreground";
     }
+  };
+
+  const differentiationIcons: Record<string, typeof Cpu> = {
+    technology: Cpu,
+    network_effects: Users,
+    data: Zap,
+    brand: Target,
+    cost: DollarSign,
+    regulatory: Scale,
   };
 
   const getGapColor = (gap?: string) => {
@@ -1191,28 +1186,43 @@ function BasicCompetitorLandscapeCard({
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex flex-wrap items-center gap-2">
-              {competitivePositioning?.differentiationType && (
-                <Badge
-                  className={cn(
-                    "capitalize text-xs",
-                    getDifferentiationTypeColor(competitivePositioning.differentiationType),
-                  )}
-                  data-testid="badge-differentiation-type"
-                >
-                  {competitivePositioning.differentiationType.replace(/_/g, " ")}
-                </Badge>
-              )}
+            <div className="grid grid-cols-2 gap-3">
+              {competitivePositioning?.differentiationType && (() => {
+                const DiffIcon = differentiationIcons[competitivePositioning.differentiationType.toLowerCase()] ?? Target;
+                return (
+                  <div
+                    className={cn(
+                      "rounded-lg border border-l-4 p-3 space-y-1",
+                      getDifferentiationBorderColor(competitivePositioning.differentiationType),
+                    )}
+                    data-testid="badge-differentiation-type"
+                  >
+                    <p className="text-xs font-medium text-muted-foreground">Differentiation</p>
+                    <div className="flex items-center gap-1.5">
+                      <DiffIcon className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm font-semibold capitalize">
+                        {competitivePositioning.differentiationType.replace(/_/g, " ")}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
               {competitivePositioning?.differentiationDurability && (
-                <Badge
+                <div
                   className={cn(
-                    "capitalize text-xs",
-                    getDurabilityColor(competitivePositioning.differentiationDurability),
+                    "rounded-lg border border-l-4 p-3 space-y-1",
+                    getDurabilityBorderColor(competitivePositioning.differentiationDurability),
                   )}
                   data-testid="badge-durability"
                 >
-                  {competitivePositioning.differentiationDurability} durability
-                </Badge>
+                  <p className="text-xs font-medium text-muted-foreground">Durability</p>
+                  <div className="flex items-center gap-1.5">
+                    <Shield className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm font-semibold capitalize">
+                      {competitivePositioning.differentiationDurability}
+                    </span>
+                  </div>
+                </div>
               )}
             </div>
             {competitivePositioning?.differentiationSummary && (
@@ -1249,7 +1259,7 @@ function BasicCompetitorLandscapeCard({
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex gap-3 overflow-x-auto pb-2" data-testid="list-direct-competitor-names">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" data-testid="list-direct-competitor-names">
               {directCards.map((c, i) => (
                 <CompactCompetitorCard key={`${c.name}-${i}`} name={c.name} description={c.description} funding={c.funding.totalRaised} website={c.website} index={i} />
               ))}
@@ -1268,7 +1278,7 @@ function BasicCompetitorLandscapeCard({
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex gap-3 overflow-x-auto pb-2" data-testid="list-indirect-competitor-names">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" data-testid="list-indirect-competitor-names">
               {indirectCards.map((c, i) => (
                 <CompactCompetitorCard
                   key={`${c.name}-${i}`}

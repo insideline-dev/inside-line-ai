@@ -6,7 +6,6 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { TeamGrid } from "@/components/TeamProfile";
 import { SectionScoreCard } from "@/components/SectionScoreCard";
 import { DataGapsSection, parseDataGapItems } from "@/components/DataGapsSection";
@@ -588,13 +587,12 @@ export function TeamTabContent({
               <Users className="h-5 w-5 text-primary" />
               Founder-Market Fit
               {roundedFmfScore !== null && (
-                <Badge
-                  variant="secondary"
-                  className={cn("ml-auto tabular-nums", fmfScoreColor(roundedFmfScore))}
+                <span
+                  className={cn("ml-auto text-2xl font-bold tabular-nums", fmfScoreColor(roundedFmfScore))}
                   data-testid="text-fmf-score"
                 >
-                  {roundedFmfScore}/100
-                </Badge>
+                  {roundedFmfScore}<span className="text-sm font-medium text-muted-foreground">/100</span>
+                </span>
               )}
             </CardTitle>
           </CardHeader>

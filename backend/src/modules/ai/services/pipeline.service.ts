@@ -89,9 +89,9 @@ interface QueuePhaseParams {
   knownState?: PipelineState;
 }
 
-const MIN_RESEARCH_PHASE_TIMEOUT_MS = 3_600_000;
-const DEFAULT_RESEARCH_AGENT_STAGGER_MS = 5_000;
-const RESEARCH_PHASE_1_MAX_STAGGER_OFFSETS = 3;
+const MIN_RESEARCH_PHASE_TIMEOUT_MS = 2_400_000; // 40 minutes minimum
+const DEFAULT_RESEARCH_AGENT_STAGGER_MS = 180_000; // 3 minutes
+const RESEARCH_AGENT_COUNT = 5;
 export const PIPELINE_MISSING_FIELDS_ERROR_PREFIX =
   "Pipeline start blocked: missing critical fields";
 
@@ -1499,17 +1499,14 @@ export class PipelineService {
         ? config.getResearchAgentStaggerMs()
         : DEFAULT_RESEARCH_AGENT_STAGGER_MS;
 
-    // Research runs in two waves: phase 1 staggered agents, then competitor agent.
-    // Budget phase timeout to accommodate worst-case deep-research duration.
-    const phase1MaxStartDelayMs =
-      Math.max(0, researchStaggerMs) * RESEARCH_PHASE_1_MAX_STAGGER_OFFSETS;
-    const deepResearchBudgetMs = researchHardTimeoutMs * 2 + phase1MaxStartDelayMs;
+    // All agents run in a single staggered wave. Budget = max stagger delay + single agent hard timeout.
+    const maxStaggerDelayMs = Math.max(0, researchStaggerMs) * (RESEARCH_AGENT_COUNT - 1);
+    const singleWaveBudgetMs = researchHardTimeoutMs + maxStaggerDelayMs;
 
     return Math.max(
       normalizedConfiguredTimeout,
       MIN_RESEARCH_PHASE_TIMEOUT_MS,
-      researchHardTimeoutMs,
-      deepResearchBudgetMs,
+      singleWaveBudgetMs,
     );
   }
 

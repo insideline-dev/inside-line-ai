@@ -54,6 +54,7 @@ export class MarketEvaluationAgent extends BaseEvaluationAgent<MarketEvaluation>
 
     const tamPattern = /(tam|total addressable market|market size)/i;
     const samPattern = /(sam|serviceable addressable market|serviceable available market)/i;
+    const somPattern = /(som|serviceable obtainable market)/i;
     const growthPattern = /(cagr|growth rate|year[- ]over[- ]year|yoy|market growth)/i;
 
     // Fallback chain: structured JSON → market research text → pitch deck rawText
@@ -68,6 +69,11 @@ export class MarketEvaluationAgent extends BaseEvaluationAgent<MarketEvaluation>
       tryExtract(marketText ?? "", samPattern) ??
       this.extractClaimLine(rawText, samPattern);
 
+    const claimedSOM =
+      (marketSize?.som != null ? String(marketSize.som) : null) ??
+      tryExtract(marketText ?? "", somPattern) ??
+      this.extractClaimLine(rawText, somPattern);
+
     const claimedGrowthRate =
       (growthObj?.value != null ? String(growthObj.value) : null) ??
       tryExtract(marketText ?? "", growthPattern) ??
@@ -81,6 +87,7 @@ export class MarketEvaluationAgent extends BaseEvaluationAgent<MarketEvaluation>
         ) || "Not provided",
       claimedTAM,
       claimedSAM,
+      claimedSOM,
       claimedGrowthRate,
       targetMarketDescription: pipelineData.extraction.industry || "Not provided",
     };
@@ -534,10 +541,15 @@ export class MarketEvaluationAgent extends BaseEvaluationAgent<MarketEvaluation>
             : "Legacy output did not provide explicit SOM estimate.",
       },
       deckVsResearch: {
-        tamClaimed: tamValue ?? "Unknown",
-        tamResearched: tamValue ?? "Unknown",
-        discrepancyFlag: false,
-        discrepancyNotes:
+        tam: {
+          claimed: tamValue ?? "Unknown",
+          researched: tamValue ?? "Unknown",
+          alignmentScore: null,
+          notes: "Legacy market validation indicates close alignment between claims and external research.",
+        },
+        sam: { claimed: "Unknown", researched: "Unknown", alignmentScore: null, notes: "No notes" },
+        som: { claimed: "Unknown", researched: "Unknown", alignmentScore: null, notes: "No notes" },
+        overallNotes:
           "Legacy market validation indicates close alignment between claims and external research.",
       },
     };
@@ -566,7 +578,7 @@ export class MarketEvaluationAgent extends BaseEvaluationAgent<MarketEvaluation>
         period: "Legacy output period not explicitly specified",
         source: normalizedSources[0] ?? "Legacy market output",
         deckClaimed: cagr,
-        discrepancyFlag: false,
+        discrepancyFlag: "none",
       },
       whyNow: {
         thesis: momentumRationale,
@@ -757,10 +769,15 @@ export class MarketEvaluationAgent extends BaseEvaluationAgent<MarketEvaluation>
           notes: bottomUpCalc ? "Extracted from narrative bottom-up analysis" : "No notes",
         },
         deckVsResearch: {
-          tamClaimed: deckTam ?? "Unknown",
-          tamResearched: tamValue ?? "Unknown",
-          discrepancyFlag: deckTam && tamValue ? "true" : "unknown",
-          notes: deckTam ? "Deck claim extracted from narrative analysis" : "No discrepancy noted",
+          tam: {
+            claimed: deckTam ?? "Unknown",
+            researched: tamValue ?? "Unknown",
+            alignmentScore: null,
+            notes: deckTam ? "Deck claim extracted from narrative analysis" : "No notes",
+          },
+          sam: { claimed: "Unknown", researched: "Unknown", alignmentScore: null, notes: "No notes" },
+          som: { claimed: "Unknown", researched: "Unknown", alignmentScore: null, notes: "No notes" },
+          overallNotes: deckTam ? "Deck claim extracted from narrative analysis" : "No discrepancy noted",
         },
       };
     }

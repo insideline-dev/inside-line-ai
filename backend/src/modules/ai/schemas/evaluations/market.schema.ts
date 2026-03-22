@@ -73,6 +73,7 @@ const SomSchema = z.object({
   value: requiredStringFromNull("Unknown"),
   methodology: requiredStringFromNull("Unknown"),
   assumptions: requiredStringFromNull("Unknown"),
+  sources: arrayWithFallback(MarketSourceSchema),
   confidence: z.preprocess(
     (value) => (value == null ? "low" : value),
     EvaluationConfidenceSchema,
@@ -84,12 +85,61 @@ const BottomUpSanityCheckSchema = z.object({
   notes: requiredStringFromNull("No notes"),
 });
 
-const DeckVsResearchSchema = z.object({
-  tamClaimed: requiredStringFromNull("Unknown"),
-  tamResearched: requiredStringFromNull("Unknown"),
-  discrepancyFlag: requiredStringFromNull("unknown"),
-  notes: requiredStringFromNull("No discrepancy noted"),
+const MetricAlignmentSchema = z.object({
+  claimed: requiredStringFromNull("Unknown"),
+  researched: requiredStringFromNull("Unknown"),
+  alignmentScore: z.preprocess(
+    (v) =>
+      typeof v === "number" && Number.isFinite(v)
+        ? Math.max(0, Math.min(100, Math.round(v)))
+        : null,
+    z.number().min(0).max(100).nullable(),
+  ),
+  notes: requiredStringFromNull("No notes"),
 });
+
+const DeckVsResearchSchema = z.preprocess(
+  (value) => {
+    const v = value as Record<string, unknown> | null | undefined;
+    // Backward compat: convert legacy flat shape to per-metric
+    if (v && "tamClaimed" in v && !("tam" in v)) {
+      return {
+        tam: {
+          claimed: v.tamClaimed,
+          researched: v.tamResearched,
+          alignmentScore: null,
+          notes:
+            (v.notes as string) ??
+            (v.discrepancyNotes as string) ??
+            "No notes",
+        },
+        sam: {
+          claimed: "Unknown",
+          researched: "Unknown",
+          alignmentScore: null,
+          notes: "No notes",
+        },
+        som: {
+          claimed: "Unknown",
+          researched: "Unknown",
+          alignmentScore: null,
+          notes: "No notes",
+        },
+        overallNotes:
+          (v.notes as string) ??
+          (v.discrepancyNotes as string) ??
+          "No notes",
+      };
+    }
+    return v ?? {};
+  },
+  z.object({
+    tam: objectWithFallback(MetricAlignmentSchema),
+    sam: objectWithFallback(MetricAlignmentSchema),
+    som: objectWithFallback(MetricAlignmentSchema),
+    overallNotes: requiredStringFromNull("No notes"),
+  }),
+);
 
 const MarketSizingRawSchema = z.object({
   tam: objectWithFallback(TamSchema),

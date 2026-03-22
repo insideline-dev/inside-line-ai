@@ -600,14 +600,16 @@ export function FinancialsTabContent({ evaluation, financialsWeight }: Financial
       {(raiseAmount || monthlyBurn || runway || useOfFundsBreakdown.length > 0) && (
         <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
           {raiseAmount && (
-            <Card className="overflow-hidden border-0 bg-gradient-to-br from-violet-500/10 via-background to-background shadow-sm">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+            <Card className="col-span-2 overflow-hidden border-0 bg-gradient-to-br from-violet-500/10 via-background to-background shadow-sm ring-1 ring-violet-500/10 xl:col-span-2">
+              <CardContent className="p-5">
+                <div className="mb-3 flex items-center gap-2 text-xs font-medium text-muted-foreground">
                   <CircleDollarSign className="h-4 w-4 text-violet-500" />
                   <span>Raise Amount</span>
                 </div>
-                <p className="text-2xl font-bold tracking-tight">{raiseAmount}</p>
-                <p className="mt-1 text-[11px] text-muted-foreground">Target capital raise</p>
+                <MarkdownText className="text-3xl font-bold tracking-tight text-foreground [&>p]:mb-0 [&_strong]:font-bold">
+                  {raiseAmount}
+                </MarkdownText>
+                <p className="mt-2 text-xs text-muted-foreground">Target capital raise</p>
               </CardContent>
             </Card>
           )}
@@ -1112,7 +1114,9 @@ export function FinancialsTabContent({ evaluation, financialsWeight }: Financial
                       >
                         {priorityIcon(item.priority)}
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm">{item.flag}</p>
+                          <MarkdownText className="text-sm [&>p]:mb-0">
+                            {item.flag}
+                          </MarkdownText>
                         </div>
                         <Badge variant="outline" className={cn("shrink-0", priorityBadgeClass(item.priority))}>
                           {formatEnumLabel(item.priority)}

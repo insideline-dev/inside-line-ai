@@ -127,6 +127,7 @@ describe("Evaluation variable mapping", () => {
         "marketResearchOutput",
         "claimedTAM",
         "claimedSAM",
+        "claimedSOM",
         "claimedGrowthRate",
         "targetMarketDescription",
       ],
@@ -472,7 +473,7 @@ describe("Evaluation variable mapping", () => {
       expect(parsed.confidence).toBe("high");
       expect(parsed.keyFindings.length).toBeGreaterThan(0);
       expect(parsed.risks.length).toBeGreaterThan(0);
-      expect(parsed.dataGaps[0]).toContain("30x Cost Efficiency Validation");
+      expect(parsed.dataGaps[0]?.gap).toContain("30x Cost Efficiency Validation");
       expect(parsed.sources).toEqual(expect.arrayContaining(["IDC", "Kings Research"]));
       expect(parsed.scoring.overallScore).toBe(89);
       expect(parsed.scoring.confidence).toBe("high");
@@ -518,10 +519,10 @@ describe("Evaluation variable mapping", () => {
           som: { value: "Unknown", methodology: "Unknown", assumptions: "Unknown", confidence: "low" },
           bottomUpSanityCheck: { calculation: "Not performed", notes: "No notes" },
           deckVsResearch: {
-            tamClaimed: "Unknown",
-            tamResearched: "Unknown",
-            discrepancyFlag: false,
-            discrepancyNotes: "No discrepancy noted",
+            tam: { claimed: "Unknown", researched: "Unknown", alignmentScore: null, notes: "No notes" },
+            sam: { claimed: "Unknown", researched: "Unknown", alignmentScore: null, notes: "No notes" },
+            som: { claimed: "Unknown", researched: "Unknown", alignmentScore: null, notes: "No notes" },
+            overallNotes: "No discrepancy noted",
           },
         },
         marketGrowthAndTiming: {
@@ -530,7 +531,7 @@ describe("Evaluation variable mapping", () => {
             period: "Unknown",
             source: "Unknown",
             deckClaimed: "Unknown",
-            discrepancyFlag: false,
+            discrepancyFlag: "none",
           },
           whyNow: { thesis: "Unknown", supportedByResearch: false, evidence: [] },
           timingAssessment: "right_time",

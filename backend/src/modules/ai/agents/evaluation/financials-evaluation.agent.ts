@@ -28,6 +28,10 @@ export class FinancialsEvaluationAgent extends BaseEvaluationAgent<FinancialsEva
     super(providers, aiConfig, promptService, modelExecution);
   }
 
+  protected override getMaxOutputTokens(): number {
+    return 120_000;
+  }
+
   protected override getAgentTemplateVariables(
     _pipelineData: EvaluationPipelineInput,
   ): Record<string, string> {

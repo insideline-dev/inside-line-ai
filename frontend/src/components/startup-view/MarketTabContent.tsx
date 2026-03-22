@@ -5,6 +5,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { AlignmentDot } from "@/components/AlignmentDot";
 import { ConfidenceBadge } from "@/components/ConfidenceBadge";
 import { SectionScoreCard } from "@/components/SectionScoreCard";
 import { DataGapsSection, parseDataGapItems } from "@/components/DataGapsSection";
@@ -403,16 +404,27 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage }: Mar
   const samConfidence = typeof sam.confidence === "string" ? sam.confidence : "unknown";
   const somConfidence = typeof som.confidence === "string" ? som.confidence : "unknown";
   const tamSources = toMarketSources(tam.sources);
+  const samSources = toMarketSources(sam.sources);
+  const somSources = toMarketSources(som.sources);
 
   const bottomUpCalculation = getMeaningful(bottomUpSanityCheck.calculation) || "Not provided";
 
-  const deckTamClaimed = getMeaningful(deckVsResearch.tamClaimed) || "Not provided";
-  const deckTamResearched = getMeaningful(deckVsResearch.tamResearched) || "Not provided";
-  const deckDiscrepancyFlag = toBoolean(deckVsResearch.discrepancyFlag);
-  const deckDiscrepancyNotes =
-    getMeaningful(deckVsResearch.notes) ||
-    getMeaningful(deckVsResearch.discrepancyNotes) ||
-    null;
+  const dvr = {
+    tam: toRecord(deckVsResearch.tam),
+    sam: toRecord(deckVsResearch.sam),
+    som: toRecord(deckVsResearch.som),
+  };
+  const dvrOverallNotes = String(deckVsResearch.overallNotes || "");
+
+  // Backward compat: legacy flat shape
+  if (!dvr.tam.claimed && deckVsResearch.tamClaimed) {
+    dvr.tam = {
+      claimed: deckVsResearch.tamClaimed,
+      researched: deckVsResearch.tamResearched,
+      alignmentScore: null,
+      notes: deckVsResearch.notes || deckVsResearch.discrepancyNotes || "",
+    };
+  }
 
   const whyNowThesis =
     getMeaningful(whyNow.thesis) ||
@@ -529,7 +541,7 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage }: Mar
                 )}
 
                 {/* Deck vs Research comparison table */}
-                {(deckTamClaimed !== "Not provided" || deckTamResearched !== "Not provided" || tamSources.length > 0) && (
+                {(dvr.tam.claimed || dvr.tam.researched || dvr.sam.claimed || dvr.sam.researched || dvr.som.claimed || dvr.som.researched || tamSources.length > 0 || samSources.length > 0 || somSources.length > 0) && (
                   <div className="w-full mt-2 rounded-lg border text-xs">
                     <div className="grid grid-cols-[50px_1fr_1fr_1fr] border-b bg-muted/30">
                       <div className="px-2 py-1.5 font-medium text-muted-foreground" />
@@ -538,9 +550,9 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage }: Mar
                       <div className="px-2 py-1.5 font-medium text-muted-foreground text-center">Deck vs Research</div>
                     </div>
                     {[
-                      { label: "TAM", value: cleanSizingValue(tamValue), sources: tamSources, hasDeck: true },
-                      { label: "SAM", value: cleanSizingValue(samValue), sources: [], hasDeck: false },
-                      { label: "SOM", value: cleanSizingValue(somValue), sources: [], hasDeck: false },
+                      { label: "TAM", value: cleanSizingValue(tamValue), sources: tamSources, alignment: dvr.tam },
+                      { label: "SAM", value: cleanSizingValue(samValue), sources: samSources, alignment: dvr.sam },
+                      { label: "SOM", value: cleanSizingValue(somValue), sources: somSources, alignment: dvr.som },
                     ].map((row) => (
                       <div key={row.label} className="grid grid-cols-[50px_1fr_1fr_1fr] border-b last:border-b-0">
                         <div className="px-2 py-2 font-bold">{row.label}</div>
@@ -556,42 +568,18 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage }: Mar
                           )) : "—"}
                         </div>
                         <div className="px-2 py-2 flex items-center justify-center">
-                          {row.hasDeck && deckDiscrepancyFlag !== null ? (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <div className="flex flex-col items-center gap-1 cursor-help">
-                                  {/* Balance bar */}
-                                  <div className="relative w-16 h-2 rounded-full bg-muted overflow-hidden">
-                                    <div
-                                      className={cn(
-                                        "absolute inset-y-0 left-0 rounded-full transition-all",
-                                        deckDiscrepancyFlag
-                                          ? "w-[35%] bg-amber-400"
-                                          : "w-full bg-emerald-400",
-                                      )}
-                                    />
-                                  </div>
-                                  <span className={cn(
-                                    "text-[9px] font-medium",
-                                    deckDiscrepancyFlag ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400",
-                                  )}>
-                                    {deckDiscrepancyFlag ? "Overstated" : "Aligned"}
-                                  </span>
-                                </div>
-                              </TooltipTrigger>
-                              <TooltipContent side="top" className="max-w-xs text-xs">
-                                {deckDiscrepancyFlag
-                                  ? "Deck claims exceed research findings"
-                                  : "Deck claims are consistent with research"}
-                              </TooltipContent>
-                            </Tooltip>
-                          ) : "—"}
+                          <AlignmentDot
+                            score={typeof row.alignment?.alignmentScore === 'number' ? row.alignment.alignmentScore : null}
+                            claimed={String(row.alignment?.claimed || "")}
+                            researched={String(row.alignment?.researched || "")}
+                            notes={String(row.alignment?.notes || "")}
+                          />
                         </div>
                       </div>
                     ))}
-                    {deckDiscrepancyNotes && (
+                    {dvrOverallNotes && dvrOverallNotes !== "No notes" && (
                       <div className="px-3 py-2 bg-muted/20 text-[11px] text-muted-foreground border-t">
-                        <MarkdownText className="inline [&>p]:inline [&>p]:mb-0">{deckDiscrepancyNotes}</MarkdownText>
+                        <MarkdownText className="inline [&>p]:inline [&>p]:mb-0">{dvrOverallNotes}</MarkdownText>
                       </div>
                     )}
                   </div>

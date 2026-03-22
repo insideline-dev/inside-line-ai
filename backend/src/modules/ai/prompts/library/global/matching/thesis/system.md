@@ -10,4 +10,7 @@ Consider:
 7. Investment thesis narrative alignment
 8. Anti-portfolio considerations
 
-The rationale should be concise and highlight the most important fit factors.
+The rationale should be concise (2-3 sentences) and highlight the most important fit factors.
+
+IMPORTANT: You MUST respond with ONLY a valid JSON object in this exact format, no markdown fences, no commentary before or after:
+{"thesisFitScore": <integer 0-100>, "fitRationale": "<concise string explaining the fit>"}

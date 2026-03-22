@@ -561,8 +561,8 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage }: Mar
                           {row.sources.length > 0 ? row.sources.map((s, si) => (
                             <div key={si}>
                               {s.url ? (
-                                <a href={s.url} target="_blank" rel="noopener noreferrer" className="underline decoration-dotted underline-offset-2">{s.name}</a>
-                              ) : s.name}
+                                <a href={s.url} target="_blank" rel="noopener noreferrer" className="underline decoration-dotted underline-offset-2"><MarkdownText className="inline [&>p]:inline [&>p]:mb-0" inline>{s.name}</MarkdownText></a>
+                              ) : <MarkdownText className="inline [&>p]:inline [&>p]:mb-0" inline>{s.name}</MarkdownText>}
                               {s.tier && <span className="text-[10px] text-muted-foreground/60 ml-1">({s.tier})</span>}
                             </div>
                           )) : "—"}

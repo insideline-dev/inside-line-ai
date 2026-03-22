@@ -793,7 +793,7 @@ export function AdminSummaryTab({
                 className={`rounded-lg border border-l-4 ${badgeBorderColor(badge.score)} bg-muted/20 px-3.5 py-2.5 text-left transition-colors hover:bg-muted/40 cursor-pointer`}
               >
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{badge.label}</p>
-                <p className="mt-1 text-sm font-medium leading-tight">{badge.topLine}</p>
+                <MarkdownText className="mt-1 text-sm font-medium leading-tight [&>p]:mb-0" inline>{badge.topLine}</MarkdownText>
                 {badge.bottomLine && (
                   <p className="mt-0.5 text-[11px] capitalize text-muted-foreground">{badge.bottomLine}</p>
                 )}

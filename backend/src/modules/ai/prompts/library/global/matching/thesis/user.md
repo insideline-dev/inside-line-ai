@@ -6,5 +6,7 @@
 
 ## Startup Profile
 Summary: {{startupSummary}}
-Recommendation: {{recommendation}}
 Overall Score: {{overallScore}}
+
+## Full Startup Profile
+{{startupProfile}}

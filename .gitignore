@@ -93,3 +93,4 @@ pnpm-lock.yaml
 # Redis
 dump.rdb
 .worktrees/
+.snapshots/

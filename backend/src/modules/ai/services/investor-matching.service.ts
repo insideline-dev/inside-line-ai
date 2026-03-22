@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { and, eq, isNull, or, sql } from "drizzle-orm";
-import { generateText, Output } from "ai";
+import { generateText } from "ai";
 import { z } from "zod";
 import { DrizzleService } from "../../../database";
 import type { SynthesisResult } from "../interfaces/phase-results.interface";
@@ -20,6 +20,7 @@ import {
   geographySelectionMatchesStartupPath,
   normalizeStartupPathFromLocation,
 } from "../../geography";
+import { buildThesisSummary } from "../../investor/thesis-summary.util";
 
 const ThesisFitSchema = z.object({
   thesisFitScore: z.number().int().min(0).max(100),
@@ -52,6 +53,8 @@ interface InvestorCandidate {
   thesisSummary: string | null;
   thesisNarrative: string | null;
   notes: string | null;
+  businessModels: string[] | null;
+  antiPortfolio: string | null;
   minThesisFitScore: number | null;
   minStartupScore: number | null;
 }
@@ -105,6 +108,8 @@ export class InvestorMatchingService {
         thesisSummary: investorThesis.thesisSummary,
         thesisNarrative: investorThesis.thesisNarrative,
         notes: investorThesis.notes,
+        businessModels: investorThesis.businessModels,
+        antiPortfolio: investorThesis.antiPortfolio,
         minThesisFitScore: investorThesis.minThesisFitScore,
         minStartupScore: investorThesis.minStartupScore,
       })
@@ -255,35 +260,51 @@ export class InvestorMatchingService {
           })
         : null;
 
-      const { output } = await generateText({
-        model:
-          execution?.generateTextOptions.model ??
-          this.providers.resolveModelForPurpose(ModelPurpose.THESIS_ALIGNMENT),
-        output: Output.object({ schema: ThesisFitSchema }),
-        temperature: this.aiConfig.getMatchingTemperature(),
-        maxOutputTokens: this.aiConfig.getMatchingMaxOutputTokens(),
-        system: promptConfig.systemPrompt,
-        tools: execution?.generateTextOptions.tools,
-        toolChoice: execution?.generateTextOptions.toolChoice,
-        providerOptions: execution?.generateTextOptions.providerOptions,
-        prompt: this.promptService.renderTemplate(promptConfig.userPrompt, {
-          investorThesisSummary: candidate.thesisSummary ?? "Not available",
-          investorThesis:
-            candidate.thesisNarrative ?? candidate.notes ?? "Not available",
-          startupSummary: input.synthesis.dealSnapshot,
-          overallScore: input.synthesis.overallScore,
-          startupProfile: JSON.stringify(input.synthesis),
-        }),
+      const userPrompt = this.promptService.renderTemplate(promptConfig.userPrompt, {
+        investorThesisSummary:
+          candidate.thesisSummary ??
+          buildThesisSummary(candidate as unknown as Record<string, unknown>),
+        investorThesis:
+          candidate.thesisNarrative ?? candidate.notes ?? "Not available",
+        startupSummary: input.synthesis.dealSnapshot,
+        overallScore: input.synthesis.overallScore,
+        startupProfile: JSON.stringify({
+            overallScore: input.synthesis.overallScore,
+            sectionScores: input.synthesis.sectionScores,
+            strengths: input.synthesis.keyStrengths,
+            risks: input.synthesis.keyRisks,
+          }),
       });
 
+      const resolvedModel =
+        execution?.generateTextOptions.model ??
+        this.providers.resolveModelForPurpose(ModelPurpose.THESIS_ALIGNMENT);
+
+      const { text } = await generateText({
+        model: resolvedModel,
+        system: promptConfig.systemPrompt,
+        prompt: userPrompt,
+        maxOutputTokens: this.aiConfig.getMatchingMaxOutputTokens(),
+      });
+
+      if (!text?.trim()) {
+        throw new Error("Model returned empty response.");
+      }
+
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error(`Model returned non-JSON (${text.length} chars): ${text.substring(0, 300)}`);
+      }
+
       return {
-        ...ThesisFitSchema.parse(output),
+        ...ThesisFitSchema.parse(JSON.parse(jsonMatch[0])),
         usedFallback: false,
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.logger.warn(
-        `Thesis alignment fallback for investor ${candidate.userId}: ${message}`,
+      const stack = error instanceof Error ? error.stack : undefined;
+      this.logger.error(
+        `Thesis alignment fallback for investor ${candidate.userId}: ${message}${stack ? `\n${stack}` : ""}`,
       );
 
       return {

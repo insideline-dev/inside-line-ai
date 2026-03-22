@@ -38,7 +38,6 @@ import {
   MarketTabContent,
   FinancialsTabContent,
 } from "@/components/startup-view";
-import { getDisplayOverallScore } from "@/lib/evaluation-display";
 import { useToast } from "@/hooks/use-toast";
 import type { Startup } from "@/types/startup";
 import type { Evaluation } from "@/types/evaluation";
@@ -114,11 +113,6 @@ function InvestorStartupDetailPage() {
   const evaluation = evalRes
     ? unwrapApiResponse<Evaluation>(evalRes)
     : evaluationFromStartup;
-
-  const overallScore = getDisplayOverallScore(
-    evaluation ?? null,
-    typeof startup?.overallScore === "number" ? startup.overallScore : null,
-  );
 
   const match = matchRes
     ? unwrapApiResponse<Record<string, unknown>>(matchRes)
@@ -215,9 +209,6 @@ function InvestorStartupDetailPage() {
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-            ) : null}
-            {overallScore > 0 ? (
-              <ScoreRing score={overallScore} size="lg" label="Overall Score" showLabel />
             ) : null}
           </div>
         }

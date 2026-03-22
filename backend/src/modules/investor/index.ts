@@ -6,5 +6,6 @@ export * from './portfolio.service';
 export * from './deal-pipeline.service';
 export * from './messaging.service';
 export * from './scoring-preferences.service';
+export * from './thesis-summary.util';
 export * from './dto';
 export * from './entities';

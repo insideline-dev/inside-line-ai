@@ -16,6 +16,10 @@ export class MarketEvaluationAgent extends BaseEvaluationAgent<MarketEvaluation>
   protected readonly systemPrompt =
     "You are a startup investment analyst evaluating market quality and TAM credibility.";
 
+  private _deckClaims: { tam: string | null; sam: string | null; som: string | null } = {
+    tam: null, sam: null, som: null,
+  };
+
   constructor(
     providers: AiProviderService,
     aiConfig: AiConfigService,
@@ -79,6 +83,13 @@ export class MarketEvaluationAgent extends BaseEvaluationAgent<MarketEvaluation>
       tryExtract(marketText ?? "", growthPattern) ??
       this.extractClaimLine(rawText, growthPattern);
 
+    // Store deck claims for post-processing alignment scores
+    this._deckClaims = {
+      tam: claimedTAM ?? null,
+      sam: claimedSAM ?? null,
+      som: claimedSOM ?? null,
+    };
+
     return {
       marketResearchOutput:
         this.truncatePromptText(
@@ -113,7 +124,8 @@ export class MarketEvaluationAgent extends BaseEvaluationAgent<MarketEvaluation>
   protected override normalizeOutputCandidate(candidate: unknown): unknown {
     const legacyNormalized = this.normalizeLegacyMarketPayload(candidate);
     const enriched = this.enrichEmptyStructuredFields(legacyNormalized);
-    return normalizeBaseEvaluationCandidate(enriched);
+    const patched = this.patchNullAlignmentScores(enriched);
+    return normalizeBaseEvaluationCandidate(patched);
   }
 
   private normalizeLegacyMarketPayload(candidate: unknown): unknown {
@@ -772,7 +784,7 @@ export class MarketEvaluationAgent extends BaseEvaluationAgent<MarketEvaluation>
           tam: {
             claimed: deckTam ?? "Unknown",
             researched: tamValue ?? "Unknown",
-            alignmentScore: null,
+            alignmentScore: (deckTam && tamValue) ? this.computeAlignmentScore(deckTam, tamValue) : null,
             notes: deckTam ? "Deck claim extracted from narrative analysis" : "No notes",
           },
           sam: { claimed: "Unknown", researched: "Unknown", alignmentScore: null, notes: "No notes" },
@@ -857,6 +869,115 @@ export class MarketEvaluationAgent extends BaseEvaluationAgent<MarketEvaluation>
     // Enrich diligenceItems from dataGaps if empty
     if (!Array.isArray(candidate.diligenceItems) || candidate.diligenceItems.length === 0) {
       candidate.diligenceItems = this.toStringArray(candidate.dataGaps).slice(0, 5);
+    }
+
+    return candidate;
+  }
+
+  private parseDollarValue(str: string): number | null {
+    if (!str || typeof str !== "string") return null;
+    const trimmed = str.trim().toLowerCase();
+    if (!trimmed || trimmed === "unknown" || trimmed === "not provided" || trimmed === "no notes") return null;
+
+    const multipliers: Record<string, number> = {
+      k: 1e3, m: 1e6, b: 1e9, t: 1e12,
+      bn: 1e9,
+      thousand: 1e3, million: 1e6, billion: 1e9, trillion: 1e12,
+    };
+
+    // Handle ranges like "$5-8B", "$5B-$8B", "$500M-1B" → take midpoint
+    const rangeMatch = trimmed.match(
+      /\$?\s*([\d.,]+)\s*([kmbt]|bn|thousand|million|billion|trillion)?\s*[-–to]+\s*\$?\s*([\d.,]+)\s*([kmbt]|bn|thousand|million|billion|trillion)?/i,
+    );
+    if (rangeMatch) {
+      const [, num1Str, mult1Str, num2Str, mult2Str] = rangeMatch;
+      const num1 = parseFloat(num1Str.replace(/,/g, ""));
+      const num2 = parseFloat(num2Str.replace(/,/g, ""));
+      if (Number.isNaN(num1) || Number.isNaN(num2)) return null;
+      const m1 = (mult1Str ? multipliers[mult1Str.toLowerCase()] : null) ?? (mult2Str ? multipliers[mult2Str.toLowerCase()] : null) ?? 1;
+      const m2 = (mult2Str ? multipliers[mult2Str.toLowerCase()] : null) ?? m1;
+      return (num1 * m1 + num2 * m2) / 2;
+    }
+
+    // Single value like "$100B", "400M", "$3.5 billion"
+    const singleMatch = trimmed.match(
+      /\$?\s*([\d.,]+)\s*([kmbt]|bn|thousand|million|billion|trillion)?/i,
+    );
+    if (singleMatch) {
+      const [, numStr, multStr] = singleMatch;
+      const num = parseFloat(numStr.replace(/,/g, ""));
+      if (Number.isNaN(num)) return null;
+      const mult = multStr ? (multipliers[multStr.toLowerCase()] ?? 1) : 1;
+      return num * mult;
+    }
+
+    return null;
+  }
+
+  private computeAlignmentScore(claimed: string, researched: string): number | null {
+    const claimedNum = this.parseDollarValue(claimed);
+    const researchedNum = this.parseDollarValue(researched);
+    if (claimedNum === null || researchedNum === null || researchedNum === 0) return null;
+
+    const ratio = claimedNum / researchedNum;
+    // Scoring rubric: 100 = perfectly aligned, 0 = completely misaligned
+    if (ratio >= 0.9 && ratio <= 1.1) {
+      // Within 10% → 90-100
+      return Math.round(100 - Math.abs(1 - ratio) * 100);
+    }
+    if (ratio >= 0.75 && ratio <= 1.25) {
+      // Within 25% → 70-89
+      return Math.round(90 - Math.abs(1 - ratio) * 80);
+    }
+    if (ratio >= 0.5 && ratio <= 2.0) {
+      // 25-100% off → 40-69
+      return Math.round(70 - Math.abs(1 - ratio) * 40);
+    }
+    // >2x off → 0-39
+    return Math.max(0, Math.round(40 - (Math.abs(1 - ratio) - 1) * 40));
+  }
+
+  private patchNullAlignmentScores(candidate: unknown): unknown {
+    if (!this.isRecord(candidate)) return candidate;
+    const marketSizing = this.asRecord(candidate.marketSizing);
+    if (!marketSizing) return candidate;
+    const dvr = this.asRecord(marketSizing.deckVsResearch);
+    if (!dvr) return candidate;
+
+    for (const metric of ["tam", "sam", "som"] as const) {
+      const entry = this.asRecord(dvr[metric]);
+      if (!entry) continue;
+
+      // Fill missing claimed from stored deck claims
+      const claimedStr = this.toString(entry.claimed);
+      if (!claimedStr || claimedStr === "Unknown") {
+        const deckClaim = this._deckClaims[metric];
+        if (deckClaim && deckClaim !== "Not provided") {
+          entry.claimed = deckClaim;
+        }
+      }
+
+      // Fill missing researched from marketSizing.{metric}.value
+      const researchedStr = this.toString(entry.researched);
+      if (!researchedStr || researchedStr === "Unknown") {
+        const sizingEntry = this.asRecord(marketSizing[metric]);
+        if (sizingEntry) {
+          const value = this.toString(sizingEntry.value);
+          if (value && value !== "Unknown") {
+            entry.researched = value;
+          }
+        }
+      }
+
+      // Compute alignment score if both values now exist
+      if (typeof entry.alignmentScore === "number") continue;
+      const claimed = this.toString(entry.claimed);
+      const researched = this.toString(entry.researched);
+      if (!claimed || !researched || claimed === "Unknown" || researched === "Unknown") continue;
+      const score = this.computeAlignmentScore(claimed, researched);
+      if (score !== null) {
+        entry.alignmentScore = score;
+      }
     }
 
     return candidate;

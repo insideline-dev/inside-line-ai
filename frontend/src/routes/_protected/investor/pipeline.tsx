@@ -1,18 +1,16 @@
-import { useState, type DragEvent } from "react";
+import { useState, useMemo, type DragEvent } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import {
-  List,
   LayoutGrid,
+  Columns3,
   Search,
   Clock,
   GripVertical,
-  Lock,
   Loader2,
-  ArrowRight,
-  MapPin,
   Plus,
+  Check,
   Sparkles,
   Eye,
   Star,
@@ -33,6 +31,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+  ContextMenuLabel,
+  ContextMenuSeparator,
+} from "@/components/ui/context-menu";
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -52,7 +58,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScoreRing } from "@/components/analysis/ScoreRing";
-import { AnalysisProgressBar } from "@/components/AnalysisProgressBar";
 
 export const Route = createFileRoute("/_protected/investor/pipeline")({
   component: PipelinePage,
@@ -88,7 +93,7 @@ type PipelineData = {
 };
 
 type Status = PipelineMatch["status"];
-type ViewMode = "list" | "board";
+type ViewMode = "cards" | "kanban";
 type StartupStatus =
   | "draft"
   | "submitted"
@@ -170,15 +175,26 @@ const PASS_REASONS = [
 
 const CURRENCIES = ["USD", "EUR", "GBP"] as const;
 
+type PipelineCardItem = {
+  displayName: string;
+  description: string | null;
+  stage: string | null;
+  industry: string | null;
+  location: string | null;
+  overallScore: number;
+  createdAt: string;
+  matchId: string | null;
+  startupId: string;
+  pipelineStatus: Status;
+  isAnalyzing: boolean;
+  isPrivate: boolean;
+};
+
 // --- Helpers ---
 
 function formatDate(date: string | null) {
   if (!date) return "--";
   return format(new Date(date), "MMM d, yyyy");
-}
-
-function getAllMatches(pipeline: PipelineData): PipelineMatch[] {
-  return STATUSES.flatMap((s) => pipeline[s]);
 }
 
 function extractList<T>(payload: unknown): T[] {
@@ -192,33 +208,6 @@ function extractList<T>(payload: unknown): T[] {
     return (payload as { data: T[] }).data;
   }
   return [];
-}
-
-function getStartupStatusBadge(status: StartupStatus) {
-  switch (status) {
-    case "submitted":
-      return (
-        <Badge variant="outline" className="gap-1">
-          <Clock className="h-3 w-3" />
-          Queued
-        </Badge>
-      );
-    case "analyzing":
-      return (
-        <Badge variant="outline" className="gap-1">
-          <Loader2 className="h-3 w-3 animate-spin" />
-          Analyzing
-        </Badge>
-      );
-    case "approved":
-      return <Badge className="bg-chart-2/10 text-chart-2 border-chart-2/20">Ready</Badge>;
-    case "pending_review":
-      return <Badge variant="secondary">Pending Review</Badge>;
-    case "rejected":
-      return <Badge variant="destructive">Rejected</Badge>;
-    default:
-      return <Badge variant="secondary">Draft</Badge>;
-  }
 }
 
 function formatStageLabel(stage: string | null | undefined): string {
@@ -243,12 +232,64 @@ function extractResponseData<T>(payload: unknown): T | null {
   return payload as T;
 }
 
+function mergeStartups(
+  pipeline: PipelineData,
+  privateStartups: PrivateStartup[],
+) {
+  const matchItems: PipelineCardItem[] = STATUSES.flatMap((status) =>
+    pipeline[status].map((m) => ({
+      displayName: m.startupName ?? "Untitled",
+      description: m.startupDescription ?? null,
+      stage: m.startupStage ?? null,
+      industry: m.startupIndustry ?? null,
+      location: null,
+      overallScore: m.overallScore,
+      createdAt: m.createdAt,
+      matchId: m.id,
+      startupId: m.startupId,
+      pipelineStatus: m.status,
+      isAnalyzing: false,
+      isPrivate: false,
+    })),
+  );
+
+  const matchedStartupIds = new Set(matchItems.map((m) => m.startupId));
+
+  const analyzingItems: PipelineCardItem[] = privateStartups
+    .filter(
+      (s) =>
+        (s.status === "submitted" || s.status === "analyzing") &&
+        !matchedStartupIds.has(s.id),
+    )
+    .map((s) => ({
+      displayName: s.name || "Untitled",
+      description: s.description ?? null,
+      stage: s.stage ?? null,
+      industry: null,
+      location: s.location ?? null,
+      overallScore: 0,
+      createdAt: s.createdAt,
+      matchId: null,
+      startupId: s.id,
+      pipelineStatus: "new" as Status,
+      isAnalyzing: true,
+      isPrivate: true,
+    }));
+
+  const allItems = [...matchItems, ...analyzingItems];
+
+  const grouped = Object.fromEntries(
+    STATUSES.map((s) => [s, allItems.filter((item) => item.pipelineStatus === s)]),
+  ) as Record<Status, PipelineCardItem[]>;
+
+  return { allItems, grouped };
+}
+
 // --- Main Component ---
 
 function PipelinePage() {
-  const [viewMode, setViewMode] = useState<ViewMode>("board");
+  const [viewMode, setViewMode] = useState<ViewMode>("cards");
   const [search, setSearch] = useState("");
-  const [filterStatus, setFilterStatus] = useState<Status | null>(null);
 
   // Dialogs
   const [passDialog, setPassDialog] = useState<{ matchId: string } | null>(null);
@@ -283,6 +324,27 @@ function PipelinePage() {
       },
     },
   });
+
+  // --- Merged items (must be before any early returns to preserve hook order) ---
+
+  const { allItems, grouped } = useMemo(
+    () => {
+      if (!pipeline) {
+        const empty = { new: [], reviewing: [], engaged: [], closed: [], passed: [] } satisfies Record<Status, PipelineCardItem[]>;
+        return { allItems: [] as PipelineCardItem[], grouped: empty };
+      }
+      return mergeStartups(pipeline, myStartups);
+    },
+    [pipeline, myStartups],
+  );
+
+  const filteredItems = useMemo(
+    () =>
+      allItems.filter((item) =>
+        item.displayName.toLowerCase().includes(search.toLowerCase()),
+      ),
+    [allItems, search],
+  );
 
   // --- Loading / Error ---
 
@@ -323,17 +385,6 @@ function PipelinePage() {
     updateStatus.mutate({ matchId, data: { status: newStatus } });
   }
 
-  // --- Filtered matches for list view ---
-
-  const allMatches = getAllMatches(pipeline);
-  const filteredMatches = allMatches.filter((m) => {
-    const matchesSearch =
-      !search ||
-      (m.startupName ?? "").toLowerCase().includes(search.toLowerCase());
-    const matchesFilter = !filterStatus || m.status === filterStatus;
-    return matchesSearch && matchesFilter;
-  });
-
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -351,20 +402,20 @@ function PipelinePage() {
           </div>
           <div className="flex rounded-md border">
             <Button
-              variant={viewMode === "list" ? "secondary" : "ghost"}
+              variant={viewMode === "cards" ? "secondary" : "ghost"}
               size="sm"
-              onClick={() => setViewMode("list")}
+              onClick={() => setViewMode("cards")}
               className="rounded-r-none"
             >
-              <List className="h-4 w-4" />
+              <LayoutGrid className="h-4 w-4" />
             </Button>
             <Button
-              variant={viewMode === "board" ? "secondary" : "ghost"}
+              variant={viewMode === "kanban" ? "secondary" : "ghost"}
               size="sm"
-              onClick={() => setViewMode("board")}
+              onClick={() => setViewMode("kanban")}
               className="rounded-l-none"
             >
-              <LayoutGrid className="h-4 w-4" />
+              <Columns3 className="h-4 w-4" />
             </Button>
           </div>
           <Button asChild>
@@ -376,83 +427,11 @@ function PipelinePage() {
         </div>
       </div>
 
-      {/* Private startups shown inline with the main pipeline view */}
-      {myStartupsResponse.isLoading ? (
-        <div className="grid gap-4 md:grid-cols-2">
-          {[1, 2].map((i) => (
-            <Skeleton key={i} className="h-36 w-full" />
-          ))}
-        </div>
-      ) : myStartups.length > 0 ? (
-        <div className="grid gap-4 md:grid-cols-2">
-          {myStartups.map((startup) => (
-            <Card key={startup.id}>
-              <CardContent className="p-4 space-y-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="font-semibold truncate">{startup.name}</p>
-                    <p className="text-sm text-muted-foreground line-clamp-1">
-                      {startup.description || "No description"}
-                    </p>
-                  </div>
-                  <ScoreRing
-                    score={startup.status === "approved" ? startup.overallScore ?? 0 : 0}
-                    size="sm"
-                    showLabel={false}
-                  />
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <Badge variant="outline" className="gap-1">
-                    <Lock className="h-3 w-3" />
-                    Private
-                  </Badge>
-                  {getStartupStatusBadge(startup.status)}
-                  <Badge variant="outline" className="capitalize">
-                    {formatStageLabel(startup.stage)}
-                  </Badge>
-                </div>
-
-                <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                  <span className="inline-flex items-center gap-1">
-                    <MapPin className="h-3 w-3" />
-                    {startup.location || "Unknown"}
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
-                    {formatDate(startup.createdAt)}
-                  </span>
-                </div>
-
-                {(startup.status === "submitted" || startup.status === "analyzing") && (
-                  <AnalysisProgressBar startupId={startup.id} />
-                )}
-
-                {(startup.status === "approved" || startup.status === "pending_review") && (
-                  <Button asChild size="sm" className="w-full">
-                    <Link to="/investor/startup/$id" params={{ id: String(startup.id) }}>
-                      {startup.status === "pending_review" ? "Review Analysis" : "View Analysis"}
-                      <ArrowRight className="ml-2 h-4 w-4" />
-                    </Link>
-                  </Button>
-                )}
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      ) : null}
-
       {/* Views */}
-      {viewMode === "board" ? (
-        <BoardView pipeline={pipeline} search={search} onDrop={handleDrop} />
+      {viewMode === "kanban" ? (
+        <BoardView grouped={grouped} search={search} onDrop={handleDrop} />
       ) : (
-        <ListView
-          matches={filteredMatches}
-          pipeline={pipeline}
-          filterStatus={filterStatus}
-          onFilterStatus={setFilterStatus}
-          onDrop={handleDrop}
-        />
+        <CardsView items={filteredItems} onStatusChange={handleDrop} />
       )}
 
       {/* Dialogs */}
@@ -512,30 +491,144 @@ function PageHeader() {
   );
 }
 
+// --- Cards View ---
+
+function PipelineCard({ item }: { item: PipelineCardItem }) {
+  const config = STATUS_CONFIG[item.pipelineStatus];
+
+  return (
+    <Card className="transition-colors hover:bg-muted/30">
+      <Link to="/investor/startup/$id" params={{ id: item.startupId }}>
+        <CardContent className="p-4 space-y-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold truncate">{item.displayName}</p>
+              {item.description && (
+                <p className="text-sm text-muted-foreground line-clamp-1">
+                  {item.description}
+                </p>
+              )}
+            </div>
+            {item.overallScore > 0 && (
+              <ScoreRing score={item.overallScore} size="sm" showLabel={false} />
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            {item.industry && (
+              <Badge variant="outline" className="capitalize text-xs">
+                {item.industry}
+              </Badge>
+            )}
+            {item.stage && (
+              <Badge variant="outline" className="capitalize text-xs">
+                {formatStageLabel(item.stage)}
+              </Badge>
+            )}
+          </div>
+
+          <div className="flex items-center justify-between">
+            {item.isAnalyzing ? (
+              <Badge variant="outline" className="gap-1">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Analyzing...
+              </Badge>
+            ) : (
+              <Badge className={config.badgeClass}>{config.label}</Badge>
+            )}
+            <span className="text-xs text-muted-foreground">
+              {formatDate(item.createdAt)}
+            </span>
+          </div>
+        </CardContent>
+      </Link>
+    </Card>
+  );
+}
+
+function CardsView({
+  items,
+  onStatusChange,
+}: {
+  items: PipelineCardItem[];
+  onStatusChange: (matchId: string, status: Status) => void;
+}) {
+  if (items.length === 0) {
+    return (
+      <Card>
+        <CardContent className="py-12 text-center text-muted-foreground">
+          No deals found.
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {items.map((item) => {
+        const key = item.matchId ?? item.startupId;
+
+        if (item.isAnalyzing || !item.matchId) {
+          return <PipelineCard key={key} item={item} />;
+        }
+
+        return (
+          <ContextMenu key={key}>
+            <ContextMenuTrigger>
+              <PipelineCard item={item} />
+            </ContextMenuTrigger>
+            <ContextMenuContent className="w-48">
+              <ContextMenuLabel>Move to</ContextMenuLabel>
+              <ContextMenuSeparator />
+              {STATUSES.map((status) => {
+                const cfg = STATUS_CONFIG[status];
+                const Icon = cfg.icon;
+                const isCurrent = item.pipelineStatus === status;
+                return (
+                  <ContextMenuItem
+                    key={status}
+                    disabled={isCurrent}
+                    onClick={() => onStatusChange(item.matchId!, status)}
+                    className="gap-2"
+                  >
+                    <Icon className={`h-4 w-4 ${cfg.iconClass}`} />
+                    {cfg.label}
+                    {isCurrent && <Check className="ml-auto h-4 w-4" />}
+                  </ContextMenuItem>
+                );
+              })}
+            </ContextMenuContent>
+          </ContextMenu>
+        );
+      })}
+    </div>
+  );
+}
+
 // --- Board View ---
 
 function BoardView({
-  pipeline,
+  grouped,
   search,
   onDrop,
 }: {
-  pipeline: PipelineData;
+  grouped: Record<Status, PipelineCardItem[]>;
   search: string;
   onDrop: (matchId: string, status: Status) => void;
 }) {
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
       {STATUSES.map((status) => {
-        const matches = pipeline[status].filter(
-          (m) =>
+        const items = grouped[status].filter(
+          (item) =>
             !search ||
-            (m.startupName ?? "").toLowerCase().includes(search.toLowerCase()),
+            item.displayName.toLowerCase().includes(search.toLowerCase()),
         );
         return (
           <KanbanColumn
             key={status}
             status={status}
-            matches={matches}
+            items={items}
             onDrop={onDrop}
           />
         );
@@ -546,11 +639,11 @@ function BoardView({
 
 function KanbanColumn({
   status,
-  matches,
+  items,
   onDrop,
 }: {
   status: Status;
-  matches: PipelineMatch[];
+  items: PipelineCardItem[];
   onDrop: (matchId: string, status: Status) => void;
 }) {
   const [dragOver, setDragOver] = useState(false);
@@ -588,14 +681,14 @@ function KanbanColumn({
           <h3 className="text-sm font-semibold">{config.label}</h3>
         </div>
         <Badge variant="secondary" className="rounded-lg px-3 text-xs tabular-nums">
-          {matches.length}
+          {items.length}
         </Badge>
       </div>
       <div className="flex-1 space-y-2 overflow-y-auto p-2.5">
-        {matches.map((match) => (
-          <KanbanCard key={match.id} match={match} />
+        {items.map((item) => (
+          <KanbanCard key={item.matchId ?? item.startupId} item={item} />
         ))}
-        {matches.length === 0 && (
+        {items.length === 0 && (
           <p className="py-10 text-center text-sm text-muted-foreground">No startups</p>
         )}
       </div>
@@ -603,151 +696,56 @@ function KanbanColumn({
   );
 }
 
-function KanbanCard({ match }: { match: PipelineMatch }) {
+function KanbanCard({ item }: { item: PipelineCardItem }) {
   function handleDragStart(e: DragEvent) {
-    e.dataTransfer.setData("text/plain", match.id);
+    if (!item.matchId) return;
+    e.dataTransfer.setData("text/plain", item.matchId);
     e.dataTransfer.effectAllowed = "move";
   }
 
   return (
     <Card
-      draggable
+      draggable={!item.isAnalyzing && !!item.matchId}
       onDragStart={handleDragStart}
-      className="cursor-grab active:cursor-grabbing"
+      className={
+        item.isAnalyzing ? "opacity-75" : "cursor-grab active:cursor-grabbing"
+      }
     >
       <CardContent className="p-3 space-y-2">
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
-            <p className="font-medium text-sm truncate">
-              {match.startupName ?? "Untitled Startup"}
-            </p>
+            <p className="font-medium text-sm truncate">{item.displayName}</p>
           </div>
-          <GripVertical className="h-4 w-4 shrink-0 text-muted-foreground" />
+          {item.isAnalyzing ? (
+            <Badge variant="outline" className="gap-1 shrink-0 text-xs">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Analyzing...
+            </Badge>
+          ) : (
+            <GripVertical className="h-4 w-4 shrink-0 text-muted-foreground" />
+          )}
         </div>
-        <div className="flex items-center gap-2">
-          <ScoreRing score={match.overallScore} size="sm" showLabel={false} />
-          <div className="flex-1 min-w-0 space-y-0.5">
-            {match.startupIndustry && (
-              <p className="text-xs text-muted-foreground truncate">
-                {match.startupIndustry}
-              </p>
-            )}
-            {match.startupStage && (
-              <p className="text-xs text-muted-foreground truncate">
-                {match.startupStage}
-              </p>
-            )}
+        {!item.isAnalyzing && (
+          <div className="flex items-center gap-2">
+            <ScoreRing score={item.overallScore} size="sm" showLabel={false} />
+            <div className="flex-1 min-w-0 space-y-0.5">
+              {item.industry && (
+                <p className="text-xs text-muted-foreground truncate">
+                  {item.industry}
+                </p>
+              )}
+              {item.stage && (
+                <p className="text-xs text-muted-foreground truncate">
+                  {formatStageLabel(item.stage)}
+                </p>
+              )}
+            </div>
           </div>
-        </div>
+        )}
         <div className="flex items-center gap-1 text-xs text-muted-foreground">
           <Clock className="h-3 w-3" />
-          <span>{formatDate(match.createdAt)}</span>
+          <span>{formatDate(item.createdAt)}</span>
         </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-// --- List View ---
-
-function ListView({
-  matches,
-  pipeline,
-  filterStatus,
-  onFilterStatus,
-  onDrop,
-}: {
-  matches: PipelineMatch[];
-  pipeline: PipelineData;
-  filterStatus: Status | null;
-  onFilterStatus: (s: Status | null) => void;
-  onDrop: (matchId: string, status: Status) => void;
-}) {
-  return (
-    <div className="space-y-4">
-      {/* Filter cards */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-        {STATUSES.map((status) => {
-          const config = STATUS_CONFIG[status];
-          const count = pipeline[status].length;
-          const isActive = filterStatus === status;
-          return (
-            <button
-              key={status}
-              onClick={() => onFilterStatus(isActive ? null : status)}
-              className={`rounded-lg border p-3 text-left transition-colors hover:bg-muted/50 ${
-                isActive ? `ring-2 ring-offset-2 ${config.borderClass} ring-current` : ""
-              }`}
-            >
-              <p className="text-xs text-muted-foreground">{config.label}</p>
-              <p className="text-2xl font-bold tabular-nums">{count}</p>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Rows */}
-      <div className="space-y-2">
-        {matches.length === 0 && (
-          <Card>
-            <CardContent className="py-12 text-center text-muted-foreground">
-              No deals found.
-            </CardContent>
-          </Card>
-        )}
-        {matches.map((match) => (
-          <ListRow key={match.id} match={match} onStatusChange={onDrop} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function ListRow({
-  match,
-  onStatusChange,
-}: {
-  match: PipelineMatch;
-  onStatusChange: (matchId: string, status: Status) => void;
-}) {
-  const config = STATUS_CONFIG[match.status];
-
-  return (
-    <Card>
-      <CardContent className="flex items-center gap-4 p-4">
-        <ScoreRing score={match.overallScore} size="sm" showLabel={false} />
-        <div className="flex-1 min-w-0">
-          <p className="font-medium truncate">
-            {match.startupName ?? "Untitled Startup"}
-          </p>
-          <p className="text-sm text-muted-foreground truncate">
-            {[match.startupIndustry, match.startupStage]
-              .filter(Boolean)
-              .join(" \u00b7 ")}
-          </p>
-        </div>
-        <Badge className={config.badgeClass}>{config.label}</Badge>
-        <span className="text-sm tabular-nums font-medium w-10 text-center">
-          {Math.round(match.overallScore)}
-        </span>
-        <span className="text-sm text-muted-foreground whitespace-nowrap">
-          {formatDate(match.createdAt)}
-        </span>
-        <Select
-          value={match.status}
-          onValueChange={(v) => onStatusChange(match.id, v as Status)}
-        >
-          <SelectTrigger className="w-[130px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {STATUSES.map((s) => (
-              <SelectItem key={s} value={s}>
-                {STATUS_CONFIG[s].label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
       </CardContent>
     </Card>
   );

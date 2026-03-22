@@ -3,6 +3,7 @@ import {
   Activity,
   AlertTriangle,
   CheckCircle2,
+  ChevronRight,
   Clock3,
   Eye,
   Loader2,
@@ -1273,40 +1274,6 @@ export function AdminPipelineLivePanel({
           </div>
         )}
 
-        <div className="grid gap-3 md:grid-cols-4">
-          <div className="rounded-lg border p-3">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Overall</p>
-            <p className="mt-1 text-2xl font-semibold tabular-nums">
-              {normalizePercent(progress?.overallProgress)}%
-            </p>
-          </div>
-          <div className="rounded-lg border p-3">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Current phase</p>
-            <p className="mt-1 text-base font-semibold">
-              {formatLabel(String(progress?.currentPhase ?? "—"))}
-            </p>
-            <p className="mt-2 text-xs text-muted-foreground">
-              Run {progress?.pipelineRunId ? progress.pipelineRunId.slice(0, 8) : "—"}
-            </p>
-          </div>
-          <div className="rounded-lg border p-3">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Active agents</p>
-            <p className="mt-1 text-2xl font-semibold">{runningAgentsCount}</p>
-            <p className="mt-2 text-xs text-muted-foreground">
-              Retrying now: {activeRetriesCount}
-            </p>
-          </div>
-          <div className={`rounded-lg border p-3 ${SURFACE_TONE_CLASS[runTone]}`}>
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Issue signals</p>
-            <p className="mt-1 text-2xl font-semibold">{totalIssueSignals}</p>
-            <p className="mt-2 text-xs text-muted-foreground">
-              {isLive
-                ? `Active failed: ${activeFailedAgentsCount} • Retrying: ${activeRetriesCount}`
-                : `Flagged agents: ${problematicAgentsCount} • Fallback: ${fallbackCount}`}
-            </p>
-          </div>
-        </div>
-
         <div className="space-y-1.5">
           <h3 className="text-sm font-semibold">Stages</h3>
           <div className="rounded-lg border divide-y">
@@ -1392,10 +1359,18 @@ export function AdminPipelineLivePanel({
           </div>
         </div>
 
-        <PhaseDataInspector
-          phaseResults={progress?.phaseResults}
-          phases={progress?.phases}
-        />
+        <details className="group">
+          <summary className="flex cursor-pointer items-center gap-1.5 text-sm font-semibold list-none [&::-webkit-details-marker]:hidden">
+            <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-90" />
+            Phase Data Inspector
+          </summary>
+          <div className="mt-2">
+            <PhaseDataInspector
+              phaseResults={progress?.phaseResults}
+              phases={progress?.phases}
+            />
+          </div>
+        </details>
 
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-2">

@@ -99,6 +99,10 @@ export class CompetitiveAdvantageEvaluationAgent extends BaseEvaluationAgent<Com
     };
   }
 
+  protected override getMaxOutputTokens(): number {
+    return 120_000;
+  }
+
   fallback({ extraction: _extraction }: EvaluationPipelineInput): CompetitiveAdvantageEvaluation {
     return CompetitiveAdvantageEvaluationSchema.parse({
       ...baseEvaluation(20, "Competitive advantage evaluation incomplete — requires manual review"),

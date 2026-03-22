@@ -1025,7 +1025,7 @@ export abstract class BaseEvaluationAgent<TOutput>
       prompt: params.prompt,
       tools: params.tools,
       toolChoice: params.toolChoice,
-      providerOptions: params.providerOptions,
+      providerOptions: params.providerOptions ?? { openai: { strictJsonSchema: false } },
       abortSignal: params.abortSignal,
     };
 
@@ -1264,8 +1264,12 @@ export abstract class BaseEvaluationAgent<TOutput>
     );
   }
 
-  private shouldUseTextOnlyStructuredMode(provider: string | undefined): boolean {
-    return provider === "openai";
+  private shouldUseTextOnlyStructuredMode(_provider: string | undefined): boolean {
+    // Previously returned true for OpenAI, which disabled native structured output
+    // and caused the model to omit complex nested fields (marketSizing, competitors, etc.)
+    // because they appeared optional in the text-appended JSON schema.
+    // OpenAI's native structured output (json_schema response_format) forces all fields.
+    return false;
   }
 
   private resolveTemperatureOption(params: {

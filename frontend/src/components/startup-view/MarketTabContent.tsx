@@ -600,11 +600,11 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage }: Mar
             );
           })()}
 
-          {/* Bottom-Up Sanity Check — compact row */}
+          {/* Bottom-Up Sanity Check */}
           {(!fundingStage || /pre.?seed|seed|series.?a/i.test(fundingStage)) && bottomUpCalculation !== "Not provided" && (
-            <div className="flex items-start gap-2 rounded-md border border-dashed px-3 py-2 text-xs">
-              <span className="font-medium text-muted-foreground shrink-0">Bottom-up check:</span>
-              <span className="font-mono">{bottomUpCalculation}</span>
+            <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
+              <p className="text-sm font-medium">Bottom-up check</p>
+              <MarkdownText className="text-xs text-muted-foreground [&>p]:mb-0">{bottomUpCalculation}</MarkdownText>
             </div>
           )}
         </CardContent>

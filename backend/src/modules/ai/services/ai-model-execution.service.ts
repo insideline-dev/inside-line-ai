@@ -168,6 +168,7 @@ export class AiModelExecutionService {
     return {
       openai: {
         reasoningEffort: "high",
+        strictJsonSchema: false,
       },
     };
   }

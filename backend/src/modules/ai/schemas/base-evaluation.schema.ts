@@ -34,7 +34,7 @@ export function normalizeConfidenceInput(value: unknown): unknown {
 function splitListLikeString(value: string): string[] {
   return value
     .split(/\r?\n/)
-    .map((item) => item.replace(/^[\s\-*•]+/, "").trim())
+    .map((item) => item.replace(/^[\s•]+/, "").replace(/^[-*](?=\s)/, "").trim())
     .filter((item) => item.length > 0);
 }
 
@@ -69,7 +69,12 @@ export const stringArray = z.preprocess(
 
 export const requiredStringFromNull = (fallback: string) =>
   z.preprocess(
-    (value) => (value == null ? fallback : value),
+    (value) =>
+      value == null
+        ? fallback
+        : typeof value === "number"
+          ? String(value)
+          : value,
     z.string().min(1),
   );
 

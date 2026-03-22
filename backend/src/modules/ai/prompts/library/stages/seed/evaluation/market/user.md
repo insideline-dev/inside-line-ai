@@ -10,6 +10,7 @@ Stage: {{stage}}
 === COMPANY MARKET CLAIMS (from pitch deck) ===
 Claimed TAM: {{claimedTAM}}
 Claimed SAM: {{claimedSAM}}
+Claimed SOM: {{claimedSOM}}
 Claimed Growth Rate: {{claimedGrowthRate}}
 Target Market Description: {{targetMarketDescription}}
 
@@ -32,3 +33,4 @@ Additional context from pitch materials:
 5. Perform a bottom-up sanity check on TAM
 6. Calculate SAM and SOM based on actual geographic and segment focus
 7. Identify research gaps, stale data, or low-confidence areas
+8. For deckVsResearch: compare EACH of TAM, SAM, and SOM separately. Use the claimed values above vs your research estimates. Provide an alignmentScore (0-100, where 100 = perfect match) for each metric that has both a deck claim and a research estimate

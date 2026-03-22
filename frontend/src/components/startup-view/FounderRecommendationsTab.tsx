@@ -185,7 +185,9 @@ export function FounderRecommendationsTab({ evaluation }: FounderRecommendations
                     {whatsWorking.map((item, index) => (
                       <li key={`w-${index}`} className="flex items-start gap-2.5 text-sm text-emerald-900 dark:text-emerald-200">
                         <span className="mt-2 size-1.5 rounded-full bg-emerald-500 shrink-0" />
-                        <span className="text-pretty">{item}</span>
+                        <MarkdownText className="inline text-pretty [&>p]:inline [&>p]:mb-0">
+                          {item}
+                        </MarkdownText>
                       </li>
                     ))}
                   </ul>
@@ -204,7 +206,9 @@ export function FounderRecommendationsTab({ evaluation }: FounderRecommendations
                     {pathToInevitability.map((item, index) => (
                       <li key={`p-${index}`} className="flex items-start gap-2.5 text-sm text-violet-900 dark:text-violet-200">
                         <span className="mt-2 size-1.5 rounded-full bg-violet-500 shrink-0" />
-                        <span className="text-pretty">{item}</span>
+                        <MarkdownText className="inline text-pretty [&>p]:inline [&>p]:mb-0">
+                          {item}
+                        </MarkdownText>
                       </li>
                     ))}
                   </ul>
@@ -322,7 +326,9 @@ function SectionCollapsible({ sectionKey, label, pitchRecs, founderRecs, default
                       <Badge variant="outline" className="shrink-0 text-[10px] font-medium border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-400">
                         Deck Gap
                       </Badge>
-                      <span className="text-sm font-medium text-balance">{rec.deckMissingElement}</span>
+                      <MarkdownText className="text-sm font-medium text-balance [&>p]:mb-0">
+                        {rec.deckMissingElement}
+                      </MarkdownText>
                     </div>
                     {rec.whyItMatters && (
                       <MarkdownText className="text-sm text-muted-foreground leading-relaxed text-pretty [&>p]:mb-0">

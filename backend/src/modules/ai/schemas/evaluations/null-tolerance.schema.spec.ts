@@ -53,7 +53,7 @@ describe("evaluation schema null tolerance", () => {
     });
 
     expect(parsed.marketSizing.tam.value).toBeDefined();
-    expect(parsed.marketGrowthAndTiming.timingAssessment).toBeDefined();
+    expect(parsed.marketGrowthAndTiming.growthRate).toBeDefined();
     expect(parsed.marketStructure.structureType).toBeDefined();
   });
 

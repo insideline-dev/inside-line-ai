@@ -2857,6 +2857,7 @@ export class EnrichmentService {
             : undefined,
           temperature: this.aiConfig.getEnrichmentTemperature(),
           maxOutputTokens: 8000,
+          providerOptions: { openai: { strictJsonSchema: false } },
         }),
         this.aiConfig.getEnrichmentTimeoutMs(),
         "[Enrichment] AI synthesis timed out",

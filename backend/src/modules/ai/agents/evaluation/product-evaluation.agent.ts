@@ -89,6 +89,10 @@ export class ProductEvaluationAgent extends BaseEvaluationAgent<ProductEvaluatio
     };
   }
 
+  protected override getMaxOutputTokens(): number {
+    return 120_000;
+  }
+
   fallback({ extraction }: EvaluationPipelineInput): ProductEvaluation {
     return ProductEvaluationSchema.parse({
       ...baseEvaluation(25, "Product evaluation incomplete — requires manual review"),

@@ -164,10 +164,13 @@ Your evaluation above should populate these structured output fields:
 
 From the Evaluation Framework:
 - marketSizing → TAM/SAM/SOM analysis, source attribution with tiers, bottom-up sanity check, and deckVsResearch comparison
-  - marketSizing.deckVsResearch.tamClaimed → The TAM figure the pitch deck claims (e.g. "$10B"). Extract verbatim from deck.
-  - marketSizing.deckVsResearch.tamResearched → The TAM figure your independent research supports (e.g. "$6-8B"). Use your best research estimate.
-  - marketSizing.deckVsResearch.discrepancyFlag → "true" if deck materially overstates vs research, "false" if aligned, "unknown" if insufficient data
-  - marketSizing.deckVsResearch.notes → One-sentence explanation of the alignment or discrepancy between deck claims and research findings
+  - marketSizing.som.sources → REQUIRED: Provide sources for SOM estimates just like TAM and SAM. Use [{ name, tier, date, geography }] format.
+  - marketSizing.deckVsResearch → Per-metric comparison between deck claims and your research:
+    - tam: { claimed (deck's TAM verbatim, e.g. "$10B"), researched (your research TAM, e.g. "$6-8B"), alignmentScore (0-100), notes (one sentence) }
+    - sam: { claimed (deck's SAM verbatim), researched (your research SAM), alignmentScore (0-100), notes (one sentence) }
+    - som: { claimed (deck's SOM verbatim), researched (your research SOM), alignmentScore (0-100), notes (one sentence) }
+    - overallNotes: One-sentence overall alignment summary
+  - ALIGNMENT SCORING (100 = perfectly aligned, 0 = completely misaligned): 90-100 = deck within 10% of research (aligned), 70-89 = within 25% (moderate), 40-69 = 25-100% overstatement (overstated), 0-39 = >2x overstatement (severely overstated). IMPORTANT: Use null when you lack sufficient data to compare — never use a low score as a substitute for missing data. You MUST provide an alignmentScore for EACH of TAM, SAM, and SOM when both the deck claim and research estimate are available.
 IMPORTANT: TAM/SAM/SOM `value` fields must be concise numeric ranges only. Examples: "$5-8B", "$500M-1B", "$200M". Never output prose like "The global TAM is estimated at..." — just the number or range.
 - marketGrowthAndTiming → growth rate with source, "why now" thesis, market lifecycle position
 - marketStructure → structure type, concentration trend, entry conditions scorecard (per-barrier severity), tailwinds, headwinds

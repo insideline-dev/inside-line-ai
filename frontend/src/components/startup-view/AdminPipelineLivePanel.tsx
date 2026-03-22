@@ -481,25 +481,19 @@ function toPrettyOutput(trace: PipelineAgentTrace | null): string {
   return "Output not captured";
 }
 
-function toPrettyMeta(trace: PipelineAgentTrace | null): string {
-  if (!trace) {
-    return "";
-  }
-  if (trace.meta && Object.keys(trace.meta).length > 0) {
-    return toPrettyJson(trace.meta);
-  }
-  return "Metadata not captured";
-}
-
 export function TraceInputPanel({
   trace,
   defaultTab = "user",
+  className,
+  contentClassName,
 }: {
   trace: PipelineAgentTrace | null;
   defaultTab?: "user" | "system";
+  className?: string;
+  contentClassName?: string;
 }) {
   return (
-    <Tabs defaultValue={defaultTab} className="space-y-2">
+    <Tabs defaultValue={defaultTab} className={cn("space-y-2", className)}>
       <TabsList className="grid h-8 w-full grid-cols-2">
         <TabsTrigger value="user" className="text-xs">
           User Prompt
@@ -508,13 +502,13 @@ export function TraceInputPanel({
           System Prompt
         </TabsTrigger>
       </TabsList>
-      <TabsContent value="user" className="mt-0">
-        <pre className="max-h-[440px] overflow-auto rounded-md border bg-muted/30 p-3 text-xs leading-relaxed whitespace-pre-wrap">
+      <TabsContent value="user" className="mt-0 min-h-0">
+        <pre className={cn("max-h-[440px] overflow-auto rounded-md border bg-muted/30 p-3 text-xs leading-relaxed whitespace-pre-wrap", contentClassName)}>
           {toPrettyUserPrompt(trace)}
         </pre>
       </TabsContent>
-      <TabsContent value="system" className="mt-0">
-        <pre className="max-h-[440px] overflow-auto rounded-md border bg-muted/30 p-3 text-xs leading-relaxed whitespace-pre-wrap">
+      <TabsContent value="system" className="mt-0 min-h-0">
+        <pre className={cn("max-h-[440px] overflow-auto rounded-md border bg-muted/30 p-3 text-xs leading-relaxed whitespace-pre-wrap", contentClassName)}>
           {toPrettySystemPrompt(trace)}
         </pre>
       </TabsContent>
@@ -1611,55 +1605,57 @@ export function AdminPipelineLivePanel({
             }
           }}
         >
-          <DialogContent className="max-w-5xl">
-            <DialogHeader>
+          <DialogContent className="flex h-[90vh] w-[min(96vw,90rem)] max-w-none flex-col overflow-hidden p-0">
+            <DialogHeader className="shrink-0 border-b px-6 py-4">
               <DialogTitle>
                 {selectedTrace
                   ? `${formatLabel(selectedTrace.stepKey || selectedTrace.agentKey)} · ${formatLabel(String(selectedTrace.phase))} ${isPhaseStepTrace(selectedTrace) ? "Step" : "Agent"} Trace`
                   : "Trace"}
               </DialogTitle>
             </DialogHeader>
-            {selectedTrace?.status === "fallback" && (
-              <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
-                Fallback reason:{" "}
-                {formatFallbackReasonWithLegacyLabel(
-                  selectedTrace.fallbackReason,
+            <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6">
+              <div className="space-y-4 pt-4">
+                {selectedTrace?.status === "fallback" && (
+                  <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+                    Fallback reason:{" "}
+                    {formatFallbackReasonWithLegacyLabel(
+                      selectedTrace.fallbackReason,
+                    )}
+                    {selectedTrace.rawProviderError ? (
+                      <>
+                        {" "}
+                        | Raw provider error: {selectedTrace.rawProviderError}
+                      </>
+                    ) : null}
+                  </div>
                 )}
-                {selectedTrace.rawProviderError ? (
-                  <>
-                    {" "}
-                    | Raw provider error: {selectedTrace.rawProviderError}
-                  </>
-                ) : null}
+                {selectedTraceWarning && selectedTrace?.status !== "fallback" && (
+                  <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+                    Warning: {selectedTraceWarning}
+                  </div>
+                )}
+                {selectedTraceRuntimeSummary && (
+                  <div className="rounded-md border border-sky-500/30 bg-sky-500/5 px-3 py-2 text-xs text-sky-700 dark:text-sky-300">
+                    Runtime model config: {selectedTraceRuntimeSummary}
+                  </div>
+                )}
+                <div className="grid min-h-0 flex-1 gap-4 md:grid-cols-2">
+                  <div className="flex min-h-0 flex-col space-y-1">
+                    <p className="text-xs font-medium text-muted-foreground">Input</p>
+                    <TraceInputPanel
+                      trace={selectedTrace}
+                      className="min-h-0 flex-1"
+                      contentClassName="h-[calc(90vh-14rem)] max-h-none"
+                    />
+                  </div>
+                  <div className="flex min-h-0 flex-col space-y-1">
+                    <p className="text-xs font-medium text-muted-foreground">Output</p>
+                    <pre className="h-[calc(90vh-14rem)] overflow-auto rounded-md border bg-muted/30 p-3 text-xs leading-relaxed whitespace-pre-wrap">
+                      {toPrettyOutput(selectedTrace)}
+                    </pre>
+                  </div>
+                </div>
               </div>
-            )}
-            {selectedTraceWarning && selectedTrace?.status !== "fallback" && (
-              <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
-                Warning: {selectedTraceWarning}
-              </div>
-            )}
-            {selectedTraceRuntimeSummary && (
-              <div className="rounded-md border border-sky-500/30 bg-sky-500/5 px-3 py-2 text-xs text-sky-700 dark:text-sky-300">
-                Runtime model config: {selectedTraceRuntimeSummary}
-              </div>
-            )}
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-muted-foreground">Input</p>
-                <TraceInputPanel trace={selectedTrace} />
-              </div>
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-muted-foreground">Output</p>
-                <pre className="max-h-[440px] overflow-auto rounded-md border bg-muted/30 p-3 text-xs leading-relaxed whitespace-pre-wrap">
-                  {toPrettyOutput(selectedTrace)}
-                </pre>
-              </div>
-            </div>
-            <div className="space-y-1">
-              <p className="text-xs font-medium text-muted-foreground">Metadata</p>
-              <pre className="max-h-[220px] overflow-auto rounded-md border bg-muted/30 p-3 text-xs leading-relaxed whitespace-pre-wrap">
-                {toPrettyMeta(selectedTrace)}
-              </pre>
             </div>
           </DialogContent>
         </Dialog>

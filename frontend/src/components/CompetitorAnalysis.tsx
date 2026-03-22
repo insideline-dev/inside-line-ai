@@ -429,13 +429,17 @@ export function DirectCompetitorCard({
                 {funding.totalRaised && (
                   <div>
                     <span className="text-muted-foreground">Total: </span>
-                    <span className="font-medium">{funding.totalRaised}</span>
+                    <MarkdownText inline className="inline font-medium [&>p]:inline [&>p]:mb-0">
+                      {funding.totalRaised}
+                    </MarkdownText>
                   </div>
                 )}
                 {funding.lastRound && (
                   <div>
                     <span className="text-muted-foreground">Last: </span>
-                    <span className="font-medium">{funding.lastRound}</span>
+                    <MarkdownText inline className="inline font-medium [&>p]:inline [&>p]:mb-0">
+                      {funding.lastRound}
+                    </MarkdownText>
                     {funding.lastRoundDate && (
                       <span className="text-muted-foreground text-xs ml-1">
                         ({funding.lastRoundDate})
@@ -446,7 +450,7 @@ export function DirectCompetitorCard({
               </div>
               {keyInvestors.length > 0 && (
                 <div className="mt-2 text-xs text-muted-foreground text-pretty">
-                  Investors: {keyInvestors.slice(0, 3).join(", ")}
+                  Investors: <MarkdownText inline className="inline [&>p]:inline [&>p]:mb-0">{keyInvestors.slice(0, 3).join(", ")}</MarkdownText>
                   {keyInvestors.length > 3 &&
                     ` +${keyInvestors.length - 3} more`}
                 </div>
@@ -473,7 +477,7 @@ export function DirectCompetitorCard({
             </div>
             {product.targetSegment && (
               <p className="text-xs text-muted-foreground">
-                Target: {product.targetSegment}
+                Target: <MarkdownText inline className="inline [&>p]:inline [&>p]:mb-0">{product.targetSegment}</MarkdownText>
               </p>
             )}
           </div>
@@ -640,17 +644,17 @@ export function IndirectCompetitorCard({
           {competitor?.description || "No description available"}
         </MarkdownText>
 
-        <div className="p-2 bg-muted/50 rounded text-xs text-pretty">
+        <div className="rounded bg-muted/50 p-2 text-xs text-pretty">
           <span className="font-medium">Why indirect: </span>
-          <span className="text-muted-foreground">
+          <MarkdownText inline className="inline text-muted-foreground [&>p]:inline [&>p]:mb-0">
             {competitor?.whyIndirect || "Not specified"}
-          </span>
+          </MarkdownText>
         </div>
 
         {competitor?.funding && (
           <div className="flex items-center gap-1.5 text-sm">
             <DollarSign className="h-3.5 w-3.5 text-green-600" />
-            <span>Funding: {competitor.funding}</span>
+            <span>Funding: <MarkdownText inline className="inline [&>p]:inline [&>p]:mb-0">{competitor.funding}</MarkdownText></span>
           </div>
         )}
 
@@ -992,15 +996,17 @@ function CompactCompetitorCard({
         <ExternalLink className="h-3 w-3 text-muted-foreground" />
       </a>
       {description && (
-        <p className="text-xs text-muted-foreground line-clamp-2 text-pretty">
+        <MarkdownText className="text-xs text-muted-foreground text-pretty [&>p]:mb-0" data-testid={`text-compact-competitor-description-${index}`}>
           {description}
-        </p>
+        </MarkdownText>
       )}
       <div className="flex flex-wrap items-center gap-1.5">
         {funding && (
           <Badge className={cn("text-xs", getFundingBadgeColor(funding))}>
-            <DollarSign className="h-3 w-3 mr-0.5" />
-            {funding}
+            <DollarSign className="h-3 w-3 mr-0.5 shrink-0" />
+            <MarkdownText inline className="inline [&>p]:inline [&>p]:mb-0">
+              {funding}
+            </MarkdownText>
           </Badge>
         )}
         {threatLevel && (
@@ -1010,9 +1016,9 @@ function CompactCompetitorCard({
         )}
       </div>
       {whyIndirect && (
-        <p className="text-xs text-muted-foreground/80 line-clamp-2 text-pretty">
+        <MarkdownText className="text-xs text-muted-foreground/80 text-pretty [&>p]:mb-0">
           {whyIndirect}
-        </p>
+        </MarkdownText>
       )}
     </div>
   );
@@ -1407,7 +1413,9 @@ function BasicCompetitorLandscapeCard({
                       className="flex items-start gap-2 text-pretty"
                     >
                       <AlertTriangle className="h-3.5 w-3.5 mt-0.5 text-amber-500 shrink-0" />
-                      <span className="text-muted-foreground">{item}</span>
+                      <MarkdownText className="inline text-muted-foreground [&>p]:inline [&>p]:mb-0">
+                        {item}
+                      </MarkdownText>
                     </li>
                   ))}
                 </ul>

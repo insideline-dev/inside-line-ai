@@ -72,6 +72,7 @@ export function createMockEvaluationResult(
           value: "$200M",
           methodology: "Win rate model",
           assumptions: "10% capture in 5 years",
+          sources: [{ name: "Internal estimate", tier: "tier_2", date: "2025", geography: "US" }],
           confidence: "low",
         },
         bottomUpSanityCheck: {
@@ -79,10 +80,10 @@ export function createMockEvaluationResult(
           notes: "Pending",
         },
         deckVsResearch: {
-          tamClaimed: "$8.5B",
-          tamResearched: "$8B",
-          discrepancyFlag: "none",
-          notes: "Aligned",
+          tam: { claimed: "$8.5B", researched: "$8B", alignmentScore: null, notes: "Aligned" },
+          sam: { claimed: "Unknown", researched: "Unknown", alignmentScore: null, notes: "No notes" },
+          som: { claimed: "Unknown", researched: "Unknown", alignmentScore: null, notes: "No notes" },
+          overallNotes: "Aligned",
         },
       },
       marketGrowthAndTiming: {

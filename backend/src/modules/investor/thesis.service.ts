@@ -21,6 +21,7 @@ import { StartupMatchingPipelineService } from '../ai/services/startup-matching-
 import { AiProviderService } from '../ai/providers/ai-provider.service';
 import { ModelPurpose } from '../ai/interfaces/pipeline.interface';
 import { generateText } from 'ai';
+import { buildThesisSummary } from './thesis-summary.util';
 
 const THESIS_SUMMARY_BATCH_SIZE = 10;
 
@@ -73,7 +74,7 @@ export class ThesisService {
       const thesisSummary = await this.generateAiSummaryWithFallback(mergedThesis);
 
       payload.thesisSummary = thesisSummary;
-      payload.thesisSummaryGeneratedAt = thesisSummary ? new Date() : null;
+      payload.thesisSummaryGeneratedAt = new Date();
 
       let result: typeof investorThesis.$inferSelect;
       if (existing) {
@@ -149,7 +150,7 @@ export class ThesisService {
     this.logger.log(`Re-matching queued for ${approvedStartups.length} startups after thesis update`);
   }
 
-  private async generateAiSummaryWithFallback(thesis: Record<string, unknown>): Promise<string | null> {
+  private async generateAiSummaryWithFallback(thesis: Record<string, unknown>): Promise<string> {
     if (this.aiProviders) {
       try {
         const model = this.aiProviders.resolveModelForPurpose(ModelPurpose.THESIS_ALIGNMENT);
@@ -192,11 +193,11 @@ export class ThesisService {
         }
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
-        this.logger.warn(`AI thesis summary generation failed, using rule-based fallback: ${msg}`);
+        this.logger.error(`AI thesis summary generation failed, using rule-based fallback: ${msg}`);
       }
     }
 
-    return this.buildThesisSummary(thesis);
+    return buildThesisSummary(thesis);
   }
 
   async delete(userId: string) {
@@ -311,109 +312,4 @@ export class ThesisService {
     };
   }
 
-  private buildThesisSummary(thesis: Record<string, unknown>): string | null {
-    const sections: string[] = [];
-
-    const readString = (value: unknown): string | null => {
-      if (typeof value !== 'string') {
-        return null;
-      }
-
-      const trimmed = value.trim();
-      return trimmed.length > 0 ? trimmed : null;
-    };
-
-    const readStringArray = (value: unknown): string[] => {
-      if (!Array.isArray(value)) {
-        return [];
-      }
-
-      return value
-        .filter((item): item is string => typeof item === 'string')
-        .map((item) => item.trim())
-        .filter((item) => item.length > 0);
-    };
-
-    const readNumber = (value: unknown): number | null => {
-      return typeof value === 'number' && Number.isFinite(value) ? value : null;
-    };
-
-    const narrative = readString(thesis.thesisNarrative);
-    if (narrative) {
-      sections.push(narrative);
-    }
-
-    const notes = readString(thesis.notes);
-    if (notes) {
-      sections.push(`Notes: ${notes}`);
-    }
-
-    const formatList = (values: string[]): string | null => {
-      if (values.length === 0) {
-        return null;
-      }
-
-      return values.join(', ');
-    };
-
-    const industries = formatList(readStringArray(thesis.industries));
-    if (industries) {
-      sections.push(`Focus industries: ${industries}.`);
-    }
-
-    const stages = formatList(readStringArray(thesis.stages));
-    if (stages) {
-      sections.push(`Preferred stages: ${stages}.`);
-    }
-
-    const geographies = formatList(readStringArray(thesis.geographicFocus));
-    if (geographies) {
-      sections.push(`Geographic focus: ${geographies}.`);
-    }
-
-    const checkSizeMin = readNumber(thesis.checkSizeMin);
-    const checkSizeMax = readNumber(thesis.checkSizeMax);
-    if (
-      typeof checkSizeMin === 'number' ||
-      typeof checkSizeMax === 'number'
-    ) {
-      const minText =
-        typeof checkSizeMin === 'number'
-          ? checkSizeMin.toLocaleString('en-US')
-          : '0';
-      const maxText =
-        typeof checkSizeMax === 'number'
-          ? checkSizeMax.toLocaleString('en-US')
-          : 'any';
-      sections.push(`Check size: ${minText} to ${maxText} USD.`);
-    }
-
-    const businessModels = formatList(readStringArray(thesis.businessModels));
-    if (businessModels) {
-      sections.push(`Business model preference: ${businessModels}.`);
-    }
-
-    const mustHaveFeatures = formatList(
-      readStringArray(thesis.mustHaveFeatures),
-    );
-    if (mustHaveFeatures) {
-      sections.push(`Must-have signals: ${mustHaveFeatures}.`);
-    }
-
-    const dealBreakers = formatList(readStringArray(thesis.dealBreakers));
-    if (dealBreakers) {
-      sections.push(`Deal breakers: ${dealBreakers}.`);
-    }
-
-    const antiPortfolio = readString(thesis.antiPortfolio);
-    if (antiPortfolio) {
-      sections.push(`Anti-portfolio constraints: ${antiPortfolio}.`);
-    }
-
-    if (sections.length === 0) {
-      return null;
-    }
-
-    return sections.join(' ').replace(/\s+/g, ' ').trim().slice(0, 2000);
-  }
 }

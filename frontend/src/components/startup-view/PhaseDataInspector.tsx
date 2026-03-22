@@ -151,8 +151,7 @@ export function PhaseDataInspector({
   );
 
   return (
-    <div className="space-y-2">
-      <h3 className="text-sm font-semibold">Phase Data Inspector</h3>
+    <div className="space-y-1.5">
       <div className="space-y-1.5">
         {phaseKeys.map((phase) => {
           const data = phaseResults[phase];

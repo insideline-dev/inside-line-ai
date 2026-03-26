@@ -172,6 +172,7 @@ Financial Planning Maturity (only populate when financialModelProvided is true):
 - financialPlanning.summary → paragraph assessing financial planning quality
 
 Strengths & Risks:
+- keyFindings → 3-5 insight-driven findings (each: takeaway + evidence + investment relevance, as a single flowing sentence)
 - strengths → specific financial planning strengths (string, one per line)
 - risks → specific financial planning risks (string, one per line)
 

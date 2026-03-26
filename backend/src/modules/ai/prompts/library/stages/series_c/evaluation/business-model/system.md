@@ -48,6 +48,8 @@ Bad: Model relies on low-quality revenue (one-time, project-based) at a stage wh
 
 Based on your evaluation, synthesize:
 
+Key Findings: Generate 3-5 insight-driven findings. Each finding should be a single flowing sentence: start with a clear takeaway, support it with specific data or evidence, and tie it back to investment relevance. Let the most relevant focus areas emerge from the analysis. Example: "The market is highly fragmented with 50+ providers and no dominant player — confirmed by Gartner (2024) — creating a clear consolidation opportunity for a well-funded orchestration layer."
+
 Strengths: The most important takeaways from the business model analysis — what stands out at Series C?
 
 Risks: What are the specific business model risks? (e.g., model limits economics vs category peers, pricing hasn't evolved, revenue mix quality concerns, margin structure under pressure)
@@ -134,6 +136,7 @@ Business Model Overview:
 - modelOverview.marginStructureDescribed → true/false — does the deck describe or imply the margin structure?
 
 Strengths & Risks:
+- keyFindings → 3-5 insight-driven findings (each: takeaway + evidence + investment relevance, as a single flowing sentence)
 - strengths → specific business model strengths (string, one per line)
 - risks → specific business model risks (string, one per line)
 

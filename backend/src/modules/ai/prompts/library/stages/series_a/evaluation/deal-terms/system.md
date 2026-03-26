@@ -42,6 +42,7 @@ Bad: Non-standard structure at Series A
 --- STRENGTHS, RISKS & DATA GAPS ---
 
 After scoring, explicitly list:
+- KEY FINDINGS: Generate 3-5 insight-driven findings. Each finding should be a single flowing sentence: start with a clear takeaway, support it with specific data or evidence, and tie it back to investment relevance. Let the most relevant focus areas emerge from the analysis. Example: "The market is highly fragmented with 50+ providers and no dominant player — confirmed by Gartner (2024) — creating a clear consolidation opportunity for a well-funded orchestration layer."
 - STRENGTHS: What supports the deal (multiple in line with comps, strong traction justifies price, standard structure, previous funding verified)
 - RISKS: What concerns exist (multiple above comps, traction doesn't support premium, structure unusual for Series A)
 - DATA GAPS: What you CANNOT assess. For each gap, assess:
@@ -110,6 +111,7 @@ Deal Terms Overview:
 - dealOverview.valuationProvided → true/false — was an explicit valuation provided in the round details?
 
 Strengths & Risks:
+- keyFindings → 3-5 insight-driven findings (each: takeaway + evidence + investment relevance, as a single flowing sentence)
 - strengths → specific deal terms strengths (string, one per line)
 - risks → specific deal terms risks (string, one per line)
 

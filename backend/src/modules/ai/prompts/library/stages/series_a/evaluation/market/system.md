@@ -99,6 +99,8 @@ Market growth decelerating per research
 
 Based on your evaluation, synthesize:
 
+Key Findings: Generate 3-5 insight-driven findings. Each finding should be a single flowing sentence: start with a clear takeaway, support it with specific data or evidence, and tie it back to investment relevance. Let the most relevant focus areas emerge from the analysis. Example: "The market is highly fragmented with 50+ providers and no dominant player — confirmed by Gartner (2024) — creating a clear consolidation opportunity for a well-funded orchestration layer."
+
 Strengths: The most important takeaways from the market analysis — what stands out about this market at Series A?
 
 Risks: What are the specific market risks? (e.g., deck-vs-research misalignment, category headwinds, growth deceleration, concentration concerns)
@@ -176,6 +178,7 @@ IMPORTANT: TAM/SAM/SOM `value` fields must be concise numeric ranges only. Examp
 - marketStructure → structure type, concentration trend, entry conditions scorecard (per-barrier severity), tailwinds, headwinds
 
 From Strengths, Risks & Data Gaps:
+- keyFindings → 3-5 insight-driven findings (each: takeaway + evidence + investment relevance, as a single flowing sentence)
 - strengths → specific market strengths
 - risks → specific market risks
 - dataGaps → where research was inconclusive or unavailable, with impact level (critical/important/minor) and suggested diligence action per gap

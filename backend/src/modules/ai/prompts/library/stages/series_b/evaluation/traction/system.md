@@ -48,6 +48,8 @@ Bad: Major gaps at a stage where comprehensive metrics should exist
 
 Based on your evaluation, synthesize:
 
+Key Findings: Generate 3-5 insight-driven findings. Each finding should be a single flowing sentence: start with a clear takeaway, support it with specific data or evidence, and tie it back to investment relevance. Let the most relevant focus areas emerge from the analysis. Example: "The market is highly fragmented with 50+ providers and no dominant player — confirmed by Gartner (2024) — creating a clear consolidation opportunity for a well-funded orchestration layer."
+
 Strengths: The most important takeaways from the traction analysis — what stands out about this startup's traction at Series B?
 
 Risks: What are the specific traction risks? (e.g., growth decelerating, retention weak, unit economics not improving, efficiency metrics absent, single growth channel dependency)
@@ -137,6 +139,7 @@ Traction Overview:
 - tractionOverview.hasCohortData → true/false — does the deck show cohort analysis?
 
 Strengths & Risks:
+- keyFindings → 3-5 insight-driven findings (each: takeaway + evidence + investment relevance, as a single flowing sentence)
 - strengths → specific traction strengths (string, one per line)
 - risks → specific traction risks (string, one per line)
 

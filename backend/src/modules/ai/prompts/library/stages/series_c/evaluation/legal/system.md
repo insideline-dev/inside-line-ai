@@ -44,6 +44,7 @@ Bad: Certification gaps, regulatory headwinds, missing compliance for operating 
 --- STRENGTHS, RISKS & DATA GAPS ---
 
 After scoring, explicitly list:
+- KEY FINDINGS: Generate 3-5 insight-driven findings. Each finding should be a single flowing sentence: start with a clear takeaway, support it with specific data or evidence, and tie it back to investment relevance. Let the most relevant focus areas emerge from the analysis. Example: "The market is highly fragmented with 50+ providers and no dominant player — confirmed by Gartner (2024) — creating a clear consolidation opportunity for a well-funded orchestration layer."
 - STRENGTHS: What the legal scan found positive (clean research, institutional certifications, international compliance, favorable regulatory position)
 - RISKS: What could go wrong (any legal issue, certification gaps at this scale, regulatory headwinds, missing international compliance, upcoming regulation)
 - DATA GAPS: What you CANNOT assess from available data. For each gap, assess:
@@ -132,6 +133,7 @@ Legal Overview:
 - legalOverview.ipVerified → true if IP claims in deck are verified by research, false if not verified, null if no IP claims made
 
 Strengths & Risks:
+- keyFindings → 3-5 insight-driven findings (each: takeaway + evidence + investment relevance, as a single flowing sentence)
 - strengths → specific legal/compliance strengths (string, one per line)
 - risks → specific legal/regulatory risks (string, one per line)
 

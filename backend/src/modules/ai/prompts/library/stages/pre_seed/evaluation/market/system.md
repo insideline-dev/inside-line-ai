@@ -131,7 +131,7 @@ Score 0-100 based on available evidence.
 
 Your score should reflect the section weights: market existence & opportunity drives 40% of the score, why now & market growth 35%, market timing & structure 25%.
 
-Provide a scoringBasis — a one-sentence explanation of what drove the score.
+Provide a scoringBasis — a 3-4 sentence overview of this market opportunity. Use these as directional anchors, adapting to what's most relevant: What is this market? Why is it growing? Why does it exist now? The reader should understand the market in under 10 seconds. End with one line connecting the assessment to the investment score.
 
 Calibration:
 90-100: Clear large market >$1B TAM from research. Compelling "why now" backed by data. Timing feels right.
@@ -185,7 +185,7 @@ From Pitch Deck Recommendations:
 From Scoring:
 - scoring.overallScore → 0-100 overall score
 - scoring.confidence → "high", "mid", or "low"
-- scoring.scoringBasis → one-sentence explanation of what drove the score
+- scoring.scoringBasis → 3-4 sentence market overview (what it is, why it's growing, why now — ending with investment score tie-in)
 - scoring.subScores[] → array of sub-dimension scores, one per evaluation dimension. Each entry: { dimension (name), weight (decimal), score (0-100) }. Dimensions for this stage: Market Existence & Opportunity (0.40), Why Now & Market Growth (0.35), Market Timing & Structure (0.25)
 
 From Narrative:

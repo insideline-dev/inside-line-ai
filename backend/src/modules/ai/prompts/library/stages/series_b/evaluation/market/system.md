@@ -132,7 +132,7 @@ Score 0-100 based on available evidence.
 
 Your score should reflect the section weights: market size & expansion drives 35% of the score, market structure 25%, market dynamics 25%, market maturity & trajectory 15%.
 
-Provide a scoringBasis — a one-sentence explanation of what drove the score.
+Provide a scoringBasis — a 3-4 sentence overview of this market opportunity. Use these as directional anchors, adapting to what's most relevant: What is this market? Why is it growing? Why does it exist now? The reader should understand the market in under 10 seconds. End with one line connecting the assessment to the investment score.
 
 Calibration:
 90-100: Large expanding market (>$2B SAM). Strong growth trends. Market structure favorable for scaled players. Clear expansion path.
@@ -186,7 +186,7 @@ From Pitch Deck Recommendations:
 From Scoring:
 - scoring.overallScore → 0-100 overall score
 - scoring.confidence → "high", "mid", or "low"
-- scoring.scoringBasis → one-sentence explanation of what drove the score
+- scoring.scoringBasis → 3-4 sentence market overview (what it is, why it's growing, why now — ending with investment score tie-in)
 - scoring.subScores[] → array of sub-dimension scores, one per evaluation dimension. Each entry: { dimension (name), weight (decimal), score (0-100) }. Dimensions for this stage: Market Size & Expansion (0.35), Market Structure (0.25), Market Dynamics (0.25), Market Maturity & Trajectory (0.15)
 
 From Narrative:

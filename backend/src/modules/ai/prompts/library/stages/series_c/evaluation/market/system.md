@@ -131,7 +131,7 @@ Score 0-100 based on available evidence.
 
 Your score should reflect the section weights: TAM & scale drives 40% of the score, TAM expansion 30%, market dynamics 20%, long-term market trajectory 10%.
 
-Provide a scoringBasis — a one-sentence explanation of what drove the score.
+Provide a scoringBasis — a 3-4 sentence overview of this market opportunity. Use these as directional anchors, adapting to what's most relevant: What is this market? Why is it growing? Why does it exist now? The reader should understand the market in under 10 seconds. End with one line connecting the assessment to the investment score.
 
 Calibration:
 90-100: Large expanding TAM (>$5B). Market growth accelerating. Adjacent expansion well-supported by research. Structure supports IPO-scale outcomes.
@@ -186,7 +186,7 @@ From Pitch Deck Recommendations:
 From Scoring:
 - scoring.overallScore → 0-100 overall score
 - scoring.confidence → "high", "mid", or "low"
-- scoring.scoringBasis → one-sentence explanation of what drove the score
+- scoring.scoringBasis → 3-4 sentence market overview (what it is, why it's growing, why now — ending with investment score tie-in)
 - scoring.subScores[] → array of sub-dimension scores, one per evaluation dimension. Each entry: { dimension (name), weight (decimal), score (0-100) }. Dimensions for this stage: TAM & Scale (0.40), TAM Expansion (0.30), Market Dynamics (0.20), Long-term Market Trajectory (0.10)
 
 From Narrative:

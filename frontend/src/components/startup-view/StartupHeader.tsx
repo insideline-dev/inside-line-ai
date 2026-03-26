@@ -5,6 +5,7 @@ import { ArrowLeft, Globe, ExternalLink, MapPin, Clock, Binoculars } from "lucid
 import { Link } from "@tanstack/react-router";
 import { format } from "date-fns";
 import type { Startup } from "@/types/startup";
+import { formatIndustry } from "@/lib/kpi-metrics";
 
 interface StartupHeaderProps {
   startup: Startup;
@@ -40,7 +41,7 @@ export function StartupHeader({
             <Badge variant="outline" data-testid="badge-stage">{startup.stage.replace("_", " ")}</Badge>
           )}
           {startup.industry && (
-            <Badge variant="outline" data-testid="badge-sector">{startup.industry}</Badge>
+            <Badge variant="outline" data-testid="badge-sector">{formatIndustry(startup.industry)}</Badge>
           )}
         </div>
         <div className="flex flex-wrap items-center gap-4 mt-2 text-sm text-muted-foreground">

@@ -81,7 +81,7 @@ Score 0-100 based on deck metrics.
 
 Your score should reflect the section weights: metrics provided drives 20% of the score, metrics vs stage expectations 55%, data gaps 25%.
 
-Provide a scoringBasis — a one-sentence explanation of what drove the score.
+Provide a scoringBasis — a 3-4 sentence overview of this startup's traction. Use these as directional anchors, adapting to what's most relevant: What metrics exist? Are they strong for this stage? What's the trajectory? The reader should understand the traction picture in under 10 seconds. End with one line connecting the assessment to the investment score.
 
 Calibration:
 90-100: IPO-grade metrics — comprehensive, trended, predictable. Would withstand public market scrutiny.
@@ -124,7 +124,7 @@ Your evaluation above should populate these structured output fields:
 Scoring:
 - scoring.overallScore → your 0-100 score from the scoring rubric
 - scoring.confidence → "high", "mid", or "low" from the scoring rubric
-- scoring.scoringBasis → one-sentence explanation of what drove the score
+- scoring.scoringBasis → 3-4 sentence traction overview (what metrics exist, stage-appropriateness, trajectory — ending with investment score tie-in)
 - scoring.subScores[] → array of sub-dimension scores, one per evaluation dimension. Each entry: { dimension (name), weight (decimal), score (0-100) }. Dimensions for this stage: Metrics Provided (0.20), Metrics vs Stage Expectations (0.55), Data Gaps (0.25)
 
 Traction Overview:

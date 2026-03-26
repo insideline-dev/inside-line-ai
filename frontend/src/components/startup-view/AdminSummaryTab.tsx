@@ -26,6 +26,8 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
+import { extractKpiMetrics, formatIndustry, formatValuationLabel } from "@/lib/kpi-metrics";
+import { KpiGrid } from "@/components/startup-view/KpiGrid";
 
 interface AdminSummaryTabProps {
   startup: Startup;
@@ -136,176 +138,6 @@ function AgentBadge({
       {label}
     </button>
   );
-}
-
-interface ContextBadgeData {
-  id: string;
-  label: string;
-  topLine: string;
-  bottomLine?: string;
-  score: number;
-  tab: string;
-}
-
-function badgeBorderColor(score: number): string {
-  if (score >= 75) return "border-l-emerald-500";
-  if (score >= 50) return "border-l-amber-500";
-  return "border-l-rose-500";
-}
-
-function safeStr(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
-}
-
-function safeNum(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
-}
-
-function rec(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
-}
-
-/** Extract short numeric value from verbose AI text. Tries ranges, multiples, money, fractions. */
-function extractShortValue(raw: string | undefined): string {
-  if (!raw || raw === "—") return raw ?? "—";
-  // Already short (under 30 chars) — keep as-is
-  if (raw.length <= 30) return raw;
-  // Money range: $1.1T–$1.6T or $500M to $1B
-  const moneyRange = raw.match(
-    /~?(\$\s?\d+(?:[.,]\d+)?\s?(?:[kmbt]|bn|million|billion|trillion))\s*[-–—]\s*~?(\$\s?\d+(?:[.,]\d+)?\s?(?:[kmbt]|bn|million|billion|trillion))/i,
-  );
-  if (moneyRange) return `${moneyRange[1].trim()} – ${moneyRange[2].trim()}`;
-  // Single money: ~$1.1T
-  const singleMoney = raw.match(/~?\$\s?\d+(?:[.,]\d+)?\s?(?:[kmbt]|bn|million|billion|trillion)/i);
-  if (singleMoney) return singleMoney[0].replace(/\s+/g, "");
-  // Multiple range: ~15x–40x or 24x
-  const multipleRange = raw.match(/~?(\d+(?:\.\d+)?x)\s*[-–—]\s*~?(\d+(?:\.\d+)?x)/i);
-  if (multipleRange) return `${multipleRange[1]} – ${multipleRange[2]}`;
-  const singleMultiple = raw.match(/~?\d+(?:\.\d+)?x/i);
-  if (singleMultiple) return singleMultiple[0];
-  // Percentage range
-  const pctRange = raw.match(/~?(\d+(?:\.\d+)?%)\s*[-–—]\s*~?(\d+(?:\.\d+)?%)/);
-  if (pctRange) return `${pctRange[1]} – ${pctRange[2]}`;
-  const singlePct = raw.match(/~?\d+(?:\.\d+)?%/);
-  if (singlePct) return singlePct[0];
-  // Fraction like 3/4
-  const fraction = raw.match(/\d+\/\d+/);
-  if (fraction) return fraction[0];
-  // Fallback: first 25 chars + ellipsis
-  return raw.slice(0, 25) + "…";
-}
-
-function buildContextBadges(data: {
-  marketData: Record<string, unknown>;
-  productData: Record<string, unknown>;
-  teamData: Record<string, unknown>;
-  competitiveData: Record<string, unknown>;
-  financialsData: Record<string, unknown>;
-  dealTermsData: Record<string, unknown>;
-  marketScore?: number;
-  productScore?: number;
-  teamScore?: number;
-  competitiveScore?: number;
-  financialsScore?: number;
-  dealTermsScore?: number;
-}): ContextBadgeData[] {
-  const badges: ContextBadgeData[] = [];
-
-  // 1. Market — TAM + timing
-  const marketSizing = rec(data.marketData.marketSizing);
-  const tam = rec(marketSizing.tam);
-  const tamValue = safeStr(tam.value);
-  const timing = rec(data.marketData.marketGrowthAndTiming);
-  const timingAssessment = safeStr(timing.timingAssessment);
-  if (tamValue || timingAssessment) {
-    badges.push({
-      id: "market", label: "Market",
-      topLine: extractShortValue(tamValue) || "—",
-      bottomLine: timingAssessment?.replace(/_/g, " "),
-      score: data.marketScore ?? 0,
-      tab: "market",
-    });
-  }
-
-  // 2. Product — tech stage
-  const productOverview = rec(data.productData.productOverview);
-  const techStage = safeStr(productOverview.techStage) ?? safeStr(data.productData.technologyStage);
-  if (techStage) {
-    badges.push({
-      id: "product", label: "Product",
-      topLine: techStage.charAt(0).toUpperCase() + techStage.slice(1),
-      score: data.productScore ?? 0,
-      tab: "product",
-    });
-  }
-
-  // 3. Team — composition + FMF
-  const teamComp = rec(data.teamData.teamComposition ?? data.teamData.functionalCoverage);
-  const coverage = [
-    teamComp.businessLeadership, teamComp.technicalCapability,
-    teamComp.domainExpertise, teamComp.gtmCapability,
-  ].filter((v) => {
-    if (typeof v === "boolean") return v;
-    if (v && typeof v === "object") return (v as Record<string, unknown>).covered === true;
-    return false;
-  }).length;
-  const fmf = rec(data.teamData.founderMarketFit);
-  const fmfScore = safeNum(fmf.score);
-  if (coverage > 0 || fmfScore !== undefined) {
-    badges.push({
-      id: "team", label: "Team",
-      topLine: `${coverage}/4 capabilities`,
-      bottomLine: fmfScore !== undefined ? `FMF: ${Math.round(fmfScore)}` : undefined,
-      score: data.teamScore ?? 0,
-      tab: "team",
-    });
-  }
-
-  // 4. Competitors — gap + moat
-  const compPos = rec(data.competitiveData.competitivePosition);
-  const currentGap = safeStr(compPos.currentGap);
-  const moat = rec(data.competitiveData.moatAssessment);
-  const moatType = safeStr(moat.moatType);
-  if (currentGap || moatType) {
-    badges.push({
-      id: "competitors", label: "Competitors",
-      topLine: currentGap?.replace(/_/g, " ") || "—",
-      bottomLine: moatType?.replace(/_/g, " "),
-      score: data.competitiveScore ?? 0,
-      tab: "competitors",
-    });
-  }
-
-  // 5. Financials — runway + credibility
-  const keyMetrics = rec(data.financialsData.keyMetrics);
-  const runway = safeStr(keyMetrics.runway);
-  const projections = rec(data.financialsData.projections);
-  const credibility = safeStr(projections.credibility);
-  if (runway || credibility) {
-    badges.push({
-      id: "financials", label: "Financials",
-      topLine: extractShortValue(runway) || "—",
-      bottomLine: credibility?.replace(/_/g, " "),
-      score: data.financialsScore ?? 0,
-      tab: "financials",
-    });
-  }
-
-  // 6. Deal — multiple + premium
-  const dealOverview = rec(data.dealTermsData.dealOverview);
-  const impliedMultiple = safeStr(dealOverview.impliedMultiple);
-  const premiumDiscount = safeStr(dealOverview.premiumDiscount);
-  if (impliedMultiple || premiumDiscount) {
-    badges.push({
-      id: "deal", label: "Deal",
-      topLine: extractShortValue(impliedMultiple) || "—",
-      bottomLine: premiumDiscount?.replace(/_/g, " "),
-      score: data.dealTermsScore ?? 0,
-      tab: "memo",
-    });
-  }
-
-  return badges;
 }
 
 const GAPS_INITIAL_COUNT = 5;
@@ -594,24 +426,6 @@ export function AdminSummaryTab({
   const allGaps = getAllStructuredDataGaps(evaluation);
   const plainGaps = getCrossAgentDataGaps(evaluation);
 
-  // Context Badges data
-  const marketData = (evaluation?.marketData as Record<string, unknown> | undefined) ?? {};
-  const productData = (evaluation?.productData as Record<string, unknown> | undefined) ?? {};
-  const teamData = (evaluation?.teamData as Record<string, unknown> | undefined) ?? {};
-  const competitiveData = (evaluation?.competitiveAdvantageData as Record<string, unknown> | undefined) ?? {};
-  const financialsData = (evaluation?.financialsData as Record<string, unknown> | undefined) ?? {};
-  const dealTermsData = (evaluation?.dealTermsData as Record<string, unknown> | undefined) ?? {};
-
-  const contextBadges = evaluation ? buildContextBadges({
-    marketData, productData, teamData, competitiveData, financialsData, dealTermsData,
-    marketScore: evaluation.marketScore,
-    productScore: evaluation.productScore,
-    teamScore: evaluation.teamScore,
-    competitiveScore: evaluation.competitiveAdvantageScore,
-    financialsScore: evaluation.financialsScore,
-    dealTermsScore: evaluation.dealTermsScore,
-  }) : [];
-
   const RADAR_SHORT_LABELS: Record<string, string> = {
     "Competitive Advantage": "Comp. Adv.",
     "Business Model": "Biz Model",
@@ -748,10 +562,10 @@ export function AdminSummaryTab({
                 {[
                   { label: "Stage", value: formatStage(startup.stage), accent: false },
                   { label: "Sector", value: startup.sectorIndustryGroup || "N/A", accent: false },
-                  { label: "Industry", value: startup.sectorIndustry || startup.industry || "N/A", accent: false },
+                  { label: "Industry", value: formatIndustry(startup.sectorIndustry || startup.industry), accent: false },
                   { label: "Location", value: startup.location || "N/A", accent: false },
                   { label: "Round", value: formatCompactCurrency(startup.fundingTarget), accent: true },
-                  { label: "Valuation", value: formatCompactCurrency(startup.valuation), accent: true },
+                  { label: "Valuation", value: `${formatCompactCurrency(startup.valuation)} ${formatValuationLabel(startup.valuationType)}`.trim(), accent: true },
                   { label: "Raise", value: formatRaiseType(startup.raiseType), accent: false },
                   { label: "Lead", value: startup.leadInvestorName || "No", accent: false },
                 ].map((item) => (
@@ -783,23 +597,8 @@ export function AdminSummaryTab({
           </CardContent>
         </Card>
 
-        {contextBadges.length > 0 && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
-            {contextBadges.map((badge) => (
-              <button
-                key={badge.id}
-                type="button"
-                onClick={() => onNavigateTab?.(badge.tab)}
-                className={`rounded-lg border border-l-4 ${badgeBorderColor(badge.score)} bg-muted/20 px-3.5 py-2.5 text-left transition-colors hover:bg-muted/40 cursor-pointer`}
-              >
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{badge.label}</p>
-                <MarkdownText className="mt-1 text-sm font-medium leading-tight [&>p]:mb-0" inline>{badge.topLine}</MarkdownText>
-                {badge.bottomLine && (
-                  <p className="mt-0.5 text-[11px] capitalize text-muted-foreground">{badge.bottomLine}</p>
-                )}
-              </button>
-            ))}
-          </div>
+        {evaluation && (
+          <KpiGrid metrics={extractKpiMetrics(startup, evaluation)} />
         )}
 
         <ExitScenariosCard scenarios={exitScenarios} />

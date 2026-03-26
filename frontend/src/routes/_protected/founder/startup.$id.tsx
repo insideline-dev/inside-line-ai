@@ -269,7 +269,6 @@ function StartupDetail() {
                 investorMemo={evaluation.investorMemo as any}
                 showScores={false}
                 showSectionScores={false}
-                summaryLayout="pills"
                 showStrengthsAndRisks={false}
               />
             ) : (

@@ -82,7 +82,7 @@ Score 0-100 based on model design.
 
 Your score should reflect the section weights: model type & logic drives 50% of the score, venture-scale potential 30%, pricing approach 20%.
 
-Provide a scoringBasis — a one-sentence explanation of what drove the score.
+Provide a scoringBasis — a 3-4 sentence overview of this business model. Use these as directional anchors, adapting to what's most relevant: How does the company make money? Are margins sustainable? Does scaling improve or weaken economics? The reader should understand the business model in under 10 seconds. End with one line connecting the assessment to the investment score.
 
 Calibration:
 90-100: Clear, well-chosen revenue model with venture-scale potential. Model type is proven in comparable businesses. Pricing thinking is already present.
@@ -124,7 +124,7 @@ Your evaluation above should populate these structured output fields:
 Scoring:
 - scoring.overallScore → your 0-100 score from the scoring rubric
 - scoring.confidence → "high", "mid", or "low" from the scoring rubric
-- scoring.scoringBasis → one-sentence explanation of what drove the score
+- scoring.scoringBasis → 3-4 sentence business model overview (how it makes money, margin sustainability, scaling economics — ending with investment score tie-in)
 - scoring.subScores[] → array of sub-dimension scores, one per evaluation dimension. Each entry: { dimension (name), weight (decimal), score (0-100) }. Dimensions for this stage: Model Type & Logic (0.50), Venture-Scale Potential (0.30), Pricing Approach (0.20)
 
 Business Model Overview:

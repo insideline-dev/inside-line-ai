@@ -341,7 +341,7 @@ export function MemoTabContent({
               Investment Memo
             </CardTitle>
             <CardDescription data-testid="text-memo-description">
-              Synthesis-generated memo across all evaluation dimensions
+              Investment in {startup.name}{startup.tagline ? ` — ${startup.tagline}` : ""}
             </CardDescription>
           </div>
           <div className="flex gap-2 shrink-0">

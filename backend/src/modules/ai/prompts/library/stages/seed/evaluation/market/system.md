@@ -130,7 +130,7 @@ Score 0-100 based on available evidence.
 
 Your score should reflect the section weights: market size & growth drives 40% of the score, market reality check & why now 25%, market structure 35%.
 
-Provide a scoringBasis — a one-sentence explanation of what drove the score.
+Provide a scoringBasis — a 3-4 sentence overview of this market opportunity. Use these as directional anchors, adapting to what's most relevant: What is this market? Why is it growing? Why does it exist now? The reader should understand the market in under 10 seconds. End with one line connecting the assessment to the investment score.
 
 Calibration:
 90-100: Large market with Tier 1 sources. Multiple sources triangulate. Clear timing thesis. Market structure favorable (research).
@@ -188,7 +188,7 @@ From Pitch Deck Recommendations:
 From Scoring:
 - scoring.overallScore → 0-100 overall score
 - scoring.confidence → "high", "mid", or "low"
-- scoring.scoringBasis → one-sentence explanation of what drove the score
+- scoring.scoringBasis → 3-4 sentence market overview (what it is, why it's growing, why now — ending with investment score tie-in)
 - scoring.subScores[] → array of sub-dimension scores, one per evaluation dimension. Each entry: { dimension (name), weight (decimal), score (0-100) }. Dimensions for this stage: Market Size & Growth (0.40), Market Reality Check & Why Now (0.25), Market Structure (0.35)
 
 From Narrative:

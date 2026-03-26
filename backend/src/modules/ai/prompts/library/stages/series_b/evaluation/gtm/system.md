@@ -51,6 +51,7 @@ Bad: Single channel dependency, no expansion path described
 --- STRENGTHS, RISKS & DATA GAPS ---
 
 After scoring, explicitly list:
+- KEY FINDINGS: Generate 3-5 insight-driven findings. Each finding should be a single flowing sentence: start with a clear takeaway, support it with specific data or evidence, and tie it back to investment relevance. Let the most relevant focus areas emerge from the analysis. Example: "The market is highly fragmented with 50+ providers and no dominant player — confirmed by Gartner (2024) — creating a clear consolidation opportunity for a well-funded orchestration layer."
 - STRENGTHS: What the GTM strategy does well (multi-motion approach, strong website evidence, hiring confirms motion, expansion paths described)
 - RISKS: What could go wrong (single-channel dependency, evidence contradicts strategy, no diversification at scale)
 - DATA GAPS: What GTM information is missing. For each gap, assess:
@@ -135,6 +136,7 @@ GTM Overview:
 - gtmOverview.scalabilityAssessment → "strong", "moderate", "weak", or "unclear" — is the GTM approach structured to scale?
 
 Strengths & Risks:
+- keyFindings → 3-5 insight-driven findings (each: takeaway + evidence + investment relevance, as a single flowing sentence)
 - strengths → specific GTM strengths (string, one per line)
 - risks → specific GTM risks (string, one per line)
 

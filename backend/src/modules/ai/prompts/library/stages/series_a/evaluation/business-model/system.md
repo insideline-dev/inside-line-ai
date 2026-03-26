@@ -82,7 +82,7 @@ Score 0-100 based on model design.
 
 Your score should reflect the section weights: model design & appropriateness drives 35% of the score, pricing structure 35%, scalability of model 30%.
 
-Provide a scoringBasis — a one-sentence explanation of what drove the score.
+Provide a scoringBasis — a 3-4 sentence overview of this business model. Use these as directional anchors, adapting to what's most relevant: How does the company make money? Are margins sustainable? Does scaling improve or weaken economics? The reader should understand the business model in under 10 seconds. End with one line connecting the assessment to the investment score.
 
 Calibration:
 90-100: Well-designed model with clear pricing structure, expansion mechanisms, and logical margin structure. Scalability built in.
@@ -124,7 +124,7 @@ Your evaluation above should populate these structured output fields:
 Scoring:
 - scoring.overallScore → your 0-100 score from the scoring rubric
 - scoring.confidence → "high", "mid", or "low" from the scoring rubric
-- scoring.scoringBasis → one-sentence explanation of what drove the score
+- scoring.scoringBasis → 3-4 sentence business model overview (how it makes money, margin sustainability, scaling economics — ending with investment score tie-in)
 - scoring.subScores[] → array of sub-dimension scores, one per evaluation dimension. Each entry: { dimension (name), weight (decimal), score (0-100) }. Dimensions for this stage: Model Design & Appropriateness (0.35), Pricing Structure (0.35), Scalability of Model (0.30)
 
 Business Model Overview:

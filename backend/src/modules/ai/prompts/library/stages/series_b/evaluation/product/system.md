@@ -95,7 +95,7 @@ Score 0-100 based on available evidence.
 
 Your score should reflect the section weights: claims credibility drives 40% of the score, product-stage fit 30%, technical risk 30%.
 
-Provide a scoringBasis — a one-sentence explanation of what drove the score.
+Provide a scoringBasis — a 3-4 sentence overview of this product. Use these as directional anchors, adapting to what's most relevant: What does it do? What stage is it at? What's defensible about it? The reader should understand the product in under 10 seconds. End with one line connecting the assessment to the investment score.
 
 Calibration:
 90-100: Evidence significantly exceeds Series B expectations, product is clearly best-in-class.
@@ -128,7 +128,7 @@ Your evaluation above should populate these structured output fields:
 Scoring:
 - scoring.overallScore → your 0-100 score from the scoring rubric
 - scoring.confidence → "high", "mid", or "low" from the scoring rubric
-- scoring.scoringBasis → one-sentence explanation of what drove the score
+- scoring.scoringBasis → 3-4 sentence product overview (what it does, what stage, what's defensible — ending with investment score tie-in)
 - scoring.subScores[] → array of sub-dimension scores, one per evaluation dimension. Each entry: { dimension (name), weight (decimal), score (0-100) }. Dimensions for this stage: Claims Credibility (0.40), Product-Stage Fit (0.30), Technical Risk (0.30)
 
 Product Overview (from section 1):

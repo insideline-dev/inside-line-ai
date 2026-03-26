@@ -21,6 +21,8 @@ import {
   getDisplaySectionScore,
   getDisplayStrengths,
 } from "@/lib/evaluation-display";
+import { extractKpiMetrics } from "@/lib/kpi-metrics";
+import { KpiGrid } from "@/components/startup-view/KpiGrid";
 
 interface InvestorMemo {
   dealHighlights?: string[];
@@ -51,32 +53,9 @@ interface SummaryCardProps {
   showSectionScores?: boolean;
   showRecommendation?: boolean;
   weights?: ScoringWeights | null;
-  summaryLayout?: "tiles" | "pills";
   showStrengthsAndRisks?: boolean;
 }
 
-function formatCurrency(value: number | null | undefined): string {
-  if (!value) return "N/A";
-  if (value >= 1000000000) return `$${(value / 1000000000).toFixed(1)}B`;
-  if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
-  if (value >= 1000) return `$${(value / 1000).toFixed(0)}K`;
-  return `$${value}`;
-}
-
-function formatStage(stage: string | null | undefined): string {
-  if (!stage) return "N/A";
-  const stageMap: Record<string, string> = {
-    "pre_seed": "Pre-Seed",
-    "seed": "Seed",
-    "series_a": "Series A",
-    "series_b": "Series B",
-    "series_c": "Series C",
-    "series_d": "Series D",
-    "series_e": "Series E",
-    "series_f_plus": "Series F+",
-  };
-  return stageMap[stage] || stage.replace("_", " ");
-}
 
 export function SummaryCard({
   startup,
@@ -85,7 +64,6 @@ export function SummaryCard({
   showScores = true,
   showSectionScores = true,
   weights,
-  summaryLayout = "tiles",
   showStrengthsAndRisks = true,
 }: SummaryCardProps) {
   const [animateBars, setAnimateBars] = useState(false);
@@ -143,55 +121,9 @@ export function SummaryCard({
               </div>
             )}
             
-            {summaryLayout === "pills" ? (
-              <div className="min-w-0 flex-1 space-y-3">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  Startup Snapshot
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  <Badge variant="secondary" className="rounded-full px-3 py-1 text-sm font-medium">
-                    Stage: {formatStage(startup.stage)}
-                  </Badge>
-                  <Badge variant="secondary" className="rounded-full px-3 py-1 text-sm font-medium">
-                    Sector: {startup.industry || "N/A"}
-                  </Badge>
-                  <Badge variant="secondary" className="rounded-full px-3 py-1 text-sm font-medium">
-                    Location: {startup.location || "N/A"}
-                  </Badge>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Badge variant="outline" className="rounded-full px-3 py-1 text-sm font-medium">
-                    Round Size: {formatCurrency(startup.fundingTarget)}
-                  </Badge>
-                  <Badge variant="outline" className="rounded-full px-3 py-1 text-sm font-medium">
-                    Valuation: {formatCurrency(startup.valuation)}
-                  </Badge>
-                </div>
-              </div>
-            ) : (
-              <div className="min-w-0 flex-1 grid grid-cols-2 gap-3 sm:grid-cols-3 md:gap-4">
-                <div className="rounded-lg bg-muted/50 p-3" data-testid="info-stage">
-                  <p className="mb-1 text-xs text-muted-foreground">Stage</p>
-                  <p className="break-words text-xs font-medium">{formatStage(startup.stage)}</p>
-                </div>
-                <div className="rounded-lg bg-muted/50 p-3" data-testid="info-sector">
-                  <p className="mb-1 text-xs text-muted-foreground">Sector</p>
-                  <p className="break-words text-xs font-medium">{startup.industry || "N/A"}</p>
-                </div>
-                <div className="rounded-lg bg-muted/50 p-3" data-testid="info-location">
-                  <p className="mb-1 text-xs text-muted-foreground">Location</p>
-                  <p className="break-words text-xs font-medium">{startup.location || "N/A"}</p>
-                </div>
-                <div className="rounded-lg bg-muted/50 p-3" data-testid="info-round-size">
-                  <p className="mb-1 text-xs text-muted-foreground">Round Size</p>
-                  <p className="break-words text-xs font-medium">{formatCurrency(startup.fundingTarget)}</p>
-                </div>
-                <div className="rounded-lg bg-muted/50 p-3" data-testid="info-valuation">
-                  <p className="mb-1 text-xs text-muted-foreground">Valuation</p>
-                  <p className="break-words text-xs font-medium">{formatCurrency(startup.valuation)}</p>
-                </div>
-              </div>
-            )}
+            <div className="min-w-0 flex-1">
+              <KpiGrid metrics={extractKpiMetrics(startup, evaluation)} />
+            </div>
           </div>
         </CardContent>
       </Card>

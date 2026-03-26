@@ -52,6 +52,7 @@ Bad: Limited diversification at a stage where multiple paths should exist
 --- STRENGTHS, RISKS & DATA GAPS ---
 
 After scoring, explicitly list:
+- KEY FINDINGS: Generate 3-5 insight-driven findings. Each finding should be a single flowing sentence: start with a clear takeaway, support it with specific data or evidence, and tie it back to investment relevance. Let the most relevant focus areas emerge from the analysis. Example: "The market is highly fragmented with 50+ providers and no dominant player — confirmed by Gartner (2024) — creating a clear consolidation opportunity for a well-funded orchestration layer."
 - STRENGTHS: What the GTM strategy does well (mature multi-motion approach, strong observable evidence, partner ecosystem, expansion underway)
 - RISKS: What could go wrong (strategy hasn't matured with stage, evidence gaps at Series C, limited diversification, expansion paths unclear)
 - DATA GAPS: What GTM information is missing. For each gap, assess:
@@ -136,6 +137,7 @@ GTM Overview:
 - gtmOverview.scalabilityAssessment → "strong", "moderate", "weak", or "unclear" — is the GTM approach structured to scale?
 
 Strengths & Risks:
+- keyFindings → 3-5 insight-driven findings (each: takeaway + evidence + investment relevance, as a single flowing sentence)
 - strengths → specific GTM strengths (string, one per line)
 - risks → specific GTM risks (string, one per line)
 

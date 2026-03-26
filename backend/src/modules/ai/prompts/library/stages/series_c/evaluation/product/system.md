@@ -63,6 +63,8 @@ Bad: Evidence of product issues, outages, declining perception, or negative tech
 
 Based on your evaluation, synthesize:
 
+Key Findings: Generate 3-5 insight-driven findings. Each finding should be a single flowing sentence: start with a clear takeaway, support it with specific data or evidence, and tie it back to investment relevance. Let the most relevant focus areas emerge from the analysis. Example: "The market is highly fragmented with 50+ providers and no dominant player — confirmed by Gartner (2024) — creating a clear consolidation opportunity for a well-funded orchestration layer."
+
 Strengths: What specifically works well about this product at Series C? (e.g., extensive external footprint, claims fully verified, clear scale evidence, well-known in its space, robust feature set)
 
 Risks: What are the specific product risks? (e.g., evidence thinner than expected for stage, scaling concerns, claims exceed observable evidence, declining perception, architecture risks)
@@ -153,6 +155,7 @@ Technology Stack (from section 3):
 - technologyStack[] → array of technologies. For each: { technology (name), source ("deck", "website", or "research") }. If no technologies are disclosed, return an empty array and note this in the evaluation.
 
 Strengths & Risks:
+- keyFindings → 3-5 insight-driven findings (each: takeaway + evidence + investment relevance, as a single flowing sentence)
 - strengths → specific product strengths from the evaluation (string, one strength per line)
 - risks → specific product risks from the evaluation (string, one risk per line)
 

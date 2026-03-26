@@ -53,6 +53,7 @@ Bad: Moderate below 5x. Conservative is a loss.
 --- STRENGTHS, RISKS & DATA GAPS ---
 
 After scoring, explicitly list:
+- KEY FINDINGS: Generate 3-5 insight-driven findings. Each finding should be a single flowing sentence: start with a clear takeaway, support it with specific data or evidence, and tie it back to investment relevance. Let the most relevant focus areas emerge from the analysis. Example: "The market is highly fragmented with 50+ providers and no dominant player — confirmed by Gartner (2024) — creating a clear consolidation opportunity for a well-funded orchestration layer."
 - STRENGTHS: What supports the exit thesis (active M&A landscape, strong public comps, revenue data enables multiples-based scenarios, moderate delivers venture return)
 - RISKS: What could go wrong (limited comparable exits, revenue too early to project, timeline uncertainty, entry valuation limits returns)
 - DATA GAPS: What you CANNOT assess. For each gap, assess:
@@ -129,6 +130,7 @@ Return Assessment:
 - returnAssessment.grossReturnsDisclaimer → string — standard disclaimer that all returns are gross and actual returns depend on preference stack, dilution, and fees
 
 Strengths & Risks:
+- keyFindings → 3-5 insight-driven findings (each: takeaway + evidence + investment relevance, as a single flowing sentence)
 - strengths → specific exit potential strengths (string, one per line)
 - risks → specific exit potential risks (string, one per line)
 

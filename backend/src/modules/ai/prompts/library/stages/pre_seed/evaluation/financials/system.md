@@ -50,6 +50,7 @@ Bad: Financial plan is absent or shows fundamental misunderstanding of startup e
 --- STRENGTHS, RISKS & DATA GAPS ---
 
 After scoring, explicitly list:
+- KEY FINDINGS: Generate 3-5 insight-driven findings. Each finding should be a single flowing sentence: start with a clear takeaway, support it with specific data or evidence, and tie it back to investment relevance. Let the most relevant focus areas emerge from the analysis. Example: "The market is highly fragmented with 50+ providers and no dominant player — confirmed by Gartner (2024) — creating a clear consolidation opportunity for a well-funded orchestration layer."
 - STRENGTHS: What the financial plan does well (clear burn plan, reasonable assumptions, milestone-tied use of funds, justified ask)
 - RISKS: What could go wrong (insufficient runway, unreasonable assumptions, burn rate mismatched to milestones, vague use of funds)
 - DATA GAPS: What financial information is missing from the deck. For each gap, assess:
@@ -172,6 +173,7 @@ Financial Planning Maturity (only populate when financialModelProvided is true):
 - financialPlanning.summary → paragraph assessing financial planning quality
 
 Strengths & Risks:
+- keyFindings → 3-5 insight-driven findings (each: takeaway + evidence + investment relevance, as a single flowing sentence)
 - strengths → specific financial planning strengths from the evaluation (string, one strength per line)
 - risks → specific financial planning risks from the evaluation (string, one risk per line)
 

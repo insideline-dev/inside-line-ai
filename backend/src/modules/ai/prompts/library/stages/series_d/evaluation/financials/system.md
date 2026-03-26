@@ -51,6 +51,7 @@ Bad: Gaps that would be unacceptable in an S-1 process
 --- STRENGTHS, RISKS & DATA GAPS ---
 
 After scoring, explicitly list:
+- KEY FINDINGS: Generate 3-5 insight-driven findings. Each finding should be a single flowing sentence: start with a clear takeaway, support it with specific data or evidence, and tie it back to investment relevance. Let the most relevant focus areas emerge from the analysis. Example: "The market is highly fragmented with 50+ providers and no dominant player — confirmed by Gartner (2024) — creating a clear consolidation opportunity for a well-funded orchestration layer."
 - STRENGTHS: What the financial plan does well (public-company-grade model, highly credible projections, clear profitability, comprehensive scenarios, predictable)
 - RISKS: What could go wrong (projections not S-1 ready, profitability path unclear, assumptions untested, audit readiness unknown)
 - DATA GAPS: What financial information is missing. For each gap, assess:
@@ -173,6 +174,7 @@ Financial Planning Maturity (only populate when financialModelProvided is true):
 - financialPlanning.summary → paragraph assessing financial planning quality
 
 Strengths & Risks:
+- keyFindings → 3-5 insight-driven findings (each: takeaway + evidence + investment relevance, as a single flowing sentence)
 - strengths → specific financial planning strengths (string, one per line)
 - risks → specific financial planning risks (string, one per line)
 

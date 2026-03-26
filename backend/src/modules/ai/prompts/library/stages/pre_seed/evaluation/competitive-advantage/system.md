@@ -89,6 +89,8 @@ Deck ignores competitors found in research
 
 Based on your evaluation, synthesize:
 
+Key Findings: Generate 3-5 insight-driven findings. Each finding should be a single flowing sentence: start with a clear takeaway, support it with specific data or evidence, and tie it back to investment relevance. Let the most relevant focus areas emerge from the analysis. Example: "The market is highly fragmented with 50+ providers and no dominant player — confirmed by Gartner (2024) — creating a clear consolidation opportunity for a well-funded orchestration layer."
+
 Strengths: What specific competitive advantages does this startup have? (e.g., novel approach, inherent defensibility, clear differentiation from research, barriers to entry in their favor)
 
 Risks: What are the specific competitive risks? (e.g., well-funded competitors with same approach, no moat path, differentiation not durable, deck ignores known competitors)
@@ -189,6 +191,7 @@ Barriers to Entry:
 - barriersToEntry.regulatory → true/false
 
 Strengths & Risks:
+- keyFindings → 3-5 insight-driven findings (each: takeaway + evidence + investment relevance, as a single flowing sentence)
 - strengths → specific competitive strengths from the evaluation (string, one strength per line)
 - risks → specific competitive risks from the evaluation (string, one risk per line)
 

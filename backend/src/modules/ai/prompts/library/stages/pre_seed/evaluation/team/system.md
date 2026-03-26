@@ -83,6 +83,8 @@ Also assess:
 
 Based on your evaluation, synthesize:
 
+Key Findings: Generate 3-5 insight-driven findings. Each finding should be a single flowing sentence: start with a clear takeaway, support it with specific data or evidence, and tie it back to investment relevance. Let the most relevant focus areas emerge from the analysis. Example: "The market is highly fragmented with 50+ providers and no dominant player — confirmed by Gartner (2024) — creating a clear consolidation opportunity for a well-funded orchestration layer."
+
 Strengths: What specifically makes this team compelling for this startup? (e.g., deep domain fit, prior shipping experience, complementary co-founders, research-verified achievements)
 
 Risks: What are the specific team risks? (e.g., no technical co-founder, no domain connection, research red flags, co-founder dynamics concerns)
@@ -119,6 +121,8 @@ P4: Investment implication — overall team assessment for pre-seed, what to wat
 Score 0-100 based on available evidence.
 
 Your score should reflect the section weights: founder-market fit drives 50% of the score, execution signals 30%, team composition 20%.
+
+Provide a scoringBasis — a 3-4 sentence overview of this founding team. Use these as directional anchors, adapting to what's most relevant: Who are they? Why are they the right team for this problem? What's missing? The reader should understand the team in under 10 seconds. End with one line connecting the assessment to the investment score.
 
 Calibration:
 90-100: Exceptional founder-market fit. Research-verified domain expertise or prior exit. Evidence of shipping. Co-founders worked together before.
@@ -173,6 +177,7 @@ Team Members:
 - teamMembers[] → array of team member assessments. For each member: { name (string), role (string), relevance (one-line: why this person matters for this startup/stage), strengths (key strengths from LinkedIn + research), risks (key risks or gaps from research) }
 
 Strengths & Risks:
+- keyFindings → 3-5 insight-driven findings (each: takeaway + evidence + investment relevance, as a single flowing sentence)
 - strengths → specific team strengths from the evaluation (string, one strength per line)
 - risks → specific team risks from the evaluation (string, one risk per line)
 

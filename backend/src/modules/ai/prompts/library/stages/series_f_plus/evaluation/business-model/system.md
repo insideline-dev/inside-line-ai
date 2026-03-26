@@ -48,6 +48,8 @@ Bad: Model that may not sustain economics at public-company scale
 
 Based on your evaluation, synthesize:
 
+Key Findings: Generate 3-5 insight-driven findings. Each finding should be a single flowing sentence: start with a clear takeaway, support it with specific data or evidence, and tie it back to investment relevance. Let the most relevant focus areas emerge from the analysis. Example: "The market is highly fragmented with 50+ providers and no dominant player — confirmed by Gartner (2024) — creating a clear consolidation opportunity for a well-funded orchestration layer."
+
 Strengths: The most important takeaways from the business model analysis — what stands out at pre-IPO?
 
 Risks: What are the specific business model risks? (e.g., model doesn't meet public market expectations, revenue quality concerns, margin sustainability questioned, pricing power durability uncertain)
@@ -81,7 +83,7 @@ Score 0-100 based on model design.
 
 Your score should reflect the section weights: model design for public markets drives 45% of the score, pricing & revenue quality 30%, model durability 25%.
 
-Provide a scoringBasis — a one-sentence explanation of what drove the score.
+Provide a scoringBasis — a 3-4 sentence overview of this business model. Use these as directional anchors, adapting to what's most relevant: How does the company make money? Are margins sustainable? Does scaling improve or weaken economics? The reader should understand the business model in under 10 seconds. End with one line connecting the assessment to the investment score.
 
 Calibration:
 90-100: Public-company-grade model design — comprehensive pricing, high-quality revenue structure, durable model with multiple growth paths.
@@ -123,7 +125,7 @@ Your evaluation above should populate these structured output fields:
 Scoring:
 - scoring.overallScore → your 0-100 score from the scoring rubric
 - scoring.confidence → "high", "mid", or "low" from the scoring rubric
-- scoring.scoringBasis → one-sentence explanation of what drove the score
+- scoring.scoringBasis → 3-4 sentence business model overview (how it makes money, margin sustainability, scaling economics — ending with investment score tie-in)
 - scoring.subScores[] → array of sub-dimension scores, one per evaluation dimension. Each entry: { dimension (name), weight (decimal), score (0-100) }. Dimensions for this stage: Model Design for Public Markets (0.45), Pricing & Revenue Quality (0.30), Model Durability (0.25)
 
 Business Model Overview:
@@ -134,6 +136,7 @@ Business Model Overview:
 - modelOverview.marginStructureDescribed → true/false — does the deck describe or imply the margin structure?
 
 Strengths & Risks:
+- keyFindings → 3-5 insight-driven findings (each: takeaway + evidence + investment relevance, as a single flowing sentence)
 - strengths → specific business model strengths (string, one per line)
 - risks → specific business model risks (string, one per line)
 

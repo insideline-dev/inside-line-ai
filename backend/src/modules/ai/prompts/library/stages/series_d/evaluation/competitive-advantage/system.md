@@ -135,7 +135,7 @@ Score 0-100 based on available evidence.
 
 Your score should reflect the section weights: dominant moat drives 45% of the score, durability under scrutiny 30%, threat assessment 25%.
 
-Provide a scoringBasis — a one-sentence explanation of what drove the score.
+Provide a scoringBasis — a 3-4 sentence overview of this startup's competitive position. Use these as directional anchors, adapting to what's most relevant: What's the moat? How durable is it? What threatens it? The reader should understand the competitive landscape in under 10 seconds. End with one line connecting the assessment to the investment score.
 
 Calibration:
 90-100: Dominant position. No credible challenger. Self-reinforcing moat. Public-market ready. Category-defining.
@@ -170,7 +170,7 @@ Your evaluation above should populate these structured output fields:
 Scoring:
 - scoring.overallScore → your 0-100 score from the scoring rubric
 - scoring.confidence → "high", "mid", or "low" from the scoring rubric
-- scoring.scoringBasis → one-sentence explanation of what drove the score
+- scoring.scoringBasis → 3-4 sentence competitive position overview (what's the moat, durability, threats — ending with investment score tie-in)
 - scoring.subScores[] → array of sub-dimension scores, one per evaluation dimension. Each entry: { dimension (name), weight (decimal), score (0-100) }. Dimensions for this stage: Dominant Moat (0.45), Durability Under Scrutiny (0.30), Threat Assessment (0.25)
 
 Strategic Positioning:

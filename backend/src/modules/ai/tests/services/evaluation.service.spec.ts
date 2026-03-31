@@ -4,14 +4,31 @@ import type { EvaluationResult } from "../../interfaces/phase-results.interface"
 import { EvaluationService } from "../../services/evaluation.service";
 import type { EvaluationAgentRegistryService } from "../../services/evaluation-agent-registry.service";
 import type { PipelineStateService } from "../../services/pipeline-state.service";
+import type { DrizzleService } from "../../../../database";
 import { createEvaluationPipelineInput } from "../fixtures/evaluation-pipeline.fixture";
+
+function createDrizzleMock(stage: string | null = null) {
+  return {
+    db: {
+      select: jest.fn().mockReturnValue({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest.fn().mockResolvedValue(
+              stage ? [{ stage }] : [],
+            ),
+          }),
+        }),
+      }),
+    },
+  } as unknown as jest.Mocked<DrizzleService>;
+}
 
 describe("EvaluationService", () => {
   let service: EvaluationService;
   let pipelineState: jest.Mocked<PipelineStateService>;
   let registry: jest.Mocked<EvaluationAgentRegistryService>;
-
-  const pipelineInput = createEvaluationPipelineInput();
+  let drizzle: jest.Mocked<DrizzleService>;
+  let pipelineInput: ReturnType<typeof createEvaluationPipelineInput>;
 
   const evaluationResult = {
     team: { score: 80 },
@@ -39,6 +56,8 @@ describe("EvaluationService", () => {
   } as unknown as EvaluationResult;
 
   beforeEach(() => {
+    pipelineInput = createEvaluationPipelineInput();
+
     pipelineState = {
       getPhaseResult: jest
         .fn()
@@ -68,9 +87,12 @@ describe("EvaluationService", () => {
       }),
     } as unknown as jest.Mocked<EvaluationAgentRegistryService>;
 
+    drizzle = createDrizzleMock("seed");
+
     service = new EvaluationService(
       pipelineState as unknown as PipelineStateService,
       registry as unknown as EvaluationAgentRegistryService,
+      drizzle as unknown as DrizzleService,
     );
   });
 
@@ -91,11 +113,10 @@ describe("EvaluationService", () => {
     );
     expect(registry.runAll).toHaveBeenCalledWith(
       "startup-1",
-      {
+      expect.objectContaining({
         extraction: pipelineInput.extraction,
         scraping: pipelineInput.scraping,
-        research: pipelineInput.research,
-      },
+      }),
       expect.any(Function),
       expect.any(Function),
       expect.any(Function),
@@ -110,11 +131,10 @@ describe("EvaluationService", () => {
 
     expect(registry.runAll).toHaveBeenCalledWith(
       "startup-1",
-      {
+      expect.objectContaining({
         extraction: pipelineInput.extraction,
         scraping: pipelineInput.scraping,
-        research: pipelineInput.research,
-      },
+      }),
       expect.any(Function),
       expect.any(Function),
       expect.any(Function),
@@ -328,6 +348,50 @@ describe("EvaluationService", () => {
         "Evaluation requires extraction, scraping, and research results",
       );
       expect(registry.runAll).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("database stage override", () => {
+    it("overrides extraction.stage with DB stage when they differ", async () => {
+      drizzle = createDrizzleMock("series_b");
+      service = new EvaluationService(
+        pipelineState as unknown as PipelineStateService,
+        registry as unknown as EvaluationAgentRegistryService,
+        drizzle as unknown as DrizzleService,
+      );
+
+      await service.run("startup-1");
+
+      const passedInput = registry.runAll.mock.calls[0]?.[1];
+      expect(passedInput?.extraction.stage).toBe("series_b");
+    });
+
+    it("preserves extraction.stage when DB stage matches", async () => {
+      drizzle = createDrizzleMock("seed");
+      service = new EvaluationService(
+        pipelineState as unknown as PipelineStateService,
+        registry as unknown as EvaluationAgentRegistryService,
+        drizzle as unknown as DrizzleService,
+      );
+
+      await service.run("startup-1");
+
+      const passedInput = registry.runAll.mock.calls[0]?.[1];
+      expect(passedInput?.extraction.stage).toBe("seed");
+    });
+
+    it("preserves extraction.stage when startup record not found", async () => {
+      drizzle = createDrizzleMock(null);
+      service = new EvaluationService(
+        pipelineState as unknown as PipelineStateService,
+        registry as unknown as EvaluationAgentRegistryService,
+        drizzle as unknown as DrizzleService,
+      );
+
+      await service.run("startup-1");
+
+      const passedInput = registry.runAll.mock.calls[0]?.[1];
+      expect(passedInput?.extraction.stage).toBe("seed");
     });
   });
 });

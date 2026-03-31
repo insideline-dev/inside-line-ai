@@ -1700,6 +1700,8 @@ DO NOT INCLUDE:
 - Industry figures mentioned as references
 - Anyone from OTHER companies providing quotes
 - Regular employees below Director level
+- Names appearing as document watermarks or recipient attributions (e.g., "Shared by/with", "Viewed by", "Sent to", "Prepared for")
+- Names that appear repeatedly on every page/slide as a watermark or footer — these are deck recipients/viewers, NOT team members. A real team member is mentioned 1-3 times in a team section; a watermark name appears on every single page with no role context.
 
 Return each person with their full name, their role/title, and optionally their LinkedIn URL and a short bio if mentioned.`,
         prompt: truncated,
@@ -1708,7 +1710,7 @@ Return each person with their full name, their role/title, and optionally their 
 
       const members = (output ?? { members: [] }).members;
 
-      const result: TeamMemberInput[] = members
+      const candidates: TeamMemberInput[] = members
         .filter((m) => m.name.trim().length >= 2)
         .map((m) => ({
           name: m.name.trim(),
@@ -1717,7 +1719,21 @@ Return each person with their full name, their role/title, and optionally their 
           teamMemberSource: "deck" as const,
         }));
 
-      this.logger.log(`[Scraping] Deck team discovery found ${result.length} members`);
+      // Filter watermark names by frequency — watermarks repeat on every page
+      const WATERMARK_THRESHOLD = 5;
+      const result = candidates.filter((m) => {
+        const escaped = m.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const count = (truncated.match(new RegExp(escaped, "gi")) || []).length;
+        if (count >= WATERMARK_THRESHOLD) {
+          this.logger.log(
+            `[Scraping] Filtered likely watermark name: ${m.name} (appeared ${count} times in deck)`,
+          );
+          return false;
+        }
+        return true;
+      });
+
+      this.logger.log(`[Scraping] Deck team discovery found ${result.length} members (${candidates.length - result.length} watermark names filtered)`);
       progress?.onStepComplete("deck_team_discovery", {
         summary: { discovered: result.length },
         outputJson: { members: result },

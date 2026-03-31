@@ -115,7 +115,7 @@ export class AiConfigService {
   }
 
   getEvaluationAttemptTimeoutMs(): number {
-    return 300_000;
+    return 600_000;
   }
 
   getEvaluationMaxAttempts(): number {
@@ -123,7 +123,7 @@ export class AiConfigService {
   }
 
   getEvaluationAgentHardTimeoutMs(): number {
-    return 960_000;
+    return 1_800_000;
   }
 
   getSynthesisMaxOutputTokens(): number {

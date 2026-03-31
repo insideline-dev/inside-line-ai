@@ -81,7 +81,7 @@ export const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
       phase: PipelinePhase.EVALUATION,
       dependsOn: [PipelinePhase.RESEARCH],
       canRunParallelWith: [],
-      timeoutMs: 30 * 60 * 1000,
+      timeoutMs: 40 * 60 * 1000,
       maxRetries: 2,
       required: true,
       queue: QUEUE_NAMES.AI_EVALUATION,

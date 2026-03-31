@@ -475,13 +475,20 @@ export abstract class BaseEvaluationAgent<TOutput>
             fallbackReason,
             rawProviderError,
           });
+          const retryDelayMs = Math.min(
+            this.getRetryDelayMs(attempt),
+            Math.max(0, this.getRemainingBudgetMs(startedAtMs, hardTimeoutMs) - 50),
+          );
           this.logger.warn(
-            `${this.key} evaluation retrying due to ${fallbackReason} (${attempt}/${maxAttempts})`,
+            `${this.key} evaluation retrying due to ${fallbackReason} (${attempt}/${maxAttempts}), backoff ${retryDelayMs}ms`,
           );
           lastFallbackReason = fallbackReason;
           lastFallbackMessage = normalizedMessage;
           lastRawProviderError = rawProviderError;
           lastCapturedOutputText = capturedOutputText;
+          if (retryDelayMs > 0) {
+            await this.sleep(retryDelayMs);
+          }
           continue;
         }
 
@@ -1655,5 +1662,15 @@ export abstract class BaseEvaluationAgent<TOutput>
     const head = Math.max(200, Math.floor(maxChars * 0.7));
     const tail = Math.max(120, maxChars - head);
     return `${normalized.slice(0, head)}\n\n...[truncated ${normalized.length - maxChars} chars]...\n\n${normalized.slice(-tail)}`;
+  }
+
+  private getRetryDelayMs(attempt: number): number {
+    const baseMs = 3_000 * 2 ** Math.max(0, attempt - 1);
+    const jitter = Math.floor(Math.random() * 2_000);
+    return baseMs + jitter;
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }

@@ -965,7 +965,11 @@ export class GeminiResearchService {
       normalized.includes("rate limit") ||
       normalized.includes("429") ||
       normalized.includes("provider") ||
-      normalized.includes("model")
+      normalized.includes("model") ||
+      normalized.includes("aborted") ||
+      normalized.includes("econnreset") ||
+      normalized.includes("fetch failed") ||
+      normalized.includes("connection")
     ) {
       return "MODEL_OR_PROVIDER_ERROR";
     }

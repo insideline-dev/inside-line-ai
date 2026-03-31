@@ -1249,6 +1249,14 @@ export abstract class BaseEvaluationAgent<TOutput>
     ) {
       return "TIMEOUT";
     }
+    if (
+      normalized.includes("aborted") ||
+      normalized.includes("econnreset") ||
+      normalized.includes("fetch failed") ||
+      normalized.includes("connection")
+    ) {
+      return "MODEL_OR_PROVIDER_ERROR";
+    }
     if (error instanceof Error) {
       return "MODEL_OR_PROVIDER_ERROR";
     }

@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { MarkdownText } from "@/components/MarkdownText";
 
 interface Experience {
   title?: string;
@@ -168,9 +169,9 @@ export function TeamProfileCard({
                 </div>
 
                 {(member.summary || member.background) && (
-                  <p className="text-sm text-muted-foreground leading-relaxed mt-3">
-                    {member.summary || member.background}
-                  </p>
+                  <MarkdownText className="text-sm text-muted-foreground leading-relaxed mt-3">
+                    {(member.summary || member.background)!}
+                  </MarkdownText>
                 )}
               </div>
             </div>

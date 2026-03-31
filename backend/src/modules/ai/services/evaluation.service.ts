@@ -1,4 +1,5 @@
-import { Injectable, Optional } from "@nestjs/common";
+import { Injectable, Logger, Optional } from "@nestjs/common";
+import { eq } from "drizzle-orm";
 import { EvaluationAgentRegistryService } from "./evaluation-agent-registry.service";
 import { PipelineStateService } from "./pipeline-state.service";
 import { ModelPurpose, PipelinePhase } from "../interfaces/pipeline.interface";
@@ -15,6 +16,8 @@ import { EVALUATION_AGENT_KEYS } from "../constants/agent-keys";
 import { AiDebugLogService } from "./ai-debug-log.service";
 import { DEFAULT_MODEL_BY_PURPOSE } from "../ai.config";
 import { normalizeResearchResult } from "./research-result-normalizer";
+import { DrizzleService } from "../../../database";
+import { startup } from "../../startup/entities";
 
 export interface EvaluationRunOptions {
   onAgentStart?: (agent: EvaluationAgentKey) => void;
@@ -25,9 +28,12 @@ export interface EvaluationRunOptions {
 
 @Injectable()
 export class EvaluationService {
+  private readonly logger = new Logger(EvaluationService.name);
+
   constructor(
     private pipelineState: PipelineStateService,
     private registry: EvaluationAgentRegistryService,
+    private drizzle: DrizzleService,
     @Optional() private aiDebugLog?: AiDebugLogService,
   ) {}
 
@@ -119,8 +125,26 @@ export class EvaluationService {
       );
     }
 
+    const [record] = await this.drizzle.db
+      .select({ stage: startup.stage })
+      .from(startup)
+      .where(eq(startup.id, startupId))
+      .limit(1);
+
+    if (record?.stage && record.stage !== extraction.stage) {
+      this.logger.log(
+        `[Evaluation] Stage override: extraction="${extraction.stage}" → db="${record.stage}"`,
+      );
+      extraction.stage = record.stage;
+    }
+
+    const enrichment = await this.pipelineState.getPhaseResult(
+      startupId,
+      PipelinePhase.ENRICHMENT,
+    );
+
     const { result: normalizedResearch } = normalizeResearchResult(research);
-    return { extraction, scraping, research: normalizedResearch };
+    return { extraction, scraping, research: normalizedResearch, enrichment: enrichment ?? undefined };
   }
 
   private mergeAgentResult(

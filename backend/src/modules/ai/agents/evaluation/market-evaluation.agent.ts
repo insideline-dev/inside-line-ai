@@ -1221,12 +1221,4 @@ export class MarketEvaluationAgent extends BaseEvaluationAgent<MarketEvaluation>
   protected override getMaxOutputTokens(): number {
     return 120_000;
   }
-
-  protected override getEvaluationAttemptTimeoutMs(): number {
-    return 150_000; // 2.5 minutes per attempt (market research data is large)
-  }
-
-  protected override getEvaluationAgentHardTimeoutMs(): number {
-    return 600_000; // 10 minutes hard limit
-  }
 }

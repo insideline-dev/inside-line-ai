@@ -25,14 +25,14 @@
   --animate-in: enter 0.2s ease-out;
   --animate-out: exit 0.2s ease-in;
   /* Light mode colors - Inside Line brand */
-  --color-background: #FFFAF7;
+  --color-background: #FFFFFF;
   --color-foreground: #0A1017;
-  --color-card: #FFFAF7;
+  --color-card: #FFFFFF;
   --color-card-foreground: #0A1017;
-  --color-popover: #FFFAF7;
+  --color-popover: #FFFFFF;
   --color-popover-foreground: #0A1017;
   --color-primary: #163F67;
-  --color-primary-foreground: #FFFAF7;
+  --color-primary-foreground: #FFFFFF;
   --color-secondary: hsl(210 15% 94%);
   --color-secondary-foreground: #0A1017;
   --color-muted: hsl(210 15% 94%);
@@ -50,7 +50,7 @@
   --color-sidebar-foreground: #0A1017;
   --color-sidebar-border: hsl(210 10% 88%);
   --color-sidebar-primary: #163F67;
-  --color-sidebar-primary-foreground: #FFFAF7;
+  --color-sidebar-primary-foreground: #FFFFFF;
   --color-sidebar-accent: hsl(210 15% 90%);
   --color-sidebar-accent-foreground: #0A1017;
   --color-sidebar-ring: #163F67;

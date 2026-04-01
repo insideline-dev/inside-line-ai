@@ -76,23 +76,7 @@ export function mapStageToEnum(
 
 export function isLikelyPlaceholderStage(record: StartupFieldRecord): boolean {
   const normalizedStage = mapStageToEnum(record.stage);
-  if (!normalizedStage) return true;
-  if (normalizedStage !== StartupStage.SEED) return false;
-
-  const structuralSignals = [
-    isMissingWebsiteValue(record.website),
-    isLikelyPlaceholderText(record.industry),
-    isLikelyPlaceholderText(record.location),
-  ];
-  const secondarySignals = [
-    typeof record.fundingTarget !== "number" || record.fundingTarget <= 0,
-    typeof record.teamSize !== "number" || record.teamSize <= 1,
-  ];
-  const totalSignals = [...structuralSignals, ...secondarySignals];
-  return (
-    structuralSignals.filter(Boolean).length >= 1 &&
-    totalSignals.filter(Boolean).length >= 2
-  );
+  return !normalizedStage;
 }
 
 export function normalizeWebsiteCandidate(

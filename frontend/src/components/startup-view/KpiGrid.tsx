@@ -1,3 +1,4 @@
+import { MarkdownText } from "@/components/MarkdownText";
 import type { KpiMetrics } from "@/lib/kpi-metrics";
 import { cn } from "@/lib/utils";
 
@@ -23,7 +24,7 @@ export function KpiGrid({ metrics, className }: KpiGridProps) {
       {KPI_ITEMS.map(({ key, label }) => (
         <div key={key} className="rounded-lg bg-muted/50 p-3">
           <p className="text-[11px] text-muted-foreground">{label}</p>
-          <p className="text-sm font-medium mt-0.5">{metrics[key]}</p>
+          <MarkdownText className="text-sm font-medium mt-0.5 [&>p]:mb-0">{metrics[key]}</MarkdownText>
         </div>
       ))}
     </div>

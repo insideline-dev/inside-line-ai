@@ -51,6 +51,7 @@ import {
   UserRoundSearch,
   type LucideIcon,
 } from "lucide-react";
+import insideLineLogo from "@/assets/icon-insideline.svg";
 import { useAuth, useLogout } from "@/lib/auth";
 import type { UserRole } from "@/types";
 import { useMockAuthStore } from "@/stores";
@@ -172,9 +173,9 @@ function UserMenu() {
           size="lg"
           className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
         >
-          <Avatar className="h-8 w-8 rounded-lg">
+          <Avatar className="h-8 w-8 rounded-none">
             <AvatarImage src={user?.image || undefined} />
-            <AvatarFallback className="rounded-lg">
+            <AvatarFallback className="rounded-none">
               {user?.name?.charAt(0).toUpperCase() || "U"}
             </AvatarFallback>
           </Avatar>
@@ -186,7 +187,7 @@ function UserMenu() {
         </SidebarMenuButton>
       </DropdownMenuTrigger>
       <DropdownMenuContent
-        className="w-[--radix-dropdown-menu-trigger-width] min-w-56 rounded-lg"
+        className="w-[--radix-dropdown-menu-trigger-width] min-w-56 rounded-none"
         side="bottom"
         align="end"
         sideOffset={4}
@@ -230,12 +231,14 @@ function AppSidebar({ role }: { role: UserRole }) {
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
               <Link to="/">
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                  <Shield className="size-4" />
-                </div>
-                <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold">Inside Line</span>
-                </div>
+                <img
+                  src={insideLineLogo}
+                  alt="Inside Line"
+                  className="size-8 shrink-0"
+                />
+                <span className="truncate font-serif text-2xl font-normal tracking-tight">
+                  Inside Line
+                </span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>

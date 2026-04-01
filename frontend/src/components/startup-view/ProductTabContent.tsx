@@ -1,13 +1,33 @@
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Package, Image, Code, Layers, Shield } from "lucide-react";
+import { Package, Image, Code, Layers, Shield, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MarkdownText } from "@/components/MarkdownText";
 import { SectionScoreCard } from "@/components/SectionScoreCard";
 import { DataGapsSection, parseDataGapItems } from "@/components/DataGapsSection";
 import type { Startup } from "@/types/startup";
 import type { Evaluation } from "@/types/evaluation";
+
+
+function DescriptionBlock({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div>
+      <h4 className="mb-1 text-sm font-medium">Description</h4>
+      <div className={cn("text-sm leading-relaxed text-muted-foreground", !expanded && "line-clamp-4")}>
+        <MarkdownText className="[&>p]:mb-2 [&>p:last-child]:mb-0">{text}</MarkdownText>
+      </div>
+      <button
+        onClick={() => setExpanded(v => !v)}
+        className="mt-1 text-xs text-primary hover:underline"
+      >
+        {expanded ? "Show less" : "Show more"}
+      </button>
+    </div>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -318,10 +338,10 @@ export function ProductTabContent({ startup, evaluation, showScores = true, prod
   // Product Showcase
   const founderScreenshots = (startup.productScreenshots as string[]) || [];
 
-  // Unified description — prefer description, fallback to coreValueProp then whatItDoes
-  const productDescription = description || coreValueProp || whatItDoes;
+  // Unified description — prefer description, fallback to whatItDoes
+  const productDescription = description || whatItDoes;
 
-  const hasOverview = productCategory || targetUser || techStage || productDescription || keyFeatures.length > 0;
+  const hasOverview = productCategory || targetUser || techStage || coreValueProp || productDescription || keyFeatures.length > 0;
   const hasMoat = !!(moatStage || moatType);
   const hasMaturity = techStage || claimsAssessment.length > 0 || hasMoat;
   const hasContent = hasOverview || hasMaturity || technologyStack.length > 0 || dataGaps.length > 0 || founderScreenshots.length > 0 || productData;
@@ -380,11 +400,11 @@ export function ProductTabContent({ startup, evaluation, showScores = true, prod
                       <TooltipTrigger asChild>
                         <div className="rounded-lg border bg-muted/50 px-3 py-2 cursor-default">
                           <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Category</p>
-                          <p className="text-sm font-medium line-clamp-2">{productCategory}</p>
+                          <MarkdownText inline className="text-sm font-medium line-clamp-1">{productCategory}</MarkdownText>
                         </div>
                       </TooltipTrigger>
                       <TooltipContent side="bottom" className="max-w-xs">
-                        <p className="text-xs">{productCategory}</p>
+                        <MarkdownText className="text-xs">{productCategory}</MarkdownText>
                       </TooltipContent>
                     </Tooltip>
                   )}
@@ -393,11 +413,11 @@ export function ProductTabContent({ startup, evaluation, showScores = true, prod
                       <TooltipTrigger asChild>
                         <div className="rounded-lg border bg-muted/50 px-3 py-2 cursor-default">
                           <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Target User</p>
-                          <p className="text-sm font-medium line-clamp-2">{targetUser}</p>
+                          <MarkdownText inline className="text-sm font-medium line-clamp-1">{targetUser}</MarkdownText>
                         </div>
                       </TooltipTrigger>
                       <TooltipContent side="bottom" className="max-w-xs">
-                        <p className="text-xs">{targetUser}</p>
+                        <MarkdownText className="text-xs">{targetUser}</MarkdownText>
                       </TooltipContent>
                     </Tooltip>
                   )}
@@ -411,14 +431,17 @@ export function ProductTabContent({ startup, evaluation, showScores = true, prod
               </TooltipProvider>
             )}
 
+            {/* Core Value Prop — highlighted callout */}
+            {coreValueProp && (
+              <div className="flex items-start gap-3 rounded-lg border border-primary/20 bg-primary/5 px-4 py-3">
+                <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                <p className="text-sm font-medium leading-relaxed">{coreValueProp}</p>
+              </div>
+            )}
+
             {/* Description — unified display */}
             {productDescription && (
-              <div>
-                <h4 className="mb-1 text-sm font-medium">Description</h4>
-                <MarkdownText className="text-sm leading-relaxed text-muted-foreground [&>p]:mb-0">
-                  {productDescription}
-                </MarkdownText>
-              </div>
+              <DescriptionBlock text={productDescription} />
             )}
 
             {/* Key Features — within description area */}
@@ -484,7 +507,7 @@ export function ProductTabContent({ startup, evaluation, showScores = true, prod
 
             {/* Moat Assessment — right after lifecycle */}
             {hasMoat && (
-              <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
+              <div className="space-y-3">
                 <div className="flex items-center gap-2">
                   <Shield className="h-4 w-4 text-muted-foreground" />
                   <h4 className="text-sm font-medium">Moat Assessment</h4>

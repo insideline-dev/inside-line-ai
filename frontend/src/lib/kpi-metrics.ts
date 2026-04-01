@@ -116,7 +116,7 @@ export function extractKpiMetrics(
   }
 
   const financials = rec(evaluation.financialsData);
-  const keyMetrics = rec(financials.keyMetrics);
+  const charts = rec(financials.charts);
   const market = rec(evaluation.marketData);
   const marketSizing = rec(market.marketSizing);
   const tam = rec(marketSizing.tam);
@@ -128,38 +128,41 @@ export function extractKpiMetrics(
   const productOverview = rec(product.productOverview);
   const team = rec(evaluation.teamData);
   const fmf = rec(team.founderMarketFit);
+  // --- First 3 KPIs: sourced from pitch deck ---
 
-  // ARR
-  const arrRaw = safeStr(keyMetrics.arr) ?? safeStr(keyMetrics.annualRecurringRevenue);
-  const arrNum = safeNum(keyMetrics.arr) ?? safeNum(keyMetrics.annualRecurringRevenue);
+  // ARR (pitch deck): revenue projections from financial model, then traction narrative
+  const revenueProjection = Array.isArray(charts.revenueProjection)
+    ? charts.revenueProjection as Array<{ period?: string; revenue?: number }>
+    : [];
+  const latestRevenue = revenueProjection.length > 0
+    ? safeNum(revenueProjection[0].revenue)
+    : undefined;
   let arr = DASH;
-  if (arrRaw) {
-    arr = extractShortValue(arrRaw);
-  } else if (arrNum !== undefined) {
-    arr = arrNum >= 1_000_000
-      ? `$${(arrNum / 1_000_000).toFixed(1)}M`
-      : arrNum >= 1_000
-        ? `$${Math.round(arrNum / 1_000)}K`
-        : `$${arrNum}`;
+  if (latestRevenue !== undefined && latestRevenue > 0) {
+    arr = latestRevenue >= 1_000_000
+      ? `$${(latestRevenue / 1_000_000).toFixed(1)}M`
+      : latestRevenue >= 1_000
+        ? `$${Math.round(latestRevenue / 1_000)}K`
+        : `$${latestRevenue}`;
   }
 
-  // Growth Rate
-  const cagrStr = safeStr(growthRate.cagr);
-  const period = safeStr(growthRate.period);
+  // Growth Rate (pitch deck claimed)
+  const deckClaimed = safeStr(growthRate.deckClaimed);
   let growthRateVal = DASH;
-  if (cagrStr) {
-    growthRateVal = cagrStr.includes("%") ? cagrStr : `${cagrStr}%`;
-    if (period) growthRateVal += ` ${period}`;
+  if (deckClaimed && deckClaimed !== "Unknown") {
+    growthRateVal = extractShortValue(deckClaimed);
   }
 
-  // Gross Margin
-  const marginRaw = safeStr(keyMetrics.grossMargin);
-  const marginNum = safeNum(keyMetrics.grossMargin);
+  // Gross Margin (pitch deck): margin progression from financial model
+  const marginProgression = Array.isArray(charts.marginProgression)
+    ? charts.marginProgression as Array<{ period?: string; grossMargin?: number }>
+    : [];
+  const latestMargin = marginProgression.length > 0
+    ? safeNum(marginProgression[0].grossMargin)
+    : undefined;
   let grossMargin = DASH;
-  if (marginRaw) {
-    grossMargin = marginRaw.includes("%") ? marginRaw : `${marginRaw}%`;
-  } else if (marginNum !== undefined) {
-    grossMargin = `${Math.round(marginNum)}%`;
+  if (latestMargin !== undefined && latestMargin > 0) {
+    grossMargin = `${Math.round(latestMargin)}%`;
   }
 
   // Market Structure
@@ -170,10 +173,12 @@ export function extractKpiMetrics(
   const tamValue = safeStr(tam.value);
   const tamDisplay = tamValue ? extractShortValue(tamValue) : DASH;
 
-  // Market Growth (reuse cagr)
+  // Market Growth (researched CAGR)
+  const cagrStr = safeStr(growthRate.cagr);
   let marketGrowth = DASH;
-  if (cagrStr) {
-    marketGrowth = cagrStr.includes("%") ? `${cagrStr} CAGR` : `${cagrStr}% CAGR`;
+  if (cagrStr && cagrStr !== "Unknown") {
+    const cagrVal = extractShortValue(cagrStr);
+    marketGrowth = cagrVal.includes("CAGR") ? cagrVal : `${cagrVal} CAGR`;
   }
 
   // Product Stage

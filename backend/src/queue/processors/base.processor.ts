@@ -86,8 +86,10 @@ export abstract class BaseProcessor<
           connection: workerConnection,
           ...(this.queuePrefix ? { prefix: this.queuePrefix } : {}),
           concurrency: this.concurrency,
-          // Don't auto-run if connection fails - wait for manual retry
           autorun: true,
+          lockDuration: 300_000,    // 5 min (default 30s too short for AI jobs running 10-40 min)
+          stalledInterval: 300_000, // 5 min — match lockDuration to avoid false stall detection
+          maxStalledCount: 2,       // 2 consecutive misses before marking failed (default 1)
         },
       );
 

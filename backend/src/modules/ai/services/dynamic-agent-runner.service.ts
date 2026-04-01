@@ -66,21 +66,28 @@ export class DynamicAgentRunnerService {
     });
 
     const maxAttempts = 3;
+    const attemptTimeoutMs = this.aiConfig.getDynamicAgentAttemptTimeoutMs();
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       try {
-        const response = await generateText({
-          model:
-            executionOptions?.generateTextOptions.model ??
-            this.providers.resolveModelForPurpose(ModelPurpose.EVALUATION),
-          output: Output.object({ schema }),
-          system: promptConfig.systemPrompt,
-          prompt: renderedPrompt,
-          temperature: this.aiConfig.getEvaluationTemperature(),
-          maxOutputTokens: this.aiConfig.getEvaluationMaxOutputTokens(),
-          tools: executionOptions?.generateTextOptions.tools,
-          toolChoice: executionOptions?.generateTextOptions.toolChoice,
-          providerOptions: executionOptions?.generateTextOptions.providerOptions,
-        });
+        const response = await this.withTimeout(
+          (abortSignal) =>
+            generateText({
+              model:
+                executionOptions?.generateTextOptions.model ??
+                this.providers.resolveModelForPurpose(ModelPurpose.EVALUATION),
+              output: Output.object({ schema }),
+              system: promptConfig.systemPrompt,
+              prompt: renderedPrompt,
+              temperature: this.aiConfig.getEvaluationTemperature(),
+              maxOutputTokens: this.aiConfig.getEvaluationMaxOutputTokens(),
+              tools: executionOptions?.generateTextOptions.tools,
+              toolChoice: executionOptions?.generateTextOptions.toolChoice,
+              providerOptions: executionOptions?.generateTextOptions.providerOptions,
+              abortSignal,
+            }),
+          attemptTimeoutMs,
+          `Dynamic agent ${params.agentKey} timed out after ${attemptTimeoutMs}ms`,
+        );
 
         return {
           key: params.agentKey,
@@ -98,7 +105,7 @@ export class DynamicAgentRunnerService {
           `[${params.agentKey}] dynamic run attempt ${attempt}/${maxAttempts} failed: ${message}`,
         );
         if (attempt < maxAttempts) {
-          await this.sleep(attempt * 250);
+          await this.sleep(this.getRetryDelayMs(attempt));
           continue;
         }
 
@@ -165,6 +172,64 @@ export class DynamicAgentRunnerService {
       default:
         return null;
     }
+  }
+
+  private getRetryDelayMs(attempt: number): number {
+    const baseMs = 3_000 * 2 ** Math.max(0, attempt - 1);
+    const jitter = Math.floor(Math.random() * 2_000);
+    return baseMs + jitter;
+  }
+
+  private async withTimeout<T>(
+    operation: (abortSignal: AbortSignal | undefined) => Promise<T>,
+    timeoutMs: number,
+    message: string,
+  ): Promise<T> {
+    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+      return operation(undefined);
+    }
+
+    return await new Promise<T>((resolve, reject) => {
+      const controller =
+        typeof AbortController === "undefined" ? undefined : new AbortController();
+      let settled = false;
+      const complete = (fn: () => void) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        fn();
+      };
+      const timer = setTimeout(() => {
+        try {
+          controller?.abort(new Error(message));
+        } catch {
+          controller?.abort();
+        }
+        complete(() => reject(new Error(message)));
+      }, timeoutMs);
+      Promise.resolve(operation(controller?.signal))
+        .then((result) => {
+          complete(() => resolve(result));
+        })
+        .catch((error) => {
+          complete(() => {
+            if (controller?.signal.aborted) {
+              const reason = controller.signal.reason;
+              const timeoutError =
+                reason instanceof Error
+                  ? reason
+                  : new Error(
+                      typeof reason === "string" && reason.trim().length > 0
+                        ? reason
+                        : message,
+                    );
+              reject(timeoutError);
+              return;
+            }
+            reject(error);
+          });
+        });
+    });
   }
 
   private sleep(ms: number): Promise<void> {

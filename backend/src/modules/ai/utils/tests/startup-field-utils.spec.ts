@@ -195,8 +195,7 @@ describe("isLikelyPlaceholderStage", () => {
     expect(isLikelyPlaceholderStage(record({ stage: "Series G" }))).toBe(true);
   });
 
-  it("returns false for a non-seed stage regardless of field quality", () => {
-    // series_a never triggers the seed heuristic
+  it("returns false for any valid stage regardless of other field quality", () => {
     expect(
       isLikelyPlaceholderStage(
         record({
@@ -211,61 +210,15 @@ describe("isLikelyPlaceholderStage", () => {
     ).toBe(false);
   });
 
-  it("returns false for seed with all valid fields (insufficient signals)", () => {
-    expect(
-      isLikelyPlaceholderStage(
-        record({
-          stage: "seed",
-          website: "https://acme.com",
-          industry: "SaaS",
-          location: "San Francisco",
-          fundingTarget: 1_000_000,
-          teamSize: 5,
-        }),
-      ),
-    ).toBe(false);
-  });
-
-  it("returns true for seed + missing website + teamSize 1 (1 structural + 1 secondary)", () => {
+  it("returns false for seed — valid stage is always trusted", () => {
     expect(
       isLikelyPlaceholderStage(
         record({
           stage: "seed",
           website: null as unknown as string,
-          teamSize: 1,
-          industry: "SaaS",
-          location: "San Francisco",
-          fundingTarget: 1_000_000,
-        }),
-      ),
-    ).toBe(true);
-  });
-
-  it("returns true for seed + placeholder industry + zero funding (1 structural + 1 secondary)", () => {
-    expect(
-      isLikelyPlaceholderStage(
-        record({
-          stage: "seed",
-          website: "https://acme.com",
           industry: "unknown",
-          location: "San Francisco",
+          location: "unknown",
           fundingTarget: 0,
-          teamSize: 5,
-        }),
-      ),
-    ).toBe(true);
-  });
-
-  it("returns false for seed + only teamSize 1 with no structural signal", () => {
-    // secondary-only: teamSize <= 1 but no structural signal fires
-    expect(
-      isLikelyPlaceholderStage(
-        record({
-          stage: "seed",
-          website: "https://acme.com",
-          industry: "SaaS",
-          location: "San Francisco",
-          fundingTarget: 1_000_000,
           teamSize: 1,
         }),
       ),
@@ -457,7 +410,7 @@ describe("getMissingCriticalFields", () => {
     expect(result).not.toContain("stage");
   });
 
-  it("reports stage missing when seed heuristic fires", () => {
+  it("does not report stage missing for seed — valid stage is trusted", () => {
     const result = getMissingCriticalFields(
       record({
         stage: "seed",
@@ -465,10 +418,11 @@ describe("getMissingCriticalFields", () => {
         teamSize: 1,
       }),
     );
-    expect(result).toContain("stage");
+    expect(result).toContain("website");
+    expect(result).not.toContain("stage");
   });
 
-  it("reports both website and stage when both are missing", () => {
+  it("reports only website when website is missing but stage is valid seed", () => {
     const result = getMissingCriticalFields(
       record({
         stage: "seed",
@@ -479,6 +433,6 @@ describe("getMissingCriticalFields", () => {
       }),
     );
     expect(result).toContain("website");
-    expect(result).toContain("stage");
+    expect(result).not.toContain("stage");
   });
 });

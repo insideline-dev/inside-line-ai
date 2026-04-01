@@ -522,11 +522,11 @@ export function AdminSummaryTab({
                         <PolarRadiusAxis angle={90} domain={[0, 100]} tick={false} axisLine={false} tickCount={5} />
                         <Radar
                           dataKey="score"
-                          stroke="hsl(var(--primary))"
-                          fill="hsl(var(--primary))"
-                          fillOpacity={0.1}
+                          stroke="#163F67"
+                          fill="#C9E0F9"
+                          fillOpacity={0.35}
                           strokeWidth={1.5}
-                          dot={{ r: 2.5, fill: "hsl(var(--primary))", strokeWidth: 0 }}
+                          dot={{ r: 2.5, fill: "#163F67", strokeWidth: 0 }}
                         />
                         <Tooltip
                           content={({ active, payload: tp }) => {

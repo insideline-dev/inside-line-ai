@@ -139,7 +139,7 @@ export function AdminReviewSidebar({
               <Button
                 onClick={onApprove}
                 disabled={approveDisabled}
-                className="h-10 rounded-md bg-gradient-to-r from-fuchsia-500 to-violet-600 text-sm font-medium text-white hover:opacity-95"
+                className="h-10 text-sm font-medium"
               >
                 <CheckCircle2 className="h-4 w-4 mr-2" />
                 Approve
@@ -148,7 +148,7 @@ export function AdminReviewSidebar({
                 variant="destructive"
                 onClick={onReject}
                 disabled={rejectDisabled}
-                className="h-10 rounded-md text-sm font-medium"
+                className="h-10 text-sm font-medium"
               >
                 <XCircle className="h-4 w-4 mr-2" />
                 Reject

@@ -16,7 +16,7 @@ interface ScrapedPage {
   pricing?: WebsiteScrapedData["pricing"];
   customerLogos: string[];
   testimonials: WebsiteScrapedData["testimonials"];
-  metadata: Pick<WebsiteScrapedData["metadata"], "ogImage" | "keywords" | "author">;
+  metadata: Pick<WebsiteScrapedData["metadata"], "ogImage" | "logoUrl" | "keywords" | "author">;
 }
 
 interface ResolvedSafeUrl {
@@ -250,6 +250,7 @@ export class WebsiteScraperService {
         hasTeamPage,
         hasPricingPage,
         ogImage: homepage.metadata.ogImage,
+        logoUrl: homepage.metadata.logoUrl,
         keywords: homepage.metadata.keywords,
         author: homepage.metadata.author,
       },
@@ -563,6 +564,7 @@ export class WebsiteScraperService {
       testimonials: this.extractTestimonials($),
       metadata: {
         ogImage: $('meta[property="og:image"]').attr("content")?.trim(),
+        logoUrl: this.extractLogoUrl($, pageUrl),
         keywords: $('meta[name="keywords"]').attr("content")?.trim(),
         author: $('meta[name="author"]').attr("content")?.trim(),
       },
@@ -722,6 +724,51 @@ export class WebsiteScraperService {
     });
 
     return logos;
+  }
+
+  private extractLogoUrl($: cheerio.CheerioAPI, pageUrl: string): string | undefined {
+    // 1. Apple touch icon (highest quality, always square)
+    const appleTouchIcon = $('link[rel="apple-touch-icon"]').first().attr("href")?.trim();
+    if (appleTouchIcon) {
+      const resolved = this.resolveLink(appleTouchIcon, pageUrl);
+      if (resolved) return resolved;
+    }
+
+    // 2. Favicon links — prefer largest sizes attribute
+    const iconLinks = $('link[rel="icon"], link[rel="shortcut icon"]').toArray();
+    if (iconLinks.length > 0) {
+      let bestHref: string | undefined;
+      let bestSize = 0;
+      for (const link of iconLinks) {
+        const href = $(link).attr("href")?.trim();
+        if (!href) continue;
+        const sizes = $(link).attr("sizes")?.trim();
+        const size = sizes ? parseInt(sizes.split("x")[0], 10) || 0 : 0;
+        if (size > bestSize || !bestHref) {
+          bestSize = size;
+          bestHref = href;
+        }
+      }
+      if (bestHref) {
+        const resolved = this.resolveLink(bestHref, pageUrl);
+        if (resolved) return resolved;
+      }
+    }
+
+    // 3. Logo image in header/nav
+    const logoImg = $('header img, nav img, .logo img, #logo img, [class*="logo"] img').first();
+    const logoSrc = logoImg.attr("src")?.trim();
+    if (logoSrc && !logoSrc.startsWith("data:")) {
+      const width = parseInt(logoImg.attr("width") ?? "", 10);
+      const height = parseInt(logoImg.attr("height") ?? "", 10);
+      const tooSmall = (width > 0 && width < 32) || (height > 0 && height < 32);
+      if (!tooSmall) {
+        const resolved = this.resolveLink(logoSrc, pageUrl);
+        if (resolved) return resolved;
+      }
+    }
+
+    return undefined;
   }
 
   private extractTestimonials(

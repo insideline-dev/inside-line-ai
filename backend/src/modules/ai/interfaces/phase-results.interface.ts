@@ -112,6 +112,7 @@ export interface WebsiteScrapedData {
     hasTeamPage: boolean;
     hasPricingPage: boolean;
     ogImage?: string;
+    logoUrl?: string;
     keywords?: string;
     author?: string;
   };
@@ -172,6 +173,7 @@ export interface ScrapingResult {
   website?: WebsiteScrapedData | null;
   websiteUrl?: string | null;
   websiteSummary?: string;
+  logoUrl?: string | null;
   teamMembers: EnrichedTeamMember[];
   notableClaims: string[];
   scrapeErrors: ScrapeError[];

@@ -376,38 +376,13 @@ export class ClaraService {
               ...extra,
             };
 
-            if (
-            result.pipelineStarted === false &&
-            (result.missingFields?.length ?? 0) > 0
-            ) {
-              const missingLabels = this.formatMissingFieldLabels(
-                result.missingFields ?? [],
-              );
-              replyText = [
-                `We already have ${result.startupName} in our system and I’ve updated it with the details you sent.`,
-                "",
-                "Before I can restart analysis, I still need:",
-                ...missingLabels.map((label) => `- ${label}`),
-                "",
-                "Please reply with the missing details and I’ll start the pipeline immediately.",
-              ].join("\n");
-              await this.conversationService.updateStatus(
-                conversation.id,
-                ConversationStatus.AWAITING_INFO,
-              );
-            } else if (result.pipelineStarted) {
-              await this.conversationService.updateStatus(
-                conversation.id,
-                ConversationStatus.PROCESSING,
-              );
-              replyText = result.isEnriched
-                ? `We already have ${result.startupName} in our system. I've updated it with the new information you sent and re-triggered the analysis. You'll receive an updated report when it's ready.`
-                : `We already have ${result.startupName} in our system (status: ${result.status}). I've linked this conversation to the existing record and started the analysis pipeline.`;
-            } else {
-              replyText = result.isEnriched
-                ? `We already have ${result.startupName} in our system. I've updated it with the new information you sent and re-triggered the analysis. You'll receive an updated report when it's ready.`
-                : `We already have ${result.startupName} in our system (status: ${result.status}). I've linked this conversation to the existing record.`;
-            }
+            await this.conversationService.updateStatus(
+              conversation.id,
+              ConversationStatus.PROCESSING,
+            );
+            replyText = result.isEnriched
+              ? `We already have ${result.startupName} in our system. I’ve updated it with the new information you sent and re-triggered the analysis. You’ll receive an updated report when it’s ready.`
+              : `We already have ${result.startupName} in our system (status: ${result.status}). I’ve linked this conversation to the existing record and started the analysis pipeline.`;
           }
         } else {
           await this.conversationService.linkStartup(conversation.id, result.startupId);
@@ -423,39 +398,15 @@ export class ClaraService {
             ...extra,
           };
 
-          if (result.pipelineStarted === false) {
-            const missingLabels = this.formatMissingFieldLabels(
-              result.missingFields ?? [],
-            );
-            replyText = [
-              `Subject: Pitch Deck Received: ${result.startupName}`,
-              "",
-              `Hi ${fromName ?? "there"},`,
-              "",
-              "Thanks, I received your pitch deck.",
-              "I still need the following details before I can start the analysis:",
-              ...missingLabels.map((label) => `- ${label}`),
-              "",
-              "Please reply with those details and I’ll start the pipeline right away.",
-              "",
-              "Best regards,",
-              "Clara",
-            ].join("\n");
-            await this.conversationService.updateStatus(
-              conversation.id,
-              ConversationStatus.AWAITING_INFO,
-            );
-          } else {
-            await this.conversationService.updateStatus(
-              conversation.id,
-              ConversationStatus.PROCESSING,
-            );
-            replyText = await this.claraAi.generateResponse(
-              ClaraIntent.SUBMISSION,
-              ctx,
-              extra,
-            );
-          }
+          await this.conversationService.updateStatus(
+            conversation.id,
+            ConversationStatus.PROCESSING,
+          );
+          replyText = await this.claraAi.generateResponse(
+            ClaraIntent.SUBMISSION,
+            ctx,
+            extra,
+          );
         }
         } // end else (noPitchDeck check)
       } else {

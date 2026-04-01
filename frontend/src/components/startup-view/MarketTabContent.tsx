@@ -224,15 +224,15 @@ function ConcentrationSpectrum({ structureType, direction, evidence }: { structu
 
 // --- Market Lifecycle S-Curve ---
 
-const LIFECYCLE_POSITIONS: Record<string, { x: number; y: number; label: string }> = {
-  emerging:     { x: 20,  y: 58, label: "Emerging" },
-  introduction: { x: 20,  y: 58, label: "Introduction" },
-  early_growth: { x: 55,  y: 38, label: "Early Growth" },
-  growth:       { x: 90,  y: 12, label: "Growth" },
-  mature:       { x: 130, y: 10, label: "Maturity" },
-  maturity:     { x: 130, y: 10, label: "Maturity" },
-  declining:    { x: 172, y: 40, label: "Decline" },
-  decline:      { x: 172, y: 40, label: "Decline" },
+const LIFECYCLE_POSITIONS: Record<string, { cx: number; cy: number; label: string; regionX: number; regionW: number }> = {
+  emerging:     { cx: 60,  cy: 105, label: "Emerging",     regionX: 10,  regionW: 65 },
+  introduction: { cx: 60,  cy: 105, label: "Introduction", regionX: 10,  regionW: 65 },
+  early_growth: { cx: 110, cy: 75,  label: "Early Growth", regionX: 75,  regionW: 70 },
+  growth:       { cx: 180, cy: 17,  label: "Growth",       regionX: 145, regionW: 75 },
+  mature:       { cx: 260, cy: 16,  label: "Maturity",     regionX: 220, regionW: 90 },
+  maturity:     { cx: 260, cy: 16,  label: "Maturity",     regionX: 220, regionW: 90 },
+  declining:    { cx: 345, cy: 65,  label: "Decline",      regionX: 310, regionW: 80 },
+  decline:      { cx: 345, cy: 65,  label: "Decline",      regionX: 310, regionW: 80 },
 };
 
 function LifecycleSCurve({ position }: { position: string }) {
@@ -241,7 +241,7 @@ function LifecycleSCurve({ position }: { position: string }) {
 
   return (
     <div className="flex flex-col items-center gap-2 w-full">
-      <svg viewBox="0 0 400 120" className="w-full max-w-md h-auto" aria-label={`Market lifecycle: ${pos.label}`}>
+      <svg viewBox="0 0 400 120" className="w-full h-auto" aria-label={`Market lifecycle: ${pos.label}`}>
         {/* Background fill under curve */}
         <path
           d="M 10,110 C 50,110 80,105 110,75 C 140,45 160,15 200,12 C 240,9 270,14 300,32 C 330,50 356,80 390,100 L 390,110 Z"
@@ -256,12 +256,12 @@ function LifecycleSCurve({ position }: { position: string }) {
           strokeWidth="3"
           strokeLinecap="round"
         />
-        {/* Sweet spot region (growth area) */}
-        <rect x="136" y="4" width="90" height="106" rx="6" className="fill-emerald-500/10 dark:fill-emerald-500/12" />
+        {/* Active stage highlight region */}
+        <rect x={pos.regionX} y="4" width={pos.regionW} height="106" rx="6" className="fill-violet-500/8" />
         {/* Active dot */}
         <circle
-          cx={pos.x * 2}
-          cy={pos.y * (110 / 62)}
+          cx={pos.cx}
+          cy={pos.cy}
           r="8"
           className="fill-violet-500 dark:fill-violet-400"
           stroke="white"
@@ -273,7 +273,7 @@ function LifecycleSCurve({ position }: { position: string }) {
           .map(([key, val]) => (
             <text
               key={key}
-              x={val.x * 2}
+              x={val.cx}
               y={116}
               textAnchor="middle"
               className={cn(
@@ -659,12 +659,16 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage }: Mar
 
           {/* Market Lifecycle S-Curve */}
           {lifecyclePosition !== "Not provided" && (
-            <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
-              <p className="text-sm font-medium">Market Lifecycle</p>
-              <LifecycleSCurve position={lifecyclePosition} />
-              {lifecycleEvidence !== "Not provided" && (
-                <MarkdownText className="text-xs text-muted-foreground [&>p]:mb-0">{lifecycleEvidence}</MarkdownText>
-              )}
+            <div className="rounded-lg border bg-muted/20 p-3">
+              <div className="grid grid-cols-[1fr_2fr] gap-4 items-center">
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Market Lifecycle</p>
+                  {lifecycleEvidence !== "Not provided" && (
+                    <MarkdownText className="text-xs text-muted-foreground [&>p]:mb-0">{lifecycleEvidence}</MarkdownText>
+                  )}
+                </div>
+                <LifecycleSCurve position={lifecyclePosition} />
+              </div>
             </div>
           )}
         </CardContent>

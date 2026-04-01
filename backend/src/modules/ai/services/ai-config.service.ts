@@ -6,8 +6,8 @@ import { ModelPurpose } from "../interfaces/pipeline.interface";
 import { ResearchAgentKey } from "../interfaces/agent.interface";
 import { AiModelOverrideService } from "./ai-model-override.service";
 
-const DEFAULT_RESEARCH_ATTEMPT_TIMEOUT_MS = 600_000; // 10 minutes per attempt
-const DEFAULT_RESEARCH_AGENT_HARD_TIMEOUT_MS = 1_500_000; // 25 minutes hard ceiling per agent
+const DEFAULT_RESEARCH_ATTEMPT_TIMEOUT_MS = 3_600_000; // 1 hour per attempt (deep research models can take 30+ min)
+const DEFAULT_RESEARCH_AGENT_HARD_TIMEOUT_MS = 3_600_000; // 1 hour hard ceiling per agent
 
 @Injectable()
 export class AiConfigService {
@@ -47,15 +47,18 @@ export class AiConfigService {
   }
 
   getResearchAttemptTimeoutMs(): number {
-    return DEFAULT_RESEARCH_ATTEMPT_TIMEOUT_MS;
+    const configured = this.config.get<number>("AI_RESEARCH_ATTEMPT_TIMEOUT_MS");
+    return this.toPositiveInt(configured, DEFAULT_RESEARCH_ATTEMPT_TIMEOUT_MS);
   }
 
   getResearchMaxAttempts(): number {
-    return 3;
+    const configured = this.config.get<number>("AI_RESEARCH_MAX_ATTEMPTS");
+    return this.toPositiveInt(configured, 3);
   }
 
   getResearchAgentHardTimeoutMs(): number {
-    return DEFAULT_RESEARCH_AGENT_HARD_TIMEOUT_MS;
+    const configured = this.config.get<number>("AI_RESEARCH_AGENT_HARD_TIMEOUT_MS");
+    return this.toPositiveInt(configured, DEFAULT_RESEARCH_AGENT_HARD_TIMEOUT_MS);
   }
 
   getResearchAttemptTimeoutMsForAgent(_agent: ResearchAgentKey): number {
@@ -115,15 +118,18 @@ export class AiConfigService {
   }
 
   getEvaluationAttemptTimeoutMs(): number {
-    return 600_000;
+    const configured = this.config.get<number>("AI_EVALUATION_ATTEMPT_TIMEOUT_MS");
+    return this.toPositiveInt(configured, 600_000);
   }
 
   getEvaluationMaxAttempts(): number {
-    return 3;
+    const configured = this.config.get<number>("AI_EVALUATION_MAX_ATTEMPTS");
+    return this.toPositiveInt(configured, 3);
   }
 
   getEvaluationAgentHardTimeoutMs(): number {
-    return 1_800_000;
+    const configured = this.config.get<number>("AI_EVALUATION_AGENT_HARD_TIMEOUT_MS");
+    return this.toPositiveInt(configured, 2_400_000); // 40 min — headroom for 3 × 10m attempts + backoff
   }
 
   getSynthesisMaxOutputTokens(): number {
@@ -135,15 +141,23 @@ export class AiConfigService {
   }
 
   getSynthesisAttemptTimeoutMs(): number {
-    return 300_000;
+    const configured = this.config.get<number>("AI_SYNTHESIS_ATTEMPT_TIMEOUT_MS");
+    return this.toPositiveInt(configured, 600_000); // 10 min (was 5 min — reasoning models need more time)
   }
 
   getSynthesisMaxAttempts(): number {
-    return 3;
+    const configured = this.config.get<number>("AI_SYNTHESIS_MAX_ATTEMPTS");
+    return this.toPositiveInt(configured, 3);
   }
 
   getSynthesisAgentHardTimeoutMs(): number {
-    return 960_000;
+    const configured = this.config.get<number>("AI_SYNTHESIS_AGENT_HARD_TIMEOUT_MS");
+    return this.toPositiveInt(configured, 1_200_000); // 20 min (was 16 min)
+  }
+
+  getDynamicAgentAttemptTimeoutMs(): number {
+    const configured = this.config.get<number>("AI_DYNAMIC_AGENT_ATTEMPT_TIMEOUT_MS");
+    return this.toPositiveInt(configured, 600_000); // 10 min
   }
 
   getModelForPurpose(purpose: ModelPurpose): string {

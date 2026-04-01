@@ -605,6 +605,10 @@ export class ScrapingService {
       website,
       websiteUrl: website?.url ?? record.website ?? null,
       websiteSummary: website?.description || undefined,
+      logoUrl: website?.metadata.logoUrl
+        ?? website?.metadata.ogImage
+        ?? (website?.url ? new URL("/favicon.ico", website.url).toString() : null)
+        ?? null,
       teamMembers: verifiedTeamMembers,
       notableClaims: this.buildNotableClaims(record.industry, record.stage, record.fundingTarget),
       scrapeErrors,

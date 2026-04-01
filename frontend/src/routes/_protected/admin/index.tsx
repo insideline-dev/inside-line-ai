@@ -159,7 +159,7 @@ function AdminStartupRow({ startup }: { startup: StartupItem }) {
 
 function AdminDashboard() {
   const prevAnalyzingCountRef = useRef<number>(0);
-  const [activeTab, setActiveTab] = useState("pending_review");
+  const [activeTab, setActiveTab] = useState("all");
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 50;
 
@@ -219,47 +219,48 @@ function AdminDashboard() {
       label: "Pending",
       value: (byStatus?.pending_review ?? 0) + (byStatus?.submitted ?? 0),
       icon: Clock,
-      bgColor: "bg-chart-4/10",
-      iconColor: "text-chart-4",
+      accent: "border-l-amber-500",
+      iconColor: "text-amber-600",
     },
     {
       label: "Analyzing",
       value: byStatus?.analyzing ?? 0,
       icon: Sparkles,
-      bgColor: "bg-chart-5/10",
-      iconColor: "text-chart-5",
+      accent: "border-l-violet-500",
+      iconColor: "text-violet-600",
     },
     {
       label: "Approved",
       value: byStatus?.approved ?? 0,
       icon: CheckCircle,
-      bgColor: "bg-chart-2/10",
-      iconColor: "text-chart-2",
+      accent: "border-l-emerald-500",
+      iconColor: "text-emerald-600",
     },
     {
       label: "Rejected",
       value: byStatus?.rejected ?? 0,
       icon: XCircle,
-      bgColor: "bg-destructive/10",
-      iconColor: "text-destructive",
+      accent: "border-l-red-500",
+      iconColor: "text-red-600",
     },
     {
       label: "Investors",
       value: statsData?.users?.byRole?.investor ?? 0,
       icon: Users,
-      bgColor: "bg-chart-3/10",
-      iconColor: "text-chart-3",
+      accent: "border-l-sky-500",
+      iconColor: "text-sky-600",
     },
     {
       label: "Matches",
       value: statsData?.matches?.total ?? 0,
       icon: Target,
-      bgColor: "bg-chart-1/10",
-      iconColor: "text-chart-1",
+      accent: "border-l-primary",
+      iconColor: "text-primary",
     },
   ];
 
   const tabs = [
+    { value: "all", label: "All", count: statsData?.startups?.total ?? 0 },
     {
       value: "pending_review",
       label: "Pending Review",
@@ -268,7 +269,6 @@ function AdminDashboard() {
     { value: "analyzing", label: "Analyzing", count: byStatus?.analyzing ?? 0 },
     { value: "approved", label: "Approved", count: byStatus?.approved ?? 0 },
     { value: "rejected", label: "Rejected", count: byStatus?.rejected ?? 0 },
-    { value: "all", label: "All", count: statsData?.startups?.total ?? 0 },
   ];
 
   return (
@@ -291,13 +291,13 @@ function AdminDashboard() {
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
           {stats.map((stat) => (
-            <Card key={stat.label}>
-              <CardContent className="p-4 text-center">
-                <div className={`w-10 h-10 rounded-full ${stat.bgColor} flex items-center justify-center mx-auto mb-2`}>
-                  <stat.icon className={`w-5 h-5 ${stat.iconColor}`} />
+            <Card key={stat.label} className={`border-l-3 ${stat.accent}`}>
+              <CardContent className="p-4 flex items-center gap-3">
+                <stat.icon className={`w-4 h-4 shrink-0 ${stat.iconColor}`} />
+                <div className="min-w-0">
+                  <p className="text-2xl font-semibold tabular-nums leading-none">{stat.value}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{stat.label}</p>
                 </div>
-                <p className="text-2xl font-bold">{stat.value}</p>
-                <p className="text-xs text-muted-foreground">{stat.label}</p>
               </CardContent>
             </Card>
           ))}

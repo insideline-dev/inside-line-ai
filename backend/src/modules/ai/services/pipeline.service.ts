@@ -13,6 +13,7 @@ import { pipelineRun, pipelineAgentRun } from "../entities";
 import type {
   EnrichmentResult,
   ExtractionResult,
+  ScrapingResult,
 } from "../interfaces/phase-results.interface";
 import type {
   EvaluationAgentKey,
@@ -388,15 +389,6 @@ export class PipelineService {
       extractStageFromText(extraction.rawText);
     if (!stageCandidate) {
       missing.push("stage");
-    } else if (stageCandidate === StartupStage.SEED) {
-      const structuralPlaceholderSignals = [
-        isLikelyPlaceholderText(extraction.industry),
-        isLikelyPlaceholderText(extraction.location),
-        isMissingWebsiteValue(websiteCandidate),
-      ];
-      if (structuralPlaceholderSignals.some(Boolean)) {
-        missing.push("stage");
-      }
     }
 
     return Array.from(new Set(missing));
@@ -1105,27 +1097,39 @@ export class PipelineService {
       }
     }
 
-    if (phase === PipelinePhase.EVALUATION) {
-      await this.updatePipelineQualityFromEvaluation(state.startupId);
-    }
-    if (phase === PipelinePhase.ENRICHMENT) {
-      const criticalMissing = await this.getCriticalMissingAfterEnrichment(startupId);
-      if (criticalMissing.length > 0) {
-        await this.notifyClaraMissingInfoForPipelineStart(startupId, criticalMissing, {
-          pipelineRunId: state.pipelineRunId,
-        });
-        const reason = this.buildAwaitingFounderInfoReason(
-          criticalMissing,
-          "after enrichment",
-        );
-        this.logger.warn(
-          `[Pipeline] Cancelling run for ${startupId}: unresolved critical fields after enrichment [${criticalMissing.join(", ")}]`,
-        );
-        await this.cancelPipeline(startupId, { reason });
-        return;
+    if (phase === PipelinePhase.SCRAPING) {
+      const scraping = (await this.pipelineState.getPhaseResult(
+        startupId,
+        PipelinePhase.SCRAPING,
+      )) as ScrapingResult | null;
+      if (scraping?.logoUrl) {
+        try {
+          const [record] = await this.drizzle.db
+            .select({ logoUrl: startup.logoUrl })
+            .from(startup)
+            .where(eq(startup.id, startupId))
+            .limit(1);
+          if (record && !record.logoUrl) {
+            await this.drizzle.db
+              .update(startup)
+              .set({ logoUrl: scraping.logoUrl })
+              .where(eq(startup.id, startupId));
+            this.logger.log(
+              `[Pipeline] Scraping-phase sync updated logoUrl for ${startupId}`,
+            );
+          }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          this.logger.warn(
+            `[Pipeline] Failed to sync logoUrl from scraping phase for ${startupId}: ${message}`,
+          );
+        }
       }
     }
 
+    if (phase === PipelinePhase.EVALUATION) {
+      await this.updatePipelineQualityFromEvaluation(state.startupId);
+    }
     await this.applyTransitions(startupId);
   }
 
@@ -1294,24 +1298,6 @@ export class PipelineService {
       `[Pipeline] Skipping ${phase} phase for ${startupId}: ${reason}`,
     );
 
-    if (phase === PipelinePhase.ENRICHMENT) {
-      const criticalMissing = await this.getCriticalMissingAfterEnrichment(startupId);
-      if (criticalMissing.length > 0) {
-        await this.notifyClaraMissingInfoForPipelineStart(startupId, criticalMissing, {
-          pipelineRunId,
-        });
-        const reason = this.buildAwaitingFounderInfoReason(
-          criticalMissing,
-          "after skipped enrichment",
-        );
-        this.logger.warn(
-          `[Pipeline] Cancelling run for ${startupId}: unresolved critical fields after skipped enrichment [${criticalMissing.join(", ")}]`,
-        );
-        await this.cancelPipeline(startupId, { reason });
-        return true;
-      }
-    }
-
     await this.applyTransitions(startupId);
     return true;
   }
@@ -1353,25 +1339,6 @@ export class PipelineService {
         return;
       }
 
-      const criticalMissing = await this.getCriticalMissingAfterEnrichment(startupId);
-      if (criticalMissing.includes("website")) {
-        await this.notifyClaraMissingInfoForPipelineStart(
-          startupId,
-          criticalMissing,
-          {
-            pipelineRunId,
-          },
-        );
-        const reason = this.buildAwaitingFounderInfoReason(
-          criticalMissing,
-          "before scraping",
-        );
-        this.logger.warn(
-          `[Pipeline] Cancelling run for ${startupId}: website still unresolved before scraping [${criticalMissing.join(", ")}]`,
-        );
-        await this.cancelPipeline(startupId, { reason });
-        return;
-      }
     }
 
     if (phase === PipelinePhase.ENRICHMENT) {

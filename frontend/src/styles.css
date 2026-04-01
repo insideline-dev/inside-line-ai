@@ -25,49 +25,54 @@
   --animate-in: enter 0.2s ease-out;
   --animate-out: exit 0.2s ease-in;
   /* Light mode colors - Inside Line brand */
-  --color-background: hsl(0 0% 100%);
-  --color-foreground: hsl(240 10% 4%);
-  --color-card: hsl(0 0% 100%);
-  --color-card-foreground: hsl(240 10% 4%);
-  --color-popover: hsl(0 0% 100%);
-  --color-popover-foreground: hsl(240 10% 4%);
-  --color-primary: hsl(250 91% 64%);
-  --color-primary-foreground: hsl(0 0% 100%);
-  --color-secondary: hsl(240 5% 96%);
-  --color-secondary-foreground: hsl(240 10% 4%);
-  --color-muted: hsl(240 5% 96%);
-  --color-muted-foreground: hsl(240 4% 46%);
-  --color-accent: hsl(240 5% 92%);
-  --color-accent-foreground: hsl(240 10% 4%);
+  --color-background: #FFFAF7;
+  --color-foreground: #0A1017;
+  --color-card: #FFFAF7;
+  --color-card-foreground: #0A1017;
+  --color-popover: #FFFAF7;
+  --color-popover-foreground: #0A1017;
+  --color-primary: #163F67;
+  --color-primary-foreground: #FFFAF7;
+  --color-secondary: hsl(210 15% 94%);
+  --color-secondary-foreground: #0A1017;
+  --color-muted: hsl(210 15% 94%);
+  --color-muted-foreground: hsl(210 10% 45%);
+  --color-accent: hsl(210 15% 90%);
+  --color-accent-foreground: #0A1017;
   --color-destructive: hsl(0 84% 60%);
   --color-destructive-foreground: hsl(0 0% 100%);
-  --color-border: hsl(240 6% 90%);
-  --color-input: hsl(240 6% 87%);
-  --color-ring: hsl(250 91% 64%);
+  --color-border: hsl(210 10% 88%);
+  --color-input: hsl(210 10% 85%);
+  --color-ring: #163F67;
 
   /* Sidebar colors */
-  --color-sidebar: hsl(240 5% 96%);
-  --color-sidebar-foreground: hsl(240 10% 4%);
-  --color-sidebar-border: hsl(240 6% 90%);
-  --color-sidebar-primary: hsl(250 91% 64%);
-  --color-sidebar-primary-foreground: hsl(0 0% 100%);
-  --color-sidebar-accent: hsl(240 5% 92%);
-  --color-sidebar-accent-foreground: hsl(240 10% 4%);
-  --color-sidebar-ring: hsl(250 91% 64%);
+  --color-sidebar: hsl(210 15% 94%);
+  --color-sidebar-foreground: #0A1017;
+  --color-sidebar-border: hsl(210 10% 88%);
+  --color-sidebar-primary: #163F67;
+  --color-sidebar-primary-foreground: #FFFAF7;
+  --color-sidebar-accent: hsl(210 15% 90%);
+  --color-sidebar-accent-foreground: #0A1017;
+  --color-sidebar-ring: #163F67;
 
-  --font-sans: 'Inter', sans-serif;
-  --font-serif: 'Playfair Display', Georgia, serif;
+  --font-sans: 'DM Sans', sans-serif;
+  --font-serif: 'Instrument Serif', Georgia, serif;
   --font-mono: 'JetBrains Mono', Menlo, monospace;
 
-  --radius-sm: 0.1875rem;
-  --radius-md: 0.375rem;
-  --radius-lg: 0.5rem;
-  --radius-xl: 0.625rem;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
 }
 
 @layer base {
   * {
     @apply border-border;
+  }
+  *:focus-visible {
+    outline: none !important;
+    ring-color: transparent !important;
+    box-shadow: none !important;
   }
   body {
     @apply font-sans antialiased bg-background text-foreground;
@@ -82,29 +87,29 @@
   --color-card-foreground: hsl(0 0% 98%);
   --color-popover: hsl(240 10% 6%);
   --color-popover-foreground: hsl(0 0% 98%);
-  --color-primary: hsl(250 91% 64%);
+  --color-primary: hsl(210 55% 45%);
   --color-primary-foreground: hsl(0 0% 100%);
-  --color-secondary: hsl(240 4% 14%);
+  --color-secondary: hsl(210 8% 14%);
   --color-secondary-foreground: hsl(0 0% 98%);
-  --color-muted: hsl(240 4% 14%);
-  --color-muted-foreground: hsl(240 5% 65%);
-  --color-accent: hsl(240 4% 16%);
+  --color-muted: hsl(210 8% 14%);
+  --color-muted-foreground: hsl(210 8% 65%);
+  --color-accent: hsl(210 8% 16%);
   --color-accent-foreground: hsl(0 0% 98%);
   --color-destructive: hsl(0 62% 50%);
   --color-destructive-foreground: hsl(0 0% 100%);
-  --color-border: hsl(240 4% 16%);
-  --color-input: hsl(240 4% 22%);
-  --color-ring: hsl(250 91% 64%);
+  --color-border: hsl(210 8% 16%);
+  --color-input: hsl(210 8% 22%);
+  --color-ring: hsl(210 55% 45%);
 
   /* Sidebar colors - dark mode */
-  --color-sidebar: hsl(240 10% 5%);
+  --color-sidebar: hsl(212 39% 5%);
   --color-sidebar-foreground: hsl(0 0% 98%);
-  --color-sidebar-border: hsl(240 4% 16%);
-  --color-sidebar-primary: hsl(250 91% 64%);
+  --color-sidebar-border: hsl(210 8% 16%);
+  --color-sidebar-primary: hsl(210 55% 45%);
   --color-sidebar-primary-foreground: hsl(0 0% 100%);
-  --color-sidebar-accent: hsl(240 4% 14%);
+  --color-sidebar-accent: hsl(210 8% 14%);
   --color-sidebar-accent-foreground: hsl(0 0% 98%);
-  --color-sidebar-ring: hsl(250 91% 64%);
+  --color-sidebar-ring: hsl(210 55% 45%);
 }
 
 /* Animation utilities for shadcn/ui - Tailwind v4 @utility syntax for variant support */

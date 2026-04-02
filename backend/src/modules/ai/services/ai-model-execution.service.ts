@@ -29,6 +29,18 @@ export interface ModelExecutionResolution {
   usage: {
     getBraveToolCallCount: () => number;
   };
+  braveSearchFn?: (
+    query: string,
+    count?: number,
+  ) => Promise<{
+    query: string;
+    results: Array<{
+      title: string;
+      url: string;
+      description: string;
+      age?: string;
+    }>;
+  }>;
 }
 
 @Injectable()
@@ -87,6 +99,7 @@ export class AiModelExecutionService {
         usage: {
           getBraveToolCallCount: () => 0,
         },
+        braveSearchFn: undefined,
       };
     }
 
@@ -139,6 +152,22 @@ export class AiModelExecutionService {
       ? stepCountIs(4)
       : stepCountIs(requiresProviderEvidence && requiresBraveToolCall ? 8 : 6);
 
+    const braveSearchFn = requiresBraveToolCall
+      ? async (query: string, count?: number) => {
+          braveUsage.calls += 1;
+          const result = await this.braveSearch.search(query, { count });
+          return {
+            query: result.query,
+            results: result.results.map((item) => ({
+              title: item.title,
+              url: item.url,
+              description: item.description,
+              age: item.age,
+            })),
+          };
+        }
+      : undefined;
+
     return {
       resolvedConfig,
       generateTextOptions: {
@@ -155,6 +184,7 @@ export class AiModelExecutionService {
       usage: {
         getBraveToolCallCount: () => braveUsage.calls,
       },
+      braveSearchFn,
     };
   }
 

@@ -60,6 +60,13 @@ export function isOpenAiDeepResearchModel(modelName: string): boolean {
   return OPENAI_DEEP_RESEARCH_MODEL_NAMES.has(normalized);
 }
 
+export function isOpenAiStandardModel(modelName: string): boolean {
+  return (
+    resolveProviderForModelName(modelName) === "openai" &&
+    !isOpenAiDeepResearchModel(modelName)
+  );
+}
+
 export const DEFAULT_CONTEXT_CONFIG: Required<
   Pick<
     AiContextConfig,

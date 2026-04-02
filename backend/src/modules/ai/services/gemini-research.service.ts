@@ -10,11 +10,15 @@ import type { SourceEntry } from "../interfaces/phase-results.interface";
 import { ModelPurpose, PipelinePhase } from "../interfaces/pipeline.interface";
 import { AiProviderService } from "../providers/ai-provider.service";
 import { AiConfigService } from "./ai-config.service";
-import { isOpenAiDeepResearchModel } from "./ai-runtime-config.schema";
+import {
+  isOpenAiDeepResearchModel,
+  isOpenAiStandardModel,
+} from "./ai-runtime-config.schema";
 import {
   OpenAiDeepResearchCheckpointEvent,
   OpenAiDeepResearchService,
 } from "./openai-deep-research.service";
+import type OpenAI from "openai";
 import { PipelineAgentTraceService } from "./pipeline-agent-trace.service";
 
 interface ResearchRequest<TOutput extends { sources: string[] }> {
@@ -66,6 +70,7 @@ interface ResearchTextRequest {
     requiresBraveToolCall: boolean;
   };
   getBraveToolCallCount?: () => number;
+  braveSearchFn?: (query: string, count?: number) => Promise<BraveSearchResult>;
   prompt: string;
   systemPrompt: string;
   minReportLength: number;
@@ -92,6 +97,16 @@ interface PreservedUngroundedTextInput {
   lastSources: SourceEntry[];
   lastSourceSanitization: SourceSanitizationSummary;
   attempt: number;
+}
+
+interface BraveSearchResult {
+  query: string;
+  results: Array<{
+    title: string;
+    url: string;
+    description: string;
+    age?: string;
+  }>;
 }
 
 interface SourceCarrier {
@@ -467,6 +482,22 @@ export class GeminiResearchService {
               },
             };
           }
+        } else if (isOpenAiStandardModel(modelName)) {
+          const openAiText = await this.runOpenAiTextGeneration({
+            agent: request.agent,
+            modelName,
+            systemPrompt: request.systemPrompt,
+            prompt: request.prompt,
+            enableWebSearch:
+              request.searchEnforcement?.requiresProviderEvidence ?? false,
+            enableBraveSearch:
+              request.searchEnforcement?.requiresBraveToolCall ?? false,
+            braveSearchFn: request.braveSearchFn,
+            timeoutMs: attemptTimeoutMs,
+          });
+          extractedSources = openAiText.extractedSources;
+          lastOutputText = openAiText.outputText.trim();
+          meta = { openAiNative: { modelName } };
         } else {
           const standardText = await this.runStandardTextGeneration({
             agent: request.agent,
@@ -632,6 +663,202 @@ export class GeminiResearchService {
     return {
       extractedSources: this.extractSources(responseRecord, input.agent),
       outputText: this.resolveRawOutputText(responseRecord, undefined),
+    };
+  }
+
+  private async runOpenAiTextGeneration(input: {
+    agent: ResearchAgentKey;
+    modelName: string;
+    systemPrompt: string;
+    prompt: string;
+    enableWebSearch: boolean;
+    enableBraveSearch: boolean;
+    braveSearchFn?: (query: string, count?: number) => Promise<BraveSearchResult>;
+    timeoutMs: number;
+  }): Promise<{
+    outputText: string;
+    extractedSources: ExtractedSources;
+  }> {
+    const tools: OpenAI.Responses.Tool[] = [];
+    const include: OpenAI.Responses.ResponseIncludable[] = [];
+
+    if (input.enableWebSearch) {
+      tools.push({
+        type: "web_search",
+        search_context_size: "high",
+      });
+      include.push("web_search_call.results");
+    }
+
+    if (input.enableBraveSearch && input.braveSearchFn) {
+      tools.push({
+        type: "function" as const,
+        name: "brave_search",
+        description:
+          "Search the public web with Brave Search when researching startups.",
+        strict: false,
+        parameters: {
+          type: "object" as const,
+          properties: {
+            query: { type: "string" as const },
+            count: { type: "integer" as const, minimum: 1, maximum: 10 },
+          },
+          required: ["query"],
+        },
+      });
+    }
+
+    let response = await this.withTimeout(
+      () =>
+        this.openAiDeepResearch.createResponse({
+          model: input.modelName,
+          instructions: input.systemPrompt,
+          input: input.prompt,
+          tools: tools.length > 0 ? tools : undefined,
+          include: include.length > 0 ? include : undefined,
+          temperature: this.aiConfig.getResearchTemperature(),
+        }),
+      input.timeoutMs,
+      `Research agent ${input.agent} timed out`,
+    );
+
+    // Tool call loop for Brave search function calls
+    if (input.braveSearchFn) {
+      response = await this.resolveOpenAiFunctionCalls(
+        response,
+        input,
+      );
+    }
+
+    return {
+      outputText: response.output_text?.trim() ?? "",
+      extractedSources: this.extractOpenAiSources(response, input.agent),
+    };
+  }
+
+  private async resolveOpenAiFunctionCalls(
+    response: OpenAI.Responses.Response,
+    input: {
+      agent: ResearchAgentKey;
+      modelName: string;
+      systemPrompt: string;
+      braveSearchFn?: (query: string, count?: number) => Promise<BraveSearchResult>;
+      timeoutMs: number;
+    },
+    iteration = 0,
+  ): Promise<OpenAI.Responses.Response> {
+    const maxIterations = 3;
+    if (iteration >= maxIterations || !input.braveSearchFn) {
+      return response;
+    }
+
+    const functionCalls = response.output.filter(
+      (item): item is OpenAI.Responses.ResponseFunctionToolCall =>
+        item.type === "function_call",
+    );
+
+    if (functionCalls.length === 0) {
+      return response;
+    }
+
+    const toolOutputs: Array<{
+      type: "function_call_output";
+      call_id: string;
+      output: string;
+    }> = [];
+
+    for (const call of functionCalls) {
+      if (call.name !== "brave_search") {
+        continue;
+      }
+      try {
+        const args = JSON.parse(call.arguments) as {
+          query?: string;
+          count?: number;
+        };
+        const result = await input.braveSearchFn(
+          args.query ?? "",
+          args.count,
+        );
+        toolOutputs.push({
+          type: "function_call_output",
+          call_id: call.call_id,
+          output: JSON.stringify(result),
+        });
+      } catch (error) {
+        toolOutputs.push({
+          type: "function_call_output",
+          call_id: call.call_id,
+          output: JSON.stringify({
+            error: this.errorMessage(error),
+          }),
+        });
+      }
+    }
+
+    if (toolOutputs.length === 0) {
+      return response;
+    }
+
+    const followUp = await this.openAiDeepResearch.createResponse({
+      model: input.modelName,
+      instructions: input.systemPrompt,
+      input: toolOutputs as unknown as string,
+      previousResponseId: response.id,
+    });
+
+    return this.resolveOpenAiFunctionCalls(followUp, input, iteration + 1);
+  }
+
+  private extractOpenAiSources(
+    response: OpenAI.Responses.Response,
+    agent: ResearchAgentKey,
+  ): ExtractedSources {
+    const dedupe = new Map<string, SourceEntry>();
+    const droppedHosts = new Set<string>();
+    let droppedCount = 0;
+    const timestamp = new Date().toISOString();
+
+    const addSource = (url: string | undefined, name: string) => {
+      if (!url) return;
+      const sanitized = this.sanitizeSourceUrl(url);
+      if (sanitized.droppedHost) {
+        droppedHosts.add(sanitized.droppedHost);
+        droppedCount += 1;
+        return;
+      }
+      if (!sanitized.url) return;
+      if (dedupe.has(sanitized.url)) return;
+      dedupe.set(sanitized.url, {
+        name,
+        url: sanitized.url,
+        type: "search",
+        agent,
+        timestamp,
+      });
+    };
+
+    for (const item of response.output) {
+      if (item.type !== "message") continue;
+      const message = item as OpenAI.Responses.ResponseOutputMessage;
+      for (const part of message.content) {
+        if (part.type !== "output_text") continue;
+        const textPart = part as OpenAI.Responses.ResponseOutputText;
+        for (const annotation of textPart.annotations ?? []) {
+          if (annotation.type === "url_citation") {
+            addSource(annotation.url, annotation.title || "Web source");
+          }
+        }
+      }
+    }
+
+    return {
+      entries: Array.from(dedupe.values()),
+      evidenceCount: dedupe.size,
+      sanitization: {
+        droppedCount,
+        droppedHosts: Array.from(droppedHosts),
+      },
     };
   }
 
@@ -1397,7 +1624,18 @@ export class GeminiResearchService {
   }
 
   private errorMessage(error: unknown): string {
-    return error instanceof Error ? error.message : String(error);
+    if (!(error instanceof Error)) return String(error);
+    const parts: string[] = [error.message];
+    let current: unknown = error.cause;
+    const seen = new Set<unknown>([error]);
+    while (current instanceof Error && !seen.has(current)) {
+      seen.add(current);
+      if (current.message && current.message !== parts[parts.length - 1]) {
+        parts.push(current.message);
+      }
+      current = current.cause;
+    }
+    return parts.join(" → ");
   }
 
   private joinErrorMessages(first: string, second: string): string {
@@ -1584,6 +1822,17 @@ export class GeminiResearchService {
         .catch((error) => {
           complete(() => {
             if (controller?.signal.aborted) {
+              // Prefer the original error — it carries real provider details
+              // (e.g. 429, context length, content filter) vs generic abort reason
+              if (
+                error instanceof Error &&
+                error.message &&
+                error.message !== "The operation was aborted" &&
+                error.message !== "This operation was aborted"
+              ) {
+                reject(error);
+                return;
+              }
               const reason = controller.signal.reason;
               const timeoutError =
                 reason instanceof Error

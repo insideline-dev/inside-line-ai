@@ -224,68 +224,66 @@ function ConcentrationSpectrum({ structureType, direction, evidence }: { structu
 
 // --- Market Lifecycle S-Curve ---
 
-const LIFECYCLE_POSITIONS: Record<string, { cx: number; cy: number; label: string; regionX: number; regionW: number }> = {
-  emerging:     { cx: 60,  cy: 105, label: "Emerging",     regionX: 10,  regionW: 65 },
-  introduction: { cx: 60,  cy: 105, label: "Introduction", regionX: 10,  regionW: 65 },
-  early_growth: { cx: 110, cy: 75,  label: "Early Growth", regionX: 75,  regionW: 70 },
-  growth:       { cx: 180, cy: 17,  label: "Growth",       regionX: 145, regionW: 75 },
-  mature:       { cx: 260, cy: 16,  label: "Maturity",     regionX: 220, regionW: 90 },
-  maturity:     { cx: 260, cy: 16,  label: "Maturity",     regionX: 220, regionW: 90 },
-  declining:    { cx: 345, cy: 65,  label: "Decline",      regionX: 310, regionW: 80 },
-  decline:      { cx: 345, cy: 65,  label: "Decline",      regionX: 310, regionW: 80 },
+const LIFECYCLE_STAGES = [
+  { key: "emerging",     cx: 32,  cy: 58, label: "Emerging",     labelX: 32 },
+  { key: "early_growth", cx: 68,  cy: 38, label: "Early Growth", labelX: 68 },
+  { key: "growth",       cx: 120, cy: 10, label: "Growth",       labelX: 120 },
+  { key: "mature",       cx: 178, cy: 12, label: "Maturity",     labelX: 178 },
+  { key: "declining",    cx: 228, cy: 42, label: "Decline",      labelX: 228 },
+] as const;
+
+const LIFECYCLE_ALIASES: Record<string, string> = {
+  introduction: "emerging",
+  maturity: "mature",
+  decline: "declining",
 };
 
 function LifecycleSCurve({ position }: { position: string }) {
-  const normalized = position.toLowerCase().trim().replace(/\s+/g, "_");
-  const pos = LIFECYCLE_POSITIONS[normalized] ?? LIFECYCLE_POSITIONS.emerging;
+  const raw = position.toLowerCase().trim().replace(/\s+/g, "_");
+  const normalized = LIFECYCLE_ALIASES[raw] ?? raw;
+  const activeStage = LIFECYCLE_STAGES.find((s) => s.key === normalized) ?? LIFECYCLE_STAGES[0];
 
   return (
-    <div className="flex flex-col items-center gap-2 w-full">
-      <svg viewBox="0 0 400 120" className="w-full h-auto" aria-label={`Market lifecycle: ${pos.label}`}>
-        {/* Background fill under curve */}
+    <div className="flex items-center justify-center">
+      <svg viewBox="0 0 260 80" width="260" height="80" aria-label={`Market lifecycle: ${activeStage.label}`}>
+        {/* Curve */}
         <path
-          d="M 10,110 C 50,110 80,105 110,75 C 140,45 160,15 200,12 C 240,9 270,14 300,32 C 330,50 356,80 390,100 L 390,110 Z"
-          className="fill-muted-foreground/5"
-        />
-        {/* Curve path */}
-        <path
-          d="M 10,110 C 50,110 80,105 110,75 C 140,45 160,15 200,12 C 240,9 270,14 300,32 C 330,50 356,80 390,100"
+          d="M 8,62 C 30,62 45,55 68,38 C 91,21 105,8 130,6 C 155,4 175,10 200,26 C 220,38 240,55 252,62"
           fill="none"
           stroke="currentColor"
-          className="text-muted-foreground/40"
-          strokeWidth="3"
+          className="text-muted-foreground/25"
+          strokeWidth="2"
           strokeLinecap="round"
         />
-        {/* Active stage highlight region */}
-        <rect x={pos.regionX} y="4" width={pos.regionW} height="106" rx="6" className="fill-violet-500/8" />
         {/* Active dot */}
         <circle
-          cx={pos.cx}
-          cy={pos.cy}
-          r="8"
+          cx={activeStage.cx}
+          cy={activeStage.cy}
+          r="5"
           className="fill-violet-500 dark:fill-violet-400"
           stroke="white"
-          strokeWidth="3"
+          strokeWidth="2"
         />
         {/* Stage labels */}
-        {Object.entries(LIFECYCLE_POSITIONS)
-          .filter(([key]) => ["emerging", "early_growth", "growth", "mature", "declining"].includes(key))
-          .map(([key, val]) => (
+        {LIFECYCLE_STAGES.map((stage) => {
+          const isActive = stage.key === normalized;
+          return (
             <text
-              key={key}
-              x={val.cx}
-              y={116}
+              key={stage.key}
+              x={stage.labelX}
+              y={74}
               textAnchor="middle"
               className={cn(
-                "text-[10px]",
-                normalized === key || (key === "mature" && normalized === "maturity")
-                  ? "fill-violet-600 dark:fill-violet-400 font-bold"
-                  : "fill-muted-foreground/50",
+                "text-[8px] select-none",
+                isActive
+                  ? "fill-violet-600 dark:fill-violet-400 font-semibold"
+                  : "fill-muted-foreground/40",
               )}
             >
-              {val.label}
+              {stage.label}
             </text>
-          ))}
+          );
+        })}
       </svg>
     </div>
   );
@@ -660,14 +658,16 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage }: Mar
           {/* Market Lifecycle S-Curve */}
           {lifecyclePosition !== "Not provided" && (
             <div className="rounded-lg border bg-muted/20 p-3">
-              <div className="grid grid-cols-[1fr_2fr] gap-4 items-center">
-                <div className="space-y-2">
+              <div className="flex items-center gap-4">
+                <div className="min-w-0 flex-1 space-y-1">
                   <p className="text-sm font-medium">Market Lifecycle</p>
                   {lifecycleEvidence !== "Not provided" && (
-                    <MarkdownText className="text-xs text-muted-foreground [&>p]:mb-0">{lifecycleEvidence}</MarkdownText>
+                    <MarkdownText className="text-xs text-muted-foreground leading-relaxed [&>p]:mb-0">{lifecycleEvidence}</MarkdownText>
                   )}
                 </div>
-                <LifecycleSCurve position={lifecyclePosition} />
+                <div className="shrink-0">
+                  <LifecycleSCurve position={lifecyclePosition} />
+                </div>
               </div>
             </div>
           )}

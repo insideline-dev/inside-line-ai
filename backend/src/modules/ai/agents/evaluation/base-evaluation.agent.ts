@@ -337,32 +337,56 @@ export abstract class BaseEvaluationAgent<TOutput>
         retryCount: Math.max(0, attempt - 1),
       });
       try {
-        const response = await this.withTimeout(
+        const useNativeExecution =
+          this.modelExecution && !this.useDirectGenerateText();
+        const response = await this.withTimeout<unknown>(
           (abortSignal) =>
-            generateText(
-              this.buildGenerateTextInput({
-                model: resolvedModel,
-                system: composedSystemPrompt,
-                prompt: useTextOnlyStructuredMode
-                  ? this.buildJsonObjectPrompt(renderedPrompt)
-                  : renderedPrompt,
-                schema: useTextOnlyStructuredMode ? null : this.schema,
-                temperature: evaluationTemperature,
-                maxOutputTokens: this.getMaxOutputTokens(),
-                tools: execution?.generateTextOptions.tools,
-                toolChoice: execution?.generateTextOptions.toolChoice,
-                providerOptions: execution?.generateTextOptions.providerOptions,
-                abortSignal,
-              }),
-            ),
+            useNativeExecution
+              ? this.modelExecution!.generateText<TOutput>({
+                  model: resolvedModel,
+                  system: composedSystemPrompt,
+                  prompt: useTextOnlyStructuredMode
+                    ? this.buildJsonObjectPrompt(renderedPrompt)
+                    : renderedPrompt,
+                  schema: useTextOnlyStructuredMode ? undefined : this.schema,
+                  temperature: evaluationTemperature,
+                  maxOutputTokens: this.getMaxOutputTokens(),
+                  tools: execution?.generateTextOptions.tools,
+                  toolChoice: execution?.generateTextOptions.toolChoice,
+                  providerOptions: execution?.generateTextOptions.providerOptions,
+                  abortSignal,
+                })
+              : generateText(
+                  this.buildGenerateTextInput({
+                    model: resolvedModel,
+                    system: composedSystemPrompt,
+                    prompt: useTextOnlyStructuredMode
+                      ? this.buildJsonObjectPrompt(renderedPrompt)
+                      : renderedPrompt,
+                    schema: useTextOnlyStructuredMode ? null : this.schema,
+                    temperature: evaluationTemperature,
+                    maxOutputTokens: this.getMaxOutputTokens(),
+                    tools: execution?.generateTextOptions.tools,
+                    toolChoice: execution?.generateTextOptions.toolChoice,
+                    providerOptions: execution?.generateTextOptions.providerOptions,
+                    abortSignal,
+                  }),
+                ),
           attemptTimeoutMs,
           `${this.key} evaluation timed out`,
         );
 
+        const responseOutput = useNativeExecution
+          ? this.extractStructuredOutput(response)
+          : (response as Awaited<ReturnType<typeof generateText>>).output;
         const normalizedOutput = this.normalizeNarrativeFields(
           useTextOnlyStructuredMode
-            ? this.parseTextOnlyStructuredResponse(response)
-            : this.schema.parse(this.normalizeOutputCandidate(response.output)),
+            ? this.parseTextOnlyStructuredResponse(
+                response as
+                  | Awaited<ReturnType<typeof generateText>>
+                  | Awaited<ReturnType<AiModelExecutionService["generateText"]>>,
+              )
+            : this.schema.parse(this.normalizeOutputCandidate(responseOutput)),
         );
 
         this.emitTraceEvent(options, {
@@ -1291,6 +1315,14 @@ export abstract class BaseEvaluationAgent<TOutput>
       reason === "TIMEOUT" ||
       reason === "MODEL_OR_PROVIDER_ERROR"
     );
+  }
+
+  /**
+   * Override to return true to bypass modelExecution and use Vercel AI SDK directly.
+   * Used by agents whose complex Zod schemas don't work well with the native OpenAI path.
+   */
+  protected useDirectGenerateText(): boolean {
+    return false;
   }
 
   private shouldUseTextOnlyStructuredMode(_provider: string | undefined): boolean {

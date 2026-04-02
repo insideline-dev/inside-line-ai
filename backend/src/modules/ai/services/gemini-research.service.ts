@@ -680,14 +680,12 @@ export class GeminiResearchService {
     extractedSources: ExtractedSources;
   }> {
     const tools: OpenAI.Responses.Tool[] = [];
-    const include: OpenAI.Responses.ResponseIncludable[] = [];
 
     if (input.enableWebSearch) {
       tools.push({
         type: "web_search",
         search_context_size: "high",
       });
-      include.push("web_search_call.results");
     }
 
     if (input.enableBraveSearch && input.braveSearchFn) {
@@ -715,7 +713,6 @@ export class GeminiResearchService {
           instructions: input.systemPrompt,
           input: input.prompt,
           tools: tools.length > 0 ? tools : undefined,
-          include: include.length > 0 ? include : undefined,
           temperature: this.aiConfig.getResearchTemperature(),
         }),
       input.timeoutMs,

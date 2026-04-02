@@ -106,7 +106,7 @@ export class SynthesisAgent {
     const maxAttempts = this.aiConfig.getSynthesisMaxAttempts();
     const hardTimeoutMs = this.aiConfig.getSynthesisAgentHardTimeoutMs();
     const startedAtMs = Date.now();
-
+    let useTextOnlyStructuredMode = false;
 
     try {
       const promptConfig = await this.promptService.resolve({
@@ -122,9 +122,11 @@ export class SynthesisAgent {
       const model =
         execution?.generateTextOptions.model ??
         this.providers.resolveModelForPurpose(ModelPurpose.SYNTHESIS);
-      const useTextOnlyStructuredMode = this.shouldUseTextOnlyStructuredMode(
-        execution?.resolvedConfig.provider,
-      );
+      useTextOnlyStructuredMode =
+        !this.modelExecution &&
+        this.shouldUseTextOnlyStructuredMode(
+          execution?.resolvedConfig.provider,
+        );
       const rewrittenSections = await this.rewriteEvaluationSections({
         input,
         model,
@@ -184,29 +186,45 @@ export class SynthesisAgent {
                 "low",
               )
             : execution?.generateTextOptions.providerOptions;
-          const response = await this.withTimeout(
+          const response: Awaited<ReturnType<AiModelExecutionService["generateText"]>> | Awaited<ReturnType<typeof generateText>> = await this.withTimeout(
             (abortSignal) =>
-              generateText({
-                model: model as Parameters<typeof generateText>[0]["model"],
-                ...(useTextOnlyStructuredMode
-                  ? {}
-                  : { output: Output.object({ schema: SynthesisSchema }) }),
-                temperature: this.aiConfig.getSynthesisTemperature(),
-                maxOutputTokens: this.aiConfig.getSynthesisMaxOutputTokens(),
-                system: systemPrompt,
-                prompt: synthesisPrompt,
-                tools: execution?.generateTextOptions.tools,
-                toolChoice: execution?.generateTextOptions.toolChoice,
-                providerOptions:
-                  synthesisProviderOptions as Parameters<typeof generateText>[0]["providerOptions"],
-                abortSignal,
-              }),
+              this.modelExecution
+                ? this.modelExecution.generateText<z.infer<typeof SynthesisSchema>>({
+                    model,
+                    ...(useTextOnlyStructuredMode
+                      ? {}
+                      : { schema: SynthesisSchema }),
+                    temperature: this.aiConfig.getSynthesisTemperature(),
+                    maxOutputTokens: this.aiConfig.getSynthesisMaxOutputTokens(),
+                    system: systemPrompt,
+                    prompt: synthesisPrompt,
+                    tools: execution?.generateTextOptions.tools,
+                    toolChoice: execution?.generateTextOptions.toolChoice,
+                    providerOptions:
+                      synthesisProviderOptions as Parameters<typeof generateText>[0]["providerOptions"],
+                    abortSignal,
+                  })
+                : generateText({
+                    model: model as Parameters<typeof generateText>[0]["model"],
+                    ...(useTextOnlyStructuredMode
+                      ? {}
+                      : { output: Output.object({ schema: SynthesisSchema }) }),
+                    temperature: this.aiConfig.getSynthesisTemperature(),
+                    maxOutputTokens: this.aiConfig.getSynthesisMaxOutputTokens(),
+                    system: systemPrompt,
+                    prompt: synthesisPrompt,
+                    tools: execution?.generateTextOptions.tools,
+                    toolChoice: execution?.generateTextOptions.toolChoice,
+                    providerOptions:
+                      synthesisProviderOptions as Parameters<typeof generateText>[0]["providerOptions"],
+                    abortSignal,
+                  }),
             attemptTimeoutMs,
             "Synthesis agent timed out",
           );
           const output = useTextOnlyStructuredMode
             ? this.parseTextOnlyResponse(response)
-            : SynthesisSchema.parse(response.output);
+            : SynthesisSchema.parse(this.extractStructuredOutput(response));
           const composedSections = this.composeInvestorMemoSections(
             output.investorMemo.sections,
             rewrittenSections,
@@ -1125,11 +1143,17 @@ Citation rules:
   }
 
   private resolveRawOutputText(
-    response: { text?: string },
+    response: { text?: string } | unknown,
     output?: unknown,
   ): string {
-    if (typeof response.text === "string" && response.text.trim().length > 0) {
-      return response.text;
+    if (
+      response &&
+      typeof response === "object" &&
+      !Array.isArray(response) &&
+      typeof (response as { text?: unknown }).text === "string" &&
+      (response as { text: string }).text.trim().length > 0
+    ) {
+      return (response as { text: string }).text;
     }
     if (output === undefined) {
       return "";
@@ -1137,12 +1161,20 @@ Citation rules:
     return this.safeStringify(output);
   }
 
+  private extractStructuredOutput(response: unknown): unknown {
+    if (!response || typeof response !== "object" || Array.isArray(response)) {
+      return undefined;
+    }
+    const record = response as Record<string, unknown>;
+    return record.experimental_output ?? record.output;
+  }
+
   private shouldUseTextOnlyStructuredMode(provider: string | undefined): boolean {
     return provider === "openai";
   }
 
   private parseTextOnlyResponse(
-    response: Awaited<ReturnType<typeof generateText>>,
+    response: Awaited<ReturnType<typeof generateText>> | Awaited<ReturnType<AiModelExecutionService["generateText"]>>,
   ): z.infer<typeof SynthesisSchema> {
     const outputText = this.resolveRawOutputText(response);
     const finishReason = (response as unknown as Record<string, unknown>).finishReason;

@@ -7,10 +7,7 @@ import { ASSET_TYPES } from "../../storage/storage.config";
 import { UserRole } from "../../auth/entities/auth.schema";
 import { AgentMailClientService } from "../integrations/agentmail/agentmail-client.service";
 import { startup, StartupStatus, StartupStage } from "../startup/entities/startup.schema";
-import {
-  PipelineService,
-  PIPELINE_MISSING_FIELDS_ERROR_PREFIX,
-} from "../ai/services/pipeline.service";
+import { PipelineService } from "../ai/services/pipeline.service";
 import { PipelinePhase } from "../ai/interfaces/pipeline.interface";
 import {
   extractWebsiteFromText,

@@ -107,20 +107,33 @@ export class FieldExtractorService {
         pitchDeckText: this.truncateForPrompt(trimmed),
       });
 
-      const { output } = await generateText({
-        output: Output.object({ schema: ExtractedFieldsSchema }),
-        temperature: this.aiConfig.getExtractionTemperature(),
-        system: promptConfig.systemPrompt,
-        prompt,
-        model:
-          execution?.generateTextOptions.model ??
-          this.providers.resolveModelForPurpose(ModelPurpose.EXTRACTION),
-        tools: execution?.generateTextOptions.tools,
-        toolChoice: execution?.generateTextOptions.toolChoice,
-        providerOptions: execution?.generateTextOptions.providerOptions,
-      });
+      const response = this.modelExecution
+        ? await this.modelExecution.generateText<ExtractedFields>({
+            model:
+              execution?.generateTextOptions.model ??
+              this.providers.resolveModelForPurpose(ModelPurpose.EXTRACTION),
+            schema: ExtractedFieldsSchema,
+            temperature: this.aiConfig.getExtractionTemperature(),
+            system: promptConfig.systemPrompt,
+            prompt,
+            tools: execution?.generateTextOptions.tools,
+            toolChoice: execution?.generateTextOptions.toolChoice,
+            providerOptions: execution?.generateTextOptions.providerOptions,
+          })
+        : await generateText({
+            output: Output.object({ schema: ExtractedFieldsSchema }),
+            temperature: this.aiConfig.getExtractionTemperature(),
+            system: promptConfig.systemPrompt,
+            prompt,
+            model:
+              execution?.generateTextOptions.model ??
+              this.providers.resolveModelForPurpose(ModelPurpose.EXTRACTION),
+            tools: execution?.generateTextOptions.tools,
+            toolChoice: execution?.generateTextOptions.toolChoice,
+            providerOptions: execution?.generateTextOptions.providerOptions,
+          });
 
-      return ExtractedFieldsSchema.parse(output);
+      return ExtractedFieldsSchema.parse(response.output);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.warn(`AI field extraction failed, falling back to context only: ${message}`);
@@ -141,16 +154,25 @@ export class FieldExtractorService {
       .join("\n---\n");
 
     try {
-      const { output } = await generateText({
-        output: Output.object({ schema: DeckClassificationSchema }),
-        temperature: 0,
-        system:
-          "You classify documents. Identify which document is a startup pitch deck (company overview, problem/solution, market opportunity, team, business model, funding ask). Return the 0-based index, or -1 if none is a pitch deck. Financial reports, earnings supplements, annual reports, and cap tables are NOT pitch decks.",
-        prompt: `Which of these documents is a startup pitch deck?\n\n${docList}`,
-        model: this.providers.resolveModelForPurpose(ModelPurpose.EXTRACTION),
-      });
+      const response = this.modelExecution
+        ? await this.modelExecution.generateText<{ deckIndex: number; confidence: number }>({
+            model: this.providers.resolveModelForPurpose(ModelPurpose.EXTRACTION),
+            schema: DeckClassificationSchema,
+            temperature: 0,
+            system:
+              "You classify documents. Identify which document is a startup pitch deck (company overview, problem/solution, market opportunity, team, business model, funding ask). Return the 0-based index, or -1 if none is a pitch deck. Financial reports, earnings supplements, annual reports, and cap tables are NOT pitch decks.",
+            prompt: `Which of these documents is a startup pitch deck?\n\n${docList}`,
+          })
+        : await generateText({
+            output: Output.object({ schema: DeckClassificationSchema }),
+            temperature: 0,
+            system:
+              "You classify documents. Identify which document is a startup pitch deck (company overview, problem/solution, market opportunity, team, business model, funding ask). Return the 0-based index, or -1 if none is a pitch deck. Financial reports, earnings supplements, annual reports, and cap tables are NOT pitch decks.",
+            prompt: `Which of these documents is a startup pitch deck?\n\n${docList}`,
+            model: this.providers.resolveModelForPurpose(ModelPurpose.EXTRACTION),
+          });
 
-      return DeckClassificationSchema.parse(output);
+      return DeckClassificationSchema.parse(response.output);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : String(error);

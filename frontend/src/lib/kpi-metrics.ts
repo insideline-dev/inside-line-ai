@@ -117,6 +117,7 @@ export function extractKpiMetrics(
 
   const financials = rec(evaluation.financialsData);
   const charts = rec(financials.charts);
+  const keyMetrics = rec(financials.keyMetrics);
   const market = rec(evaluation.marketData);
   const marketSizing = rec(market.marketSizing);
   const tam = rec(marketSizing.tam);
@@ -130,13 +131,14 @@ export function extractKpiMetrics(
   const fmf = rec(team.founderMarketFit);
   // --- First 3 KPIs: sourced from pitch deck ---
 
-  // ARR (pitch deck): revenue projections from financial model, then traction narrative
+  // ARR (prefer chart data, then legacy keyMetrics fallbacks)
   const revenueProjection = Array.isArray(charts.revenueProjection)
     ? charts.revenueProjection as Array<{ period?: string; revenue?: number }>
     : [];
   const latestRevenue = revenueProjection.length > 0
     ? safeNum(revenueProjection[0].revenue)
     : undefined;
+  const arrRaw = safeStr(keyMetrics.arr) ?? safeStr(keyMetrics.annualRecurringRevenue);
   let arr = DASH;
   if (latestRevenue !== undefined && latestRevenue > 0) {
     arr = latestRevenue >= 1_000_000
@@ -144,25 +146,37 @@ export function extractKpiMetrics(
       : latestRevenue >= 1_000
         ? `$${Math.round(latestRevenue / 1_000)}K`
         : `$${latestRevenue}`;
+  } else if (arrRaw && arrRaw !== "Unknown") {
+    arr = extractShortValue(arrRaw);
   }
 
-  // Growth Rate (pitch deck claimed)
+  // Growth Rate (prefer deckClaimed, fall back to researched CAGR)
   const deckClaimed = safeStr(growthRate.deckClaimed);
+  const cagrStr = safeStr(growthRate.cagr);
+  const growthPeriod = safeStr(growthRate.period);
   let growthRateVal = DASH;
   if (deckClaimed && deckClaimed !== "Unknown") {
     growthRateVal = extractShortValue(deckClaimed);
+  } else if (cagrStr && cagrStr !== "Unknown") {
+    const cagrDisplay = extractShortValue(cagrStr);
+    growthRateVal = growthPeriod && growthPeriod !== "Unknown"
+      ? `${cagrDisplay} ${growthPeriod}`
+      : cagrDisplay;
   }
 
-  // Gross Margin (pitch deck): margin progression from financial model
+  // Gross Margin (prefer chart data, then legacy keyMetrics fallback)
   const marginProgression = Array.isArray(charts.marginProgression)
     ? charts.marginProgression as Array<{ period?: string; grossMargin?: number }>
     : [];
   const latestMargin = marginProgression.length > 0
     ? safeNum(marginProgression[0].grossMargin)
     : undefined;
+  const grossMarginRaw = safeStr(keyMetrics.grossMargin);
   let grossMargin = DASH;
   if (latestMargin !== undefined && latestMargin > 0) {
     grossMargin = `${Math.round(latestMargin)}%`;
+  } else if (grossMarginRaw && grossMarginRaw !== "Unknown") {
+    grossMargin = grossMarginRaw.includes("%") ? grossMarginRaw : `${grossMarginRaw}%`;
   }
 
   // Market Structure
@@ -174,7 +188,6 @@ export function extractKpiMetrics(
   const tamDisplay = tamValue ? extractShortValue(tamValue) : DASH;
 
   // Market Growth (researched CAGR)
-  const cagrStr = safeStr(growthRate.cagr);
   let marketGrowth = DASH;
   if (cagrStr && cagrStr !== "Unknown") {
     const cagrVal = extractShortValue(cagrStr);

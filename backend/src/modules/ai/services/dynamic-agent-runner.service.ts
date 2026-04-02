@@ -1,5 +1,4 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { generateText, Output } from "ai";
 import type {
   EvaluationPipelineInput,
   ResearchPipelineInput,
@@ -71,11 +70,11 @@ export class DynamicAgentRunnerService {
       try {
         const response = await this.withTimeout(
           (abortSignal) =>
-            generateText({
+            this.modelExecution.generateText({
               model:
                 executionOptions?.generateTextOptions.model ??
                 this.providers.resolveModelForPurpose(ModelPurpose.EVALUATION),
-              output: Output.object({ schema }),
+              schema,
               system: promptConfig.systemPrompt,
               prompt: renderedPrompt,
               temperature: this.aiConfig.getEvaluationTemperature(),

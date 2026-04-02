@@ -37,7 +37,7 @@ export class TractionEvaluationAgent extends BaseEvaluationAgent<TractionEvaluat
   }
 
   buildContext(pipelineData: EvaluationPipelineInput) {
-    const { extraction, scraping, research } = pipelineData;
+    const { extraction, scraping } = pipelineData;
     const notableClaims = Array.isArray(scraping.notableClaims)
       ? scraping.notableClaims
       : [];

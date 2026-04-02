@@ -11,6 +11,7 @@ import { ModelPurpose } from "../interfaces/pipeline.interface";
 import type { PipelineFallbackReason } from "../interfaces/agent.interface";
 import { AiConfigService } from "./ai-config.service";
 import { AiProviderService } from "../providers/ai-provider.service";
+import { AiModelExecutionService } from "./ai-model-execution.service";
 
 const WEBSITE_TEXT_LIMIT = 12_000;
 const DECK_CONTENT_LIMIT = 15_000;
@@ -52,6 +53,7 @@ export class ResearchParametersService {
   constructor(
     @Optional() private aiProvider?: AiProviderService,
     @Optional() private aiConfig?: AiConfigService,
+    @Optional() private modelExecution?: AiModelExecutionService,
   ) {}
 
   async generate(
@@ -79,13 +81,19 @@ export class ResearchParametersService {
       const model = this.aiProvider.resolveModelForPurpose(ModelPurpose.RESEARCH);
       const prompt = this.buildPrompt(extraction, scraping, teamMembers);
 
-      const { experimental_output: output } = await generateText({
-        model,
-        prompt,
-        output: Output.object({ schema: ResearchParametersSchema }),
-      });
+      const response = this.modelExecution
+        ? await this.modelExecution.generateText<z.infer<typeof ResearchParametersSchema>>({
+            model,
+            schema: ResearchParametersSchema,
+            prompt,
+          })
+        : await generateText({
+            model,
+            prompt,
+            output: Output.object({ schema: ResearchParametersSchema }),
+          });
 
-      const parsed = output ?? null;
+      const parsed = response.experimental_output ?? response.output ?? null;
       if (!parsed) {
         this.logger.warn("[ResearchParameters] Empty AI output; returning fallback");
         return this.buildFallback(extraction, teamMembers);

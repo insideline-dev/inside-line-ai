@@ -7,6 +7,7 @@ import type { LinkedInProfile } from '../../integrations/unipile/entities';
 import type { EnrichedTeamMember } from '../interfaces/phase-results.interface';
 import { ModelPurpose } from '../interfaces/pipeline.interface';
 import { AiProviderService } from '../providers/ai-provider.service';
+import { AiModelExecutionService } from './ai-model-execution.service';
 
 interface TeamMemberInput {
   name: string;
@@ -120,6 +121,7 @@ export class LinkedinEnrichmentService {
     private unipileService: UnipileService,
     @Optional() private config?: ConfigService,
     @Optional() private aiProviders?: AiProviderService,
+    @Optional() private modelExecution?: AiModelExecutionService,
   ) {
     this.batchSize = this.config?.get<number>('LINKEDIN_BATCH_SIZE', 10) ?? 10;
     this.maxCompanyLeadershipCandidates =
@@ -738,7 +740,6 @@ export class LinkedinEnrichmentService {
     const traceOptions = options?.onTrace ? { onTrace: options.onTrace } : undefined;
     const searchQueries = this.buildSearchQueries(member.name);
     let matches: LinkedInProfile[] = [];
-    let matchedQuery = searchQueries[0] ?? member.name;
 
     for (const query of searchQueries) {
       this.emitTrace(options, {
@@ -770,7 +771,6 @@ export class LinkedinEnrichmentService {
         },
         outputJson: matches,
       });
-      matchedQuery = query;
       if (matches.length > 0) {
         break;
       }
@@ -807,7 +807,6 @@ export class LinkedinEnrichmentService {
           },
           outputJson: matches,
         });
-        matchedQuery = query;
         if (matches.length > 0) {
           break;
         }
@@ -1415,50 +1414,96 @@ export class LinkedinEnrichmentService {
     }
 
     try {
-      const response = await generateText({
-        model: this.aiProviders.resolveModelForPurpose(ModelPurpose.RESEARCH),
-        temperature: 0,
-        system: [
-          "You are an identity verification agent for LinkedIn profile matching.",
-          "Return ONLY a JSON object with keys: accepted, confidence, reason.",
-          "Be strict: accept only when the profile is very likely the exact same person.",
-          "Current association with target company is preferred.",
-          "You may also accept if there is strong historical founder/executive association with the target company, and clearly state that it is historical (not current).",
-          "Reject operational/non-executive profiles (for example driver/courier roles) when leadership is expected.",
-        ].join("\n"),
-        prompt: JSON.stringify(
-          {
-            requestedMember: {
-              name: requestedMember.name,
-              role: requestedMember.role ?? null,
-            },
-            startupContext: {
-              companyName: startupContext?.companyName ?? null,
-              website: startupContext?.website ?? null,
-            },
-            candidateProfile: {
-              firstName: profile.firstName ?? null,
-              lastName: profile.lastName ?? null,
-              headline: profile.headline ?? null,
-              currentCompany: profile.currentCompany ?? null,
-              experience: profile.experience.slice(0, 8).map((entry) => ({
-                company: entry.company,
-                title: entry.title,
-                startDate: entry.startDate,
-                endDate: entry.endDate,
-                current: entry.current,
-              })),
-              profileUrl: profile.profileUrl ?? null,
-            },
-          },
-          null,
-          2,
-        ),
-        output: Output.object({ schema: LinkedInIdentityVerifierSchema }),
-      });
+      const response = this.modelExecution
+        ? await this.modelExecution.generateText<z.infer<typeof LinkedInIdentityVerifierSchema>>({
+            model: this.aiProviders.resolveModelForPurpose(ModelPurpose.RESEARCH),
+            schema: LinkedInIdentityVerifierSchema,
+            temperature: 0,
+            system: [
+              "You are an identity verification agent for LinkedIn profile matching.",
+              "Be strict: accept only when the profile is very likely the exact same person.",
+              "Current association with target company is preferred.",
+              "You may also accept if there is strong historical founder/executive association with the target company, and clearly state that it is historical (not current).",
+              "Reject operational/non-executive profiles (for example driver/courier roles) when leadership is expected.",
+            ].join("\n"),
+            prompt: JSON.stringify(
+              {
+                requestedMember: {
+                  name: requestedMember.name,
+                  role: requestedMember.role ?? null,
+                },
+                startupContext: {
+                  companyName: startupContext?.companyName ?? null,
+                  website: startupContext?.website ?? null,
+                },
+                candidateProfile: {
+                  firstName: profile.firstName ?? null,
+                  lastName: profile.lastName ?? null,
+                  headline: profile.headline ?? null,
+                  currentCompany: profile.currentCompany ?? null,
+                  experience: profile.experience.slice(0, 8).map((entry) => ({
+                    company: entry.company,
+                    title: entry.title,
+                    startDate: entry.startDate,
+                    endDate: entry.endDate,
+                    current: entry.current,
+                  })),
+                  profileUrl: profile.profileUrl ?? null,
+                },
+              },
+              null,
+              2,
+            ),
+          })
+        : await generateText({
+            model: this.aiProviders.resolveModelForPurpose(ModelPurpose.RESEARCH),
+            temperature: 0,
+            system: [
+              "You are an identity verification agent for LinkedIn profile matching.",
+              "Return ONLY a JSON object with keys: accepted, confidence, reason.",
+              "Be strict: accept only when the profile is very likely the exact same person.",
+              "Current association with target company is preferred.",
+              "You may also accept if there is strong historical founder/executive association with the target company, and clearly state that it is historical (not current).",
+              "Reject operational/non-executive profiles (for example driver/courier roles) when leadership is expected.",
+            ].join("\n"),
+            prompt: JSON.stringify(
+              {
+                requestedMember: {
+                  name: requestedMember.name,
+                  role: requestedMember.role ?? null,
+                },
+                startupContext: {
+                  companyName: startupContext?.companyName ?? null,
+                  website: startupContext?.website ?? null,
+                },
+                candidateProfile: {
+                  firstName: profile.firstName ?? null,
+                  lastName: profile.lastName ?? null,
+                  headline: profile.headline ?? null,
+                  currentCompany: profile.currentCompany ?? null,
+                  experience: profile.experience.slice(0, 8).map((entry) => ({
+                    company: entry.company,
+                    title: entry.title,
+                    startDate: entry.startDate,
+                    endDate: entry.endDate,
+                    current: entry.current,
+                  })),
+                  profileUrl: profile.profileUrl ?? null,
+                },
+              },
+              null,
+              2,
+            ),
+            output: Output.object({ schema: LinkedInIdentityVerifierSchema }),
+          });
+
+      const parsed = response.output ?? response.experimental_output;
+      if (!parsed) {
+        return null;
+      }
 
       return {
-        ...response.output,
+        ...parsed,
         associationType: this.deriveAssociationType(
           profile,
           startupContext?.companyName,

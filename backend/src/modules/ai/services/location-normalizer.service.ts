@@ -5,6 +5,7 @@ import { generateText, Output } from "ai";
 import { z } from "zod";
 import { ModelPurpose } from "../interfaces/pipeline.interface";
 import { AiProviderService } from "../providers/ai-provider.service";
+import { AiModelExecutionService } from "./ai-model-execution.service";
 
 const NormalizedRegionSchema = z.object({
   region: z.enum(["us", "europe", "latam", "asia", "mena", "global"]),
@@ -23,6 +24,7 @@ export class LocationNormalizerService implements OnModuleDestroy {
   constructor(
     private providers: AiProviderService,
     private config: ConfigService,
+    private modelExecution?: AiModelExecutionService,
   ) {
     this.initializeRedis();
   }
@@ -45,21 +47,35 @@ export class LocationNormalizerService implements OnModuleDestroy {
     }
 
     try {
-      const { output } = await generateText({
-        model: this.providers.resolveModelForPurpose(
-          ModelPurpose.LOCATION_NORMALIZATION,
-        ),
-        output: Output.object({ schema: NormalizedRegionSchema }),
-        temperature: 0,
-        maxOutputTokens: 64,
-        prompt: [
-          "Map the startup location to exactly one region enum value.",
-          "Valid regions: us, europe, latam, asia, mena, global.",
-          `Location: ${location}`,
-        ].join("\n"),
-      });
+      const model = this.providers.resolveModelForPurpose(
+        ModelPurpose.LOCATION_NORMALIZATION,
+      );
 
-      const parsed = NormalizedRegionSchema.parse(output);
+      const response = this.modelExecution
+        ? await this.modelExecution.generateText<{ region: NormalizedRegion }>({
+            model,
+            schema: NormalizedRegionSchema,
+            temperature: 0,
+            maxOutputTokens: 64,
+            prompt: [
+              "Map the startup location to exactly one region enum value.",
+              "Valid regions: us, europe, latam, asia, mena, global.",
+              `Location: ${location}`,
+            ].join("\n"),
+          })
+        : await generateText({
+            model,
+            output: Output.object({ schema: NormalizedRegionSchema }),
+            temperature: 0,
+            maxOutputTokens: 64,
+            prompt: [
+              "Map the startup location to exactly one region enum value.",
+              "Valid regions: us, europe, latam, asia, mena, global.",
+              `Location: ${location}`,
+            ].join("\n"),
+          });
+
+      const parsed = NormalizedRegionSchema.parse(response.output);
       await this.cacheRegion(key, parsed.region);
       return parsed.region;
     } catch (error) {

@@ -530,7 +530,7 @@ describe("PipelineService", () => {
       location: "NYC",
       fundingAsk: 0,
       valuation: 0,
-    } as any);
+    } as never);
     phaseTransition.decideNextPhases.mockReturnValueOnce({
       queue: [PipelinePhase.ENRICHMENT, PipelinePhase.SCRAPING],
       blockedByRequiredFailure: false,
@@ -592,7 +592,7 @@ describe("PipelineService", () => {
       location: "NYC",
       fundingAsk: 0,
       valuation: 0,
-    } as any;
+    } as never;
     const priorState = createState({
       status: PipelineStatus.CANCELLED,
       results: {
@@ -1285,7 +1285,7 @@ describe("PipelineService", () => {
       notifyMissingStartupInfo: jest.fn().mockResolvedValue(undefined),
       notifyPipelineComplete: jest.fn().mockResolvedValue(undefined),
     };
-    moduleRef.get.mockReturnValueOnce(clara as any);
+    moduleRef.get.mockReturnValueOnce(clara as never);
     const state = createState({}, {
       [PipelinePhase.EXTRACTION]: PhaseStatus.COMPLETED,
       [PipelinePhase.SCRAPING]: PhaseStatus.COMPLETED,
@@ -1343,7 +1343,7 @@ describe("PipelineService", () => {
       notifyMissingStartupInfo: jest.fn().mockResolvedValue(undefined),
       notifyPipelineComplete: jest.fn().mockResolvedValue(undefined),
     };
-    moduleRef.get.mockReturnValueOnce(clara as any);
+    moduleRef.get.mockReturnValueOnce(clara as never);
     const state = createState(
       { quality: "degraded" },
       {

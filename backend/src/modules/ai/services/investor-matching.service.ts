@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { and, eq, isNull, or, sql } from "drizzle-orm";
-import { generateText } from "ai";
+import { generateText, Output } from "ai";
 import { z } from "zod";
 import { DrizzleService } from "../../../database";
 import type { SynthesisResult } from "../interfaces/phase-results.interface";
@@ -280,24 +280,32 @@ export class InvestorMatchingService {
         execution?.generateTextOptions.model ??
         this.providers.resolveModelForPurpose(ModelPurpose.THESIS_ALIGNMENT);
 
-      const { text } = await generateText({
-        model: resolvedModel,
-        system: promptConfig.systemPrompt,
-        prompt: userPrompt,
-        maxOutputTokens: this.aiConfig.getMatchingMaxOutputTokens(),
-      });
+      const response = this.modelExecution
+        ? await this.modelExecution.generateText<z.infer<typeof ThesisFitSchema>>({
+            model: resolvedModel,
+            schema: ThesisFitSchema,
+            system: promptConfig.systemPrompt,
+            prompt: userPrompt,
+            maxOutputTokens: this.aiConfig.getMatchingMaxOutputTokens(),
+            tools: execution?.generateTextOptions.tools,
+            toolChoice: execution?.generateTextOptions.toolChoice,
+            providerOptions: execution?.generateTextOptions.providerOptions,
+          })
+        : await generateText({
+            model: resolvedModel,
+            system: promptConfig.systemPrompt,
+            prompt: userPrompt,
+            maxOutputTokens: this.aiConfig.getMatchingMaxOutputTokens(),
+            output: Output.object({ schema: ThesisFitSchema }),
+          });
 
-      if (!text?.trim()) {
-        throw new Error("Model returned empty response.");
-      }
-
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        throw new Error(`Model returned non-JSON (${text.length} chars): ${text.substring(0, 300)}`);
+      const parsed = response.output ?? response.experimental_output ?? null;
+      if (!parsed) {
+        throw new Error("Model returned empty structured response.");
       }
 
       return {
-        ...ThesisFitSchema.parse(JSON.parse(jsonMatch[0])),
+        ...ThesisFitSchema.parse(parsed),
         usedFallback: false,
       };
     } catch (error) {

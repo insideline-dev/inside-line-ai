@@ -16,6 +16,7 @@ import {
   Handshake
 } from "lucide-react";
 import type { Evaluation } from "@/types/evaluation";
+import { MarkdownText } from "@/components/MarkdownText";
 
 interface InsightsTabContentProps {
   evaluation: Evaluation | null;
@@ -162,7 +163,9 @@ export function InsightsTabContent({ evaluation }: InsightsTabContentProps) {
                 {overallStrengths.slice(0, 4).map((strength, i) => (
                   <li key={i} className="text-sm flex items-start gap-2" data-testid={`item-founder-strength-${i}`}>
                     <ChevronRight className="w-3 h-3 mt-1 shrink-0 text-chart-2" />
-                    <span>{strength}</span>
+                    <MarkdownText inline className="inline [&>p]:inline [&>p]:mb-0">
+                      {strength}
+                    </MarkdownText>
                   </li>
                 ))}
               </ul>
@@ -177,7 +180,9 @@ export function InsightsTabContent({ evaluation }: InsightsTabContentProps) {
                   risks.slice(0, 4).map((risk, i) => (
                     <li key={i} className="text-sm flex items-start gap-2" data-testid={`item-key-risk-${i}`}>
                       <ChevronRight className="w-3 h-3 mt-1 shrink-0 text-chart-4" />
-                      <span>{risk}</span>
+                      <MarkdownText inline className="inline [&>p]:inline [&>p]:mb-0">
+                        {risk}
+                      </MarkdownText>
                     </li>
                   ))
                 ) : (

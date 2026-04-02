@@ -7,7 +7,7 @@ import { StorageService } from "../../../storage";
 import { NotificationType } from "../../../notification/entities";
 import { NotificationService } from "../../../notification/notification.service";
 import { QueueService } from "../../../queue";
-import { startup, StartupStage, StartupStatus } from "../../startup/entities";
+import { startup, StartupStatus } from "../../startup/entities";
 import { startupEvaluation } from "../../analysis/entities";
 import { pipelineRun, pipelineAgentRun } from "../entities";
 import type {
@@ -679,7 +679,7 @@ export class PipelineService {
   async startPipeline(
     startupId: string,
     userId: string,
-    options?: {
+    _options?: {
       skipExtraction?: boolean;
     },
   ): Promise<string> {

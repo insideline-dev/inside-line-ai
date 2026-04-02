@@ -12,7 +12,7 @@
     "build:frontend": "cd frontend && bun run build",
     "lint": "bun run lint:backend && bun run lint:frontend",
     "lint:backend": "cd backend && bun run lint",
-    "lint:frontend": "bunx tsc --noEmit -p frontend/tsconfig.json",
+    "lint:frontend": "cd frontend && bunx tsc --noEmit",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
     "docker:build": "docker compose build",

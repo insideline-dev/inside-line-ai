@@ -178,6 +178,9 @@ export function createMockEvaluationResult(
         monthlyBurn: null,
         runway: null,
         runwayMonths: null,
+        arr: null,
+        annualRecurringRevenue: null,
+        grossMargin: null,
       },
       capitalPlan: {
         burnPlanDescribed: false,

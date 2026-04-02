@@ -336,7 +336,9 @@ export function DirectCompetitorCard({
               data-testid={`text-competitor-name-${index}`}
             >
               <Building2 className="h-4 w-4 text-muted-foreground" />
-              {competitor?.name || "Unknown Competitor"}
+              <MarkdownText inline className="inline [&>p]:inline [&>p]:mb-0">
+                {competitor?.name || "Unknown Competitor"}
+              </MarkdownText>
             </CardTitle>
             {competitor?.website && (
               <a
@@ -602,7 +604,9 @@ export function IndirectCompetitorCard({
               data-testid={`text-indirect-competitor-name-${index}`}
             >
               <Building2 className="h-4 w-4 text-muted-foreground" />
-              {competitor?.name || "Unknown Competitor"}
+              <MarkdownText inline className="inline [&>p]:inline [&>p]:mb-0">
+                {competitor?.name || "Unknown Competitor"}
+              </MarkdownText>
             </CardTitle>
             {competitor?.website && (
               <a
@@ -992,7 +996,9 @@ function CompactCompetitorCard({
         rel="noopener noreferrer"
         className="inline-flex items-center gap-1.5 font-semibold text-sm hover:underline"
       >
-        {name}
+        <MarkdownText inline className="inline [&>p]:inline [&>p]:mb-0">
+          {name}
+        </MarkdownText>
         <ExternalLink className="h-3 w-3 text-muted-foreground" />
       </a>
       {description && (

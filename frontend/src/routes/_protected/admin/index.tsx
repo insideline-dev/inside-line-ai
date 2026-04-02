@@ -45,6 +45,7 @@ interface StartupItem {
   overallScore?: number;
   createdAt: string;
   percentileRank?: number;
+  logoUrl?: string | null;
 }
 
 const TAB_TO_STATUS: Record<string, AdminControllerGetAllStartupsStatus | undefined> = {
@@ -79,6 +80,28 @@ function formatStage(stage: string) {
     .join(" ");
 }
 
+function StartupLogo({ name, logoUrl }: { name: string; logoUrl?: string | null }) {
+  const [imgError, setImgError] = useState(false);
+  const initial = name.charAt(0).toUpperCase();
+
+  if (logoUrl && !imgError) {
+    return (
+      <img
+        src={logoUrl}
+        alt={`${name} logo`}
+        className="w-11 h-11 rounded-lg object-contain bg-muted/40 shrink-0"
+        onError={() => setImgError(true)}
+      />
+    );
+  }
+
+  return (
+    <div className="w-11 h-11 rounded-lg bg-muted flex items-center justify-center shrink-0">
+      <span className="text-base font-semibold text-muted-foreground">{initial}</span>
+    </div>
+  );
+}
+
 function AdminStartupRow({ startup }: { startup: StartupItem }) {
   const [effectiveStatus, setEffectiveStatus] = useState(startup.status);
 
@@ -94,41 +117,34 @@ function AdminStartupRow({ startup }: { startup: StartupItem }) {
   );
 
   return (
-    <Card className="hover:shadow-md transition-shadow">
-      <CardContent className="p-6">
-        <div className="flex flex-col lg:flex-row items-start gap-6">
-          {startup.overallScore ? (
-            <ScoreRing score={startup.overallScore} size="sm" showLabel={false} />
-          ) : (
-            <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
-              <Clock className="w-6 h-6 text-muted-foreground" />
-            </div>
-          )}
-          <div className="flex-1 min-w-0 space-y-2">
-            <div className="flex flex-wrap items-center gap-3">
-              <h3 className="text-lg font-semibold">{startup.name}</h3>
+    <Card className="hover:shadow-md transition-shadow group">
+      <CardContent className="p-4">
+        <div className="flex items-start gap-4">
+          <StartupLogo name={startup.name} logoUrl={startup.logoUrl} />
+
+          <div className="flex-1 min-w-0 space-y-1.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-[15px] font-semibold leading-tight">{startup.name}</h3>
               {getStatusBadge(effectiveStatus)}
-              {startup.stage && <Badge variant="outline">{formatStage(startup.stage)}</Badge>}
-              {startup.industry && <Badge variant="secondary">{startup.industry}</Badge>}
+              {startup.stage && <Badge variant="outline" className="text-[11px] px-1.5 py-0">{formatStage(startup.stage)}</Badge>}
+              {startup.industry && <Badge variant="secondary" className="text-[11px] px-1.5 py-0">{startup.industry}</Badge>}
             </div>
             {startup.description && (
-              <p className="text-muted-foreground line-clamp-2">{startup.description}</p>
+              <p className="text-[13px] text-muted-foreground line-clamp-1">{startup.description}</p>
             )}
-            <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
               {startup.website && (
                 <span className="flex items-center gap-1">
-                  <Building2 className="w-4 h-4" />
+                  <Building2 className="w-3.5 h-3.5" />
                   {startup.website}
                 </span>
               )}
               <span className="flex items-center gap-1">
-                <Clock className="w-4 h-4" />
-                Submitted {format(new Date(startup.createdAt), "MMM d, yyyy")}
+                <Clock className="w-3.5 h-3.5" />
+                {format(new Date(startup.createdAt), "MMM d, yyyy")}
               </span>
-              {startup.percentileRank && (
-                <span className="flex items-center gap-1">
-                  Top {Math.round(100 - startup.percentileRank)}%
-                </span>
+              {startup.percentileRank != null && startup.percentileRank > 0 && (
+                <span>Top {Math.round(100 - startup.percentileRank)}%</span>
               )}
             </div>
             {(effectiveStatus === "submitted" || effectiveStatus === "analyzing") && (
@@ -139,13 +155,21 @@ function AdminStartupRow({ startup }: { startup: StartupItem }) {
               />
             )}
           </div>
-          <div className="flex gap-2">
-            <Button variant={effectiveStatus === "analyzing" ? "default" : "outline"} asChild>
+
+          <div className="flex items-center gap-3 shrink-0">
+            {startup.overallScore ? (
+              <ScoreRing score={startup.overallScore} size="sm" showLabel={false} />
+            ) : (
+              <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+                <Clock className="w-5 h-5 text-muted-foreground" />
+              </div>
+            )}
+            <Button variant={effectiveStatus === "analyzing" ? "default" : "outline"} size="sm" asChild>
               <Link to="/admin/startup/$id" params={{ id: startup.id }}>
                 {effectiveStatus === "analyzing" ? (
-                  <Sparkles className="w-4 h-4 mr-2" />
+                  <Sparkles className="w-4 h-4 mr-1.5" />
                 ) : (
-                  <Eye className="w-4 h-4 mr-2" />
+                  <Eye className="w-4 h-4 mr-1.5" />
                 )}
                 {effectiveStatus === "analyzing" ? "Live" : "Review"}
               </Link>

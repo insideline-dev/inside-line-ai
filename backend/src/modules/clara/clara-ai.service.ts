@@ -4,6 +4,7 @@ import { z } from "zod";
 import { AiProviderService } from "../ai/providers/ai-provider.service";
 import { ModelPurpose } from "../ai/interfaces/pipeline.interface";
 import { AiPromptService } from "../ai/services/ai-prompt.service";
+import { AiModelExecutionService } from "../ai/services/ai-model-execution.service";
 import {
   ClaraIntent,
   type IntentClassification,
@@ -24,6 +25,7 @@ export class ClaraAiService {
   constructor(
     private providers: AiProviderService,
     private promptService: AiPromptService,
+    private modelExecution?: AiModelExecutionService,
   ) {}
 
   async classifyIntent(ctx: MessageContext): Promise<IntentClassification> {
@@ -50,12 +52,19 @@ export class ClaraAiService {
         key: "clara.response",
         stage: extra?.startupStage,
       });
-      const { text } = await generateText({
-        model: this.providers.resolveModelForPurpose(ModelPurpose.CLARA),
-        temperature: 0.4,
-        system: promptConfig.systemPrompt,
-        prompt: this.buildResponsePrompt(promptConfig.userPrompt, intent, ctx, extra),
-      });
+      const { text } = this.modelExecution
+        ? await this.modelExecution.generateText<string>({
+            model: this.providers.resolveModelForPurpose(ModelPurpose.CLARA),
+            temperature: 0.4,
+            system: promptConfig.systemPrompt,
+            prompt: this.buildResponsePrompt(promptConfig.userPrompt, intent, ctx, extra),
+          })
+        : await generateText({
+            model: this.providers.resolveModelForPurpose(ModelPurpose.CLARA),
+            temperature: 0.4,
+            system: promptConfig.systemPrompt,
+            prompt: this.buildResponsePrompt(promptConfig.userPrompt, intent, ctx, extra),
+          });
       return text;
     } catch (error) {
       this.logger.warn(`Response generation failed: ${error}`);
@@ -137,13 +146,21 @@ export class ClaraAiService {
     });
 
     try {
-      const { output } = await generateText({
-        model: this.providers.resolveModelForPurpose(ModelPurpose.CLARA),
-        output: Output.object({ schema: IntentClassificationSchema }),
-        temperature: 0.1,
-        system: promptConfig.systemPrompt,
-        prompt,
-      });
+      const { output } = this.modelExecution
+        ? await this.modelExecution.generateText<IntentClassification>({
+            model: this.providers.resolveModelForPurpose(ModelPurpose.CLARA),
+            schema: IntentClassificationSchema,
+            temperature: 0.1,
+            system: promptConfig.systemPrompt,
+            prompt,
+          })
+        : await generateText({
+            model: this.providers.resolveModelForPurpose(ModelPurpose.CLARA),
+            output: Output.object({ schema: IntentClassificationSchema }),
+            temperature: 0.1,
+            system: promptConfig.systemPrompt,
+            prompt,
+          });
 
       return IntentClassificationSchema.parse(output);
     } catch (error) {
@@ -322,14 +339,23 @@ export class ClaraAiService {
         .filter(Boolean)
         .join("\n");
 
-      const { text } = await generateText({
-        model: this.providers.resolveModelForPurpose(ModelPurpose.CLARA),
-        tools,
-        stopWhen: stepCountIs(5),
-        temperature: 0.3,
-        system: systemPrompt,
-        prompt: userPrompt,
-      });
+      const { text } = this.modelExecution
+        ? await this.modelExecution.generateText<string>({
+            model: this.providers.resolveModelForPurpose(ModelPurpose.CLARA),
+            tools,
+            toolChoice: "auto",
+            temperature: 0.3,
+            system: systemPrompt,
+            prompt: userPrompt,
+          })
+        : await generateText({
+            model: this.providers.resolveModelForPurpose(ModelPurpose.CLARA),
+            tools,
+            stopWhen: stepCountIs(5),
+            temperature: 0.3,
+            system: systemPrompt,
+            prompt: userPrompt,
+          });
 
       return text;
     } catch (error) {

@@ -10,11 +10,6 @@ const optionalUrl = z.preprocess(
   z.string().url().optional(),
 );
 
-const optionalNonNegativeNumber = z.preprocess(
-  nullToUndefined,
-  z.number().nonnegative().optional(),
-);
-
 const optionalString = z.preprocess(
   nullToUndefined,
   z.string().min(1).optional(),

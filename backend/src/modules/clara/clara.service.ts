@@ -257,7 +257,7 @@ export class ClaraService {
 
       let replyText = "Thanks for the update.";
       let intent: ClaraIntent;
-      let intentClassification: IntentClassification;
+      const intentClassification = await this.claraAi.classifyIntent(ctx);
       let finalStartupId: string | null = conversation.startupId;
       let finalStartupExtra = startupContext;
       let pendingActionForMemory = this.readPendingActionFromMemory(
@@ -270,7 +270,6 @@ export class ClaraService {
         pendingAction: null,
       };
 
-      intentClassification = await this.claraAi.classifyIntent(ctx);
       const unresolvedCriticalFields = conversation.startupId
         ? await this.submissionService.getMissingCriticalFieldsForStartup(
             conversation.startupId,

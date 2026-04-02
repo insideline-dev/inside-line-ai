@@ -17,7 +17,47 @@ const startup = {
 } satisfies Startup;
 
 describe("extractKpiMetrics", () => {
-  it("prefers new-style chart and deck-claimed KPI fields when present", () => {
+  it("prefers deck structured data for KPIs when present", () => {
+    const evaluation = {
+      id: "eval_deck",
+      startupId: startup.id,
+      deckData: {
+        financials: {
+          arr: "$2.5M",
+          growthRate: "150% YoY",
+          grossMargin: "72%",
+        },
+        market: {
+          tam: "$50B",
+          marketGrowthRate: "12% CAGR",
+        },
+      },
+      // Evaluation data should be overridden by deck data
+      financialsData: {
+        charts: {
+          revenueProjection: [{ period: "2026", revenue: 1000000 }],
+          marginProgression: [{ period: "2026", grossMargin: 55 }],
+        },
+        keyMetrics: { arr: "$800K" },
+      },
+      marketData: {
+        marketSizing: { tam: { value: "$30B" } },
+        marketGrowthAndTiming: {
+          growthRate: { deckClaimed: "80% YoY", cagr: "10%", period: "2025-2030" },
+        },
+      },
+      createdAt: "2026-04-02T00:00:00.000Z",
+    } as unknown as Evaluation;
+
+    const result = extractKpiMetrics(startup, evaluation);
+    expect(result.arr).toBe("$2.5M");
+    expect(result.growthRate).toBe("150% YoY");
+    expect(result.grossMargin).toBe("72%");
+    expect(result.tam).toBe("$50B");
+    expect(result.marketGrowth).toBe("12% CAGR");
+  });
+
+  it("falls back to chart/evaluation data when deck data is absent", () => {
     const evaluation = {
       id: "eval_1",
       startupId: startup.id,

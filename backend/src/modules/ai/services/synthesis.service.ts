@@ -108,7 +108,7 @@ export class SynthesisService {
     );
     synthesis.confidenceScore = confidenceScore;
 
-    await this.persistResults(startupId, synthesis, evaluation, scraping, research);
+    await this.persistResults(startupId, synthesis, evaluation, scraping, research, extraction);
 
     this.logger.log(
       `[Synthesis] ✅ Results persisted | Score: ${synthesis.overallScore} | KeyStrengths: ${synthesis.keyStrengths?.length} | KeyRisks: ${synthesis.keyRisks?.length}`,
@@ -197,6 +197,7 @@ export class SynthesisService {
     evaluation: EvaluationResult,
     scraping: ScrapingResult,
     research: ResearchResult,
+    extraction?: ExtractionResult,
   ): Promise<void> {
     const { overallScore, sectionScores } = synthesis;
     const evaluationWithMemoNarratives = this.applyMemoNarrativesFromSynthesis(
@@ -246,6 +247,7 @@ export class SynthesisService {
       founderReport: synthesis.founderReport,
       sources: persistedSources,
       dataConfidenceNotes: synthesis.dataConfidenceNotes,
+      deckData: extraction?.deckStructuredData ?? null,
     };
 
     await this.drizzle.db.transaction(async (tx) => {

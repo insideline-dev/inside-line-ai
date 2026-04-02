@@ -53,6 +53,9 @@ export class OpenAiTextGenerationService {
       1,
       params.maxToolRoundtrips ?? DEFAULT_MAX_TOOL_ROUNDTRIPS,
     );
+    const temperature = this.supportsTemperature(params.modelName)
+      ? params.temperature
+      : undefined;
     const shouldUseParse = Boolean(params.schema) && tools.length === 0;
 
     if (shouldUseParse && params.schema) {
@@ -63,7 +66,7 @@ export class OpenAiTextGenerationService {
           text: {
             format: zodTextFormat(params.schema, "response"),
           },
-          temperature: params.temperature,
+          temperature,
           max_output_tokens: params.maxOutputTokens,
           reasoning: this.toReasoningConfig(params.reasoningEffort),
         },
@@ -125,6 +128,9 @@ export class OpenAiTextGenerationService {
     finishReason?: string;
   }> {
     const { client, params, tools, toolChoice, maxToolRoundtrips } = input;
+    const temperature = this.supportsTemperature(params.modelName)
+      ? params.temperature
+      : undefined;
 
     let response = await client.responses.create(
       {
@@ -132,7 +138,7 @@ export class OpenAiTextGenerationService {
         input: this.buildInput(params.system, params.prompt),
         tools: tools.length > 0 ? tools : undefined,
         tool_choice: toolChoice,
-        temperature: params.temperature,
+        temperature,
         max_output_tokens: params.maxOutputTokens,
         reasoning: this.toReasoningConfig(params.reasoningEffort),
       },
@@ -197,7 +203,7 @@ export class OpenAiTextGenerationService {
           model: params.modelName,
           previous_response_id: response.id,
           input: toolOutputs,
-          temperature: params.temperature,
+          temperature,
           max_output_tokens: params.maxOutputTokens,
           reasoning: this.toReasoningConfig(params.reasoningEffort),
         },
@@ -249,6 +255,11 @@ export class OpenAiTextGenerationService {
     }
     messages.push({ role: "user", content: prompt });
     return messages;
+  }
+
+  private supportsTemperature(modelName: string): boolean {
+    const normalized = modelName.trim().toLowerCase();
+    return !normalized.startsWith("gpt-5");
   }
 
   private convertTools(tools: ToolSet): OpenAI.Responses.Tool[] {

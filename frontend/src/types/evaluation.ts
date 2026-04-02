@@ -177,6 +177,9 @@ export interface Evaluation {
   investorMemo?: InvestorMemo;
   sources?: Source[];
 
+  // Deck structured data (extracted directly from pitch deck)
+  deckData?: Record<string, unknown>;
+
   // Exit scenarios (from deal terms agent, surfaced on summary page)
   exitScenarios?: ExitScenario[];
 

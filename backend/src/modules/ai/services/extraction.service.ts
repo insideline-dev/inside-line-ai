@@ -567,6 +567,36 @@ export class ExtractionService {
       pageCount,
       warnings,
     );
+
+    // Extract structured deck data (non-fatal — KPI enrichment, not pipeline-critical)
+    if (source !== "startup-context") {
+      progress?.onStepStart("deck_structured_extraction");
+      try {
+        const deckStructuredData =
+          await this.fieldExtractor.extractDeckStructuredData(extractedText);
+        if (deckStructuredData) {
+          result.deckStructuredData = deckStructuredData;
+          this.logger.log(
+            `[Extraction] Deck structured data extracted for startup ${startupId}`,
+          );
+          progress?.onStepComplete("deck_structured_extraction", {
+            summary: { extracted: true },
+            outputJson: deckStructuredData,
+          });
+        } else {
+          progress?.onStepComplete("deck_structured_extraction", {
+            summary: { extracted: false },
+          });
+        }
+      } catch (error) {
+        const message = this.asMessage(error);
+        this.logger.warn(
+          `[Extraction] Deck structured extraction failed (non-fatal) for startup ${startupId}: ${message}`,
+        );
+        progress?.onStepFailed("deck_structured_extraction", message);
+      }
+    }
+
     this.logger.log(
       `[Extraction] Completed extraction phase for startup ${startupId} | source=${result.source ?? "unknown"} | pageCount=${result.pageCount ?? 0} | warnings=${result.warnings?.length ?? 0}`,
     );

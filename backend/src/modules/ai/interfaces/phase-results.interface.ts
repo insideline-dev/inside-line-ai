@@ -72,6 +72,7 @@ export interface ExtractionResult {
   source?: "pdf-parse" | "pptx-parse" | "mistral-ocr" | "startup-context";
   pageCount?: number;
   warnings?: string[];
+  deckStructuredData?: import("../schemas/deck-structured-data.schema").DeckStructuredData;
 }
 
 export interface WebsiteScrapedData {

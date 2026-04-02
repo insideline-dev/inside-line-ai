@@ -115,6 +115,12 @@ export function extractKpiMetrics(
     };
   }
 
+  // --- Deck structured data (highest priority for KPIs) ---
+  const deck = rec(evaluation.deckData);
+  const deckFinancials = rec(deck.financials);
+  const deckMarket = rec(deck.market);
+
+  // --- Evaluation data (fallback) ---
   const financials = rec(evaluation.financialsData);
   const charts = rec(financials.charts);
   const keyMetrics = rec(financials.keyMetrics);
@@ -129,9 +135,9 @@ export function extractKpiMetrics(
   const productOverview = rec(product.productOverview);
   const team = rec(evaluation.teamData);
   const fmf = rec(team.founderMarketFit);
-  // --- First 3 KPIs: sourced from pitch deck ---
 
-  // ARR (prefer chart data, then legacy keyMetrics fallbacks)
+  // --- ARR: deck first → chart data → legacy keyMetrics ---
+  const deckArr = safeStr(deckFinancials.arr);
   const revenueProjection = Array.isArray(charts.revenueProjection)
     ? charts.revenueProjection as Array<{ period?: string; revenue?: number }>
     : [];
@@ -140,7 +146,9 @@ export function extractKpiMetrics(
     : undefined;
   const arrRaw = safeStr(keyMetrics.arr) ?? safeStr(keyMetrics.annualRecurringRevenue);
   let arr = DASH;
-  if (latestRevenue !== undefined && latestRevenue > 0) {
+  if (deckArr && deckArr !== "Unknown") {
+    arr = extractShortValue(deckArr);
+  } else if (latestRevenue !== undefined && latestRevenue > 0) {
     arr = latestRevenue >= 1_000_000
       ? `$${(latestRevenue / 1_000_000).toFixed(1)}M`
       : latestRevenue >= 1_000
@@ -150,12 +158,15 @@ export function extractKpiMetrics(
     arr = extractShortValue(arrRaw);
   }
 
-  // Growth Rate (prefer deckClaimed, fall back to researched CAGR)
+  // --- Growth Rate: deck first → deckClaimed → researched CAGR ---
+  const deckGrowth = safeStr(deckFinancials.growthRate);
   const deckClaimed = safeStr(growthRate.deckClaimed);
   const cagrStr = safeStr(growthRate.cagr);
   const growthPeriod = safeStr(growthRate.period);
   let growthRateVal = DASH;
-  if (deckClaimed && deckClaimed !== "Unknown") {
+  if (deckGrowth && deckGrowth !== "Unknown") {
+    growthRateVal = extractShortValue(deckGrowth);
+  } else if (deckClaimed && deckClaimed !== "Unknown") {
     growthRateVal = extractShortValue(deckClaimed);
   } else if (cagrStr && cagrStr !== "Unknown") {
     const cagrDisplay = extractShortValue(cagrStr);
@@ -164,7 +175,8 @@ export function extractKpiMetrics(
       : cagrDisplay;
   }
 
-  // Gross Margin (prefer chart data, then legacy keyMetrics fallback)
+  // --- Gross Margin: deck first → chart data → legacy keyMetrics ---
+  const deckGrossMargin = safeStr(deckFinancials.grossMargin);
   const marginProgression = Array.isArray(charts.marginProgression)
     ? charts.marginProgression as Array<{ period?: string; grossMargin?: number }>
     : [];
@@ -173,7 +185,9 @@ export function extractKpiMetrics(
     : undefined;
   const grossMarginRaw = safeStr(keyMetrics.grossMargin);
   let grossMargin = DASH;
-  if (latestMargin !== undefined && latestMargin > 0) {
+  if (deckGrossMargin && deckGrossMargin !== "Unknown") {
+    grossMargin = deckGrossMargin.includes("%") ? deckGrossMargin : `${deckGrossMargin}%`;
+  } else if (latestMargin !== undefined && latestMargin > 0) {
     grossMargin = `${Math.round(latestMargin)}%`;
   } else if (grossMarginRaw && grossMarginRaw !== "Unknown") {
     grossMargin = grossMarginRaw.includes("%") ? grossMarginRaw : `${grossMarginRaw}%`;
@@ -183,13 +197,20 @@ export function extractKpiMetrics(
   const structureType = safeStr(marketStructure.structureType);
   const mktStructure = structureType ? titleCase(structureType) : DASH;
 
-  // TAM
+  // --- TAM: deck first → evaluation ---
+  const deckTam = safeStr(deckMarket.tam);
   const tamValue = safeStr(tam.value);
-  const tamDisplay = tamValue ? extractShortValue(tamValue) : DASH;
+  const tamDisplay = deckTam
+    ? extractShortValue(deckTam)
+    : tamValue ? extractShortValue(tamValue) : DASH;
 
-  // Market Growth (researched CAGR)
+  // --- Market Growth: deck first → researched CAGR ---
+  const deckMarketGrowth = safeStr(deckMarket.marketGrowthRate);
   let marketGrowth = DASH;
-  if (cagrStr && cagrStr !== "Unknown") {
+  if (deckMarketGrowth && deckMarketGrowth !== "Unknown") {
+    const val = extractShortValue(deckMarketGrowth);
+    marketGrowth = val.includes("CAGR") ? val : `${val} CAGR`;
+  } else if (cagrStr && cagrStr !== "Unknown") {
     const cagrVal = extractShortValue(cagrStr);
     marketGrowth = cagrVal.includes("CAGR") ? cagrVal : `${cagrVal} CAGR`;
   }

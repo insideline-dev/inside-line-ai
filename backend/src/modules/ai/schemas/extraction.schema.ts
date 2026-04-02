@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DeckStructuredDataSchema } from "./deck-structured-data.schema";
 
 const StartupFileReferenceSchema = z.object({
   path: z.string().min(1),
@@ -60,6 +61,7 @@ export const ExtractionSchema = z.object({
     .default("startup-context"),
   pageCount: z.number().int().nonnegative().optional(),
   warnings: z.array(z.string()).optional().default([]),
+  deckStructuredData: DeckStructuredDataSchema.optional(),
 });
 
 export type Extraction = z.infer<typeof ExtractionSchema>;

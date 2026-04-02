@@ -7,6 +7,10 @@ import { AiProviderService } from "../providers/ai-provider.service";
 import { AiPromptService } from "./ai-prompt.service";
 import { AiConfigService } from "./ai-config.service";
 import { AiModelExecutionService } from "./ai-model-execution.service";
+import {
+  DeckStructuredDataAiSchema,
+  type DeckStructuredData,
+} from "../schemas/deck-structured-data.schema";
 
 const DeckClassificationSchema = z.object({
   deckIndex: z
@@ -177,6 +181,56 @@ export class FieldExtractorService {
       const message =
         error instanceof Error ? error.message : String(error);
       this.logger.warn(`AI deck classification failed: ${message}`);
+      return null;
+    }
+  }
+
+  async extractDeckStructuredData(
+    rawText: string,
+  ): Promise<DeckStructuredData | null> {
+    const trimmed = rawText.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const systemPrompt = `You are a financial analyst extracting structured metrics from a startup pitch deck.
+
+Extract every quantitative metric and key fact you can find. For each value, preserve the exact format from the deck (e.g. "$2.5M", "150% YoY", "~72%").
+
+Rules:
+- Only extract values explicitly stated in the deck text. Do not infer or calculate.
+- If a metric is not present, leave it as null.
+- For notableClaims, extract up to 5 standout traction/business claims.
+- For useOfFunds, extract the breakdown items (e.g. "40% Engineering", "30% Sales").
+- For keyFeatures, extract up to 5 key product features.
+- For keyMembers, extract founder/executive names and roles.`;
+
+    try {
+      const model = this.providers.resolveModelForPurpose(ModelPurpose.EXTRACTION);
+
+      const response = this.modelExecution
+        ? await this.modelExecution.generateText({
+            model,
+            schema: DeckStructuredDataAiSchema,
+            temperature: 0,
+            system: systemPrompt,
+            prompt: this.truncateForPrompt(trimmed),
+          })
+        : await generateText({
+            output: Output.object({ schema: DeckStructuredDataAiSchema }),
+            temperature: 0,
+            system: systemPrompt,
+            prompt: this.truncateForPrompt(trimmed),
+            model,
+          });
+
+      const parsed = DeckStructuredDataAiSchema.parse(response.output);
+      return { ...parsed, extractedAt: new Date().toISOString() };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `Deck structured data extraction failed (non-fatal): ${message}`,
+      );
       return null;
     }
   }

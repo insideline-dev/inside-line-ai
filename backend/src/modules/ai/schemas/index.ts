@@ -64,6 +64,7 @@ export function isZodSchema(input: unknown): input is z.ZodTypeAny {
 
 export * from "./base-evaluation.schema";
 export * from "./simple-evaluation.schema";
+export * from "./deck-structured-data.schema";
 export * from "./extraction.schema";
 export * from "./synthesis.schema";
 export * from "./matching";

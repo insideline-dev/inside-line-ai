@@ -251,12 +251,17 @@ export function createMockEvaluationResult(
           {
             name: "FactoryCloud",
             description: "Industrial workflow SaaS",
+            url: null,
+            fundingRaised: null,
           },
         ],
         indirect: [
           {
             name: "Internal ERP custom workflows",
             description: "Custom-built alternatives",
+            whyIndirect: null,
+            url: null,
+            threatLevel: null,
           },
         ],
         advantages: ["Deeper workflow specialization"],

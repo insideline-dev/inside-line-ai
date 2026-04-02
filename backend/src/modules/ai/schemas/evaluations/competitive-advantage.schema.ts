@@ -2,22 +2,22 @@ import { z } from "zod";
 import { BaseEvaluationSchema, requiredStringFromNull, stringArray } from "../base-evaluation.schema";
 import { FounderPitchRecommendationSchema } from "../simple-evaluation.schema";
 
-const nullToUndefined = (value: unknown): unknown =>
-  value === null ? undefined : value;
+const nullishToNull = (value: unknown): unknown =>
+  value === undefined || value === null ? null : value;
 
-const optionalUrl = z.preprocess(
-  nullToUndefined,
-  z.string().url().optional(),
+const nullableUrl = z.preprocess(
+  nullishToNull,
+  z.string().url().nullable().default(null),
 );
 
-const optionalString = z.preprocess(
-  nullToUndefined,
-  z.string().min(1).optional(),
+const nullableString = z.preprocess(
+  nullishToNull,
+  z.string().min(1).nullable().default(null),
 );
 
-const optionalThreatLevel = z.preprocess(
-  nullToUndefined,
-  z.enum(["high", "medium", "low"]).optional(),
+const nullableThreatLevel = z.preprocess(
+  nullishToNull,
+  z.enum(["high", "medium", "low"]).nullable().default(null),
 );
 
 // --- Strategic Positioning ---
@@ -97,16 +97,16 @@ export const CompetitivePositionSchema = z.object({
 const DirectCompetitorSchema = z.object({
   name: requiredStringFromNull("Unknown competitor"),
   description: requiredStringFromNull("Description unavailable"),
-  url: optionalUrl,
-  fundingRaised: optionalString,
+  url: nullableUrl,
+  fundingRaised: nullableString,
 });
 
 const IndirectCompetitorSchema = z.object({
   name: requiredStringFromNull("Unknown competitor"),
   description: requiredStringFromNull("Description unavailable"),
-  whyIndirect: optionalString,
-  url: optionalUrl,
-  threatLevel: optionalThreatLevel,
+  whyIndirect: nullableString,
+  url: nullableUrl,
+  threatLevel: nullableThreatLevel,
 });
 
 export const CompetitorsSchema = z.object({

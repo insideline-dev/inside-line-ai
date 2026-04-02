@@ -131,6 +131,10 @@ export class OpenAiTextGenerationService {
     const temperature = this.supportsTemperature(params.modelName)
       ? params.temperature
       : undefined;
+    const textConfig: OpenAI.Responses.ResponseTextConfig | undefined =
+      params.schema
+        ? { format: zodTextFormat(params.schema, "response") as OpenAI.Responses.ResponseFormatTextJSONSchemaConfig }
+        : undefined;
 
     let response = await client.responses.create(
       {
@@ -138,6 +142,7 @@ export class OpenAiTextGenerationService {
         input: this.buildInput(params.system, params.prompt),
         tools: tools.length > 0 ? tools : undefined,
         tool_choice: toolChoice,
+        text: textConfig,
         temperature,
         max_output_tokens: params.maxOutputTokens,
         reasoning: this.toReasoningConfig(params.reasoningEffort),
@@ -203,6 +208,7 @@ export class OpenAiTextGenerationService {
           model: params.modelName,
           previous_response_id: response.id,
           input: toolOutputs,
+          text: textConfig,
           temperature,
           max_output_tokens: params.maxOutputTokens,
           reasoning: this.toReasoningConfig(params.reasoningEffort),

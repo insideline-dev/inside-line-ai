@@ -113,7 +113,81 @@ function toSubScores(value: unknown): SubScoreItem[] {
 }
 
 function normalizeKey(value?: string) {
-  return value?.trim().toLowerCase() || "";
+  if (!value) return "";
+  return value
+    .trim()
+    .toLowerCase()
+    // Strip common titles/prefixes
+    .replace(/^(dr|mr|mrs|ms|prof|eng)\.?\s+/, "")
+    // Strip common suffixes
+    .replace(/[,\s]+(jr|sr|phd|md|mba|cpa|esq|ii|iii|iv)\.?\s*$/, "")
+    // Remove dots (J. Smith -> J Smith)
+    .replace(/\./g, "")
+    // Normalize dashes/apostrophes to spaces
+    .replace(/[-–—'ʼ'`]/g, " ")
+    // Collapse whitespace
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Check if two names likely refer to the same person. */
+function areSimilarNames(a: string, b: string): boolean {
+  const na = normalizeKey(a);
+  const nb = normalizeKey(b);
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+
+  // Condensed match — "Al Hassan" vs "AlHassan"
+  if (na.replace(/\s/g, "") === nb.replace(/\s/g, "")) return true;
+
+  // Word-subset match — "john smith" vs "john alexander smith"
+  const wordsA = na.split(" ");
+  const wordsB = nb.split(" ");
+  if (wordsA.length >= 2 && wordsB.length >= 2) {
+    if (wordsA.every((w) => wordsB.includes(w)) || wordsB.every((w) => wordsA.includes(w))) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/** Resolve the map key for a name — reuses an existing key when names are similar. */
+function resolveMapKey(
+  map: Map<string, unknown>,
+  name: string | undefined,
+): string | undefined {
+  const key = normalizeKey(name);
+  if (!key) return undefined;
+  if (map.has(key)) return key;
+  for (const existing of map.keys()) {
+    if (areSimilarNames(key, existing)) return existing;
+  }
+  return key;
+}
+
+/** Find an item by fuzzy name match. */
+function findByFuzzyName<T>(
+  items: Array<T>,
+  name: string,
+  getName: (item: T) => string | undefined,
+): T | undefined {
+  const targetKey = normalizeKey(name);
+  if (!targetKey) return undefined;
+  const exact = items.find((item) => normalizeKey(getName(item)) === targetKey);
+  if (exact) return exact;
+  return items.find((item) => areSimilarNames(name, getName(item) || ""));
+}
+
+/** Check if a name matches any name in a set (fuzzy). */
+function isInNameSet(set: Set<string>, name: string): boolean {
+  const key = normalizeKey(name);
+  if (!key) return false;
+  if (set.has(key)) return true;
+  for (const existing of set) {
+    if (areSimilarNames(key, existing)) return true;
+  }
+  return false;
 }
 
 /** Parse a string into individual items by splitting on newlines / bullet chars. */
@@ -269,6 +343,52 @@ function resolveExperience(
   return [];
 }
 
+/** Count how many meaningful fields a member has (used to pick the "richer" duplicate). */
+function memberRichness(m: TeamMember): number {
+  let score = 0;
+  if (m.linkedinUrl) score += 2;
+  if (m.headline) score += 1;
+  if (m.summary) score += 1;
+  if (m.profilePictureUrl) score += 1;
+  if (m.location) score += 1;
+  if (m.experience?.length) score += m.experience.length;
+  if (m.education?.length) score += m.education.length;
+  if (m.skills?.length) score += 1;
+  if (m.fmfScore !== undefined) score += 1;
+  if (m.relevantExperience) score += 1;
+  if (m.background) score += 1;
+  return score;
+}
+
+/** Final safety-net dedup: merge any remaining near-duplicate members. */
+function deduplicateMembers(members: TeamMember[]): TeamMember[] {
+  const result: TeamMember[] = [];
+  const consumed = new Set<number>();
+
+  for (let i = 0; i < members.length; i++) {
+    if (consumed.has(i)) continue;
+    let best = members[i];
+
+    for (let j = i + 1; j < members.length; j++) {
+      if (consumed.has(j)) continue;
+      if (areSimilarNames(best.name, members[j].name)) {
+        // Keep the entry with richer data
+        const other = members[j];
+        if (memberRichness(other) > memberRichness(best)) {
+          best = { ...best, ...other, name: other.name };
+        } else {
+          best = { ...other, ...best, name: best.name };
+        }
+        consumed.add(j);
+      }
+    }
+
+    result.push(best);
+  }
+
+  return result;
+}
+
 function buildTeamMembers(
   evaluation: Evaluation | null,
   submittedMembers: TeamMember[],
@@ -294,9 +414,9 @@ function buildTeamMembers(
   // Layer 1 (lowest priority): extracted founders
   for (const founder of extractedFounders) {
     if (!shouldInclude(founder.name as string | undefined)) continue;
-    const key = normalizeKey(founder.name as string | undefined);
-    if (key) {
-      memberMap.set(key, {
+    const mapKey = resolveMapKey(memberMap, founder.name as string | undefined);
+    if (mapKey) {
+      memberMap.set(mapKey, {
         ...founder,
         role: (founder.role as string) || "Founder",
         source: "scraped",
@@ -307,20 +427,20 @@ function buildTeamMembers(
   // Layer 2: evaluation agent results
   for (const evalMember of teamEvals) {
     if (!shouldInclude(evalMember.name as string | undefined)) continue;
-    const key = normalizeKey(evalMember.name as string | undefined);
-    if (key) {
-      const existing = memberMap.get(key);
-      memberMap.set(key, { ...existing, ...evalMember, source: "evaluation" });
+    const mapKey = resolveMapKey(memberMap, evalMember.name as string | undefined);
+    if (mapKey) {
+      const existing = memberMap.get(mapKey);
+      memberMap.set(mapKey, { ...existing, ...evalMember, source: "evaluation" });
     }
   }
 
   // Layer 3: research / teamData members
   for (const researchMember of researchTeamMembers) {
     if (!shouldInclude(researchMember.name as string | undefined)) continue;
-    const key = normalizeKey(researchMember.name as string | undefined);
-    if (key) {
-      const existing = memberMap.get(key);
-      memberMap.set(key, {
+    const mapKey = resolveMapKey(memberMap, researchMember.name as string | undefined);
+    if (mapKey) {
+      const existing = memberMap.get(mapKey);
+      memberMap.set(mapKey, {
         ...existing,
         ...researchMember,
         bio: (researchMember.bio as string) || (existing?.bio as string) || "",
@@ -334,10 +454,10 @@ function buildTeamMembers(
 
   // Layer 5 (top): submitted members always win
   for (const member of submittedMembers ?? []) {
-    const key = normalizeKey(member.name);
-    if (!key) continue;
-    const existing = memberMap.get(key);
-    memberMap.set(key, { ...existing, ...member, source: "submitted" });
+    const mapKey = resolveMapKey(memberMap, member.name);
+    if (!mapKey) continue;
+    const existing = memberMap.get(mapKey);
+    memberMap.set(mapKey, { ...existing, ...member, source: "submitted" });
   }
 
   const merged = Array.from(memberMap.values());
@@ -345,21 +465,16 @@ function buildTeamMembers(
     return (submittedMembers ?? []).map((m) => ({ ...m, source: "submitted" as const }));
   }
 
-  return merged.map((member) => {
-    const memberKey = normalizeKey(member.name as string | undefined);
-    const isSubmittedMember = submittedKeys.has(memberKey);
+  return deduplicateMembers(merged.map((member) => {
+    const memberName = (member.name as string) || "";
+    const isSubmittedMember = isInNameSet(submittedKeys, memberName);
+    const getName = (e: Record<string, unknown>) => e.name as string | undefined;
     const hasEnrichment = teamEvals.some(
-      (e) => normalizeKey(e.name as string | undefined) === memberKey && e.enrichmentStatus === "success",
+      (e) => areSimilarNames(memberName, (e.name as string) || "") && e.enrichmentStatus === "success",
     );
-    const memberEval = teamEvals.find(
-      (e) => normalizeKey(e.name as string | undefined) === memberKey,
-    ) as Record<string, unknown> | undefined;
-    const founderData = extractedFounders.find(
-      (f) => normalizeKey(f.name as string | undefined) === memberKey,
-    );
-    const teamEvalData = teamEvalMembers.find(
-      (f) => normalizeKey(f.name as string | undefined) === memberKey,
-    );
+    const memberEval = findByFuzzyName(teamEvals, memberName, getName) as Record<string, unknown> | undefined;
+    const founderData = findByFuzzyName(extractedFounders, memberName, getName);
+    const teamEvalData = findByFuzzyName(teamEvalMembers, memberName, getName);
 
     const linkedinAnalysis = (memberEval?.linkedinAnalysis ?? {}) as Record<string, unknown>;
     const linkedinData = (memberEval?.linkedinData ?? linkedinAnalysis) as Record<string, unknown>;
@@ -419,7 +534,7 @@ function buildTeamMembers(
         (teamEvalData?.background as string) ||
         "",
     };
-  });
+  }));
 }
 
 // ---------------------------------------------------------------------------

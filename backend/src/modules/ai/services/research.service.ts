@@ -455,6 +455,7 @@ export class ResearchService {
         providerOptions: execution?.generateTextOptions.providerOptions,
         searchEnforcement: execution?.searchEnforcement,
         getBraveToolCallCount: execution?.usage.getBraveToolCallCount,
+        braveSearchFn: execution?.braveSearchFn,
         prompt,
         systemPrompt,
         minReportLength: MIN_RESEARCH_REPORT_LENGTH,

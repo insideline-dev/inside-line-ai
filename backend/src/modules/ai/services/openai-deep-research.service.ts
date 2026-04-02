@@ -55,6 +55,35 @@ export class OpenAiDeepResearchService {
     return Boolean(this.config.get<string>("OPENAI_API_KEY"));
   }
 
+  async createResponse(params: {
+    model: string;
+    instructions: string;
+    input: string;
+    tools?: OpenAI.Responses.Tool[];
+    include?: OpenAI.Responses.ResponseIncludable[];
+    temperature?: number;
+    previousResponseId?: string;
+  }): Promise<OpenAI.Responses.Response> {
+    if (!this.isConfigured()) {
+      throw new ServiceUnavailableException(
+        "OPENAI_API_KEY is not configured",
+      );
+    }
+
+    const client = this.getClient();
+    return client.responses.create({
+      model: params.model,
+      instructions: params.instructions,
+      input: params.input,
+      tools: params.tools,
+      include: params.include,
+      temperature: params.temperature,
+      ...(params.previousResponseId
+        ? { previous_response_id: params.previousResponseId }
+        : {}),
+    });
+  }
+
   async runResearchText(
     request: OpenAiDeepResearchTextRequest,
   ): Promise<OpenAiDeepResearchTextResponse> {

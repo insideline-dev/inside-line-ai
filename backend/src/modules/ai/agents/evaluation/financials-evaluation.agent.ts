@@ -32,6 +32,10 @@ export class FinancialsEvaluationAgent extends BaseEvaluationAgent<FinancialsEva
     return 120_000;
   }
 
+  protected override useDirectGenerateText(): boolean {
+    return true;
+  }
+
   protected override getAgentTemplateVariables(
     _pipelineData: EvaluationPipelineInput,
   ): Record<string, string> {

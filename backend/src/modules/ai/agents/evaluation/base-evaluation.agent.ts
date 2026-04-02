@@ -255,9 +255,9 @@ export abstract class BaseEvaluationAgent<TOutput>
             enableBraveSearch: options?.braveSearchEnabled,
           })
         : null;
-      useTextOnlyStructuredMode =
-        !this.modelExecution &&
-        this.shouldUseTextOnlyStructuredMode(execution?.resolvedConfig.provider);
+      useTextOnlyStructuredMode = this.shouldUseTextOnlyStructuredMode(
+        execution?.resolvedConfig.provider,
+      );
       resolvedModel =
         execution?.generateTextOptions.model ??
         this.providers.resolveModelForPurpose(ModelPurpose.EVALUATION);
@@ -337,52 +337,32 @@ export abstract class BaseEvaluationAgent<TOutput>
         retryCount: Math.max(0, attempt - 1),
       });
       try {
-        const response = await this.withTimeout<unknown>(
+        const response = await this.withTimeout(
           (abortSignal) =>
-            this.modelExecution
-              ? this.modelExecution.generateText<TOutput>({
-                  model: resolvedModel,
-                  system: composedSystemPrompt,
-                  prompt: useTextOnlyStructuredMode
-                    ? this.buildJsonObjectPrompt(renderedPrompt)
-                    : renderedPrompt,
-                  schema: useTextOnlyStructuredMode ? undefined : this.schema,
-                  temperature: evaluationTemperature,
-                  maxOutputTokens: this.getMaxOutputTokens(),
-                  tools: execution?.generateTextOptions.tools,
-                  toolChoice: execution?.generateTextOptions.toolChoice,
-                  providerOptions: execution?.generateTextOptions.providerOptions,
-                  abortSignal,
-                })
-              : generateText(
-                  this.buildGenerateTextInput({
-                    model: resolvedModel,
-                    system: composedSystemPrompt,
-                    prompt: useTextOnlyStructuredMode
-                      ? this.buildJsonObjectPrompt(renderedPrompt)
-                      : renderedPrompt,
-                    schema: useTextOnlyStructuredMode ? null : this.schema,
-                    temperature: evaluationTemperature,
-                    maxOutputTokens: this.getMaxOutputTokens(),
-                    tools: execution?.generateTextOptions.tools,
-                    toolChoice: execution?.generateTextOptions.toolChoice,
-                    providerOptions: execution?.generateTextOptions.providerOptions,
-                    abortSignal,
-                  }),
-                ),
+            generateText(
+              this.buildGenerateTextInput({
+                model: resolvedModel,
+                system: composedSystemPrompt,
+                prompt: useTextOnlyStructuredMode
+                  ? this.buildJsonObjectPrompt(renderedPrompt)
+                  : renderedPrompt,
+                schema: useTextOnlyStructuredMode ? null : this.schema,
+                temperature: evaluationTemperature,
+                maxOutputTokens: this.getMaxOutputTokens(),
+                tools: execution?.generateTextOptions.tools,
+                toolChoice: execution?.generateTextOptions.toolChoice,
+                providerOptions: execution?.generateTextOptions.providerOptions,
+                abortSignal,
+              }),
+            ),
           attemptTimeoutMs,
           `${this.key} evaluation timed out`,
         );
 
-        const responseOutput = this.extractStructuredOutput(response);
         const normalizedOutput = this.normalizeNarrativeFields(
           useTextOnlyStructuredMode
-            ? this.parseTextOnlyStructuredResponse(
-                response as
-                  | Awaited<ReturnType<typeof generateText>>
-                  | Awaited<ReturnType<AiModelExecutionService["generateText"]>>,
-              )
-            : this.schema.parse(this.normalizeOutputCandidate(responseOutput)),
+            ? this.parseTextOnlyStructuredResponse(response)
+            : this.schema.parse(this.normalizeOutputCandidate(response.output)),
         );
 
         this.emitTraceEvent(options, {

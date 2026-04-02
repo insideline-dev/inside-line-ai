@@ -214,12 +214,21 @@ export function normalizeBaseEvaluationCandidate(candidate: unknown): unknown {
         ? scoring.overallScore
         : candidate.score;
   const rawConfidence = candidate.confidence ?? scoring?.confidence;
-  const scoringBasis =
-    typeof scoring?.scoringBasis === "string"
+  const rawScoringBasis =
+    typeof scoring?.scoringBasis === "string" && scoring.scoringBasis !== "Scoring basis pending"
       ? scoring.scoringBasis
-      : typeof candidate.scoringBasis === "string"
+      : typeof candidate.scoringBasis === "string" && candidate.scoringBasis !== "Scoring basis pending"
         ? candidate.scoringBasis
-        : "Scoring basis pending";
+        : null;
+  // Derive from narrativeSummary when the model doesn't provide a scoringBasis
+  const scoringBasis = rawScoringBasis ?? (() => {
+    const narrative = typeof candidate.narrativeSummary === "string" ? candidate.narrativeSummary.trim() : "";
+    if (!narrative) return "Scoring basis pending";
+    // Take the first sentence or first 200 chars as a concise basis
+    const firstSentence = narrative.match(/^[^.!?\n]+[.!?]/)?.[0];
+    if (firstSentence && firstSentence.length <= 250) return firstSentence.trim();
+    return narrative.slice(0, 200).trim() + "…";
+  })();
   const keyFindings =
     normalizeStringArrayInput(candidate.keyFindings).length > 0
       ? normalizeStringArrayInput(candidate.keyFindings)

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, jest, mock } from "bun:test";
+import { describe, expect, it, jest, mock } from "bun:test";
 
 const generateTextMock = jest.fn();
 mock.module("ai", () => ({

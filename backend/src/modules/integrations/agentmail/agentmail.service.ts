@@ -277,28 +277,40 @@ export class AgentMailService {
     const message = this.getObject(raw.message);
     const thread = this.getObject(raw.thread);
 
+    const rawCamel = raw as Record<string, unknown> & {
+      inboxId?: unknown;
+      threadId?: unknown;
+      messageId?: unknown;
+    };
+    const messageCamel = message as
+      | (Record<string, unknown> & { inboxId?: unknown; threadId?: unknown; messageId?: unknown })
+      | null;
+    const threadCamel = thread as
+      | (Record<string, unknown> & { inboxId?: unknown; threadId?: unknown })
+      | null;
+
     const inboxId =
       this.asNonEmptyString(raw.inbox_id)
       ?? this.asNonEmptyString(message?.inbox_id)
       ?? this.asNonEmptyString(thread?.inbox_id)
-      ?? this.asNonEmptyString((raw as any).inboxId) // fallback to camelCase
-      ?? this.asNonEmptyString((message as any)?.inboxId)
-      ?? this.asNonEmptyString((thread as any)?.inboxId);
+      ?? this.asNonEmptyString(rawCamel.inboxId) // fallback to camelCase
+      ?? this.asNonEmptyString(messageCamel?.inboxId)
+      ?? this.asNonEmptyString(threadCamel?.inboxId);
     const threadId =
       this.asNonEmptyString(raw.thread_id)
       ?? this.asNonEmptyString(message?.thread_id)
       ?? this.asNonEmptyString(thread?.thread_id)
       ?? this.asNonEmptyString(thread?.id)
-      ?? this.asNonEmptyString((raw as any).threadId) // fallback to camelCase
-      ?? this.asNonEmptyString((message as any)?.threadId)
-      ?? this.asNonEmptyString((thread as any)?.threadId);
+      ?? this.asNonEmptyString(rawCamel.threadId) // fallback to camelCase
+      ?? this.asNonEmptyString(messageCamel?.threadId)
+      ?? this.asNonEmptyString(threadCamel?.threadId);
     const messageId =
       this.asNonEmptyString(raw.message_id)
       ?? this.asNonEmptyString(message?.id)
       ?? this.asNonEmptyString(message?.message_id)
       ?? this.asNonEmptyString(message?.smtp_id)
-      ?? this.asNonEmptyString((raw as any).messageId) // fallback to camelCase
-      ?? this.asNonEmptyString((message as any)?.messageId);
+      ?? this.asNonEmptyString(rawCamel.messageId) // fallback to camelCase
+      ?? this.asNonEmptyString(messageCamel?.messageId);
 
     return {
       inboxId,

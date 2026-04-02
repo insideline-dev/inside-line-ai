@@ -33,6 +33,7 @@ import { PipelineStateService } from "./pipeline-state.service";
 import { ScrapingCacheService } from "./scraping-cache.service";
 import { WebsiteScraperService } from "./website-scraper.service";
 import { PipelineFlowConfigService } from "./pipeline-flow-config.service";
+import { AiModelExecutionService } from "./ai-model-execution.service";
 
 interface TeamMemberInput {
   name: string;
@@ -107,6 +108,7 @@ export class ScrapingService {
     @Optional() private aiProvider?: AiProviderService,
     @Optional() private aiConfig?: AiConfigService,
     @Optional() private pipelineFlowConfigService?: PipelineFlowConfigService,
+    @Optional() private modelExecution?: AiModelExecutionService,
   ) {
     this.debugLogEnabled =
       this.config?.get<boolean>("AI_SCRAPING_DEBUG_LOG_ENABLED", true) ?? true;
@@ -1684,9 +1686,11 @@ export class ScrapingService {
     try {
       const model = this.aiProvider.resolveModelForPurpose(ModelPurpose.EXTRACTION);
 
-      const { experimental_output: output } = await generateText({
-        model,
-        system: `You are a pitch deck analyst. Analyze the following pitch deck text to identify the TOP 6-10 most impactful leadership team members.
+      const response = this.modelExecution
+        ? await this.modelExecution.generateText<z.infer<typeof DeckTeamDiscoverySchema>>({
+            model,
+            schema: DeckTeamDiscoverySchema,
+            system: `You are a pitch deck analyst. Analyze the following pitch deck text to identify the TOP 6-10 most impactful leadership team members.
 
 INCLUDE (in order of priority):
 1. Founders and Co-founders
@@ -1708,10 +1712,37 @@ DO NOT INCLUDE:
 - Names that appear repeatedly on every page/slide as a watermark or footer — these are deck recipients/viewers, NOT team members. A real team member is mentioned 1-3 times in a team section; a watermark name appears on every single page with no role context.
 
 Return each person with their full name, their role/title, and optionally their LinkedIn URL and a short bio if mentioned.`,
-        prompt: truncated,
-        output: Output.object({ schema: DeckTeamDiscoverySchema }),
-      });
+            prompt: truncated,
+          })
+        : await generateText({
+            model,
+            system: `You are a pitch deck analyst. Analyze the following pitch deck text to identify the TOP 6-10 most impactful leadership team members.
 
+INCLUDE (in order of priority):
+1. Founders and Co-founders
+2. C-suite executives (CEO, CTO, CFO, COO, CMO, CRO, CPO, etc.)
+3. VPs (VP of Engineering, VP of Sales, VP of Product, etc.)
+4. Directors (Director of Engineering, Director of Marketing, etc.)
+
+LIMIT: Return only the TOP 10 most senior/impactful people. Prioritize founders and C-level first.
+
+DO NOT INCLUDE:
+- Advisors (even if they have an "Advisor" title)
+- Board members (unless they are also executives)
+- People mentioned in endorsements/testimonials
+- Customers or partners
+- Industry figures mentioned as references
+- Anyone from OTHER companies providing quotes
+- Regular employees below Director level
+- Names appearing as document watermarks or recipient attributions (e.g., "Shared by/with", "Viewed by", "Sent to", "Prepared for")
+- Names that appear repeatedly on every page/slide as a watermark or footer — these are deck recipients/viewers, NOT team members. A real team member is mentioned 1-3 times in a team section; a watermark name appears on every single page with no role context.
+
+Return each person with their full name, their role/title, and optionally their LinkedIn URL and a short bio if mentioned.`,
+            prompt: truncated,
+            output: Output.object({ schema: DeckTeamDiscoverySchema }),
+          });
+
+      const output = response.experimental_output ?? response.output;
       const members = (output ?? { members: [] }).members;
 
       const candidates: TeamMemberInput[] = members

@@ -9,6 +9,7 @@ import {
   Minus
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { MarkdownText } from "@/components/MarkdownText";
 
 interface FounderInsightCardProps {
   title: string;
@@ -54,7 +55,9 @@ export function FounderInsightCard({
               {strengths.slice(0, 3).map((strength, i) => (
                 <li key={i} className="text-sm text-muted-foreground flex items-start gap-2" data-testid={`item-strength-${sectionId}-${i}`}>
                   <ChevronRight className="w-3 h-3 mt-1 shrink-0 text-chart-2" />
-                  <span>{strength}</span>
+                  <MarkdownText inline className="inline [&>p]:inline [&>p]:mb-0">
+                    {strength}
+                  </MarkdownText>
                 </li>
               ))}
             </ul>
@@ -71,7 +74,9 @@ export function FounderInsightCard({
               {improvements.slice(0, 3).map((item, i) => (
                 <li key={i} className="text-sm text-muted-foreground flex items-start gap-2" data-testid={`item-improvement-${sectionId}-${i}`}>
                   <ChevronRight className="w-3 h-3 mt-1 shrink-0 text-chart-4" />
-                  <span>{item}</span>
+                  <MarkdownText inline className="inline [&>p]:inline [&>p]:mb-0">
+                    {item}
+                  </MarkdownText>
                 </li>
               ))}
             </ul>
@@ -88,7 +93,9 @@ export function FounderInsightCard({
               {unclearItems.slice(0, 2).map((item, i) => (
                 <li key={i} className="text-sm text-muted-foreground flex items-start gap-2" data-testid={`item-clarify-${sectionId}-${i}`}>
                   <Badge variant="outline" className="text-xs px-1.5 py-0 shrink-0" data-testid={`badge-action-${sectionId}-${i}`}>Action</Badge>
-                  <span>{item}</span>
+                  <MarkdownText inline className="inline [&>p]:inline [&>p]:mb-0">
+                    {item}
+                  </MarkdownText>
                 </li>
               ))}
             </ul>

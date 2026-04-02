@@ -608,12 +608,12 @@ describe("ClaraSubmissionService", () => {
         id: "asset-deck",
         key: "startups/admin-1/documents/deck.pdf",
         url: "https://storage.com/deck.pdf",
-      } as any)
+      } as never)
       .mockResolvedValueOnce({
         id: "asset-financials",
         key: "startups/admin-1/documents/financials.pdf",
         url: "https://storage.com/financials.pdf",
-      } as any);
+      } as never);
 
     const ctx = createMessageContext({
       attachments: [

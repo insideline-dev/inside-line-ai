@@ -255,9 +255,9 @@ export abstract class BaseEvaluationAgent<TOutput>
             enableBraveSearch: options?.braveSearchEnabled,
           })
         : null;
-      useTextOnlyStructuredMode = this.shouldUseTextOnlyStructuredMode(
-        execution?.resolvedConfig.provider,
-      );
+      useTextOnlyStructuredMode =
+        !this.modelExecution &&
+        this.shouldUseTextOnlyStructuredMode(execution?.resolvedConfig.provider);
       resolvedModel =
         execution?.generateTextOptions.model ??
         this.providers.resolveModelForPurpose(ModelPurpose.EVALUATION);
@@ -337,32 +337,52 @@ export abstract class BaseEvaluationAgent<TOutput>
         retryCount: Math.max(0, attempt - 1),
       });
       try {
-        const response = await this.withTimeout(
+        const response = await this.withTimeout<unknown>(
           (abortSignal) =>
-            generateText(
-              this.buildGenerateTextInput({
-                model: resolvedModel,
-                system: composedSystemPrompt,
-                prompt: useTextOnlyStructuredMode
-                  ? this.buildJsonObjectPrompt(renderedPrompt)
-                  : renderedPrompt,
-                schema: useTextOnlyStructuredMode ? null : this.schema,
-                temperature: evaluationTemperature,
-                maxOutputTokens: this.getMaxOutputTokens(),
-                tools: execution?.generateTextOptions.tools,
-                toolChoice: execution?.generateTextOptions.toolChoice,
-                providerOptions: execution?.generateTextOptions.providerOptions,
-                abortSignal,
-              }),
-            ),
+            this.modelExecution
+              ? this.modelExecution.generateText<TOutput>({
+                  model: resolvedModel,
+                  system: composedSystemPrompt,
+                  prompt: useTextOnlyStructuredMode
+                    ? this.buildJsonObjectPrompt(renderedPrompt)
+                    : renderedPrompt,
+                  schema: useTextOnlyStructuredMode ? undefined : this.schema,
+                  temperature: evaluationTemperature,
+                  maxOutputTokens: this.getMaxOutputTokens(),
+                  tools: execution?.generateTextOptions.tools,
+                  toolChoice: execution?.generateTextOptions.toolChoice,
+                  providerOptions: execution?.generateTextOptions.providerOptions,
+                  abortSignal,
+                })
+              : generateText(
+                  this.buildGenerateTextInput({
+                    model: resolvedModel,
+                    system: composedSystemPrompt,
+                    prompt: useTextOnlyStructuredMode
+                      ? this.buildJsonObjectPrompt(renderedPrompt)
+                      : renderedPrompt,
+                    schema: useTextOnlyStructuredMode ? null : this.schema,
+                    temperature: evaluationTemperature,
+                    maxOutputTokens: this.getMaxOutputTokens(),
+                    tools: execution?.generateTextOptions.tools,
+                    toolChoice: execution?.generateTextOptions.toolChoice,
+                    providerOptions: execution?.generateTextOptions.providerOptions,
+                    abortSignal,
+                  }),
+                ),
           attemptTimeoutMs,
           `${this.key} evaluation timed out`,
         );
 
+        const responseOutput = this.extractStructuredOutput(response);
         const normalizedOutput = this.normalizeNarrativeFields(
           useTextOnlyStructuredMode
-            ? this.parseTextOnlyStructuredResponse(response)
-            : this.schema.parse(this.normalizeOutputCandidate(response.output)),
+            ? this.parseTextOnlyStructuredResponse(
+                response as
+                  | Awaited<ReturnType<typeof generateText>>
+                  | Awaited<ReturnType<AiModelExecutionService["generateText"]>>,
+              )
+            : this.schema.parse(this.normalizeOutputCandidate(responseOutput)),
         );
 
         this.emitTraceEvent(options, {
@@ -634,16 +654,30 @@ export abstract class BaseEvaluationAgent<TOutput>
   }
 
   private resolveRawOutputText(
-    response: { text?: string },
+    response: { text?: string } | unknown,
     output?: unknown,
   ): string {
-    if (typeof response.text === "string" && response.text.trim().length > 0) {
-      return response.text;
+    if (
+      response &&
+      typeof response === "object" &&
+      !Array.isArray(response) &&
+      typeof (response as { text?: unknown }).text === "string" &&
+      (response as { text: string }).text.trim().length > 0
+    ) {
+      return (response as { text: string }).text;
     }
     if (output === undefined) {
       return "";
     }
     return this.safeStringify(output);
+  }
+
+  private extractStructuredOutput(response: unknown): unknown {
+    if (!response || typeof response !== "object" || Array.isArray(response)) {
+      return undefined;
+    }
+    const record = response as Record<string, unknown>;
+    return record.experimental_output ?? record.output;
   }
 
   private shouldAttemptTextRecovery(message: string): boolean {
@@ -1052,7 +1086,7 @@ export abstract class BaseEvaluationAgent<TOutput>
   }
 
   private parseTextOnlyStructuredResponse(
-    response: Awaited<ReturnType<typeof generateText>>,
+    response: Awaited<ReturnType<typeof generateText>> | Awaited<ReturnType<AiModelExecutionService["generateText"]>>,
   ): TOutput {
     const responseOutput = (response as { output?: unknown }).output;
     let outputText = this.resolveRawOutputText(response);

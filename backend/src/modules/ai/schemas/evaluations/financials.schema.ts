@@ -100,6 +100,9 @@ export const FinancialsEvaluationSchema = BaseEvaluationSchema.extend({
       monthlyBurn: nullableString.default(null),
       runway: nullableString.default(null),
       runwayMonths: nullableNumber.default(null),
+      arr: nullableString.default(null),
+      annualRecurringRevenue: nullableString.default(null),
+      grossMargin: nullableString.default(null),
     }),
   ),
   capitalPlan: z.preprocess(

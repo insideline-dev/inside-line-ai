@@ -433,9 +433,14 @@ export function ProductTabContent({ startup, evaluation, showScores = true, prod
 
             {/* Core Value Prop — highlighted callout */}
             {coreValueProp && (
-              <div className="flex items-start gap-3 rounded-lg border border-primary/20 bg-primary/5 px-4 py-3">
-                <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                <p className="text-sm font-medium leading-relaxed">{coreValueProp}</p>
+              <div className="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3">
+                <div className="mb-1 flex items-center gap-2">
+                  <Sparkles className="h-3.5 w-3.5 text-primary" />
+                  <span className="text-[10px] font-medium uppercase tracking-wider text-primary">Value Proposition</span>
+                </div>
+                <MarkdownText inline className="text-sm font-medium leading-relaxed [&>p]:inline [&>p]:mb-0">
+                  {coreValueProp}
+                </MarkdownText>
               </div>
             )}
 

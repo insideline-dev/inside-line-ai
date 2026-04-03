@@ -146,7 +146,7 @@ export function SectionScoreCard({
                 <div key={item.dimension}>
                   <div className="flex items-baseline justify-between gap-1.5 text-xs">
                     <span className="truncate font-medium">
-                      {item.dimension}{" "}
+                      <MarkdownText className="inline [&>p]:inline [&>p]:mb-0" inline>{item.dimension}</MarkdownText>{" "}
                       <span className="font-normal text-muted-foreground">
                         {pct}
                       </span>

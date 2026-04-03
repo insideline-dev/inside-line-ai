@@ -190,6 +190,11 @@ function isInNameSet(set: Set<string>, name: string): boolean {
   return false;
 }
 
+function normalizeLinkedinUrl(url?: string): string {
+  if (!url) return "";
+  return url.toLowerCase().replace(/\/+$/, "").replace(/\?.*$/, "").trim();
+}
+
 /** Parse a string into individual items by splitting on newlines / bullet chars. */
 function parseStringItems(value: unknown): string[] {
   if (Array.isArray(value)) {
@@ -371,7 +376,14 @@ function deduplicateMembers(members: TeamMember[]): TeamMember[] {
 
     for (let j = i + 1; j < members.length; j++) {
       if (consumed.has(j)) continue;
-      if (areSimilarNames(best.name, members[j].name)) {
+
+      const nameMatch = areSimilarNames(best.name, members[j].name);
+      const linkedinMatch =
+        !!best.linkedinUrl &&
+        !!members[j].linkedinUrl &&
+        normalizeLinkedinUrl(best.linkedinUrl) === normalizeLinkedinUrl(members[j].linkedinUrl);
+
+      if (nameMatch || linkedinMatch) {
         // Keep the entry with richer data
         const other = members[j];
         if (memberRichness(other) > memberRichness(best)) {
@@ -410,11 +422,28 @@ function buildTeamMembers(
   const shouldInclude = (name?: string) => Boolean(normalizeKey(name));
 
   const memberMap = new Map<string, Record<string, unknown> & { source: TeamMemberSource }>();
+  const linkedinToKey = new Map<string, string>();
+
+  /** Resolve map key by LinkedIn URL first, then by name. */
+  function resolveKey(name: string | undefined, linkedinUrl: string | undefined): string | undefined {
+    if (linkedinUrl) {
+      const normUrl = normalizeLinkedinUrl(linkedinUrl);
+      if (normUrl && linkedinToKey.has(normUrl)) {
+        return linkedinToKey.get(normUrl)!;
+      }
+    }
+    const key = resolveMapKey(memberMap, name);
+    if (key && linkedinUrl) {
+      const normUrl = normalizeLinkedinUrl(linkedinUrl);
+      if (normUrl) linkedinToKey.set(normUrl, key);
+    }
+    return key;
+  }
 
   // Layer 1 (lowest priority): extracted founders
   for (const founder of extractedFounders) {
     if (!shouldInclude(founder.name as string | undefined)) continue;
-    const mapKey = resolveMapKey(memberMap, founder.name as string | undefined);
+    const mapKey = resolveKey(founder.name as string | undefined, founder.linkedinUrl as string | undefined);
     if (mapKey) {
       memberMap.set(mapKey, {
         ...founder,
@@ -427,7 +456,7 @@ function buildTeamMembers(
   // Layer 2: evaluation agent results
   for (const evalMember of teamEvals) {
     if (!shouldInclude(evalMember.name as string | undefined)) continue;
-    const mapKey = resolveMapKey(memberMap, evalMember.name as string | undefined);
+    const mapKey = resolveKey(evalMember.name as string | undefined, evalMember.linkedinUrl as string | undefined);
     if (mapKey) {
       const existing = memberMap.get(mapKey);
       memberMap.set(mapKey, { ...existing, ...evalMember, source: "evaluation" });
@@ -437,7 +466,7 @@ function buildTeamMembers(
   // Layer 3: research / teamData members
   for (const researchMember of researchTeamMembers) {
     if (!shouldInclude(researchMember.name as string | undefined)) continue;
-    const mapKey = resolveMapKey(memberMap, researchMember.name as string | undefined);
+    const mapKey = resolveKey(researchMember.name as string | undefined, researchMember.linkedinUrl as string | undefined);
     if (mapKey) {
       const existing = memberMap.get(mapKey);
       memberMap.set(mapKey, {
@@ -454,7 +483,7 @@ function buildTeamMembers(
 
   // Layer 5 (top): submitted members always win
   for (const member of submittedMembers ?? []) {
-    const mapKey = resolveMapKey(memberMap, member.name);
+    const mapKey = resolveKey(member.name, member.linkedinUrl);
     if (!mapKey) continue;
     const existing = memberMap.get(mapKey);
     memberMap.set(mapKey, { ...existing, ...member, source: "submitted" });

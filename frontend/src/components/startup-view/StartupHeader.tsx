@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { StatusBadge } from "@/components/analysis/StatusBadge";
 import { ArrowLeft, Globe, ExternalLink, MapPin, Clock, Binoculars } from "lucide-react";
 import { Link } from "@tanstack/react-router";
@@ -29,6 +30,14 @@ export function StartupHeader({
       </Button>
       <div className="flex-1">
         <div className="flex flex-wrap items-center gap-3">
+          <Avatar className="h-9 w-9 shrink-0 rounded-lg">
+            {startup.logoUrl ? (
+              <AvatarImage src={startup.logoUrl} alt={startup.name} className="object-contain" />
+            ) : null}
+            <AvatarFallback className="rounded-lg text-sm font-semibold">
+              {startup.name.charAt(0).toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
           <h1 className="text-2xl font-bold" data-testid="text-startup-name">{startup.name}</h1>
           {showStatus && <StatusBadge status={startup.status as any} data-testid="badge-status" />}
           {startup.submittedByRole === "scout" && (

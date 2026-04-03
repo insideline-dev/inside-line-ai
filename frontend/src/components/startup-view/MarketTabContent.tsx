@@ -225,11 +225,11 @@ function ConcentrationSpectrum({ structureType, direction, evidence }: { structu
 // --- Market Lifecycle S-Curve ---
 
 const LIFECYCLE_STAGES = [
-  { key: "emerging",     cx: 32,  cy: 58, label: "Emerging",     labelX: 32 },
-  { key: "early_growth", cx: 68,  cy: 38, label: "Early Growth", labelX: 68 },
-  { key: "growth",       cx: 120, cy: 10, label: "Growth",       labelX: 120 },
-  { key: "mature",       cx: 178, cy: 12, label: "Maturity",     labelX: 178 },
-  { key: "declining",    cx: 228, cy: 42, label: "Decline",      labelX: 228 },
+  { key: "emerging",     cx: 44,  cy: 74, label: "Emerging",     labelX: 44,  regionStart: 0,   regionEnd: 72 },
+  { key: "early_growth", cx: 104, cy: 44, label: "Early Growth", labelX: 104, regionStart: 72,  regionEnd: 144 },
+  { key: "growth",       cx: 185, cy: 12, label: "Growth",       labelX: 185, regionStart: 144, regionEnd: 225 },
+  { key: "mature",       cx: 268, cy: 18, label: "Maturity",     labelX: 268, regionStart: 225, regionEnd: 310 },
+  { key: "declining",    cx: 340, cy: 56, label: "Decline",      labelX: 340, regionStart: 310, regionEnd: 370 },
 ] as const;
 
 const LIFECYCLE_ALIASES: Record<string, string> = {
@@ -244,25 +244,40 @@ function LifecycleSCurve({ position }: { position: string }) {
   const activeStage = LIFECYCLE_STAGES.find((s) => s.key === normalized) ?? LIFECYCLE_STAGES[0];
 
   return (
-    <div className="flex items-center justify-center">
-      <svg viewBox="0 0 260 80" width="260" height="80" aria-label={`Market lifecycle: ${activeStage.label}`}>
+    <div className="w-full">
+      <svg viewBox="0 0 370 108" className="w-full h-auto" aria-label={`Market lifecycle: ${activeStage.label}`}>
+        {/* Active stage highlight region */}
+        <rect
+          x={activeStage.regionStart}
+          y={0}
+          width={activeStage.regionEnd - activeStage.regionStart}
+          height={92}
+          rx={10}
+          className="fill-violet-100/50 dark:fill-violet-900/20"
+        />
         {/* Curve */}
         <path
-          d="M 8,62 C 30,62 45,55 68,38 C 91,21 105,8 130,6 C 155,4 175,10 200,26 C 220,38 240,55 252,62"
+          d="M 10,78 C 35,78 60,65 104,44 C 135,28 155,12 185,10 C 215,8 240,14 268,22 C 300,34 325,52 358,72"
           fill="none"
           stroke="currentColor"
           className="text-muted-foreground/25"
-          strokeWidth="2"
+          strokeWidth="2.5"
           strokeLinecap="round"
         />
-        {/* Active dot */}
+        {/* Active dot with glow */}
         <circle
           cx={activeStage.cx}
           cy={activeStage.cy}
-          r="5"
+          r="10"
+          className="fill-violet-500/15 dark:fill-violet-400/15"
+        />
+        <circle
+          cx={activeStage.cx}
+          cy={activeStage.cy}
+          r="5.5"
           className="fill-violet-500 dark:fill-violet-400"
           stroke="white"
-          strokeWidth="2"
+          strokeWidth="2.5"
         />
         {/* Stage labels */}
         {LIFECYCLE_STAGES.map((stage) => {
@@ -271,12 +286,12 @@ function LifecycleSCurve({ position }: { position: string }) {
             <text
               key={stage.key}
               x={stage.labelX}
-              y={74}
+              y={104}
               textAnchor="middle"
               className={cn(
-                "text-[8px] select-none",
+                "text-[10px] select-none",
                 isActive
-                  ? "fill-violet-600 dark:fill-violet-400 font-semibold"
+                  ? "fill-violet-600 dark:fill-violet-400 font-bold"
                   : "fill-muted-foreground/40",
               )}
             >
@@ -657,17 +672,15 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage }: Mar
 
           {/* Market Lifecycle S-Curve */}
           {lifecyclePosition !== "Not provided" && (
-            <div className="rounded-lg border bg-muted/20 p-3">
-              <div className="flex items-center gap-4">
-                <div className="min-w-0 flex-1 space-y-1">
+            <div className="rounded-lg border bg-muted/20 p-4">
+              <div className="grid grid-cols-2 gap-6 items-center">
+                <div className="space-y-2">
                   <p className="text-sm font-medium">Market Lifecycle</p>
                   {lifecycleEvidence !== "Not provided" && (
-                    <MarkdownText className="text-xs text-muted-foreground leading-relaxed [&>p]:mb-0">{lifecycleEvidence}</MarkdownText>
+                    <MarkdownText className="text-xs text-muted-foreground leading-relaxed [&>p]:mb-1.5">{lifecycleEvidence}</MarkdownText>
                   )}
                 </div>
-                <div className="shrink-0">
-                  <LifecycleSCurve position={lifecyclePosition} />
-                </div>
+                <LifecycleSCurve position={lifecyclePosition} />
               </div>
             </div>
           )}

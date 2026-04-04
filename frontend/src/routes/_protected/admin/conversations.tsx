@@ -12,6 +12,7 @@ import { DataTable } from "@/components/DataTable";
 import { customFetch } from "@/api/client";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Mail } from "lucide-react";
+import { MarkdownText } from "@/components/MarkdownText";
 
 export const Route = createFileRoute("/_protected/admin/conversations")({
   component: ConversationsPage,
@@ -186,9 +187,9 @@ function ConversationsPage() {
                           </p>
                         )}
                         {msg.bodyText && (
-                          <p className={`text-sm whitespace-pre-wrap text-pretty ${isInbound ? "text-foreground" : "text-primary-foreground"}`}>
-                            {msg.bodyText}
-                          </p>
+                          <div className={`text-sm text-pretty ${isInbound ? "text-foreground" : "text-primary-foreground"}`}>
+                            <MarkdownText>{msg.bodyText}</MarkdownText>
+                          </div>
                         )}
                         {msg.errorMessage && (
                           <p className="text-xs mt-2 text-destructive bg-destructive/10 rounded px-2 py-1 text-pretty">

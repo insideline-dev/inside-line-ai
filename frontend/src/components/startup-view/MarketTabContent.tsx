@@ -18,6 +18,8 @@ interface MarketTabContentProps {
   evaluation: Evaluation | null;
   marketWeight?: number;
   fundingStage?: string;
+  showKeyFindingsAndRisks?: boolean;
+  showDataGaps?: boolean;
 }
 
 function toRecord(value: unknown): Record<string, unknown> {
@@ -328,7 +330,7 @@ function SourceInfoTooltip({ sources }: { sources: MarketSourceView[] }) {
   );
 }
 
-export function MarketTabContent({ evaluation, marketWeight, fundingStage }: MarketTabContentProps) {
+export function MarketTabContent({ evaluation, marketWeight, fundingStage, showKeyFindingsAndRisks = true, showDataGaps = true }: MarketTabContentProps) {
   if (!evaluation) {
     return (
       <Card className="border-dashed" data-testid="card-market-empty">
@@ -447,6 +449,8 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage }: Mar
   const whyNowEvidence = toStringArray(whyNow.evidence);
   const growthRateCagr = getMeaningful(growthRate.cagr) || "Not provided";
   const growthRateDeckClaimed = getMeaningful(growthRate.deckClaimed) || "Not provided";
+  const growthRateDeckClaimedPeriod = getMeaningful(growthRate.deckClaimedPeriod);
+  const growthRateDeckClaimedAnnualized = getMeaningful(growthRate.deckClaimedAnnualized);
   const growthTrajectory = getMeaningful(growthRate.trajectory) || getMeaningful(growthTiming.trajectory);
   const lifecyclePosition = getMeaningful(marketLifecycle.position) || "Not provided";
   const lifecycleEvidence = getMeaningful(marketLifecycle.evidence) || "Not provided";
@@ -639,9 +643,14 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage }: Mar
                     <MarkdownText className="text-[11px] text-muted-foreground text-center max-w-xs mt-1 [&>p]:mb-0">{cagr.detail}</MarkdownText>
                   )}
                   {growthRateDeckClaimed !== "Not provided" && growthRateDeckClaimed !== growthRateCagr && (
-                    <div className="flex items-center gap-4 text-xs mt-1">
-                      <span className="text-muted-foreground">Deck: <span className="font-medium text-foreground">{extractCagrNumber(growthRateDeckClaimed).number}</span></span>
-                      <span className="text-muted-foreground">Research: <span className="font-medium text-foreground">{cagr.number}</span></span>
+                    <div className="flex flex-col gap-1 text-xs mt-1">
+                      <div className="flex items-center gap-4">
+                        <span className="text-muted-foreground">Deck: <span className="font-medium text-foreground">{extractCagrNumber(growthRateDeckClaimed).number}{growthRateDeckClaimedPeriod && growthRateDeckClaimedPeriod !== "Unknown" ? ` ${growthRateDeckClaimedPeriod}` : ""}</span></span>
+                        <span className="text-muted-foreground">Research: <span className="font-medium text-foreground">{cagr.number} CAGR</span></span>
+                      </div>
+                      {growthRateDeckClaimedAnnualized && growthRateDeckClaimedAnnualized !== "Unknown" && growthRateDeckClaimedPeriod && growthRateDeckClaimedPeriod !== "YoY" && (
+                        <span className="text-[10px] text-muted-foreground">Deck annualized: <span className="font-medium text-foreground">{growthRateDeckClaimedAnnualized}</span></span>
+                      )}
                     </div>
                   )}
                 </div>
@@ -789,7 +798,7 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage }: Mar
       </Card>
 
       {/* --- Key Findings & Risks --- */}
-      {(keyFindings.length > 0 || risks.length > 0) && (
+      {showKeyFindingsAndRisks && (keyFindings.length > 0 || risks.length > 0) && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Key Findings & Risks</CardTitle>
@@ -819,7 +828,7 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage }: Mar
         </Card>
       )}
 
-      <DataGapsSection gaps={dataGapItems} />
+      {showDataGaps && <DataGapsSection gaps={dataGapItems} />}
     </div>
   );
 }

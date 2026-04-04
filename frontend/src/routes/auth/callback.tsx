@@ -5,6 +5,7 @@ import { z } from "zod";
 import { authApi, authKeys } from "@/lib/auth";
 import { setAccessToken } from "@/lib/auth/token";
 import { safeRedirect } from "@/lib/utils";
+import insideLineLogo from "@/assets/icon-insideline.svg";
 
 const searchSchema = z.object({
   success: z.coerce.string().optional(),
@@ -65,7 +66,11 @@ function AuthCallbackPage() {
   }, [success, error, navigate, queryClient]);
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center">
+    <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-6">
+      <div className="flex items-center gap-2.5">
+        <img src={insideLineLogo} alt="Inside Line" className="size-8 shrink-0" />
+        <span className="font-serif text-2xl font-normal tracking-tight">Inside Line</span>
+      </div>
       <div className="text-center">
         <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mx-auto" />
         <p className="mt-4 text-muted-foreground">Completing sign in...</p>

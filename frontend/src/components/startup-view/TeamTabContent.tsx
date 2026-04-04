@@ -69,6 +69,8 @@ interface TeamTabContentProps {
   evaluation: Evaluation | null;
   teamMembers: TeamMember[];
   showScores?: boolean;
+  showStrengthsAndRisks?: boolean;
+  showDataGaps?: boolean;
   teamWeight?: number;
   companyName?: string;
 }
@@ -624,6 +626,8 @@ export function TeamTabContent({
   evaluation,
   teamMembers,
   showScores = true,
+  showStrengthsAndRisks = true,
+  showDataGaps = true,
   teamWeight,
   companyName,
 }: TeamTabContentProps) {
@@ -784,7 +788,7 @@ export function TeamTabContent({
       )}
 
       {/* Section 5: Strengths & Risks */}
-      {(strengths.length > 0 || risks.length > 0) && (
+      {showStrengthsAndRisks && (strengths.length > 0 || risks.length > 0) && (
         <div className="grid gap-6 md:grid-cols-2" data-testid="container-strengths-risks">
           <Card>
             <CardHeader className="pb-3">
@@ -839,7 +843,7 @@ export function TeamTabContent({
       )}
 
       {/* Section 6: Data Gaps */}
-      <DataGapsSection gaps={dataGaps} />
+      {showDataGaps && <DataGapsSection gaps={dataGaps} />}
     </div>
   );
 }

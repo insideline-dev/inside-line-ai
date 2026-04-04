@@ -5,6 +5,7 @@ import { tool } from "ai";
 import type { AgentMail } from "agentmail";
 import { DrizzleService } from "../../database";
 import { startup } from "../startup/entities/startup.schema";
+import { startupEvaluation } from "../analysis/entities/analysis.schema";
 import { MatchService } from "../investor/match.service";
 import { DealPipelineService } from "../investor/deal-pipeline.service";
 import { ThesisService } from "../investor/thesis.service";
@@ -187,6 +188,150 @@ export class ClaraToolsService {
             return { message: `No accessible startup found matching "${name}".` };
           }
           return result;
+        },
+      }),
+
+      getStartupAnalysis: tool({
+        description:
+          "Get a specific analysis section for a startup by name (fuzzy search). Use this when asked about competitors, market, team, product, traction, financials, or any evaluation topic. Returns the detailed AI-generated analysis for that section only.",
+        inputSchema: z.object({
+          name: z.string().describe("Startup name to search for"),
+          section: z
+            .enum([
+              "summary",
+              "team",
+              "market",
+              "product",
+              "traction",
+              "business_model",
+              "gtm",
+              "financials",
+              "competitive_advantage",
+              "legal",
+              "deal_terms",
+              "exit_potential",
+            ])
+            .describe(
+              "Which analysis section to fetch. Use 'summary' for overview, 'competitive_advantage' for competitors, etc.",
+            ),
+        }),
+        execute: async ({ name, section }) => {
+          if (!actor.actorUserId) return { message: noAccount };
+          if (!this.isInvestor(actor)) return { message: notInvestor };
+
+          const target = await this.resolveStartupForActor({ actor, name });
+          if (!target) {
+            return { message: `No accessible startup found matching "${name}".` };
+          }
+
+          const [evaluation] = await this.drizzle.db
+            .select()
+            .from(startupEvaluation)
+            .where(eq(startupEvaluation.startupId, target.id))
+            .limit(1);
+
+          if (!evaluation) {
+            return {
+              startupName: target.name,
+              message: "Analysis has not been completed for this startup yet.",
+            };
+          }
+
+          const base = {
+            startupName: target.name,
+            overallScore: evaluation.overallScore,
+            section,
+          };
+
+          switch (section) {
+            case "summary":
+              return {
+                ...base,
+                executiveSummary: evaluation.executiveSummary,
+                keyStrengths: evaluation.keyStrengths,
+                keyRisks: evaluation.keyRisks,
+                recommendations: evaluation.recommendations,
+                sectionScores: evaluation.sectionScores,
+                confidenceScore: evaluation.confidenceScore,
+              };
+            case "team":
+              return {
+                ...base,
+                score: evaluation.teamScore,
+                data: evaluation.teamData,
+                founderMarketFit: evaluation.founderMarketFit,
+                teamComposition: evaluation.teamComposition,
+                teamMemberEvaluations: evaluation.teamMemberEvaluations,
+                executionRiskNotes: evaluation.executionRiskNotes,
+              };
+            case "market":
+              return {
+                ...base,
+                score: evaluation.marketScore,
+                data: evaluation.marketData,
+                tamValidation: evaluation.tamValidation,
+                marketCredibility: evaluation.marketCredibility,
+              };
+            case "product":
+              return {
+                ...base,
+                score: evaluation.productScore,
+                data: evaluation.productData,
+                productSummary: evaluation.productSummary,
+                extractedFeatures: evaluation.extractedFeatures,
+                extractedTechStack: evaluation.extractedTechStack,
+              };
+            case "traction":
+              return {
+                ...base,
+                score: evaluation.tractionScore,
+                data: evaluation.tractionData,
+                momentumScore: evaluation.momentumScore,
+                tractionCredibility: evaluation.tractionCredibility,
+              };
+            case "business_model":
+              return {
+                ...base,
+                score: evaluation.businessModelScore,
+                data: evaluation.businessModelData,
+              };
+            case "gtm":
+              return {
+                ...base,
+                score: evaluation.gtmScore,
+                data: evaluation.gtmData,
+              };
+            case "financials":
+              return {
+                ...base,
+                score: evaluation.financialsScore,
+                data: evaluation.financialsData,
+              };
+            case "competitive_advantage":
+              return {
+                ...base,
+                score: evaluation.competitiveAdvantageScore,
+                data: evaluation.competitiveAdvantageData,
+              };
+            case "legal":
+              return {
+                ...base,
+                score: evaluation.legalScore,
+                data: evaluation.legalData,
+              };
+            case "deal_terms":
+              return {
+                ...base,
+                score: evaluation.dealTermsScore,
+                data: evaluation.dealTermsData,
+              };
+            case "exit_potential":
+              return {
+                ...base,
+                score: evaluation.exitPotentialScore,
+                data: evaluation.exitPotentialData,
+              };
+          }
         },
       }),
 

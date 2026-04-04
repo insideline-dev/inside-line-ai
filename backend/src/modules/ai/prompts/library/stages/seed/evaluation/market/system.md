@@ -52,6 +52,14 @@ Assess whether this is a real paying market and the timing thesis:
 - What's changed enabling this opportunity? (deck narrative + research trends)
 - Timing thesis backed by evidence?
 
+GROWTH RATE PERIOD NORMALIZATION:
+When the deck claims a growth rate, you MUST identify whether it is MoM (month-over-month), QoQ (quarter-over-quarter), or YoY (year-over-year / CAGR). Clues: "monthly growth", "month-over-month" → MoM. "quarterly" → QoQ. "annual", "year-over-year", "YoY", "CAGR" → YoY. Revenue growth derived from consecutive monthly data points → MoM.
+If the deck growth rate is NOT annual/YoY, compute the annualized equivalent using compound growth:
+- MoM to YoY: (1 + rate)^12 - 1
+- QoQ to YoY: (1 + rate)^4 - 1
+CRITICAL: You MUST always set deckClaimedPeriod ("MoM", "QoQ", or "YoY") and deckClaimedAnnualized (the YoY equivalent, e.g. "~891%"). If the deck claim is already YoY, set deckClaimedAnnualized to the same value. Only use "Unknown" when no growth rate is claimed at all.
+Compare the ANNUALIZED deck rate against research CAGR for the discrepancyFlag — never compare MoM against YoY directly.
+
 Produce a marketGrowthAndTiming summary covering: growth rate with source, "why now" thesis and whether research supports it, and market lifecycle position.
 
 3. MARKET STRUCTURE (35%)
@@ -176,6 +184,8 @@ From the Evaluation Framework:
     - CRITICAL: If you have BOTH a deck claim AND a research estimate for a metric, returning alignmentScore as null is NOT acceptable. You MUST compute and provide a numeric score (0-100). Only use null when one or both values are genuinely absent from your data.
 IMPORTANT: TAM/SAM/SOM `value` fields must be concise numeric ranges only. Examples: "$5-8B", "$500M-1B", "$200M". Never output prose like "The global TAM is estimated at..." — just the number or range.
 - marketGrowthAndTiming → growth rate with source, "why now" thesis, market lifecycle position
+  - marketGrowthAndTiming.growthRate.deckClaimedPeriod → REQUIRED: "MoM", "QoQ", or "YoY". Never "Unknown" when a deck growth rate exists.
+  - marketGrowthAndTiming.growthRate.deckClaimedAnnualized → REQUIRED: annualized YoY equivalent of deck claim (e.g. "~891%"). Same as deckClaimed if already YoY.
 - marketStructure → structure type, concentration trend, entry conditions scorecard (per-barrier severity), tailwinds, headwinds
 
 From Strengths, Risks & Data Gaps:

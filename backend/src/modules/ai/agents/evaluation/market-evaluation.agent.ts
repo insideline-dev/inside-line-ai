@@ -100,6 +100,9 @@ export class MarketEvaluationAgent extends BaseEvaluationAgent<MarketEvaluation>
       claimedSAM,
       claimedSOM,
       claimedGrowthRate,
+      claimedGrowthRatePeriod:
+        (pipelineData.extraction.deckStructuredData as Record<string, Record<string, unknown>> | undefined)
+          ?.financials?.growthRatePeriod as string ?? "Not provided",
       targetMarketDescription: pipelineData.extraction.industry || "Not provided",
     };
   }
@@ -590,6 +593,8 @@ export class MarketEvaluationAgent extends BaseEvaluationAgent<MarketEvaluation>
         period: "Legacy output period not explicitly specified",
         source: normalizedSources[0] ?? "Legacy market output",
         deckClaimed: cagr,
+        deckClaimedPeriod: "Unknown",
+        deckClaimedAnnualized: "Unknown",
         discrepancyFlag: "none",
       },
       whyNow: {
@@ -809,6 +814,8 @@ export class MarketEvaluationAgent extends BaseEvaluationAgent<MarketEvaluation>
           period: this.extractPeriod(corpus) ?? "Unknown",
           source: sources[0] ?? "Extracted from narrative",
           deckClaimed: this.extractDeckGrowthClaim(corpus) ?? "Unknown",
+          deckClaimedPeriod: "Unknown",
+          deckClaimedAnnualized: "Unknown",
           discrepancyFlag: "unknown",
           trajectory,
         },

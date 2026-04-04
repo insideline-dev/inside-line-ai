@@ -31,6 +31,7 @@ import {
 } from "@/lib/auth";
 import { env } from "@/env";
 import { safeRedirect } from "@/lib/utils";
+import insideLineLogo from "@/assets/icon-insideline.svg";
 
 const magicLinkSchema = z.object({
   email: z.string().min(1, "Email is required").email("Invalid email address"),
@@ -335,11 +336,11 @@ function LoginPage() {
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
       <div className="mb-8 text-center">
-        <div className="flex flex-wrap items-center justify-center gap-1.5">
-          <span className="text-4xl font-bold tracking-tight text-foreground">
+        <div className="flex items-center justify-center gap-3">
+          <img src={insideLineLogo} alt="Inside Line" className="size-10 shrink-0" />
+          <span className="font-serif text-3xl font-normal tracking-tight text-foreground">
             Inside Line
           </span>
-          <span className="text-primary font-semibold text-2xl">.AI</span>
         </div>
         <p className="text-muted-foreground mt-2">
           AI-Powered Venture Decision Intelligence

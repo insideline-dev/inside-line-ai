@@ -38,6 +38,8 @@ interface SourcesTabContentProps {
   startup: Startup;
   evaluation: Evaluation | null;
   dataRoomDocuments?: DataRoomDocument[];
+  showAiAgents?: boolean;
+  showDatabaseRecords?: boolean;
 }
 
 interface DataRoomDocument {
@@ -303,6 +305,8 @@ export function SourcesTabContent({
   startup,
   evaluation,
   dataRoomDocuments = [],
+  showAiAgents = true,
+  showDatabaseRecords = true,
 }: SourcesTabContentProps) {
   const allSources = (evaluation?.sources as unknown as SourceLike[]) || [];
   const isDocumentSource = (source: SourceLike): boolean => {
@@ -526,61 +530,65 @@ export function SourcesTabContent({
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className={sectionTitleClass()}>
-            <Sparkles className="h-4 w-4 text-violet-500" />
-            AI Analysis Agents
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {aiAgentRows.map((row) => (
-            <div key={row.key} className="rounded-md bg-muted/25 p-3">
+      {showAiAgents && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className={sectionTitleClass()}>
+              <Sparkles className="h-4 w-4 text-violet-500" />
+              AI Analysis Agents
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {aiAgentRows.map((row) => (
+              <div key={row.key} className="rounded-md bg-muted/25 p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold">{row.label}</p>
+                    <p className="text-xs text-muted-foreground">{row.description}</p>
+                    <p className="mt-1 text-xs font-medium">
+                      {row.key === "synthesis" ? "Percentile" : "Score"}: {row.score}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {formatDate(evaluation?.updatedAt || evaluation?.createdAt)}
+                    </p>
+                  </div>
+                  <Badge variant="secondary" className="shrink-0 text-[11px]">
+                    {row.model}
+                  </Badge>
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {showDatabaseRecords && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className={sectionTitleClass()}>
+              <Database className="h-4 w-4 text-orange-500" />
+              Database Records
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="rounded-md bg-muted/25 p-3">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-sm font-semibold">{row.label}</p>
-                  <p className="text-xs text-muted-foreground">{row.description}</p>
-                  <p className="mt-1 text-xs font-medium">
-                    {row.key === "synthesis" ? "Percentile" : "Score"}: {row.score}
-                  </p>
+                  <p className="text-sm font-semibold">startups</p>
+                  <p className="text-xs text-muted-foreground">Retrieved startup record: {startup.name}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">ID: {startup.id}, Name: {startup.name}</p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {formatDate(evaluation?.updatedAt || evaluation?.createdAt)}
+                    {formatDate(startup.updatedAt || startup.createdAt)}
                   </p>
                 </div>
                 <Badge variant="secondary" className="shrink-0 text-[11px]">
-                  {row.model}
+                  Orchestrator
                 </Badge>
               </div>
             </div>
-          ))}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className={sectionTitleClass()}>
-            <Database className="h-4 w-4 text-orange-500" />
-            Database Records
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="rounded-md bg-muted/25 p-3">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold">startups</p>
-                <p className="text-xs text-muted-foreground">Retrieved startup record: {startup.name}</p>
-                <p className="mt-1 text-xs text-muted-foreground">ID: {startup.id}, Name: {startup.name}</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {formatDate(startup.updatedAt || startup.createdAt)}
-                </p>
-              </div>
-              <Badge variant="secondary" className="shrink-0 text-[11px]">
-                Orchestrator
-              </Badge>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

@@ -37,6 +37,7 @@ interface ProductTabContentProps {
   startup: Startup;
   evaluation: Evaluation | null;
   showScores?: boolean;
+  showDataGaps?: boolean;
   productWeight?: number;
 }
 
@@ -298,7 +299,7 @@ function MoatStageIndicator({ stage }: { stage: string }) {
 // Main Component
 // ---------------------------------------------------------------------------
 
-export function ProductTabContent({ startup, evaluation, showScores = true, productWeight }: ProductTabContentProps) {
+export function ProductTabContent({ startup, evaluation, showScores = true, showDataGaps = true, productWeight }: ProductTabContentProps) {
   const productData = (evaluation?.productData ?? {}) as Record<string, unknown>;
   const productOverview = (productData.productOverview ?? {}) as Record<string, unknown>;
   const compAdvData = (evaluation?.competitiveAdvantageData ?? {}) as Record<string, unknown>;
@@ -629,7 +630,7 @@ export function ProductTabContent({ startup, evaluation, showScores = true, prod
       {/* ================================================================= */}
       {/* Data Gaps                                                         */}
       {/* ================================================================= */}
-      <DataGapsSection gaps={dataGaps} />
+      {showDataGaps && <DataGapsSection gaps={dataGaps} />}
 
       {/* ================================================================= */}
       {/* Product Showcase (founder screenshots)                            */}

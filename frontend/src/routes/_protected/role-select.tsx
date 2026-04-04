@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Building2, TrendingUp, Loader2, ArrowRight, Binoculars } from "lucide-react";
 import { useSelectRole } from "@/lib/auth";
+import insideLineLogo from "@/assets/icon-insideline.svg";
 
 export const Route = createFileRoute("/_protected/role-select")({
   component: RoleSelectPage,
@@ -31,9 +32,9 @@ function RoleSelectPage() {
 
       <div className="relative w-full max-w-3xl space-y-10">
         <div className="text-center space-y-4">
-          <div className="flex flex-wrap items-center justify-center gap-1.5">
-            <span className="text-2xl font-bold tracking-tight">Inside Line</span>
-            <span className="text-primary font-semibold">.AI</span>
+          <div className="flex items-center justify-center gap-2.5">
+            <img src={insideLineLogo} alt="Inside Line" className="size-8 shrink-0" />
+            <span className="font-serif text-2xl font-normal tracking-tight">Inside Line</span>
           </div>
           <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">How will you use Inside Line?</h1>
           <p className="text-muted-foreground">Choose your role to get started</p>

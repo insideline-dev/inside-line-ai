@@ -265,7 +265,7 @@ export interface MarketSizing {
 }
 
 export interface MarketGrowthAndTiming {
-  growthRate: { cagr: string; period: string; source: string; deckClaimed: string; discrepancyFlag: boolean };
+  growthRate: { cagr: string; period: string; source: string; deckClaimed: string; deckClaimedPeriod?: string; deckClaimedAnnualized?: string; discrepancyFlag: boolean };
   whyNow: { thesis: string; supportedByResearch: boolean; evidence: string[] };
   timingAssessment: string;
   timingRationale: string;

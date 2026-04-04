@@ -11,6 +11,8 @@ Stage: {{stage}}
 Claimed TAM: {{claimedTAM}}
 Claimed SAM: {{claimedSAM}}
 Claimed Growth Rate: {{claimedGrowthRate}}
+Claimed Growth Rate Period (from deck extraction): {{claimedGrowthRatePeriod}}
+(You MUST identify the growth period — MoM, QoQ, or YoY — and normalize to annual/YoY for comparison with research CAGR)
 Target Market Description: {{targetMarketDescription}}
 
 Additional context from pitch materials:

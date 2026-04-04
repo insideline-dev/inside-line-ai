@@ -92,6 +92,8 @@ export function createMockEvaluationResult(
           period: "2024-2029",
           source: "IDC",
           deckClaimed: "20%",
+          deckClaimedPeriod: "YoY",
+          deckClaimedAnnualized: "20%",
           discrepancyFlag: "none",
           trajectory: "stable",
         },

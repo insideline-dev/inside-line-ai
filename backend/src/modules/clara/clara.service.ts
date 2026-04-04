@@ -409,6 +409,37 @@ export class ClaraService {
         }
         } // end else (noPitchDeck check)
       } else {
+        // Role gate: only investors and admins can use the agent loop.
+        // Unknown users (no account) are allowed through for submission discovery.
+        // Founders and scouts get a polite rejection.
+        if (
+          actorRole &&
+          actorRole !== "investor" &&
+          actorRole !== "admin"
+        ) {
+          intent = intentClassification.intent;
+          replyText = [
+            `Hi ${fromName ?? "there"},`,
+            "",
+            "Clara is currently available to investors and admins on the Inside Line platform. If you'd like to submit a startup for review, please forward your pitch deck PDF to this email address.",
+            "",
+            "Best regards,",
+            "Clara",
+          ].join("\n");
+
+          await this.conversationService.logMessage({
+            conversationId: conversation.id,
+            messageId,
+            direction: MessageDirection.INBOUND,
+            fromEmail,
+            subject: message.subject,
+            bodyText: message.text,
+            intent: intentClassification.intent,
+            intentConfidence: intentClassification.confidence,
+            attachments,
+            processed: true,
+          });
+        } else {
         intent = intentClassification.intent;
 
         await this.conversationService.logMessage({
@@ -568,6 +599,7 @@ export class ClaraService {
             ? null
             : copilotResult.pendingAction;
         }
+        } // end role-gated else
       }
 
       if (!agentRuntime.replyHandled) {

@@ -7,7 +7,6 @@ import { AnalysisProgressBar } from "@/components/AnalysisProgressBar";
 import {
   StartupHeader,
   SummaryCard,
-  InsightsTabContent,
   MarketTabContent,
   ProductTabContent,
   TeamTabContent,
@@ -19,10 +18,35 @@ import {
   useStartupControllerGetDataRoom,
 } from "@/api/generated/startup/startup";
 import { EditTeamSheet } from "@/components/startup/EditTeamSheet";
+import { formatIndustry, formatValuationLabel } from "@/lib/kpi-metrics";
 import type { Startup } from "@/types/startup";
 import type { Evaluation } from "@/types/evaluation";
 import { Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+function formatCompactCurrency(value?: number | null): string {
+  if (value == null) return "N/A";
+  if (value >= 1_000_000_000) return `$${(value / 1_000_000_000).toFixed(1)}B`;
+  if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `$${Math.round(value / 1_000)}K`;
+  return `$${value}`;
+}
+
+function formatStage(value?: string | null): string {
+  if (!value) return "N/A";
+  return value
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function formatRaiseType(value?: string | null): string {
+  if (!value) return "N/A";
+  return value
+    .split("_")
+    .map((part) => part.toUpperCase() === "SAFE" ? "SAFE" : part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
 
 export const Route = createFileRoute("/_protected/founder/startup/$id")({
   component: StartupDetail,
@@ -43,7 +67,6 @@ interface DataRoomDocument {
 
 const FOUNDER_STARTUP_SECTIONS = [
   { id: "summary", label: "Summary" },
-  { id: "insights", label: "Insights" },
   { id: "recommendations", label: "Recommendations" },
   { id: "team", label: "Team" },
   { id: "product", label: "Product" },
@@ -261,7 +284,34 @@ function StartupDetail() {
             className="scroll-mt-28 space-y-4"
             data-testid="section-summary"
           >
-            <h2 className="text-2xl font-semibold tracking-tight">Summary</h2>
+            {/* Startup Info Card */}
+            <Card>
+              <CardContent className="py-4">
+                <div className="grid grid-cols-2 gap-x-5 gap-y-3 sm:grid-cols-4">
+                  {[
+                    { label: "Stage", value: formatStage(startup.stage) },
+                    { label: "Sector", value: startup.sectorIndustryGroup || "N/A" },
+                    { label: "Industry", value: formatIndustry(startup.sectorIndustry || startup.industry) },
+                    { label: "Location", value: startup.location || "N/A" },
+                    { label: "Round", value: formatCompactCurrency(startup.fundingTarget), accent: true },
+                    { label: "Valuation", value: `${formatCompactCurrency(startup.valuation)} ${formatValuationLabel(startup.valuationType)}`.trim(), accent: true },
+                    { label: "Raise", value: formatRaiseType(startup.raiseType) },
+                    { label: "Lead", value: startup.leadInvestorName || "No" },
+                  ].map((item) => (
+                    <div key={item.label}>
+                      <p className="text-[11px] text-muted-foreground">{item.label}</p>
+                      <p className={cn(
+                        "text-sm font-medium text-pretty",
+                        "accent" in item && item.accent && "text-primary",
+                      )}>
+                        {item.value}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
             {evaluation ? (
               <SummaryCard
                 startup={startup}
@@ -276,21 +326,6 @@ function StartupDetail() {
                 startup.status === "analyzing"
                   ? "Your startup is currently being analyzed. This may take a few minutes."
                   : "Analysis has not been completed yet.",
-              )
-            )}
-          </section>
-
-          <section
-            id="insights"
-            className="scroll-mt-28 space-y-4"
-            data-testid="section-insights"
-          >
-            <h2 className="text-2xl font-semibold tracking-tight">Insights</h2>
-            {evaluation ? (
-              <InsightsTabContent evaluation={evaluation} />
-            ) : (
-              renderPendingCard(
-                "Insights will be available once the analysis is complete.",
               )
             )}
           </section>
@@ -328,6 +363,8 @@ function StartupDetail() {
                 teamMembers={teamMembers}
                 teamWeight={undefined}
                 companyName={startup.name}
+                showStrengthsAndRisks={false}
+                showDataGaps={false}
               />
             ) : (
               renderPendingCard(
@@ -347,6 +384,7 @@ function StartupDetail() {
                 startup={startup}
                 evaluation={evaluation}
                 productWeight={undefined}
+                showDataGaps={false}
               />
             ) : (
               renderPendingCard(
@@ -362,7 +400,11 @@ function StartupDetail() {
           >
             <h2 className="text-2xl font-semibold tracking-tight">Market</h2>
             {evaluation ? (
-              <MarketTabContent evaluation={evaluation} />
+              <MarketTabContent
+                evaluation={evaluation}
+                showKeyFindingsAndRisks={false}
+                showDataGaps={false}
+              />
             ) : (
               renderPendingCard(
                 "Market analysis will be available once the evaluation is complete.",
@@ -380,6 +422,8 @@ function StartupDetail() {
               startup={startup}
               evaluation={evaluation ?? null}
               dataRoomDocuments={dataRoomDocuments}
+              showAiAgents={false}
+              showDatabaseRecords={false}
             />
           </section>
         </div>

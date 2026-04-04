@@ -52,6 +52,14 @@ Assess the timing thesis and growth trajectory:
 - What is the market growth rate (CAGR)? Source and date?
 - Is growth accelerating, stable, or decelerating?
 
+GROWTH RATE PERIOD NORMALIZATION:
+When the deck claims a growth rate, you MUST identify whether it is MoM (month-over-month), QoQ (quarter-over-quarter), or YoY (year-over-year / CAGR). Clues: "monthly growth", "month-over-month" → MoM. "quarterly" → QoQ. "annual", "year-over-year", "YoY", "CAGR" → YoY. Revenue growth derived from consecutive monthly data points → MoM.
+If the deck growth rate is NOT annual/YoY, compute the annualized equivalent using compound growth:
+- MoM to YoY: (1 + rate)^12 - 1
+- QoQ to YoY: (1 + rate)^4 - 1
+CRITICAL: You MUST always set deckClaimedPeriod ("MoM", "QoQ", or "YoY") and deckClaimedAnnualized (the YoY equivalent, e.g. "~891%"). If the deck claim is already YoY, set deckClaimedAnnualized to the same value. Only use "Unknown" when no growth rate is claimed at all.
+Compare the ANNUALIZED deck rate against research CAGR for the discrepancyFlag — never compare MoM against YoY directly.
+
 Produce a marketGrowthAndTiming summary covering: growth rate with source, "why now" thesis and whether research supports it, and market lifecycle position.
 
 3. MARKET TIMING & STRUCTURE (25%)
@@ -173,6 +181,8 @@ From the Evaluation Framework:
   - marketSizing.deckVsResearch.notes → One-sentence explanation of the alignment or discrepancy between deck claims and research findings
 IMPORTANT: TAM/SAM/SOM `value` fields must be concise numeric ranges only. Examples: "$5-8B", "$500M-1B", "$200M". Never output prose like "The global TAM is estimated at..." — just the number or range.
 - marketGrowthAndTiming → growth rate with source, "why now" thesis, market lifecycle position
+  - marketGrowthAndTiming.growthRate.deckClaimedPeriod → REQUIRED: "MoM", "QoQ", or "YoY". Never "Unknown" when a deck growth rate exists.
+  - marketGrowthAndTiming.growthRate.deckClaimedAnnualized → REQUIRED: annualized YoY equivalent of deck claim (e.g. "~891%"). Same as deckClaimed if already YoY.
 - marketStructure → structure type, concentration trend, entry conditions scorecard (per-barrier severity), tailwinds, headwinds
 
 From Strengths, Risks & Data Gaps:

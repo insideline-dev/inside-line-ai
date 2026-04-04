@@ -46,19 +46,30 @@ export interface FilterState {
   industries: string[];
   regions: string[];
   scoreRange: [number, number];
+  source?: "all" | "my_submissions" | "matched";
 }
 
 interface SearchAndFiltersProps {
   filters: FilterState;
   onFiltersChange: (filters: FilterState) => void;
   showScoreFilter?: boolean;
+  hideSearch?: boolean;
+  showSourceFilter?: boolean;
   placeholder?: string;
 }
+
+const SOURCE_OPTIONS = [
+  { value: "all" as const, label: "All Startups" },
+  { value: "my_submissions" as const, label: "My Submissions" },
+  { value: "matched" as const, label: "Matched" },
+];
 
 export function SearchAndFilters({
   filters,
   onFiltersChange,
   showScoreFilter = true,
+  hideSearch = false,
+  showSourceFilter = false,
   placeholder = "Search by name or description..."
 }: SearchAndFiltersProps) {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -69,6 +80,7 @@ export function SearchAndFilters({
     if (filters.industries.length > 0) count++;
     if (filters.regions.length > 0) count++;
     if (showScoreFilter && (filters.scoreRange[0] > 0 || filters.scoreRange[1] < 100)) count++;
+    if (filters.source && filters.source !== "all") count++;
     return count;
   }, [filters, showScoreFilter]);
 
@@ -95,6 +107,7 @@ export function SearchAndFilters({
       industries: [],
       regions: [],
       scoreRange: [0, 100],
+      source: "all",
     });
   };
 
@@ -103,27 +116,29 @@ export function SearchAndFilters({
   return (
     <div className="space-y-3">
       <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder={placeholder}
-            value={filters.search}
-            onChange={(e) => handleSearchChange(e.target.value)}
-            className="pl-10"
-            data-testid="input-search"
-          />
-          {filters.search && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
-              onClick={() => handleSearchChange("")}
-              data-testid="button-clear-search"
-            >
-              <X className="w-3 h-3" />
-            </Button>
-          )}
-        </div>
+        {!hideSearch && (
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder={placeholder}
+              value={filters.search}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              className="pl-10"
+              data-testid="input-search"
+            />
+            {filters.search && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
+                onClick={() => handleSearchChange("")}
+                data-testid="button-clear-search"
+              >
+                <X className="w-3 h-3" />
+              </Button>
+            )}
+          </div>
+        )}
 
         <Popover open={isFilterOpen} onOpenChange={setIsFilterOpen}>
           <PopoverTrigger asChild>
@@ -157,6 +172,24 @@ export function SearchAndFilters({
                   </Button>
                 )}
               </div>
+
+              {showSourceFilter && (
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Source</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {SOURCE_OPTIONS.map((option) => (
+                      <Badge
+                        key={option.value}
+                        variant={(filters.source ?? "all") === option.value ? "default" : "outline"}
+                        className="cursor-pointer"
+                        onClick={() => onFiltersChange({ ...filters, source: option.value })}
+                      >
+                        {option.label}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="space-y-2">
                 <Label className="text-sm font-medium">Stage</Label>
@@ -275,6 +308,15 @@ export function SearchAndFilters({
               />
             </Badge>
           ))}
+          {filters.source && filters.source !== "all" && (
+            <Badge variant="secondary" className="gap-1">
+              {SOURCE_OPTIONS.find(o => o.value === filters.source)?.label}
+              <X
+                className="w-3 h-3 cursor-pointer"
+                onClick={() => onFiltersChange({ ...filters, source: "all" })}
+              />
+            </Badge>
+          )}
           {showScoreFilter && (filters.scoreRange[0] > 0 || filters.scoreRange[1] < 100) && (
             <Badge variant="secondary" className="gap-1">
               Score: {filters.scoreRange[0]}-{filters.scoreRange[1]}
@@ -350,6 +392,7 @@ export const defaultFilters: FilterState = {
   industries: [],
   regions: [],
   scoreRange: [0, 100],
+  source: "all",
 };
 
 const REGIONS_EXPORT = REGIONS;

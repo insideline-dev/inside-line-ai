@@ -10,6 +10,7 @@ const DeckFinancialsSchema = z.preprocess(
     mrr: nullableString,
     revenue: nullableString,
     growthRate: nullableString,
+    growthRatePeriod: nullableString,
     grossMargin: nullableString,
     burnRate: nullableString,
     runway: nullableString,

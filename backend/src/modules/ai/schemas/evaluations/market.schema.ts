@@ -160,6 +160,8 @@ const GrowthRateSchema = z.object({
   period: requiredStringFromNull("Unknown"),
   source: requiredStringFromNull("Unknown"),
   deckClaimed: requiredStringFromNull("Unknown"),
+  deckClaimedPeriod: requiredStringFromNull("Unknown"),
+  deckClaimedAnnualized: requiredStringFromNull("Unknown"),
   discrepancyFlag: requiredStringFromNull("unknown"),
   trajectory: enumWithFallback(["accelerating", "stable", "decelerating"], "stable"),
 });

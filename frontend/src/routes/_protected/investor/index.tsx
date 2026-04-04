@@ -289,8 +289,8 @@ function applyStatusOverrides(
   statusOverrides: Record<string, Status>,
 ): PipelineCardItem[] {
   return items.map((item) => {
-    if (!item.matchId) return item;
-    const overriddenStatus = statusOverrides[item.matchId];
+    const key = item.matchId ?? item.startupId;
+    const overriddenStatus = statusOverrides[key];
     return overriddenStatus ? { ...item, pipelineStatus: overriddenStatus } : item;
   });
 }
@@ -465,7 +465,7 @@ function CardsView({
   onToggleBookmark,
 }: {
   items: PipelineCardItem[];
-  onStatusChange: (matchId: string, status: Status) => void;
+  onStatusChange: (dragId: string, status: Status) => void;
   onToggleBookmark: (startupId: string) => void;
 }) {
   if (items.length === 0) {
@@ -487,7 +487,7 @@ function CardsView({
       {items.map((item) => {
         const key = item.matchId ?? item.startupId;
 
-        if (item.isAnalyzing || !item.matchId) {
+        if (item.isAnalyzing) {
           return <PipelineCard key={key} item={item} onToggleBookmark={onToggleBookmark} />;
         }
 
@@ -507,7 +507,7 @@ function CardsView({
                   <ContextMenuItem
                     key={status}
                     disabled={isCurrent}
-                    onClick={() => onStatusChange(item.matchId!, status)}
+                    onClick={() => onStatusChange(item.matchId ?? item.startupId, status)}
                     className="gap-2"
                   >
                     <Icon className={`h-4 w-4 ${cfg.iconClass}`} />
@@ -595,8 +595,8 @@ function KanbanColumn({
   function handleDrop(e: DragEvent) {
     e.preventDefault();
     setDragOver(false);
-    const matchId = e.dataTransfer.getData("text/plain");
-    if (matchId) onDrop(matchId, status);
+    const dragId = e.dataTransfer.getData("text/plain");
+    if (dragId) onDrop(dragId, status);
   }
 
   return (
@@ -650,26 +650,25 @@ function KanbanCard({
   onDragEnd: () => void;
   onToggleBookmark: (startupId: string) => void;
 }) {
+  const dragId = item.matchId ?? item.startupId;
+
   function handleDragStart(e: DragEvent) {
-    if (!item.matchId) return;
-    e.dataTransfer.setData("text/plain", item.matchId);
+    e.dataTransfer.setData("text/plain", dragId);
     e.dataTransfer.effectAllowed = "move";
-    onDragStart(item.matchId);
+    onDragStart(dragId);
   }
 
   return (
     <Card
-      draggable={!item.isAnalyzing && !!item.matchId}
+      draggable={!item.isAnalyzing}
       onDragStart={handleDragStart}
       onDragEnd={onDragEnd}
       className={
         item.isAnalyzing
           ? "opacity-75"
-          : item.matchId && item.matchId === draggingMatchId
+          : dragId === draggingMatchId
             ? "cursor-grabbing opacity-60"
-            : item.matchId
-              ? "cursor-grab active:cursor-grabbing"
-              : ""
+            : "cursor-grab active:cursor-grabbing"
       }
     >
       <CardContent className="p-3 space-y-2">
@@ -1019,33 +1018,40 @@ function InvestorDashboard() {
   }, [allItems, filters.source]);
 
   // ─ Handlers
-  const handleDrop = (matchId: string, newStatus: Status) => {
-    const currentItem = allItems.find((item) => item.matchId === matchId);
+  const handleDrop = (dragId: string, newStatus: Status) => {
+    const currentItem = allItems.find((item) => (item.matchId ?? item.startupId) === dragId);
     if (!currentItem || currentItem.pipelineStatus === newStatus) {
       setDraggingMatchId(null);
       return;
     }
 
-    setStatusOverrides((current) => ({ ...current, [matchId]: newStatus }));
+    const itemKey = currentItem.matchId ?? currentItem.startupId;
+    setStatusOverrides((current) => ({ ...current, [itemKey]: newStatus }));
+
+    // Private items (no matchId) — visual move only, no API call
+    if (!currentItem.matchId) {
+      setDraggingMatchId(null);
+      return;
+    }
 
     if (newStatus === "passed") {
-      setPassDialog({ matchId });
+      setPassDialog({ matchId: currentItem.matchId });
       setDraggingMatchId(null);
       return;
     }
     if (newStatus === "closed") {
-      setCloseDialog({ matchId });
+      setCloseDialog({ matchId: currentItem.matchId });
       setDraggingMatchId(null);
       return;
     }
 
     updateStatus.mutate(
-      { matchId, data: { status: newStatus } },
+      { matchId: currentItem.matchId, data: { status: newStatus } },
       {
         onError: () => {
           setStatusOverrides((current) => {
             const next = { ...current };
-            delete next[matchId];
+            delete next[itemKey];
             return next;
           });
         },

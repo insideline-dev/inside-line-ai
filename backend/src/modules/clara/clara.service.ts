@@ -320,7 +320,7 @@ export class ClaraService {
 
         await this.conversationService.updateLastIntent(conversation.id, intent);
 
-        const extractedName = intentClassification.extractedCompanyName;
+        const extractedName = intentClassification.extractedCompanyName ?? undefined;
 
         const result = await this.submissionService.handleSubmission(
           ctx,

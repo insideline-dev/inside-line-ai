@@ -665,9 +665,11 @@ function KanbanCard({
       className={
         item.isAnalyzing
           ? "opacity-75"
-          : item.matchId === draggingMatchId
+          : item.matchId && item.matchId === draggingMatchId
             ? "cursor-grabbing opacity-60"
-            : "cursor-grab active:cursor-grabbing"
+            : item.matchId
+              ? "cursor-grab active:cursor-grabbing"
+              : ""
       }
     >
       <CardContent className="p-3 space-y-2">
@@ -685,6 +687,7 @@ function KanbanCard({
               {item.matchId && (
                 <button
                   type="button"
+                  draggable={false}
                   className="p-0.5"
                   onClick={(e) => {
                     e.stopPropagation();

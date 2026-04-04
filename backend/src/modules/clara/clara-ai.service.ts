@@ -320,7 +320,7 @@ export class ClaraAiService {
         "- If the user doesn't specify a startup name, check conversation memory for a linked startup or ask which startup they mean.",
         "- Prefer answering from the platform data and tools, not generic advice.",
         "- Sign off as Clara.",
-        "- Format responses for email (plain text, no markdown).",
+        "- Format responses using markdown (bold, lists, headings) for readability. The response will be rendered as HTML in email.",
         "- Never fabricate data. If a tool returns no results, say so.",
       ].join("\n");
 

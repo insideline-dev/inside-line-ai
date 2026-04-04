@@ -1,6 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { eq } from "drizzle-orm";
+import { marked } from "marked";
 import { RedisFallbackClient } from "../ai/services/redis-fallback.service";
 import type { AgentMail } from "agentmail";
 import { DrizzleService } from "../../database";
@@ -610,6 +611,7 @@ export class ClaraService {
             inReplyToMessageId: messageId,
           },
           text: replyText,
+          html: this.toHtml(replyText),
         });
       }
 
@@ -1271,6 +1273,7 @@ export class ClaraService {
           inReplyToMessageId: replyTarget.messageId,
         },
         text: params.text,
+        html: this.toHtml(params.text),
         attachments: params.attachments,
       });
       return;
@@ -1289,8 +1292,13 @@ export class ClaraService {
         subject: params.subject,
       },
       text: params.text,
+      html: this.toHtml(params.text),
       attachments: params.attachments,
     });
+  }
+
+  private toHtml(text: string): string {
+    return marked.parse(text, { async: false }) as string;
   }
 
   private getConversationReplyTarget(

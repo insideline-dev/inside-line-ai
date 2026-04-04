@@ -147,7 +147,7 @@ export class ClaraToolsService {
       getMyNotes: tool({
         description: "Get the investor's notes, optionally filtered by startup name",
         inputSchema: z.object({
-          startupName: z.string().optional().describe("Filter notes by startup name"),
+          startupName: z.string().nullable().optional().describe("Filter notes by startup name"),
         }),
         execute: async ({ startupName }) => {
           if (!actor.actorUserId) return { message: noAccount };
@@ -360,14 +360,14 @@ export class ClaraToolsService {
         description:
           "Get detailed analysis pipeline progress for a startup by name or startup ID. Returns stages, status, and completion progress.",
         inputSchema: z.object({
-          startupId: z.string().optional(),
-          name: z.string().optional(),
+          startupId: z.string().nullable().optional(),
+          name: z.string().nullable().optional(),
         }),
         execute: async ({ startupId, name }) => {
           if (!actor.actorUserId) return { message: noAccount };
           const target = await this.resolveStartupForActor({
             actor,
-            startupId,
+            startupId: startupId ?? undefined,
             name: name ?? undefined,
           });
           if (!target) {
@@ -459,15 +459,15 @@ export class ClaraToolsService {
         description:
           "Email the analysis report PDF as an attachment in this email thread for the linked or requested startup.",
         inputSchema: z.object({
-          startupId: z.string().optional(),
-          startupName: z.string().optional(),
+          startupId: z.string().nullable().optional(),
+          startupName: z.string().nullable().optional(),
         }),
         execute: async ({ startupId, startupName }) => {
           return this.sendStartupPdfAttachment({
             actor,
             kind: "report",
-            startupId,
-            startupName,
+            startupId: startupId ?? undefined,
+            startupName: startupName ?? undefined,
           });
         },
       }),
@@ -476,15 +476,15 @@ export class ClaraToolsService {
         description:
           "Email the investment memo PDF as an attachment in this email thread for the linked or requested startup.",
         inputSchema: z.object({
-          startupId: z.string().optional(),
-          startupName: z.string().optional(),
+          startupId: z.string().nullable().optional(),
+          startupName: z.string().nullable().optional(),
         }),
         execute: async ({ startupId, startupName }) => {
           return this.sendStartupPdfAttachment({
             actor,
             kind: "memo",
-            startupId,
-            startupName,
+            startupId: startupId ?? undefined,
+            startupName: startupName ?? undefined,
           });
         },
       }),
@@ -493,10 +493,10 @@ export class ClaraToolsService {
         description:
           "Prepare a new investor note for a startup. This only proposes the change and requires a confirmation reply before execution.",
         inputSchema: z.object({
-          startupName: z.string().optional(),
+          startupName: z.string().nullable().optional(),
           content: z.string().min(1).max(5000),
-          category: z.string().max(100).optional(),
-          isPinned: z.boolean().optional(),
+          category: z.string().max(100).nullable().optional(),
+          isPinned: z.boolean().nullable().optional(),
         }),
         execute: async ({ startupName, content, category, isPinned }) => {
           if (!actor.actorUserId) return { message: noAccount };
@@ -535,9 +535,9 @@ export class ClaraToolsService {
           "Prepare an update to an existing investor note by note ID. This only proposes the change and requires confirmation.",
         inputSchema: z.object({
           noteId: z.string().uuid(),
-          content: z.string().min(1).max(5000).optional(),
-          category: z.string().max(100).optional(),
-          isPinned: z.boolean().optional(),
+          content: z.string().min(1).max(5000).nullable().optional(),
+          category: z.string().max(100).nullable().optional(),
+          isPinned: z.boolean().nullable().optional(),
         }),
         execute: async ({ noteId, content, category, isPinned }) => {
           if (!actor.actorUserId) return { message: noAccount };
@@ -573,7 +573,7 @@ export class ClaraToolsService {
         description:
           "Prepare a save/unsave toggle for an investor match by startup name. This only proposes the change and requires confirmation.",
         inputSchema: z.object({
-          startupName: z.string().optional(),
+          startupName: z.string().nullable().optional(),
         }),
         execute: async ({ startupName }) => {
           if (!actor.actorUserId) return { message: noAccount };
@@ -608,15 +608,15 @@ export class ClaraToolsService {
         description:
           "Prepare an investor match status update for a startup. This only proposes the change and requires confirmation.",
         inputSchema: z.object({
-          startupName: z.string().optional(),
+          startupName: z.string().nullable().optional(),
           status: z.enum(["new", "reviewing", "engaged", "closed", "passed"]),
-          passReason: z.string().max(500).optional(),
-          passNotes: z.string().max(5000).optional(),
-          investmentAmount: z.number().positive().optional(),
-          investmentCurrency: z.string().max(10).optional(),
-          investmentDate: z.string().datetime().optional(),
-          investmentNotes: z.string().max(5000).optional(),
-          meetingRequested: z.boolean().optional(),
+          passReason: z.string().max(500).nullable().optional(),
+          passNotes: z.string().max(5000).nullable().optional(),
+          investmentAmount: z.number().positive().nullable().optional(),
+          investmentCurrency: z.string().max(10).nullable().optional(),
+          investmentDate: z.string().datetime().nullable().optional(),
+          investmentNotes: z.string().max(5000).nullable().optional(),
+          meetingRequested: z.boolean().nullable().optional(),
         }),
         execute: async ({ startupName, ...statusUpdate }) => {
           if (!actor.actorUserId) return { message: noAccount };
@@ -660,8 +660,8 @@ export class ClaraToolsService {
         description:
           "Prepare an admin-only startup reanalysis. This only proposes the change and requires confirmation.",
         inputSchema: z.object({
-          startupName: z.string().optional(),
-          startupId: z.string().optional(),
+          startupName: z.string().nullable().optional(),
+          startupId: z.string().nullable().optional(),
         }),
         execute: async ({ startupName, startupId }) => {
           if (!actor.actorUserId) return { message: noAccount };
@@ -669,7 +669,7 @@ export class ClaraToolsService {
 
           const target = await this.resolveStartupForActor({
             actor,
-            startupId,
+            startupId: startupId ?? undefined,
             name: startupName ?? undefined,
           });
           if (!target) {

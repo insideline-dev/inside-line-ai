@@ -25,7 +25,7 @@ export interface IntentClassification {
   intent: ClaraIntent;
   confidence: number;
   reasoning: string;
-  extractedCompanyName?: string;
+  extractedCompanyName?: string | null;
 }
 
 export interface AttachmentMeta {

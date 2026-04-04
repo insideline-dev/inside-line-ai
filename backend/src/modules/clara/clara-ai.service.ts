@@ -15,7 +15,7 @@ const IntentClassificationSchema = z.object({
   intent: z.nativeEnum(ClaraIntent),
   confidence: z.number().min(0).max(1),
   reasoning: z.string(),
-  extractedCompanyName: z.string().optional(),
+  extractedCompanyName: z.string().nullable().optional(),
 });
 
 @Injectable()

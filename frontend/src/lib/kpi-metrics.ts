@@ -160,14 +160,24 @@ export function extractKpiMetrics(
 
   // --- Growth Rate: deck first → deckClaimed → researched CAGR ---
   const deckGrowth = safeStr(deckFinancials.growthRate);
+  const deckGrowthPeriod = safeStr(deckFinancials.growthRatePeriod);
   const deckClaimed = safeStr(growthRate.deckClaimed);
+  const deckClaimedPeriod = safeStr(growthRate.deckClaimedPeriod);
   const cagrStr = safeStr(growthRate.cagr);
   const growthPeriod = safeStr(growthRate.period);
   let growthRateVal = DASH;
   if (deckGrowth && deckGrowth !== "Unknown") {
-    growthRateVal = extractShortValue(deckGrowth);
+    const shortVal = extractShortValue(deckGrowth);
+    const period = deckGrowthPeriod && deckGrowthPeriod !== "Unknown" ? deckGrowthPeriod : null;
+    growthRateVal = period && !shortVal.toLowerCase().includes(period.toLowerCase())
+      ? `${shortVal} ${period}`
+      : shortVal;
   } else if (deckClaimed && deckClaimed !== "Unknown") {
-    growthRateVal = extractShortValue(deckClaimed);
+    const shortVal = extractShortValue(deckClaimed);
+    const period = deckClaimedPeriod && deckClaimedPeriod !== "Unknown" ? deckClaimedPeriod : null;
+    growthRateVal = period && !shortVal.toLowerCase().includes(period.toLowerCase())
+      ? `${shortVal} ${period}`
+      : shortVal;
   } else if (cagrStr && cagrStr !== "Unknown") {
     const cagrDisplay = extractShortValue(cagrStr);
     growthRateVal = growthPeriod && growthPeriod !== "Unknown"

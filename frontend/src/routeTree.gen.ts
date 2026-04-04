@@ -36,7 +36,6 @@ import { Route as ProtectedInvestorSubmitRouteImport } from './routes/_protected
 import { Route as ProtectedInvestorScoringRouteImport } from './routes/_protected/investor/scoring'
 import { Route as ProtectedInvestorPortfolioRouteImport } from './routes/_protected/investor/portfolio'
 import { Route as ProtectedInvestorPortalRouteImport } from './routes/_protected/investor/portal'
-import { Route as ProtectedInvestorPipelineRouteImport } from './routes/_protected/investor/pipeline'
 import { Route as ProtectedInvestorNotesRouteImport } from './routes/_protected/investor/notes'
 import { Route as ProtectedInvestorMessagingRouteImport } from './routes/_protected/investor/messaging'
 import { Route as ProtectedFounderSubmitRouteImport } from './routes/_protected/founder/submit'
@@ -195,12 +194,6 @@ const ProtectedInvestorPortalRoute = ProtectedInvestorPortalRouteImport.update({
   path: '/portal',
   getParentRoute: () => ProtectedInvestorRoute,
 } as any)
-const ProtectedInvestorPipelineRoute =
-  ProtectedInvestorPipelineRouteImport.update({
-    id: '/pipeline',
-    path: '/pipeline',
-    getParentRoute: () => ProtectedInvestorRoute,
-  } as any)
 const ProtectedInvestorNotesRoute = ProtectedInvestorNotesRouteImport.update({
   id: '/notes',
   path: '/notes',
@@ -333,7 +326,6 @@ export interface FileRoutesByFullPath {
   '/founder/submit': typeof ProtectedFounderSubmitRoute
   '/investor/messaging': typeof ProtectedInvestorMessagingRoute
   '/investor/notes': typeof ProtectedInvestorNotesRoute
-  '/investor/pipeline': typeof ProtectedInvestorPipelineRoute
   '/investor/portal': typeof ProtectedInvestorPortalRoute
   '/investor/portfolio': typeof ProtectedInvestorPortfolioRoute
   '/investor/scoring': typeof ProtectedInvestorScoringRoute
@@ -377,7 +369,6 @@ export interface FileRoutesByTo {
   '/founder/submit': typeof ProtectedFounderSubmitRoute
   '/investor/messaging': typeof ProtectedInvestorMessagingRoute
   '/investor/notes': typeof ProtectedInvestorNotesRoute
-  '/investor/pipeline': typeof ProtectedInvestorPipelineRoute
   '/investor/portal': typeof ProtectedInvestorPortalRoute
   '/investor/portfolio': typeof ProtectedInvestorPortfolioRoute
   '/investor/scoring': typeof ProtectedInvestorScoringRoute
@@ -427,7 +418,6 @@ export interface FileRoutesById {
   '/_protected/founder/submit': typeof ProtectedFounderSubmitRoute
   '/_protected/investor/messaging': typeof ProtectedInvestorMessagingRoute
   '/_protected/investor/notes': typeof ProtectedInvestorNotesRoute
-  '/_protected/investor/pipeline': typeof ProtectedInvestorPipelineRoute
   '/_protected/investor/portal': typeof ProtectedInvestorPortalRoute
   '/_protected/investor/portfolio': typeof ProtectedInvestorPortfolioRoute
   '/_protected/investor/scoring': typeof ProtectedInvestorScoringRoute
@@ -477,7 +467,6 @@ export interface FileRouteTypes {
     | '/founder/submit'
     | '/investor/messaging'
     | '/investor/notes'
-    | '/investor/pipeline'
     | '/investor/portal'
     | '/investor/portfolio'
     | '/investor/scoring'
@@ -521,7 +510,6 @@ export interface FileRouteTypes {
     | '/founder/submit'
     | '/investor/messaging'
     | '/investor/notes'
-    | '/investor/pipeline'
     | '/investor/portal'
     | '/investor/portfolio'
     | '/investor/scoring'
@@ -570,7 +558,6 @@ export interface FileRouteTypes {
     | '/_protected/founder/submit'
     | '/_protected/investor/messaging'
     | '/_protected/investor/notes'
-    | '/_protected/investor/pipeline'
     | '/_protected/investor/portal'
     | '/_protected/investor/portfolio'
     | '/_protected/investor/scoring'
@@ -792,13 +779,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProtectedInvestorPortalRouteImport
       parentRoute: typeof ProtectedInvestorRoute
     }
-    '/_protected/investor/pipeline': {
-      id: '/_protected/investor/pipeline'
-      path: '/pipeline'
-      fullPath: '/investor/pipeline'
-      preLoaderRoute: typeof ProtectedInvestorPipelineRouteImport
-      parentRoute: typeof ProtectedInvestorRoute
-    }
     '/_protected/investor/notes': {
       id: '/_protected/investor/notes'
       path: '/notes'
@@ -991,7 +971,6 @@ const ProtectedFounderRouteWithChildren =
 interface ProtectedInvestorRouteChildren {
   ProtectedInvestorMessagingRoute: typeof ProtectedInvestorMessagingRoute
   ProtectedInvestorNotesRoute: typeof ProtectedInvestorNotesRoute
-  ProtectedInvestorPipelineRoute: typeof ProtectedInvestorPipelineRoute
   ProtectedInvestorPortalRoute: typeof ProtectedInvestorPortalRoute
   ProtectedInvestorPortfolioRoute: typeof ProtectedInvestorPortfolioRoute
   ProtectedInvestorScoringRoute: typeof ProtectedInvestorScoringRoute
@@ -1004,7 +983,6 @@ interface ProtectedInvestorRouteChildren {
 const ProtectedInvestorRouteChildren: ProtectedInvestorRouteChildren = {
   ProtectedInvestorMessagingRoute: ProtectedInvestorMessagingRoute,
   ProtectedInvestorNotesRoute: ProtectedInvestorNotesRoute,
-  ProtectedInvestorPipelineRoute: ProtectedInvestorPipelineRoute,
   ProtectedInvestorPortalRoute: ProtectedInvestorPortalRoute,
   ProtectedInvestorPortfolioRoute: ProtectedInvestorPortfolioRoute,
   ProtectedInvestorScoringRoute: ProtectedInvestorScoringRoute,

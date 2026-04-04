@@ -298,6 +298,8 @@ export class ClaraAiService {
         "- Their deal pipeline status",
         "- Detailed startup information (fuzzy name search)",
         "- Quick startup status checks",
+        "- Detailed startup analysis sections (team, market, product, traction, business model, GTM, financials, competitive advantage, legal, deal terms, exit potential)",
+        "- Executive summary with key strengths, risks, and recommendations",
         "- Their investment thesis",
         "- Their notes on startups",
         "- Their portfolio companies",
@@ -314,6 +316,8 @@ export class ClaraAiService {
         "- If asked about submitting a startup, explain they can forward a pitch deck PDF.",
         "- If asked for a memo/report PDF and a linked startup exists, use the PDF email tool instead of only describing how to download it.",
         "- Action tools only prepare changes. If an action tool returns a confirmation request, tell the sender to reply CONFIRM or CANCEL.",
+        "- When asked about specific analysis topics (competitors, market size, team, product, financials, etc.), use getStartupAnalysis with the appropriate section instead of getStartupDetails.",
+        "- If the user doesn't specify a startup name, check conversation memory for a linked startup or ask which startup they mean.",
         "- Prefer answering from the platform data and tools, not generic advice.",
         "- Sign off as Clara.",
         "- Format responses for email (plain text, no markdown).",
@@ -359,7 +363,10 @@ export class ClaraAiService {
 
       return text;
     } catch (error) {
-      this.logger.warn(`Agent loop failed: ${error}`);
+      this.logger.error(
+        `Agent loop failed for ${ctx.fromEmail}: ${error}`,
+        error instanceof Error ? error.stack : undefined,
+      );
       return "I'm sorry, I ran into a technical issue processing your message. Please try again shortly.";
     }
   }

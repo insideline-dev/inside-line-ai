@@ -90,7 +90,7 @@ export const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
       phase: PipelinePhase.SYNTHESIS,
       dependsOn: [PipelinePhase.EVALUATION],
       canRunParallelWith: [],
-      timeoutMs: 20 * 60 * 1000,
+      timeoutMs: 180 * 60 * 1000,
       maxRetries: 2,
       required: true,
       queue: QUEUE_NAMES.AI_SYNTHESIS,

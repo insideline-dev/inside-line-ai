@@ -67,6 +67,26 @@ export class EnrichmentProcessor
     await this.close();
   }
 
+  protected override async onWorkerStalled(
+    job: Job<AiEnrichmentJobData>,
+  ): Promise<void> {
+    const { startupId, pipelineRunId, userId } = job.data;
+    await this.pipelineService.recordInfrastructureIssue({
+      startupId,
+      pipelineRunId,
+      userId,
+      phase: PipelinePhase.ENRICHMENT,
+      stepKey: "worker_stalled",
+      error: `BullMQ worker marked enrichment job ${job.id} as stalled`,
+      failureSource: "worker_stalled",
+      meta: {
+        queueName: QUEUE_NAMES.AI_ENRICHMENT,
+        jobId: String(job.id),
+        jobType: job.data.type,
+      },
+    });
+  }
+
   protected async process(
     job: Job<AiEnrichmentJobData>,
   ): Promise<Omit<AiEnrichmentJobResult, "jobId" | "duration" | "success">> {

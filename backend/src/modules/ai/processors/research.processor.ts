@@ -62,6 +62,26 @@ export class ResearchProcessor
     await this.close();
   }
 
+  protected override async onWorkerStalled(
+    job: Job<AiResearchJobData>,
+  ): Promise<void> {
+    const { startupId, pipelineRunId, userId } = job.data;
+    await this.pipelineService.recordInfrastructureIssue({
+      startupId,
+      pipelineRunId,
+      userId,
+      phase: PipelinePhase.RESEARCH,
+      stepKey: "worker_stalled",
+      error: `BullMQ worker marked research job ${job.id} as stalled`,
+      failureSource: "worker_stalled",
+      meta: {
+        queueName: QUEUE_NAMES.AI_RESEARCH,
+        jobId: String(job.id),
+        jobType: job.data.type,
+      },
+    });
+  }
+
   protected async process(
     job: Job<AiResearchJobData>,
   ): Promise<Omit<AiResearchJobResult, "jobId" | "duration" | "success">> {

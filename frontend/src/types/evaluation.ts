@@ -265,11 +265,17 @@ export interface MarketSizing {
 }
 
 export interface MarketGrowthAndTiming {
-  growthRate: { cagr: string; period: string; source: string; deckClaimed: string; deckClaimedPeriod?: string; deckClaimedAnnualized?: string; discrepancyFlag: boolean };
+  growthRate: { cagr: string; period: string; source: string; deckClaimed: string; deckClaimedPeriod?: string; deckClaimedAnnualized?: string; discrepancyFlag: boolean; year?: string; sourceUrl?: string; dataType?: "forecast" | "actual" | "unknown" };
   whyNow: { thesis: string; supportedByResearch: boolean; evidence: string[] };
   timingAssessment: string;
   timingRationale: string;
   marketLifecycle: { position: string; evidence: string };
+  standardizedGrowthRate?: {
+    cagr: number | null;
+    originalRate: number | null;
+    originalBasis: string;
+    period: string;
+  } | null;
 }
 
 export interface MarketStructure {

@@ -22,4 +22,6 @@ export const GetUploadUrlDtoContentType = {
   'video/webm': 'video/webm',
   'application/json': 'application/json',
   'application/pdf': 'application/pdf',
+  'application/vndms-excel': 'application/vnd.ms-excel',
+  'application/vndopenxmlformats-officedocumentspreadsheetmlsheet': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 } as const;

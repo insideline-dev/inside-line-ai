@@ -21,3 +21,6 @@ export const EVALUATION_AGENT_KEYS = [
   "dealTerms",
   "exitPotential",
 ] as const satisfies readonly EvaluationAgentKey[];
+
+export const MEMO_SYNTHESIS_AGENT_KEY = "memosynthesis";
+export const REPORT_SYNTHESIS_AGENT_KEY = "reportsynthesis";

@@ -4,7 +4,7 @@ import {
   getStartupControllerGetProgressQueryKey,
   getStartupControllerFindOneQueryKey,
   useStartupControllerGetProgress,
-} from "@/api/generated/startup/startup";
+} from "@/api/generated/startups/startups";
 import {
   usePipelineStatus,
   type AgentProgressEvent,

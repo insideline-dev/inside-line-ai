@@ -235,9 +235,12 @@ export function AdminReviewSidebar({
               for (const file of startup.files) {
                 const href = normalizeUploadedFileHref(startup, file.path);
                 if (!href) continue;
+                const categoryLabel = (file as { category?: string }).category
+                  ? ` [${((file as { category?: string }).category ?? "").replace(/_/g, " ")}]`
+                  : "";
                 links.push({
                   icon: <Link2 className="h-4 w-4 shrink-0" />,
-                  label: file.name || "Document",
+                  label: (file.name || "Document") + categoryLabel,
                   href,
                 });
               }

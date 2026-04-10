@@ -16,7 +16,7 @@ import {
 import {
   useStartupControllerFindOne,
   useStartupControllerGetDataRoom,
-} from "@/api/generated/startup/startup";
+} from "@/api/generated/startups/startups";
 import { EditTeamSheet } from "@/components/startup/EditTeamSheet";
 import { formatIndustry, formatValuationLabel } from "@/lib/kpi-metrics";
 import type { Startup } from "@/types/startup";
@@ -365,6 +365,7 @@ function StartupDetail() {
                 companyName={startup.name}
                 showStrengthsAndRisks={false}
                 showDataGaps={false}
+                showScores={false}
               />
             ) : (
               renderPendingCard(
@@ -385,6 +386,7 @@ function StartupDetail() {
                 evaluation={evaluation}
                 productWeight={undefined}
                 showDataGaps={false}
+                showScores={false}
               />
             ) : (
               renderPendingCard(
@@ -404,6 +406,7 @@ function StartupDetail() {
                 evaluation={evaluation}
                 showKeyFindingsAndRisks={false}
                 showDataGaps={false}
+                showScores={false}
               />
             ) : (
               renderPendingCard(

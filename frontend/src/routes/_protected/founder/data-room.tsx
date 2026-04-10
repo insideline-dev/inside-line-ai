@@ -1,11 +1,16 @@
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataTable } from "@/components/DataTable";
 import { FileUploadDropzone } from "@/components/FileUploadDropzone";
-import { useStartupControllerFindAll } from "@/api/generated/startup/startup";
+import {
+  useStartupControllerFindAll,
+  useStartupControllerUpdateDataRoomCategory,
+} from "@/api/generated/startups/startups";
+import { UpdateDataRoomCategoryDtoCategory } from "@/api/generated/model/updateDataRoomCategoryDtoCategory";
 import { env } from "@/env";
 
 export const Route = createFileRoute("/_protected/founder/data-room")({
@@ -24,7 +29,18 @@ type DataRoomDoc = {
   visibleToInvestors?: string[] | null;
 };
 
-const CATEGORY_OPTIONS = ["pitch_deck", "financials", "legal", "product", "other"];
+const CATEGORY_OPTIONS = Object.values(
+  UpdateDataRoomCategoryDtoCategory,
+) as UpdateDataRoomCategoryDtoCategory[];
+
+type DocumentCategory = UpdateDataRoomCategoryDtoCategory;
+
+function formatCategoryLabel(category: string): string {
+  return category
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
 
 async function fetchDataRoom(startupId: string) {
   return fetch(`${env.VITE_API_BASE_URL}/startups/${startupId}/data-room`, {
@@ -57,13 +73,62 @@ async function uploadDocument(startupId: string, file: File, category: string) {
   return response.json();
 }
 
+function CategorySelect({
+  doc,
+  startupId,
+}: {
+  doc: DataRoomDoc;
+  startupId: string;
+}) {
+  const queryClient = useQueryClient();
+  const updateCategory = useStartupControllerUpdateDataRoomCategory({
+    mutation: {
+      onSuccess: async () => {
+        await queryClient.invalidateQueries({
+          queryKey: ["founder", "data-room", startupId],
+        });
+        toast.success("Category updated");
+      },
+      onError: (err) => {
+        toast.error((err as Error).message || "Failed to update category");
+      },
+    },
+  });
+
+  function handleChange(event: React.ChangeEvent<HTMLSelectElement>) {
+    const newCategory = event.target.value as DocumentCategory;
+    updateCategory.mutate({
+      id: startupId,
+      docId: doc.id,
+      data: { category: newCategory },
+    });
+  }
+
+  const pending = updateCategory.isPending;
+
+  return (
+    <select
+      className="rounded-md border border-input bg-background px-2 py-1 text-sm disabled:opacity-50"
+      value={doc.category}
+      disabled={pending}
+      onChange={handleChange}
+    >
+      {CATEGORY_OPTIONS.map((option) => (
+        <option key={option} value={option}>
+          {formatCategoryLabel(option)}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 function DataRoomPage() {
   const queryClient = useQueryClient();
   const { data: response, isLoading: loadingStartups, error } = useStartupControllerFindAll();
   const startups = (response?.data as StartupItem[] | undefined) ?? [];
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [category, setCategory] = useState(CATEGORY_OPTIONS[0]);
+  const [category, setCategory] = useState<string>(CATEGORY_OPTIONS[0]);
 
   const activeStartupId = useMemo(
     () => selectedId ?? startups[0]?.id ?? null,
@@ -164,10 +229,13 @@ function DataRoomPage() {
             >
               {CATEGORY_OPTIONS.map((option) => (
                 <option key={option} value={option}>
-                  {option.replace(/_/g, " ")}
+                  {formatCategoryLabel(option)}
                 </option>
               ))}
             </select>
+            <p className="text-xs text-muted-foreground text-pretty">
+              Category will be auto-detected after upload. You can change it later.
+            </p>
           </div>
           <FileUploadDropzone onUpload={(file) => uploadMutation.mutate(file)} />
           {uploadMutation.error && (
@@ -189,7 +257,15 @@ function DataRoomPage() {
             <DataTable
               data={(documents as DataRoomDoc[] | undefined) ?? []}
               columns={[
-                { header: "Category", accessor: "category" },
+                {
+                  header: "Category",
+                  cell: (row) =>
+                    activeStartupId ? (
+                      <CategorySelect doc={row} startupId={activeStartupId} />
+                    ) : (
+                      formatCategoryLabel(row.category)
+                    ),
+                },
                 {
                   header: "File",
                   cell: (row) =>

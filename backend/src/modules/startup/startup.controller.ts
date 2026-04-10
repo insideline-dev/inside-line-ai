@@ -50,6 +50,9 @@ import {
   GetProgressResponseDto,
   UploadDataRoomDto,
   UpdateDataRoomPermissionsDto,
+  UpdateDataRoomCategoryDto,
+  RegisterDataRoomFileDto,
+  RegisterDataRoomFilesBulkDto,
   RespondInterestDto,
   ScheduleMeetingDto,
 } from './dto';
@@ -238,6 +241,34 @@ export class StartupController {
     throw new BadRequestException('File or assetId is required');
   }
 
+  @Post(':id/data-room/register')
+  @Roles(UserRole.FOUNDER, UserRole.INVESTOR, UserRole.ADMIN, UserRole.SCOUT)
+  async registerDataRoomFile(
+    @CurrentUser() user: User,
+    @Param('id') startupId: string,
+    @Body() dto: RegisterDataRoomFileDto,
+  ) {
+    return this.dataRoomService.registerFile({
+      startupId,
+      userId: user.id,
+      path: dto.path,
+      name: dto.name,
+      type: dto.type,
+      size: dto.size,
+      category: dto.category,
+    });
+  }
+
+  @Post(':id/data-room/register-bulk')
+  @Roles(UserRole.FOUNDER, UserRole.INVESTOR, UserRole.ADMIN, UserRole.SCOUT)
+  async registerDataRoomFilesBulk(
+    @CurrentUser() user: User,
+    @Param('id') startupId: string,
+    @Body() dto: RegisterDataRoomFilesBulkDto,
+  ) {
+    return this.dataRoomService.registerFiles(startupId, user.id, dto.files);
+  }
+
   @Get(':id/data-room')
   @Roles(UserRole.FOUNDER, UserRole.ADMIN)
   async getDataRoom(@Param('id') startupId: string) {
@@ -252,6 +283,16 @@ export class StartupController {
     @Body() dto: UpdateDataRoomPermissionsDto,
   ) {
     return this.dataRoomService.updatePermissions(docId, dto.investorIds);
+  }
+
+  @Patch(':id/data-room/:docId/category')
+  @Roles(UserRole.FOUNDER, UserRole.INVESTOR, UserRole.ADMIN, UserRole.SCOUT)
+  async updateDataRoomCategory(
+    @Param('id') _id: string,
+    @Param('docId') docId: string,
+    @Body() dto: UpdateDataRoomCategoryDto,
+  ) {
+    return this.dataRoomService.updateCategory(docId, dto.category);
   }
 
   @Delete(':id/data-room/:docId')
@@ -359,6 +400,23 @@ export class StartupController {
   @Roles(UserRole.ADMIN)
   async reanalyze(@CurrentUser() user: User, @Param('id') id: string) {
     return this.startupService.reanalyze(id, user.id);
+  }
+
+  @Patch(':id/files/:fileIndex/classification')
+  @Roles(UserRole.FOUNDER, UserRole.INVESTOR, UserRole.ADMIN)
+  async updateFileClassification(
+    @CurrentUser() user: User,
+    @Param('id') id: string,
+    @Param('fileIndex') fileIndex: string,
+    @Body() body: { category: string },
+  ) {
+    await this.startupService.updateFileClassification(
+      id,
+      user.id,
+      parseInt(fileIndex, 10),
+      body.category,
+    );
+    return { success: true };
   }
 
   @Patch('admin/:id')

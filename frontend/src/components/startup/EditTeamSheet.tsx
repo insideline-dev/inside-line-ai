@@ -11,8 +11,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useStartupControllerUpdate } from "@/api/generated/startup/startup";
-import { getStartupControllerFindOneQueryKey } from "@/api/generated/startup/startup";
+import { useStartupControllerUpdate } from "@/api/generated/startups/startups";
+import { getStartupControllerFindOneQueryKey } from "@/api/generated/startups/startups";
 import type { TeamMember } from "@/types/startup";
 import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";

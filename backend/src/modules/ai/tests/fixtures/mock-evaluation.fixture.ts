@@ -96,7 +96,11 @@ export function createMockEvaluationResult(
           deckClaimedAnnualized: "20%",
           discrepancyFlag: "none",
           trajectory: "stable",
+          year: "2024",
+          sourceUrl: "idc.com",
+          dataType: "forecast",
         },
+        standardizedGrowthRate: null,
         whyNow: {
           thesis: "Regulatory cycle accelerating adoption",
           supportedByResearch: true,

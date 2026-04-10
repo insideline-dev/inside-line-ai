@@ -128,6 +128,9 @@ export class MarketEvaluationAgent extends BaseEvaluationAgent<MarketEvaluation>
     const legacyNormalized = this.normalizeLegacyMarketPayload(candidate);
     const enriched = this.enrichEmptyStructuredFields(legacyNormalized);
     const patched = this.patchNullAlignmentScores(enriched);
+    if (this.isRecord(patched)) {
+      this.computeStandardizedGrowthRate(patched);
+    }
     return normalizeBaseEvaluationCandidate(patched);
   }
 
@@ -988,6 +991,87 @@ export class MarketEvaluationAgent extends BaseEvaluationAgent<MarketEvaluation>
     }
 
     return candidate;
+  }
+
+  // --- Standardized Growth Rate (CAGR conversion) ---
+
+  private computeStandardizedGrowthRate(
+    candidate: Record<string, unknown>,
+  ): void {
+    const growthAndTiming = this.asRecord(candidate.marketGrowthAndTiming);
+    if (!growthAndTiming) return;
+
+    const growthRate = this.asRecord(growthAndTiming.growthRate);
+    if (!growthRate) return;
+
+    const deckClaimed =
+      typeof growthRate.deckClaimed === "string"
+        ? growthRate.deckClaimed
+        : undefined;
+    const deckClaimedPeriod =
+      typeof growthRate.deckClaimedPeriod === "string"
+        ? growthRate.deckClaimedPeriod
+        : undefined;
+    const cagrStr =
+      typeof growthRate.cagr === "string" ? growthRate.cagr : undefined;
+
+    const originalRate = this.extractPercentNumber(deckClaimed);
+    const basis = this.normalizeGrowthBasis(deckClaimedPeriod);
+
+    let cagr: number | null = null;
+    if (originalRate !== null && basis !== "unknown") {
+      cagr = this.convertToCagr(originalRate, basis);
+    } else if (cagrStr && cagrStr !== "Unknown") {
+      cagr = this.extractPercentNumber(cagrStr);
+    }
+
+    growthAndTiming.standardizedGrowthRate = {
+      cagr,
+      originalRate,
+      originalBasis: basis,
+      period:
+        typeof growthRate.period === "string" ? growthRate.period : "Unknown",
+    };
+  }
+
+  private extractPercentNumber(text: string | undefined): number | null {
+    if (!text) return null;
+    const match = text.match(/~?(\d+(?:\.\d+)?)\s*%/);
+    if (!match) return null;
+    const num = parseFloat(match[1]);
+    return Number.isFinite(num) ? num : null;
+  }
+
+  private normalizeGrowthBasis(period: string | undefined): string {
+    if (!period) return "unknown";
+    const lower = period.trim().toLowerCase();
+    if (lower === "mom" || lower.includes("month")) return "MoM";
+    if (lower === "qoq" || lower.includes("quarter")) return "QoQ";
+    if (
+      lower === "yoy" ||
+      lower === "cagr" ||
+      lower.includes("year") ||
+      lower.includes("annual")
+    )
+      return "YoY";
+    return "unknown";
+  }
+
+  private convertToCagr(rate: number, basis: string): number {
+    const decimal = rate / 100;
+    switch (basis) {
+      case "MoM":
+        return (
+          Math.round((Math.pow(1 + decimal, 12) - 1) * 100 * 10) / 10
+        );
+      case "QoQ":
+        return (
+          Math.round((Math.pow(1 + decimal, 4) - 1) * 100 * 10) / 10
+        );
+      case "YoY":
+      default:
+        return rate;
+    }
   }
 
   private hasPopulatedNestedFields(obj: unknown): boolean {

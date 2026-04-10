@@ -7,14 +7,19 @@ import { z } from "zod";
 import {
   useStartupControllerCreate,
   useStartupControllerSubmit,
-} from "@/api/generated/startup/startup";
+  useStartupControllerUpdate,
+  useStartupControllerFindOne,
+  useStartupControllerRegisterDataRoomFilesBulk,
+} from "@/api/generated/startups/startups";
 import { usePortalControllerSubmitToPortal } from "@/api/generated/portal/portal";
 import { useStorageControllerGetUploadUrl } from "@/api/generated/storage/storage";
 import type {
   CreateStartupDto,
   GetUploadUrlDtoContentType,
   SubmitToPortalDto,
+  UpdateStartupDto,
 } from "@/api/generated/model";
+import type { Startup } from "@/types";
 
 // Simple debounce hook
 function useDebouncedCallback<T extends (...args: any[]) => any>(
@@ -61,9 +66,9 @@ import { Upload, Globe, FileText, Building2, MapPin, Loader2, CheckCircle, Users
 // Define base schema shape for type inference
 const baseFormSchema = z.object({
   name: z.string().min(1, "Company name is required"),
-  tagline: z.string().min(1, "Tagline is required").max(500, "Tagline is too long"),
+  tagline: z.string().max(500, "Tagline is too long").optional().or(z.literal("")),
   website: z.string().url("Please enter a valid URL").optional().or(z.literal("")),
-  description: z.string().min(100, "Description must be at least 100 characters"),
+  description: z.string().max(5000).optional().or(z.literal("")),
   stage: z.string().min(1, "Stage is required"),
   sectorIndustryGroup: z.string().optional(),
   sectorIndustry: z.string().optional(),
@@ -99,9 +104,9 @@ const createSubmitSchema = (userRole: "founder" | "investor" | "admin" | "portal
 
   const baseSchema = z.object({
     name: z.string().min(1, "Company name is required"),
-    tagline: z.string().min(1, "Tagline is required").max(500, "Tagline is too long"),
+    tagline: z.string().max(500, "Tagline is too long").optional().or(z.literal("")),
     website: websiteValidation,
-    description: z.string().min(100, "Description must be at least 100 characters"),
+    description: z.string().max(5000).optional().or(z.literal("")),
     stage: z.string().min(1, "Stage is required"),
     sectorIndustryGroup: z.string().optional(),
     sectorIndustry: z.string().optional(),
@@ -143,6 +148,7 @@ interface UploadedFile {
   name: string;
   type: string;
   publicUrl?: string;
+  size?: number;
 }
 
 interface TeamMember {
@@ -196,6 +202,8 @@ const SUPPORTED_IMAGE_TYPES = [
 
 const SUPPORTED_DOCUMENT_TYPES = [
   "application/pdf",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   ...SUPPORTED_IMAGE_TYPES,
 ] as const;
 
@@ -257,7 +265,6 @@ export function StartupSubmitForm({
   successMessage,
 }: StartupSubmitFormProps) {
   void apiEndpoint;
-  void draftIdProp;
   const isPortalSubmission = !!portalSlug;
   const isWebsiteRequired = isPortalSubmission ? portalRequiredFields.includes("website") : true;
   const isPitchDeckRequired = isPortalSubmission ? portalRequiredFields.includes("pitchDeck") : false;
@@ -284,8 +291,21 @@ export function StartupSubmitForm({
   const submitSchema = createSubmitSchema(userRole, isWebsiteRequired);
   const createStartupMutation = useStartupControllerCreate();
   const submitStartupMutation = useStartupControllerSubmit();
+  const updateStartupMutation = useStartupControllerUpdate();
+  const registerDataRoomFilesBulkMutation =
+    useStartupControllerRegisterDataRoomFilesBulk();
   const portalSubmitMutation = usePortalControllerSubmitToPortal();
   const uploadUrlMutation = useStorageControllerGetUploadUrl();
+
+  // Backend draft tracking
+  const [startupId, setStartupId] = useState<string | null>(draftIdProp ?? null);
+  const registeredFilePathsRef = useRef<Set<string>>(new Set());
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
+
+  // Load existing draft from backend when draftId prop is provided
+  const existingDraftQuery = useStartupControllerFindOne(draftIdProp ?? "", {
+    query: { enabled: !!draftIdProp },
+  });
 
   const form = useForm<SubmitFormData>({
     resolver: zodResolver(submitSchema) as any,
@@ -515,8 +535,8 @@ export function StartupSubmitForm({
 
         const submitPayload: SubmitToPortalDto = {
           name: data.name.trim(),
-          tagline: data.tagline.trim(),
-          description: data.description.trim(),
+          tagline: data.tagline?.trim() || "",
+          description: data.description?.trim() || "",
           website,
           location: data.location.trim(),
           industry:
@@ -546,8 +566,8 @@ export function StartupSubmitForm({
 
       const createPayload = {
         name: data.name.trim(),
-        tagline: data.tagline.trim(),
-        description: data.description.trim(),
+        tagline: data.tagline?.trim() || "",
+        description: data.description?.trim() || "",
         website,
         location: data.location.trim(),
         industry:
@@ -606,22 +626,34 @@ export function StartupSubmitForm({
         return { id: "external-submission" };
       }
 
-      const createResult = await createStartupMutation.mutateAsync({
-        data: createPayload,
-      });
-      const created = unwrapApiResponse<{ id?: string }>(createResult);
-      const startupId = created?.id;
+      // If a draft was already saved, update instead of creating a new startup.
+      let targetId = startupId;
+      if (targetId) {
+        await updateStartupMutation.mutateAsync({
+          id: targetId,
+          data: createPayload as UpdateStartupDto,
+        });
+      } else {
+        const createResult = await createStartupMutation.mutateAsync({
+          data: createPayload,
+        });
+        const created = unwrapApiResponse<{ id?: string }>(createResult);
+        targetId = created?.id ?? null;
+      }
 
-      if (!startupId) {
+      if (!targetId) {
         throw new Error("Startup was created but no startup id was returned");
       }
 
+      // Register any not-yet-registered files into the data room.
+      await registerPendingFilesToDataRoom(targetId, normalizedFiles);
+
       await submitStartupMutation.mutateAsync({
-        id: startupId,
+        id: targetId,
         data: {},
       });
 
-      return created;
+      return { id: targetId };
     },
     onSuccess: () => {
       const resolvedSuccessMessage = successMessage ?? (isInvestorOrAdmin
@@ -648,6 +680,243 @@ export function StartupSubmitForm({
       toast.error(error.message || "Something went wrong. Please try again.");
     },
   });
+
+  // Register files uploaded via presigned URL into the data room. Skips files
+  // that have already been registered in this session.
+  const registerPendingFilesToDataRoom = useCallback(
+    async (
+      targetStartupId: string,
+      files: Array<{ path: string; name: string; type: string }>,
+    ) => {
+      const pending = files.filter(
+        (f) => f.path && !registeredFilePathsRef.current.has(f.path),
+      );
+      if (pending.length === 0) return;
+
+      const payload = pending.map((f) => {
+        const match = uploadedFiles.find((u) => u.path === f.path);
+        return {
+          path: f.path,
+          name: f.name,
+          type: f.type,
+          size: typeof match?.size === "number" ? match.size : 0,
+        };
+      });
+
+      try {
+        await registerDataRoomFilesBulkMutation.mutateAsync({
+          id: targetStartupId,
+          data: { files: payload },
+        });
+        pending.forEach((f) => registeredFilePathsRef.current.add(f.path));
+      } catch (err) {
+        // Non-fatal: the startup itself is saved — log and continue.
+        console.warn("[StartupSubmitForm] data room register failed", err);
+      }
+    },
+    [uploadedFiles, registerDataRoomFilesBulkMutation],
+  );
+
+  // Populate form from an existing backend draft when editing.
+  useEffect(() => {
+    if (!draftIdProp) return;
+    const data = existingDraftQuery.data as unknown;
+    const startup = unwrapApiResponse<Partial<Startup> | null>(data);
+    if (!startup || !startup.id) return;
+
+    setStartupId(startup.id);
+
+    const setField = <K extends keyof SubmitFormData>(
+      key: K,
+      value: SubmitFormData[K] | undefined | null,
+    ) => {
+      if (value !== undefined && value !== null && value !== "") {
+        form.setValue(key, value as never);
+      }
+    };
+
+    setField("name", startup.name as never);
+    setField("tagline", startup.tagline as never);
+    setField("description", startup.description as never);
+    setField("website", startup.website as never);
+    setField("location", startup.location as never);
+    setField("stage", startup.stage as never);
+    setField("sectorIndustryGroup", startup.sectorIndustryGroup as never);
+    setField("sectorIndustry", startup.sectorIndustry as never);
+    setField(
+      "fundingTarget",
+      (startup.fundingTarget != null ? String(startup.fundingTarget) : "") as never,
+    );
+    setField("roundCurrency", (startup.roundCurrency as never) ?? ("USD" as never));
+    setField(
+      "valuation",
+      (startup.valuation != null ? String(startup.valuation) : "") as never,
+    );
+    setField("valuationKnown", startup.valuationKnown as never);
+    setField("valuationType", startup.valuationType as never);
+    setField("raiseType", startup.raiseType as never);
+    setField("leadSecured", startup.leadSecured as never);
+    setField("leadInvestorName", startup.leadInvestorName as never);
+    setField("contactName", startup.contactName as never);
+    setField("contactEmail", startup.contactEmail as never);
+    setField("contactPhone", startup.contactPhone as never);
+    setField("contactPhoneCountryCode", startup.contactPhoneCountryCode as never);
+    setField("hasPreviousFunding", startup.hasPreviousFunding as never);
+    setField(
+      "previousFundingAmount",
+      (startup.previousFundingAmount != null
+        ? String(startup.previousFundingAmount)
+        : "") as never,
+    );
+    setField("previousFundingCurrency", startup.previousFundingCurrency as never);
+    setField("previousInvestors", startup.previousInvestors as never);
+    setField("previousRoundType", startup.previousRoundType as never);
+    setField("technologyReadinessLevel", startup.technologyReadinessLevel as never);
+    setField("demoVideoUrl", startup.demoVideoUrl as never);
+    setField("productDescription", startup.productDescription as never);
+
+    if (Array.isArray(startup.teamMembers) && startup.teamMembers.length) {
+      setTeamMembers(
+        startup.teamMembers.map((m) => ({
+          name: m.name ?? "",
+          role: m.role ?? "",
+          linkedinUrl: m.linkedinUrl ?? "",
+        })),
+      );
+    }
+    if (Array.isArray(startup.productScreenshots)) {
+      setProductScreenshots(startup.productScreenshots);
+    }
+    if (Array.isArray(startup.files)) {
+      const restored: UploadedFile[] = startup.files.map((f) => ({
+        path: f.path,
+        name: f.name,
+        type: f.type,
+      }));
+      setUploadedFiles(restored);
+      restored.forEach((f) => registeredFilePathsRef.current.add(f.path));
+      setDeckPath(startup.pitchDeckPath ?? getDefaultDeckPath(restored));
+    }
+    setIsLoadingDraft(false);
+  }, [draftIdProp, existingDraftQuery.data, form]);
+
+  const onSaveDraft = async () => {
+    setIsSavingDraft(true);
+    try {
+      const data = form.getValues();
+      if (!data.name?.trim()) {
+        toast.error("Please enter a startup name before saving a draft.");
+        return;
+      }
+
+      const validTeamMembers = teamMembers
+        .map((member) => ({
+          name: member.name.trim(),
+          role: member.role.trim(),
+          linkedinUrl: member.linkedinUrl.trim(),
+        }))
+        .filter((member) => member.name || member.role || member.linkedinUrl);
+
+      const normalizedFiles = uploadedFiles
+        .map((file) => ({
+          path: file.path.trim(),
+          name: file.name.trim(),
+          type: file.type.trim(),
+        }))
+        .filter((file) => file.path && file.name && file.type);
+
+      const pitchDeckFile =
+        uploadedFiles.find(
+          (file) => file.path === deckPath && isPdfFileType(file.type),
+        ) ?? uploadedFiles.find((file) => isPdfFileType(file.type));
+      const pitchDeckPath =
+        deckPath && normalizedFiles.some((file) => file.path === deckPath)
+          ? deckPath
+          : getDefaultDeckPath(uploadedFiles);
+
+      const draftPayload: Partial<CreateStartupDto> = {
+        name: data.name.trim(),
+        tagline: data.tagline?.trim() || "",
+        description: data.description?.trim() || "",
+        website: data.website?.trim() || "",
+        location: data.location?.trim() || "",
+        industry:
+          data.sectorIndustry?.trim() ||
+          data.sectorIndustryGroup?.trim() ||
+          "general",
+        sectorIndustryGroup: normalizeOptionalText(data.sectorIndustryGroup),
+        sectorIndustry: normalizeOptionalText(data.sectorIndustry),
+        stage: (data.stage || undefined) as CreateStartupDto["stage"],
+        fundingTarget:
+          parsePositiveNumberInput(data.fundingTarget) != null
+            ? Math.round(parsePositiveNumberInput(data.fundingTarget) as number)
+            : undefined,
+        teamSize: Math.max(validTeamMembers.length, 1),
+        pitchDeckUrl: pitchDeckFile?.publicUrl,
+        pitchDeckPath: pitchDeckPath || undefined,
+        files: normalizedFiles.length ? normalizedFiles : undefined,
+        teamMembers: validTeamMembers.length ? validTeamMembers : undefined,
+        roundCurrency: normalizeOptionalText(data.roundCurrency) || "USD",
+        valuation: parsePositiveNumberInput(data.valuation),
+        valuationKnown:
+          typeof data.valuationKnown === "boolean" ? data.valuationKnown : undefined,
+        valuationType: data.valuationKnown ? data.valuationType : undefined,
+        raiseType: data.raiseType,
+        leadSecured: data.leadSecured,
+        leadInvestorName: normalizeOptionalText(data.leadInvestorName),
+        contactName: normalizeOptionalText(data.contactName),
+        contactEmail: normalizeOptionalText(data.contactEmail),
+        contactPhone: normalizeOptionalText(data.contactPhone),
+        contactPhoneCountryCode: normalizeOptionalText(data.contactPhoneCountryCode),
+        hasPreviousFunding:
+          typeof data.hasPreviousFunding === "boolean"
+            ? data.hasPreviousFunding
+            : undefined,
+        previousFundingAmount: parsePositiveNumberInput(data.previousFundingAmount),
+        previousFundingCurrency: normalizeOptionalText(data.previousFundingCurrency),
+        previousInvestors: normalizeOptionalText(data.previousInvestors),
+        previousRoundType: normalizeOptionalText(data.previousRoundType),
+        technologyReadinessLevel:
+          (data.technologyReadinessLevel as CreateStartupDto["technologyReadinessLevel"]) ||
+          undefined,
+        demoVideoUrl: normalizeOptionalText(data.demoVideoUrl),
+        productDescription: normalizeOptionalText(data.productDescription),
+        productScreenshots: productScreenshots.length ? productScreenshots : undefined,
+      };
+
+      let targetId = startupId;
+      if (targetId) {
+        await updateStartupMutation.mutateAsync({
+          id: targetId,
+          data: draftPayload as UpdateStartupDto,
+        });
+      } else {
+        const createResult = await createStartupMutation.mutateAsync({
+          data: draftPayload as CreateStartupDto,
+        });
+        const created = unwrapApiResponse<{ id?: string }>(createResult);
+        targetId = created?.id ?? null;
+        if (targetId) {
+          setStartupId(targetId);
+        }
+      }
+
+      if (!targetId) {
+        throw new Error("Failed to save draft: no startup id returned");
+      }
+
+      await registerPendingFilesToDataRoom(targetId, normalizedFiles);
+
+      queryClient.invalidateQueries({ queryKey: ["/startups"] });
+      toast.success("Draft saved");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to save draft",
+      );
+    } finally {
+      setIsSavingDraft(false);
+    }
+  };
 
   const onSubmit = (data: SubmitFormData) => {
     submitMutation.mutate(data);
@@ -751,7 +1020,7 @@ export function StartupSubmitForm({
               name="tagline"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Tagline *</FormLabel>
+                  <FormLabel>Tagline</FormLabel>
                   <FormControl>
                     <Input
                       placeholder="The one-line summary of your startup"
@@ -1145,7 +1414,7 @@ export function StartupSubmitForm({
                   )
                 ) {
                   throw new Error(
-                    "Only PDF and image files are supported for startup uploads",
+                    "Only PDF, image, and Excel files are supported for startup uploads",
                   );
                 }
 
@@ -1625,24 +1894,48 @@ export function StartupSubmitForm({
           </CardContent>
         </Card>
 
-        <Button
-          type="submit"
-          className="w-full"
-          disabled={submitMutation.isPending}
-          data-testid="button-submit"
-        >
-          {submitMutation.isPending ? (
-            <>
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              Submitting...
-            </>
-          ) : (
-            <>
-              <Upload className="w-4 h-4 mr-2" />
-              Submit for Analysis
-            </>
+        <div className="flex flex-col sm:flex-row gap-3">
+          {shouldSaveDraft && (
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full sm:w-auto"
+              disabled={isSavingDraft || submitMutation.isPending}
+              onClick={onSaveDraft}
+              data-testid="button-save-draft"
+            >
+              {isSavingDraft ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Saving Draft...
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4 mr-2" />
+                  Save as Draft
+                </>
+              )}
+            </Button>
           )}
-        </Button>
+          <Button
+            type="submit"
+            className="flex-1"
+            disabled={submitMutation.isPending || isSavingDraft}
+            data-testid="button-submit"
+          >
+            {submitMutation.isPending ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Submitting...
+              </>
+            ) : (
+              <>
+                <Upload className="w-4 h-4 mr-2" />
+                Submit for Analysis
+              </>
+            )}
+          </Button>
+        </div>
       </form>
     </Form>
   );

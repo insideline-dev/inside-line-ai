@@ -12,6 +12,7 @@ export const QUEUE_NAMES = {
   AI_EVALUATION: "ai-evaluation",
   AI_SYNTHESIS: "ai-synthesis",
   AI_MATCHING: "ai-matching",
+  DOCUMENT_CLASSIFICATION: "document-classification",
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
@@ -48,6 +49,7 @@ export const QUEUE_CONCURRENCY = {
   [QUEUE_NAMES.AI_EVALUATION]: 8,
   [QUEUE_NAMES.AI_SYNTHESIS]: 2,
   [QUEUE_NAMES.AI_MATCHING]: 3,
+  [QUEUE_NAMES.DOCUMENT_CLASSIFICATION]: 5,
 } as const;
 
 // Safe defaults; real values should be resolved via ConfigService.
@@ -83,6 +85,10 @@ export const DEFAULT_QUEUE_DEPTH_LIMITS: QueueDepthLimits = {
   [QUEUE_NAMES.AI_MATCHING]: {
     maxDepth: 500,
     maxPerUser: 5,
+  },
+  [QUEUE_NAMES.DOCUMENT_CLASSIFICATION]: {
+    maxDepth: 500,
+    maxPerUser: 10,
   },
 } as const;
 
@@ -177,6 +183,16 @@ export function resolveQueueDepthLimits(
       maxPerUser: toPositiveInt(
         getNumber("QUEUE_MAX_PER_USER_AI_MATCHING", DEFAULT_QUEUE_DEPTH_LIMITS[QUEUE_NAMES.AI_MATCHING].maxPerUser),
         DEFAULT_QUEUE_DEPTH_LIMITS[QUEUE_NAMES.AI_MATCHING].maxPerUser,
+      ),
+    },
+    [QUEUE_NAMES.DOCUMENT_CLASSIFICATION]: {
+      maxDepth: toPositiveInt(
+        getNumber("QUEUE_MAX_DEPTH_DOCUMENT_CLASSIFICATION", DEFAULT_QUEUE_DEPTH_LIMITS[QUEUE_NAMES.DOCUMENT_CLASSIFICATION].maxDepth),
+        DEFAULT_QUEUE_DEPTH_LIMITS[QUEUE_NAMES.DOCUMENT_CLASSIFICATION].maxDepth,
+      ),
+      maxPerUser: toPositiveInt(
+        getNumber("QUEUE_MAX_PER_USER_DOCUMENT_CLASSIFICATION", DEFAULT_QUEUE_DEPTH_LIMITS[QUEUE_NAMES.DOCUMENT_CLASSIFICATION].maxPerUser),
+        DEFAULT_QUEUE_DEPTH_LIMITS[QUEUE_NAMES.DOCUMENT_CLASSIFICATION].maxPerUser,
       ),
     },
   };

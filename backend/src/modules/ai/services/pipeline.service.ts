@@ -8,6 +8,7 @@ import { NotificationType } from "../../../notification/entities";
 import { NotificationService } from "../../../notification/notification.service";
 import { QueueService } from "../../../queue";
 import { startup, StartupStatus } from "../../startup/entities";
+import { UserRole } from "../../../auth/entities/auth.schema";
 import { startupEvaluation } from "../../analysis/entities";
 import { pipelineRun, pipelineAgentRun } from "../entities";
 import type {
@@ -71,6 +72,10 @@ type AgentRetryMetadata = {
   mode: "agent_retry";
   agentKey: string;
 };
+
+type DiagnosticFailureSource =
+  | "phase_timeout"
+  | "worker_stalled";
 
 export interface RetryAgentRequest {
   phase: PipelinePhase.RESEARCH | PipelinePhase.EVALUATION;
@@ -148,6 +153,86 @@ export class PipelineService {
     } catch {
       return null;
     }
+  }
+
+  private async recordDiagnosticTrace(params: {
+    startupId: string;
+    pipelineRunId?: string;
+    userId?: string;
+    phase: PipelinePhase;
+    stepKey: string;
+    error: string;
+    failureSource: DiagnosticFailureSource;
+    meta?: Record<string, unknown>;
+  }): Promise<void> {
+    const state =
+      params.pipelineRunId && params.userId
+        ? null
+        : await this.pipelineState.get(params.startupId);
+    const pipelineRunId = params.pipelineRunId ?? state?.pipelineRunId;
+    const userId = params.userId ?? state?.userId;
+
+    if (pipelineRunId && userId) {
+      await this.onAgentProgress({
+        startupId: params.startupId,
+        userId,
+        pipelineRunId,
+        phase: params.phase,
+        key: params.stepKey,
+        status: "failed",
+        progress: 0,
+        error: params.error,
+        lifecycleEvent: "failed",
+      }).catch((progressError) => {
+        const message =
+          progressError instanceof Error
+            ? progressError.message
+            : String(progressError);
+        this.logger.warn(
+          `[Pipeline] Failed to persist diagnostic progress for ${params.phase}/${params.stepKey} on ${params.startupId}: ${message}`,
+        );
+      });
+    }
+
+    if (!this.pipelineAgentTrace || !pipelineRunId) {
+      return;
+    }
+
+    await this.pipelineAgentTrace
+      .recordRun({
+        startupId: params.startupId,
+        pipelineRunId,
+        phase: params.phase,
+        agentKey: params.stepKey,
+        traceKind: "phase_step",
+        stepKey: params.stepKey,
+        status: "failed",
+        error: params.error,
+        meta: {
+          failureSource: params.failureSource,
+          ...(params.meta ?? {}),
+        },
+      })
+      .catch((traceError) => {
+        const message =
+          traceError instanceof Error ? traceError.message : String(traceError);
+        this.logger.warn(
+          `[Pipeline] Failed to persist diagnostic trace for ${params.phase}/${params.stepKey} on ${params.startupId}: ${message}`,
+        );
+      });
+  }
+
+  async recordInfrastructureIssue(params: {
+    startupId: string;
+    pipelineRunId: string;
+    userId: string;
+    phase: PipelinePhase;
+    stepKey: string;
+    error: string;
+    failureSource: DiagnosticFailureSource;
+    meta?: Record<string, unknown>;
+  }): Promise<void> {
+    await this.recordDiagnosticTrace(params);
   }
 
   private async getMissingCriticalFields(
@@ -1618,7 +1703,57 @@ export class PipelineService {
       return;
     }
 
+    // Auto-approve investor private submissions after pipeline completion
+    // so they appear in the investor dashboard with matching scores.
+    const shouldAutoApprove = await this.isInvestorPrivateSubmission(startupId);
+    if (shouldAutoApprove) {
+      await this.drizzle.db
+        .update(startup)
+        .set({
+          status: StartupStatus.APPROVED,
+          approvedAt: new Date(),
+        })
+        .where(eq(startup.id, startupId));
+
+      this.logger.log(
+        `Auto-approved investor private submission ${startupId} after pipeline completion`,
+      );
+
+      try {
+        await this.startupMatching.queueStartupMatching({
+          startupId,
+          requestedBy,
+          triggerSource: "pipeline_completion",
+          requireApproved: false,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.error(
+          `Auto-approved startup ${startupId} but matching queue failed: ${message}`,
+        );
+      }
+      return;
+    }
+
     await this.updateStartupStatus(startupId, StartupStatus.PENDING_REVIEW);
+  }
+
+  private async isInvestorPrivateSubmission(
+    startupId: string,
+  ): Promise<boolean> {
+    const [record] = await this.drizzle.db
+      .select({
+        isPrivate: startup.isPrivate,
+        submittedByRole: startup.submittedByRole,
+      })
+      .from(startup)
+      .where(eq(startup.id, startupId))
+      .limit(1);
+
+    return (
+      record?.isPrivate === true &&
+      record?.submittedByRole === UserRole.INVESTOR
+    );
   }
 
   private async createPipelineRunRecord(state: PipelineState): Promise<void> {
@@ -2108,7 +2243,32 @@ export class PipelineService {
       return;
     }
 
+    const phaseConfig = this.phaseTransition.getPhaseConfig(phase);
+    const timeoutBudgetMs = this.resolvePhaseTimeoutMs(
+      phase,
+      phaseConfig.timeoutMs,
+    );
+    const startedAtMs = state.phases[phase].startedAt
+      ? new Date(state.phases[phase].startedAt).getTime()
+      : NaN;
+    const elapsedMs = Number.isFinite(startedAtMs)
+      ? Math.max(0, Date.now() - startedAtMs)
+      : undefined;
     const message = `Phase "${phase}" timed out`;
+    await this.recordDiagnosticTrace({
+      startupId,
+      pipelineRunId: state.pipelineRunId,
+      userId: state.userId,
+      phase,
+      stepKey: "phase_timeout",
+      error: message,
+      failureSource: "phase_timeout",
+      meta: {
+        phaseStatus: status,
+        timeoutBudgetMs,
+        ...(typeof elapsedMs === "number" ? { elapsedMs } : {}),
+      },
+    });
     await this.pipelineState.updatePhase(startupId, phase, PhaseStatus.FAILED, message);
     await this.onPhaseFailed(startupId, phase, message);
   }

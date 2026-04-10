@@ -30,6 +30,7 @@ import type {
   AdminControllerExportUsersParams,
   AdminControllerGetAiPromptCoverageAuditParams,
   AdminControllerGetAllStartupsParams,
+  AdminControllerGetConversationsParams,
   AdminControllerGetPendingStartupsParams,
   AdminControllerGetStartupStatsParams,
   AdminControllerGetUsersParams,
@@ -5670,17 +5671,24 @@ export type adminControllerGetConversationsResponseSuccess = (adminControllerGet
 
 export type adminControllerGetConversationsResponse = (adminControllerGetConversationsResponseSuccess)
 
-export const getAdminControllerGetConversationsUrl = () => {
+export const getAdminControllerGetConversationsUrl = (params?: AdminControllerGetConversationsParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
+    
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
 
-  
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/admin/conversations`
+  return stringifiedParams.length > 0 ? `/admin/conversations?${stringifiedParams}` : `/admin/conversations`
 }
 
-export const adminControllerGetConversations = async ( options?: RequestInit): Promise<adminControllerGetConversationsResponse> => {
+export const adminControllerGetConversations = async (params?: AdminControllerGetConversationsParams, options?: RequestInit): Promise<adminControllerGetConversationsResponse> => {
   
-  return customFetch<adminControllerGetConversationsResponse>(getAdminControllerGetConversationsUrl(),
+  return customFetch<adminControllerGetConversationsResponse>(getAdminControllerGetConversationsUrl(params),
   {      
     ...options,
     method: 'GET'
@@ -5693,23 +5701,23 @@ export const adminControllerGetConversations = async ( options?: RequestInit): P
 
 
 
-export const getAdminControllerGetConversationsQueryKey = () => {
+export const getAdminControllerGetConversationsQueryKey = (params?: AdminControllerGetConversationsParams,) => {
     return [
-    `/admin/conversations`
+    `/admin/conversations`, ...(params ? [params] : [])
     ] as const;
     }
 
     
-export const getAdminControllerGetConversationsQueryOptions = <TData = Awaited<ReturnType<typeof adminControllerGetConversations>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetConversations>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+export const getAdminControllerGetConversationsQueryOptions = <TData = Awaited<ReturnType<typeof adminControllerGetConversations>>, TError = ErrorType<unknown>>(params?: AdminControllerGetConversationsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetConversations>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getAdminControllerGetConversationsQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getAdminControllerGetConversationsQueryKey(params);
 
   
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof adminControllerGetConversations>>> = ({ signal }) => adminControllerGetConversations({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof adminControllerGetConversations>>> = ({ signal }) => adminControllerGetConversations(params, { signal, ...requestOptions });
 
       
 
@@ -5723,7 +5731,7 @@ export type AdminControllerGetConversationsQueryError = ErrorType<unknown>
 
 
 export function useAdminControllerGetConversations<TData = Awaited<ReturnType<typeof adminControllerGetConversations>>, TError = ErrorType<unknown>>(
-  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetConversations>>, TError, TData>> & Pick<
+ params: undefined |  AdminControllerGetConversationsParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetConversations>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof adminControllerGetConversations>>,
           TError,
@@ -5733,7 +5741,7 @@ export function useAdminControllerGetConversations<TData = Awaited<ReturnType<ty
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function useAdminControllerGetConversations<TData = Awaited<ReturnType<typeof adminControllerGetConversations>>, TError = ErrorType<unknown>>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetConversations>>, TError, TData>> & Pick<
+ params?: AdminControllerGetConversationsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetConversations>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof adminControllerGetConversations>>,
           TError,
@@ -5743,7 +5751,7 @@ export function useAdminControllerGetConversations<TData = Awaited<ReturnType<ty
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function useAdminControllerGetConversations<TData = Awaited<ReturnType<typeof adminControllerGetConversations>>, TError = ErrorType<unknown>>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetConversations>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ params?: AdminControllerGetConversationsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetConversations>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 /**
@@ -5751,11 +5759,11 @@ export function useAdminControllerGetConversations<TData = Awaited<ReturnType<ty
  */
 
 export function useAdminControllerGetConversations<TData = Awaited<ReturnType<typeof adminControllerGetConversations>>, TError = ErrorType<unknown>>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetConversations>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ params?: AdminControllerGetConversationsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetConversations>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient 
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getAdminControllerGetConversationsQueryOptions(options)
+  const queryOptions = getAdminControllerGetConversationsQueryOptions(params,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

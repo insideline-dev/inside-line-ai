@@ -62,6 +62,26 @@ export class EvaluationProcessor
     await this.close();
   }
 
+  protected override async onWorkerStalled(
+    job: Job<AiEvaluationJobData>,
+  ): Promise<void> {
+    const { startupId, pipelineRunId, userId } = job.data;
+    await this.pipelineService.recordInfrastructureIssue({
+      startupId,
+      pipelineRunId,
+      userId,
+      phase: PipelinePhase.EVALUATION,
+      stepKey: "worker_stalled",
+      error: `BullMQ worker marked evaluation job ${job.id} as stalled`,
+      failureSource: "worker_stalled",
+      meta: {
+        queueName: QUEUE_NAMES.AI_EVALUATION,
+        jobId: String(job.id),
+        jobType: job.data.type,
+      },
+    });
+  }
+
   protected async process(
     job: Job<AiEvaluationJobData>,
   ): Promise<Omit<AiEvaluationJobResult, "jobId" | "duration" | "success">> {

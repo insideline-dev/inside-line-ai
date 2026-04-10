@@ -3,17 +3,23 @@ import { ConfigService } from "@nestjs/config";
 import { QUEUE_NAMES } from "../../../../queue";
 import { ModelPurpose } from "../../interfaces/pipeline.interface";
 import { AiConfigService } from "../../services/ai-config.service";
+import type { AiModelOverrideService } from "../../services/ai-model-override.service";
 
 describe("AiConfigService", () => {
   let config: jest.Mocked<ConfigService>;
   let service: AiConfigService;
+  let overrideService: jest.Mocked<AiModelOverrideService>;
 
   beforeEach(() => {
     config = {
       get: jest.fn(),
     } as unknown as jest.Mocked<ConfigService>;
 
-    service = new AiConfigService(config);
+    overrideService = {
+      getModelNameSync: jest.fn().mockReturnValue(null),
+    } as unknown as jest.Mocked<AiModelOverrideService>;
+
+    service = new AiConfigService(config, overrideService);
   });
 
   it("returns defaults for model mapping", () => {
@@ -101,7 +107,7 @@ describe("AiConfigService", () => {
   it("returns deep-research stagger default when unset", () => {
     config.get.mockReturnValue(undefined);
 
-    expect(service.getResearchAgentStaggerMs()).toBe(5000);
+    expect(service.getResearchAgentStaggerMs()).toBe(180000);
   });
 
   it("uses configured deep-research stagger and allows zero to disable", () => {
@@ -178,6 +184,21 @@ describe("AiConfigService", () => {
     });
 
     expect(service.getResearchAgentHardTimeoutMs()).toBe(3_600_000);
+  });
+
+  it("uses 180-minute synthesis timeout defaults when unset", () => {
+    config.get.mockImplementation((key: string, fallback?: unknown) => {
+      if (key === "AI_SYNTHESIS_ATTEMPT_TIMEOUT_MS") {
+        return undefined;
+      }
+      if (key === "AI_SYNTHESIS_AGENT_HARD_TIMEOUT_MS") {
+        return undefined;
+      }
+      return fallback as number;
+    });
+
+    expect(service.getSynthesisAttemptTimeoutMs()).toBe(10_800_000);
+    expect(service.getSynthesisAgentHardTimeoutMs()).toBe(10_800_000);
   });
 
   describe("getResearchAttemptTimeoutMsForAgent", () => {

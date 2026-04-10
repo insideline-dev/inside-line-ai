@@ -698,9 +698,23 @@ describe("PipelineService", () => {
   });
 
   it("asks Clara for missing website/stage details after enrichment completes with unresolved critical gaps", async () => {
-    stateService.get.mockResolvedValue(createState());
+    stateService.get.mockResolvedValue(
+      createState(
+        {},
+        {
+          [PipelinePhase.ENRICHMENT]: PhaseStatus.COMPLETED,
+          [PipelinePhase.RESEARCH]: PhaseStatus.PENDING,
+        },
+      ),
+    );
     stateService.getPhaseResult.mockResolvedValueOnce({
       fieldsStillMissing: ["website", "stage", "description"],
+    });
+    phaseTransition.decideNextPhases.mockReturnValueOnce({
+      queue: [PipelinePhase.RESEARCH],
+      blockedByRequiredFailure: false,
+      pipelineComplete: false,
+      degraded: false,
     });
 
     const clara = {
@@ -722,7 +736,7 @@ describe("PipelineService", () => {
       "startup-1",
       PipelineStatus.CANCELLED,
     );
-    expect(phaseTransition.decideNextPhases).not.toHaveBeenCalled();
+    expect(phaseTransition.decideNextPhases).toHaveBeenCalledTimes(1);
   });
 
   it("cancels before research when critical fields remain unresolved", async () => {
@@ -767,7 +781,7 @@ describe("PipelineService", () => {
     );
   });
 
-  it("cancels scraping when enrichment is terminal but website is still missing", async () => {
+  it("does not cancel scraping solely because website is still missing after enrichment is terminal", async () => {
     const runningState = createState(
       {},
       {
@@ -811,14 +825,17 @@ describe("PipelineService", () => {
       phase: PipelinePhase.SCRAPING,
     });
 
-    expect(clara.notifyMissingStartupInfo).toHaveBeenCalledWith(
-      "startup-1",
-      expect.arrayContaining(["website"]),
-      { pipelineRunId: "run-1" },
+    expect(clara.notifyMissingStartupInfo).not.toHaveBeenCalled();
+    expect(queue.addJob).toHaveBeenCalledWith(
+      "ai-scraping",
+      expect.objectContaining({
+        type: "ai_scraping",
+        startupId: "startup-1",
+      }),
+      expect.any(Object),
     );
-    expect(queue.addJob).not.toHaveBeenCalled();
-    expect(queue.removePipelineJobs).toHaveBeenCalledWith("startup-1");
-    expect(stateService.setStatus).toHaveBeenCalledWith(
+    expect(queue.removePipelineJobs).not.toHaveBeenCalled();
+    expect(stateService.setStatus).not.toHaveBeenCalledWith(
       "startup-1",
       PipelineStatus.CANCELLED,
     );
@@ -1089,13 +1106,33 @@ describe("PipelineService", () => {
       {},
       {
         [PipelinePhase.ENRICHMENT]: PhaseStatus.PENDING,
+        [PipelinePhase.RESEARCH]: PhaseStatus.PENDING,
       },
     );
     stateService.get
       .mockResolvedValueOnce(runningState) // onPhaseSkipped preflight
-      .mockResolvedValueOnce(runningState); // cancelPipeline state fetch
+      .mockResolvedValueOnce({
+        ...runningState,
+        phases: {
+          ...runningState.phases,
+          [PipelinePhase.ENRICHMENT]: { status: PhaseStatus.SKIPPED },
+        },
+      }) // applyTransitions refresh
+      .mockResolvedValueOnce({
+        ...runningState,
+        phases: {
+          ...runningState.phases,
+          [PipelinePhase.ENRICHMENT]: { status: PhaseStatus.SKIPPED },
+        },
+      }); // cancelPipeline state fetch
     stateService.getPhaseResult.mockResolvedValueOnce({
       fieldsStillMissing: ["website", "description"],
+    });
+    phaseTransition.decideNextPhases.mockReturnValueOnce({
+      queue: [PipelinePhase.RESEARCH],
+      blockedByRequiredFailure: false,
+      pipelineComplete: false,
+      degraded: false,
     });
 
     const clara = {
@@ -1125,7 +1162,7 @@ describe("PipelineService", () => {
       "startup-1",
       PipelineStatus.CANCELLED,
     );
-    expect(phaseTransition.decideNextPhases).not.toHaveBeenCalled();
+    expect(phaseTransition.decideNextPhases).toHaveBeenCalledTimes(1);
   });
 
   it("ignores stale phase skip requests from older pipeline runs", async () => {
@@ -1845,7 +1882,28 @@ describe("PipelineService", () => {
         expect.objectContaining({
           startupId: "startup-1",
           phase: PipelinePhase.RESEARCH,
-          timeoutMs: 7_740_000,
+          timeoutMs: 4_320_000,
+        }),
+      );
+    });
+
+    it("extends synthesis phase timeout budget to match the synthesis runtime budget", async () => {
+      stateService.get.mockResolvedValueOnce(createState());
+
+      aiConfig.getSynthesisAgentHardTimeoutMs = jest.fn().mockReturnValue(10_800_000);
+
+      await (service as unknown as { queuePhase: (opts: Record<string, unknown>) => Promise<void> }).queuePhase({
+        startupId: "startup-1",
+        pipelineRunId: "run-1",
+        userId: "user-1",
+        phase: PipelinePhase.SYNTHESIS,
+      });
+
+      expect(errorRecovery.schedulePhaseTimeout).toHaveBeenCalledWith(
+        expect.objectContaining({
+          startupId: "startup-1",
+          phase: PipelinePhase.SYNTHESIS,
+          timeoutMs: 10_860_000,
         }),
       );
     });

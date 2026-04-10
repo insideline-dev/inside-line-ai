@@ -8,6 +8,8 @@ import { AiModelOverrideService } from "./ai-model-override.service";
 
 const DEFAULT_RESEARCH_ATTEMPT_TIMEOUT_MS = 3_600_000; // 1 hour per attempt (deep research models can take 30+ min)
 const DEFAULT_RESEARCH_AGENT_HARD_TIMEOUT_MS = 3_600_000; // 1 hour hard ceiling per agent
+const DEFAULT_SYNTHESIS_ATTEMPT_TIMEOUT_MS = 10_800_000; // 180 min one-big-timeout budget for synthesis
+const DEFAULT_SYNTHESIS_AGENT_HARD_TIMEOUT_MS = 10_800_000; // 180 min hard ceiling aligned with synthesis attempt budget
 
 @Injectable()
 export class AiConfigService {
@@ -142,7 +144,7 @@ export class AiConfigService {
 
   getSynthesisAttemptTimeoutMs(): number {
     const configured = this.config.get<number>("AI_SYNTHESIS_ATTEMPT_TIMEOUT_MS");
-    return this.toPositiveInt(configured, 600_000); // 10 min (was 5 min — reasoning models need more time)
+    return this.toPositiveInt(configured, DEFAULT_SYNTHESIS_ATTEMPT_TIMEOUT_MS);
   }
 
   getSynthesisMaxAttempts(): number {
@@ -152,7 +154,7 @@ export class AiConfigService {
 
   getSynthesisAgentHardTimeoutMs(): number {
     const configured = this.config.get<number>("AI_SYNTHESIS_AGENT_HARD_TIMEOUT_MS");
-    return this.toPositiveInt(configured, 1_200_000); // 20 min (was 16 min)
+    return this.toPositiveInt(configured, DEFAULT_SYNTHESIS_AGENT_HARD_TIMEOUT_MS);
   }
 
   getDynamicAgentAttemptTimeoutMs(): number {

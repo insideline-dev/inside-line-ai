@@ -31,6 +31,51 @@ describe("SynthesisAgent", () => {
     concerns: [],
     diligenceItems: [],
   };
+  const buildSuccessfulSynthesisOutput = (
+    overrides: {
+      dealSnapshot?: string;
+      keyStrengths?: string[];
+      keyRisks?: string[];
+      investorMemo?: {
+        executiveSummary?: string;
+        sections?: Array<Record<string, unknown>>;
+        keyDueDiligenceAreas?: string[];
+      };
+      founderReport?: {
+        summary?: string;
+        whatsWorking?: string[];
+        pathToInevitability?: string[];
+      };
+      dataConfidenceNotes?: string;
+    } = {},
+  ) => ({
+    dealSnapshot:
+      overrides.dealSnapshot ??
+      "Clipaf is a promising company with credible upside and manageable execution risk.\n\nThe business shows early evidence of product pull, but scaling discipline still matters.\n\nNear-term diligence should focus on validating channel quality and execution consistency.\n\nThe opportunity is attractive if the team continues to convert product momentum into repeatable growth.",
+    keyStrengths: overrides.keyStrengths ?? ["Strong team"],
+    keyRisks: overrides.keyRisks ?? ["GTM evidence still early"],
+    investorMemo: {
+      executiveSummary:
+        overrides.investorMemo?.executiveSummary ??
+        "Clipaf shows a credible opportunity with clear upside if execution remains disciplined.",
+      sections: overrides.investorMemo?.sections ?? [],
+      keyDueDiligenceAreas:
+        overrides.investorMemo?.keyDueDiligenceAreas ?? ["Validate GTM"],
+    },
+    founderReport: {
+      summary:
+        overrides.founderReport?.summary ??
+        "Clipaf can improve investor readiness by tightening evidence around repeatable execution.",
+      whatsWorking:
+        overrides.founderReport?.whatsWorking ?? ["Strong team quality"],
+      pathToInevitability:
+        overrides.founderReport?.pathToInevitability ?? [
+          "Validate channel scalability",
+        ],
+    },
+    dataConfidenceNotes:
+      overrides.dataConfidenceNotes ?? "Data quality is moderate-high.",
+  });
 
   const isSectionRewriteCall = (payload: unknown): boolean =>
     Boolean(
@@ -48,10 +93,7 @@ describe("SynthesisAgent", () => {
     >,
   ) => {
     let finalIndex = 0;
-    generateTextMock.mockImplementation((payload: unknown) => {
-      if (isSectionRewriteCall(payload)) {
-        return Promise.resolve({ output: sectionRewriteOutput });
-      }
+    modelExecution.generateText.mockImplementation((_payload: unknown) => {
       const next = responses[Math.min(finalIndex, responses.length - 1)];
       finalIndex += 1;
       if (!next) {
@@ -115,7 +157,19 @@ describe("SynthesisAgent", () => {
           providerOptions: undefined,
         },
       }),
+      generateText: jest
+        .fn()
+        .mockImplementation(() =>
+          Promise.reject(new Error("No mocked final synthesis response")),
+        ),
     } as unknown as jest.Mocked<AiModelExecutionService>;
+
+    generateTextMock.mockImplementation((payload: unknown) => {
+      if (isSectionRewriteCall(payload)) {
+        return Promise.resolve({ output: sectionRewriteOutput });
+      }
+      return Promise.reject(new Error("Unexpected direct generateText call"));
+    });
 
     service = new SynthesisAgent(
       providers as unknown as AiProviderService,
@@ -129,31 +183,7 @@ describe("SynthesisAgent", () => {
     mockFinalResponses([
       {
         type: "resolve",
-        output: {
-          overallScore: 79.2,
-          recommendation: "Consider",
-          executiveSummary: "Balanced opportunity with execution risk.",
-          strengths: ["Strong team"],
-          concerns: ["GTM evidence still early"],
-          investmentThesis: "Invest with milestone-based conviction.",
-          nextSteps: ["Validate channel scalability"],
-          confidenceLevel: "Medium",
-          investorMemo: {
-            executiveSummary: "Investor memo body",
-            summary: "Test summary",
-            sections: [],
-            recommendation: "Consider",
-            riskLevel: "medium",
-            dealHighlights: ["Strong team"],
-            keyDueDiligenceAreas: ["Validate GTM"],
-          },
-          founderReport: {
-            summary: "Founder report body",
-            sections: [],
-            actionItems: ["Focus on channel scalability"],
-          },
-          dataConfidenceNotes: "Data quality is moderate-high.",
-        },
+        output: buildSuccessfulSynthesisOutput(),
       },
     ]);
 
@@ -166,13 +196,16 @@ describe("SynthesisAgent", () => {
       stageWeights: { team: 0.25, traction: 0.2, market: 0.2, product: 0.15, dealTerms: 0.1, exitPotential: 0.1 },
     });
 
-    expect(providers.resolveModelForPurpose).toHaveBeenCalledWith(
-      ModelPurpose.SYNTHESIS,
-    );
+    expect(providers.resolveModelForPurpose).not.toHaveBeenCalled();
+    expect(modelExecution.resolveForPrompt).toHaveBeenCalledWith({
+      key: "synthesis.final",
+      stage: pipeline.extraction.stage,
+    });
     expect(aiConfig.getSynthesisTemperature).toHaveBeenCalledTimes(12);
-    expect(aiConfig.getSynthesisMaxOutputTokens).toHaveBeenCalledTimes(12);
-    expect(generateTextMock).toHaveBeenCalledTimes(12);
-    const finalCall = generateTextMock.mock.calls
+    expect(aiConfig.getSynthesisMaxOutputTokens).toHaveBeenCalledTimes(13);
+    expect(generateTextMock).toHaveBeenCalledTimes(11);
+    expect(modelExecution.generateText).toHaveBeenCalledTimes(1);
+    const finalCall = modelExecution.generateText.mock.calls
       .map((entry) => entry[0])
       .find(
         (payload) =>
@@ -190,37 +223,13 @@ describe("SynthesisAgent", () => {
     );
     expect((finalCall as { prompt?: string }).prompt).toContain("Company Overview");
     expect((finalCall as { prompt?: string }).prompt).toContain("Clipaf");
-    expect(output.recommendation).toBe("Consider");
-    expect(output.investorMemo.executiveSummary).toBe(output.executiveSummary);
+    expect(output.dealSnapshot).toContain("Clipaf");
+    expect(output.investorMemo.executiveSummary).toContain("credible opportunity");
   });
 
   it("runDetailed captures prompt/output trace fields", async () => {
-    generateTextMock.mockResolvedValue({
-      output: {
-        overallScore: 79.2,
-        recommendation: "Consider",
-        executiveSummary: "Balanced opportunity with execution risk.",
-        strengths: ["Strong team"],
-        concerns: ["GTM evidence still early"],
-        investmentThesis: "Invest with milestone-based conviction.",
-        nextSteps: ["Validate channel scalability"],
-        confidenceLevel: "Medium",
-        investorMemo: {
-          executiveSummary: "Investor memo body",
-          summary: "Test summary",
-          sections: [],
-          recommendation: "Consider",
-          riskLevel: "medium",
-          dealHighlights: ["Strong team"],
-          keyDueDiligenceAreas: ["Validate GTM"],
-        },
-        founderReport: {
-          summary: "Founder report body",
-          sections: [],
-          actionItems: ["Focus on channel scalability"],
-        },
-        dataConfidenceNotes: "Data quality is moderate-high.",
-      },
+    modelExecution.generateText.mockResolvedValue({
+      output: buildSuccessfulSynthesisOutput(),
     });
 
     const pipeline = createEvaluationPipelineInput();
@@ -235,12 +244,12 @@ describe("SynthesisAgent", () => {
     expect(result.usedFallback).toBe(false);
     expect(result.inputPrompt).toContain("<evaluation_data>");
     expect(result.outputJson).toEqual(
-      expect.objectContaining({ recommendation: "Consider" }),
+      expect.objectContaining({ dealSnapshot: expect.stringContaining("Clipaf") }),
     );
-    expect(result.outputText).toContain("overallScore");
+    expect(result.outputText).toContain("dealSnapshot");
   });
 
-  it("uses text-only JSON parsing for OpenAI-backed synthesis models", async () => {
+  it("uses structured model execution for OpenAI-backed synthesis models when model execution is available", async () => {
     modelExecution.resolveForPrompt.mockResolvedValueOnce({
       resolvedConfig: {
         source: "published",
@@ -259,29 +268,17 @@ describe("SynthesisAgent", () => {
         providerOptions: undefined,
       },
     });
-    generateTextMock.mockResolvedValueOnce({
-      text: JSON.stringify({
-        overallScore: 81.1,
-        recommendation: "Consider",
-        executiveSummary: "Promising company with credible upside and manageable execution risk.",
-        strengths: ["Strong founder-market fit"],
-        concerns: ["Still early on repeatable GTM proof"],
-        investmentThesis: "Attractive if execution milestones continue to be met.",
-        nextSteps: ["Validate repeatability of acquisition channels"],
-        confidenceLevel: "Medium",
+    modelExecution.generateText.mockResolvedValueOnce({
+      output: buildSuccessfulSynthesisOutput({
+        keyStrengths: ["Strong founder-market fit"],
+        keyRisks: ["Still early on repeatable GTM proof"],
         investorMemo: {
-          executiveSummary: "Investor memo body",
-          summary: "Memo summary",
-          sections: [],
-          recommendation: "Consider",
-          riskLevel: "medium",
-          dealHighlights: ["Founder-market fit"],
           keyDueDiligenceAreas: ["Validate GTM repeatability"],
         },
         founderReport: {
-          summary: "Founder report body",
-          sections: [],
-          actionItems: ["Validate repeatability of acquisition channels"],
+          pathToInevitability: [
+            "Validate repeatability of acquisition channels",
+          ],
         },
         dataConfidenceNotes: "Evidence quality is moderate.",
       }),
@@ -297,39 +294,30 @@ describe("SynthesisAgent", () => {
     });
 
     expect(result.usedFallback).toBe(false);
-    expect(result.output.recommendation).toBe("Consider");
-    const call = generateTextMock.mock.calls[0]?.[0];
-    expect(call?.output).toBeUndefined();
-    expect(String(call?.prompt ?? "")).toContain("JSON OUTPUT CONTRACT");
+    expect(result.output.dealSnapshot).toContain("Clipaf");
+    const call = modelExecution.generateText.mock.calls[0]?.[0];
+    expect(call?.schema).toBeDefined();
+    expect(String(call?.prompt ?? "")).not.toContain("JSON OUTPUT CONTRACT");
   });
 
   it("expands short executive summary into a detailed multi-paragraph narrative", async () => {
-    generateTextMock.mockResolvedValue({
-      output: {
-        overallScore: 78,
-        recommendation: "Consider",
-        executiveSummary: "Promising company with clear upside and manageable risk.",
-        strengths: ["Strong team quality", "Large and growing market"],
-        concerns: ["GTM repeatability still unproven", "Need stronger unit economics evidence"],
-        investmentThesis: "Invest if milestones are hit with disciplined execution.",
-        nextSteps: ["Validate conversion by channel", "Audit retention cohorts"],
-        confidenceLevel: "Medium",
+    modelExecution.generateText.mockResolvedValue({
+      output: buildSuccessfulSynthesisOutput({
+        dealSnapshot:
+          "Clipaf has a credible path to becoming a meaningful category player.\n\nThe team has built early momentum around a product that addresses a real workflow pain point.\n\nCommercial proof is still early, so the next phase depends on showing repeatable acquisition quality and disciplined retention.\n\nIf that execution evidence strengthens, the upside remains compelling relative to current maturity.",
+        keyStrengths: ["Strong team quality", "Large and growing market"],
+        keyRisks: [
+          "GTM repeatability still unproven",
+          "Need stronger unit economics evidence",
+        ],
         investorMemo: {
-          executiveSummary: "Investor memo body",
-          summary: "Test summary",
-          sections: [],
-          recommendation: "Consider",
-          riskLevel: "medium",
-          dealHighlights: ["Strong team quality"],
           keyDueDiligenceAreas: ["Validate GTM repeatability"],
         },
         founderReport: {
-          summary: "Founder report body",
-          sections: [],
-          actionItems: ["Validate conversion by channel"],
+          pathToInevitability: ["Validate conversion by channel"],
         },
         dataConfidenceNotes: "Some sections rely on directional signals.",
-      },
+      }),
     });
 
     const pipeline = createEvaluationPipelineInput();
@@ -341,61 +329,49 @@ describe("SynthesisAgent", () => {
       stageWeights: { team: 0.25, traction: 0.2, market: 0.2, product: 0.15, dealTerms: 0.1, exitPotential: 0.1 },
     });
 
-    const paragraphs = output.executiveSummary
+    const paragraphs = output.dealSnapshot
       .split(/\n\s*\n+/)
       .map((paragraph) => paragraph.trim())
       .filter((paragraph) => paragraph.length > 0);
 
     expect(paragraphs.length).toBeGreaterThanOrEqual(4);
-    expect(output.executiveSummary).toContain("Clipaf");
-    expect(output.executiveSummary).not.toMatch(SCORE_CONFIDENCE_PATTERN);
+    expect(output.dealSnapshot).toContain("Clipaf");
+    expect(output.dealSnapshot).not.toMatch(SCORE_CONFIDENCE_PATTERN);
   });
 
   it("strips score/confidence phrasing from synthesis narrative fields", async () => {
-    generateTextMock.mockResolvedValue({
-      output: {
-        overallScore: 80,
-        recommendation: "Consider",
-        executiveSummary:
+    modelExecution.generateText.mockResolvedValue({
+      output: buildSuccessfulSynthesisOutput({
+        dealSnapshot:
           "Clipaf is currently rated 88/100 with high confidence. The opportunity has credible upside with clear milestones.",
-        strengths: ["Team quality (91/100, 84% confidence)"],
-        concerns: ["Distribution risk (61/100, 42% confidence)"],
-        investmentThesis:
-          "This section is currently scored at 88/100 with 85% confidence. Invest if milestones hold.",
-        nextSteps: ["Validate retention cohorts"],
-        confidenceLevel: "Medium",
+        keyStrengths: ["Team quality (91/100, 84% confidence)"],
+        keyRisks: ["Distribution risk (61/100, 42% confidence)"],
         investorMemo: {
           executiveSummary:
             "This section is currently scored at 88/100 with 85% confidence. Investor memo body.",
-          summary:
-            "Highest-signal dimensions are Team (91/100, 84% confidence) and Product (88/100, 80% confidence).",
           sections: [
             {
               title: "Overview",
               content:
                 "Lowest-scoring dimensions are GTM (61/100, 42% confidence), which currently constrain upside confidence.",
+              highlights: [],
+              concerns: [],
+              sources: [],
             },
           ],
-          recommendation: "Consider",
-          riskLevel: "medium",
-          dealHighlights: ["Team (91/100, 84% confidence)"],
           keyDueDiligenceAreas: ["Validate channel efficiency"],
         },
         founderReport: {
           summary:
             "This section is currently scored at 88/100 with 85% confidence. Founder report body.",
-          sections: [
-            {
-              title: "Plan",
-              content:
-                "Execution focus remains strong (88/100, 80% confidence) with pending evidence depth.",
-            },
+          whatsWorking: [
+            "Execution focus remains strong (88/100, 80% confidence) with pending evidence depth.",
           ],
-          actionItems: ["Harden retention measurement"],
+          pathToInevitability: ["Harden retention measurement"],
         },
         dataConfidenceNotes:
           "Data quality remains moderate with partial independent validation.",
-      },
+      }),
     });
 
     const pipeline = createEvaluationPipelineInput();
@@ -414,49 +390,30 @@ describe("SynthesisAgent", () => {
       },
     });
 
-    expect(output.executiveSummary).not.toMatch(SCORE_CONFIDENCE_PATTERN);
-    expect(output.investmentThesis).not.toMatch(SCORE_CONFIDENCE_PATTERN);
+    expect(output.dealSnapshot).not.toMatch(SCORE_CONFIDENCE_PATTERN);
     expect(output.investorMemo.executiveSummary).not.toMatch(
       SCORE_CONFIDENCE_PATTERN,
     );
-    expect(output.investorMemo.summary ?? "").not.toMatch(SCORE_CONFIDENCE_PATTERN);
     expect(output.investorMemo.sections[0]?.content ?? "").not.toMatch(
       SCORE_CONFIDENCE_PATTERN,
     );
     expect(output.founderReport.summary).not.toMatch(SCORE_CONFIDENCE_PATTERN);
-    expect(output.founderReport.sections[0]?.content ?? "").not.toMatch(
+    expect(output.founderReport.whatsWorking[0] ?? "").not.toMatch(
       SCORE_CONFIDENCE_PATTERN,
     );
-    expect(output.strengths[0] ?? "").not.toMatch(SCORE_CONFIDENCE_PATTERN);
-    expect(output.concerns[0] ?? "").not.toMatch(SCORE_CONFIDENCE_PATTERN);
+    expect(output.keyStrengths[0] ?? "").not.toMatch(SCORE_CONFIDENCE_PATTERN);
+    expect(output.keyRisks[0] ?? "").not.toMatch(SCORE_CONFIDENCE_PATTERN);
   });
 
   it("routes to gemini provider when synthesis model is non-gpt", async () => {
-    generateTextMock.mockResolvedValue({
-      output: {
-        overallScore: 75,
-        recommendation: "Consider",
-        executiveSummary: "Summary",
-        strengths: ["Strength"],
-        concerns: ["Concern"],
-        investmentThesis: "Thesis",
-        nextSteps: ["Step"],
-        confidenceLevel: "Medium",
-        investorMemo: {
-          executiveSummary: "Investor memo",
-          sections: [],
-          recommendation: "Consider",
-          riskLevel: "medium",
-          dealHighlights: [],
-          keyDueDiligenceAreas: [],
-        },
-        founderReport: {
-          summary: "Founder report",
-          sections: [],
-          actionItems: [],
-        },
+    modelExecution.generateText.mockResolvedValue({
+      output: buildSuccessfulSynthesisOutput({
+        keyStrengths: ["Strength"],
+        keyRisks: ["Concern"],
+        investorMemo: { executiveSummary: "Investor memo" },
+        founderReport: { summary: "Founder report" },
         dataConfidenceNotes: "Confidence note",
-      },
+      }),
     });
 
     const pipeline = createEvaluationPipelineInput();
@@ -472,36 +429,13 @@ describe("SynthesisAgent", () => {
       key: "synthesis.final",
       stage: pipeline.extraction.stage,
     });
-    const call = generateTextMock.mock.calls[0]?.[0];
-    expect(call?.output).toBeDefined();
+    const call = modelExecution.generateText.mock.calls[0]?.[0];
+    expect(call?.schema).toBeDefined();
   });
 
   it("synthesis brief is wrapped in evaluation_data tags", async () => {
-    generateTextMock.mockResolvedValue({
-      output: {
-        overallScore: 75,
-        recommendation: "Consider",
-        executiveSummary: "Summary",
-        strengths: ["Strength"],
-        concerns: ["Concern"],
-        investmentThesis: "Thesis",
-        nextSteps: ["Step"],
-        confidenceLevel: "Medium",
-        investorMemo: {
-          executiveSummary: "Investor memo",
-          sections: [],
-          recommendation: "Consider",
-          riskLevel: "medium",
-          dealHighlights: [],
-          keyDueDiligenceAreas: [],
-        },
-        founderReport: {
-          summary: "Founder report",
-          sections: [],
-          actionItems: [],
-        },
-        dataConfidenceNotes: "Confidence note",
-      },
+    modelExecution.generateText.mockResolvedValue({
+      output: buildSuccessfulSynthesisOutput(),
     });
 
     const pipeline = createEvaluationPipelineInput();
@@ -513,7 +447,7 @@ describe("SynthesisAgent", () => {
       stageWeights: { team: 0.25, traction: 0.2, market: 0.2, product: 0.15, dealTerms: 0.1, exitPotential: 0.1 },
     });
 
-    const finalCall = generateTextMock.mock.calls
+    const finalCall = modelExecution.generateText.mock.calls
       .map((entry) => entry[0])
       .find(
         (payload) =>
@@ -528,31 +462,8 @@ describe("SynthesisAgent", () => {
   });
 
   it("synthesis system prompt contains defense instruction", async () => {
-    generateTextMock.mockResolvedValue({
-      output: {
-        overallScore: 75,
-        recommendation: "Consider",
-        executiveSummary: "Summary",
-        strengths: ["Strength"],
-        concerns: ["Concern"],
-        investmentThesis: "Thesis",
-        nextSteps: ["Step"],
-        confidenceLevel: "Medium",
-        investorMemo: {
-          executiveSummary: "Investor memo",
-          sections: [],
-          recommendation: "Consider",
-          riskLevel: "medium",
-          dealHighlights: [],
-          keyDueDiligenceAreas: [],
-        },
-        founderReport: {
-          summary: "Founder report",
-          sections: [],
-          actionItems: [],
-        },
-        dataConfidenceNotes: "Confidence note",
-      },
+    modelExecution.generateText.mockResolvedValue({
+      output: buildSuccessfulSynthesisOutput(),
     });
 
     const pipeline = createEvaluationPipelineInput();
@@ -564,7 +475,7 @@ describe("SynthesisAgent", () => {
       stageWeights: { team: 0.25, traction: 0.2, market: 0.2, product: 0.15, dealTerms: 0.1, exitPotential: 0.1 },
     });
 
-    const finalCall = generateTextMock.mock.calls
+    const finalCall = modelExecution.generateText.mock.calls
       .map((entry) => entry[0])
       .find(
         (payload) =>
@@ -582,31 +493,8 @@ describe("SynthesisAgent", () => {
   });
 
   it("coerces legacy non-string research fields when building synthesis brief", async () => {
-    generateTextMock.mockResolvedValue({
-      output: {
-        overallScore: 75,
-        recommendation: "Consider",
-        executiveSummary: "Summary",
-        strengths: ["Strength"],
-        concerns: ["Concern"],
-        investmentThesis: "Thesis",
-        nextSteps: ["Step"],
-        confidenceLevel: "Medium",
-        investorMemo: {
-          executiveSummary: "Investor memo",
-          sections: [],
-          recommendation: "Consider",
-          riskLevel: "medium",
-          dealHighlights: [],
-          keyDueDiligenceAreas: [],
-        },
-        founderReport: {
-          summary: "Founder report",
-          sections: [],
-          actionItems: [],
-        },
-        dataConfidenceNotes: "Confidence note",
-      },
+    modelExecution.generateText.mockResolvedValue({
+      output: buildSuccessfulSynthesisOutput(),
     });
 
     const pipeline = createEvaluationPipelineInput();
@@ -634,7 +522,7 @@ describe("SynthesisAgent", () => {
       },
     });
 
-    const finalCall = generateTextMock.mock.calls
+    const finalCall = modelExecution.generateText.mock.calls
       .map((entry) => entry[0])
       .find(
         (payload) =>
@@ -661,11 +549,10 @@ describe("SynthesisAgent", () => {
       stageWeights: { team: 0.25, traction: 0.2, market: 0.2, product: 0.15, dealTerms: 0.1, exitPotential: 0.1 },
     });
 
-    expect(output.overallScore).toBe(0);
-    expect(output.recommendation).toBe("Decline");
-    expect(output.executiveSummary).toContain("Synthesis failed");
-    expect(output.concerns).toContain("Automated synthesis could not be completed");
-    expect(output.confidenceLevel).toBe("Low");
+    expect(output.dealSnapshot).toContain("Synthesis failed");
+    expect(output.keyRisks).toContain("Automated synthesis could not be completed");
+    expect(output.investorMemo.executiveSummary).toContain("Synthesis generation failed");
+    expect(output.dataConfidenceNotes).toContain("manual verification");
   });
 
   it("runDetailed returns fallback reason metadata on empty output errors", async () => {
@@ -689,8 +576,9 @@ describe("SynthesisAgent", () => {
       "Model returned empty structured output; fallback result generated.",
     );
     expect(result.retryCount).toBe(1);
-    expect(generateTextMock).toHaveBeenCalledTimes(13);
-    expect(result.output.overallScore).toBe(0);
+    expect(generateTextMock).toHaveBeenCalledTimes(11);
+    expect(modelExecution.generateText).toHaveBeenCalledTimes(2);
+    expect(result.output.dealSnapshot).toContain("Synthesis failed");
   });
 
   it("retries once and succeeds when second synthesis attempt returns output", async () => {
@@ -698,31 +586,20 @@ describe("SynthesisAgent", () => {
       { type: "reject", error: new Error("No object generated") },
       {
         type: "resolve",
-        output: {
-          overallScore: 81.3,
-          recommendation: "Consider",
-          executiveSummary: "Strong upside with manageable risk profile.",
-          strengths: ["Efficient channel mix"],
-          concerns: ["Regulatory volatility"],
-          investmentThesis: "High potential if execution remains disciplined.",
-          nextSteps: ["Validate contribution margin trend"],
-          confidenceLevel: "Medium",
+        output: buildSuccessfulSynthesisOutput({
+          dealSnapshot: "Strong upside with manageable risk profile.",
+          keyStrengths: ["Efficient channel mix"],
+          keyRisks: ["Regulatory volatility"],
           investorMemo: {
             executiveSummary: "Investor memo body",
-            summary: "Test summary",
-            sections: [],
-            recommendation: "Consider",
-            riskLevel: "medium",
-            dealHighlights: ["Efficient channel mix"],
             keyDueDiligenceAreas: ["Validate contribution margin"],
           },
           founderReport: {
             summary: "Founder report body",
-            sections: [],
-            actionItems: ["Validate contribution margin trend"],
+            pathToInevitability: ["Validate contribution margin trend"],
           },
           dataConfidenceNotes: "Evidence quality is moderate.",
-        },
+        }),
       },
     ]);
 
@@ -738,7 +615,8 @@ describe("SynthesisAgent", () => {
     expect(result.usedFallback).toBe(false);
     expect(result.retryCount).toBe(1);
     expect(result.attempt).toBe(2);
-    expect(result.output.recommendation).toBe("Consider");
-    expect(generateTextMock).toHaveBeenCalledTimes(13);
+    expect(result.output.dealSnapshot).toContain("Strong upside");
+    expect(generateTextMock).toHaveBeenCalledTimes(11);
+    expect(modelExecution.generateText).toHaveBeenCalledTimes(2);
   });
 });

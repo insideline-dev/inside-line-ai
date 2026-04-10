@@ -93,6 +93,7 @@ interface QueuePhaseParams {
 const MIN_RESEARCH_PHASE_TIMEOUT_MS = 2_400_000; // 40 minutes minimum
 const DEFAULT_RESEARCH_AGENT_STAGGER_MS = 180_000; // 3 minutes
 const RESEARCH_AGENT_COUNT = 5;
+const SYNTHESIS_PHASE_TIMEOUT_BUFFER_MS = 60_000; // avoid racing the worker's own timeout handling
 export const PIPELINE_MISSING_FIELDS_ERROR_PREFIX =
   "Pipeline start blocked: missing critical fields";
 
@@ -679,7 +680,7 @@ export class PipelineService {
   async startPipeline(
     startupId: string,
     userId: string,
-    _options?: {
+    options?: {
       skipExtraction?: boolean;
     },
   ): Promise<string> {
@@ -709,6 +710,86 @@ export class PipelineService {
       pipelineRunId: state.pipelineRunId,
       phases: this.phaseTransition.getConfig().phases.map((phase) => phase.phase),
     });
+
+    if (options?.skipExtraction) {
+      const priorExtraction =
+        this.extractionService.getCachedResult(startupId) ??
+        ((existing?.results?.[PipelinePhase.EXTRACTION] as ExtractionResult | undefined) ??
+          null);
+
+      if (priorExtraction) {
+        await this.pipelineState.setPhaseResult(
+          startupId,
+          PipelinePhase.EXTRACTION,
+          priorExtraction,
+        );
+        await this.pipelineState.updatePhase(
+          startupId,
+          PipelinePhase.EXTRACTION,
+          PhaseStatus.COMPLETED,
+        );
+        await this.progressTracker.updatePhaseProgress({
+          startupId,
+          userId,
+          pipelineRunId: state.pipelineRunId,
+          phase: PipelinePhase.EXTRACTION,
+          status: PhaseStatus.COMPLETED,
+        });
+
+        try {
+          await this.syncStartupFieldsFromExtractionResult(
+            startupId,
+            priorExtraction,
+            "pre-pipeline",
+          );
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          this.logger.warn(
+            `[Pipeline] Failed to sync startup fields from reused extraction result for ${startupId}: ${message}`,
+          );
+        }
+
+        const stateWithCompletedExtraction: PipelineState = {
+          ...state,
+          phases: {
+            ...state.phases,
+            [PipelinePhase.EXTRACTION]: {
+              ...state.phases[PipelinePhase.EXTRACTION],
+              status: PhaseStatus.COMPLETED,
+            },
+          },
+          results: {
+            ...state.results,
+            [PipelinePhase.EXTRACTION]: priorExtraction,
+          },
+        };
+        const decision =
+          this.phaseTransition.decideNextPhases(stateWithCompletedExtraction);
+
+        for (const phase of decision.queue) {
+          await this.queuePhase({
+            startupId,
+            pipelineRunId: state.pipelineRunId,
+            userId,
+            phase,
+            knownState: stateWithCompletedExtraction,
+          });
+        }
+
+        await this.notifyPipelineLifecycle({
+          userId,
+          startupId,
+          type: NotificationType.INFO,
+          title: "Analysis started",
+          message: "AI pipeline analysis has started.",
+        });
+
+        this.logger.log(
+          `Started AI pipeline ${state.pipelineRunId} for startup ${startupId} using existing extraction output`,
+        );
+        return state.pipelineRunId;
+      }
+    }
 
     for (const phase of this.phaseTransition.getInitialPhases()) {
       await this.queuePhase({
@@ -1452,29 +1533,43 @@ export class PipelineService {
     const normalizedConfiguredTimeout = Number.isFinite(configuredTimeoutMs)
       ? Math.max(1, Math.floor(configuredTimeoutMs))
       : 1;
-    if (phase !== PipelinePhase.RESEARCH) {
-      return normalizedConfiguredTimeout;
+    const config = this.aiConfig as Partial<AiConfigService>;
+    if (phase === PipelinePhase.RESEARCH) {
+      const researchHardTimeoutMs =
+        typeof config.getResearchAgentHardTimeoutMs === "function"
+          ? config.getResearchAgentHardTimeoutMs()
+          : MIN_RESEARCH_PHASE_TIMEOUT_MS;
+      const researchStaggerMs =
+        typeof config.getResearchAgentStaggerMs === "function"
+          ? config.getResearchAgentStaggerMs()
+          : DEFAULT_RESEARCH_AGENT_STAGGER_MS;
+
+      // All agents run in a single staggered wave. Budget = max stagger delay + single agent hard timeout.
+      const maxStaggerDelayMs = Math.max(0, researchStaggerMs) * (RESEARCH_AGENT_COUNT - 1);
+      const singleWaveBudgetMs = researchHardTimeoutMs + maxStaggerDelayMs;
+
+      return Math.max(
+        normalizedConfiguredTimeout,
+        MIN_RESEARCH_PHASE_TIMEOUT_MS,
+        singleWaveBudgetMs,
+      );
     }
 
-    const config = this.aiConfig as Partial<AiConfigService>;
-    const researchHardTimeoutMs =
-      typeof config.getResearchAgentHardTimeoutMs === "function"
-        ? config.getResearchAgentHardTimeoutMs()
-        : MIN_RESEARCH_PHASE_TIMEOUT_MS;
-    const researchStaggerMs =
-      typeof config.getResearchAgentStaggerMs === "function"
-        ? config.getResearchAgentStaggerMs()
-        : DEFAULT_RESEARCH_AGENT_STAGGER_MS;
+    if (phase === PipelinePhase.SYNTHESIS) {
+      const synthesisHardTimeoutMs =
+        typeof config.getSynthesisAgentHardTimeoutMs === "function"
+          ? config.getSynthesisAgentHardTimeoutMs()
+          : normalizedConfiguredTimeout;
 
-    // All agents run in a single staggered wave. Budget = max stagger delay + single agent hard timeout.
-    const maxStaggerDelayMs = Math.max(0, researchStaggerMs) * (RESEARCH_AGENT_COUNT - 1);
-    const singleWaveBudgetMs = researchHardTimeoutMs + maxStaggerDelayMs;
+      const synthesisBudgetMs = Math.max(
+        normalizedConfiguredTimeout,
+        Math.max(1, Math.floor(synthesisHardTimeoutMs)),
+      );
 
-    return Math.max(
-      normalizedConfiguredTimeout,
-      MIN_RESEARCH_PHASE_TIMEOUT_MS,
-      singleWaveBudgetMs,
-    );
+      return synthesisBudgetMs + SYNTHESIS_PHASE_TIMEOUT_BUFFER_MS;
+    }
+
+    return normalizedConfiguredTimeout;
   }
 
   private async updateStartupStatus(

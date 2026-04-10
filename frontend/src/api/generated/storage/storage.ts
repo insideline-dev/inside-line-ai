@@ -28,7 +28,6 @@ import type {
   DownloadUrlResponseDto,
   GetUploadUrlDto,
   StorageControllerDeleteAsset200,
-  StorageControllerDeleteFile200,
   StorageControllerListAssetsParams,
   UploadUrlResponseDto
 } from '.././model';
@@ -541,85 +540,3 @@ export function useStorageControllerGetDownloadUrl<TData = Awaited<ReturnType<ty
 
 
 
-/**
- * @summary Delete a raw file from R2
- */
-export type storageControllerDeleteFileResponse200 = {
-  data: StorageControllerDeleteFile200
-  status: 200
-}
-    
-export type storageControllerDeleteFileResponseSuccess = (storageControllerDeleteFileResponse200) & {
-  headers: Headers;
-};
-;
-
-export type storageControllerDeleteFileResponse = (storageControllerDeleteFileResponseSuccess)
-
-export const getStorageControllerDeleteFileUrl = (key: string,) => {
-
-
-  
-
-  return `/storage/${key}`
-}
-
-export const storageControllerDeleteFile = async (key: string, options?: RequestInit): Promise<storageControllerDeleteFileResponse> => {
-  
-  return customFetch<storageControllerDeleteFileResponse>(getStorageControllerDeleteFileUrl(key),
-  {      
-    ...options,
-    method: 'DELETE'
-    
-    
-  }
-);}
-
-
-
-
-export const getStorageControllerDeleteFileMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof storageControllerDeleteFile>>, TError,{key: string}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof storageControllerDeleteFile>>, TError,{key: string}, TContext> => {
-
-const mutationKey = ['storageControllerDeleteFile'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-      
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof storageControllerDeleteFile>>, {key: string}> = (props) => {
-          const {key} = props ?? {};
-
-          return  storageControllerDeleteFile(key,requestOptions)
-        }
-
-
-
-        
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type StorageControllerDeleteFileMutationResult = NonNullable<Awaited<ReturnType<typeof storageControllerDeleteFile>>>
-    
-    export type StorageControllerDeleteFileMutationError = ErrorType<unknown>
-
-    /**
- * @summary Delete a raw file from R2
- */
-export const useStorageControllerDeleteFile = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof storageControllerDeleteFile>>, TError,{key: string}, TContext>, request?: SecondParameter<typeof customFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof storageControllerDeleteFile>>,
-        TError,
-        {key: string},
-        TContext
-      > => {
-      return useMutation(getStorageControllerDeleteFileMutationOptions(options), queryClient);
-    }
-    

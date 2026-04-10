@@ -10,6 +10,11 @@ import type {
   EvaluationAgentKey,
   EvaluationPipelineInput,
 } from "../interfaces/agent.interface";
+import {
+  type ClassifiedFile,
+  CATEGORY_AGENT_MAP,
+  type DocumentCategory,
+} from "../interfaces/document-classification.interface";
 import type { EvaluationResult } from "../interfaces/phase-results.interface";
 import { EVALUATION_SCHEMAS } from "../schemas";
 import { EVALUATION_AGENT_KEYS } from "../constants/agent-keys";
@@ -67,7 +72,7 @@ export class EvaluationService {
       options?.onAgentLifecycle?.(payload);
     };
 
-    const pipelineInput = await this.loadPipelineInput(startupId);
+    const { pipelineInput, agentDocumentMap } = await this.loadPipelineInput(startupId);
     if (options?.agentKey) {
       const current = await this.pipelineState.getPhaseResult(
         startupId,
@@ -81,6 +86,7 @@ export class EvaluationService {
           handleAgentStart,
           handleAgentComplete,
           handleAgentLifecycle,
+          agentDocumentMap,
         );
       }
 
@@ -90,6 +96,7 @@ export class EvaluationService {
         pipelineInput,
         handleAgentStart,
         handleAgentLifecycle,
+        agentDocumentMap,
       );
       handleAgentComplete(rerun);
 
@@ -102,10 +109,14 @@ export class EvaluationService {
       handleAgentStart,
       handleAgentComplete,
       handleAgentLifecycle,
+      agentDocumentMap,
     );
   }
 
-  private async loadPipelineInput(startupId: string): Promise<EvaluationPipelineInput> {
+  private async loadPipelineInput(startupId: string): Promise<{
+    pipelineInput: EvaluationPipelineInput;
+    agentDocumentMap: Map<EvaluationAgentKey, string[]>;
+  }> {
     const extraction = await this.pipelineState.getPhaseResult(
       startupId,
       PipelinePhase.EXTRACTION,
@@ -126,7 +137,7 @@ export class EvaluationService {
     }
 
     const [record] = await this.drizzle.db
-      .select({ stage: startup.stage })
+      .select({ stage: startup.stage, files: startup.files })
       .from(startup)
       .where(eq(startup.id, startupId))
       .limit(1);
@@ -144,7 +155,33 @@ export class EvaluationService {
     );
 
     const { result: normalizedResearch } = normalizeResearchResult(research);
-    return { extraction, scraping, research: normalizedResearch, enrichment: enrichment ?? undefined };
+
+    const agentDocumentMap = this.buildAgentDocumentMap(
+      (record?.files as ClassifiedFile[] | null) ?? [],
+    );
+
+    return {
+      pipelineInput: { extraction, scraping, research: normalizedResearch, enrichment: enrichment ?? undefined },
+      agentDocumentMap,
+    };
+  }
+
+  private buildAgentDocumentMap(
+    files: ClassifiedFile[],
+  ): Map<EvaluationAgentKey, string[]> {
+    const map = new Map<EvaluationAgentKey, string[]>();
+
+    for (const file of files) {
+      if (!file.category) continue;
+      const agentKeys = CATEGORY_AGENT_MAP[file.category as DocumentCategory] ?? [];
+      for (const key of agentKeys) {
+        const existing = map.get(key) ?? [];
+        existing.push(`[${file.category}] ${file.name}`);
+        map.set(key, existing);
+      }
+    }
+
+    return map;
   }
 
   private mergeAgentResult(

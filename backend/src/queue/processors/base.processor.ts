@@ -24,6 +24,9 @@ const HEALTH_CHECK_INTERVAL_MS = 15_000;
 const STALLED_CONSUMPTION_THRESHOLD_MS = 45_000;
 const RECOVERY_DELAY_MS = 5_000;
 const TRANSIENT_REDIS_WARN_WINDOW_MS = 30_000;
+const AI_JOB_LOCK_DURATION_MS = 15 * 60 * 1000;
+const AI_JOB_STALLED_INTERVAL_MS = 15 * 60 * 1000;
+const AI_JOB_MAX_STALLED_COUNT = 3;
 const TRANSIENT_REDIS_ERROR_PATTERNS = [
   "connection is closed",
   "connection closed",
@@ -87,9 +90,9 @@ export abstract class BaseProcessor<
           ...(this.queuePrefix ? { prefix: this.queuePrefix } : {}),
           concurrency: this.concurrency,
           autorun: true,
-          lockDuration: 300_000,    // 5 min (default 30s too short for AI jobs running 10-40 min)
-          stalledInterval: 300_000, // 5 min — match lockDuration to avoid false stall detection
-          maxStalledCount: 2,       // 2 consecutive misses before marking failed (default 1)
+          lockDuration: AI_JOB_LOCK_DURATION_MS,
+          stalledInterval: AI_JOB_STALLED_INTERVAL_MS,
+          maxStalledCount: AI_JOB_MAX_STALLED_COUNT,
         },
       );
 
@@ -109,6 +112,9 @@ export abstract class BaseProcessor<
 
       this.worker.on('stalled', (jobId) => {
         this.logger.warn(`Job ${jobId} stalled in queue ${this.queueName}`);
+        if (jobId) {
+          void this.handleStalledJob(String(jobId));
+        }
       });
 
       // Only log connection errors once, not continuously
@@ -198,6 +204,10 @@ export abstract class BaseProcessor<
   protected abstract process(
     job: Job<TData>,
   ): Promise<Omit<TResult, 'jobId' | 'duration' | 'success'>>;
+
+  protected async onWorkerStalled(_job: Job<TData>): Promise<void> {
+    return Promise.resolve();
+  }
 
   /**
    * Check if an error is a validation/input error that should not be retried
@@ -469,6 +479,25 @@ export abstract class BaseProcessor<
     options.connectTimeout = options.connectTimeout ?? 10_000;
     options.keepAlive = options.keepAlive ?? 30_000;
     return options;
+  }
+
+  private async handleStalledJob(jobId: string): Promise<void> {
+    try {
+      const queue = this.getOrCreateProbeQueue();
+      const job = await queue.getJob(jobId);
+      if (!job) {
+        this.logger.warn(
+          `Unable to resolve stalled job ${jobId} in queue ${this.queueName}`,
+        );
+        return;
+      }
+      await this.onWorkerStalled(job as Job<TData>);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `Failed to handle stalled job ${jobId} in queue ${this.queueName}: ${message}`,
+      );
+    }
   }
 
 }

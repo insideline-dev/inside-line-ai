@@ -136,7 +136,9 @@ export function extractKpiMetrics(
   const team = rec(evaluation.teamData);
   const fmf = rec(team.founderMarketFit);
 
-  // --- ARR: deck first → chart data → legacy keyMetrics ---
+  // --- ARR: structured KPI → deck string → chart data → legacy keyMetrics ---
+  const arrKpi = rec(deckFinancials.arrKpi);
+  const arrKpiValue = safeStr(arrKpi.value);
   const deckArr = safeStr(deckFinancials.arr);
   const revenueProjection = Array.isArray(charts.revenueProjection)
     ? charts.revenueProjection as Array<{ period?: string; revenue?: number }>
@@ -146,7 +148,14 @@ export function extractKpiMetrics(
     : undefined;
   const arrRaw = safeStr(keyMetrics.arr) ?? safeStr(keyMetrics.annualRecurringRevenue);
   let arr = DASH;
-  if (deckArr && deckArr !== "Unknown") {
+  if (arrKpiValue && arrKpiValue !== "Unknown") {
+    const currency = safeStr(arrKpi.currency) ?? "USD";
+    const prefix = currency === "USD" ? "$" : `${currency} `;
+    const val = extractShortValue(arrKpiValue).replace(/^\$/, "");
+    const period = safeStr(arrKpi.period);
+    const suffix = period && period !== "current" ? ` (${period})` : "";
+    arr = `${prefix}${val}${suffix}`;
+  } else if (deckArr && deckArr !== "Unknown") {
     arr = extractShortValue(deckArr);
   } else if (latestRevenue !== undefined && latestRevenue > 0) {
     arr = latestRevenue >= 1_000_000
@@ -158,7 +167,9 @@ export function extractKpiMetrics(
     arr = extractShortValue(arrRaw);
   }
 
-  // --- Growth Rate: deck first → deckClaimed → researched CAGR ---
+  // --- Growth Rate: structured KPI → deck string → deckClaimed → researched CAGR ---
+  const growthRateKpi = rec(deckFinancials.growthRateKpi);
+  const grKpiValue = safeStr(growthRateKpi.value);
   const deckGrowth = safeStr(deckFinancials.growthRate);
   const deckGrowthPeriod = safeStr(deckFinancials.growthRatePeriod);
   const deckClaimed = safeStr(growthRate.deckClaimed);
@@ -166,7 +177,13 @@ export function extractKpiMetrics(
   const cagrStr = safeStr(growthRate.cagr);
   const growthPeriod = safeStr(growthRate.period);
   let growthRateVal = DASH;
-  if (deckGrowth && deckGrowth !== "Unknown") {
+  if (grKpiValue && grKpiValue !== "Unknown") {
+    const basis = safeStr(growthRateKpi.basis);
+    const period = safeStr(growthRateKpi.period);
+    const basisLabel = basis && basis !== "unknown" ? ` ${basis}` : "";
+    const periodLabel = period && period !== "current" ? ` · ${period}` : "";
+    growthRateVal = `${extractShortValue(grKpiValue)}${basisLabel}${periodLabel}`;
+  } else if (deckGrowth && deckGrowth !== "Unknown") {
     const shortVal = extractShortValue(deckGrowth);
     const period = deckGrowthPeriod && deckGrowthPeriod !== "Unknown" ? deckGrowthPeriod : null;
     growthRateVal = period && !shortVal.toLowerCase().includes(period.toLowerCase())
@@ -185,7 +202,9 @@ export function extractKpiMetrics(
       : cagrDisplay;
   }
 
-  // --- Gross Margin: deck first → chart data → legacy keyMetrics ---
+  // --- Gross Margin: structured KPI → deck string → chart data → legacy keyMetrics ---
+  const grossMarginKpi = rec(deckFinancials.grossMarginKpi);
+  const gmKpiValue = safeStr(grossMarginKpi.value);
   const deckGrossMargin = safeStr(deckFinancials.grossMargin);
   const marginProgression = Array.isArray(charts.marginProgression)
     ? charts.marginProgression as Array<{ period?: string; grossMargin?: number }>
@@ -195,7 +214,12 @@ export function extractKpiMetrics(
     : undefined;
   const grossMarginRaw = safeStr(keyMetrics.grossMargin);
   let grossMargin = DASH;
-  if (deckGrossMargin && deckGrossMargin !== "Unknown") {
+  if (gmKpiValue && gmKpiValue !== "Unknown") {
+    const val = gmKpiValue.includes("%") ? gmKpiValue : `${gmKpiValue}%`;
+    const period = safeStr(grossMarginKpi.period);
+    const suffix = period && period !== "current" ? ` (${period})` : "";
+    grossMargin = `${val}${suffix}`;
+  } else if (deckGrossMargin && deckGrossMargin !== "Unknown") {
     grossMargin = deckGrossMargin.includes("%") ? deckGrossMargin : `${deckGrossMargin}%`;
   } else if (latestMargin !== undefined && latestMargin > 0) {
     grossMargin = `${Math.round(latestMargin)}%`;
@@ -207,12 +231,23 @@ export function extractKpiMetrics(
   const structureType = safeStr(marketStructure.structureType);
   const mktStructure = structureType ? titleCase(structureType) : DASH;
 
-  // --- TAM: deck first → evaluation ---
+  // --- TAM: structured KPI → deck string → evaluation ---
+  const tamKpi = rec(deckMarket.tamKpi);
+  const tamKpiValue = safeStr(tamKpi.value);
   const deckTam = safeStr(deckMarket.tam);
   const tamValue = safeStr(tam.value);
-  const tamDisplay = deckTam
-    ? extractShortValue(deckTam)
-    : tamValue ? extractShortValue(tamValue) : DASH;
+  let tamDisplay: string;
+  if (tamKpiValue && tamKpiValue !== "Unknown") {
+    const currency = safeStr(tamKpi.currency) ?? "USD";
+    const prefix = currency === "USD" ? "$" : `${currency} `;
+    const val = extractShortValue(tamKpiValue).replace(/^\$/, "");
+    const scale = safeStr(tamKpi.scale);
+    tamDisplay = `${prefix}${val}${scale && !val.includes(scale) ? scale : ""}`;
+  } else {
+    tamDisplay = deckTam
+      ? extractShortValue(deckTam)
+      : tamValue ? extractShortValue(tamValue) : DASH;
+  }
 
   // --- Market Growth: deck first → researched CAGR ---
   const deckMarketGrowth = safeStr(deckMarket.marketGrowthRate);

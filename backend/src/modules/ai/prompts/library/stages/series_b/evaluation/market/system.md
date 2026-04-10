@@ -184,6 +184,9 @@ IMPORTANT: TAM/SAM/SOM `value` fields must be concise numeric ranges only. Examp
 - marketGrowthAndTiming → growth rate with source, key dynamics, market lifecycle position
   - marketGrowthAndTiming.growthRate.deckClaimedPeriod → REQUIRED: "MoM", "QoQ", or "YoY". Never "Unknown" when a deck growth rate exists.
   - marketGrowthAndTiming.growthRate.deckClaimedAnnualized → REQUIRED: annualized YoY equivalent of deck claim (e.g. "~891%"). Same as deckClaimed if already YoY.
+  - marketGrowthAndTiming.growthRate.year → The reference year for this growth data point (e.g., "2025", "2024-2028"). Required.
+  - marketGrowthAndTiming.growthRate.sourceUrl → URL or domain of the primary data source (e.g., "gartner.com"). Use research URLs, not report titles.
+  - marketGrowthAndTiming.growthRate.dataType → "forecast" for projections, "actual" for historical data, "unknown" if unclear.
 - marketStructure → structure type, concentration trend, entry conditions scorecard (per-barrier severity), tailwinds, headwinds
 
 From Strengths, Risks & Data Gaps:

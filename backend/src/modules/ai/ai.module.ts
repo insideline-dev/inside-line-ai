@@ -26,6 +26,7 @@ import { AiModelOverrideService } from "./services/ai-model-override.service";
 import { AiPromptService } from "./services/ai-prompt.service";
 import { AiPromptRuntimeService } from "./services/ai-prompt-runtime.service";
 import {
+  ClassificationProcessor,
   EnrichmentProcessor,
   EvaluationProcessor,
   ExtractionProcessor,
@@ -46,6 +47,8 @@ import { PipelineStateSnapshotService } from "./services/pipeline-state-snapshot
 import { PipelineFeedbackService } from "./services/pipeline-feedback.service";
 import { PipelineAgentTraceService } from "./services/pipeline-agent-trace.service";
 import { PdfTextExtractorService } from "./services/pdf-text-extractor.service";
+import { DocumentClassificationService } from "./services/document-classification.service";
+import { ExcelTextExtractorService } from "./services/excel-text-extractor.service";
 import { PptxTextExtractorService } from "./services/pptx-text-extractor.service";
 import { LinkedinEnrichmentService } from "./services/linkedin-enrichment.service";
 import { InvestorMatchingService } from "./services/investor-matching.service";
@@ -56,7 +59,8 @@ import { ResearchService } from "./services/research.service";
 import { ScoreComputationService } from "./services/score-computation.service";
 import { ScrapingCacheService } from "./services/scraping-cache.service";
 import { ScrapingService } from "./services/scraping.service";
-import { SynthesisAgent } from "./agents/synthesis";
+import { MemoSynthesisAgent } from "./agents/synthesis/memo-synthesis.agent";
+import { ReportSynthesisAgent } from "./agents/synthesis/report-synthesis.agent";
 import { SynthesisService } from "./services/synthesis.service";
 import { StartupMatchingPipelineService } from "./services/startup-matching-pipeline.service";
 import { WebsiteScraperService } from "./services/website-scraper.service";
@@ -108,9 +112,11 @@ import { OpenAiTextGenerationService } from "./services/openai-text-generation.s
     GeminiResearchService,
     OpenAiDeepResearchService,
     OpenAiTextGenerationService,
+    DocumentClassificationService,
     ExtractionService,
     PdfTextExtractorService,
     PptxTextExtractorService,
+    ExcelTextExtractorService,
     MistralOcrService,
     FieldExtractorService,
     ScrapingService,
@@ -122,7 +128,8 @@ import { OpenAiTextGenerationService } from "./services/openai-text-generation.s
     ScrapingCacheService,
     ResearchParametersService,
     ResearchService,
-    SynthesisAgent,
+    MemoSynthesisAgent,
+    ReportSynthesisAgent,
     ScoreComputationService,
     LocationNormalizerService,
     InvestorMatchingService,
@@ -142,6 +149,7 @@ import { OpenAiTextGenerationService } from "./services/openai-text-generation.s
     EvaluationAgentRegistryService,
     EvaluationService,
     SynthesisService,
+    ClassificationProcessor,
     ExtractionProcessor,
     EnrichmentProcessor,
     ScrapingProcessor,
@@ -167,6 +175,7 @@ import { OpenAiTextGenerationService } from "./services/openai-text-generation.s
     EvaluationInputResolverService,
     OpenAiDeepResearchService,
     OpenAiTextGenerationService,
+    DocumentClassificationService,
     PipelineStateService,
     PipelineStateSnapshotService,
     PipelineFeedbackService,

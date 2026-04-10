@@ -44,7 +44,7 @@ import {
 import { AnalysisProgressBar } from "@/components/AnalysisProgressBar";
 import {
   useStartupControllerFindAll,
-} from "@/api/generated/startup/startup";
+} from "@/api/generated/startups/startups";
 import { useToast } from "@/hooks/use-toast";
 import {
   Target,

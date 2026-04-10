@@ -45,7 +45,7 @@ export const envSchema = z.object({
   QUEUE_MAX_PER_USER_AI_SYNTHESIS: z.coerce.number().default(5),
   QUEUE_MAX_DEPTH_AI_MATCHING: z.coerce.number().default(500),
   QUEUE_MAX_PER_USER_AI_MATCHING: z.coerce.number().default(5),
-  QUEUE_PREFIX: z.string().optional(),
+  QUEUE_PREFIX: z.string().trim().optional(),
   AI_QUEUE_CONCURRENCY_EXTRACTION: z.coerce.number().default(4),
   AI_QUEUE_CONCURRENCY_ENRICHMENT: z.coerce.number().default(4),
   AI_QUEUE_CONCURRENCY_SCRAPING: z.coerce.number().default(4),
@@ -187,6 +187,15 @@ export const envSchema = z.object({
   AI_SYNTHESIS_AGENT_HARD_TIMEOUT_MS: z.coerce.number().default(10800000),
   AI_EXTRACTION_MAX_TEXT_CHARS: z.coerce.number().default(180000),
   AI_EXTRACTION_MAX_PDF_BYTES: z.coerce.number().default(104857600),
+}).superRefine((env, ctx) => {
+  if (env.NODE_ENV === "production" && !env.QUEUE_PREFIX) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["QUEUE_PREFIX"],
+      message:
+        "QUEUE_PREFIX is required in production to isolate BullMQ workers between environments",
+    });
+  }
 });
 
 export type Env = z.infer<typeof envSchema>;

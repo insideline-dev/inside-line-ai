@@ -35,6 +35,7 @@ export interface EvaluationPipelineInput {
   scraping: ScrapingResult;
   research: ResearchResult;
   enrichment?: EnrichmentResult;
+  relevantSupportingDocuments?: string;
   mappedInputs?: Record<string, unknown>;
   mappedInputSources?: Array<{
     researchAgentId: ResearchAgentKey;

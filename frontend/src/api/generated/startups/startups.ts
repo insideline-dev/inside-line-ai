@@ -29,6 +29,8 @@ import type {
   CreateStartupDto,
   GetProgressResponseDto,
   PresignedUrlDto,
+  RegisterDataRoomFileDto,
+  RegisterDataRoomFilesBulkDto,
   RejectStartupDto,
   RespondInterestDto,
   SaveDraftDto,
@@ -38,6 +40,7 @@ import type {
   StartupControllerFindAllParams,
   StartupControllerFindApprovedParams,
   SubmitStartupDto,
+  UpdateDataRoomCategoryDto,
   UpdateDataRoomPermissionsDto,
   UpdateStartupDto,
   UploadDataRoomDto
@@ -1613,7 +1616,161 @@ export function useStartupControllerGetDataRoom<TData = Awaited<ReturnType<typeo
 
 
 
-export type startupControllerUpdateDataRoomPermissionsResponse200 = {
+export type startupControllerRegisterDataRoomFileResponse201 = {
+  data: void
+  status: 201
+}
+    
+export type startupControllerRegisterDataRoomFileResponseSuccess = (startupControllerRegisterDataRoomFileResponse201) & {
+  headers: Headers;
+};
+;
+
+export type startupControllerRegisterDataRoomFileResponse = (startupControllerRegisterDataRoomFileResponseSuccess)
+
+export const getStartupControllerRegisterDataRoomFileUrl = (id: string,) => {
+
+
+  
+
+  return `/startups/${id}/data-room/register`
+}
+
+export const startupControllerRegisterDataRoomFile = async (id: string,
+    registerDataRoomFileDto: RegisterDataRoomFileDto, options?: RequestInit): Promise<startupControllerRegisterDataRoomFileResponse> => {
+  
+  return customFetch<startupControllerRegisterDataRoomFileResponse>(getStartupControllerRegisterDataRoomFileUrl(id),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      registerDataRoomFileDto,)
+  }
+);}
+
+
+
+
+export const getStartupControllerRegisterDataRoomFileMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startupControllerRegisterDataRoomFile>>, TError,{id: string;data: BodyType<RegisterDataRoomFileDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof startupControllerRegisterDataRoomFile>>, TError,{id: string;data: BodyType<RegisterDataRoomFileDto>}, TContext> => {
+
+const mutationKey = ['startupControllerRegisterDataRoomFile'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof startupControllerRegisterDataRoomFile>>, {id: string;data: BodyType<RegisterDataRoomFileDto>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  startupControllerRegisterDataRoomFile(id,data,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type StartupControllerRegisterDataRoomFileMutationResult = NonNullable<Awaited<ReturnType<typeof startupControllerRegisterDataRoomFile>>>
+    export type StartupControllerRegisterDataRoomFileMutationBody = BodyType<RegisterDataRoomFileDto>
+    export type StartupControllerRegisterDataRoomFileMutationError = ErrorType<unknown>
+
+    export const useStartupControllerRegisterDataRoomFile = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startupControllerRegisterDataRoomFile>>, TError,{id: string;data: BodyType<RegisterDataRoomFileDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof startupControllerRegisterDataRoomFile>>,
+        TError,
+        {id: string;data: BodyType<RegisterDataRoomFileDto>},
+        TContext
+      > => {
+      return useMutation(getStartupControllerRegisterDataRoomFileMutationOptions(options), queryClient);
+    }
+    export type startupControllerRegisterDataRoomFilesBulkResponse201 = {
+  data: void
+  status: 201
+}
+    
+export type startupControllerRegisterDataRoomFilesBulkResponseSuccess = (startupControllerRegisterDataRoomFilesBulkResponse201) & {
+  headers: Headers;
+};
+;
+
+export type startupControllerRegisterDataRoomFilesBulkResponse = (startupControllerRegisterDataRoomFilesBulkResponseSuccess)
+
+export const getStartupControllerRegisterDataRoomFilesBulkUrl = (id: string,) => {
+
+
+  
+
+  return `/startups/${id}/data-room/register-bulk`
+}
+
+export const startupControllerRegisterDataRoomFilesBulk = async (id: string,
+    registerDataRoomFilesBulkDto: RegisterDataRoomFilesBulkDto, options?: RequestInit): Promise<startupControllerRegisterDataRoomFilesBulkResponse> => {
+  
+  return customFetch<startupControllerRegisterDataRoomFilesBulkResponse>(getStartupControllerRegisterDataRoomFilesBulkUrl(id),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      registerDataRoomFilesBulkDto,)
+  }
+);}
+
+
+
+
+export const getStartupControllerRegisterDataRoomFilesBulkMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startupControllerRegisterDataRoomFilesBulk>>, TError,{id: string;data: BodyType<RegisterDataRoomFilesBulkDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof startupControllerRegisterDataRoomFilesBulk>>, TError,{id: string;data: BodyType<RegisterDataRoomFilesBulkDto>}, TContext> => {
+
+const mutationKey = ['startupControllerRegisterDataRoomFilesBulk'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof startupControllerRegisterDataRoomFilesBulk>>, {id: string;data: BodyType<RegisterDataRoomFilesBulkDto>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  startupControllerRegisterDataRoomFilesBulk(id,data,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type StartupControllerRegisterDataRoomFilesBulkMutationResult = NonNullable<Awaited<ReturnType<typeof startupControllerRegisterDataRoomFilesBulk>>>
+    export type StartupControllerRegisterDataRoomFilesBulkMutationBody = BodyType<RegisterDataRoomFilesBulkDto>
+    export type StartupControllerRegisterDataRoomFilesBulkMutationError = ErrorType<unknown>
+
+    export const useStartupControllerRegisterDataRoomFilesBulk = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startupControllerRegisterDataRoomFilesBulk>>, TError,{id: string;data: BodyType<RegisterDataRoomFilesBulkDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof startupControllerRegisterDataRoomFilesBulk>>,
+        TError,
+        {id: string;data: BodyType<RegisterDataRoomFilesBulkDto>},
+        TContext
+      > => {
+      return useMutation(getStartupControllerRegisterDataRoomFilesBulkMutationOptions(options), queryClient);
+    }
+    export type startupControllerUpdateDataRoomPermissionsResponse200 = {
   data: void
   status: 200
 }
@@ -1691,6 +1848,85 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getStartupControllerUpdateDataRoomPermissionsMutationOptions(options), queryClient);
+    }
+    export type startupControllerUpdateDataRoomCategoryResponse200 = {
+  data: void
+  status: 200
+}
+    
+export type startupControllerUpdateDataRoomCategoryResponseSuccess = (startupControllerUpdateDataRoomCategoryResponse200) & {
+  headers: Headers;
+};
+;
+
+export type startupControllerUpdateDataRoomCategoryResponse = (startupControllerUpdateDataRoomCategoryResponseSuccess)
+
+export const getStartupControllerUpdateDataRoomCategoryUrl = (id: string,
+    docId: string,) => {
+
+
+  
+
+  return `/startups/${id}/data-room/${docId}/category`
+}
+
+export const startupControllerUpdateDataRoomCategory = async (id: string,
+    docId: string,
+    updateDataRoomCategoryDto: UpdateDataRoomCategoryDto, options?: RequestInit): Promise<startupControllerUpdateDataRoomCategoryResponse> => {
+  
+  return customFetch<startupControllerUpdateDataRoomCategoryResponse>(getStartupControllerUpdateDataRoomCategoryUrl(id,docId),
+  {      
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateDataRoomCategoryDto,)
+  }
+);}
+
+
+
+
+export const getStartupControllerUpdateDataRoomCategoryMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startupControllerUpdateDataRoomCategory>>, TError,{id: string;docId: string;data: BodyType<UpdateDataRoomCategoryDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof startupControllerUpdateDataRoomCategory>>, TError,{id: string;docId: string;data: BodyType<UpdateDataRoomCategoryDto>}, TContext> => {
+
+const mutationKey = ['startupControllerUpdateDataRoomCategory'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof startupControllerUpdateDataRoomCategory>>, {id: string;docId: string;data: BodyType<UpdateDataRoomCategoryDto>}> = (props) => {
+          const {id,docId,data} = props ?? {};
+
+          return  startupControllerUpdateDataRoomCategory(id,docId,data,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type StartupControllerUpdateDataRoomCategoryMutationResult = NonNullable<Awaited<ReturnType<typeof startupControllerUpdateDataRoomCategory>>>
+    export type StartupControllerUpdateDataRoomCategoryMutationBody = BodyType<UpdateDataRoomCategoryDto>
+    export type StartupControllerUpdateDataRoomCategoryMutationError = ErrorType<unknown>
+
+    export const useStartupControllerUpdateDataRoomCategory = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startupControllerUpdateDataRoomCategory>>, TError,{id: string;docId: string;data: BodyType<UpdateDataRoomCategoryDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof startupControllerUpdateDataRoomCategory>>,
+        TError,
+        {id: string;docId: string;data: BodyType<UpdateDataRoomCategoryDto>},
+        TContext
+      > => {
+      return useMutation(getStartupControllerUpdateDataRoomCategoryMutationOptions(options), queryClient);
     }
     export type startupControllerDeleteDataRoomDocumentResponse200 = {
   data: void
@@ -2902,6 +3138,83 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getStartupControllerReanalyzeMutationOptions(options), queryClient);
+    }
+    export type startupControllerUpdateFileClassificationResponse200 = {
+  data: void
+  status: 200
+}
+    
+export type startupControllerUpdateFileClassificationResponseSuccess = (startupControllerUpdateFileClassificationResponse200) & {
+  headers: Headers;
+};
+;
+
+export type startupControllerUpdateFileClassificationResponse = (startupControllerUpdateFileClassificationResponseSuccess)
+
+export const getStartupControllerUpdateFileClassificationUrl = (id: string,
+    fileIndex: string,) => {
+
+
+  
+
+  return `/startups/${id}/files/${fileIndex}/classification`
+}
+
+export const startupControllerUpdateFileClassification = async (id: string,
+    fileIndex: string, options?: RequestInit): Promise<startupControllerUpdateFileClassificationResponse> => {
+  
+  return customFetch<startupControllerUpdateFileClassificationResponse>(getStartupControllerUpdateFileClassificationUrl(id,fileIndex),
+  {      
+    ...options,
+    method: 'PATCH'
+    
+    
+  }
+);}
+
+
+
+
+export const getStartupControllerUpdateFileClassificationMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startupControllerUpdateFileClassification>>, TError,{id: string;fileIndex: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof startupControllerUpdateFileClassification>>, TError,{id: string;fileIndex: string}, TContext> => {
+
+const mutationKey = ['startupControllerUpdateFileClassification'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof startupControllerUpdateFileClassification>>, {id: string;fileIndex: string}> = (props) => {
+          const {id,fileIndex} = props ?? {};
+
+          return  startupControllerUpdateFileClassification(id,fileIndex,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type StartupControllerUpdateFileClassificationMutationResult = NonNullable<Awaited<ReturnType<typeof startupControllerUpdateFileClassification>>>
+    
+    export type StartupControllerUpdateFileClassificationMutationError = ErrorType<unknown>
+
+    export const useStartupControllerUpdateFileClassification = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startupControllerUpdateFileClassification>>, TError,{id: string;fileIndex: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof startupControllerUpdateFileClassification>>,
+        TError,
+        {id: string;fileIndex: string},
+        TContext
+      > => {
+      return useMutation(getStartupControllerUpdateFileClassificationMutationOptions(options), queryClient);
     }
     export type startupControllerAdminUpdateResponse200 = {
   data: void

@@ -18,15 +18,9 @@ export interface UpdateStartupDto {
    * @maxLength 200
    */
   name?: string;
-  /**
-   * @minLength 1
-   * @maxLength 500
-   */
+  /** @maxLength 500 */
   tagline?: string;
-  /**
-   * @minLength 100
-   * @maxLength 5000
-   */
+  /** @maxLength 5000 */
   description?: string;
   website?: string;
   /**

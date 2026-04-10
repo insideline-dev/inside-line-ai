@@ -20,6 +20,7 @@ interface MarketTabContentProps {
   fundingStage?: string;
   showKeyFindingsAndRisks?: boolean;
   showDataGaps?: boolean;
+  showScores?: boolean;
 }
 
 function toRecord(value: unknown): Record<string, unknown> {
@@ -330,7 +331,7 @@ function SourceInfoTooltip({ sources }: { sources: MarketSourceView[] }) {
   );
 }
 
-export function MarketTabContent({ evaluation, marketWeight, fundingStage, showKeyFindingsAndRisks = true, showDataGaps = true }: MarketTabContentProps) {
+export function MarketTabContent({ evaluation, marketWeight, fundingStage, showKeyFindingsAndRisks = true, showDataGaps = true, showScores = true }: MarketTabContentProps) {
   if (!evaluation) {
     return (
       <Card className="border-dashed" data-testid="card-market-empty">
@@ -451,6 +452,12 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage, showK
   const growthRateDeckClaimed = getMeaningful(growthRate.deckClaimed) || "Not provided";
   const growthRateDeckClaimedPeriod = getMeaningful(growthRate.deckClaimedPeriod);
   const growthRateDeckClaimedAnnualized = getMeaningful(growthRate.deckClaimedAnnualized);
+  const growthRateYear = getMeaningful(growthRate.year);
+  const growthRateSourceUrl = getMeaningful(growthRate.sourceUrl);
+  const growthRateDataType = getMeaningful(growthRate.dataType);
+  const standardizedGrowthRate = toRecord(growthTiming.standardizedGrowthRate);
+  const standardizedCagr = typeof standardizedGrowthRate?.cagr === "number" ? standardizedGrowthRate.cagr : null;
+  const standardizedBasis = getMeaningful(standardizedGrowthRate?.originalBasis);
   const growthTrajectory = getMeaningful(growthRate.trajectory) || getMeaningful(growthTiming.trajectory);
   const lifecyclePosition = getMeaningful(marketLifecycle.position) || "Not provided";
   const lifecycleEvidence = getMeaningful(marketLifecycle.evidence) || "Not provided";
@@ -499,16 +506,18 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage, showK
 
   return (
     <div className="space-y-6">
-      <SectionScoreCard
-        title="Market Score"
-        score={typeof evaluation?.marketScore === "number" ? evaluation.marketScore : 0}
-        weight={typeof marketWeight === "number" ? marketWeight : undefined}
-        confidence={confidence}
-        scoringBasis={scoringBasis ?? undefined}
-        subScores={marketSubScores}
-        dataTestId="card-market-score"
-        confidenceTestId="badge-market-confidence"
-      />
+      {showScores && (
+        <SectionScoreCard
+          title="Market Score"
+          score={typeof evaluation?.marketScore === "number" ? evaluation.marketScore : 0}
+          weight={typeof marketWeight === "number" ? marketWeight : undefined}
+          confidence={confidence}
+          scoringBasis={scoringBasis ?? undefined}
+          subScores={marketSubScores}
+          dataTestId="card-market-score"
+          confidenceTestId="badge-market-confidence"
+        />
+      )}
 
       {/* --- Market Sizing Inverted Triangle --- */}
       <Card className="border-primary/15">
@@ -650,6 +659,26 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage, showK
                       </div>
                       {growthRateDeckClaimedAnnualized && growthRateDeckClaimedAnnualized !== "Unknown" && growthRateDeckClaimedPeriod && growthRateDeckClaimedPeriod !== "YoY" && (
                         <span className="text-[10px] text-muted-foreground">Deck annualized: <span className="font-medium text-foreground">{growthRateDeckClaimedAnnualized}</span></span>
+                      )}
+                    </div>
+                  )}
+                  {standardizedCagr !== null && standardizedBasis && standardizedBasis !== "YoY" && standardizedBasis !== "unknown" && (
+                    <span className="text-[10px] text-muted-foreground">Standardized CAGR: <span className="font-medium text-foreground">{standardizedCagr.toFixed(1)}%</span></span>
+                  )}
+                  {(growthRateYear || growthRateSourceUrl || (growthRateDataType && growthRateDataType !== "unknown")) && (
+                    <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                      {growthRateYear && growthRateYear !== "Unknown" && (
+                        <Badge variant="outline" className="text-[10px] h-5">{growthRateYear}</Badge>
+                      )}
+                      {growthRateSourceUrl && growthRateSourceUrl !== "Unknown" && (
+                        <Badge variant="outline" className="text-[10px] h-5 text-muted-foreground">
+                          {growthRateSourceUrl.replace(/^https?:\/\/(www\.)?/, "").split("/")[0]}
+                        </Badge>
+                      )}
+                      {growthRateDataType && growthRateDataType !== "unknown" && (
+                        <Badge variant={growthRateDataType === "actual" ? "default" : "secondary"} className="text-[10px] h-5">
+                          {growthRateDataType === "forecast" ? "Forecast" : "Actual"}
+                        </Badge>
                       )}
                     </div>
                   )}

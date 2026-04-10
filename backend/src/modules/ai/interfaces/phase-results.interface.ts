@@ -1,3 +1,4 @@
+import type { DocumentCategory } from "./document-classification.interface";
 import type { ResearchParameters } from "./research-parameters.interface";
 import type {
   BusinessModelEvaluation,
@@ -19,6 +20,8 @@ export interface StartupFileReference {
   path: string;
   name: string;
   type: string;
+  category?: DocumentCategory;
+  confidence?: number;
 }
 
 export interface StartupTeamMemberReference {

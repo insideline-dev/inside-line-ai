@@ -18,16 +18,10 @@ export interface CreateStartupDto {
    * @maxLength 200
    */
   name: string;
-  /**
-   * @minLength 1
-   * @maxLength 500
-   */
-  tagline: string;
-  /**
-   * @minLength 100
-   * @maxLength 5000
-   */
-  description: string;
+  /** @maxLength 500 */
+  tagline?: string;
+  /** @maxLength 5000 */
+  description?: string;
   website: string;
   /**
    * @minLength 1

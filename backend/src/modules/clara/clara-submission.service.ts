@@ -1,6 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { and, eq, sql } from "drizzle-orm";
 import { DrizzleService } from "../../database";
+import { QueueService, QUEUE_NAMES } from "../../queue";
 import { StorageService } from "../../storage";
 import { AssetService } from "../../storage/asset.service";
 import { ASSET_TYPES } from "../../storage/storage.config";
@@ -55,6 +56,7 @@ export class ClaraSubmissionService {
 
   constructor(
     private drizzle: DrizzleService,
+    private queue: QueueService,
     private storage: StorageService,
     private assetService: AssetService,
     private agentMailClient: AgentMailClientService,
@@ -175,12 +177,12 @@ export class ClaraSubmissionService {
       `Created startup ${created.id} (${companyName}) from email by ${ctx.fromEmail}`,
     );
 
+    await this.queueDocumentClassification(created.id, ownerUserId);
     await this.runPrePipelineExtraction(created.id);
     const refreshedCreated = await this.loadCriticalStartupSnapshot(created.id);
     const resolvedStartupName = refreshedCreated?.name ?? companyName;
     const resolvedStatus = refreshedCreated?.status ?? StartupStatus.SUBMITTED;
     const pipelineStart = await this.startPipelineIfReady(created.id, ownerUserId, {
-      allowMissingCritical: true,
       skipExtraction: true,
     });
 
@@ -650,7 +652,6 @@ export class ClaraSubmissionService {
       }
 
       const pipelineStart = await this.startPipelineIfReady(startupId, ownerUserId, {
-        allowMissingCritical: true,
         skipExtraction: true,
       });
       return {
@@ -672,7 +673,6 @@ export class ClaraSubmissionService {
     await this.normalizeLegacyPlaceholderDefaults(startupId);
     await this.runPrePipelineExtraction(startupId);
     const pipelineStart = await this.startPipelineIfReady(startupId, ownerUserId, {
-      allowMissingCritical: true,
       skipExtraction: true,
     });
 
@@ -687,16 +687,32 @@ export class ClaraSubmissionService {
     };
   }
 
+  private async queueDocumentClassification(
+    startupId: string,
+    userId: string,
+  ): Promise<void> {
+    try {
+      await this.queue.addJob(QUEUE_NAMES.DOCUMENT_CLASSIFICATION, {
+        type: "document_classification",
+        startupId,
+        userId,
+      });
+    } catch (error) {
+      this.logger.warn(
+        `[ClaraSubmission] Failed to queue document classification for startup ${startupId}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
   private async startPipelineIfReady(
     startupId: string,
     userId: string,
     opts?: {
       skipValidation?: boolean;
-      allowMissingCritical?: boolean;
       skipExtraction?: boolean;
     },
   ): Promise<PipelineStartResult> {
-    if (!opts?.skipValidation && !opts?.allowMissingCritical) {
+    if (!opts?.skipValidation) {
       const snapshot = await this.loadCriticalStartupSnapshot(startupId);
       if (snapshot) {
         const missing = getMissingCriticalFields(snapshot);

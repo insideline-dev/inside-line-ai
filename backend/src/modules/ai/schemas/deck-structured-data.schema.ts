@@ -3,6 +3,40 @@ import { z } from "zod";
 const nullableString = z.string().nullable().default(null);
 const nullableNumber = z.number().nullable().default(null);
 
+const DeckArrKpiSchema = z.preprocess(
+  (v) => v ?? null,
+  z
+    .object({
+      value: z.string(),
+      currency: z.string().default("USD"),
+      period: z.string().default("current"),
+    })
+    .nullable(),
+);
+
+const DeckGrowthRateKpiSchema = z.preprocess(
+  (v) => v ?? null,
+  z
+    .object({
+      value: z.string(),
+      basis: z
+        .enum(["MoM", "QoQ", "YoY", "CAGR", "unknown"])
+        .default("unknown"),
+      period: z.string().default("current"),
+    })
+    .nullable(),
+);
+
+const DeckGrossMarginKpiSchema = z.preprocess(
+  (v) => v ?? null,
+  z
+    .object({
+      value: z.string(),
+      period: z.string().default("current"),
+    })
+    .nullable(),
+);
+
 const DeckFinancialsSchema = z.preprocess(
   (val) => val ?? {},
   z.object({
@@ -17,6 +51,9 @@ const DeckFinancialsSchema = z.preprocess(
     ltv: nullableString,
     cac: nullableString,
     nrr: nullableString,
+    arrKpi: DeckArrKpiSchema.default(null),
+    growthRateKpi: DeckGrowthRateKpiSchema.default(null),
+    grossMarginKpi: DeckGrossMarginKpiSchema.default(null),
   }),
 );
 
@@ -30,6 +67,17 @@ const DeckTractionSchema = z.preprocess(
   }),
 );
 
+const DeckTamKpiSchema = z.preprocess(
+  (v) => v ?? null,
+  z
+    .object({
+      value: z.string(),
+      scale: z.enum(["M", "B", "T"]).default("B"),
+      currency: z.string().default("USD"),
+    })
+    .nullable(),
+);
+
 const DeckMarketSchema = z.preprocess(
   (val) => val ?? {},
   z.object({
@@ -37,6 +85,7 @@ const DeckMarketSchema = z.preprocess(
     sam: nullableString,
     som: nullableString,
     marketGrowthRate: nullableString,
+    tamKpi: DeckTamKpiSchema.default(null),
   }),
 );
 

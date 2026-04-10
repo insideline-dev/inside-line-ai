@@ -96,8 +96,14 @@ export type AiPipelineJobData =
   | AiEvaluationJobData
   | AiSynthesisJobData;
 
+export interface DocumentClassificationJobData extends BaseJobData {
+  type: "document_classification";
+  startupId: string;
+}
+
 export type JobData =
   | TaskJobData
   | AnalysisJobData
   | AiPipelineJobData
-  | AiMatchingJobData;
+  | AiMatchingJobData
+  | DocumentClassificationJobData;

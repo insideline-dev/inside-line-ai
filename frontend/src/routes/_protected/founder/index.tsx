@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { StartupCard } from "@/components/startup/StartupCard";
-import { useStartupControllerFindAll } from "@/api/generated/startup/startup";
+import { useStartupControllerFindAll } from "@/api/generated/startups/startups";
 import { Plus } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Startup } from "@/types";

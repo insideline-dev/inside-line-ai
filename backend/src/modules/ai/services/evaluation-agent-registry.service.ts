@@ -98,6 +98,7 @@ export class EvaluationAgentRegistryService {
     onAgentStart?: (agent: EvaluationAgentKey) => void,
     onAgentComplete?: (payload: EvaluationAgentCompletion) => void,
     onAgentLifecycle?: (payload: EvaluationAgentLifecycleEvent) => void,
+    agentDocumentMap?: Map<EvaluationAgentKey, string[]>,
   ): Promise<EvaluationResult> {
     const resolvedAgents = await this.resolveAgents();
     const pipelineRunId = (await this.pipelineState.get(startupId))?.pipelineRunId;
@@ -129,6 +130,7 @@ export class EvaluationAgentRegistryService {
         const resolvedInput = await this.resolvePipelineInputForAgent(
           agent.key,
           pipelineData,
+          agentDocumentMap,
         );
         const dataSummary = this.buildInputDataSummary(resolvedInput);
         const startedAt = new Date();
@@ -332,6 +334,7 @@ export class EvaluationAgentRegistryService {
     pipelineData: EvaluationPipelineInput,
     onAgentStart?: (agent: EvaluationAgentKey) => void,
     onAgentLifecycle?: (payload: EvaluationAgentLifecycleEvent) => void,
+    agentDocumentMap?: Map<EvaluationAgentKey, string[]>,
   ): Promise<EvaluationAgentCompletion> {
     const resolvedAgents = await this.resolveAgents();
     const pipelineRunId = (await this.pipelineState.get(startupId))?.pipelineRunId;
@@ -354,6 +357,7 @@ export class EvaluationAgentRegistryService {
     const resolvedInput = await this.resolvePipelineInputForAgent(
       key,
       pipelineData,
+      agentDocumentMap,
     );
     const dataSummary = this.buildInputDataSummary(resolvedInput);
     try {
@@ -752,11 +756,18 @@ export class EvaluationAgentRegistryService {
   private async resolvePipelineInputForAgent(
     agentKey: EvaluationAgentKey,
     pipelineData: EvaluationPipelineInput,
+    agentDocumentMap?: Map<EvaluationAgentKey, string[]>,
   ): Promise<ResolvedEvaluationInput> {
+    const relevantDocs = agentDocumentMap?.get(agentKey);
+    const relevantSupportingDocuments = relevantDocs && relevantDocs.length > 0
+      ? `Relevant classified documents for this evaluation:\n${relevantDocs.join("\n")}`
+      : undefined;
+
     if (!this.evaluationInputResolver) {
       return {
         pipelineData: {
           ...pipelineData,
+          relevantSupportingDocuments,
           mappedInputs: { researchReportText: pipelineData.research.combinedReportText ?? "" },
           mappedInputSources: [],
           edgeDrivenInputFallbackUsed: false,
@@ -769,10 +780,14 @@ export class EvaluationAgentRegistryService {
     }
 
     try {
-      return await this.evaluationInputResolver.resolveForAgent(
+      const resolved = await this.evaluationInputResolver.resolveForAgent(
         agentKey,
         pipelineData,
       );
+      if (relevantSupportingDocuments) {
+        resolved.pipelineData.relevantSupportingDocuments = relevantSupportingDocuments;
+      }
+      return resolved;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.warn(
@@ -781,6 +796,7 @@ export class EvaluationAgentRegistryService {
       return {
         pipelineData: {
           ...pipelineData,
+          relevantSupportingDocuments,
           mappedInputs: { researchReportText: pipelineData.research.combinedReportText ?? "" },
           mappedInputSources: [],
           edgeDrivenInputFallbackUsed: true,

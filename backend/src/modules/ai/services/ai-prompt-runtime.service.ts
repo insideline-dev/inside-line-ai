@@ -19,7 +19,7 @@ import type {
 } from "../interfaces/phase-results.interface";
 import { ModelPurpose, PipelinePhase } from "../interfaces/pipeline.interface";
 import { ALL_RESEARCH_AGENTS } from "../agents/research";
-import { SynthesisAgent, type SynthesisAgentInput } from "../agents/synthesis";
+import { MemoSynthesisAgent, type MemoSynthesisInput } from "../agents/synthesis/memo-synthesis.agent";
 import {
   AI_PROMPT_KEYS,
   EVALUATION_PROMPT_KEY_BY_AGENT,
@@ -444,6 +444,75 @@ const RUNTIME_SCHEMA_BY_KEY: Record<AiPromptKey, PromptRuntimeSchema> = {
     ],
     notes: ["Synthesis prompt receives both narrative brief and full machine-readable evaluation payload."],
   },
+  "synthesis.memo": {
+    requiredPhases: [
+      PipelinePhase.EXTRACTION,
+      PipelinePhase.RESEARCH,
+      PipelinePhase.EVALUATION,
+    ],
+    fields: [
+      { path: "companyName", label: "Company Name", type: "string", sourceVariable: "companyName" },
+      { path: "stage", label: "Stage", type: "string", sourceVariable: "stage" },
+      { path: "sector", label: "Sector", type: "string", sourceVariable: "sector" },
+      { path: "location", label: "Location", type: "string", sourceVariable: "location" },
+      { path: "website", label: "Website", type: "string", sourceVariable: "website" },
+      { path: "stageWeights", label: "Stage Weights", type: "string", sourceVariable: "stageWeights" },
+      { path: "evaluationData", label: "Evaluation Data", type: "string", sourceVariable: "evaluationData" },
+      { path: "evaluationRecommendations", label: "Evaluation Recommendations", type: "string", sourceVariable: "evaluationRecommendations" },
+    ],
+    notes: ["Single-call memo synthesis produces all 11 sections, executive summary, due diligence areas, and data confidence notes."],
+  },
+  "synthesis.memo-chunk": {
+    requiredPhases: [
+      PipelinePhase.EXTRACTION,
+      PipelinePhase.RESEARCH,
+      PipelinePhase.EVALUATION,
+    ],
+    fields: [
+      { path: "companyName", label: "Company Name", type: "string", sourceVariable: "companyName" },
+      { path: "stage", label: "Stage", type: "string", sourceVariable: "stage" },
+      { path: "industry", label: "Industry", type: "string", sourceVariable: "industry" },
+      { path: "sectionPayloads", label: "Section Payloads", type: "string", sourceVariable: "sectionPayloads" },
+      { path: "researchContext", label: "Research Context", type: "string", sourceVariable: "researchContext" },
+      { path: "priorSectionsContext", label: "Prior Sections Context", type: "string", sourceVariable: "priorSectionsContext" },
+    ],
+    notes: ["Legacy: Memo chunk calls produce 3-4 memo sections per call. Replaced by synthesis.memo."],
+  },
+  "synthesis.memo-summary": {
+    requiredPhases: [
+      PipelinePhase.EXTRACTION,
+      PipelinePhase.EVALUATION,
+    ],
+    fields: [
+      { path: "companyName", label: "Company Name", type: "string", sourceVariable: "companyName" },
+      { path: "stage", label: "Stage", type: "string", sourceVariable: "stage" },
+      { path: "industry", label: "Industry", type: "string", sourceVariable: "industry" },
+      { path: "sectionsOverview", label: "Sections Overview", type: "string", sourceVariable: "sectionsOverview" },
+      { path: "scoresOverview", label: "Scores Overview", type: "string", sourceVariable: "scoresOverview" },
+    ],
+    notes: ["Produces executive summary and key due diligence areas from all completed memo sections."],
+  },
+  "synthesis.report": {
+    requiredPhases: [
+      PipelinePhase.EXTRACTION,
+      PipelinePhase.RESEARCH,
+      PipelinePhase.EVALUATION,
+    ],
+    fields: [
+      { path: "companyName", label: "Company Name", type: "string", sourceVariable: "companyName" },
+      { path: "stage", label: "Stage", type: "string", sourceVariable: "stage" },
+      { path: "sector", label: "Sector", type: "string", sourceVariable: "sector" },
+      { path: "location", label: "Location", type: "string", sourceVariable: "location" },
+      { path: "website", label: "Website", type: "string", sourceVariable: "website" },
+      { path: "executiveSummary", label: "Executive Summary", type: "string", sourceVariable: "executiveSummary" },
+      { path: "memoSectionsSummary", label: "Memo Sections Summary", type: "string", sourceVariable: "memoSectionsSummary" },
+      { path: "keyDueDiligenceAreas", label: "Key Due Diligence Areas", type: "string", sourceVariable: "keyDueDiligenceAreas" },
+      { path: "evaluationBrief", label: "Evaluation Brief", type: "string", sourceVariable: "evaluationBrief" },
+      { path: "evaluationRecommendations", label: "Evaluation Recommendations", type: "string", sourceVariable: "evaluationRecommendations" },
+      { path: "stageWeights", label: "Stage Weights", type: "string", sourceVariable: "stageWeights" },
+    ],
+    notes: ["Produces UI-facing report fields: deal snapshot, strengths, risks, founder report, confidence notes."],
+  },
   "matching.thesis": {
     requiredPhases: [PipelinePhase.EXTRACTION, PipelinePhase.SYNTHESIS],
     fields: [
@@ -550,7 +619,7 @@ export class AiPromptRuntimeService {
     private pipelineFeedback: PipelineFeedbackService,
     private aiConfig: AiConfigService,
     private scoreComputation: ScoreComputationService,
-    private synthesisAgent: SynthesisAgent,
+    private memoSynthesisAgent: MemoSynthesisAgent,
     private teamEvaluationAgent: TeamEvaluationAgent,
     private marketEvaluationAgent: MarketEvaluationAgent,
     private productEvaluationAgent: ProductEvaluationAgent,
@@ -786,7 +855,7 @@ export class AiPromptRuntimeService {
       );
     }
 
-    if (key === "synthesis.final") {
+    if (key === "synthesis.final" || key === "synthesis.memo" || key === "synthesis.report") {
       return this.resolveSynthesisVariables(input);
     }
 
@@ -1016,7 +1085,7 @@ export class AiPromptRuntimeService {
     );
 
     const stageWeights = await this.scoreComputation.getWeightsForStage(extraction.stage);
-    const synthesisInput: SynthesisAgentInput = {
+    const memoInput: MemoSynthesisInput = {
       extraction,
       scraping,
       research,
@@ -1024,7 +1093,7 @@ export class AiPromptRuntimeService {
       stageWeights: stageWeights as unknown as Record<string, number>,
     };
 
-    const promptVariables = this.synthesisAgent.buildPromptVariables(synthesisInput);
+    const promptVariables = this.memoSynthesisAgent.buildPromptVariables(memoInput);
 
     return {
       stage: this.normalizeStage(input.stage ?? extraction.stage),
@@ -1150,7 +1219,7 @@ export class AiPromptRuntimeService {
       return ModelPurpose.EVALUATION;
     }
 
-    if (key === "synthesis.final") {
+    if (key === "synthesis.final" || key === "synthesis.memo" || key === "synthesis.report") {
       return ModelPurpose.SYNTHESIS;
     }
 

@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { useStartupControllerFindAll } from "@/api/generated/startup/startup";
+import { useStartupControllerFindAll } from "@/api/generated/startups/startups";
 import { env } from "@/env";
 
 export const Route = createFileRoute("/_protected/founder/investor-interest")({

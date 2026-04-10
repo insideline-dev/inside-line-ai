@@ -1,11 +1,12 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { eq } from "drizzle-orm";
+import { z } from "zod";
 import { DrizzleService } from "../../../database";
 import { startup } from "../../startup/entities";
 import { startupEvaluation } from "../../analysis/entities";
 import { PipelineStateService } from "./pipeline-state.service";
 import { ModelPurpose, PipelinePhase } from "../interfaces/pipeline.interface";
-import { EVALUATION_AGENT_KEYS } from "../constants/agent-keys";
+import { EVALUATION_AGENT_KEYS, MEMO_SYNTHESIS_AGENT_KEY, REPORT_SYNTHESIS_AGENT_KEY } from "../constants/agent-keys";
 import type {
   EvaluationResult,
   ExtractionResult,
@@ -13,11 +14,15 @@ import type {
   ScrapingResult,
   SynthesisResult,
 } from "../interfaces/phase-results.interface";
+import { ExitScenarioSchema } from "../schemas/evaluations/exit-potential.schema";
 import {
   ScoreComputationService,
   type SectionScores,
 } from "./score-computation.service";
-import { SynthesisAgent } from "../agents/synthesis";
+import { MemoSynthesisAgent } from "../agents/synthesis/memo-synthesis.agent";
+import type { MemoSynthesisOutput } from "../agents/synthesis/memo-synthesis.agent";
+import { ReportSynthesisAgent } from "../agents/synthesis/report-synthesis.agent";
+import type { ReportSynthesisOutput } from "../agents/synthesis/report-synthesis.agent";
 import type { SynthesisAgentOutput } from "../agents/synthesis";
 import type { InvestorMemo, FounderReport } from "../schemas/synthesis.schema";
 import type { EvaluationFallbackReason } from "../interfaces/agent.interface";
@@ -28,13 +33,13 @@ import { sanitizeNarrativeText } from "./narrative-sanitizer";
 export const SYNTHESIS_AGENT_KEY = "synthesisagent";
 
 export interface SynthesisRunTraceDetails {
-  agentKey: typeof SYNTHESIS_AGENT_KEY;
-  status: "completed" | "fallback";
+  agentKey: string;
+  status: "completed" | "fallback" | "failed";
   attempt: number;
   retryCount: number;
   usedFallback: boolean;
-  inputPrompt?: string;
-  systemPrompt?: string;
+  inputPrompt: string;
+  systemPrompt: string;
   outputText?: string;
   outputJson?: unknown;
   error?: string;
@@ -44,8 +49,21 @@ export interface SynthesisRunTraceDetails {
 
 export interface SynthesisRunDetails {
   synthesis: SynthesisResult;
-  trace: SynthesisRunTraceDetails;
+  traces: SynthesisRunTraceDetails[];
 }
+
+export interface SynthesisProgressCallbacks {
+  onMemoStarted?: () => void;
+  onMemoCompleted?: (trace: SynthesisRunTraceDetails) => void;
+  onReportStarted?: () => void;
+  onReportCompleted?: (trace: SynthesisRunTraceDetails) => void;
+}
+
+const EXIT_SCENARIO_ORDER = {
+  conservative: 0,
+  moderate: 1,
+  optimistic: 2,
+} as const;
 
 @Injectable()
 export class SynthesisService {
@@ -54,7 +72,8 @@ export class SynthesisService {
   constructor(
     private drizzle: DrizzleService,
     private pipelineState: PipelineStateService,
-    private synthesisAgent: SynthesisAgent,
+    private memoSynthesisAgent: MemoSynthesisAgent,
+    private reportSynthesisAgent: ReportSynthesisAgent,
     private scoreComputation: ScoreComputationService,
     private aiConfig: AiConfigService,
     private memoGenerator: MemoGeneratorService,
@@ -65,7 +84,7 @@ export class SynthesisService {
     return details.synthesis;
   }
 
-  async runDetailed(startupId: string): Promise<SynthesisRunDetails> {
+  async runDetailed(startupId: string, callbacks?: SynthesisProgressCallbacks): Promise<SynthesisRunDetails> {
     this.logger.log(`[Synthesis] Starting synthesis run | Startup: ${startupId}`);
 
     const { extraction, research, evaluation, scraping } =
@@ -78,25 +97,96 @@ export class SynthesisService {
       `[Synthesis] Loaded phase results | Company: ${extraction.companyName} | Research sources: ${research.sources?.length ?? 0}`,
     );
 
-    const generated = await this.synthesisAgent.runDetailed({
-      extraction,
-      scraping,
-      research,
-      evaluation,
+    // --- Agent 1: Memo Synthesis ---
+    callbacks?.onMemoStarted?.();
+
+    const memoResult = await this.memoSynthesisAgent.runDetailed({
+      extraction, scraping, research, evaluation,
       stageWeights: normalizedWeights as unknown as Record<string, number>,
     });
-    const synthesizedOutput = generated.usedFallback
-      ? await this.reusePreviousNarrativeOnFallback(startupId, generated.output)
-      : generated.output;
+
+    const memoOutput = memoResult.usedFallback
+      ? await this.reusePreviousMemoOnFallback(startupId, memoResult.output)
+      : memoResult.output;
+
+    const memoTrace: SynthesisRunTraceDetails = {
+      agentKey: MEMO_SYNTHESIS_AGENT_KEY,
+      status: memoResult.usedFallback ? "fallback" : "completed",
+      attempt: memoResult.attempt,
+      retryCount: memoResult.retryCount,
+      usedFallback: memoResult.usedFallback,
+      inputPrompt: memoResult.inputPrompt,
+      systemPrompt: memoResult.systemPrompt,
+      outputText: memoResult.outputText,
+      outputJson: memoOutput,
+      error: memoResult.error,
+      fallbackReason: memoResult.fallbackReason,
+      rawProviderError: memoResult.rawProviderError,
+    };
+    callbacks?.onMemoCompleted?.(memoTrace);
+
+    // --- Agent 2: Report Synthesis ---
+    callbacks?.onReportStarted?.();
+
+    const reportResult = await this.reportSynthesisAgent.runDetailed({
+      extraction, scraping, research, evaluation,
+      stageWeights: normalizedWeights as unknown as Record<string, number>,
+      memoOutput,
+    });
+
+    const reportOutput = reportResult.usedFallback
+      ? this.reusePreviousReportOnFallback(reportResult.output)
+      : reportResult.output;
+
+    const reportTrace: SynthesisRunTraceDetails = {
+      agentKey: REPORT_SYNTHESIS_AGENT_KEY,
+      status: reportResult.usedFallback ? "fallback" : "completed",
+      attempt: reportResult.attempt,
+      retryCount: reportResult.retryCount,
+      usedFallback: reportResult.usedFallback,
+      inputPrompt: reportResult.inputPrompt,
+      systemPrompt: reportResult.systemPrompt,
+      outputText: reportResult.outputText,
+      outputJson: reportResult.outputJson,
+      error: reportResult.error,
+      fallbackReason: reportResult.fallbackReason,
+      rawProviderError: reportResult.rawProviderError,
+    };
+    callbacks?.onReportCompleted?.(reportTrace);
+
+    // --- Compose Final Output ---
+    const exitScenarios = reportOutput.exitScenarios.length > 0
+      ? reportOutput.exitScenarios
+      : this.normalizeExitScenarios(evaluation.exitPotential?.exitScenarios);
+
+    const composedOutput: SynthesisAgentOutput = {
+      dealSnapshot: reportOutput.dealSnapshot,
+      keyStrengths: reportOutput.keyStrengths,
+      keyRisks: reportOutput.keyRisks,
+      exitScenarios,
+      investorMemo: {
+        executiveSummary: memoOutput.executiveSummary,
+        sections: memoOutput.sections.map((s) => ({
+          title: s.title,
+          content: s.memoNarrative,
+          highlights: s.highlights,
+          concerns: s.concerns,
+          sources: s.sources,
+        })),
+        keyDueDiligenceAreas: memoOutput.keyDueDiligenceAreas,
+      },
+      founderReport: reportOutput.founderReport,
+      dataConfidenceNotes: reportOutput.dataConfidenceNotes || memoOutput.dataConfidenceNotes || "",
+    };
 
     const overallScore = this.scoreComputation.computeWeightedScore(sectionScores, normalizedWeights);
 
     this.logger.log(
-      `[Synthesis] Agent output | Strengths: ${synthesizedOutput.keyStrengths.length} | Risks: ${synthesizedOutput.keyRisks.length}`,
+      `[Synthesis] Agent output | Strengths: ${composedOutput.keyStrengths.length} | Risks: ${composedOutput.keyRisks.length}`,
     );
 
     const synthesis = this.buildSynthesisResult(
-      synthesizedOutput,
+      composedOutput,
       sectionScores,
       overallScore,
       evaluation,
@@ -118,20 +208,7 @@ export class SynthesisService {
 
     return {
       synthesis: { ...synthesis },
-      trace: {
-        agentKey: SYNTHESIS_AGENT_KEY,
-        status: generated.usedFallback ? "fallback" : "completed",
-        attempt: generated.attempt,
-        retryCount: generated.retryCount,
-        usedFallback: generated.usedFallback,
-        inputPrompt: generated.inputPrompt,
-        systemPrompt: generated.systemPrompt,
-        outputText: generated.outputText,
-        outputJson: generated.outputJson,
-        error: generated.error,
-        fallbackReason: generated.fallbackReason,
-        rawProviderError: generated.rawProviderError,
-      },
+      traces: [memoTrace, reportTrace],
     };
   }
 
@@ -561,83 +638,83 @@ export class SynthesisService {
     ];
   }
 
-  private async reusePreviousNarrativeOnFallback(
+  private async reusePreviousMemoOnFallback(
     startupId: string,
-    fallbackOutput: SynthesisAgentOutput,
-  ): Promise<SynthesisAgentOutput> {
+    fallbackOutput: MemoSynthesisOutput,
+  ): Promise<MemoSynthesisOutput> {
     try {
       const [existing] = await this.drizzle.db
-        .select({
-          executiveSummary: startupEvaluation.executiveSummary,
-          keyStrengths: startupEvaluation.keyStrengths,
-          keyRisks: startupEvaluation.keyRisks,
-          investorMemo: startupEvaluation.investorMemo,
-          founderReport: startupEvaluation.founderReport,
-          dataConfidenceNotes: startupEvaluation.dataConfidenceNotes,
-        })
+        .select({ investorMemo: startupEvaluation.investorMemo })
         .from(startupEvaluation)
         .where(eq(startupEvaluation.startupId, startupId))
         .limit(1);
 
-      if (!existing) {
-        return fallbackOutput;
-      }
+      const memo = existing?.investorMemo as {
+        executiveSummary?: string;
+        sections?: Array<Record<string, unknown>>;
+        keyDueDiligenceAreas?: string[];
+        dataConfidenceNotes?: string;
+      } | null;
 
-      const dealSnapshot =
-        typeof existing.executiveSummary === "string"
-          ? sanitizeNarrativeText(existing.executiveSummary.trim())
-          : "";
-      const keyStrengths = this.sanitizeStringArray(
-        this.toStringArray(existing.keyStrengths),
-      );
-      const keyRisks = this.sanitizeStringArray(this.toStringArray(existing.keyRisks));
-      const investorMemo = this.sanitizeInvestorMemo(
-        this.toObjectValue<InvestorMemo>(existing.investorMemo),
-      );
-      const founderReport = this.sanitizeFounderReport(
-        this.toObjectValue<FounderReport>(existing.founderReport),
-      );
-
-      const hasReusableNarrative =
-        dealSnapshot.length > 0 ||
-        keyStrengths.length > 0 ||
-        keyRisks.length > 0 ||
-        Boolean(investorMemo) ||
-        Boolean(founderReport);
-
-      if (!hasReusableNarrative) {
-        return fallbackOutput;
-      }
-
-      const previousConfidenceNotes =
-        typeof existing.dataConfidenceNotes === "string"
-          ? sanitizeNarrativeText(existing.dataConfidenceNotes.trim())
-          : "";
-      const preservationNote =
-        "Latest synthesis attempt returned empty structured output; previous narrative was preserved.";
+      if (!memo?.sections?.length) return fallbackOutput;
 
       return {
-        ...fallbackOutput,
-        dealSnapshot:
-          dealSnapshot.length > 0
-            ? dealSnapshot
-            : fallbackOutput.dealSnapshot,
-        keyStrengths:
-          keyStrengths.length > 0 ? keyStrengths : fallbackOutput.keyStrengths,
-        keyRisks: keyRisks.length > 0 ? keyRisks : fallbackOutput.keyRisks,
-        investorMemo: investorMemo ?? fallbackOutput.investorMemo,
-        founderReport: founderReport ?? fallbackOutput.founderReport,
-        dataConfidenceNotes: [previousConfidenceNotes, preservationNote]
-          .filter((item) => item.length > 0)
-          .join(" "),
+        executiveSummary: memo.executiveSummary || fallbackOutput.executiveSummary,
+        sections: fallbackOutput.sections.length > 0
+          ? fallbackOutput.sections
+          : memo.sections.map((s) => ({
+              sectionKey: String(s.sectionKey ?? s.title ?? "unknown").toLowerCase().replace(/[^a-z]/g, ""),
+              title: String(s.title ?? "Untitled"),
+              memoNarrative: String(s.content ?? s.memoNarrative ?? "Narrative unavailable."),
+              highlights: Array.isArray(s.highlights) ? s.highlights as string[] : [],
+              concerns: Array.isArray(s.concerns) ? s.concerns as string[] : [],
+              diligenceItems: Array.isArray(s.diligenceItems) ? s.diligenceItems as string[] : [],
+              sources: Array.isArray(s.sources) ? s.sources as Array<{ label: string; url: string }> : [],
+            })),
+        keyDueDiligenceAreas: memo.keyDueDiligenceAreas ?? fallbackOutput.keyDueDiligenceAreas,
+        dataConfidenceNotes: memo.dataConfidenceNotes || fallbackOutput.dataConfidenceNotes,
       };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.logger.warn(
-        `[Synthesis] Unable to preserve previous narrative after fallback: ${message}`,
-      );
+    } catch {
       return fallbackOutput;
     }
+  }
+
+  private reusePreviousReportOnFallback(
+    fallbackOutput: ReportSynthesisOutput,
+  ): ReportSynthesisOutput {
+    return fallbackOutput;
+  }
+
+  private normalizeExitScenarios(
+    value: unknown,
+  ): SynthesisAgentOutput["exitScenarios"] {
+    const parsed = z.array(ExitScenarioSchema).length(3).safeParse(value);
+    if (!parsed.success) {
+      return [];
+    }
+
+    const uniqueScenarios = new Set(parsed.data.map((s) => s.scenario));
+    if (
+      uniqueScenarios.size !== 3 ||
+      !uniqueScenarios.has("conservative") ||
+      !uniqueScenarios.has("moderate") ||
+      !uniqueScenarios.has("optimistic")
+    ) {
+      return [];
+    }
+
+    return [...parsed.data]
+      .sort(
+        (left, right) =>
+          EXIT_SCENARIO_ORDER[left.scenario] -
+          EXIT_SCENARIO_ORDER[right.scenario],
+      )
+      .map((scenario) => ({
+        ...scenario,
+        exitValuation: sanitizeNarrativeText(scenario.exitValuation).replace(/\s+/g, " ").trim(),
+        timeline: sanitizeNarrativeText(scenario.timeline).replace(/\s+/g, " ").trim(),
+        researchBasis: sanitizeNarrativeText(scenario.researchBasis).replace(/\s+/g, " ").trim(),
+      }));
   }
 
   private toStringArray(value: unknown): string[] {

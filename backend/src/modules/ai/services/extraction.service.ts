@@ -15,6 +15,7 @@ import { ExtractionSchema } from "../schemas";
 import { FieldExtractorService, type ExtractedFields } from "./field-extractor.service";
 import { MistralOcrService } from "./mistral-ocr.service";
 import { PdfTextExtractorService } from "./pdf-text-extractor.service";
+import { ExcelTextExtractorService } from "./excel-text-extractor.service";
 import { PptxTextExtractorService } from "./pptx-text-extractor.service";
 
 type SupportingDocumentExtraction = {
@@ -62,6 +63,7 @@ export class ExtractionService {
     private storage: StorageService,
     private pdfTextExtractor: PdfTextExtractorService,
     private pptxTextExtractor: PptxTextExtractorService,
+    private excelTextExtractor: ExcelTextExtractorService,
     private mistralOcr: MistralOcrService,
     private fieldExtractor: FieldExtractorService,
   ) {
@@ -1240,6 +1242,8 @@ export class ExtractionService {
       contentType === "application/pdf" ||
       contentType.includes("presentation") ||
       contentType.includes("powerpoint") ||
+      contentType.includes("spreadsheet") ||
+      contentType === "application/vnd.ms-excel" ||
       contentType.startsWith("text/") ||
       contentType === "application/json" ||
       contentType === "text/csv" ||
@@ -1248,7 +1252,7 @@ export class ExtractionService {
       return true;
     }
 
-    return /\.(pdf|pptx?|pps|txt|md|csv|json)$/i.test(filename);
+    return /\.(pdf|pptx?|pps|xlsx?|csv|txt|md|json)$/i.test(filename);
   }
 
   private async extractTextFromSupportingFile(
@@ -1276,6 +1280,15 @@ export class ExtractionService {
     ) {
       const pptxResult = await this.pptxTextExtractor.extractText(buffer);
       return pptxResult.text;
+    }
+
+    if (
+      contentType.includes("spreadsheet") ||
+      contentType === "application/vnd.ms-excel" ||
+      /\.xlsx?$/i.test(filename)
+    ) {
+      const excelResult = this.excelTextExtractor.extractText(buffer);
+      return excelResult.text;
     }
 
     if (

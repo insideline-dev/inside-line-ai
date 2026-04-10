@@ -17,7 +17,7 @@ import { CountryCodeSelector } from "@/components/CountryCodeSelector";
 import {
   useStartupControllerAdminUpdate,
   getStartupControllerFindOneQueryKey,
-} from "@/api/generated/startup/startup";
+} from "@/api/generated/startups/startups";
 import {
   getAdminControllerGetAllStartupsQueryKey,
   getAdminControllerGetStatsQueryKey,

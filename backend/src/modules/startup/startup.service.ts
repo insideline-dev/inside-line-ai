@@ -468,6 +468,7 @@ export class StartupService {
 
       await this.draftService.delete(id);
 
+      await this.queueDocumentClassification(id, userId);
       await this.triggerAnalysis(id, userId);
 
       this.logger.log(`Submitted startup ${id} for review`);
@@ -494,6 +495,7 @@ export class StartupService {
         .where(eq(startup.id, id))
         .returning();
 
+      await this.queueDocumentClassification(id, userId);
       await this.triggerAnalysis(id, userId);
 
       this.logger.log(`Resubmitted startup ${id}`);
@@ -1059,12 +1061,15 @@ export class StartupService {
     "image/gif",
     "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     "application/vnd.ms-powerpoint",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.ms-excel",
+    "text/csv",
   ]);
 
   async getUploadUrl(id: string, userId: string, dto: PresignedUrl) {
     if (!StartupService.ALLOWED_UPLOAD_TYPES.has(dto.fileType)) {
       throw new BadRequestException(
-        `File type '${dto.fileType}' is not allowed. Accepted: PDF, PNG, JPEG, WebP, GIF, PPTX, PPT`,
+        `File type '${dto.fileType}' is not allowed. Accepted: PDF, PNG, JPEG, WebP, GIF, PPTX, PPT, XLSX, XLS, CSV`,
       );
     }
 
@@ -1154,6 +1159,54 @@ export class StartupService {
     return this.buildProgressResponse(this.drizzle.db, id, found.status, {
       includeAdminDetails: true,
     });
+  }
+
+  async updateFileClassification(
+    startupId: string,
+    userId: string,
+    fileIndex: number,
+    category: string,
+  ): Promise<void> {
+    const existing = await this.findOne(startupId, userId);
+    const files = (existing.files ?? []) as Array<{
+      path: string;
+      name: string;
+      type: string;
+      category?: string;
+      confidence?: number;
+    }>;
+
+    if (fileIndex < 0 || fileIndex >= files.length) {
+      throw new BadRequestException(`Invalid file index: ${fileIndex}`);
+    }
+
+    files[fileIndex] = {
+      ...files[fileIndex],
+      category,
+      confidence: 1.0,
+    };
+
+    await this.drizzle.db
+      .update(startup)
+      .set({ files, updatedAt: new Date() })
+      .where(eq(startup.id, startupId));
+  }
+
+  private async queueDocumentClassification(
+    startupId: string,
+    userId: string,
+  ): Promise<void> {
+    try {
+      await this.queue.addJob(QUEUE_NAMES.DOCUMENT_CLASSIFICATION, {
+        type: "document_classification",
+        startupId,
+        userId,
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Failed to queue document classification for startup ${startupId}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 
   private async triggerAnalysis(

@@ -23,19 +23,19 @@ const DeckClassificationSchema = z.object({
 });
 
 const ExtractedFieldsSchema = z.object({
-  companyName: z.string().min(1).optional(),
-  tagline: z.string().optional(),
-  founderNames: z.array(z.string().min(1)).optional(),
-  industry: z.string().min(1).optional(),
-  stage: z.string().min(1).optional(),
-  location: z.string().optional(),
+  companyName: z.string().min(1).nullable().optional(),
+  tagline: z.string().nullable().optional(),
+  founderNames: z.array(z.string().min(1)).nullable().optional(),
+  industry: z.string().min(1).nullable().optional(),
+  stage: z.string().min(1).nullable().optional(),
+  location: z.string().nullable().optional(),
   website: z.preprocess(
     (value) =>
-      typeof value === "string" && value.trim().length === 0 ? undefined : value,
-    z.string().url().optional(),
+      typeof value === "string" && value.trim().length === 0 ? null : value,
+    z.string().url().nullable().optional(),
   ),
-  fundingAsk: z.number().nonnegative().optional(),
-  valuation: z.number().nonnegative().optional(),
+  fundingAsk: z.number().nonnegative().nullable().optional(),
+  valuation: z.number().nonnegative().nullable().optional(),
 });
 
 export type ExtractedFields = z.infer<typeof ExtractedFieldsSchema>;
@@ -204,7 +204,11 @@ Rules:
 - For notableClaims, extract up to 5 standout traction/business claims.
 - For useOfFunds, extract the breakdown items (e.g. "40% Engineering", "30% Sales").
 - For keyFeatures, extract up to 5 key product features.
-- For keyMembers, extract founder/executive names and roles.`;
+- For keyMembers, extract founder/executive names and roles.
+- For arrKpi: only populate if an ARR or annual recurring revenue figure is explicitly stated. Extract the value verbatim (e.g. "$2.5M"), the currency code (default "USD" if not stated), and the period it refers to verbatim (e.g. "Q1 2026", "current", "FY2025").
+- For growthRateKpi: only populate if a growth rate is explicitly stated. Extract the value verbatim (e.g. "15%"), identify the basis — "MoM" for monthly, "QoQ" for quarterly, "YoY" for annual/yearly, "CAGR" for compound annual. Use "unknown" only when context gives zero signal about the time basis. Extract the period verbatim if stated (default "current").
+- For grossMarginKpi: only populate if a gross margin percentage is explicitly stated. Extract the value verbatim (e.g. "72%") and the period it applies to (default "current").
+- For tamKpi: only populate if a total addressable market (TAM) figure is explicitly stated. Extract the value verbatim (e.g. "4.5"), identify the scale — "M" for millions, "B" for billions, "T" for trillions — and the currency code (default "USD").`;
 
     try {
       const model = this.providers.resolveModelForPurpose(ModelPurpose.EXTRACTION);

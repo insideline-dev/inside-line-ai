@@ -16,6 +16,7 @@ import { ProgressTrackerService } from "../../orchestrator/progress-tracker.serv
 import { PhaseTransitionService } from "../../orchestrator/phase-transition.service";
 import { ErrorRecoveryService } from "../../orchestrator/error-recovery.service";
 import { PipelineFeedbackService } from "../../services/pipeline-feedback.service";
+import { PipelineAgentTraceService } from "../../services/pipeline-agent-trace.service";
 import { StartupMatchingPipelineService } from "../../services/startup-matching-pipeline.service";
 import { PipelineTemplateService } from "../../services/pipeline-template.service";
 import { EnrichmentService, type EnrichmentNeedAssessment } from "../../services/enrichment.service";
@@ -118,6 +119,7 @@ describe("PipelineService", () => {
   let phaseTransition: jest.Mocked<PhaseTransitionService>;
   let errorRecovery: jest.Mocked<ErrorRecoveryService>;
   let pipelineFeedback: jest.Mocked<PipelineFeedbackService>;
+  let pipelineAgentTrace: jest.Mocked<PipelineAgentTraceService>;
   let startupMatching: jest.Mocked<StartupMatchingPipelineService>;
   let pipelineTemplateService: jest.Mocked<PipelineTemplateService>;
   let enrichmentService: jest.Mocked<EnrichmentService>;
@@ -376,6 +378,11 @@ describe("PipelineService", () => {
       markConsumedByScope: jest.fn().mockResolvedValue(0),
     } as unknown as jest.Mocked<PipelineFeedbackService>;
 
+    pipelineAgentTrace = {
+      recordRun: jest.fn().mockResolvedValue(undefined),
+      cleanupExpired: jest.fn().mockResolvedValue(undefined),
+    } as unknown as jest.Mocked<PipelineAgentTraceService>;
+
     startupMatching = {
       queueStartupMatching: jest.fn().mockResolvedValue({
         startupId: "startup-1",
@@ -449,6 +456,7 @@ describe("PipelineService", () => {
       storage,
       extractionService,
       moduleRef,
+      pipelineAgentTrace,
     );
   });
 
@@ -1708,6 +1716,78 @@ describe("PipelineService", () => {
       }),
       expect.objectContaining({
         delay: 2000,
+      }),
+    );
+  });
+
+  it("records timeout diagnostics with elapsed and budget metadata", async () => {
+    const startedAt = new Date(Date.now() - 65_000).toISOString();
+    aiConfig.getResearchAgentHardTimeoutMs = jest.fn().mockReturnValue(
+      3_600_000,
+    ) as never;
+    aiConfig.getResearchAgentStaggerMs = jest.fn().mockReturnValue(
+      15_000,
+    ) as never;
+    stateService.get.mockResolvedValueOnce(
+      createState(
+        {
+          phases: {
+            ...createState().phases,
+            [PipelinePhase.RESEARCH]: {
+              status: PhaseStatus.WAITING,
+              startedAt,
+            },
+          },
+        },
+        {
+          [PipelinePhase.RESEARCH]: PhaseStatus.WAITING,
+        },
+      ),
+    );
+    phaseTransition.getPhaseConfig.mockReturnValueOnce({
+      ...phaseConfig[PipelinePhase.RESEARCH],
+      timeoutMs: 1_000,
+      maxRetries: 0,
+    } as never);
+
+    await (
+      service as unknown as {
+        handlePhaseTimeout: (
+          startupId: string,
+          phase: PipelinePhase,
+        ) => Promise<void>;
+      }
+    ).handlePhaseTimeout("startup-1", PipelinePhase.RESEARCH);
+
+    expect(progressTracker.updateAgentProgress).toHaveBeenCalledWith(
+      expect.objectContaining({
+        startupId: "startup-1",
+        userId: "user-1",
+        pipelineRunId: "run-1",
+        phase: PipelinePhase.RESEARCH,
+        key: "phase_timeout",
+        status: "failed",
+        progress: 0,
+        error: 'Phase "research" timed out',
+        lifecycleEvent: "failed",
+      }),
+    );
+    expect(pipelineAgentTrace.recordRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        startupId: "startup-1",
+        pipelineRunId: "run-1",
+        phase: PipelinePhase.RESEARCH,
+        agentKey: "phase_timeout",
+        traceKind: "phase_step",
+        stepKey: "phase_timeout",
+        status: "failed",
+        error: 'Phase "research" timed out',
+        meta: expect.objectContaining({
+          failureSource: "phase_timeout",
+          phaseStatus: PhaseStatus.WAITING,
+          timeoutBudgetMs: 3_660_000,
+          elapsedMs: expect.any(Number),
+        }),
       }),
     );
   });

@@ -127,8 +127,14 @@ export type AiPipelineJobResult =
   | AiEvaluationJobResult
   | AiSynthesisJobResult;
 
+export interface DocumentClassificationJobResult extends BaseJobResult {
+  type: "document_classification";
+  classifiedCount: number;
+}
+
 export type JobResult =
   | TaskJobResult
   | AnalysisJobResult
   | AiPipelineJobResult
-  | AiMatchingJobResult;
+  | AiMatchingJobResult
+  | DocumentClassificationJobResult;

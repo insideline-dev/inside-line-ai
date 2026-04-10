@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { Clock, CheckCircle, Eye, XCircle, Loader2 } from "lucide-react";
+import { Clock, CheckCircle, Eye, XCircle, Loader2, FileEdit } from "lucide-react";
 import type { StartupStatus } from "@/types";
 
 interface StatusBadgeProps {
@@ -9,6 +9,7 @@ interface StatusBadgeProps {
 }
 
 const statusConfig: Record<StartupStatus, { label: string; icon: typeof Clock; variant: "default" | "secondary" | "destructive" | "outline" }> = {
+  draft: { label: "Draft", icon: FileEdit, variant: "outline" },
   submitted: { label: "Submitted", icon: Clock, variant: "secondary" },
   analyzing: { label: "Analyzing", icon: Loader2, variant: "outline" },
   pending_review: { label: "Pending Review", icon: Eye, variant: "outline" },

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataTable } from "@/components/DataTable";
-import { useStartupControllerFindAll } from "@/api/generated/startup/startup";
+import { useStartupControllerFindAll } from "@/api/generated/startups/startups";
 import { customFetch } from "@/api/client";
 
 export const Route = createFileRoute("/_protected/founder/meetings")({

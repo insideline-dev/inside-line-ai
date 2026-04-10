@@ -170,46 +170,6 @@
         ]
       }
     },
-    "/storage/{key}": {
-      "delete": {
-        "operationId": "StorageController_deleteFile",
-        "parameters": [
-          {
-            "name": "key",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "success": {
-                      "type": "boolean"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "JWT": []
-          }
-        ],
-        "summary": "Delete a raw file from R2",
-        "tags": [
-          "Storage"
-        ]
-      }
-    },
     "/auth/register": {
       "post": {
         "operationId": "AuthController_register",
@@ -1416,6 +1376,82 @@
         ]
       }
     },
+    "/startups/{id}/data-room/register": {
+      "post": {
+        "operationId": "StartupController_registerDataRoomFile",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterDataRoomFileDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "tags": [
+          "Startups"
+        ]
+      }
+    },
+    "/startups/{id}/data-room/register-bulk": {
+      "post": {
+        "operationId": "StartupController_registerDataRoomFilesBulk",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterDataRoomFilesBulkDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "tags": [
+          "Startups"
+        ]
+      }
+    },
     "/startups/{id}/data-room/{docId}/permissions": {
       "patch": {
         "operationId": "StartupController_updateDataRoomPermissions",
@@ -1443,6 +1479,52 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/UpdateDataRoomPermissionsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "tags": [
+          "Startups"
+        ]
+      }
+    },
+    "/startups/{id}/data-room/{docId}/category": {
+      "patch": {
+        "operationId": "StartupController_updateDataRoomCategory",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "docId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateDataRoomCategoryDto"
               }
             }
           }
@@ -2057,6 +2139,42 @@
         ],
         "responses": {
           "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "tags": [
+          "Startups"
+        ]
+      }
+    },
+    "/startups/{id}/files/{fileIndex}/classification": {
+      "patch": {
+        "operationId": "StartupController_updateFileClassification",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fileIndex",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
             "description": ""
           }
         },
@@ -4791,7 +4909,24 @@
     "/admin/conversations": {
       "get": {
         "operationId": "AdminController_getConversations",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": ""
@@ -6713,7 +6848,9 @@
               "video/mp4",
               "video/webm",
               "application/json",
-              "application/pdf"
+              "application/pdf",
+              "application/vnd.ms-excel",
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             ]
           },
           "projectId": {
@@ -7140,13 +7277,13 @@
             "maxLength": 200
           },
           "tagline": {
+            "default": "",
             "type": "string",
-            "minLength": 1,
             "maxLength": 500
           },
           "description": {
+            "default": "",
             "type": "string",
-            "minLength": 100,
             "maxLength": 5000
           },
           "website": {
@@ -7367,8 +7504,6 @@
         },
         "required": [
           "name",
-          "tagline",
-          "description",
           "website",
           "location",
           "industry",
@@ -7386,13 +7521,13 @@
             "maxLength": 200
           },
           "tagline": {
+            "default": "",
             "type": "string",
-            "minLength": 1,
             "maxLength": 500
           },
           "description": {
+            "default": "",
             "type": "string",
-            "minLength": 100,
             "maxLength": 5000
           },
           "website": {
@@ -8047,6 +8182,104 @@
           "category"
         ]
       },
+      "RegisterDataRoomFileDto": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "type": {
+            "type": "string",
+            "minLength": 1
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "pitch_deck",
+              "financial",
+              "cap_table",
+              "legal",
+              "technical_product",
+              "business_plan",
+              "market_research",
+              "contract",
+              "team_hr",
+              "miscellaneous"
+            ]
+          }
+        },
+        "required": [
+          "path",
+          "name",
+          "type",
+          "size"
+        ]
+      },
+      "RegisterDataRoomFilesBulkDto": {
+        "type": "object",
+        "properties": {
+          "files": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "name": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "type": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "size": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "category": {
+                  "type": "string",
+                  "enum": [
+                    "pitch_deck",
+                    "financial",
+                    "cap_table",
+                    "legal",
+                    "technical_product",
+                    "business_plan",
+                    "market_research",
+                    "contract",
+                    "team_hr",
+                    "miscellaneous"
+                  ]
+                }
+              },
+              "required": [
+                "path",
+                "name",
+                "type",
+                "size"
+              ]
+            }
+          }
+        },
+        "required": [
+          "files"
+        ]
+      },
       "UpdateDataRoomPermissionsDto": {
         "type": "object",
         "properties": {
@@ -8060,6 +8293,29 @@
             }
           }
         }
+      },
+      "UpdateDataRoomCategoryDto": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string",
+            "enum": [
+              "pitch_deck",
+              "financial",
+              "cap_table",
+              "legal",
+              "technical_product",
+              "business_plan",
+              "market_research",
+              "contract",
+              "team_hr",
+              "miscellaneous"
+            ]
+          }
+        },
+        "required": [
+          "category"
+        ]
       },
       "RespondInterestDto": {
         "type": "object",
@@ -8533,13 +8789,13 @@
                 "maxLength": 200
               },
               "tagline": {
+                "default": "",
                 "type": "string",
-                "minLength": 1,
                 "maxLength": 500
               },
               "description": {
+                "default": "",
                 "type": "string",
-                "minLength": 100,
                 "maxLength": 5000
               },
               "website": {
@@ -8760,8 +9016,6 @@
             },
             "required": [
               "name",
-              "tagline",
-              "description",
               "website",
               "location",
               "industry",
@@ -9562,6 +9816,10 @@
                 "evaluation.dealTerms",
                 "evaluation.exitPotential",
                 "synthesis.final",
+                "synthesis.memo",
+                "synthesis.memo-chunk",
+                "synthesis.memo-summary",
+                "synthesis.report",
                 "matching.thesis",
                 "pipeline.orchestrator",
                 "extraction.linkedin",
@@ -9882,6 +10140,10 @@
                             "evaluation.dealTerms",
                             "evaluation.exitPotential",
                             "synthesis.final",
+                            "synthesis.memo",
+                            "synthesis.memo-chunk",
+                            "synthesis.memo-summary",
+                            "synthesis.report",
                             "matching.thesis",
                             "pipeline.orchestrator",
                             "extraction.linkedin",
@@ -10041,6 +10303,10 @@
                   "evaluation.dealTerms",
                   "evaluation.exitPotential",
                   "synthesis.final",
+                  "synthesis.memo",
+                  "synthesis.memo-chunk",
+                  "synthesis.memo-summary",
+                  "synthesis.report",
                   "matching.thesis",
                   "pipeline.orchestrator",
                   "extraction.linkedin",
@@ -10648,6 +10914,10 @@
               "evaluation.dealTerms",
               "evaluation.exitPotential",
               "synthesis.final",
+              "synthesis.memo",
+              "synthesis.memo-chunk",
+              "synthesis.memo-summary",
+              "synthesis.report",
               "matching.thesis",
               "pipeline.orchestrator",
               "extraction.linkedin",
@@ -10852,6 +11122,10 @@
               "evaluation.dealTerms",
               "evaluation.exitPotential",
               "synthesis.final",
+              "synthesis.memo",
+              "synthesis.memo-chunk",
+              "synthesis.memo-summary",
+              "synthesis.report",
               "matching.thesis",
               "pipeline.orchestrator",
               "extraction.linkedin",
@@ -11117,6 +11391,10 @@
                     "evaluation.dealTerms",
                     "evaluation.exitPotential",
                     "synthesis.final",
+                    "synthesis.memo",
+                    "synthesis.memo-chunk",
+                    "synthesis.memo-summary",
+                    "synthesis.report",
                     "matching.thesis",
                     "pipeline.orchestrator",
                     "extraction.linkedin",

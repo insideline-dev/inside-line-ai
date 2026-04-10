@@ -1,10 +1,13 @@
 import { z } from "zod";
 import { DeckStructuredDataSchema } from "./deck-structured-data.schema";
+import { DocumentCategory } from "../interfaces/document-classification.interface";
 
 const StartupFileReferenceSchema = z.object({
   path: z.string().min(1),
   name: z.string().min(1),
   type: z.string().min(1),
+  category: z.nativeEnum(DocumentCategory).optional(),
+  confidence: z.number().min(0).max(1).optional(),
 });
 
 const StartupTeamMemberReferenceSchema = z.object({

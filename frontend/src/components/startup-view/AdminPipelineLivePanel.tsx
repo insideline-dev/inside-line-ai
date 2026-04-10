@@ -65,6 +65,7 @@ type ActivityItem = {
   tone: SignalTone;
   timestamp: string | undefined;
   error?: string;
+  diagnostic?: string;
   runtimeSummary?: string;
   hasIssue: boolean;
   agent?: FlattenedAgent;
@@ -108,7 +109,12 @@ const STEP_LABELS: Record<string, string> = {
   web_search: "Web Search",
   research_parameters: "Research Parameters",
   ai_synthesis: "AI Synthesis",
+  memosynthesis: "Memo Synthesis",
+  reportsynthesis: "Report Synthesis",
+  synthesisagent: "Synthesis",
   db_writes: "DB Writes",
+  phase_timeout: "Phase Timeout",
+  worker_stalled: "Worker Stalled",
 };
 
 const STATUS_BADGE_CLASS: Record<string, string> = {
@@ -429,6 +435,122 @@ function toPrettyJson(value: unknown): string {
   } catch {
     return String(value);
   }
+}
+
+function formatDurationMs(value: number | undefined): string | undefined {
+  if (!Number.isFinite(value) || value == null) {
+    return undefined;
+  }
+  if (value < 1000) {
+    return `${Math.round(value)}ms`;
+  }
+  const totalSeconds = Math.round(value / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes <= 0) {
+    return `${seconds}s`;
+  }
+  return `${minutes}m ${seconds}s`;
+}
+
+function readTraceFailureSource(
+  trace: PipelineAgentTrace,
+): "phase_timeout" | "worker_stalled" | undefined {
+  const failureSource = trace.meta?.failureSource;
+  if (failureSource === "phase_timeout" || failureSource === "worker_stalled") {
+    return failureSource;
+  }
+  return undefined;
+}
+
+function formatTraceDiagnosticSummary(
+  trace: PipelineAgentTrace,
+): string | undefined {
+  const failureSource = readTraceFailureSource(trace);
+  if (failureSource === "phase_timeout") {
+    const timeoutBudgetMs =
+      typeof trace.meta?.timeoutBudgetMs === "number"
+        ? trace.meta.timeoutBudgetMs
+        : undefined;
+    const elapsedMs =
+      typeof trace.meta?.elapsedMs === "number" ? trace.meta.elapsedMs : undefined;
+    const budgetText = formatDurationMs(timeoutBudgetMs);
+    const elapsedText = formatDurationMs(elapsedMs);
+    return [
+      "Cause: phase timeout",
+      elapsedText ? `elapsed ${elapsedText}` : null,
+      budgetText ? `budget ${budgetText}` : null,
+    ]
+      .filter((value): value is string => Boolean(value))
+      .join(" · ");
+  }
+
+  if (failureSource === "worker_stalled") {
+    const queueName =
+      typeof trace.meta?.queueName === "string" ? trace.meta.queueName : undefined;
+    const jobId = typeof trace.meta?.jobId === "string" ? trace.meta.jobId : undefined;
+    return [
+      "Cause: BullMQ worker stall",
+      queueName ? `queue ${queueName}` : null,
+      jobId ? `job ${jobId}` : null,
+    ]
+      .filter((value): value is string => Boolean(value))
+      .join(" · ");
+  }
+
+  if (trace.status === "fallback" && trace.fallbackReason) {
+    return `Cause: ${formatFallbackReasonWithLegacyLabel(trace.fallbackReason)}`;
+  }
+
+  return undefined;
+}
+
+function buildTraceDiagnostics(trace: PipelineAgentTrace): string[] {
+  const diagnostics: string[] = [];
+  const failureSource = readTraceFailureSource(trace);
+  if (failureSource === "phase_timeout") {
+    diagnostics.push("Failure source: phase timeout");
+  } else if (failureSource === "worker_stalled") {
+    diagnostics.push("Failure source: BullMQ worker stalled");
+  }
+  if (trace.fallbackReason) {
+    diagnostics.push(
+      `Fallback reason: ${formatFallbackReasonWithLegacyLabel(trace.fallbackReason)}`,
+    );
+  }
+  if (typeof trace.meta?.queueName === "string") {
+    diagnostics.push(`Queue: ${trace.meta.queueName}`);
+  }
+  if (typeof trace.meta?.jobId === "string") {
+    diagnostics.push(`Job ID: ${trace.meta.jobId}`);
+  }
+  const timeoutBudgetMs =
+    typeof trace.meta?.timeoutBudgetMs === "number"
+      ? trace.meta.timeoutBudgetMs
+      : undefined;
+  const elapsedMs =
+    typeof trace.meta?.elapsedMs === "number" ? trace.meta.elapsedMs : undefined;
+  const timeoutBudgetText = formatDurationMs(timeoutBudgetMs);
+  const elapsedText = formatDurationMs(elapsedMs);
+  if (timeoutBudgetText) {
+    diagnostics.push(`Timeout budget: ${timeoutBudgetText}`);
+  }
+  if (elapsedText) {
+    diagnostics.push(`Elapsed before failure: ${elapsedText}`);
+  }
+  if (typeof trace.meta?.phaseStatus === "string") {
+    diagnostics.push(`Phase status at failure: ${trace.meta.phaseStatus}`);
+  }
+  if (trace.startedAt) {
+    diagnostics.push(`Started: ${formatTime(trace.startedAt)}`);
+  }
+  if (trace.completedAt) {
+    diagnostics.push(`Completed: ${formatTime(trace.completedAt)}`);
+  }
+  if (typeof trace.rawProviderError === "string" && trace.rawProviderError.trim()) {
+    diagnostics.push(`Raw provider error: ${trace.rawProviderError}`);
+  }
+  return diagnostics;
 }
 
 function toPrettyUserPrompt(trace: PipelineAgentTrace | null): string {
@@ -928,6 +1050,7 @@ export function AdminPipelineLivePanel({
     for (const trace of aiAgentTraceTimeline) {
       const warning = readTraceWarning(trace);
       const normalizedTraceError = normalizeTraceError(trace);
+      const diagnostic = formatTraceDiagnosticSummary(trace);
       const advisoryWarning = isAdvisoryTraceWarning(
         trace,
         warning,
@@ -949,6 +1072,7 @@ export function AdminPipelineLivePanel({
             : "success",
         timestamp: trace.startedAt ?? trace.completedAt ?? undefined,
         error: normalizedTraceError ?? (advisoryWarning ? undefined : warning),
+        diagnostic,
         runtimeSummary,
         hasIssue:
           trace.status === "failed" ||
@@ -961,6 +1085,7 @@ export function AdminPipelineLivePanel({
     for (const trace of stepTraceTimeline) {
       const warning = readTraceWarning(trace);
       const normalizedTraceError = normalizeTraceError(trace);
+      const diagnostic = formatTraceDiagnosticSummary(trace);
       const advisoryWarning = isAdvisoryTraceWarning(
         trace,
         warning,
@@ -982,6 +1107,7 @@ export function AdminPipelineLivePanel({
             : "success",
         timestamp: trace.startedAt ?? trace.completedAt ?? undefined,
         error: normalizedTraceError ?? (advisoryWarning ? undefined : warning),
+        diagnostic,
         runtimeSummary,
         hasIssue:
           trace.status === "failed" ||
@@ -1135,6 +1261,12 @@ export function AdminPipelineLivePanel({
   const selectedTraceRuntimeSummary = selectedTrace
     ? readTraceRuntimeSummary(selectedTrace)
     : undefined;
+  const selectedTraceDiagnostic = selectedTrace
+    ? formatTraceDiagnosticSummary(selectedTrace)
+    : undefined;
+  const selectedTraceDiagnostics = selectedTrace
+    ? buildTraceDiagnostics(selectedTrace)
+    : [];
   const emptyTelemetryMessage =
     startupStatus === "submitted"
       ? "Awaiting founder info. Clara has requested missing required details (website and funding stage). Pipeline will resume after the startup is updated."
@@ -1497,6 +1629,12 @@ export function AdminPipelineLivePanel({
                         </p>
                       )}
 
+                      {item.diagnostic && (
+                        <p className="mt-1 truncate text-[11px] text-muted-foreground">
+                          {item.diagnostic}
+                        </p>
+                      )}
+
                       {isAgent && item.agent && (
                         <div className="mt-1 flex flex-wrap items-center gap-2">
                           {isFallbackAgent(item.agent.data) && (
@@ -1614,6 +1752,39 @@ export function AdminPipelineLivePanel({
                     Runtime model config: {selectedTraceRuntimeSummary}
                   </div>
                 )}
+                {selectedTraceDiagnostic && (
+                  <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                    {selectedTraceDiagnostic}
+                  </div>
+                )}
+                <details className="rounded-md border bg-muted/20">
+                  <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-muted-foreground">
+                    Diagnostics
+                  </summary>
+                  <div className="space-y-2 border-t px-3 py-3 text-xs">
+                    {selectedTraceDiagnostics.length > 0 ? (
+                      selectedTraceDiagnostics.map((line) => (
+                        <div key={line} className="text-muted-foreground">
+                          {line}
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-muted-foreground">
+                        No additional diagnostics captured.
+                      </div>
+                    )}
+                  </div>
+                </details>
+                <details className="rounded-md border bg-muted/20">
+                  <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-muted-foreground">
+                    Raw Trace Metadata
+                  </summary>
+                  <div className="border-t p-3">
+                    <pre className="max-h-[220px] overflow-auto rounded-md border bg-muted/30 p-3 text-xs leading-relaxed whitespace-pre-wrap">
+                      {toPrettyJson(selectedTrace?.meta ?? {})}
+                    </pre>
+                  </div>
+                </details>
                 <div className="grid min-h-0 flex-1 gap-4 md:grid-cols-2">
                   <div className="flex min-h-0 flex-col space-y-1">
                     <p className="text-xs font-medium text-muted-foreground">Input</p>

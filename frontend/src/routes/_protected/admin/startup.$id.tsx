@@ -52,7 +52,7 @@ import {
   useStartupControllerAdminDelete,
   getStartupControllerGetProgressQueryKey,
   getStartupControllerFindOneQueryKey,
-} from "@/api/generated/startup/startup";
+} from "@/api/generated/startups/startups";
 import {
   useAdminControllerApproveStartup,
   useAdminControllerReanalyzeStartup,

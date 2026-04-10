@@ -21,8 +21,8 @@ const TeamMemberSchema = z.object({
 
 export const CreateStartupSchema = z.object({
   name: z.string().min(1).max(200),
-  tagline: z.string().min(1).max(500),
-  description: z.string().min(100).max(5000),
+  tagline: z.string().max(500).optional().default(""),
+  description: z.string().max(5000).optional().default(""),
   website: z.string().url(),
   location: z.string().min(1).max(200),
   industry: z.string().min(1).max(200),

@@ -163,8 +163,29 @@ const GrowthRateSchema = z.object({
   deckClaimedPeriod: requiredStringFromNull("Unknown"),
   deckClaimedAnnualized: requiredStringFromNull("Unknown"),
   discrepancyFlag: requiredStringFromNull("unknown"),
-  trajectory: enumWithFallback(["accelerating", "stable", "decelerating"], "stable"),
+  trajectory: enumWithFallback(
+    ["accelerating", "stable", "decelerating"],
+    "stable",
+  ),
+  year: requiredStringFromNull("Unknown"),
+  sourceUrl: requiredStringFromNull("Unknown"),
+  dataType: enumWithFallback(
+    ["forecast", "actual", "unknown"],
+    "unknown",
+  ),
 });
+
+const StandardizedGrowthRateSchema = z.preprocess(
+  (v) => v ?? null,
+  z
+    .object({
+      cagr: z.number().nullable().default(null),
+      originalRate: z.number().nullable().default(null),
+      originalBasis: requiredStringFromNull("unknown"),
+      period: requiredStringFromNull("Unknown"),
+    })
+    .nullable(),
+);
 
 const WhyNowSchema = z.object({
   thesis: requiredStringFromNull("Unknown"),
@@ -182,6 +203,7 @@ const MarketLifecycleSchema = z.object({
 
 const MarketGrowthAndTimingRawSchema = z.object({
   growthRate: objectWithFallback(GrowthRateSchema),
+  standardizedGrowthRate: objectWithFallback(StandardizedGrowthRateSchema),
   whyNow: objectWithFallback(WhyNowSchema),
   marketLifecycle: objectWithFallback(MarketLifecycleSchema),
 });

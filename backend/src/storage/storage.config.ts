@@ -28,6 +28,8 @@ export const MIME_TYPES = {
   // Data
   'application/json': 'json',
   'application/pdf': 'pdf',
+  'application/vnd.ms-excel': 'xls',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
 } as const;
 
 // Presigned URL expiry times in seconds

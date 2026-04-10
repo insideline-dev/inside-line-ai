@@ -126,12 +126,21 @@ export function StartupCard({ startup, basePath, showScore = true, showActions =
         <div className="flex items-center justify-between pt-2 border-t">
           <StatusBadge status={effectiveStatus} />
           {showActions && (
-            <Button asChild variant="ghost" size="sm" className="gap-1">
-              <Link to={`${basePath}/startup/${startup.id}` as any}>
-                View Details
-                <ChevronRight className="h-4 w-4" />
-              </Link>
-            </Button>
+            effectiveStatus === "draft" ? (
+              <Button asChild variant="ghost" size="sm" className="gap-1">
+                <Link to="/founder/submit" search={{ draftId: startup.id }}>
+                  Continue Draft
+                  <ChevronRight className="h-4 w-4" />
+                </Link>
+              </Button>
+            ) : (
+              <Button asChild variant="ghost" size="sm" className="gap-1">
+                <Link to={`${basePath}/startup/${startup.id}` as any}>
+                  View Details
+                  <ChevronRight className="h-4 w-4" />
+                </Link>
+              </Button>
+            )
           )}
         </div>
       </CardContent>

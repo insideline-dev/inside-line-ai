@@ -84,15 +84,41 @@ export class OpenAiDirectClientService {
     );
 
     const choice = response.choices[0];
-    const rawText = choice?.message?.content ?? "";
+    const finishReason = choice?.finish_reason;
+    const message = choice?.message;
+    const rawText = message?.content ?? "";
+    const refusal = (message as { refusal?: string | null } | undefined)?.refusal ?? null;
+
+    this.logger.debug(
+      `[OpenAIDirect] model=${input.modelName} finishReason=${finishReason ?? "unknown"} rawTextLength=${rawText.length} refusal=${refusal ? "yes" : "no"} usage=${response.usage ? `in:${response.usage.prompt_tokens},out:${response.usage.completion_tokens}` : "unknown"}`,
+    );
+
+    if (refusal) {
+      throw new Error(`OpenAI refused to respond: ${refusal}`);
+    }
+
+    if (!rawText || rawText.trim().length === 0) {
+      throw new Error(
+        `OpenAI returned empty content (finish_reason: ${finishReason ?? "unknown"}). This often indicates the model hit the token limit or a refusal. Try increasing maxOutputTokens.`,
+      );
+    }
+
+    if (finishReason === "length") {
+      this.logger.warn(
+        `[OpenAIDirect] Response truncated (finish_reason=length) for ${input.schemaName}. Output may be incomplete.`,
+      );
+    }
 
     let parsed: T;
     try {
       const json = JSON.parse(rawText) as unknown;
       parsed = input.schema.parse(json);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new Error(`OpenAI structured output parse failed: ${message}`);
+      const errMessage = error instanceof Error ? error.message : String(error);
+      const preview = rawText.slice(0, 500);
+      throw new Error(
+        `OpenAI structured output parse failed: ${errMessage} | finishReason=${finishReason ?? "unknown"} | rawTextPreview=${preview}`,
+      );
     }
 
     return {
@@ -104,7 +130,7 @@ export class OpenAiDirectClientService {
             outputTokens: response.usage.completion_tokens ?? 0,
           }
         : undefined,
-      finishReason: choice?.finish_reason,
+      finishReason: finishReason ?? undefined,
     };
   }
 }

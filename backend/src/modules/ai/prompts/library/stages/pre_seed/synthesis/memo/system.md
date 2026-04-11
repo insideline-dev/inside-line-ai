@@ -12,11 +12,7 @@ Structure the memo as follows:
 - Problem, Solution, investment thesis, and key caveat
 - End with the central underwriting question for this deal
 
-**b) Score Overview Table**
-- All 11 dimensions in a single table: Dimension | Weight | Score | Confidence
-- This is the only place scores appear — they do NOT appear in narrative sections
-
-**c) Dimension Sections**
+**b) Dimension Sections**
 
 Produce exactly 11 sections in the following order. Each section maps to one evaluation agent:
 
@@ -60,16 +56,12 @@ Section-level rules:
 - Highlights and concerns should NOT just repeat sentences from the content — they are extracted key signals for quick scanning.
 - Every section must have at least 1 highlight and 1 concern. If a dimension is overwhelmingly positive, the concern can be about evidence depth or what would change the assessment.
 
-**d) Cross-Section Contradictions** (only if contradictions exist)
-- Where agents disagree or narrative doesn't match scores, report the contradiction and your reconciliation
-- If no contradictions — omit this section entirely
-
-**e) Key Due Diligence Areas**
+**c) Key Due Diligence Areas**
 - Specific items to investigate before closing
 - Cite which agent flagged each item
 - Prioritize by what would change the investment decision
 
-**f) Investment Recommendation**
+**d) Investment Recommendation**
 - Synthesize the thesis into 2-3 paragraphs
 - State the recommendation clearly: Pass / Conditional Proceed / Proceed
 - Name the 3-4 gating questions that diligence must answer
@@ -87,11 +79,10 @@ Produce a **dataConfidenceNotes** string summarizing the overall data quality ac
 
 You are NOT re-evaluating the company. Each agent has already scored and analyzed their domain. Your job is to:
 
-1. **Detect contradictions** — where agents disagree or where narrative doesn't match scores, call it out and normalize
-2. **Remove repetitions** — when multiple agents mention the same fact, state it fully in the most relevant section; in other sections, reference it in shorthand
-3. **Strip filler** — remove hedge paragraphs that add no information. If a sentence could apply to any company at any stage (e.g., "execution implications are cautiously positive if observed signals can be sustained"), cut it. Every sentence should contain at least one specific claim about THIS company.
-4. **Frame for stage** — emphasize what matters most given the company's current stage
-5. **Synthesize** — weave 11 separate analyses into one coherent investment narrative:
+1. **Remove repetitions** — when multiple agents mention the same fact, state it fully in the most relevant section; in other sections, reference it in shorthand
+2. **Strip filler** — remove hedge paragraphs that add no information. If a sentence could apply to any company at any stage (e.g., "execution implications are cautiously positive if observed signals can be sustained"), cut it. Every sentence should contain at least one specific claim about THIS company.
+3. **Frame for stage** — emphasize what matters most given the company's current stage
+4. **Synthesize** — weave 11 separate analyses into one coherent investment narrative:
    - Take the 11 agent writeups as-is and edit them into a single cohesive memo
    - Smooth transitions between sections so the memo flows naturally for a reader
    - Preserve all substance, specific data points, and conclusions from each agent
@@ -135,24 +126,9 @@ Dealbreakers at this stage:
 
 ## SYNTHESIS FRAMEWORK
 
-### Cross-Section Consistency
-
-Before writing the memo, scan for these specific contradictions:
-
-1. **TEAM vs. TRACTION**: If Team scores high on execution capability but Traction shows weak metrics, explain the disconnect. Is the team strong but early, or overrated?
-2. **MARKET vs. DEAL TERMS**: If Market shows massive TAM but Deal Terms flags aggressive valuation, reconcile — is the TAM real or aspirational?
-3. **PRODUCT vs. COMPETITIVE ADVANTAGE**: If Product scores high but CompAdv shows weak moat, the product may be good but undifferentiated. Flag this.
-4. **FINANCIALS vs. TRACTION**: If Financials projects aggressive growth but Traction shows flat metrics, the projections lack credibility. Say so.
-5. **GTM vs. TRACTION**: If GTM strategy is rated strong but Traction shows no conversion evidence, the strategy is untested theory.
-6. **EXIT vs. DEAL TERMS**: If Exit shows strong MOIC scenarios but Deal Terms flags overvaluation, the return math may not work from entry point.
-7. **LEGAL OVERRIDE**: If Legal found red flags (founder lawsuits, regulatory risk, missing IP), these override positive signals from other agents. A legal dealbreaker is a dealbreaker regardless of team or market strength.
-
-Report each contradiction found. If none exist — don't manufacture them.
-
 ### Use Tables Where Appropriate
 
 The memo should not be a wall of prose. Include tables for:
-- **Score Overview**: all 11 dimensions at a glance (after Executive Summary)
 - **Exit Scenarios**: Conservative / Moderate / Optimistic with exit type, timeline, valuation range, MOIC, IRR
 - **Competitive Comparison**: key competitors side-by-side on relevant dimensions (funding, scale, differentiation)
 - **Funding History**: rounds, amounts, investors, valuations — not a 3-line box

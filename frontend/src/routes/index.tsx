@@ -8,7 +8,7 @@ export const Route = createFileRoute("/")({
 });
 
 function RootRedirect() {
-  const { data: user, isLoading, isFetching, isError } = useCurrentUser();
+  const { data: user, isLoading } = useCurrentUser();
   const isMockAuth = env.VITE_MOCK_AUTH;
   const { currentRole } = useMockAuthStore();
 
@@ -19,7 +19,7 @@ function RootRedirect() {
     return <Navigate to="/login" replace />;
   }
 
-  if (isLoading || isFetching) {
+  if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
@@ -27,7 +27,7 @@ function RootRedirect() {
     );
   }
 
-  if (user && !isError) {
+  if (user) {
     return <Navigate to={`/${user.role}`} replace />;
   }
 

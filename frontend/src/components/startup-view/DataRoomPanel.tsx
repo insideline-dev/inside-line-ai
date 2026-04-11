@@ -183,18 +183,12 @@ async function uploadDocument(startupId: string, file: File, category: string) {
   formData.append("file", file);
   formData.append("category", category);
 
-  const { getAccessToken } = await import("@/lib/auth/token");
-  const token = getAccessToken();
-  const headers: Record<string, string> = {};
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-
   const response = await fetch(
     `${env.VITE_API_BASE_URL}/startups/${startupId}/data-room`,
     {
       method: "POST",
       body: formData,
       credentials: "include",
-      headers,
     },
   );
 

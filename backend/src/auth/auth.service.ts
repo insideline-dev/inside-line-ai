@@ -110,7 +110,6 @@ export class AuthService {
         });
       }
 
-      // Link OAuth account with tokens
       await this.drizzle.db.insert(account).values({
         userId: foundUser.id,
         providerId: profile.providerType,
@@ -184,7 +183,6 @@ export class AuthService {
    * - Detects token reuse and invalidates entire family
    */
   async refreshTokens(tokenValue: string): Promise<RefreshResult> {
-    // Find the refresh token
     const [storedToken] = await this.drizzle.db
       .select()
       .from(refreshTokenTable)
@@ -195,49 +193,51 @@ export class AuthService {
       throw new UnauthorizedException("Invalid refresh token");
     }
 
-    // Check if token is expired
     if (storedToken.expiresAt < new Date()) {
-      // Clean up expired token
       await this.drizzle.db
         .delete(refreshTokenTable)
         .where(eq(refreshTokenTable.id, storedToken.id));
       throw new UnauthorizedException("Refresh token expired");
     }
 
-    // SECURITY: Detect token reuse attack
-    if (storedToken.used) {
+    // SECURITY: atomically claim the token. A conditional UPDATE … WHERE used=false
+    // ensures only one caller can rotate a given token — even under concurrent refresh
+    // calls racing on the same cookie. Losers (including reuse attacks) get 0 rows and
+    // trigger family-wide invalidation.
+    const claimed = await this.drizzle.db
+      .update(refreshTokenTable)
+      .set({ used: true })
+      .where(
+        and(
+          eq(refreshTokenTable.id, storedToken.id),
+          eq(refreshTokenTable.used, false),
+        ),
+      )
+      .returning({ id: refreshTokenTable.id });
+
+    if (claimed.length === 0) {
       this.logger.warn(
-        `Token reuse detected for family ${storedToken.family}, invalidating all tokens`,
+        `Refresh token reuse or concurrent-race detected for family ${storedToken.family}, invalidating all tokens`,
       );
-      // Invalidate entire token family (potential attack)
       await this.drizzle.db
         .delete(refreshTokenTable)
         .where(eq(refreshTokenTable.family, storedToken.family));
       throw new UnauthorizedException("Token reuse detected");
     }
 
-    // Get user
     const foundUser = await this.userAuth.findUserById(storedToken.userId);
     if (!foundUser) {
       throw new UnauthorizedException("User not found");
     }
 
-    // Mark current token as used
-    await this.drizzle.db
-      .update(refreshTokenTable)
-      .set({ used: true })
-      .where(eq(refreshTokenTable.id, storedToken.id));
-
-    // Generate new tokens in same family
     const accessToken = this.generateAccessToken(foundUser);
     const newRefreshTokenValue = randomBytes(32).toString("hex");
     const expiresAt = new Date(Date.now() + this.getRefreshTokenTtlMs());
 
-    // Store new refresh token in same family
     await this.drizzle.db.insert(refreshTokenTable).values({
       token: newRefreshTokenValue,
       userId: foundUser.id,
-      family: storedToken.family, // Same family for rotation tracking
+      family: storedToken.family,
       expiresAt,
     });
 
@@ -246,6 +246,21 @@ export class AuthService {
       refreshToken: newRefreshTokenValue,
       user: foundUser,
     };
+  }
+
+  /**
+   * Resolve the user owning a given refresh token, if any. Used by logout to
+   * identify which user to revoke without requiring a valid access token.
+   */
+  async findUserIdByRefreshToken(
+    tokenValue: string,
+  ): Promise<string | undefined> {
+    const [row] = await this.drizzle.db
+      .select({ userId: refreshTokenTable.userId })
+      .from(refreshTokenTable)
+      .where(eq(refreshTokenTable.token, tokenValue))
+      .limit(1);
+    return row?.userId;
   }
 
   /**

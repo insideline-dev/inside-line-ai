@@ -1,7 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { authApi } from "./api";
-import { setAccessToken } from "./token";
 import type {
   LoginRequest,
   RegisterRequest,
@@ -27,8 +26,7 @@ export function useCurrentUser() {
   return useQuery({
     queryKey: authKeys.user,
     queryFn: authApi.getCurrentUser,
-    staleTime: 0,
-    refetchOnMount: "always",
+    staleTime: 5 * 60 * 1000, // 5 min
     retry: false, // Don't retry auth failures
   });
 }
@@ -41,7 +39,6 @@ export function useLogin() {
   return useMutation({
     mutationFn: (data: LoginRequest) => authApi.login(data),
     onSuccess: (data) => {
-      setAccessToken(data.accessToken);
       queryClient.setQueryData(authKeys.user, data.user);
       if (data.user.onboardingCompleted) {
         const redirect = consumeRedirect();
@@ -61,7 +58,6 @@ export function useRegister() {
   return useMutation({
     mutationFn: (data: RegisterRequest) => authApi.register(data),
     onSuccess: (data) => {
-      setAccessToken(data.accessToken);
       queryClient.setQueryData(authKeys.user, data.user);
       if (data.user.onboardingCompleted) {
         const redirect = consumeRedirect();
@@ -99,7 +95,6 @@ export function useVerifyMagicLink() {
   return useMutation({
     mutationFn: (token: string) => authApi.verifyMagicLink(token),
     onSuccess: (data) => {
-      setAccessToken(data.accessToken);
       queryClient.setQueryData(authKeys.user, data.user);
       if (data.user.onboardingCompleted) {
         const redirect = consumeRedirect();
@@ -118,7 +113,6 @@ export function useVerifyEmail() {
   return useMutation({
     mutationFn: (token: string) => authApi.verifyEmail({ token }),
     onSuccess: (data) => {
-      setAccessToken(data.accessToken);
       queryClient.setQueryData(authKeys.user, data.user);
     },
   });
@@ -138,7 +132,6 @@ export function useLogout() {
   return useMutation({
     mutationFn: () => authApi.logout(),
     onSuccess: () => {
-      setAccessToken(null);
       queryClient.removeQueries({ queryKey: authKeys.user });
       navigate({ to: "/login" });
     },
@@ -153,7 +146,6 @@ export function useLogoutAll() {
   return useMutation({
     mutationFn: () => authApi.logoutAll(),
     onSuccess: () => {
-      setAccessToken(null);
       queryClient.removeQueries({ queryKey: authKeys.user });
       navigate({ to: "/login" });
     },
@@ -168,7 +160,6 @@ export function useSelectRole() {
   return useMutation({
     mutationFn: (role: "founder" | "investor") => authApi.selectRole(role),
     onSuccess: (data) => {
-      setAccessToken(data.accessToken);
       queryClient.setQueryData(authKeys.user, data.user);
       const redirect = consumeRedirect();
       navigate({ to: redirect || `/${data.user.role}` });

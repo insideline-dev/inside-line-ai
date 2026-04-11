@@ -56,7 +56,7 @@ export function StartupCard({ startup, basePath, showScore = true, showActions =
   }, []);
 
   return (
-    <Card className={cn("hover:shadow-md transition-shadow", className)}>
+    <Card className={cn("flex flex-col hover:shadow-md transition-shadow", className)}>
       <CardHeader className="pb-2">
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-start gap-3 flex-1 min-w-0">
@@ -91,7 +91,7 @@ export function StartupCard({ startup, basePath, showScore = true, showActions =
           {showScore && startup.overallScore && <ScoreRing score={startup.overallScore} size="sm" showLabel={false} />}
         </div>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="flex flex-1 flex-col justify-between gap-4">
         {startup.description && (
           <p className="text-sm text-muted-foreground line-clamp-2">{startup.description}</p>
         )}
@@ -123,7 +123,7 @@ export function StartupCard({ startup, basePath, showScore = true, showActions =
           />
         )}
 
-        <div className="flex items-center justify-between pt-2 border-t">
+        <div className="mt-auto flex items-center justify-between pt-3 border-t">
           <StatusBadge status={effectiveStatus} />
           {showActions && (
             effectiveStatus === "draft" ? (

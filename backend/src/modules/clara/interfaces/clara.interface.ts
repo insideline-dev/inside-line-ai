@@ -66,6 +66,13 @@ export interface ConversationMessage {
   createdAt: Date;
 }
 
+export interface ClassifiedDocumentSummary {
+  fileName: string;
+  category: string;
+  confidence: number;
+  routedAgents: string[];
+}
+
 export interface SubmissionResult {
   startupId: string;
   startupName: string;
@@ -76,6 +83,7 @@ export interface SubmissionResult {
   pipelineStarted?: boolean;
   missingFields?: Array<"website" | "stage">;
   noPitchDeck?: boolean;
+  classifiedDocuments?: ClassifiedDocumentSummary[];
 }
 
 export interface ClaraAgentRuntimeState {

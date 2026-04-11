@@ -149,7 +149,6 @@ export class ReportSynthesisAgent {
                 prompt: renderedPrompt,
                 schema: ReportSynthesisOutputOpenAiSchema,
                 schemaName: "report_synthesis_output",
-                temperature: 0.3,
                 maxOutputTokens: 8000,
                 reasoningEffort: "low",
                 abortSignal,
@@ -167,7 +166,6 @@ export class ReportSynthesisAgent {
             generateText({
               model: model as Parameters<typeof generateText>[0]["model"],
               output: Output.object({ schema: ReportSynthesisSchema }),
-              temperature: 0.3,
               maxOutputTokens: 8000,
               system: systemPrompt,
               prompt: renderedPrompt,

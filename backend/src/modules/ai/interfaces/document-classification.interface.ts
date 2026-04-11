@@ -27,7 +27,7 @@ export interface ClassifiedFile {
   confidence?: number;
 }
 
-const ALL_EVALUATION_AGENTS: EvaluationAgentKey[] = [
+export const ALL_EVALUATION_AGENTS: EvaluationAgentKey[] = [
   "team",
   "market",
   "product",

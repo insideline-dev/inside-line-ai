@@ -14,7 +14,7 @@ export { AnalysisProgressBar } from "./AnalysisProgressBar";
 export { MemoSection, CompetitorCard, FundingRoundCard } from "./MemoSection";
 
 // Search and Filters
-export { SearchAndFilters, useFilteredStartups, defaultFilters, REGIONS } from "./SearchAndFilters";
+export { SearchAndFilters, useFilteredStartups, defaultFilters, REGIONS, STAGES, SOURCE_OPTIONS } from "./SearchAndFilters";
 export type { FilterState } from "./SearchAndFilters";
 
 // Re-export from analysis subdirectory

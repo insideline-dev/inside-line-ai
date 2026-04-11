@@ -23,6 +23,7 @@ export const pipelineRunStatusEnum = pgEnum("pipeline_run_status", [
 ]);
 
 export const pipelinePhaseEnum = pgEnum("pipeline_phase", [
+  PipelinePhase.CLASSIFICATION,
   PipelinePhase.EXTRACTION,
   PipelinePhase.ENRICHMENT,
   PipelinePhase.SCRAPING,

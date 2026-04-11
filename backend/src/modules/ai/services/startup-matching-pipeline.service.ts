@@ -200,6 +200,9 @@ export class StartupMatchingPipelineService {
     notificationsSent: number;
     notificationError?: string;
   }> {
+    this.logger.log(
+      `Processing matching job: startupId=${jobData.startupId} userId=${jobData.userId} triggerSource=${jobData.triggerSource}`,
+    );
     const startedAt = new Date();
     await this.drizzle.db
       .update(analysisJob)
@@ -212,11 +215,6 @@ export class StartupMatchingPipelineService {
 
     try {
       const startupRecord = await this.loadStartup(jobData.startupId);
-      if (startupRecord.status !== StartupStatus.APPROVED) {
-        throw new BadRequestException(
-          `Startup must be approved before matching. Current status: ${startupRecord.status}`,
-        );
-      }
 
       const synthesis = await this.pipelineState.getPhaseResult(
         jobData.startupId,
@@ -225,7 +223,7 @@ export class StartupMatchingPipelineService {
 
       if (!synthesis) {
         throw new BadRequestException(
-          "No synthesis data available. The AI pipeline must complete before matching.",
+          `Cannot match startup (status: ${startupRecord.status}) — run AI analysis first so synthesis data is available.`,
         );
       }
 
@@ -240,6 +238,7 @@ export class StartupMatchingPipelineService {
           geoPath: startupRecord.geoPath ?? null,
         },
         synthesis: synthesis as SynthesisResult,
+        forceIncludeInvestorId: jobData.userId,
       });
 
       let notificationsSent = 0;

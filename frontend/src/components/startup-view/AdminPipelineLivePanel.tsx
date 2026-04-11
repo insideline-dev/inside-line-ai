@@ -82,6 +82,7 @@ const ACTIVITY_FILTERS: { value: ActivityFilter; label: string }[] = [
 ];
 
 const PHASE_LABELS: Record<string, string> = {
+  classification: "Classification",
   extraction: "Extraction",
   enrichment: "Gap Fill",
   scraping: "Scraping",

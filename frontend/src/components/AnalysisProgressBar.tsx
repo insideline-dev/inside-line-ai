@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Check, X, FileSearch, Globe, Search, BarChart3, Sparkles, AlertTriangle, Clock3 } from "lucide-react";
+import { Loader2, Check, X, FileSearch, Globe, Search, BarChart3, Sparkles, AlertTriangle, Clock3, Tags } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { useStartupRealtimeProgress } from "@/lib/startup/useStartupRealtimeProgress";
@@ -14,8 +14,9 @@ interface AnalysisProgressBarProps {
 }
 
 const PHASE_ORDER = [
-  "enrichment",
+  "classification",
   "extraction",
+  "enrichment",
   "scraping",
   "research",
   "evaluation",
@@ -23,6 +24,7 @@ const PHASE_ORDER = [
 ] as const;
 
 const PHASE_META: Record<string, { label: string; icon: typeof FileSearch }> = {
+  classification: { label: "Classifying Docs", icon: Tags },
   enrichment: { label: "Gap Filling", icon: Search },
   extraction: { label: "Extracting", icon: FileSearch },
   scraping: { label: "Scraping", icon: Globe },

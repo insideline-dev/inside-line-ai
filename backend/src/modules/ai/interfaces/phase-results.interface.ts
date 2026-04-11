@@ -16,6 +16,21 @@ import type {
 import type { InvestorMemo, FounderReport } from "../schemas/synthesis.schema";
 import type { ExitScenario } from "../schemas/evaluations/exit-potential.schema";
 
+export interface ClassifiedDocumentTrace {
+  dataRoomId: string;
+  fileName: string;
+  category: DocumentCategory;
+  confidence: number;
+  routedAgents: string[];
+  error?: string;
+}
+
+export interface ClassificationPhaseResult {
+  classifiedCount: number;
+  failedCount: number;
+  documents: ClassifiedDocumentTrace[];
+}
+
 export interface StartupFileReference {
   path: string;
   name: string;

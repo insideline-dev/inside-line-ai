@@ -1,4 +1,5 @@
 export const PIPELINE_PHASE_ORDER = [
+  "classification",
   "extraction",
   "enrichment",
   "scraping",

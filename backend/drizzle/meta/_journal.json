@@ -50,6 +50,20 @@
       "when": 1775868023107,
       "tag": "0006_spicy_lockjaw",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1775920874602,
+      "tag": "0007_tranquil_squadron_supreme",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1775928387578,
+      "tag": "0008_reflective_lilith",
+      "breakpoints": true
     }
   ]
 }

@@ -272,6 +272,30 @@ function toSourceArray(value: unknown): MemoSectionSource[] {
     }));
 }
 
+function toEvaluationSourceArray(value: unknown): MemoSectionSource[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is Record<string, unknown> =>
+      item != null &&
+      typeof item === "object" &&
+      typeof (item as Record<string, unknown>).url === "string" &&
+      ((item as Record<string, unknown>).url as string).trim().length > 0,
+    )
+    .map((item) => {
+      const label =
+        typeof item.title === "string" && item.title.trim().length > 0
+          ? item.title.trim()
+          : typeof item.name === "string" && item.name.trim().length > 0
+            ? item.name.trim()
+            : item.url as string;
+
+      return {
+        label,
+        url: (item.url as string).trim(),
+      };
+    });
+}
+
 function toMemoSections(value: unknown): InvestorMemoSection[] {
   if (!Array.isArray(value)) return [];
   return value
@@ -335,6 +359,7 @@ export function MemoTabContent({
     memo?.executiveSummary ||
     evaluation.executiveSummary ||
     `Synthesis executive summary for ${startup.name} is not available yet.`;
+  const executiveSummarySources = toEvaluationSourceArray(evaluation.sources);
 
   return (
     <Card data-testid="card-investment-memo">
@@ -374,6 +399,7 @@ export function MemoTabContent({
           icon={FileText}
           animateOnMount={animateOnMount}
           summary={executiveSummaryText}
+          sources={executiveSummarySources}
           defaultExpanded={true}
         />
 

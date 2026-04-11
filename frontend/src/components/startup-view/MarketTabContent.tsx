@@ -12,7 +12,6 @@ import { DataGapsSection, parseDataGapItems } from "@/components/DataGapsSection
 import { MarkdownText } from "@/components/MarkdownText";
 import { ChartNoAxesColumn, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { HowToStrengthenCard } from "@/components/startup-view/HowToStrengthenCard";
 import type { Evaluation } from "@/types/evaluation";
 
 interface MarketTabContentProps {
@@ -22,7 +21,6 @@ interface MarketTabContentProps {
   showKeyFindingsAndRisks?: boolean;
   showDataGaps?: boolean;
   showScores?: boolean;
-  onStrengthenExpand?: () => void;
 }
 
 function toRecord(value: unknown): Record<string, unknown> {
@@ -42,6 +40,15 @@ interface MarketSourceView {
   url?: string;
   tier?: string;
   geography?: string;
+}
+
+function sourceLabelFromUrl(url: string | null | undefined): string | null {
+  if (!url || isPlaceholder(url)) return null;
+  try {
+    return url.replace(/^https?:\/\/(www\.)?/, "").split("/")[0] || null;
+  } catch {
+    return null;
+  }
 }
 
 function toMarketSources(value: unknown): MarketSourceView[] {
@@ -333,14 +340,7 @@ function SourceInfoTooltip({ sources }: { sources: MarketSourceView[] }) {
   );
 }
 
-function getHowToStrengthen(sectionData: unknown): string[] {
-  if (!sectionData || typeof sectionData !== "object") return [];
-  const hts = (sectionData as Record<string, unknown>).howToStrengthen;
-  if (!Array.isArray(hts)) return [];
-  return hts.filter((s): s is string => typeof s === "string" && s.trim().length > 0);
-}
-
-export function MarketTabContent({ evaluation, marketWeight, fundingStage, showKeyFindingsAndRisks = true, showDataGaps = true, showScores = true, onStrengthenExpand }: MarketTabContentProps) {
+export function MarketTabContent({ evaluation, marketWeight, fundingStage, showKeyFindingsAndRisks = true, showDataGaps = true, showScores = true }: MarketTabContentProps) {
   if (!evaluation) {
     return (
       <Card className="border-dashed" data-testid="card-market-empty">
@@ -462,7 +462,9 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage, showK
   const growthRateDeckClaimedPeriod = getMeaningful(growthRate.deckClaimedPeriod);
   const growthRateDeckClaimedAnnualized = getMeaningful(growthRate.deckClaimedAnnualized);
   const growthRateYear = getMeaningful(growthRate.year);
+  const growthRateSource = getMeaningful(growthRate.source);
   const growthRateSourceUrl = getMeaningful(growthRate.sourceUrl);
+  const growthRateSourceLabel = growthRateSource || sourceLabelFromUrl(growthRateSourceUrl);
   const growthRateDataType = getMeaningful(growthRate.dataType);
   const standardizedGrowthRate = toRecord(growthTiming.standardizedGrowthRate);
   const standardizedCagr = typeof standardizedGrowthRate?.cagr === "number" ? standardizedGrowthRate.cagr : null;
@@ -511,8 +513,6 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage, showK
     (a, b) => (severityOrder[a.severity.toLowerCase()] ?? 1) - (severityOrder[b.severity.toLowerCase()] ?? 1),
   );
 
-  const marketStrengthenItems = getHowToStrengthen(evaluation?.marketData);
-
   return (
     <div className="space-y-6">
       {showScores && (
@@ -527,8 +527,6 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage, showK
           confidenceTestId="badge-market-confidence"
         />
       )}
-
-      <HowToStrengthenCard items={marketStrengthenItems} onExpand={onStrengthenExpand} />
 
       {/* --- Market Sizing Inverted Triangle --- */}
       <Card className="border-primary/15">
@@ -676,14 +674,14 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage, showK
                   {standardizedCagr !== null && standardizedBasis && standardizedBasis !== "YoY" && standardizedBasis !== "unknown" && (
                     <span className="text-[10px] text-muted-foreground">Standardized CAGR: <span className="font-medium text-foreground">{standardizedCagr.toFixed(1)}%</span></span>
                   )}
-                  {(growthRateYear || growthRateSourceUrl || (growthRateDataType && growthRateDataType !== "unknown")) && (
+                  {(growthRateYear || growthRateSourceLabel || (growthRateDataType && growthRateDataType !== "unknown")) && (
                     <div className="flex items-center gap-1.5 flex-wrap mt-1">
                       {growthRateYear && growthRateYear !== "Unknown" && (
                         <Badge variant="outline" className="text-[10px] h-5">{growthRateYear}</Badge>
                       )}
-                      {growthRateSourceUrl && growthRateSourceUrl !== "Unknown" && (
-                        <Badge variant="outline" className="text-[10px] h-5 text-muted-foreground">
-                          {growthRateSourceUrl.replace(/^https?:\/\/(www\.)?/, "").split("/")[0]}
+                      {growthRateSourceLabel && (
+                        <Badge variant="outline" className="text-[10px] h-5 text-muted-foreground max-w-full">
+                          Source: {growthRateSourceLabel}
                         </Badge>
                       )}
                       {growthRateDataType && growthRateDataType !== "unknown" && (

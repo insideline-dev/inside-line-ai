@@ -136,7 +136,6 @@ export class MemoSynthesisAgent {
                 prompt: renderedPrompt,
                 schema: MemoSynthesisOutputOpenAiSchema,
                 schemaName: "memo_synthesis_output",
-                temperature: 0.2,
                 maxOutputTokens: 128000,
                 reasoningEffort: "low",
                 abortSignal,
@@ -155,7 +154,6 @@ export class MemoSynthesisAgent {
             generateText({
               model: model as Parameters<typeof generateText>[0]["model"],
               output: Output.object({ schema: MemoSynthesisOutputSchema }),
-              temperature: 0.2,
               maxOutputTokens: 128000,
               system: systemPrompt,
               prompt: renderedPrompt,

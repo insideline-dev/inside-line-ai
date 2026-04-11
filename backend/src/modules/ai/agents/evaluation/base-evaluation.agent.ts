@@ -520,6 +520,15 @@ export abstract class BaseEvaluationAgent<TOutput>
         lastFallbackMessage = normalizedMessage;
         lastRawProviderError = rawProviderError;
 
+        const fallbackMeta =
+          fallbackReason === "TIMEOUT"
+            ? {
+                timeoutMs: hardTimeoutMs,
+                timedOut: true,
+                timeoutScope: "agent",
+              }
+            : undefined;
+
         this.emitLifecycleEvent(options, {
           agent: this.key,
           event: "fallback",
@@ -528,6 +537,7 @@ export abstract class BaseEvaluationAgent<TOutput>
           error: normalizedMessage,
           fallbackReason,
           rawProviderError,
+          meta: fallbackMeta,
         });
 
         if (fallbackReason === "SCHEMA_OUTPUT_INVALID" && error instanceof z.ZodError) {
@@ -562,6 +572,7 @@ export abstract class BaseEvaluationAgent<TOutput>
           error: normalizedMessage,
           fallbackReason,
           rawProviderError,
+          meta: fallbackMeta,
         });
         return {
           key: this.key,
@@ -570,6 +581,7 @@ export abstract class BaseEvaluationAgent<TOutput>
           error: normalizedMessage,
           fallbackReason,
           rawProviderError,
+          meta: fallbackMeta,
         };
       }
     }
@@ -579,6 +591,15 @@ export abstract class BaseEvaluationAgent<TOutput>
     const finalFallbackMessage =
       lastFallbackMessage ??
       "Model returned empty structured output; fallback result generated.";
+    const finalFallbackMeta =
+      finalFallbackReason === "TIMEOUT"
+        ? {
+            timeoutMs: hardTimeoutMs,
+            timedOut: true,
+            timeoutScope: "agent",
+          }
+        : undefined;
+
     this.emitLifecycleEvent(options, {
       agent: this.key,
       event: "fallback",
@@ -587,6 +608,7 @@ export abstract class BaseEvaluationAgent<TOutput>
       error: finalFallbackMessage,
       fallbackReason: finalFallbackReason,
       rawProviderError: lastRawProviderError,
+      meta: finalFallbackMeta,
     });
     const fallbackOutput = this.normalizeNarrativeFields(
       this.fallback(pipelineData),
@@ -604,6 +626,7 @@ export abstract class BaseEvaluationAgent<TOutput>
       error: finalFallbackMessage,
       fallbackReason: finalFallbackReason,
       rawProviderError: lastRawProviderError,
+      meta: finalFallbackMeta,
     });
     return {
       key: this.key,
@@ -612,6 +635,7 @@ export abstract class BaseEvaluationAgent<TOutput>
       error: finalFallbackMessage,
       fallbackReason: finalFallbackReason,
       rawProviderError: lastRawProviderError,
+      meta: finalFallbackMeta,
     };
   }
 

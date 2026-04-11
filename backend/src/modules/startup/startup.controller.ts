@@ -13,6 +13,7 @@ import {
   UseInterceptors,
   UploadedFile,
   BadRequestException,
+  NotFoundException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
@@ -109,7 +110,7 @@ export class StartupController {
     @Param('id') id: string,
     @Body() dto: UpdateStartupDto,
   ) {
-    return this.startupService.update(id, user.id, dto);
+    return this.startupService.update(id, user.id, dto, user.role);
   }
 
   @Delete(':id')
@@ -270,9 +271,9 @@ export class StartupController {
   }
 
   @Get(':id/data-room')
-  @Roles(UserRole.FOUNDER, UserRole.ADMIN)
+  @Roles(UserRole.FOUNDER, UserRole.ADMIN, UserRole.INVESTOR)
   async getDataRoom(@Param('id') startupId: string) {
-    return this.dataRoomService.getDocuments(startupId);
+    return this.dataRoomService.getDocumentsWithMigration(startupId);
   }
 
   @Patch(':id/data-room/:docId/permissions')
@@ -347,7 +348,14 @@ export class StartupController {
   @Get('approved/:id')
   @Roles(UserRole.INVESTOR, UserRole.ADMIN)
   async findApprovedById(@CurrentUser() _user: User, @Param('id') id: string) {
-    return this.startupService.findApprovedById(id);
+    try {
+      return await this.startupService.findApprovedById(id);
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        return null;
+      }
+      throw error;
+    }
   }
 
   @Get('approved/:id/evaluation')

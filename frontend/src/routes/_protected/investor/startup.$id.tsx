@@ -37,6 +37,7 @@ import {
   ProductTabContent,
   MarketTabContent,
   FinancialsTabContent,
+  DataRoomPanel,
 } from "@/components/startup-view";
 import { useToast } from "@/hooks/use-toast";
 import type { Startup } from "@/types/startup";
@@ -54,7 +55,8 @@ type InvestorStartupTab =
   | "product"
   | "team"
   | "financials"
-  | "competitors";
+  | "competitors"
+  | "data-room";
 
 function unwrapApiResponse<T>(payload: unknown): T {
   if (
@@ -215,23 +217,37 @@ function InvestorStartupDetailPage() {
       />
 
       {(typeof match?.thesisFitScore === "number" || typeof thesisRationaleText === "string") && (
-        <Card className="border-primary/15 bg-primary/[0.04]">
-          <CardHeader className="pb-3">
-            <CardTitle>Thesis Alignment</CardTitle>
+        <Card className="border-2 border-primary/30 bg-gradient-to-br from-primary/5 to-primary/10 shadow-md">
+          <CardHeader className="pb-2">
+            <div className="flex items-center gap-2">
+              <div className="rounded-full bg-primary/10 p-1.5">
+                <BarChart2 className="h-4 w-4 text-primary" />
+              </div>
+              <CardTitle className="text-lg">Thesis Alignment</CardTitle>
+            </div>
             <CardDescription>How this startup fits your investment thesis.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-4">
             {typeof match?.thesisFitScore === "number" && (
-              <div className="inline-flex items-center gap-3">
-                <ScoreRing score={match.thesisFitScore as number} size="sm" showLabel={false} variant="secondary" />
-                <div>
-                  <p className="text-sm font-medium">Thesis fit score</p>
-                  <p className="text-xs text-muted-foreground">Investor-specific alignment based on your thesis and scoring profile.</p>
+              <div className="flex items-center gap-4 rounded-lg bg-background/60 p-4 border">
+                <ScoreRing score={match.thesisFitScore as number} size="lg" showLabel variant="secondary" />
+                <div className="flex-1">
+                  <p className="text-lg font-semibold">
+                    {match.thesisFitScore >= 80 ? "Strong Fit" :
+                     match.thesisFitScore >= 60 ? "Good Fit" :
+                     match.thesisFitScore >= 40 ? "Moderate Fit" : "Low Fit"}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Based on your investment thesis and scoring preferences
+                  </p>
                 </div>
               </div>
             )}
             {typeof thesisRationaleText === "string" && thesisRationaleText.trim().length > 0 && (
-              <p className="text-sm text-muted-foreground">{thesisRationaleText}</p>
+              <div className="rounded-lg bg-muted/50 p-3">
+                <p className="text-sm font-medium mb-1">AI Analysis</p>
+                <p className="text-sm text-muted-foreground">{thesisRationaleText}</p>
+              </div>
             )}
           </CardContent>
         </Card>
@@ -252,6 +268,7 @@ function InvestorStartupDetailPage() {
               <TabsTrigger value="team" className="w-full sm:w-auto">Team</TabsTrigger>
               <TabsTrigger value="financials" className="w-full sm:w-auto">Financials</TabsTrigger>
               <TabsTrigger value="competitors" className="w-full sm:w-auto">Competitors</TabsTrigger>
+              <TabsTrigger value="data-room" className="w-full sm:w-auto">Data Room</TabsTrigger>
             </>
           )}
         </TabsList>
@@ -311,6 +328,15 @@ function InvestorStartupDetailPage() {
               <CompetitorsTabContent
                 evaluation={evaluation}
                 companyName={startup.name}
+              />
+            </TabsContent>
+
+            <TabsContent value="data-room" className="mt-6">
+              <DataRoomPanel
+                startupId={id}
+                role="investor"
+                allowUpload={false}
+                allowCategoryEdit={false}
               />
             </TabsContent>
 

@@ -204,7 +204,18 @@ export class SynthesisService {
       `[Synthesis] ✅ Results persisted | Score: ${synthesis.overallScore} | KeyStrengths: ${synthesis.keyStrengths?.length} | KeyRisks: ${synthesis.keyRisks?.length}`,
     );
 
-    await this.performPostSynthesisOps(startupId, synthesis, extraction);
+    // Fire-and-forget: PDF generation + upload is heavy (minutes) and its
+    // output (memo URLs) is not required for the phase to complete or for any
+    // frontend flow. Blocking the synthesis phase on it made the pipeline view
+    // hang after agents finished.
+    void this.performPostSynthesisOps(startupId, synthesis, extraction).catch(
+      (error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.error(
+          `[Synthesis] Deferred post-synthesis ops failed for ${startupId}: ${message}`,
+        );
+      },
+    );
 
     return {
       synthesis: { ...synthesis },

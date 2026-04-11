@@ -108,7 +108,7 @@ export class PipelineStateService implements OnModuleDestroy {
         userId,
         status: PipelineStatus.RUNNING,
         quality: "standard",
-        currentPhase: PipelinePhase.EXTRACTION,
+        currentPhase: PipelinePhase.CLASSIFICATION,
         phases: this.createInitialPhases(),
         results: {},
         retryCounts: {},
@@ -119,6 +119,12 @@ export class PipelineStateService implements OnModuleDestroy {
             output: 0,
           },
           phases: {
+            [PipelinePhase.CLASSIFICATION]: {
+              phase: PipelinePhase.CLASSIFICATION,
+              agentCount: 0,
+              successCount: 0,
+              failedCount: 0,
+            },
             [PipelinePhase.EXTRACTION]: {
               phase: PipelinePhase.EXTRACTION,
               agentCount: 0,
@@ -438,6 +444,7 @@ export class PipelineStateService implements OnModuleDestroy {
 
   private createInitialPhases(): Record<PipelinePhase, PhaseResult> {
     return {
+      [PipelinePhase.CLASSIFICATION]: { status: PhaseStatus.PENDING },
       [PipelinePhase.EXTRACTION]: { status: PhaseStatus.PENDING },
       [PipelinePhase.ENRICHMENT]: { status: PhaseStatus.PENDING },
       [PipelinePhase.SCRAPING]: { status: PhaseStatus.PENDING },

@@ -31,6 +31,7 @@ import type {
 } from "@/types/evaluation";
 import { MarkdownText } from "@/components/MarkdownText";
 import { cn } from "@/lib/utils";
+import { getAllStructuredDataGaps } from "@/lib/evaluation-display";
 
 interface FounderRecommendationsTabProps {
   evaluation: Evaluation | null;
@@ -141,7 +142,22 @@ export function FounderRecommendationsTab({ evaluation }: FounderRecommendations
       pitchRecs.length > 0 || founderRecs.length > 0 || howToStrengthen.length > 0,
   );
 
-  if (sections.length === 0) {
+  const founderReportData = (evaluation?.founderReport ?? null) as FounderReport | null;
+  const whatsWorking = founderReportData?.whatsWorking?.filter((s) => s.trim().length > 0) ?? [];
+  const pathToInevitability = founderReportData?.pathToInevitability?.filter((s) => s.trim().length > 0) ?? [];
+  const structuredDataGaps = getAllStructuredDataGaps(evaluation).slice(0, 6);
+
+  const totalDeckGaps = sections.reduce((sum, s) => sum + s.pitchRecs.length, 0);
+  const totalActionItems = sections.reduce((sum, s) => sum + s.founderRecs.length, 0);
+  const totalStrengthens = sections.reduce((sum, s) => sum + s.howToStrengthen.length, 0);
+  const hasFounderContent =
+    structuredDataGaps.length > 0 ||
+    sections.length > 0 ||
+    whatsWorking.length > 0 ||
+    pathToInevitability.length > 0 ||
+    Boolean(founderReportData?.summary?.trim());
+
+  if (!hasFounderContent) {
     return (
       <Card className="border-dashed">
         <CardContent className="p-12 text-center">
@@ -153,14 +169,6 @@ export function FounderRecommendationsTab({ evaluation }: FounderRecommendations
       </Card>
     );
   }
-
-  const founderReportData = (evaluation?.founderReport ?? null) as FounderReport | null;
-  const whatsWorking = founderReportData?.whatsWorking?.filter((s) => s.trim().length > 0) ?? [];
-  const pathToInevitability = founderReportData?.pathToInevitability?.filter((s) => s.trim().length > 0) ?? [];
-
-  const totalDeckGaps = sections.reduce((sum, s) => sum + s.pitchRecs.length, 0);
-  const totalActionItems = sections.reduce((sum, s) => sum + s.founderRecs.length, 0);
-  const totalStrengthens = sections.reduce((sum, s) => sum + s.howToStrengthen.length, 0);
 
   return (
     <div className="space-y-6">
@@ -181,6 +189,42 @@ export function FounderRecommendationsTab({ evaluation }: FounderRecommendations
           <MarkdownText className="text-sm text-muted-foreground leading-relaxed text-pretty [&>p]:mb-0">
             {founderReportData?.summary || "Founder report summary is not available yet."}
           </MarkdownText>
+
+          {structuredDataGaps.length > 0 && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-4 dark:border-amber-900 dark:bg-amber-950/30">
+              <div className="flex items-center gap-2 mb-3">
+                <FileWarning className="size-4 text-amber-600 dark:text-amber-400" />
+                <span className="text-sm font-semibold text-amber-700 dark:text-amber-400">
+                  Data Gaps to Resolve
+                </span>
+              </div>
+              <ul className="space-y-3">
+                {structuredDataGaps.map((item, index) => (
+                  <li
+                    key={`${item.source}-${item.gap}-${index}`}
+                    className="rounded-md border border-amber-200/70 bg-background/80 px-3 py-2.5 dark:border-amber-900/60"
+                  >
+                    <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                      <Badge variant="outline" className="text-[10px] font-medium border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-400">
+                        {item.source}
+                      </Badge>
+                      <Badge variant="secondary" className="text-[10px] capitalize">
+                        {item.impact}
+                      </Badge>
+                    </div>
+                    <MarkdownText className="text-sm font-medium text-pretty [&>p]:mb-0">
+                      {item.gap}
+                    </MarkdownText>
+                    {item.suggestedAction && (
+                      <MarkdownText className="mt-1.5 text-sm text-muted-foreground leading-relaxed text-pretty [&>p]:mb-0">
+                        {item.suggestedAction}
+                      </MarkdownText>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {(whatsWorking.length > 0 || pathToInevitability.length > 0) && (
             <div className="space-y-4">
@@ -265,7 +309,7 @@ export function FounderRecommendationsTab({ evaluation }: FounderRecommendations
 
       {/* Section Recommendations */}
       <div className="space-y-3">
-        {sections.map((section, sectionIndex) => (
+        {sections.map((section) => (
           <SectionCollapsible
             key={section.key}
             sectionKey={section.key}
@@ -273,7 +317,7 @@ export function FounderRecommendationsTab({ evaluation }: FounderRecommendations
             pitchRecs={section.pitchRecs}
             founderRecs={section.founderRecs}
             howToStrengthen={section.howToStrengthen}
-            defaultOpen={sectionIndex < 2}
+            defaultOpen={false}
           />
         ))}
       </div>

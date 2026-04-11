@@ -28,6 +28,7 @@ import { AdminEditTab } from "@/components/startup-view/AdminEditTab";
 import { AdminPipelineLivePanel } from "@/components/startup-view/AdminPipelineLivePanel";
 import { FounderRecommendationsTab } from "@/components/startup-view/FounderRecommendationsTab";
 import { FinancialsTabContent } from "@/components/startup-view/FinancialsTabContent";
+import { DataRoomPanel } from "@/components/startup-view/DataRoomPanel";
 import {
   RefreshCw,
   Download,
@@ -107,6 +108,7 @@ type AdminStartupTab =
   | "competitors"
   | "sources"
   | "recommendations"
+  | "data-room"
   | "edit"
   | "raw";
 
@@ -738,6 +740,7 @@ function AdminReviewPage() {
                 <TabsTrigger value="competitors" className="w-full sm:w-auto">Competitors</TabsTrigger>
                 <TabsTrigger value="sources" className="w-full sm:w-auto">Sources</TabsTrigger>
                 <TabsTrigger value="recommendations" className="w-full sm:w-auto">Recommendations</TabsTrigger>
+                <TabsTrigger value="data-room" className="w-full sm:w-auto">Data Room</TabsTrigger>
                 <TabsTrigger value="edit" className="w-full sm:w-auto">Edit</TabsTrigger>
                 <TabsTrigger value="raw" className="w-full sm:w-auto">Raw</TabsTrigger>
               </>
@@ -835,6 +838,10 @@ function AdminReviewPage() {
 
               <TabsContent value="recommendations" className="mt-6">
                 <FounderRecommendationsTab evaluation={evaluation} />
+              </TabsContent>
+
+              <TabsContent value="data-room" className="mt-6">
+                <DataRoomPanel startupId={id} role="admin" />
               </TabsContent>
 
               <TabsContent value="edit" className="mt-6">

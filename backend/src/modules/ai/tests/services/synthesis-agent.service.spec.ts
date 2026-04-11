@@ -217,7 +217,6 @@ describe("SynthesisAgent", () => {
     expect(finalCall).toBeDefined();
     expect(finalCall).toEqual(
       expect.objectContaining({
-        temperature: 0.2,
         maxOutputTokens: 4000,
       }),
     );

@@ -1,4 +1,5 @@
 import type {
+  ClassificationPhaseResult,
   EnrichmentResult,
   ExtractionResult,
   ScrapingResult,
@@ -8,6 +9,7 @@ import type {
 } from './phase-results.interface';
 
 export enum PipelinePhase {
+  CLASSIFICATION = "classification",
   EXTRACTION = "extraction",
   ENRICHMENT = "enrichment",
   SCRAPING = "scraping",
@@ -44,6 +46,7 @@ export enum ModelPurpose {
   LOCATION_NORMALIZATION = "location_normalization",
   OCR = "ocr",
   CLARA = "clara",
+  CLASSIFICATION = "classification",
 }
 
 export interface TokenUsage {
@@ -92,6 +95,7 @@ export interface PhaseResult {
 }
 
 export interface PhaseResultMap {
+  [PipelinePhase.CLASSIFICATION]: ClassificationPhaseResult;
   [PipelinePhase.EXTRACTION]: ExtractionResult;
   [PipelinePhase.ENRICHMENT]: EnrichmentResult;
   [PipelinePhase.SCRAPING]: ScrapingResult;

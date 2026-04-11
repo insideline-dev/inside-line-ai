@@ -64,6 +64,7 @@ export interface EvaluationAgentResult<TOutput> {
   error?: string;
   fallbackReason?: EvaluationFallbackReason;
   rawProviderError?: string;
+  meta?: Record<string, unknown>;
 }
 
 export interface EvaluationFeedbackNote {
@@ -99,6 +100,7 @@ export interface EvaluationAgentLifecycleEvent {
   error?: string;
   fallbackReason?: EvaluationFallbackReason;
   rawProviderError?: string;
+  meta?: Record<string, unknown>;
 }
 
 export interface EvaluationAgentTraceEvent {
@@ -115,6 +117,7 @@ export interface EvaluationAgentTraceEvent {
   error?: string;
   fallbackReason?: EvaluationFallbackReason;
   rawProviderError?: string;
+  meta?: Record<string, unknown>;
 }
 
 export interface EvaluationAgentRunOptions {
@@ -135,6 +138,7 @@ export interface EvaluationAgentCompletion {
   error?: string;
   fallbackReason?: EvaluationFallbackReason;
   rawProviderError?: string;
+  meta?: Record<string, unknown>;
 }
 
 export interface EvaluationAgent<TOutput> {

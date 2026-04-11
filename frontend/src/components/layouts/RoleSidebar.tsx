@@ -75,12 +75,14 @@ const roleNavItems: Record<UserRole, NavItem[]> = {
   investor: [
     { title: "Pipeline", url: "/investor", icon: Target },
     { title: "Analyze Startup", url: "/investor/submit", icon: Plus },
+    { title: "Data Room", url: "/investor/data-room", icon: Folder },
     { title: "Investment Thesis", url: "/investor/thesis", icon: Settings },
     { title: "Scoring", url: "/investor/scoring", icon: Scale },
     { title: "Submission Portal", url: "/investor/portal", icon: Link2 },
   ],
   admin: [
     { title: "Review Queue", url: "/admin", icon: Shield },
+    { title: "Data Room", url: "/admin/data-room", icon: Folder },
     { title: "Analytics", url: "/admin/analytics", icon: BarChart3 },
     { title: "Users", url: "/admin/users", icon: Users },
     { title: "Investors", url: "/admin/investors", icon: UserRoundSearch },

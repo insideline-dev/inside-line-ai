@@ -38,6 +38,7 @@ import { Route as ProtectedInvestorPortfolioRouteImport } from './routes/_protec
 import { Route as ProtectedInvestorPortalRouteImport } from './routes/_protected/investor/portal'
 import { Route as ProtectedInvestorNotesRouteImport } from './routes/_protected/investor/notes'
 import { Route as ProtectedInvestorMessagingRouteImport } from './routes/_protected/investor/messaging'
+import { Route as ProtectedInvestorDataRoomRouteImport } from './routes/_protected/investor/data-room'
 import { Route as ProtectedFounderSubmitRouteImport } from './routes/_protected/founder/submit'
 import { Route as ProtectedFounderMeetingsRouteImport } from './routes/_protected/founder/meetings'
 import { Route as ProtectedFounderInvestorInterestRouteImport } from './routes/_protected/founder/investor-interest'
@@ -48,6 +49,7 @@ import { Route as ProtectedAdminScoringRouteImport } from './routes/_protected/a
 import { Route as ProtectedAdminInvestorsRouteImport } from './routes/_protected/admin/investors'
 import { Route as ProtectedAdminIntegrationsRouteImport } from './routes/_protected/admin/integrations'
 import { Route as ProtectedAdminFlowRouteImport } from './routes/_protected/admin/flow'
+import { Route as ProtectedAdminDataRoomRouteImport } from './routes/_protected/admin/data-room'
 import { Route as ProtectedAdminConversationsRouteImport } from './routes/_protected/admin/conversations'
 import { Route as ProtectedAdminAnalyticsRouteImport } from './routes/_protected/admin/analytics'
 import { Route as ProtectedAdminAgentsRouteImport } from './routes/_protected/admin/agents'
@@ -205,6 +207,12 @@ const ProtectedInvestorMessagingRoute =
     path: '/messaging',
     getParentRoute: () => ProtectedInvestorRoute,
   } as any)
+const ProtectedInvestorDataRoomRoute =
+  ProtectedInvestorDataRoomRouteImport.update({
+    id: '/data-room',
+    path: '/data-room',
+    getParentRoute: () => ProtectedInvestorRoute,
+  } as any)
 const ProtectedFounderSubmitRoute = ProtectedFounderSubmitRouteImport.update({
   id: '/submit',
   path: '/submit',
@@ -257,6 +265,11 @@ const ProtectedAdminIntegrationsRoute =
 const ProtectedAdminFlowRoute = ProtectedAdminFlowRouteImport.update({
   id: '/flow',
   path: '/flow',
+  getParentRoute: () => ProtectedAdminRoute,
+} as any)
+const ProtectedAdminDataRoomRoute = ProtectedAdminDataRoomRouteImport.update({
+  id: '/data-room',
+  path: '/data-room',
   getParentRoute: () => ProtectedAdminRoute,
 } as any)
 const ProtectedAdminConversationsRoute =
@@ -314,6 +327,7 @@ export interface FileRoutesByFullPath {
   '/admin/agents': typeof ProtectedAdminAgentsRoute
   '/admin/analytics': typeof ProtectedAdminAnalyticsRoute
   '/admin/conversations': typeof ProtectedAdminConversationsRoute
+  '/admin/data-room': typeof ProtectedAdminDataRoomRoute
   '/admin/flow': typeof ProtectedAdminFlowRoute
   '/admin/integrations': typeof ProtectedAdminIntegrationsRoute
   '/admin/investors': typeof ProtectedAdminInvestorsRoute
@@ -324,6 +338,7 @@ export interface FileRoutesByFullPath {
   '/founder/investor-interest': typeof ProtectedFounderInvestorInterestRoute
   '/founder/meetings': typeof ProtectedFounderMeetingsRoute
   '/founder/submit': typeof ProtectedFounderSubmitRoute
+  '/investor/data-room': typeof ProtectedInvestorDataRoomRoute
   '/investor/messaging': typeof ProtectedInvestorMessagingRoute
   '/investor/notes': typeof ProtectedInvestorNotesRoute
   '/investor/portal': typeof ProtectedInvestorPortalRoute
@@ -357,6 +372,7 @@ export interface FileRoutesByTo {
   '/admin/agents': typeof ProtectedAdminAgentsRoute
   '/admin/analytics': typeof ProtectedAdminAnalyticsRoute
   '/admin/conversations': typeof ProtectedAdminConversationsRoute
+  '/admin/data-room': typeof ProtectedAdminDataRoomRoute
   '/admin/flow': typeof ProtectedAdminFlowRoute
   '/admin/integrations': typeof ProtectedAdminIntegrationsRoute
   '/admin/investors': typeof ProtectedAdminInvestorsRoute
@@ -367,6 +383,7 @@ export interface FileRoutesByTo {
   '/founder/investor-interest': typeof ProtectedFounderInvestorInterestRoute
   '/founder/meetings': typeof ProtectedFounderMeetingsRoute
   '/founder/submit': typeof ProtectedFounderSubmitRoute
+  '/investor/data-room': typeof ProtectedInvestorDataRoomRoute
   '/investor/messaging': typeof ProtectedInvestorMessagingRoute
   '/investor/notes': typeof ProtectedInvestorNotesRoute
   '/investor/portal': typeof ProtectedInvestorPortalRoute
@@ -406,6 +423,7 @@ export interface FileRoutesById {
   '/_protected/admin/agents': typeof ProtectedAdminAgentsRoute
   '/_protected/admin/analytics': typeof ProtectedAdminAnalyticsRoute
   '/_protected/admin/conversations': typeof ProtectedAdminConversationsRoute
+  '/_protected/admin/data-room': typeof ProtectedAdminDataRoomRoute
   '/_protected/admin/flow': typeof ProtectedAdminFlowRoute
   '/_protected/admin/integrations': typeof ProtectedAdminIntegrationsRoute
   '/_protected/admin/investors': typeof ProtectedAdminInvestorsRoute
@@ -416,6 +434,7 @@ export interface FileRoutesById {
   '/_protected/founder/investor-interest': typeof ProtectedFounderInvestorInterestRoute
   '/_protected/founder/meetings': typeof ProtectedFounderMeetingsRoute
   '/_protected/founder/submit': typeof ProtectedFounderSubmitRoute
+  '/_protected/investor/data-room': typeof ProtectedInvestorDataRoomRoute
   '/_protected/investor/messaging': typeof ProtectedInvestorMessagingRoute
   '/_protected/investor/notes': typeof ProtectedInvestorNotesRoute
   '/_protected/investor/portal': typeof ProtectedInvestorPortalRoute
@@ -455,6 +474,7 @@ export interface FileRouteTypes {
     | '/admin/agents'
     | '/admin/analytics'
     | '/admin/conversations'
+    | '/admin/data-room'
     | '/admin/flow'
     | '/admin/integrations'
     | '/admin/investors'
@@ -465,6 +485,7 @@ export interface FileRouteTypes {
     | '/founder/investor-interest'
     | '/founder/meetings'
     | '/founder/submit'
+    | '/investor/data-room'
     | '/investor/messaging'
     | '/investor/notes'
     | '/investor/portal'
@@ -498,6 +519,7 @@ export interface FileRouteTypes {
     | '/admin/agents'
     | '/admin/analytics'
     | '/admin/conversations'
+    | '/admin/data-room'
     | '/admin/flow'
     | '/admin/integrations'
     | '/admin/investors'
@@ -508,6 +530,7 @@ export interface FileRouteTypes {
     | '/founder/investor-interest'
     | '/founder/meetings'
     | '/founder/submit'
+    | '/investor/data-room'
     | '/investor/messaging'
     | '/investor/notes'
     | '/investor/portal'
@@ -546,6 +569,7 @@ export interface FileRouteTypes {
     | '/_protected/admin/agents'
     | '/_protected/admin/analytics'
     | '/_protected/admin/conversations'
+    | '/_protected/admin/data-room'
     | '/_protected/admin/flow'
     | '/_protected/admin/integrations'
     | '/_protected/admin/investors'
@@ -556,6 +580,7 @@ export interface FileRouteTypes {
     | '/_protected/founder/investor-interest'
     | '/_protected/founder/meetings'
     | '/_protected/founder/submit'
+    | '/_protected/investor/data-room'
     | '/_protected/investor/messaging'
     | '/_protected/investor/notes'
     | '/_protected/investor/portal'
@@ -793,6 +818,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProtectedInvestorMessagingRouteImport
       parentRoute: typeof ProtectedInvestorRoute
     }
+    '/_protected/investor/data-room': {
+      id: '/_protected/investor/data-room'
+      path: '/data-room'
+      fullPath: '/investor/data-room'
+      preLoaderRoute: typeof ProtectedInvestorDataRoomRouteImport
+      parentRoute: typeof ProtectedInvestorRoute
+    }
     '/_protected/founder/submit': {
       id: '/_protected/founder/submit'
       path: '/submit'
@@ -863,6 +895,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProtectedAdminFlowRouteImport
       parentRoute: typeof ProtectedAdminRoute
     }
+    '/_protected/admin/data-room': {
+      id: '/_protected/admin/data-room'
+      path: '/data-room'
+      fullPath: '/admin/data-room'
+      preLoaderRoute: typeof ProtectedAdminDataRoomRouteImport
+      parentRoute: typeof ProtectedAdminRoute
+    }
     '/_protected/admin/conversations': {
       id: '/_protected/admin/conversations'
       path: '/conversations'
@@ -919,6 +958,7 @@ interface ProtectedAdminRouteChildren {
   ProtectedAdminAgentsRoute: typeof ProtectedAdminAgentsRoute
   ProtectedAdminAnalyticsRoute: typeof ProtectedAdminAnalyticsRoute
   ProtectedAdminConversationsRoute: typeof ProtectedAdminConversationsRoute
+  ProtectedAdminDataRoomRoute: typeof ProtectedAdminDataRoomRoute
   ProtectedAdminFlowRoute: typeof ProtectedAdminFlowRoute
   ProtectedAdminIntegrationsRoute: typeof ProtectedAdminIntegrationsRoute
   ProtectedAdminInvestorsRoute: typeof ProtectedAdminInvestorsRoute
@@ -933,6 +973,7 @@ const ProtectedAdminRouteChildren: ProtectedAdminRouteChildren = {
   ProtectedAdminAgentsRoute: ProtectedAdminAgentsRoute,
   ProtectedAdminAnalyticsRoute: ProtectedAdminAnalyticsRoute,
   ProtectedAdminConversationsRoute: ProtectedAdminConversationsRoute,
+  ProtectedAdminDataRoomRoute: ProtectedAdminDataRoomRoute,
   ProtectedAdminFlowRoute: ProtectedAdminFlowRoute,
   ProtectedAdminIntegrationsRoute: ProtectedAdminIntegrationsRoute,
   ProtectedAdminInvestorsRoute: ProtectedAdminInvestorsRoute,
@@ -969,6 +1010,7 @@ const ProtectedFounderRouteWithChildren =
   ProtectedFounderRoute._addFileChildren(ProtectedFounderRouteChildren)
 
 interface ProtectedInvestorRouteChildren {
+  ProtectedInvestorDataRoomRoute: typeof ProtectedInvestorDataRoomRoute
   ProtectedInvestorMessagingRoute: typeof ProtectedInvestorMessagingRoute
   ProtectedInvestorNotesRoute: typeof ProtectedInvestorNotesRoute
   ProtectedInvestorPortalRoute: typeof ProtectedInvestorPortalRoute
@@ -981,6 +1023,7 @@ interface ProtectedInvestorRouteChildren {
 }
 
 const ProtectedInvestorRouteChildren: ProtectedInvestorRouteChildren = {
+  ProtectedInvestorDataRoomRoute: ProtectedInvestorDataRoomRoute,
   ProtectedInvestorMessagingRoute: ProtectedInvestorMessagingRoute,
   ProtectedInvestorNotesRoute: ProtectedInvestorNotesRoute,
   ProtectedInvestorPortalRoute: ProtectedInvestorPortalRoute,

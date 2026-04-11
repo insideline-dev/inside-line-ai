@@ -21,7 +21,6 @@ import {
   Megaphone,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { HowToStrengthenCard } from "@/components/startup-view/HowToStrengthenCard";
 import type { Evaluation } from "@/types/evaluation";
 import type { TeamMemberSource } from "@/components/TeamProfile";
 
@@ -74,7 +73,6 @@ interface TeamTabContentProps {
   showDataGaps?: boolean;
   teamWeight?: number;
   companyName?: string;
-  onStrengthenExpand?: () => void;
 }
 
 interface SubScoreItem {
@@ -249,6 +247,30 @@ function extractFounderMarketFitWhy(teamData: Record<string, unknown> | undefine
 }
 
 // ---------------------------------------------------------------------------
+// Markdown / annotation cleanup
+// ---------------------------------------------------------------------------
+
+/** Strip markdown bold/italic and parenthetical annotations like "(profile entry 1)". */
+function cleanMemberName(raw: string): string {
+  return raw
+    .replace(/\*{1,2}([^*]+)\*{1,2}/g, "$1")  // **bold** or *italic*
+    .replace(/\(profile\s+entry\s*\**\d*\**\)/gi, "")  // (profile entry 1)
+    .replace(/\(entry\s*\d+\)/gi, "")  // (entry 1)
+    .replace(/\(#\d+\)/g, "")  // (#1)
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+/** Strip markdown from any string field. */
+function stripMd(raw: string | undefined): string {
+  if (!raw) return "";
+  return raw
+    .replace(/\*{1,2}([^*]+)\*{1,2}/g, "$1")
+    .replace(/\(profile\s+entry\s*\**\d*\**\)/gi, "")
+    .trim();
+}
+
+// ---------------------------------------------------------------------------
 // Team member merge (5-layer resolution)
 // ---------------------------------------------------------------------------
 
@@ -381,7 +403,7 @@ function deduplicateMembers(members: TeamMember[]): TeamMember[] {
     for (let j = i + 1; j < members.length; j++) {
       if (consumed.has(j)) continue;
 
-      const nameMatch = areSimilarNames(best.name, members[j].name);
+      const nameMatch = areSimilarNames(cleanMemberName(best.name), cleanMemberName(members[j].name));
       const linkedinMatch =
         !!best.linkedinUrl &&
         !!members[j].linkedinUrl &&
@@ -498,8 +520,8 @@ function buildTeamMembers(
     return (submittedMembers ?? []).map((m) => ({ ...m, source: "submitted" as const }));
   }
 
-  return deduplicateMembers(merged.map((member) => {
-    const memberName = (member.name as string) || "";
+  const built = deduplicateMembers(merged.map((member) => {
+    const memberName = cleanMemberName((member.name as string) || "");
     const isSubmittedMember = isInNameSet(submittedKeys, memberName);
     const getName = (e: Record<string, unknown>) => e.name as string | undefined;
     const hasEnrichment = teamEvals.some(
@@ -518,19 +540,20 @@ function buildTeamMembers(
       : member.source;
 
     return {
-      name: (member.name as string) || "Unknown",
-      role: (memberEval?.role as string) || (member.role as string) || (founderData?.role as string) || "Team Member",
+      name: cleanMemberName((member.name as string) || "") || "Unknown",
+      role: stripMd((memberEval?.role as string) || (member.role as string) || (founderData?.role as string) || "Team Member"),
       discovered: !isSubmittedMember && Boolean(memberEval?.scrapedCandidate),
       source: resolvedSource,
       linkedinUrl:
         (memberEval?.linkedinUrl as string) || (member.linkedinUrl as string) || (founderData?.linkedinUrl as string),
-      headline:
+      headline: stripMd(
         (li.headline as string) ||
         (li.currentPosition as string) ||
         (founderData?.currentPosition as string) ||
         (member.headline as string) ||
         "",
-      summary:
+      ),
+      summary: stripMd(
         (li.summary as string) ||
         (member.bio as string) ||
         (memberEval?.bio as string) ||
@@ -538,6 +561,7 @@ function buildTeamMembers(
         (founderData?.background as string) ||
         (linkedinAnalysis.background as string) ||
         "",
+      ),
       profilePictureUrl:
         (li.profilePictureUrl as string) ||
         (li.profileImageUrl as string) ||
@@ -568,6 +592,10 @@ function buildTeamMembers(
         "",
     };
   }));
+
+  // Sort: most data-rich members first (LinkedIn enriched > submitted > scraped)
+  built.sort((a, b) => memberRichness(b) - memberRichness(a));
+  return built;
 }
 
 // ---------------------------------------------------------------------------
@@ -624,13 +652,6 @@ function fmfScoreColor(score: number): string {
 // Main component
 // ---------------------------------------------------------------------------
 
-function getHowToStrengthen(sectionData: unknown): string[] {
-  if (!sectionData || typeof sectionData !== "object") return [];
-  const hts = (sectionData as Record<string, unknown>).howToStrengthen;
-  if (!Array.isArray(hts)) return [];
-  return hts.filter((s): s is string => typeof s === "string" && s.trim().length > 0);
-}
-
 export function TeamTabContent({
   evaluation,
   teamMembers,
@@ -639,7 +660,6 @@ export function TeamTabContent({
   showDataGaps = true,
   teamWeight,
   companyName,
-  onStrengthenExpand,
 }: TeamTabContentProps) {
   const teamData = useMemo(
     () => toRecord(evaluation?.teamData),
@@ -682,8 +702,6 @@ export function TeamTabContent({
 
   const dataGaps = useMemo(() => parseDataGapItems(teamData.dataGaps), [teamData]);
 
-  const teamStrengthenItems = getHowToStrengthen(evaluation?.teamData);
-
   return (
     <div className="space-y-6" data-testid="container-team-tab">
       {/* Section 1: Score Card */}
@@ -700,8 +718,6 @@ export function TeamTabContent({
           confidenceTestId="badge-team-confidence"
         />
       )}
-
-      <HowToStrengthenCard items={teamStrengthenItems} onExpand={onStrengthenExpand} />
 
       {/* Section 2: Team Composition */}
       {teamComposition && (

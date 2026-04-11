@@ -42,8 +42,17 @@ export const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
   },
   phases: [
     {
-      phase: PipelinePhase.EXTRACTION,
+      phase: PipelinePhase.CLASSIFICATION,
       dependsOn: [],
+      canRunParallelWith: [],
+      timeoutMs: 5 * 60 * 1000,
+      maxRetries: 2,
+      required: false,
+      queue: QUEUE_NAMES.DOCUMENT_CLASSIFICATION,
+    },
+    {
+      phase: PipelinePhase.EXTRACTION,
+      dependsOn: [PipelinePhase.CLASSIFICATION],
       canRunParallelWith: [],
       timeoutMs: 8 * 60 * 1000,
       maxRetries: 2,

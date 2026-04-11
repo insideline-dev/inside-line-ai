@@ -6,6 +6,7 @@ import {
   timestamp,
   jsonb,
   index,
+  numeric,
 } from 'drizzle-orm/pg-core';
 import { startup } from './startup.schema';
 import { asset } from '../../../storage/entities/asset.schema';
@@ -25,6 +26,17 @@ export const dataRoom = pgTable(
       .notNull()
       .references(() => asset.id, { onDelete: 'cascade' }),
     category: text('category').notNull(),
+    classificationStatus: text('classification_status')
+      .$type<'pending' | 'classifying' | 'completed' | 'failed'>()
+      .notNull()
+      .default('pending'),
+    classificationConfidence: numeric('classification_confidence', {
+      precision: 4,
+      scale: 3,
+    }),
+    routedAgents: jsonb('routed_agents').$type<string[]>().default([]),
+    classificationError: text('classification_error'),
+    classifiedAt: timestamp('classified_at'),
     visibleToInvestors: jsonb('visible_to_investors')
       .$type<string[]>()
       .default([]),

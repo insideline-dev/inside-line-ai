@@ -222,6 +222,11 @@ export class AiConfigService {
           "AI_MODEL_CLARA",
           DEFAULT_MODEL_BY_PURPOSE[ModelPurpose.CLARA],
         );
+      case ModelPurpose.CLASSIFICATION:
+        return this.config.get<string>(
+          "AI_MODEL_CLASSIFICATION",
+          DEFAULT_MODEL_BY_PURPOSE[ModelPurpose.CLASSIFICATION],
+        );
       default:
         return DEFAULT_MODEL_BY_PURPOSE[purpose];
     }
@@ -286,7 +291,7 @@ export class AiConfigService {
   }
 
   getMatchingMaxOutputTokens(): number {
-    return Number(this.config.get("AI_MATCHING_MAX_OUTPUT_TOKENS", "500"));
+    return Number(this.config.get("AI_MATCHING_MAX_OUTPUT_TOKENS", "10000"));
   }
 
   getMatchingMinThesisFitScore(): number {

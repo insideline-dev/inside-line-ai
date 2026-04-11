@@ -108,6 +108,7 @@ export class PipelineService {
   private claraService: ClaraService | null = null;
   private readonly typeByPhase: Record<
     PipelinePhase,
+    | "document_classification"
     | "ai_extraction"
     | "ai_enrichment"
     | "ai_scraping"
@@ -115,6 +116,7 @@ export class PipelineService {
     | "ai_evaluation"
     | "ai_synthesis"
   > = {
+    [PipelinePhase.CLASSIFICATION]: "document_classification",
     [PipelinePhase.EXTRACTION]: "ai_extraction",
     [PipelinePhase.ENRICHMENT]: "ai_enrichment",
     [PipelinePhase.SCRAPING]: "ai_scraping",

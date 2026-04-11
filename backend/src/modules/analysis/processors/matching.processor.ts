@@ -4,7 +4,12 @@
  * `modules/ai/processors/matching.processor.ts` which uses AI-powered thesis alignment.
  * This file is kept for reference only and is NOT registered in any module.
  */
-import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleInit,
+  OnModuleDestroy,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Job } from 'bullmq';
 import { eq } from 'drizzle-orm';
@@ -21,7 +26,7 @@ import { NotificationService } from '../../../notification/notification.service'
 import { NotificationGateway } from '../../../notification/notification.gateway';
 import { NotificationType } from '../../../notification/entities';
 import { MatchService } from '../../investor/match.service';
-import { investorThesis, InvestorThesis } from '../../investor/entities';
+import { investorThesis, InvestorThesis, startupMatch } from '../../investor/entities';
 import type {
   MatchingJobData,
   MatchingJobResult,
@@ -88,6 +93,18 @@ export class MatchingProcessor
       }
 
       const scores = (scoringJob.result as { scores: StartupScores }).scores;
+      const startupMatchRows = await this.drizzle.db
+        .select({
+          investorId: startupMatch.investorId,
+          thesisFitScore: startupMatch.thesisFitScore,
+          fitRationale: startupMatch.fitRationale,
+          thesisFitFallback: startupMatch.thesisFitFallback,
+        })
+        .from(startupMatch)
+        .where(eq(startupMatch.startupId, startupId));
+      const existingMatchByInvestorId = new Map(
+        startupMatchRows.map((row) => [row.investorId, row]),
+      );
       const activeInvestors = await this.getActiveInvestors();
 
       let matchCount = 0;
@@ -106,6 +123,7 @@ export class MatchingProcessor
       };
 
       for (const investor of activeInvestors) {
+        const existingMatch = existingMatchByInvestorId.get(investor.userId);
         const overallScore = this.matchService.calculateOverallScore(
           {
             marketScore: scores.marketScore,
@@ -124,6 +142,9 @@ export class MatchingProcessor
           tractionScore: scores.tractionScore,
           financialsScore: scores.financialsScore,
           matchReason: this.generateMatchReason(scores, overallScore),
+          thesisFitScore: existingMatch?.thesisFitScore ?? undefined,
+          fitRationale: existingMatch?.fitRationale ?? undefined,
+          thesisFitFallback: existingMatch?.thesisFitFallback ?? undefined,
         });
 
         matchCount++;

@@ -213,6 +213,73 @@ export function useJobStatus(
   return socket;
 }
 
+export interface DocumentClassifyingEvent {
+  startupId: string;
+  dataRoomId: string;
+  fileName: string;
+}
+
+export interface DocumentClassifiedEvent {
+  startupId: string;
+  dataRoomId: string;
+  fileName: string;
+  category: string;
+  confidence: number;
+  routedAgents: string[];
+}
+
+export interface DocumentClassificationFailedEvent {
+  startupId: string;
+  dataRoomId: string;
+  fileName: string;
+  error: string;
+}
+
+export function useDataRoomClassification(
+  startupId: string | null,
+  handlers?: {
+    onClassifying?: (data: DocumentClassifyingEvent) => void;
+    onClassified?: (data: DocumentClassifiedEvent) => void;
+    onFailed?: (data: DocumentClassificationFailedEvent) => void;
+  },
+) {
+  const socket = useSocket();
+  const handlersRef = useRef(handlers);
+
+  useEffect(() => {
+    handlersRef.current = handlers;
+  });
+
+  useEffect(() => {
+    if (!socket || !startupId) return;
+
+    const onClassifying = (data: DocumentClassifyingEvent) => {
+      if (data.startupId !== startupId) return;
+      handlersRef.current?.onClassifying?.(data);
+    };
+    const onClassified = (data: DocumentClassifiedEvent) => {
+      if (data.startupId !== startupId) return;
+      handlersRef.current?.onClassified?.(data);
+    };
+    const onFailed = (data: DocumentClassificationFailedEvent) => {
+      if (data.startupId !== startupId) return;
+      handlersRef.current?.onFailed?.(data);
+    };
+
+    socket.on("document:classifying", onClassifying);
+    socket.on("document:classified", onClassified);
+    socket.on("document:classification_failed", onFailed);
+
+    return () => {
+      socket.off("document:classifying", onClassifying);
+      socket.off("document:classified", onClassified);
+      socket.off("document:classification_failed", onFailed);
+    };
+  }, [socket, startupId]);
+
+  return socket;
+}
+
 export function usePipelineStatus(
   startupId: string | null,
   handlers?: {

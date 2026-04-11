@@ -182,6 +182,7 @@ export class EvaluationAgentRegistryService {
             error: result.error,
             fallbackReason: normalizedFallbackReason,
             rawProviderError: result.rawProviderError,
+            meta: result.meta,
           });
 
           if (result.usedFallback) {
@@ -266,11 +267,15 @@ export class EvaluationAgentRegistryService {
             error: errorMessage,
             fallbackReason,
             rawProviderError: errorMessage,
+            meta: this.buildUnhandledErrorMeta(error),
           });
         }
       }),
     );
-    await Promise.allSettled(traceWrites);
+    // Fire-and-forget: trace writes already have internal .catch(); awaiting
+    // here previously delayed phase completion by the time it took to flush
+    // all accumulated onTrace events to the pipeline_agent_run table.
+    void Promise.allSettled(traceWrites);
 
     for (const agent of this.agents) {
       if (!outputs.has(agent.key)) {
@@ -388,7 +393,7 @@ export class EvaluationAgentRegistryService {
         await this.consumeAgentFeedback(startupId, key);
         await this.consumePhaseFeedback(startupId);
       }
-      await Promise.allSettled(traceWrites);
+      void Promise.allSettled(traceWrites);
 
       return {
         agent: result.key,
@@ -406,6 +411,7 @@ export class EvaluationAgentRegistryService {
           ? (result.fallbackReason ?? "UNHANDLED_AGENT_EXCEPTION")
           : result.fallbackReason,
         rawProviderError: result.rawProviderError,
+        meta: result.meta,
       };
     } catch (error) {
       const completedAt = new Date();
@@ -447,7 +453,7 @@ export class EvaluationAgentRegistryService {
           meta: this.buildUnhandledErrorMeta(error),
         }),
       );
-      await Promise.allSettled(traceWrites);
+      void Promise.allSettled(traceWrites);
       return {
         agent: key,
         output: fallbackOutput,
@@ -458,6 +464,7 @@ export class EvaluationAgentRegistryService {
         error: message,
         fallbackReason,
         rawProviderError: message,
+        meta: this.buildUnhandledErrorMeta(error),
       };
     }
   }

@@ -29,6 +29,7 @@ export class DealPipelineService {
         fitRationale: startupMatch.fitRationale,
         createdAt: startupMatch.createdAt,
         startupName: startup.name,
+        startupLogoUrl: startup.logoUrl,
         startupStage: startup.stage,
         startupIndustry: startup.industry,
         startupDescription: startup.description,

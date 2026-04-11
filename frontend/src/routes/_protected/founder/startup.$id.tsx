@@ -366,6 +366,7 @@ function StartupDetail() {
                 showStrengthsAndRisks={false}
                 showDataGaps={false}
                 showScores={false}
+                onStrengthenExpand={() => scrollToSection("recommendations")}
               />
             ) : (
               renderPendingCard(
@@ -387,6 +388,7 @@ function StartupDetail() {
                 productWeight={undefined}
                 showDataGaps={false}
                 showScores={false}
+                onStrengthenExpand={() => scrollToSection("recommendations")}
               />
             ) : (
               renderPendingCard(
@@ -407,6 +409,7 @@ function StartupDetail() {
                 showKeyFindingsAndRisks={false}
                 showDataGaps={false}
                 showScores={false}
+                onStrengthenExpand={() => scrollToSection("recommendations")}
               />
             ) : (
               renderPendingCard(

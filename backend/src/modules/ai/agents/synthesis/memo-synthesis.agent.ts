@@ -10,12 +10,15 @@ import type {
   ScrapingResult,
 } from "../../interfaces/phase-results.interface";
 import { AiProviderService } from "../../providers/ai-provider.service";
+import { MemoSynthesisOutputOpenAiSchema } from "../../schemas/memo-synthesis-openai.schema";
 import { MemoSynthesisOutputSchema } from "../../schemas/memo-synthesis.schema";
 import type { MemoChunkSection } from "../../schemas/memo-synthesis.schema";
 import { AiConfigService } from "../../services/ai-config.service";
 import { AiModelExecutionService } from "../../services/ai-model-execution.service";
 import { AiPromptService } from "../../services/ai-prompt.service";
+import { resolveProviderForModelName } from "../../services/ai-runtime-config.schema";
 import { reconcileCitationMarkers, sanitizeNarrativeText } from "../../services/narrative-sanitizer";
+import { OpenAiDirectClientService } from "../../services/openai-direct-client.service";
 import { MEMO_SECTION_ORDER } from "./synthesis-chunk.config";
 import {
   classifyFallbackReason,
@@ -72,6 +75,7 @@ export class MemoSynthesisAgent {
     private readonly providers: AiProviderService,
     private readonly aiConfig: AiConfigService,
     private readonly promptService: AiPromptService,
+    private readonly openAiDirect: OpenAiDirectClientService,
     private readonly modelExecution?: AiModelExecutionService,
   ) {}
 
@@ -96,11 +100,18 @@ export class MemoSynthesisAgent {
 
       const model =
         execution?.generateTextOptions.model ??
-        this.providers.resolveModelForPurpose(ModelPurpose.SYNTHESIS);
+        this.providers.resolveModelForPurpose(ModelPurpose.MEMO_SYNTHESIS);
 
       const providerOptions = execution?.generateTextOptions.providerOptions as
         | Record<string, unknown>
         | undefined;
+
+      const resolvedModelName =
+        execution?.resolvedConfig.modelName ??
+        this.aiConfig.getModelForPurpose(ModelPurpose.MEMO_SYNTHESIS);
+      const provider = resolveProviderForModelName(resolvedModelName);
+      const useOpenAiDirect =
+        provider === "openai" && this.openAiDirect.isConfigured();
 
       const promptVariables = this.buildPromptVariables(input);
       renderedPrompt = this.promptService.renderTemplate(
@@ -110,8 +121,60 @@ export class MemoSynthesisAgent {
       systemPrompt = promptConfig.systemPrompt;
 
       this.logger.debug(
-        `[MemoSynthesis] Starting single-call | Company: ${input.extraction.companyName} | Stage: ${input.extraction.stage}`,
+        `[MemoSynthesis] Starting single-call | Company: ${input.extraction.companyName} | Stage: ${input.extraction.stage} | Path: ${useOpenAiDirect ? `openai-direct(${resolvedModelName})` : "ai-sdk"}`,
       );
+
+      const callModel = async (
+        remainingMs: number,
+      ): Promise<{ parsedOutput: MemoSynthesisOutput; rawText: string; outputJson: unknown }> => {
+        if (useOpenAiDirect) {
+          const direct = await withTimeout(
+            (abortSignal) =>
+              this.openAiDirect.generateStructured({
+                modelName: resolvedModelName,
+                system: systemPrompt,
+                prompt: renderedPrompt,
+                schema: MemoSynthesisOutputOpenAiSchema,
+                schemaName: "memo_synthesis_output",
+                temperature: 0.2,
+                maxOutputTokens: 128000,
+                reasoningEffort: "low",
+                abortSignal,
+              }),
+            remainingMs,
+            "Memo synthesis agent timed out",
+          );
+          const parsed = MemoSynthesisOutputSchema.parse(direct.output);
+          const sanitized = this.sanitizeOutput(parsed);
+          return { parsedOutput: sanitized, rawText: direct.rawText, outputJson: sanitized };
+        }
+
+        const strippedProviderOptions = stripReasoningEffort(providerOptions);
+        const response = await withTimeout(
+          (abortSignal) =>
+            generateText({
+              model: model as Parameters<typeof generateText>[0]["model"],
+              output: Output.object({ schema: MemoSynthesisOutputSchema }),
+              temperature: 0.2,
+              maxOutputTokens: 128000,
+              system: systemPrompt,
+              prompt: renderedPrompt,
+              providerOptions: strippedProviderOptions as Parameters<typeof generateText>[0]["providerOptions"],
+              abortSignal,
+            }),
+          remainingMs,
+          "Memo synthesis agent timed out",
+        );
+
+        const rawOutput = extractStructuredOutput(response);
+        const parsed = MemoSynthesisOutputSchema.parse(rawOutput);
+        const sanitized = this.sanitizeOutput(parsed);
+        return {
+          parsedOutput: sanitized,
+          rawText: resolveRawOutputText(response, rawOutput),
+          outputJson: sanitized,
+        };
+      };
 
       const maxAttempts = 2;
 
@@ -126,38 +189,18 @@ export class MemoSynthesisAgent {
         }
 
         try {
-          const strippedProviderOptions = stripReasoningEffort(providerOptions);
-
-          const response = await withTimeout(
-            (abortSignal) =>
-              generateText({
-                model: model as Parameters<typeof generateText>[0]["model"],
-                output: Output.object({ schema: MemoSynthesisOutputSchema }),
-                temperature: 0.2,
-                maxOutputTokens: 128000,
-                system: systemPrompt,
-                prompt: renderedPrompt,
-                providerOptions: strippedProviderOptions as Parameters<typeof generateText>[0]["providerOptions"],
-                abortSignal,
-              }),
-            remainingMs,
-            "Memo synthesis agent timed out",
-          );
-
-          const rawOutput = extractStructuredOutput(response);
-          const parsed = MemoSynthesisOutputSchema.parse(rawOutput);
-          const sanitized = this.sanitizeOutput(parsed);
+          const { parsedOutput, rawText, outputJson } = await callModel(remainingMs);
 
           this.logger.log(
-            `[MemoSynthesis] Completed | Sections: ${sanitized.sections.length} | DDAs: ${sanitized.keyDueDiligenceAreas.length}`,
+            `[MemoSynthesis] Completed | Sections: ${parsedOutput.sections.length} | DDAs: ${parsedOutput.keyDueDiligenceAreas.length}`,
           );
 
           return {
-            output: sanitized,
+            output: parsedOutput,
             inputPrompt: renderedPrompt,
             systemPrompt,
-            outputText: resolveRawOutputText(response, rawOutput),
-            outputJson: sanitized,
+            outputText: rawText,
+            outputJson,
             usedFallback: false,
             attempt,
             retryCount: attempt - 1,

@@ -6,6 +6,7 @@
  * OpenAPI spec version: 2.0
  */
 import type { UpdateStartupDtoFilesItem } from './updateStartupDtoFilesItem';
+import type { UpdateStartupDtoPrivateInvestorPipelineStatus } from './updateStartupDtoPrivateInvestorPipelineStatus';
 import type { UpdateStartupDtoRaiseType } from './updateStartupDtoRaiseType';
 import type { UpdateStartupDtoStage } from './updateStartupDtoStage';
 import type { UpdateStartupDtoTeamMembersItem } from './updateStartupDtoTeamMembersItem';
@@ -98,4 +99,5 @@ export interface UpdateStartupDto {
   /** @maxItems 20 */
   productScreenshots?: string[];
   demoUrl?: string;
+  privateInvestorPipelineStatus?: UpdateStartupDtoPrivateInvestorPipelineStatus;
 }

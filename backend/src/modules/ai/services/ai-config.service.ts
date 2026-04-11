@@ -192,6 +192,16 @@ export class AiConfigService {
           "AI_MODEL_SYNTHESIS",
           DEFAULT_MODEL_BY_PURPOSE[ModelPurpose.SYNTHESIS],
         );
+      case ModelPurpose.MEMO_SYNTHESIS:
+        return this.config.get<string>(
+          "AI_MODEL_MEMO_SYNTHESIS",
+          DEFAULT_MODEL_BY_PURPOSE[ModelPurpose.MEMO_SYNTHESIS],
+        );
+      case ModelPurpose.REPORT_SYNTHESIS:
+        return this.config.get<string>(
+          "AI_MODEL_REPORT_SYNTHESIS",
+          DEFAULT_MODEL_BY_PURPOSE[ModelPurpose.REPORT_SYNTHESIS],
+        );
       case ModelPurpose.THESIS_ALIGNMENT:
         return this.config.get<string>(
           "AI_MODEL_THESIS_ALIGNMENT",

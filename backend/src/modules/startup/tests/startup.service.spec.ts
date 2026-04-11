@@ -503,6 +503,33 @@ describe("StartupService", () => {
         service.update(mockStartupId, mockUserId, { name: "Updated Name" }),
       ).rejects.toThrow(ForbiddenException);
     });
+
+    it("should allow private investor pipeline status updates for approved private investor submissions", async () => {
+      const approvedInvestorStartup = {
+        ...mockStartup,
+        status: StartupStatus.APPROVED,
+        submittedByRole: UserRole.INVESTOR,
+        isPrivate: true,
+        privateInvestorPipelineStatus: null,
+      };
+
+      mockDb.limit
+        .mockResolvedValueOnce([approvedInvestorStartup])
+        .mockResolvedValueOnce([]);
+      mockDb.returning.mockResolvedValueOnce([
+        {
+          ...approvedInvestorStartup,
+          privateInvestorPipelineStatus: "engaged",
+        },
+      ]);
+
+      const result = await service.update(mockStartupId, mockUserId, {
+        privateInvestorPipelineStatus: "engaged",
+      });
+
+      expect(result.privateInvestorPipelineStatus).toBe("engaged");
+      expect(mockDb.update).toHaveBeenCalled();
+    });
   });
 
   describe("delete", () => {

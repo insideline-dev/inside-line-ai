@@ -215,8 +215,8 @@ function InvestorStartupDetailPage() {
       />
 
       {(typeof match?.thesisFitScore === "number" || typeof thesisRationaleText === "string") && (
-        <Card>
-          <CardHeader>
+        <Card className="border-primary/15 bg-primary/[0.04]">
+          <CardHeader className="pb-3">
             <CardTitle>Thesis Alignment</CardTitle>
             <CardDescription>How this startup fits your investment thesis.</CardDescription>
           </CardHeader>
@@ -224,7 +224,10 @@ function InvestorStartupDetailPage() {
             {typeof match?.thesisFitScore === "number" && (
               <div className="inline-flex items-center gap-3">
                 <ScoreRing score={match.thesisFitScore as number} size="sm" showLabel={false} variant="secondary" />
-                <span className="text-sm text-muted-foreground">Thesis fit score</span>
+                <div>
+                  <p className="text-sm font-medium">Thesis fit score</p>
+                  <p className="text-xs text-muted-foreground">Investor-specific alignment based on your thesis and scoring profile.</p>
+                </div>
               </div>
             )}
             {typeof thesisRationaleText === "string" && thesisRationaleText.trim().length > 0 && (

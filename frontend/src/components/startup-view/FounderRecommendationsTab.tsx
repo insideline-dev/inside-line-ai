@@ -10,6 +10,7 @@ import {
   ChevronRight,
   FileWarning,
   Zap,
+  Sparkles,
   Users,
   Target,
   Cpu,
@@ -95,6 +96,11 @@ function toFounderRecs(value: unknown): FounderRecommendation[] {
   );
 }
 
+function toHowToStrengthen(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+}
+
 function RecTypeBadge({ type }: { type: FounderRecommendation["type"] }) {
   return (
     <Badge
@@ -128,8 +134,12 @@ export function FounderRecommendationsTab({ evaluation }: FounderRecommendations
     const sectionData = (evaluation[key] as Record<string, unknown> | undefined) ?? {};
     const pitchRecs = toPitchRecs(sectionData.founderPitchRecommendations);
     const founderRecs = toFounderRecs(sectionData.founderRecommendations);
-    return { key, label: SECTION_LABELS[key], pitchRecs, founderRecs };
-  }).filter(({ pitchRecs, founderRecs }) => pitchRecs.length > 0 || founderRecs.length > 0);
+    const howToStrengthen = toHowToStrengthen(sectionData.howToStrengthen).slice(0, 3);
+    return { key, label: SECTION_LABELS[key], pitchRecs, founderRecs, howToStrengthen };
+  }).filter(
+    ({ pitchRecs, founderRecs, howToStrengthen }) =>
+      pitchRecs.length > 0 || founderRecs.length > 0 || howToStrengthen.length > 0,
+  );
 
   if (sections.length === 0) {
     return (
@@ -150,6 +160,7 @@ export function FounderRecommendationsTab({ evaluation }: FounderRecommendations
 
   const totalDeckGaps = sections.reduce((sum, s) => sum + s.pitchRecs.length, 0);
   const totalActionItems = sections.reduce((sum, s) => sum + s.founderRecs.length, 0);
+  const totalStrengthens = sections.reduce((sum, s) => sum + s.howToStrengthen.length, 0);
 
   return (
     <div className="space-y-6">
@@ -227,7 +238,13 @@ export function FounderRecommendationsTab({ evaluation }: FounderRecommendations
 
       {/* Summary Stats Bar */}
       <div className="flex items-center gap-3 rounded-lg border bg-muted/30 px-4 py-3">
-        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+          <span className="flex items-center gap-1.5">
+            <Sparkles className="size-3.5" />
+            <span className="font-medium tabular-nums text-foreground">{totalStrengthens}</span>
+            {" "}ways to strengthen
+          </span>
+          <span className="text-border">·</span>
           <span className="flex items-center gap-1.5">
             <FileWarning className="size-3.5" />
             <span className="font-medium tabular-nums text-foreground">{totalDeckGaps}</span>
@@ -255,6 +272,7 @@ export function FounderRecommendationsTab({ evaluation }: FounderRecommendations
             label={section.label}
             pitchRecs={section.pitchRecs}
             founderRecs={section.founderRecs}
+            howToStrengthen={section.howToStrengthen}
             defaultOpen={sectionIndex < 2}
           />
         ))}
@@ -272,41 +290,93 @@ interface SectionCollapsibleProps {
   label: string;
   pitchRecs: FounderPitchRecommendation[];
   founderRecs: FounderRecommendation[];
+  howToStrengthen: string[];
   defaultOpen: boolean;
 }
 
-function SectionCollapsible({ sectionKey, label, pitchRecs, founderRecs, defaultOpen }: SectionCollapsibleProps) {
+function SectionCollapsible({
+  sectionKey,
+  label,
+  pitchRecs,
+  founderRecs,
+  howToStrengthen,
+  defaultOpen,
+}: SectionCollapsibleProps) {
   const [open, setOpen] = useState(defaultOpen);
   const Icon = SECTION_ICONS[sectionKey] ?? Lightbulb;
-  const totalRecs = pitchRecs.length + founderRecs.length;
+  const detailCount = pitchRecs.length + founderRecs.length;
+  const hasDetails = detailCount > 0;
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
       <Card className={cn("transition-colors duration-150", open && "border-primary/20")}>
-        <CollapsibleTrigger asChild>
-          <button
-            type="button"
-            className="flex w-full items-center justify-between gap-3 p-4 text-left hover:bg-muted/50 rounded-xl transition-colors duration-150"
-          >
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="flex items-center justify-center size-8 rounded-lg bg-muted shrink-0">
-                <Icon className="size-4 text-muted-foreground" />
-              </div>
-              <span className="font-semibold text-sm truncate">{label}</span>
-              <Badge variant="secondary" className="shrink-0 tabular-nums text-[11px]">
-                {totalRecs}
-              </Badge>
+        <div className="flex w-full items-center justify-between gap-3 p-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="flex items-center justify-center size-8 rounded-lg bg-muted shrink-0">
+              <Icon className="size-4 text-muted-foreground" />
             </div>
-            <ChevronRight
-              className={cn(
-                "size-4 shrink-0 text-muted-foreground transition-transform duration-150",
-                open && "rotate-90",
-              )}
-            />
-          </button>
-        </CollapsibleTrigger>
+            <span className="font-semibold text-sm truncate">{label}</span>
+            {howToStrengthen.length > 0 && (
+              <Badge variant="secondary" className="shrink-0 tabular-nums text-[11px] gap-1">
+                <Sparkles className="size-3" />
+                {howToStrengthen.length}
+              </Badge>
+            )}
+            {hasDetails && (
+              <Badge variant="outline" className="shrink-0 tabular-nums text-[11px]">
+                +{detailCount} details
+              </Badge>
+            )}
+          </div>
+        </div>
 
-        <CollapsibleContent>
+        {/* Always-visible: How to Strengthen bullets */}
+        {howToStrengthen.length > 0 && (
+          <div className="px-4 pb-4">
+            <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Sparkles className="size-3.5 text-primary" />
+                <span className="text-xs font-semibold uppercase tracking-wide text-primary">
+                  How to Strengthen
+                </span>
+              </div>
+              <ul className="space-y-2">
+                {howToStrengthen.map((item, index) => (
+                  <li
+                    key={`hts-${index}`}
+                    className="flex items-start gap-2.5 text-sm"
+                  >
+                    <span className="mt-2 size-1.5 rounded-full bg-primary/60 shrink-0" />
+                    <MarkdownText className="flex-1 [&>p]:mb-0 [&>p]:leading-relaxed text-pretty">
+                      {item}
+                    </MarkdownText>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        )}
+
+        {hasDetails && (
+          <>
+            <CollapsibleTrigger asChild>
+              <button
+                type="button"
+                className="flex w-full items-center justify-between gap-3 border-t px-4 py-3 text-left text-xs text-muted-foreground hover:bg-muted/50 transition-colors duration-150"
+              >
+                <span className="font-medium uppercase tracking-wide">
+                  {open ? "Hide details" : "Show deck gaps & action items"}
+                </span>
+                <ChevronRight
+                  className={cn(
+                    "size-4 shrink-0 transition-transform duration-150",
+                    open && "rotate-90",
+                  )}
+                />
+              </button>
+            </CollapsibleTrigger>
+
+            <CollapsibleContent>
           <div className="px-4 pb-4 space-y-4">
             {/* Deck Gaps */}
             {pitchRecs.length > 0 && (
@@ -378,6 +448,8 @@ function SectionCollapsible({ sectionKey, label, pitchRecs, founderRecs, default
             )}
           </div>
         </CollapsibleContent>
+          </>
+        )}
       </Card>
     </Collapsible>
   );

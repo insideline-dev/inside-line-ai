@@ -76,6 +76,7 @@ import { PipelineTemplateService } from "./services/pipeline-template.service";
 import { SchemaCompilerService } from "./services/schema-compiler.service";
 import { EvaluationInputResolverService } from "./services/evaluation-input-resolver.service";
 import { OpenAiDeepResearchService } from "./services/openai-deep-research.service";
+import { OpenAiDirectClientService } from "./services/openai-direct-client.service";
 import { OpenAiTextGenerationService } from "./services/openai-text-generation.service";
 
 @Global()
@@ -111,6 +112,7 @@ import { OpenAiTextGenerationService } from "./services/openai-text-generation.s
     PipelineService,
     GeminiResearchService,
     OpenAiDeepResearchService,
+    OpenAiDirectClientService,
     OpenAiTextGenerationService,
     DocumentClassificationService,
     ExtractionService,
@@ -174,6 +176,7 @@ import { OpenAiTextGenerationService } from "./services/openai-text-generation.s
     PipelineTemplateService,
     EvaluationInputResolverService,
     OpenAiDeepResearchService,
+    OpenAiDirectClientService,
     OpenAiTextGenerationService,
     DocumentClassificationService,
     PipelineStateService,

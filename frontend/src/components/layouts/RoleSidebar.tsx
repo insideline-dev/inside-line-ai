@@ -74,6 +74,7 @@ const roleNavItems: Record<UserRole, NavItem[]> = {
   ],
   investor: [
     { title: "Pipeline", url: "/investor", icon: Target },
+    { title: "Analyze Startup", url: "/investor/submit", icon: Plus },
     { title: "Investment Thesis", url: "/investor/thesis", icon: Settings },
     { title: "Scoring", url: "/investor/scoring", icon: Scale },
     { title: "Submission Portal", url: "/investor/portal", icon: Link2 },

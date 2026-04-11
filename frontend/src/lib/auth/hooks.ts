@@ -27,7 +27,8 @@ export function useCurrentUser() {
   return useQuery({
     queryKey: authKeys.user,
     queryFn: authApi.getCurrentUser,
-    staleTime: 5 * 60 * 1000, // 5 min
+    staleTime: 0,
+    refetchOnMount: "always",
     retry: false, // Don't retry auth failures
   });
 }

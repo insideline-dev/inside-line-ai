@@ -21,6 +21,7 @@ import { SubmitToPortal, GetSubmissionsQuery } from './dto';
 import { NotificationType } from '../../notification/entities';
 import { PipelineService } from '../ai/services/pipeline.service';
 import { AiConfigService } from '../ai/services/ai-config.service';
+import { StartupMatchingPipelineService } from '../ai/services/startup-matching-pipeline.service';
 
 @Injectable()
 export class SubmissionService {
@@ -33,6 +34,7 @@ export class SubmissionService {
     private queue: QueueService,
     private aiPipeline: PipelineService,
     private aiConfig: AiConfigService,
+    private startupMatching: StartupMatchingPipelineService,
   ) {}
 
   private generateSlug(name: string): string {
@@ -244,6 +246,25 @@ export class SubmissionService {
         .set({ status: PortalSubmissionStatus.APPROVED })
         .where(eq(portalSubmission.id, submissionId))
         .returning();
+
+      if (updated.startupId) {
+        try {
+          const queued = await this.startupMatching.queueStartupMatching({
+            startupId: updated.startupId,
+            requestedBy: userId,
+            triggerSource: 'approval',
+            requireApproved: false,
+          });
+          this.logger.log(
+            `Queued startup matching for portal-approved ${updated.startupId} (analysisJobId=${queued.analysisJobId})`,
+          );
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          this.logger.error(
+            `Portal approval succeeded but matching queue failed for startup ${updated.startupId}: ${message}`,
+          );
+        }
+      }
 
       this.logger.log(`Approved submission ${submissionId}`);
       return updated;

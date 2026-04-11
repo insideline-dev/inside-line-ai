@@ -54,6 +54,9 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
+import { useDataRoomClassification } from "@/lib/auth/useSocket";
+import { formatAgentLabels, formatCategoryLabel } from "@/lib/agent-labels";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/query-client";
 import { ObjectUploader } from "@/components/ObjectUploader";
@@ -149,6 +152,12 @@ interface UploadedFile {
   type: string;
   publicUrl?: string;
   size?: number;
+  dataRoomId?: string;
+  classificationStatus?: "pending" | "classifying" | "completed" | "failed";
+  classificationCategory?: string;
+  classificationConfidence?: number;
+  routedAgents?: string[];
+  classificationError?: string;
 }
 
 interface TeamMember {
@@ -703,6 +712,15 @@ export function StartupSubmitForm({
         };
       });
 
+      const pendingPaths = new Set(pending.map((f) => f.path));
+      setUploadedFiles((prev) =>
+        prev.map((file) =>
+          pendingPaths.has(file.path)
+            ? { ...file, classificationStatus: "pending" as const }
+            : file,
+        ),
+      );
+
       try {
         await registerDataRoomFilesBulkMutation.mutateAsync({
           id: targetStartupId,
@@ -716,6 +734,54 @@ export function StartupSubmitForm({
     },
     [uploadedFiles, registerDataRoomFilesBulkMutation],
   );
+
+  // Live classification feedback for files in the data room.
+  useDataRoomClassification(startupId, {
+    onClassifying: (event) => {
+      setUploadedFiles((prev) =>
+        prev.map((file) =>
+          file.name === event.fileName
+            ? {
+                ...file,
+                dataRoomId: event.dataRoomId,
+                classificationStatus: "classifying",
+              }
+            : file,
+        ),
+      );
+    },
+    onClassified: (event) => {
+      setUploadedFiles((prev) =>
+        prev.map((file) =>
+          file.name === event.fileName
+            ? {
+                ...file,
+                dataRoomId: event.dataRoomId,
+                classificationStatus: "completed",
+                classificationCategory: event.category,
+                classificationConfidence: event.confidence,
+                routedAgents: event.routedAgents,
+                classificationError: undefined,
+              }
+            : file,
+        ),
+      );
+    },
+    onFailed: (event) => {
+      setUploadedFiles((prev) =>
+        prev.map((file) =>
+          file.name === event.fileName
+            ? {
+                ...file,
+                dataRoomId: event.dataRoomId,
+                classificationStatus: "failed",
+                classificationError: event.error,
+              }
+            : file,
+        ),
+      );
+    },
+  });
 
   // Populate form from an existing backend draft when editing.
   useEffect(() => {
@@ -1371,36 +1437,63 @@ export function StartupSubmitForm({
           <CardContent>
             {uploadedFiles.length > 0 && (
               <div className="space-y-2 mb-4">
-                {uploadedFiles.map((file, index) => (
-                  <div
-                    key={index}
-                    className="flex items-center gap-4 p-3 rounded-lg bg-chart-2/10 border border-chart-2/20"
-                    data-testid={`uploaded-file-${index}`}
-                  >
-                    <CheckCircle className="w-5 h-5 text-chart-2 shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium truncate text-sm">{file.name}</p>
-                      <p className="text-xs text-muted-foreground">{file.type || 'Document'}</p>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        setUploadedFiles((prev) => {
-                          const next = prev.filter((_, i) => i !== index);
-                          if (deckPath === file.path) {
-                            setDeckPath(getDefaultDeckPath(next));
-                          }
-                          return next;
-                        });
-                      }}
-                      data-testid={`button-remove-file-${index}`}
+                {uploadedFiles.map((file, index) => {
+                  const status = file.classificationStatus;
+                  const agentLabels = formatAgentLabels(file.routedAgents);
+                  return (
+                    <div
+                      key={index}
+                      className="flex items-start gap-4 p-3 rounded-lg bg-chart-2/10 border border-chart-2/20"
+                      data-testid={`uploaded-file-${index}`}
                     >
-                      Remove
-                    </Button>
-                  </div>
-                ))}
+                      <CheckCircle className="w-5 h-5 text-chart-2 shrink-0 mt-0.5" />
+                      <div className="flex-1 min-w-0 space-y-1">
+                        <p className="font-medium truncate text-sm">{file.name}</p>
+                        <p className="text-xs text-muted-foreground">{file.type || "Document"}</p>
+                        {(status === "pending" || status === "classifying") && (
+                          <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                            Classifying…
+                          </p>
+                        )}
+                        {status === "completed" && file.classificationCategory && (
+                          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                            <Badge variant="secondary" className="text-[11px]">
+                              {formatCategoryLabel(file.classificationCategory)}
+                            </Badge>
+                            {agentLabels.length > 0 && (
+                              <span className="text-[11px] text-muted-foreground">
+                                → Used by {agentLabels.join(", ")}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        {status === "failed" && (
+                          <p className="text-xs text-destructive">
+                            Classification failed: {file.classificationError ?? "unknown error"}
+                          </p>
+                        )}
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setUploadedFiles((prev) => {
+                            const next = prev.filter((_, i) => i !== index);
+                            if (deckPath === file.path) {
+                              setDeckPath(getDefaultDeckPath(next));
+                            }
+                            return next;
+                          });
+                        }}
+                        data-testid={`button-remove-file-${index}`}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  );
+                })}
               </div>
             )}
 

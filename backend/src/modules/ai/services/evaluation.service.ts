@@ -13,6 +13,7 @@ import type {
 import {
   type ClassifiedFile,
   CATEGORY_AGENT_MAP,
+  ALL_EVALUATION_AGENTS,
   type DocumentCategory,
 } from "../interfaces/document-classification.interface";
 import type { EvaluationResult } from "../interfaces/phase-results.interface";
@@ -23,6 +24,8 @@ import { DEFAULT_MODEL_BY_PURPOSE } from "../ai.config";
 import { normalizeResearchResult } from "./research-result-normalizer";
 import { DrizzleService } from "../../../database";
 import { startup } from "../../startup/entities";
+import { dataRoom } from "../../startup/entities/data-room.schema";
+import { asset } from "../../../storage/entities/asset.schema";
 
 export interface EvaluationRunOptions {
   onAgentStart?: (agent: EvaluationAgentKey) => void;
@@ -137,10 +140,12 @@ export class EvaluationService {
     }
 
     const [record] = await this.drizzle.db
-      .select({ stage: startup.stage, files: startup.files })
+      .select({ stage: startup.stage })
       .from(startup)
       .where(eq(startup.id, startupId))
       .limit(1);
+
+    const dataRoomFiles = await this.loadClassifiedDataRoomFiles(startupId);
 
     if (record?.stage && record.stage !== extraction.stage) {
       this.logger.log(
@@ -156,9 +161,7 @@ export class EvaluationService {
 
     const { result: normalizedResearch } = normalizeResearchResult(research);
 
-    const agentDocumentMap = this.buildAgentDocumentMap(
-      (record?.files as ClassifiedFile[] | null) ?? [],
-    );
+    const agentDocumentMap = this.buildAgentDocumentMap(dataRoomFiles);
 
     return {
       pipelineInput: { extraction, scraping, research: normalizedResearch, enrichment: enrichment ?? undefined },
@@ -166,17 +169,49 @@ export class EvaluationService {
     };
   }
 
+  private async loadClassifiedDataRoomFiles(
+    startupId: string,
+  ): Promise<ClassifiedFile[]> {
+    const rows = await this.drizzle.db
+      .select({
+        category: dataRoom.category,
+        assetKey: asset.key,
+        assetMetadata: asset.metadata,
+        assetMimeType: asset.mimeType,
+      })
+      .from(dataRoom)
+      .leftJoin(asset, eq(dataRoom.assetId, asset.id))
+      .where(eq(dataRoom.startupId, startupId));
+
+    return rows.map((row) => {
+      const metadata = (row.assetMetadata ?? {}) as { originalName?: string };
+      return {
+        path: row.assetKey ?? "",
+        name: metadata.originalName ?? row.assetKey ?? "unknown",
+        type: row.assetMimeType ?? "application/octet-stream",
+        category: row.category as DocumentCategory,
+        confidence: 1,
+      };
+    });
+  }
+
   private buildAgentDocumentMap(
     files: ClassifiedFile[],
   ): Map<EvaluationAgentKey, string[]> {
     const map = new Map<EvaluationAgentKey, string[]>();
+    const fewDocs = files.length <= 2;
 
     for (const file of files) {
       if (!file.category) continue;
-      const agentKeys = CATEGORY_AGENT_MAP[file.category as DocumentCategory] ?? [];
+      const agentKeys = fewDocs
+        ? ALL_EVALUATION_AGENTS
+        : (CATEGORY_AGENT_MAP[file.category as DocumentCategory] ?? []);
+      const label = fewDocs
+        ? `[${file.category} — shared: only ${files.length} doc${files.length === 1 ? "" : "s"} available] ${file.name}`
+        : `[${file.category}] ${file.name}`;
       for (const key of agentKeys) {
         const existing = map.get(key) ?? [];
-        existing.push(`[${file.category}] ${file.name}`);
+        existing.push(label);
         map.set(key, existing);
       }
     }

@@ -7,7 +7,7 @@ import { Slider } from "@/components/ui/slider";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Search, X, SlidersHorizontal, ChevronDown } from "lucide-react";
 
-const STAGES = [
+export const STAGES = [
   { value: "pre_seed", label: "Pre-Seed" },
   { value: "seed", label: "Seed" },
   { value: "series_a", label: "Series A" },
@@ -30,7 +30,7 @@ const INDUSTRY_GROUPS = [
   "Other",
 ];
 
-const REGIONS = [
+export const REGIONS = [
   { value: "us", label: "United States" },
   { value: "europe", label: "Europe" },
   { value: "asia", label: "Asia" },
@@ -55,10 +55,11 @@ interface SearchAndFiltersProps {
   showScoreFilter?: boolean;
   hideSearch?: boolean;
   showSourceFilter?: boolean;
+  hideActiveChips?: boolean;
   placeholder?: string;
 }
 
-const SOURCE_OPTIONS = [
+export const SOURCE_OPTIONS = [
   { value: "all" as const, label: "All Startups" },
   { value: "my_submissions" as const, label: "My Submissions" },
   { value: "matched" as const, label: "Matched" },
@@ -70,6 +71,7 @@ export function SearchAndFilters({
   showScoreFilter = true,
   hideSearch = false,
   showSourceFilter = false,
+  hideActiveChips = false,
   placeholder = "Search by name or description..."
 }: SearchAndFiltersProps) {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -147,13 +149,15 @@ export function SearchAndFilters({
               className="w-full justify-between gap-2 sm:w-[148px] sm:shrink-0"
               data-testid="button-filters"
             >
-              <SlidersHorizontal className="w-4 h-4" />
-              Filters
-              {activeFilterCount > 0 && (
-                <Badge variant="secondary" className="ml-1">
-                  {activeFilterCount}
-                </Badge>
-              )}
+              <span className="flex items-center gap-2">
+                <SlidersHorizontal className="w-4 h-4" />
+                Filters
+                {activeFilterCount > 0 && (
+                  <Badge variant="secondary" className="h-5 min-w-5 px-1.5">
+                    {activeFilterCount}
+                  </Badge>
+                )}
+              </span>
               <ChevronDown className="w-4 h-4" />
             </Button>
           </PopoverTrigger>
@@ -266,7 +270,7 @@ export function SearchAndFilters({
         </Popover>
       </div>
 
-      {hasActiveFilters && (
+      {!hideActiveChips && hasActiveFilters && (
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm text-muted-foreground">Active filters:</span>
           {filters.stages.map((stage) => (
@@ -395,5 +399,3 @@ export const defaultFilters: FilterState = {
   source: "all",
 };
 
-const REGIONS_EXPORT = REGIONS;
-export { REGIONS_EXPORT as REGIONS };

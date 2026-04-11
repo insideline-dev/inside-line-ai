@@ -9,8 +9,8 @@ export const Route = createFileRoute("/_protected")({
 
 function ProtectedContent() {
   const navigate = useNavigate();
-  const { data: user, isLoading } = useCurrentUser();
-  const isAuthed = !!user;
+  const { data: user, isLoading, isError } = useCurrentUser();
+  const isAuthed = !!user && !isError;
   const isMockAuth = env.VITE_MOCK_AUTH;
 
   const pathname = window.location.pathname;

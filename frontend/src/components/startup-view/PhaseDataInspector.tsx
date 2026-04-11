@@ -17,6 +17,7 @@ interface PhaseDataInspectorProps {
 }
 
 const PHASE_LABELS: Record<string, string> = {
+  classification: "Classification",
   extraction: "Extraction",
   enrichment: "Gap Fill",
   scraping: "Scraping",

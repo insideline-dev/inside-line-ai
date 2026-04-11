@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { and, eq, isNull, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { generateText, Output } from "ai";
 import { z } from "zod";
 import { DrizzleService } from "../../../database";
@@ -39,6 +39,7 @@ interface StartupMatchInput {
   };
   synthesis: SynthesisResult;
   threshold?: number;
+  forceIncludeInvestorId?: string;
 }
 
 interface InvestorCandidate {
@@ -95,45 +96,83 @@ export class InvestorMatchingService {
         ? input.startup.geoPath.map((value) => value.trim().toLowerCase())
         : normalizeStartupPathFromLocation(input.startup.location);
 
-    const candidates = await this.drizzle.db
-      .select({
-        id: investorThesis.id,
-        userId: user.id,
-        industries: investorThesis.industries,
-        stages: investorThesis.stages,
-        checkSizeMin: investorThesis.checkSizeMin,
-        checkSizeMax: investorThesis.checkSizeMax,
-        geographicFocus: investorThesis.geographicFocus,
-        geographicFocusNodes: investorThesis.geographicFocusNodes,
-        thesisSummary: investorThesis.thesisSummary,
-        thesisNarrative: investorThesis.thesisNarrative,
-        notes: investorThesis.notes,
-        businessModels: investorThesis.businessModels,
-        antiPortfolio: investorThesis.antiPortfolio,
-        minThesisFitScore: investorThesis.minThesisFitScore,
-        minStartupScore: investorThesis.minStartupScore,
-      })
+    const candidateConditions = and(
+      inArray(user.role, [UserRole.INVESTOR, UserRole.ADMIN]),
+      or(
+        isNull(investorThesis.id),
+        eq(investorThesis.isActive, true),
+      ),
+    );
+
+    const selectFields = {
+      id: investorThesis.id,
+      userId: user.id,
+      industries: investorThesis.industries,
+      stages: investorThesis.stages,
+      checkSizeMin: investorThesis.checkSizeMin,
+      checkSizeMax: investorThesis.checkSizeMax,
+      geographicFocus: investorThesis.geographicFocus,
+      geographicFocusNodes: investorThesis.geographicFocusNodes,
+      thesisSummary: investorThesis.thesisSummary,
+      thesisNarrative: investorThesis.thesisNarrative,
+      notes: investorThesis.notes,
+      businessModels: investorThesis.businessModels,
+      antiPortfolio: investorThesis.antiPortfolio,
+      minThesisFitScore: investorThesis.minThesisFitScore,
+      minStartupScore: investorThesis.minStartupScore,
+    };
+
+    let candidates = await this.drizzle.db
+      .select(selectFields)
       .from(user)
       .leftJoin(investorThesis, eq(investorThesis.userId, user.id))
-      .where(
-        and(
-          eq(user.role, UserRole.INVESTOR),
-          or(
-            isNull(investorThesis.id),
-            eq(investorThesis.isActive, true),
-          ),
-        ),
+      .where(candidateConditions);
+
+    // ALWAYS include the requesting investor, regardless of role or thesis status
+    if (input.forceIncludeInvestorId) {
+      const forcedUserExists = candidates.some(
+        (c) => c.userId === input.forceIncludeInvestorId,
       );
+      if (!forcedUserExists) {
+        const [forcedUser] = await this.drizzle.db
+          .select(selectFields)
+          .from(user)
+          .leftJoin(investorThesis, eq(investorThesis.userId, user.id))
+          .where(eq(user.id, input.forceIncludeInvestorId))
+          .limit(1);
+        if (forcedUser) {
+          candidates = [...candidates, forcedUser];
+          this.logger.log(
+            `Force-added user ${input.forceIncludeInvestorId} to candidates (was not in standard list)`,
+          );
+        } else {
+          this.logger.warn(
+            `Could not find user ${input.forceIncludeInvestorId} to force-add to candidates`,
+          );
+        }
+      }
+    }
 
     const firstFilterPassed = candidates.filter((candidate) =>
+      candidate.userId === input.forceIncludeInvestorId ||
       this.passesFirstFilter(candidate, input, startupGeoPath),
     );
+
+    const forcedInCandidates = input.forceIncludeInvestorId
+      ? candidates.some((c) => c.userId === input.forceIncludeInvestorId)
+      : false;
+    const forcedInFiltered = input.forceIncludeInvestorId
+      ? firstFilterPassed.some((c) => c.userId === input.forceIncludeInvestorId)
+      : false;
 
     this.logger.log(
       `Matching ${input.startupId}: industry="${input.startup.industry}" ` +
         `group="${input.startup.sectorIndustryGroup ?? "null"}" ` +
         `stage="${input.startup.stage}" ` +
-        `total=${candidates.length} passed=${firstFilterPassed.length}`,
+        `total=${candidates.length} passed=${firstFilterPassed.length}` +
+        (input.forceIncludeInvestorId
+          ? ` forceId=${input.forceIncludeInvestorId} inCandidates=${forcedInCandidates} inFiltered=${forcedInFiltered}`
+          : ""),
     );
 
     type EvaluatedCandidate = InvestorMatchResult & {
@@ -395,6 +434,9 @@ export class InvestorMatchingService {
         .update(startupMatch)
         .set(updatePayload)
         .where(eq(startupMatch.id, existing.id));
+      this.logger.log(
+        `Updated match for investor=${investorId} startup=${input.startupId} thesisFitScore=${thesisFitScore}`,
+      );
       return;
     }
 
@@ -412,6 +454,9 @@ export class InvestorMatchingService {
       fitRationale,
       thesisFitFallback,
     });
+    this.logger.log(
+      `Created match for investor=${investorId} startup=${input.startupId} thesisFitScore=${thesisFitScore}`,
+    );
   }
 
   private async backfillLegacyFitRationale(startupId: string): Promise<void> {

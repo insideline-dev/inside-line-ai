@@ -209,7 +209,6 @@ export class SynthesisAgent {
                     ...(useTextOnlyStructuredMode
                       ? {}
                       : { output: Output.object({ schema: SynthesisSchema }) }),
-                    temperature: this.aiConfig.getSynthesisTemperature(),
                     maxOutputTokens: this.aiConfig.getSynthesisMaxOutputTokens(),
                     system: systemPrompt,
                     prompt: synthesisPrompt,
@@ -1316,7 +1315,6 @@ Citation rules:
             model: input.model,
             system: input.systemPrompt,
             prompt: this.buildJsonObjectPrompt(input.renderedPrompt),
-            temperature: this.aiConfig.getSynthesisTemperature(),
             maxOutputTokens: this.aiConfig.getSynthesisMaxOutputTokens(),
             tools: input.tools,
             toolChoice: input.toolChoice,

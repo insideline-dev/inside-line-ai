@@ -99,6 +99,7 @@ export type AiPipelineJobData =
 export interface DocumentClassificationJobData extends BaseJobData {
   type: "document_classification";
   startupId: string;
+  pipelineRunId: string;
 }
 
 export type JobData =

@@ -349,29 +349,46 @@ export class AuthController {
       REFRESH_COOKIE_NAME
     ];
     if (!refreshToken) {
+      this.clearTokenCookies(res);
       throw new UnauthorizedException("No refresh token");
     }
 
-    const result = await this.authService.refreshTokens(refreshToken);
+    try {
+      const result = await this.authService.refreshTokens(refreshToken);
 
-    this.setTokenCookies(res, result.accessToken, result.refreshToken);
+      this.setTokenCookies(res, result.accessToken, result.refreshToken);
 
-    return {
-      user: this.sanitizeUser(result.user),
-      accessToken: result.accessToken,
-    };
+      return {
+        user: this.sanitizeUser(result.user),
+        accessToken: result.accessToken,
+      };
+    } catch (error) {
+      this.clearTokenCookies(res);
+      throw error;
+    }
   }
 
+  @Public()
   @Post("logout")
-  @ApiBearerAuth("JWT")
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "Logout and clear tokens" })
   @ApiResponse({ status: 200, description: "Logged out successfully" })
   async logout(
-    @CurrentUser() currentUser: DbUser,
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    // Revoke all refresh tokens for this user
-    await this.authService.revokeAllUserTokens(currentUser.id);
+    const refreshToken = (req.cookies as Record<string, string> | undefined)?.[
+      REFRESH_COOKIE_NAME
+    ];
+
+    if (refreshToken) {
+      try {
+        const result = await this.authService.refreshTokens(refreshToken);
+        await this.authService.revokeAllUserTokens(result.user.id);
+      } catch {
+        // Best effort: cookies should still be cleared even if token is invalid/expired.
+      }
+    }
 
     this.clearTokenCookies(res);
     return { message: "Logged out successfully" };

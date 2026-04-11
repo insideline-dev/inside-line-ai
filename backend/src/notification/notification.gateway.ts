@@ -55,6 +55,25 @@ interface PipelineEventPayloads {
       dataSummary?: Record<string, unknown>;
     };
   };
+  'document:classifying': {
+    startupId: string;
+    dataRoomId: string;
+    fileName: string;
+  };
+  'document:classified': {
+    startupId: string;
+    dataRoomId: string;
+    fileName: string;
+    category: string;
+    confidence: number;
+    routedAgents: string[];
+  };
+  'document:classification_failed': {
+    startupId: string;
+    dataRoomId: string;
+    fileName: string;
+    error: string;
+  };
   'agent:completed': {
     startupId: string;
     pipelineRunId: string;

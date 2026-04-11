@@ -57,6 +57,11 @@ export class OpenAiDirectClientService {
       );
     }
 
+    const supportsTemperature = !input.modelName
+      .trim()
+      .toLowerCase()
+      .startsWith("gpt-5");
+
     const response = await this.client.chat.completions.create(
       {
         model: input.modelName,
@@ -65,7 +70,7 @@ export class OpenAiDirectClientService {
           { role: "user", content: input.prompt },
         ],
         response_format: zodResponseFormat(input.schema, input.schemaName),
-        ...(input.temperature !== undefined
+        ...(supportsTemperature && input.temperature !== undefined
           ? { temperature: input.temperature }
           : {}),
         ...(input.maxOutputTokens !== undefined

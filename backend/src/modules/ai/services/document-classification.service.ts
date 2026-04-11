@@ -17,6 +17,7 @@ import { ExcelTextExtractorService } from "./excel-text-extractor.service";
 import { PdfTextExtractorService } from "./pdf-text-extractor.service";
 
 const ClassificationOutputSchema = z.object({
+  reasoning: z.string().describe("Brief reasoning about what the document contains and why you chose this category"),
   category: z.nativeEnum(DocumentCategory),
   confidence: z.number().min(0).max(1),
 });
@@ -59,21 +60,23 @@ export class DocumentClassificationService {
 
   async classifySingleFile(file: StartupFileReference): Promise<ClassificationResult> {
     try {
-      const snippet = (await this.extractSnippet(file)) ?? "";
+      const { head, tail } = await this.extractHeadTail(file);
       const categories = Object.values(DocumentCategory).join(", ");
-      const contentPreview = snippet.slice(0, 2000) || "[no extractable text — classify by filename and file type alone]";
+      const headPreview = head || "[no extractable text — classify by filename and file type alone]";
+      const tailPreview = tail && tail !== head ? `\n\nContent (last ~1500 chars):\n---\n${tail}\n---` : "";
       const prompt = `Filename: "${file.name ?? "unknown"}"
 File type: ${file.type ?? "unknown"}
-Content preview (first ~2000 chars):
+
+Content (first ~1500 chars):
 ---
-${contentPreview}
----
+${headPreview}
+---${tailPreview}
 
 Categories: ${categories}
 
 IMPORTANT: A pitch deck is a slide-based investor presentation (typically contains slides about problem, solution, market, team, financials, ask). Do NOT confuse it with a business plan (which is a longer prose document about strategy/operations). If the document has slide-like structure or mentions "Series A/B/C", "investment", "fundraising", it's likely a pitch_deck.
 
-Return the category and a confidence between 0 and 1.`;
+Think step by step: look at the filename, the beginning of the document, and the end of the document. Consider what kind of document this is based on its structure, tone, and content. Then return your reasoning, the category, and a confidence between 0 and 1.`;
 
       const response = await this.modelExecution.generateText<ClassificationOutput>({
         model: this.providers.resolveModelForPurpose(ModelPurpose.CLASSIFICATION),
@@ -123,35 +126,51 @@ Return the category and a confidence between 0 and 1.`;
     };
   }
 
-  private async extractSnippet(file: StartupFileReference): Promise<string | null> {
+  private async extractHeadTail(
+    file: StartupFileReference,
+  ): Promise<{ head: string | null; tail: string | null }> {
+    const empty = { head: null, tail: null };
     try {
       const downloadUrl = await this.storage.getDownloadUrl(file.path, 300);
       const response = await fetch(downloadUrl);
-      if (!response.ok) return null;
+      if (!response.ok) return empty;
 
       const buffer = Buffer.from(await response.arrayBuffer());
-      if (buffer.byteLength === 0) return null;
+      if (buffer.byteLength === 0) return empty;
 
       const contentType = (file.type ?? "").toLowerCase();
       const filename = (file.name ?? "").toLowerCase();
 
+      let fullText: string | null = null;
+
       if (contentType === "application/pdf" || filename.endsWith(".pdf")) {
         const result = await this.pdfTextExtractor.extractText(buffer);
-        return result.text.slice(0, 2000);
-      }
-
-      if (this.isExcelFile(file)) {
+        fullText = result.text;
+      } else if (this.isExcelFile(file)) {
         const result = this.excelTextExtractor.extractText(buffer);
-        return result.text.slice(0, 2000);
+        fullText = result.text;
+      } else if (
+        contentType.startsWith("text/") ||
+        /\.(csv|txt|md|json)$/i.test(filename)
+      ) {
+        fullText = buffer.toString("utf-8");
       }
 
-      if (contentType.startsWith("text/") || /\.(csv|txt|md|json)$/i.test(filename)) {
-        return buffer.toString("utf-8").slice(0, 2000);
-      }
+      if (!fullText) return empty;
 
-      return null;
+      const HEAD_SIZE = 1500;
+      const TAIL_SIZE = 1500;
+      const head = fullText.slice(0, HEAD_SIZE);
+      const tail =
+        fullText.length > HEAD_SIZE + TAIL_SIZE
+          ? fullText.slice(-TAIL_SIZE)
+          : fullText.length > HEAD_SIZE
+            ? fullText.slice(HEAD_SIZE)
+            : null;
+
+      return { head, tail };
     } catch {
-      return null;
+      return empty;
     }
   }
 

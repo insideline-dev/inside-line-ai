@@ -264,6 +264,13 @@ function parseScenarioComparison(raw: unknown[]): { data: ScenarioPoint[]; scena
   return { data, scenarioNames: Array.from(scenarioNames) };
 }
 
+/** Convert 0–1 decimal fraction to percentage points if needed. */
+function normalizeMargin(v: number | undefined): number {
+  if (v === undefined) return 0;
+  // Values stored as fractions (e.g. 0.52) must be multiplied by 100
+  return v > -1 && v < 1 && v !== 0 ? v * 100 : v;
+}
+
 function parseMarginProgression(raw: unknown[]): MarginPoint[] {
   return raw
     .map((item) => {
@@ -272,7 +279,11 @@ function parseMarginProgression(raw: unknown[]): MarginPoint[] {
       const grossMargin = toNumber(r.grossMargin);
       const operatingMargin = toNumber(r.operatingMargin);
       if (!period) return null;
-      return { period, grossMargin: grossMargin ?? 0, operatingMargin: operatingMargin ?? 0 };
+      return {
+        period,
+        grossMargin: normalizeMargin(grossMargin ?? undefined),
+        operatingMargin: normalizeMargin(operatingMargin ?? undefined),
+      };
     })
     .filter((item): item is MarginPoint => item !== null);
 }

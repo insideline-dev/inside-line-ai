@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { z } from "zod";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -72,7 +73,29 @@ import {
 } from "@/api/generated/model/retryPhaseDtoPhase";
 import type { ScoringWeights } from "@/lib/score-utils";
 
+const adminStartupSearchSchema = z.object({
+  tab: z
+    .enum([
+      "pipeline-live",
+      "summary",
+      "memo",
+      "market",
+      "product",
+      "team",
+      "financials",
+      "competitors",
+      "sources",
+      "recommendations",
+      "data-room",
+      "edit",
+      "raw",
+    ])
+    .optional(),
+  from: z.enum(["data-room"]).optional(),
+});
+
 export const Route = createFileRoute("/_protected/admin/startup/$id")({
+  validateSearch: adminStartupSearchSchema,
   component: AdminReviewPage,
 });
 
@@ -218,6 +241,7 @@ function getPipelineProgressMeta(payload: unknown): {
 
 function AdminReviewPage() {
   const { id } = Route.useParams();
+  const search = Route.useSearch();
   const { user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -236,6 +260,7 @@ function AdminReviewPage() {
   const [trackedRetry, setTrackedRetry] = useState<RetryTrackingState | null>(
     null,
   );
+  const backLink = search.from === "data-room" ? "/admin/data-room" : "/admin";
   const terminalStartupSyncKeyRef = useRef<string | null>(null);
 
   const { data: startupResponse, isLoading } = useStartupControllerFindOne(id);
@@ -497,13 +522,14 @@ function AdminReviewPage() {
       return;
     }
     setActiveTab(
-      isStartupAnalyzingUi || !evaluation ? "pipeline-live" : "summary",
+      search.tab ?? (isStartupAnalyzingUi || !evaluation ? "pipeline-live" : "summary"),
     );
     setInitializedTabForStartupId(startup.id);
   }, [
     evaluation,
     initializedTabForStartupId,
     isStartupAnalyzingUi,
+    search.tab,
     startup?.id,
   ]);
 
@@ -617,7 +643,7 @@ function AdminReviewPage() {
     <div className="space-y-6">
       <StartupHeader
         startup={startup}
-        backLink="/admin"
+        backLink={backLink}
         actions={
           <div className="flex gap-2">
             {evaluation && (
@@ -722,7 +748,19 @@ function AdminReviewPage() {
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
         <Tabs
           value={activeTab}
-          onValueChange={(value) => setActiveTab(value as AdminStartupTab)}
+          onValueChange={(value) => {
+            const nextTab = value as AdminStartupTab;
+            setActiveTab(nextTab);
+            navigate({
+              to: "/admin/startup/$id",
+              params: { id },
+              search: {
+                ...(search.from === "data-room" ? { from: "data-room" as const } : {}),
+                tab: nextTab,
+              },
+              replace: true,
+            });
+          }}
           className="w-full min-w-0"
         >
           <TabsList className="flex h-auto w-full flex-wrap rounded-xl bg-muted/60 p-2">

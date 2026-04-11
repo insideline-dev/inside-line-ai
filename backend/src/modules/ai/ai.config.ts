@@ -33,7 +33,7 @@ export const DEFAULT_MODEL_BY_PURPOSE: Record<ModelPurpose, string> = {
   [ModelPurpose.LOCATION_NORMALIZATION]: "gemini-3-flash-preview",
   [ModelPurpose.OCR]: "mistral-ocr-latest",
   [ModelPurpose.CLARA]: "gpt-5.4",
-  [ModelPurpose.CLASSIFICATION]: "gpt-5.4-nano",
+  [ModelPurpose.CLASSIFICATION]: "gpt-5.4-mini",
 };
 
 export const AI_PIPELINE_REDIS_KEY_PREFIX = "pipeline";

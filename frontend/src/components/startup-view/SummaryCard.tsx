@@ -234,7 +234,7 @@ export function SummaryCard({
                   <span className="w-6 h-6 rounded-full bg-muted text-muted-foreground text-sm font-medium flex items-center justify-center shrink-0">
                     {i + 1}
                   </span>
-                  <span className="text-sm">{area}</span>
+                  <MarkdownText className="text-sm [&>p]:mb-0">{area}</MarkdownText>
                 </li>
               ))}
             </ul>

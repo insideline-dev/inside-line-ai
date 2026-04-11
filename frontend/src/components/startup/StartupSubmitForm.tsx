@@ -55,6 +55,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import { customFetch } from "@/api/client";
 import { useDataRoomClassification } from "@/lib/auth/useSocket";
 import { formatAgentLabels, formatCategoryLabel } from "@/lib/agent-labels";
 import { useToast } from "@/hooks/use-toast";
@@ -309,6 +310,7 @@ export function StartupSubmitForm({
   // Backend draft tracking
   const [startupId, setStartupId] = useState<string | null>(draftIdProp ?? null);
   const registeredFilePathsRef = useRef<Set<string>>(new Set());
+  const hasRestoredDraftRef = useRef(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
 
   // Load existing draft from backend when draftId prop is provided
@@ -784,12 +786,15 @@ export function StartupSubmitForm({
   });
 
   // Populate form from an existing backend draft when editing.
+  // Gated by hasRestoredDraftRef so save-triggered query refetches don't
+  // clobber classification state that WebSocket handlers just set.
   useEffect(() => {
-    if (!draftIdProp) return;
+    if (!draftIdProp || hasRestoredDraftRef.current) return;
     const data = existingDraftQuery.data as unknown;
     const startup = unwrapApiResponse<Partial<Startup> | null>(data);
     if (!startup || !startup.id) return;
 
+    hasRestoredDraftRef.current = true;
     setStartupId(startup.id);
 
     const setField = <K extends keyof SubmitFormData>(
@@ -859,9 +864,52 @@ export function StartupSubmitForm({
         name: f.name,
         type: f.type,
       }));
-      setUploadedFiles(restored);
       restored.forEach((f) => registeredFilePathsRef.current.add(f.path));
       setDeckPath(startup.pitchDeckPath ?? getDefaultDeckPath(restored));
+
+      // Fetch data room entries to merge classification status into restored files.
+      type DataRoomEntry = {
+        assetKey?: string | null;
+        classificationStatus?: string | null;
+        category?: string | null;
+        classificationConfidence?: string | number | null;
+        routedAgents?: string[] | null;
+        classificationError?: string | null;
+        id?: string;
+      };
+      customFetch<DataRoomEntry[]>(`/startups/${startup.id}/data-room`)
+        .then((res) => {
+          const docs = unwrapApiResponse<DataRoomEntry[]>(res);
+          if (!Array.isArray(docs) || docs.length === 0) {
+            setUploadedFiles(restored);
+            return;
+          }
+          const byKey = new Map(
+            docs.filter((d) => d.assetKey).map((d) => [d.assetKey, d]),
+          );
+          setUploadedFiles(
+            restored.map((file) => {
+              const doc = byKey.get(file.path);
+              if (!doc) return file;
+              return {
+                ...file,
+                dataRoomId: doc.id,
+                classificationStatus: (doc.classificationStatus as UploadedFile["classificationStatus"]) ?? undefined,
+                classificationCategory: doc.category ?? undefined,
+                classificationConfidence:
+                  doc.classificationConfidence != null
+                    ? Number(doc.classificationConfidence)
+                    : undefined,
+                routedAgents: doc.routedAgents ?? undefined,
+                classificationError: doc.classificationError ?? undefined,
+              };
+            }),
+          );
+        })
+        .catch(() => {
+          // Non-fatal — files still appear, just without classification badges.
+          setUploadedFiles(restored);
+        });
     }
     setIsLoadingDraft(false);
   }, [draftIdProp, existingDraftQuery.data, form]);

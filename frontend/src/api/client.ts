@@ -1,77 +1,20 @@
 import { env } from "@/env";
-import { queryClient } from "@/lib/query-client";
-import { getAccessToken, setAccessToken } from "@/lib/auth/token";
 
 const API_BASE_URL = env.VITE_API_BASE_URL;
-const AUTH_USER_QUERY_KEY = ["auth", "user"] as const;
-const REFRESH_COOLDOWN_MS = 60_000;
 
-function clearAuthState() {
-  setAccessToken(null);
-  void queryClient.cancelQueries({ queryKey: AUTH_USER_QUERY_KEY });
-  queryClient.setQueryData(AUTH_USER_QUERY_KEY, null);
-}
-
-async function performServerLogout() {
-  try {
-    await fetch(`${API_BASE_URL}/auth/logout`, {
-      method: "POST",
-      credentials: "include",
-    });
-  } catch {
-    // Best effort only.
-  }
-}
-
-function redirectToLoginOnce() {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  const currentPath = `${window.location.pathname}${window.location.search}`;
-  if (window.location.pathname === "/login") {
-    return;
-  }
-
-  const loginUrl = new URL("/login", window.location.origin);
-  if (currentPath && currentPath !== "/") {
-    loginUrl.searchParams.set("redirect", currentPath);
-  }
-
-  window.location.replace(loginUrl.toString());
-}
-
-// Token refresh state (prevents concurrent refresh calls)
+// Token refresh state (prevents concurrent refresh calls from a single tab).
+// Auth is cookie-only: the browser holds httpOnly access + refresh cookies, and we
+// never read/write tokens from JS. This keeps access tokens out of reach of any XSS.
 let refreshPromise: Promise<boolean> | null = null;
-let refreshBlockedUntil = 0;
 
 async function refreshToken(): Promise<boolean> {
-  if (Date.now() < refreshBlockedUntil) {
-    return false;
-  }
-
   try {
     const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
       method: "POST",
       credentials: "include",
     });
-    if (res.ok) {
-      const data = await res.json();
-      if (data.accessToken) setAccessToken(data.accessToken);
-      refreshBlockedUntil = 0;
-      return true;
-    }
-
-    if (res.status === 429) {
-      const retryAfterSeconds = Number(res.headers.get("Retry-After")) || 60;
-      refreshBlockedUntil = Date.now() + retryAfterSeconds * 1000;
-    } else {
-      refreshBlockedUntil = Date.now() + REFRESH_COOLDOWN_MS;
-    }
-
-    return false;
+    return res.ok;
   } catch {
-    refreshBlockedUntil = Date.now() + REFRESH_COOLDOWN_MS;
     return false;
   }
 }
@@ -85,27 +28,13 @@ export async function customFetch<T>(
     ...(options.headers as Record<string, string>),
   };
 
-  const token = getAccessToken();
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
-  }
-
   const config: RequestInit = {
     ...options,
-    credentials: "include", // Cookies as fallback
+    credentials: "include",
     headers,
   };
 
   let response = await fetch(`${API_BASE_URL}${url}`, config);
-
-  if (response.status === 401 && url === "/auth/me") {
-    clearAuthState();
-    if (window.location.pathname !== "/login") {
-      await performServerLogout();
-      redirectToLoginOnce();
-    }
-    throw new Error("Unauthorized");
-  }
 
   // Handle 429 - retry once after backoff (don't treat as auth failure)
   if (response.status === 429) {
@@ -126,16 +55,8 @@ export async function customFetch<T>(
     const refreshed = await refreshPromise;
 
     if (refreshed) {
-      // Retry with new token
-      const retryToken = getAccessToken();
-      if (retryToken) {
-        headers["Authorization"] = `Bearer ${retryToken}`;
-      }
-      response = await fetch(`${API_BASE_URL}${url}`, { ...config, headers });
+      response = await fetch(`${API_BASE_URL}${url}`, config);
     } else {
-      clearAuthState();
-      await performServerLogout();
-      redirectToLoginOnce();
       throw new Error("Session expired");
     }
   }

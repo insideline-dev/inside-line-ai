@@ -69,12 +69,7 @@ export const Route = createFileRoute("/login")({
 
 function LoginPage() {
   const navigate = useNavigate();
-  const {
-    data: user,
-    isLoading: isCheckingAuth,
-    isFetching,
-    isError,
-  } = useCurrentUser();
+  const { data: user, isLoading: isCheckingAuth } = useCurrentUser();
   const { redirect, error, invite, view } = Route.useSearch();
   const waitlistOnly = view === "waitlist";
 
@@ -129,13 +124,13 @@ function LoginPage() {
       return;
     }
 
-    if (!isCheckingAuth && !isFetching && !isError && user) {
+    if (!isCheckingAuth && user) {
       const defaultRoute = user.onboardingCompleted
         ? `/${user.role}`
         : "/role-select";
       navigate({ to: safeRedirect(redirect, defaultRoute), replace: true });
     }
-  }, [isCheckingAuth, isFetching, isError, user, redirect, navigate]);
+  }, [isCheckingAuth, user, redirect, navigate]);
 
   useEffect(() => {
     if (!invite || didRedeemInvite.current) {

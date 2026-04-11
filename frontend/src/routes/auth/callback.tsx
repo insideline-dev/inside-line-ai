@@ -3,7 +3,6 @@ import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { authApi, authKeys } from "@/lib/auth";
-import { setAccessToken } from "@/lib/auth/token";
 import { safeRedirect } from "@/lib/utils";
 import insideLineLogo from "@/assets/icon-insideline.svg";
 
@@ -39,12 +38,11 @@ function AuthCallbackPage() {
       }
 
       if (success === "true") {
-        // OAuth succeeded - refresh to get access token, then fetch user
+        // OAuth succeeded — cookies are already set by the backend callback.
+        // Just fetch the current user to populate the query cache.
         try {
-          const refreshRes = await authApi.refresh();
-          setAccessToken(refreshRes.accessToken);
-          queryClient.setQueryData(authKeys.user, refreshRes.user);
-          const user = refreshRes.user;
+          const user = await authApi.getCurrentUser();
+          queryClient.setQueryData(authKeys.user, user);
           if (user.onboardingCompleted) {
             const rawRedirect = sessionStorage.getItem("redirectAfterAuth");
             if (rawRedirect) sessionStorage.removeItem("redirectAfterAuth");

@@ -31,7 +31,6 @@ import type {
 } from "@/types/evaluation";
 import { MarkdownText } from "@/components/MarkdownText";
 import { cn } from "@/lib/utils";
-import { getAllStructuredDataGaps } from "@/lib/evaluation-display";
 
 interface FounderRecommendationsTabProps {
   evaluation: Evaluation | null;
@@ -145,13 +144,10 @@ export function FounderRecommendationsTab({ evaluation }: FounderRecommendations
   const founderReportData = (evaluation?.founderReport ?? null) as FounderReport | null;
   const whatsWorking = founderReportData?.whatsWorking?.filter((s) => s.trim().length > 0) ?? [];
   const pathToInevitability = founderReportData?.pathToInevitability?.filter((s) => s.trim().length > 0) ?? [];
-  const structuredDataGaps = getAllStructuredDataGaps(evaluation).slice(0, 6);
-
   const totalDeckGaps = sections.reduce((sum, s) => sum + s.pitchRecs.length, 0);
   const totalActionItems = sections.reduce((sum, s) => sum + s.founderRecs.length, 0);
   const totalStrengthens = sections.reduce((sum, s) => sum + s.howToStrengthen.length, 0);
   const hasFounderContent =
-    structuredDataGaps.length > 0 ||
     sections.length > 0 ||
     whatsWorking.length > 0 ||
     pathToInevitability.length > 0 ||
@@ -189,42 +185,6 @@ export function FounderRecommendationsTab({ evaluation }: FounderRecommendations
           <MarkdownText className="text-sm text-muted-foreground leading-relaxed text-pretty [&>p]:mb-0">
             {founderReportData?.summary || "Founder report summary is not available yet."}
           </MarkdownText>
-
-          {structuredDataGaps.length > 0 && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-4 dark:border-amber-900 dark:bg-amber-950/30">
-              <div className="flex items-center gap-2 mb-3">
-                <FileWarning className="size-4 text-amber-600 dark:text-amber-400" />
-                <span className="text-sm font-semibold text-amber-700 dark:text-amber-400">
-                  Data Gaps to Resolve
-                </span>
-              </div>
-              <ul className="space-y-3">
-                {structuredDataGaps.map((item, index) => (
-                  <li
-                    key={`${item.source}-${item.gap}-${index}`}
-                    className="rounded-md border border-amber-200/70 bg-background/80 px-3 py-2.5 dark:border-amber-900/60"
-                  >
-                    <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                      <Badge variant="outline" className="text-[10px] font-medium border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-400">
-                        {item.source}
-                      </Badge>
-                      <Badge variant="secondary" className="text-[10px] capitalize">
-                        {item.impact}
-                      </Badge>
-                    </div>
-                    <MarkdownText className="text-sm font-medium text-pretty [&>p]:mb-0">
-                      {item.gap}
-                    </MarkdownText>
-                    {item.suggestedAction && (
-                      <MarkdownText className="mt-1.5 text-sm text-muted-foreground leading-relaxed text-pretty [&>p]:mb-0">
-                        {item.suggestedAction}
-                      </MarkdownText>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
 
           {(whatsWorking.length > 0 || pathToInevitability.length > 0) && (
             <div className="space-y-4">
@@ -421,43 +381,40 @@ function SectionCollapsible({
             </CollapsibleTrigger>
 
             <CollapsibleContent>
-          <div className="px-4 pb-4 space-y-4">
+          <div className="px-4 pb-4 space-y-5">
             {/* Deck Gaps */}
             {pitchRecs.length > 0 && (
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
+              <div>
+                <div className="flex items-center gap-2 mb-4">
                   <FileWarning className="size-3.5 text-amber-600 dark:text-amber-400" />
                   <span className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
                     Deck Gaps
                   </span>
                 </div>
-                {pitchRecs.map((rec, i) => (
-                  <div
-                    key={`pitch-${i}`}
-                    className="rounded-lg border border-amber-200/60 bg-amber-50/30 p-3.5 space-y-2.5 dark:border-amber-900/40 dark:bg-amber-950/20"
-                  >
-                    <div className="flex items-start gap-2">
-                      <Badge variant="outline" className="shrink-0 text-[10px] font-medium border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-400">
-                        Deck Gap
-                      </Badge>
-                      <MarkdownText className="text-sm font-medium text-balance [&>p]:mb-0">
-                        {rec.deckMissingElement}
-                      </MarkdownText>
-                    </div>
-                    {rec.whyItMatters && (
-                      <MarkdownText className="text-sm text-muted-foreground leading-relaxed text-pretty [&>p]:mb-0">
-                        {rec.whyItMatters}
-                      </MarkdownText>
-                    )}
-                    {rec.recommendation && (
-                      <div className="rounded-md bg-background border px-3 py-2.5">
-                        <MarkdownText className="text-sm leading-relaxed text-pretty [&>p]:mb-0">
-                          {rec.recommendation}
+                <div className="divide-y divide-border">
+                  {pitchRecs.map((rec, i) => (
+                    <div key={`pitch-${i}`} className="py-3.5 first:pt-0 last:pb-0">
+                      <div className="flex items-start gap-2.5 mb-1.5">
+                        <span className="mt-1.5 size-1.5 bg-amber-500 shrink-0" />
+                        <MarkdownText className="text-sm font-semibold text-foreground text-balance [&>p]:mb-0">
+                          {rec.deckMissingElement}
                         </MarkdownText>
                       </div>
-                    )}
-                  </div>
-                ))}
+                      {rec.whyItMatters && (
+                        <MarkdownText className="pl-4 text-sm text-muted-foreground leading-relaxed text-pretty [&>p]:mb-0">
+                          {rec.whyItMatters}
+                        </MarkdownText>
+                      )}
+                      {rec.recommendation && (
+                        <div className="mt-2 ml-4 border-l-2 border-amber-400/50 pl-3 dark:border-amber-600/40">
+                          <MarkdownText className="text-sm leading-relaxed text-pretty [&>p]:mb-0">
+                            {rec.recommendation}
+                          </MarkdownText>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
@@ -468,18 +425,18 @@ function SectionCollapsible({
 
             {/* Action Items */}
             {founderRecs.length > 0 && (
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
+              <div>
+                <div className="flex items-center gap-2 mb-4">
                   <Zap className="size-3.5 text-primary" />
                   <span className="text-xs font-semibold uppercase tracking-wide text-primary">
                     Action Items
                   </span>
                 </div>
-                <div className="space-y-2">
+                <div className="divide-y divide-border">
                   {founderRecs.map((rec, i) => (
                     <div
                       key={`founder-${i}`}
-                      className="flex items-start gap-3 rounded-lg border bg-muted/20 px-3.5 py-3"
+                      className="flex items-start gap-3 py-3 first:pt-0 last:pb-0"
                     >
                       <RecTypeBadge type={rec.type} />
                       <MarkdownText className="text-sm leading-relaxed text-pretty [&>p]:mb-0">

@@ -75,7 +75,7 @@ function FounderDashboard() {
       ) : (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {startups.map((startup) => (
-            <StartupCard key={startup.id} startup={startup as unknown as Startup} basePath="/founder" />
+            <StartupCard key={startup.id} startup={startup as unknown as Startup} basePath="/founder" showScore={false} />
           ))}
         </div>
       )}

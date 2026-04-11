@@ -349,23 +349,17 @@ export class AuthController {
       REFRESH_COOKIE_NAME
     ];
     if (!refreshToken) {
-      this.clearTokenCookies(res);
       throw new UnauthorizedException("No refresh token");
     }
 
-    try {
-      const result = await this.authService.refreshTokens(refreshToken);
+    const result = await this.authService.refreshTokens(refreshToken);
 
-      this.setTokenCookies(res, result.accessToken, result.refreshToken);
+    this.setTokenCookies(res, result.accessToken, result.refreshToken);
 
-      return {
-        user: this.sanitizeUser(result.user),
-        accessToken: result.accessToken,
-      };
-    } catch (error) {
-      this.clearTokenCookies(res);
-      throw error;
-    }
+    return {
+      user: this.sanitizeUser(result.user),
+      accessToken: result.accessToken,
+    };
   }
 
   @Public()
@@ -377,16 +371,22 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const refreshToken = (req.cookies as Record<string, string> | undefined)?.[
+    // Logout is @Public so it still works when the access token has already expired —
+    // otherwise expired users would get 401 and never be able to clear their cookies.
+    // Best-effort revoke the refresh-token family; worst case we just clear cookies.
+    const refreshTokenValue = (req.cookies as Record<string, string> | undefined)?.[
       REFRESH_COOKIE_NAME
     ];
-
-    if (refreshToken) {
+    if (refreshTokenValue) {
       try {
-        const result = await this.authService.refreshTokens(refreshToken);
-        await this.authService.revokeAllUserTokens(result.user.id);
+        const userId = await this.authService.findUserIdByRefreshToken(
+          refreshTokenValue,
+        );
+        if (userId) {
+          await this.authService.revokeAllUserTokens(userId);
+        }
       } catch {
-        // Best effort: cookies should still be cleared even if token is invalid/expired.
+        // swallow: clearing cookies is the important part
       }
     }
 
@@ -488,7 +488,11 @@ export class AuthController {
   ) {
     const isDev = process.env.NODE_ENV === "development";
 
-    const sameSite: "lax" | "strict" = isDev ? "lax" : "strict";
+    // 'lax' is the right balance for session cookies: it still blocks CSRF on
+    // state-changing POSTs from other origins, but allows the cookie to be sent
+    // on top-level navigations like the Google OAuth redirect back to our frontend.
+    // 'strict' would drop the cookie on that redirect and break sign-in.
+    const sameSite = "lax" as const;
     const secure = !isDev;
 
     res.cookie(JWT_COOKIE_NAME, accessToken, {
@@ -513,7 +517,7 @@ export class AuthController {
     const opts = {
       httpOnly: true,
       secure: !isDev,
-      sameSite: (isDev ? "lax" : "strict") as "lax" | "strict",
+      sameSite: "lax" as const,
       path: "/",
     };
     res.clearCookie(JWT_COOKIE_NAME, opts);

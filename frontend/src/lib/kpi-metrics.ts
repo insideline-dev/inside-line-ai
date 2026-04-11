@@ -213,18 +213,26 @@ export function extractKpiMetrics(
     ? safeNum(marginProgression[0].grossMargin)
     : undefined;
   const grossMarginRaw = safeStr(keyMetrics.grossMargin);
+
+  /** Normalise a margin value: converts 0–1 decimal fractions to %, rounds to 1dp max. */
+  function formatMarginPct(raw: string): string {
+    const num = parseFloat(raw.replace("%", "").trim());
+    if (!Number.isFinite(num)) return raw.includes("%") ? raw : `${raw}%`;
+    // Stored as decimal fraction (e.g. 0.52 → 52%)
+    const pct = num > 0 && num < 1 ? num * 100 : num;
+    const rounded = Math.round(pct * 10) / 10; // 1 decimal place max
+    return `${rounded % 1 === 0 ? Math.round(rounded) : rounded}%`;
+  }
+
   let grossMargin = DASH;
   if (gmKpiValue && gmKpiValue !== "Unknown") {
-    const val = gmKpiValue.includes("%") ? gmKpiValue : `${gmKpiValue}%`;
-    const period = safeStr(grossMarginKpi.period);
-    const suffix = period && period !== "current" ? ` (${period})` : "";
-    grossMargin = `${val}${suffix}`;
+    grossMargin = formatMarginPct(gmKpiValue);
   } else if (deckGrossMargin && deckGrossMargin !== "Unknown") {
-    grossMargin = deckGrossMargin.includes("%") ? deckGrossMargin : `${deckGrossMargin}%`;
+    grossMargin = formatMarginPct(deckGrossMargin);
   } else if (latestMargin !== undefined && latestMargin > 0) {
     grossMargin = `${Math.round(latestMargin)}%`;
   } else if (grossMarginRaw && grossMarginRaw !== "Unknown") {
-    grossMargin = grossMarginRaw.includes("%") ? grossMarginRaw : `${grossMarginRaw}%`;
+    grossMargin = formatMarginPct(grossMarginRaw);
   }
 
   // Market Structure

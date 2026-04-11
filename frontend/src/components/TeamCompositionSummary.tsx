@@ -198,7 +198,7 @@ export function TeamCompositionSummary({
                   {keyStrengths.slice(0, 5).map((strength, idx) => (
                     <li key={idx} className="flex items-start gap-2 text-sm">
                       <CheckCircle2 className="w-4 h-4 mt-0.5 text-emerald-600 shrink-0" />
-                      <span>{strength}</span>
+                      <MarkdownText inline className="inline [&>p]:inline [&>p]:mb-0">{strength}</MarkdownText>
                     </li>
                   ))}
                 </ul>
@@ -221,7 +221,7 @@ export function TeamCompositionSummary({
                   {keyRisks.slice(0, 5).map((risk, idx) => (
                     <li key={idx} className="flex items-start gap-2 text-sm">
                       <AlertTriangle className="w-4 h-4 mt-0.5 text-rose-500 shrink-0" />
-                      <span>{risk}</span>
+                      <MarkdownText inline className="inline [&>p]:inline [&>p]:mb-0">{risk}</MarkdownText>
                     </li>
                   ))}
                 </ul>

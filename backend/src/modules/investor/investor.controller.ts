@@ -26,6 +26,7 @@ import { DealPipelineService } from './deal-pipeline.service';
 import { MessagingService } from './messaging.service';
 import { ScoringPreferencesService } from './scoring-preferences.service';
 import { ScoringConfigService } from '../admin/scoring-config.service';
+import { StartupMatchingPipelineService } from '../ai/services/startup-matching-pipeline.service';
 import {
   CreateThesisDto,
   GetMatchesQueryDto,
@@ -60,6 +61,7 @@ export class InvestorController {
     private messagingService: MessagingService,
     private scoringPreferencesService: ScoringPreferencesService,
     private scoringConfigService: ScoringConfigService,
+    private startupMatching: StartupMatchingPipelineService,
   ) {}
 
   // ============ THESIS ENDPOINTS ============
@@ -110,9 +112,16 @@ export class InvestorController {
     @CurrentUser() user: User,
     @Param('startupId') startupId: string,
   ) {
-    const match = await this.matchService.findOne(user.id, startupId);
-    await this.matchService.updateViewedAt(user.id, startupId);
-    return match;
+    try {
+      const match = await this.matchService.findOne(user.id, startupId);
+      await this.matchService.updateViewedAt(user.id, startupId);
+      return match;
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        return null;
+      }
+      throw error;
+    }
   }
 
   @Patch('matches/:startupId/save')
@@ -181,6 +190,24 @@ export class InvestorController {
   @Get('pipeline')
   async getPipeline(@CurrentUser() user: User) {
     return this.pipelineService.getPipeline(user.id);
+  }
+
+  @Post('startups/:id/match')
+  async triggerStartupMatching(
+    @CurrentUser() user: User,
+    @Param('id') id: string,
+  ) {
+    return this.startupMatching.queueStartupMatching({
+      startupId: id,
+      requestedBy: user.id,
+      triggerSource: 'manual',
+      requireApproved: false,
+    });
+  }
+
+  @Get('startups/:id/matching/status')
+  async getStartupMatchingStatus(@Param('id') id: string) {
+    return this.startupMatching.getLatestMatchingStatus(id);
   }
 
   // ============================================================================

@@ -1,10 +1,11 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { and, eq, sql } from "drizzle-orm";
 import { DrizzleService } from "../../database";
-import { QueueService, QUEUE_NAMES } from "../../queue";
+import { QueueService } from "../../queue";
 import { StorageService } from "../../storage";
 import { AssetService } from "../../storage/asset.service";
 import { ASSET_TYPES } from "../../storage/storage.config";
+import { DataRoomService } from "../startup/data-room.service";
 import { UserRole } from "../../auth/entities/auth.schema";
 import { AgentMailClientService } from "../integrations/agentmail/agentmail-client.service";
 import { startup, StartupStatus, StartupStage } from "../startup/entities/startup.schema";
@@ -19,7 +20,12 @@ import { NotificationService } from "../../notification/notification.service";
 import { NotificationType } from "../../notification/entities";
 import { ClaraAiService } from "./clara-ai.service";
 import { deriveStartupGeography } from "../geography";
-import type { AttachmentMeta, MessageContext, SubmissionResult } from "./interfaces/clara.interface";
+import type {
+  AttachmentMeta,
+  ClassifiedDocumentSummary,
+  MessageContext,
+  SubmissionResult,
+} from "./interfaces/clara.interface";
 
 const PDF_MAGIC_BYTES = Buffer.from("%PDF-");
 const MAX_RETRIES = 3;
@@ -63,7 +69,41 @@ export class ClaraSubmissionService {
     private pipeline: PipelineService,
     private notifications: NotificationService,
     private claraAi: ClaraAiService,
+    private dataRoomService: DataRoomService,
   ) {}
+
+  /**
+   * Register any attachments Clara uploaded into the startup's data room so
+   * the pipeline classification phase sees them. Idempotent — re-uses existing
+   * asset rows by storage key.
+   */
+  private async registerAttachmentsToDataRoom(
+    startupId: string,
+    ownerUserId: string,
+    attachments: AttachmentMeta[],
+  ): Promise<void> {
+    const eligible = attachments.filter(
+      (a): a is AttachmentMeta & { storagePath: string } =>
+        a.status === "uploaded" && Boolean(a.storagePath),
+    );
+    if (eligible.length === 0) return;
+    try {
+      await this.dataRoomService.registerFiles(
+        startupId,
+        ownerUserId,
+        eligible.map((a) => ({
+          path: a.storagePath,
+          name: a.filename,
+          type: a.contentType,
+          size: 0,
+        })),
+      );
+    } catch (error) {
+      this.logger.warn(
+        `[ClaraSubmission] Failed to register attachments into data room for startup ${startupId}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
 
   async handleSubmission(
     ctx: MessageContext,
@@ -173,11 +213,20 @@ export class ClaraSubmissionService {
     if (uploadedFiles.length > 0) {
       await this.mergeUploadedFilesIntoStartup(created.id, uploadedFiles);
     }
+    await this.registerAttachmentsToDataRoom(
+      created.id,
+      ownerUserId,
+      processedAttachments,
+    );
     this.logger.log(
       `Created startup ${created.id} (${companyName}) from email by ${ctx.fromEmail}`,
     );
 
-    await this.queueDocumentClassification(created.id, ownerUserId);
+    const classifiedDocuments = await this.classifyDataRoomInline(
+      created.id,
+      processedAttachments,
+    );
+
     await this.runPrePipelineExtraction(created.id);
     const refreshedCreated = await this.loadCriticalStartupSnapshot(created.id);
     const resolvedStartupName = refreshedCreated?.name ?? companyName;
@@ -203,7 +252,49 @@ export class ClaraSubmissionService {
       status: resolvedStatus,
       pipelineStarted: pipelineStart.started,
       missingFields: pipelineStart.missingFields,
+      classifiedDocuments,
     };
+  }
+
+  /**
+   * Run document classification synchronously against the startup's data room
+   * right after intake so Clara can tell the founder *which* documents she
+   * recognized in her first reply. Writes categories/confidence/routing onto
+   * the dataRoom rows, so the pipeline's CLASSIFICATION phase still runs later
+   * but has fresh, correct metadata to work from. Non-fatal on failure — we
+   * fall back to the generic acknowledgement path.
+   */
+  private async classifyDataRoomInline(
+    startupId: string,
+    processedAttachments: AttachmentMeta[],
+  ): Promise<ClassifiedDocumentSummary[] | undefined> {
+    try {
+      const nameByAssetId = new Map<string, string>(
+        processedAttachments
+          .filter(
+            (a): a is AttachmentMeta & { assetId: string } => Boolean(a.assetId),
+          )
+          .map((a) => [a.assetId, a.filename]),
+      );
+
+      const classified = await this.dataRoomService.reclassifyAll(startupId);
+      return classified
+        .filter((row) => row.classificationStatus === "completed")
+        .map<ClassifiedDocumentSummary>((row) => {
+          const rawConfidence = Number(row.classificationConfidence);
+          return {
+            fileName: nameByAssetId.get(row.assetId) ?? "document",
+            category: row.category ?? "miscellaneous",
+            confidence: Number.isFinite(rawConfidence) ? rawConfidence : 0,
+            routedAgents: row.routedAgents ?? [],
+          };
+        });
+    } catch (error) {
+      this.logger.warn(
+        `[ClaraSubmission] Inline classification failed for startup ${startupId}: ${this.asMessage(error)}`,
+      );
+      return undefined;
+    }
   }
 
   private async processAttachments(
@@ -638,6 +729,7 @@ export class ClaraSubmissionService {
     if (uploadedFiles.length > 0) {
       await this.mergeUploadedFilesIntoStartup(startupId, uploadedFiles);
     }
+    await this.registerAttachmentsToDataRoom(startupId, ownerUserId, attachments);
 
     if (!newDeck) {
       const snapshot = await this.loadCriticalStartupSnapshot(startupId);
@@ -685,23 +777,6 @@ export class ClaraSubmissionService {
       pipelineStarted: pipelineStart.started,
       missingFields: pipelineStart.missingFields,
     };
-  }
-
-  private async queueDocumentClassification(
-    startupId: string,
-    userId: string,
-  ): Promise<void> {
-    try {
-      await this.queue.addJob(QUEUE_NAMES.DOCUMENT_CLASSIFICATION, {
-        type: "document_classification",
-        startupId,
-        userId,
-      });
-    } catch (error) {
-      this.logger.warn(
-        `[ClaraSubmission] Failed to queue document classification for startup ${startupId}: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
   }
 
   private async startPipelineIfReady(

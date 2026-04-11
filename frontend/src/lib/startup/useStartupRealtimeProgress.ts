@@ -22,15 +22,17 @@ import {
 const TERMINAL_PIPELINE_STATUSES = new Set(["completed", "failed", "cancelled"]);
 
 const PHASE_WEIGHTS: Record<string, number> = {
-  extraction: 0.08,
+  classification: 0.03,
+  extraction: 0.07,
   enrichment: 0.07,
   scraping: 0.10,
-  research: 0.25,
-  evaluation: 0.35,
+  research: 0.24,
+  evaluation: 0.34,
   synthesis: 0.15,
 };
 
 const EXPECTED_AGENT_RUNTIME_MS: Record<string, number> = {
+  classification: 90_000,
   extraction: 3 * 60_000,
   enrichment: 2 * 60_000,
   scraping: 5 * 60_000,

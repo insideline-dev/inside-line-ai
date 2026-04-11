@@ -26,6 +26,7 @@ import {
   MessageDirection,
   type AttachmentMeta,
   type ClaraAgentRuntimeState,
+  type ClassifiedDocumentSummary,
   type IntentClassification,
   type MessageContext,
 } from "./interfaces/clara.interface";
@@ -398,15 +399,67 @@ export class ClaraService {
             ...extra,
           };
 
-          await this.conversationService.updateStatus(
-            conversation.id,
-            ConversationStatus.PROCESSING,
+          const missingOnIntake = result.missingFields ?? [];
+          const classifiedLines = this.formatClassifiedDocumentsList(
+            result.classifiedDocuments ?? [],
           );
-          replyText = await this.claraAi.generateResponse(
-            ClaraIntent.SUBMISSION,
-            ctx,
-            extra,
-          );
+          if (!result.pipelineStarted && missingOnIntake.length > 0) {
+            const missingLabels = this.formatMissingFieldLabels(missingOnIntake);
+            await this.conversationService.updateStatus(
+              conversation.id,
+              ConversationStatus.AWAITING_INFO,
+            );
+            const lines: string[] = [
+              `Hi ${fromName ?? "there"},`,
+              "",
+              `Got ${result.startupName}'s submission. Here's what I picked up so far:`,
+              "",
+            ];
+            if (classifiedLines.length > 0) {
+              lines.push(...classifiedLines, "");
+            }
+            lines.push(
+              "Before I kick off the full deep-dive, I still need:",
+              ...missingLabels.map((label) => `- ${label}`),
+              "",
+              "Reply with those details and I'll run the end-to-end analysis immediately — you'll get the investor memo and scores the moment it's done.",
+              "",
+              "Best,",
+              "Clara",
+            );
+            replyText = lines.join("\n");
+            this.logger.log(
+              `[Clara] Submission paused for missing info: startup=${result.startupId} missing=${missingOnIntake.join(",")} classified=${result.classifiedDocuments?.length ?? 0}`,
+            );
+          } else {
+            await this.conversationService.updateStatus(
+              conversation.id,
+              ConversationStatus.PROCESSING,
+            );
+            if (classifiedLines.length > 0) {
+              replyText = [
+                `Hi ${fromName ?? "there"},`,
+                "",
+                `Got ${result.startupName}'s submission and filed everything in the data room. Here's what I recognized:`,
+                "",
+                ...classifiedLines,
+                "",
+                "The full deep-dive is running now — extraction, enrichment, scraping, research, evaluation, and synthesis. I'll email you the investor memo and scores the moment it's done (usually ~10 minutes).",
+                "",
+                "Best,",
+                "Clara",
+              ].join("\n");
+              this.logger.log(
+                `[Clara] Submission running pipeline: startup=${result.startupId} classified=${result.classifiedDocuments?.length ?? 0}`,
+              );
+            } else {
+              replyText = await this.claraAi.generateResponse(
+                ClaraIntent.SUBMISSION,
+                ctx,
+                extra,
+              );
+            }
+          }
         }
         } // end else (noPitchDeck check)
       } else {
@@ -922,6 +975,39 @@ export class ClaraService {
         ? "Company website URL"
         : "Current funding stage (pre-seed, seed, series A, etc.)",
     );
+  }
+
+  private formatClassifiedDocumentsList(
+    docs: ClassifiedDocumentSummary[],
+  ): string[] {
+    return docs.map((doc) => {
+      const confidencePct = Math.max(
+        0,
+        Math.min(100, Math.round(doc.confidence * 100)),
+      );
+      const humanCategory = this.humanizeDocumentCategory(doc.category);
+      const routedPreview =
+        doc.routedAgents.length > 0
+          ? ` → routed to ${doc.routedAgents.slice(0, 4).join(", ")}${doc.routedAgents.length > 4 ? `, +${doc.routedAgents.length - 4} more` : ""}`
+          : "";
+      return `- ${doc.fileName} — ${humanCategory} (${confidencePct}% confidence)${routedPreview}`;
+    });
+  }
+
+  private humanizeDocumentCategory(category: string): string {
+    const map: Record<string, string> = {
+      pitch_deck: "pitch deck",
+      financial: "financial model",
+      cap_table: "cap table",
+      legal: "legal document",
+      technical_product: "technical/product doc",
+      business_plan: "business plan",
+      market_research: "market research",
+      contract: "contract",
+      team_hr: "team/HR document",
+      miscellaneous: "supporting document",
+    };
+    return map[category] ?? category.replace(/_/g, " ");
   }
 
   private async resolveMissingInfoRecipient(params: {

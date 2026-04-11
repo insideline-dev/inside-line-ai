@@ -132,16 +132,12 @@ describe("InvestorMatchingService", () => {
     expect(result.candidatesEvaluated).toBe(2);
     expect(generateTextMock).toHaveBeenCalledTimes(2);
     expect(scoreComputation.computeWithInvestorPreferences).toHaveBeenCalledTimes(2);
+    expect(promptService.renderTemplate).toHaveBeenCalledTimes(2);
     expect(promptService.renderTemplate).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
         investorThesisSummary: expect.any(String),
-      }),
-    );
-    expect(promptService.renderTemplate).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({
-        investorThesisSummary: "Not available",
+        investorThesis: expect.any(String),
       }),
     );
     expect(result.matches.length).toBe(2);
@@ -280,5 +276,33 @@ describe("InvestorMatchingService", () => {
     // are ["software", "health_care", "artificial_intelligence"], no food_beverage
     expect(result.candidatesEvaluated).toBe(0);
     expect(generateTextMock).not.toHaveBeenCalled();
+  });
+
+  it("includes forceIncludeInvestorId even when they fail the first filter", async () => {
+    generateTextMock.mockResolvedValue({
+      output: {
+        thesisFitScore: 45,
+        fitRationale: "Poor thesis alignment but forced inclusion.",
+      },
+    });
+
+    // investor-eu-series-a normally wouldn't pass (wrong stage/industry)
+    // but forceIncludeInvestorId should include them anyway
+    const result = await service.matchStartup({
+      startupId: "startup-forced",
+      startup: {
+        industry: "organic_food",
+        sectorIndustryGroup: "food_beverage",
+        stage: StartupStage.SEED,
+        fundingTarget: 2_500_000,
+        location: "San Francisco, CA",
+      },
+      synthesis: createMockSynthesisResult(),
+      forceIncludeInvestorId: "investor-eu-series-a",
+    });
+
+    // Should evaluate the forced investor even though they don't match the industry/stage
+    expect(result.candidatesEvaluated).toBe(1);
+    expect(generateTextMock).toHaveBeenCalledTimes(1);
   });
 });

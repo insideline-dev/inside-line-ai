@@ -280,6 +280,9 @@ export class MatchService {
       tractionScore?: number;
       financialsScore?: number;
       matchReason?: string;
+      thesisFitScore?: number;
+      fitRationale?: string;
+      thesisFitFallback?: boolean;
     },
   ) {
     return this.drizzle.withRLS(investorId, async (db) => {
@@ -306,12 +309,35 @@ export class MatchService {
         )
         .limit(1);
 
+      const thesisFields = {
+        thesisFitScore: scores.thesisFitScore,
+        fitRationale: scores.fitRationale,
+        thesisFitFallback: scores.thesisFitFallback,
+      };
+
       if (existing) {
         const [updated] = await db
           .update(startupMatch)
           .set({
-            ...scores,
+            marketScore: scores.marketScore,
+            teamScore: scores.teamScore,
+            productScore: scores.productScore,
+            tractionScore: scores.tractionScore,
+            financialsScore: scores.financialsScore,
+            matchReason: scores.matchReason,
             overallScore,
+            thesisFitScore:
+              thesisFields.thesisFitScore === undefined
+                ? existing.thesisFitScore
+                : thesisFields.thesisFitScore,
+            fitRationale:
+              thesisFields.fitRationale === undefined
+                ? existing.fitRationale
+                : thesisFields.fitRationale,
+            thesisFitFallback:
+              thesisFields.thesisFitFallback === undefined
+                ? existing.thesisFitFallback
+                : thesisFields.thesisFitFallback,
             updatedAt: new Date(),
           })
           .where(
@@ -331,8 +357,16 @@ export class MatchService {
         .values({
           investorId,
           startupId,
-          ...scores,
+          marketScore: scores.marketScore,
+          teamScore: scores.teamScore,
+          productScore: scores.productScore,
+          tractionScore: scores.tractionScore,
+          financialsScore: scores.financialsScore,
+          matchReason: scores.matchReason,
           overallScore,
+          thesisFitScore: thesisFields.thesisFitScore,
+          fitRationale: thesisFields.fitRationale,
+          thesisFitFallback: thesisFields.thesisFitFallback,
         })
         .returning();
 

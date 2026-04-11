@@ -3,6 +3,7 @@ export type JobType =
   | "pdf"
   | "matching"
   | "market_analysis"
+  | "document_classification"
   | "ai_extraction"
   | "ai_enrichment"
   | "ai_scraping"

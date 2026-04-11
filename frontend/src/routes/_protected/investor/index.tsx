@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef, type DragEvent } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { customFetch } from "@/api/client";
 import { format } from "date-fns";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -10,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScoreRing } from "@/components/analysis/ScoreRing";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { SearchAndFilters, defaultFilters, type FilterState } from "@/components/SearchAndFilters";
+import { SearchAndFilters, defaultFilters, type FilterState, STAGES, REGIONS, SOURCE_OPTIONS } from "@/components/SearchAndFilters";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -40,6 +41,8 @@ import {
   useInvestorControllerGetPipeline,
   useInvestorControllerUpdateMatchStatus,
   useInvestorControllerToggleSaved,
+  useInvestorControllerGetThesis,
+  getInvestorControllerGetMatchDetailsQueryKey,
   getInvestorControllerGetPipelineQueryKey,
 } from "@/api/generated/investor/investor";
 import { AnalysisProgressBar } from "@/components/AnalysisProgressBar";
@@ -67,6 +70,9 @@ import {
   CircleX,
   Check,
   Bookmark,
+  Wand2,
+  AlertTriangle,
+  X,
 } from "lucide-react";
 import type { PrivateInvestorPipelineStatus } from "@/types/startup";
 
@@ -108,7 +114,7 @@ type PipelineData = {
 type Status = PipelineMatch["status"];
 type ViewMode = "list" | "kanban";
 type PrivateStartup = {
-  id: number;
+  id: string;
   name: string;
   description: string;
   stage: string;
@@ -273,7 +279,7 @@ function mergeStartups(pipeline: PipelineData | null, privateStartups: PrivateSt
   const matchedStartupIds = new Set(matchItems.map((m) => m.startupId));
 
   const privateItems: PipelineCardItem[] = privateStartups
-    .filter((s) => !matchedStartupIds.has(String(s.id)))
+    .filter((s) => !matchedStartupIds.has(s.id))
     .map((s) => ({
       displayName: s.name || "Untitled",
       description: s.description ?? null,
@@ -281,11 +287,11 @@ function mergeStartups(pipeline: PipelineData | null, privateStartups: PrivateSt
       industry: s.industry ?? null,
       location: s.location ?? null,
       logoUrl: s.logoUrl ?? null,
-      overallScore: s.status === "approved" ? s.overallScore : 0,
+      overallScore: s.overallScore ?? 0,
       thesisFitScore: null,
       createdAt: s.createdAt,
       matchId: null,
-      startupId: String(s.id),
+      startupId: s.id,
       pipelineStatus: mapPrivateStartupStatus(s.status, s.privateInvestorPipelineStatus ?? null),
       isAnalyzing: s.status === "submitted" || s.status === "analyzing",
       isPrivate: true,
@@ -387,117 +393,167 @@ function filterPipelineItems(
 
 // ─── Shared Cards ─────────────────────────────────────────────────────────────
 
-function PipelineCard({ item, onToggleBookmark }: { item: PipelineCardItem; onToggleBookmark?: (startupId: string) => void }) {
+function PipelineCard({
+  item,
+  onToggleBookmark,
+  onRunMatching,
+  isMatching = false,
+}: {
+  item: PipelineCardItem;
+  onToggleBookmark?: (startupId: string) => void;
+  onRunMatching?: (startupId: string) => void;
+  isMatching?: boolean;
+}) {
   const config = STATUS_CONFIG[item.pipelineStatus];
   const hasOverallScore = item.overallScore > 0;
   const hasThesisScore = typeof item.thesisFitScore === "number";
+  const canRunMatching = Boolean(onRunMatching);
+  const canBookmark = Boolean(onToggleBookmark && item.matchId);
+
+  const handleRunMatching = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (onRunMatching) onRunMatching(item.startupId);
+  };
+
+  const handleBookmark = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (onToggleBookmark) onToggleBookmark(item.startupId);
+  };
 
   return (
-    <Card className="group overflow-hidden border-border/70 transition-all hover:border-primary/30 hover:shadow-md">
-      <Link to="/investor/startup/$id" params={{ id: item.startupId }} className="block h-full">
-        <CardContent className="p-4 space-y-4">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0 flex-1 space-y-2">
-              <div className="flex items-center gap-2 flex-wrap">
-                {item.isPrivate && (
-                  <Badge variant="outline" className="gap-1 text-[11px]">
-                    <Lock className="h-3 w-3" />
-                    Private
-                  </Badge>
-                )}
-                {item.isAnalyzing ? (
-                  <Badge variant="outline" className="gap-1 text-[11px]">
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                    Analyzing
-                  </Badge>
-                ) : (
-                  <Badge className={`${config.badgeClass} text-[11px]`}>
-                    {item.isSaved ? "Bookmarked" : config.label}
-                  </Badge>
-                )}
-              </div>
-              <div>
-                <div className="flex items-start gap-3">
-                  <Avatar className="h-10 w-10 shrink-0 rounded-lg border bg-muted/40">
-                    {item.logoUrl ? (
-                      <AvatarImage src={item.logoUrl} alt={item.displayName} className="object-contain" />
-                    ) : null}
-                    <AvatarFallback className="rounded-lg text-xs font-medium">
-                      {item.displayName.charAt(0).toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="min-w-0 flex-1">
-                    <p className="line-clamp-1 text-base font-semibold">{item.displayName}</p>
-                    {item.description && (
-                      <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{item.description}</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              {hasThesisScore && (
-                <div className="flex flex-col items-center gap-1">
-                  <ScoreRing score={item.thesisFitScore as number} size="sm" showLabel={false} variant="secondary" />
-                  <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                    Thesis
-                  </span>
-                </div>
+    <Card className="group relative h-full flex flex-col overflow-hidden border-border/70 transition-all hover:border-primary/40 hover:shadow-md">
+      <Link
+        to="/investor/startup/$id"
+        params={{ id: item.startupId }}
+        className="flex h-full flex-col"
+        onContextMenu={(e) => e.preventDefault()}
+      >
+        <CardContent className="flex h-full flex-col gap-4 p-4">
+          {/* Header: status + quick actions */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {item.isPrivate && (
+                <Badge variant="outline" className="gap-1 text-[11px]">
+                  <Lock className="h-3 w-3" />
+                  Private
+                </Badge>
               )}
-              {hasOverallScore ? (
-                <div className="flex flex-col items-center gap-1">
-                  <ScoreRing score={item.overallScore} size="sm" showLabel={false} />
-                  <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                    Score
-                  </span>
-                </div>
+              {item.isAnalyzing ? (
+                <Badge variant="outline" className="gap-1 text-[11px]">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Analyzing
+                </Badge>
               ) : (
-                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-muted">
-                  <FileSearch className="h-5 w-5 text-muted-foreground" />
-                </div>
+                <Badge className={`${config.badgeClass} text-[11px]`}>
+                  {item.isSaved ? "Bookmarked" : config.label}
+                </Badge>
               )}
+            </div>
+            {canBookmark && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 shrink-0 opacity-60 hover:opacity-100"
+                onClick={handleBookmark}
+                aria-label={item.isSaved ? "Remove bookmark" : "Bookmark"}
+              >
+                <Bookmark
+                  className={`h-4 w-4 ${item.isSaved ? "fill-current text-primary" : ""}`}
+                />
+              </Button>
+            )}
+          </div>
+
+          {/* Identity: avatar + name + description */}
+          <div className="flex items-start gap-3">
+            <Avatar className="h-11 w-11 shrink-0 rounded-lg border bg-muted/40">
+              {item.logoUrl ? (
+                <AvatarImage
+                  src={item.logoUrl}
+                  alt={item.displayName}
+                  className="object-contain"
+                />
+              ) : null}
+              <AvatarFallback className="rounded-lg text-xs font-medium">
+                {item.displayName.charAt(0).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <div className="min-w-0 flex-1">
+              <p className="line-clamp-1 text-base font-semibold leading-tight">
+                {item.displayName}
+              </p>
+              <p className="mt-1 line-clamp-2 min-h-[2.5rem] text-sm leading-snug text-muted-foreground">
+                {item.description ?? ""}
+              </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
-            {item.stage && (
-              <Badge variant="outline" className="capitalize text-xs">
-                {formatStageLabel(item.stage)}
-              </Badge>
-            )}
-            {item.industry && (
-              <Badge variant="outline" className="capitalize text-xs">
-                {item.industry}
-              </Badge>
-            )}
-          </div>
+          {/* Tags */}
+          {(item.stage || item.industry) && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              {item.stage && (
+                <Badge variant="outline" className="capitalize text-[11px]">
+                  {formatStageLabel(item.stage)}
+                </Badge>
+              )}
+              {item.industry && (
+                <Badge variant="outline" className="capitalize text-[11px]">
+                  {item.industry}
+                </Badge>
+              )}
+            </div>
+          )}
 
           {item.isAnalyzing && (
             <AnalysisProgressBar startupId={Number(item.startupId)} compact />
           )}
 
-          {onToggleBookmark && item.matchId && (
-            <div className="flex justify-end">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onToggleBookmark(item.startupId);
-                }}
-              >
-                <Bookmark className={`h-4 w-4 ${item.isSaved ? "fill-current text-primary" : "text-muted-foreground"}`} />
-              </Button>
+          {/* Scores row */}
+          {!item.isAnalyzing && (
+            <div className="grid grid-cols-2 gap-2 rounded-md border bg-muted/30 p-3">
+              <ScoreTile
+                label="Overall"
+                score={hasOverallScore ? item.overallScore : null}
+                placeholder={hasOverallScore ? null : "Not scored"}
+              />
+              <ScoreTile
+                label="Thesis fit"
+                score={hasThesisScore ? (item.thesisFitScore as number) : null}
+                variant="secondary"
+                placeholder={hasThesisScore ? null : "Run match"}
+                onAction={canRunMatching && !hasThesisScore ? handleRunMatching : undefined}
+                isActing={isMatching}
+              />
             </div>
           )}
 
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
+          {/* Footer: date + actions + CTA */}
+          <div className="mt-auto flex items-center justify-between gap-2 border-t pt-3 text-xs text-muted-foreground">
             <span>{formatDate(item.createdAt)}</span>
-            <span className="font-medium text-foreground/80 group-hover:text-primary">
-              {item.pipelineStatus === "reviewing" ? "Review Analysis" : "View Analysis"}
-            </span>
+            <div className="flex items-center gap-1">
+              {canRunMatching && hasThesisScore && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 opacity-60 hover:opacity-100"
+                  onClick={handleRunMatching}
+                  disabled={isMatching}
+                  aria-label="Re-run thesis matching"
+                  title="Re-run thesis matching"
+                >
+                  {isMatching ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Wand2 className="h-3.5 w-3.5" />
+                  )}
+                </Button>
+              )}
+              <span className="font-medium text-foreground/80 group-hover:text-primary">
+                {item.pipelineStatus === "reviewing" ? "Review Analysis" : "View Analysis"}
+              </span>
+            </div>
           </div>
         </CardContent>
       </Link>
@@ -505,14 +561,89 @@ function PipelineCard({ item, onToggleBookmark }: { item: PipelineCardItem; onTo
   );
 }
 
+function ScoreTile({
+  label,
+  score,
+  variant = "default",
+  placeholder,
+  onAction,
+  isActing = false,
+}: {
+  label: string;
+  score: number | null;
+  variant?: "default" | "secondary";
+  placeholder?: string | null;
+  onAction?: (e: React.MouseEvent) => void;
+  isActing?: boolean;
+}) {
+  if (score !== null) {
+    return (
+      <div className="flex items-center gap-2.5">
+        <ScoreRing score={score} size="sm" showLabel={false} variant={variant} />
+        <div className="min-w-0">
+          <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            {label}
+          </p>
+          <p className="text-sm font-semibold leading-tight">{score}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (onAction) {
+    return (
+      <button
+        type="button"
+        onClick={onAction}
+        disabled={isActing}
+        className="flex items-center gap-2.5 rounded-md text-left transition-colors hover:bg-primary/5 disabled:opacity-60"
+      >
+        <div className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-dashed border-muted-foreground/40">
+          {isActing ? (
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+          ) : (
+            <Wand2 className="h-4 w-4 text-primary" />
+          )}
+        </div>
+        <div className="min-w-0">
+          <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            {label}
+          </p>
+          <p className="text-xs font-medium text-primary leading-tight">
+            {isActing ? "Matching..." : placeholder}
+          </p>
+        </div>
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2.5 opacity-60">
+      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-muted">
+        <FileSearch className="h-4 w-4 text-muted-foreground" />
+      </div>
+      <div className="min-w-0">
+        <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+          {label}
+        </p>
+        <p className="text-xs text-muted-foreground leading-tight">{placeholder ?? "—"}</p>
+      </div>
+    </div>
+  );
+}
+
 function CardsView({
   items,
   onStatusChange,
   onToggleBookmark,
+  onRunMatching,
+  matchingJobs,
 }: {
   items: PipelineCardItem[];
   onStatusChange: (dragId: string, status: Status) => void;
   onToggleBookmark: (startupId: string) => void;
+  onRunMatching: (startupId: string) => void;
+  matchingJobs: Record<string, "queued" | "running">;
 }) {
   if (items.length === 0) {
     return (
@@ -533,18 +664,40 @@ function CardsView({
       {items.map((item) => {
         const key = item.matchId ?? item.startupId;
 
+        const isMatching = Boolean(matchingJobs[item.startupId]);
+
         if (item.isAnalyzing) {
-          return <PipelineCard key={key} item={item} onToggleBookmark={onToggleBookmark} />;
+          return (
+            <PipelineCard
+              key={key}
+              item={item}
+              onToggleBookmark={onToggleBookmark}
+              onRunMatching={onRunMatching}
+              isMatching={isMatching}
+            />
+          );
         }
 
         return (
           <ContextMenu key={key}>
-            <ContextMenuTrigger>
-              <PipelineCard item={item} onToggleBookmark={onToggleBookmark} />
+            <ContextMenuTrigger className="block h-full">
+              <PipelineCard
+                item={item}
+                onToggleBookmark={onToggleBookmark}
+                onRunMatching={onRunMatching}
+                isMatching={isMatching}
+              />
             </ContextMenuTrigger>
-            <ContextMenuContent className="w-48">
-              <ContextMenuLabel>Move to</ContextMenuLabel>
+            <ContextMenuContent className="w-56">
+              <ContextMenuItem
+                onClick={() => onRunMatching(item.startupId)}
+                className="gap-2"
+              >
+                <Wand2 className="h-4 w-4 text-primary" />
+                Run thesis matching
+              </ContextMenuItem>
               <ContextMenuSeparator />
+              <ContextMenuLabel>Move to</ContextMenuLabel>
               {STATUSES.map((status) => {
                 const cfg = STATUS_CONFIG[status];
                 const Icon = cfg.icon;
@@ -579,6 +732,8 @@ function BoardView({
   onDragStart,
   onDragEnd,
   onToggleBookmark,
+  onRunMatching,
+  matchingJobs,
 }: {
   grouped: Record<Status, PipelineCardItem[]>;
   onDrop: (matchId: string, status: Status) => void;
@@ -586,6 +741,8 @@ function BoardView({
   onDragStart: (matchId: string) => void;
   onDragEnd: () => void;
   onToggleBookmark: (startupId: string) => void;
+  onRunMatching: (startupId: string) => void;
+  matchingJobs: Record<string, "queued" | "running">;
 }) {
   return (
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-5 md:grid-cols-2">
@@ -601,6 +758,8 @@ function BoardView({
             onDragStart={onDragStart}
             onDragEnd={onDragEnd}
             onToggleBookmark={onToggleBookmark}
+            onRunMatching={onRunMatching}
+            matchingJobs={matchingJobs}
           />
         );
       })}
@@ -616,6 +775,8 @@ function KanbanColumn({
   onDragStart,
   onDragEnd,
   onToggleBookmark,
+  onRunMatching,
+  matchingJobs,
 }: {
   status: Status;
   items: PipelineCardItem[];
@@ -624,6 +785,8 @@ function KanbanColumn({
   onDragStart: (matchId: string) => void;
   onDragEnd: () => void;
   onToggleBookmark: (startupId: string) => void;
+  onRunMatching: (startupId: string) => void;
+  matchingJobs: Record<string, "queued" | "running">;
 }) {
   const [dragOver, setDragOver] = useState(false);
   const config = STATUS_CONFIG[status];
@@ -673,6 +836,8 @@ function KanbanColumn({
             onDragStart={onDragStart}
             onDragEnd={onDragEnd}
             onToggleBookmark={onToggleBookmark}
+            onRunMatching={onRunMatching}
+            isMatching={Boolean(matchingJobs[item.startupId])}
           />
         ))}
         {items.length === 0 && (
@@ -689,12 +854,16 @@ function KanbanCard({
   onDragStart,
   onDragEnd,
   onToggleBookmark,
+  onRunMatching,
+  isMatching = false,
 }: {
   item: PipelineCardItem;
   draggingMatchId: string | null;
   onDragStart: (matchId: string) => void;
   onDragEnd: () => void;
   onToggleBookmark: (startupId: string) => void;
+  onRunMatching?: (startupId: string) => void;
+  isMatching?: boolean;
 }) {
   const dragId = item.matchId ?? item.startupId;
   const navigate = useNavigate();
@@ -775,24 +944,55 @@ function KanbanCard({
           )}
         </div>
         {!item.isAnalyzing && (
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              {hasOverallScore ? (
-                <div className="flex items-center gap-2">
+          <>
+            <div className="flex items-center justify-between gap-2 rounded-md border bg-muted/30 px-2 py-1.5">
+              <div className="flex items-center gap-1.5">
+                {hasOverallScore ? (
                   <ScoreRing score={item.overallScore} size="sm" showLabel={false} />
-                  <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                    Score
-                  </span>
-                </div>
-              ) : null}
-              {hasThesisScore ? (
-                <div className="flex items-center gap-2">
-                  <ScoreRing score={item.thesisFitScore as number} size="sm" showLabel={false} variant="secondary" />
-                  <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                    Thesis
-                  </span>
-                </div>
-              ) : null}
+                ) : (
+                  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-muted">
+                    <FileSearch className="h-3 w-3 text-muted-foreground" />
+                  </div>
+                )}
+                <span className="text-[9px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Overall
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                {hasThesisScore ? (
+                  <ScoreRing
+                    score={item.thesisFitScore as number}
+                    size="sm"
+                    showLabel={false}
+                    variant="secondary"
+                  />
+                ) : onRunMatching ? (
+                  <button
+                    type="button"
+                    draggable={false}
+                    disabled={isMatching}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRunMatching(item.startupId);
+                    }}
+                    title="Run thesis matching"
+                    className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-dashed border-muted-foreground/40 hover:border-primary/60 hover:bg-primary/5 disabled:opacity-60"
+                  >
+                    {isMatching ? (
+                      <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+                    ) : (
+                      <Wand2 className="h-3 w-3 text-primary" />
+                    )}
+                  </button>
+                ) : (
+                  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-muted">
+                    <span className="text-xs text-muted-foreground">—</span>
+                  </div>
+                )}
+                <span className="text-[9px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Thesis
+                </span>
+              </div>
             </div>
             <div className="flex-1 min-w-0 space-y-0.5">
               {item.industry && (
@@ -804,7 +1004,7 @@ function KanbanCard({
                 </p>
               )}
             </div>
-          </div>
+          </>
         )}
         <div className="flex items-center gap-1 text-xs text-muted-foreground">
           <Clock className="h-3 w-3" />
@@ -994,6 +1194,12 @@ function InvestorDashboard() {
   const pipelineResponse = useInvestorControllerGetPipeline();
   const pipeline = extractResponseData<PipelineData>(pipelineResponse.data);
 
+  // ─ Thesis presence (drives warning banner & matching gating)
+  const thesisResponse = useInvestorControllerGetThesis();
+  const thesisLoaded = !thesisResponse.isLoading;
+  const hasThesis = Boolean(extractResponseData<unknown>(thesisResponse.data));
+  const showThesisWarning = thesisLoaded && !hasThesis;
+
   useEffect(() => {
     setStatusOverrides({});
   }, [pipeline]);
@@ -1041,6 +1247,99 @@ function InvestorDashboard() {
       },
     },
   });
+
+  const [matchingJobs, setMatchingJobs] = useState<Record<string, "queued" | "running">>({});
+
+  const runMatching = useMutation({
+    mutationFn: (startupId: string) =>
+      customFetch(`/investor/startups/${startupId}/match`, { method: "POST" }),
+    onMutate: (startupId) => {
+      setMatchingJobs((prev) => ({ ...prev, [startupId]: "queued" }));
+    },
+    onSuccess: (_data, startupId) => {
+      toast.success("Matching queued");
+      setMatchingJobs((prev) => ({ ...prev, [startupId]: "running" }));
+    },
+    onError: (error, startupId) => {
+      setMatchingJobs((prev) => {
+        const next = { ...prev };
+        delete next[startupId];
+        return next;
+      });
+      const message = error instanceof Error ? error.message : "Failed to queue matching";
+      toast.error(message);
+    },
+  });
+
+  const handleRunMatching = (startupId: string) => {
+    if (!hasThesis) {
+      toast.error("Create your investment thesis first to run matching");
+      return;
+    }
+    if (matchingJobs[startupId]) return;
+    runMatching.mutate(startupId);
+  };
+
+  // ─ Poll matching status for running jobs
+  useEffect(() => {
+    const runningIds = Object.keys(matchingJobs);
+    if (runningIds.length === 0) return;
+
+    let cancelled = false;
+
+    const tick = async () => {
+      for (const id of runningIds) {
+        try {
+          const status = await customFetch<{
+            status: string;
+            error?: string | null;
+            result?: { matchesFound?: number };
+          }>(`/investor/startups/${id}/matching/status`);
+          if (cancelled) return;
+
+          if (status.status === "completed") {
+            setMatchingJobs((prev) => {
+              const next = { ...prev };
+              delete next[id];
+              return next;
+            });
+            toast.success(
+              status.result?.matchesFound !== undefined
+                ? `Matching complete for ${id} (${status.result.matchesFound} match${
+                    status.result.matchesFound === 1 ? "" : "es"
+                  } found)`
+                : `Matching complete for ${id}`,
+            );
+            await Promise.all([
+              queryClient.refetchQueries({ queryKey: getInvestorControllerGetPipelineQueryKey() }),
+              queryClient.refetchQueries({ queryKey: getStartupControllerFindAllQueryKey() }),
+              queryClient.refetchQueries({
+                queryKey: getInvestorControllerGetMatchDetailsQueryKey(id),
+              }),
+            ]);
+          } else if (status.status === "failed") {
+            setMatchingJobs((prev) => {
+              const next = { ...prev };
+              delete next[id];
+              return next;
+            });
+            toast.error(status.error || "Matching failed");
+          } else if (status.status === "processing" && matchingJobs[id] !== "running") {
+            setMatchingJobs((prev) => ({ ...prev, [id]: "running" }));
+          }
+        } catch {
+          // ignore transient errors; next tick retries
+        }
+      }
+    };
+
+    const interval = setInterval(tick, 3000);
+    void tick();
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [matchingJobs, queryClient, toast]);
 
   const toggleBookmark = useInvestorControllerToggleSaved({
     mutation: {
@@ -1201,6 +1500,24 @@ function InvestorDashboard() {
 
   return (
     <div className="space-y-6">
+      {showThesisWarning && (
+        <div className="flex flex-col gap-3 border border-amber-300 bg-amber-50 p-4 text-amber-900 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+            <div className="space-y-1">
+              <p className="font-semibold">No investment thesis yet</p>
+              <p className="text-sm text-amber-900/80">
+                Thesis alignment scores can&apos;t be generated until you define your investment thesis.
+                Matching will fall back to empty scores.
+              </p>
+            </div>
+          </div>
+          <Button asChild size="sm" className="shrink-0">
+            <Link to="/investor/thesis">Create thesis</Link>
+          </Button>
+        </div>
+      )}
+
       {/* ─── Header ─── */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
@@ -1251,7 +1568,7 @@ function InvestorDashboard() {
         </TabsList>
       </Tabs>
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="relative w-full sm:max-w-sm">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
@@ -1267,12 +1584,56 @@ function InvestorDashboard() {
           showScoreFilter={true}
           hideSearch={true}
           showSourceFilter={true}
+          hideActiveChips={true}
         />
       </div>
 
+      {/* ─── Active Filter Chips ─── */}
+      {(filters.stages.length > 0 || filters.industries.length > 0 || filters.regions.length > 0 || (filters.source && filters.source !== "all") || filters.scoreRange[0] > 0 || filters.scoreRange[1] < 100) && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm text-muted-foreground">Active filters:</span>
+          {filters.stages.map((stage) => (
+            <Badge key={stage} variant="secondary" className="gap-1">
+              {STAGES.find(s => s.value === stage)?.label || stage}
+              <X className="w-3 h-3 cursor-pointer" onClick={() => setFilters({ ...filters, stages: filters.stages.filter(s => s !== stage) })} />
+            </Badge>
+          ))}
+          {filters.industries.map((industry) => (
+            <Badge key={industry} variant="secondary" className="gap-1">
+              {industry}
+              <X className="w-3 h-3 cursor-pointer" onClick={() => setFilters({ ...filters, industries: filters.industries.filter(i => i !== industry) })} />
+            </Badge>
+          ))}
+          {filters.regions.map((region) => (
+            <Badge key={region} variant="secondary" className="gap-1">
+              {REGIONS.find(r => r.value === region)?.label || region}
+              <X className="w-3 h-3 cursor-pointer" onClick={() => setFilters({ ...filters, regions: filters.regions.filter(r => r !== region) })} />
+            </Badge>
+          ))}
+          {filters.source && filters.source !== "all" && (
+            <Badge variant="secondary" className="gap-1">
+              {SOURCE_OPTIONS.find(o => o.value === filters.source)?.label}
+              <X className="w-3 h-3 cursor-pointer" onClick={() => setFilters({ ...filters, source: "all" })} />
+            </Badge>
+          )}
+          {(filters.scoreRange[0] > 0 || filters.scoreRange[1] < 100) && (
+            <Badge variant="secondary" className="gap-1">
+              Score: {filters.scoreRange[0]}-{filters.scoreRange[1]}
+              <X className="w-3 h-3 cursor-pointer" onClick={() => setFilters({ ...filters, scoreRange: [0, 100] })} />
+            </Badge>
+          )}
+        </div>
+      )}
+
       {/* ─── Content Area ─── */}
       {viewMode === "list" ? (
-        <CardsView items={filteredItems} onStatusChange={handleDrop} onToggleBookmark={handleToggleBookmark} />
+        <CardsView
+          items={filteredItems}
+          onStatusChange={handleDrop}
+          onToggleBookmark={handleToggleBookmark}
+          onRunMatching={handleRunMatching}
+          matchingJobs={matchingJobs}
+        />
       ) : (
         <BoardView
           grouped={filteredGrouped}
@@ -1281,6 +1642,8 @@ function InvestorDashboard() {
           onDragStart={setDraggingMatchId}
           onDragEnd={() => setDraggingMatchId(null)}
           onToggleBookmark={handleToggleBookmark}
+          onRunMatching={handleRunMatching}
+          matchingJobs={matchingJobs}
         />
       )}
 

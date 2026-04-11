@@ -28,6 +28,7 @@ import {
 } from "../ai/interfaces/pipeline.interface";
 import { PipelineFeedbackService } from "../ai/services/pipeline-feedback.service";
 import { StartupMatchingPipelineService } from "../ai/services/startup-matching-pipeline.service";
+import { DataRoomService } from "./data-room.service";
 import { PipelineStateService } from "../ai/services/pipeline-state.service";
 import {
   pipelineAgentRun,
@@ -202,6 +203,7 @@ export class StartupService {
     private aiPipeline: PipelineService,
     private pipelineFeedback: PipelineFeedbackService,
     private startupMatching: StartupMatchingPipelineService,
+    private dataRoomService: DataRoomService,
     @Optional() private pipelineState?: PipelineStateService,
   ) {}
 
@@ -380,7 +382,7 @@ export class StartupService {
     return this.withEvaluation(this.drizzle.db, found, true);
   }
 
-  async update(id: string, userId: string, dto: UpdateStartup) {
+  async update(id: string, userId: string, dto: UpdateStartup, userRole?: UserRole) {
     return this.drizzle.withRLS(userId, async (db) => {
       const existing = await this.findOne(id, userId);
       const requestedFields = Object.entries(dto)
@@ -397,10 +399,12 @@ export class StartupService {
       const isInvestorPrivateSubmission =
         existing.submittedByRole === UserRole.INVESTOR &&
         existing.isPrivate === true;
+      const isAdmin = userRole === UserRole.ADMIN;
 
       if (
         requestedFields.includes("privateInvestorPipelineStatus") &&
-        !isInvestorPrivateSubmission
+        !isInvestorPrivateSubmission &&
+        !isAdmin
       ) {
         throw new ForbiddenException(
           "Only private investor startups can update pipeline status",
@@ -411,7 +415,10 @@ export class StartupService {
         existing.status === StartupStatus.SUBMITTED ||
         existing.status === StartupStatus.APPROVED
       ) {
-        if (!(isInvestorPrivateSubmission && (isTeamOnlyUpdate || isPrivateInvestorPipelineOnlyUpdate))) {
+        if (
+          !isAdmin &&
+          !(isInvestorPrivateSubmission && (isTeamOnlyUpdate || isPrivateInvestorPipelineOnlyUpdate))
+        ) {
           throw new ForbiddenException(
             "Cannot edit startup while submitted or approved",
           );
@@ -480,7 +487,6 @@ export class StartupService {
 
       await this.draftService.delete(id);
 
-      await this.queueDocumentClassification(id, userId);
       await this.triggerAnalysis(id, userId);
 
       this.logger.log(`Submitted startup ${id} for review`);
@@ -507,7 +513,6 @@ export class StartupService {
         .where(eq(startup.id, id))
         .returning();
 
-      await this.queueDocumentClassification(id, userId);
       await this.triggerAnalysis(id, userId);
 
       this.logger.log(`Resubmitted startup ${id}`);
@@ -1202,22 +1207,19 @@ export class StartupService {
       .update(startup)
       .set({ files, updatedAt: new Date() })
       .where(eq(startup.id, startupId));
-  }
 
-  private async queueDocumentClassification(
-    startupId: string,
-    userId: string,
-  ): Promise<void> {
-    try {
-      await this.queue.addJob(QUEUE_NAMES.DOCUMENT_CLASSIFICATION, {
-        type: "document_classification",
-        startupId,
-        userId,
-      });
-    } catch (error) {
-      this.logger.warn(
-        `Failed to queue document classification for startup ${startupId}: ${error instanceof Error ? error.message : String(error)}`,
-      );
+    // Sync category to data_rooms if the file exists there.
+    const file = files[fileIndex];
+    if (file?.path) {
+      try {
+        await this.dataRoomService.syncCategoryByAssetKey(
+          startupId,
+          file.path,
+          category,
+        );
+      } catch {
+        // Non-fatal — data_room row may not exist for legacy files.
+      }
     }
   }
 

@@ -72,7 +72,7 @@ describe("PipelineGraphCompilerService", () => {
 
   it("rejects phase cycles introduced by graph edges", () => {
     const flow = createFlowDefinition();
-    flow.edges.push({ from: "synthesis_final", to: "extract_fields" });
+    flow.edges.push({ from: "synthesis_report", to: "extract_fields" });
 
     expect(() =>
       service.compilePipelineConfig(flow, DEFAULT_PIPELINE_CONFIG),

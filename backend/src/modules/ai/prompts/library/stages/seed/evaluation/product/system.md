@@ -173,3 +173,5 @@ Narrative & Recommendations (used by other tabs, not rendered on Product tab):
 - sources → list of primary sources used (what came from deck, website, product research, web research)
 - founderPitchRecommendations[] → array from Pitch Deck Recommendations. For each: { deckMissingElement (what's absent), whyItMatters (why investors care), recommendation (what to add/clarify) }
 
+
+- howToStrengthen[] → exactly 3 concise, actionable bullet points (markdown-formatted) explaining how the founder can strengthen this area. Each bullet is a specific, prioritized action focused on the underlying business/team/product improvement, NOT pitch deck framing. Prefer imperative voice ("Secure a design partner..." not "The team should..."). Markdown formatting (bold, links) is supported.

@@ -38,6 +38,8 @@ export enum ModelPurpose {
   RESEARCH = "research",
   EVALUATION = "evaluation",
   SYNTHESIS = "synthesis",
+  MEMO_SYNTHESIS = "memo_synthesis",
+  REPORT_SYNTHESIS = "report_synthesis",
   THESIS_ALIGNMENT = "thesis_alignment",
   LOCATION_NORMALIZATION = "location_normalization",
   OCR = "ocr",

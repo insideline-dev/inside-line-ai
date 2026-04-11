@@ -1,8 +1,9 @@
-import { useState, useMemo, useEffect, type DragEvent } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { useState, useMemo, useEffect, useRef, type DragEvent } from "react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Card, CardContent } from "@/components/ui/card";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -44,6 +45,8 @@ import {
 import { AnalysisProgressBar } from "@/components/AnalysisProgressBar";
 import {
   useStartupControllerFindAll,
+  useStartupControllerUpdate,
+  getStartupControllerFindAllQueryKey,
 } from "@/api/generated/startups/startups";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -65,6 +68,7 @@ import {
   Check,
   Bookmark,
 } from "lucide-react";
+import type { PrivateInvestorPipelineStatus } from "@/types/startup";
 
 export const Route = createFileRoute("/_protected/investor/")({
   component: InvestorDashboard,
@@ -86,6 +90,7 @@ type PipelineMatch = {
   thesisFitScore: number | null;
   createdAt: string;
   startupName: string | null;
+  startupLogoUrl: string | null;
   startupStage: string | null;
   startupIndustry: string | null;
   startupDescription: string | null;
@@ -111,6 +116,8 @@ type PrivateStartup = {
   sectorIndustryGroup?: string;
   location: string;
   normalizedRegion?: string;
+  logoUrl?: string | null;
+  privateInvestorPipelineStatus?: Status | null;
   overallScore: number;
   status: string;
   createdAt: string;
@@ -122,7 +129,9 @@ type PipelineCardItem = {
   stage: string | null;
   industry: string | null;
   location: string | null;
+  logoUrl: string | null;
   overallScore: number;
+  thesisFitScore: number | null;
   createdAt: string;
   matchId: string | null;
   startupId: string;
@@ -221,7 +230,11 @@ function formatStageLabel(stage: string | null | undefined): string {
   return stage.replace(/_/g, " ");
 }
 
-function mapPrivateStartupStatus(status: string): Status {
+function mapPrivateStartupStatus(status: string, pipelineStatus?: Status | null): Status {
+  if (pipelineStatus) {
+    return pipelineStatus;
+  }
+
   switch (status) {
     case "pending_review":
       return "reviewing";
@@ -243,7 +256,9 @@ function mergeStartups(pipeline: PipelineData | null, privateStartups: PrivateSt
           stage: m.startupStage ?? null,
           industry: m.startupIndustry ?? null,
           location: null,
+          logoUrl: m.startupLogoUrl ?? null,
           overallScore: m.overallScore,
+          thesisFitScore: m.thesisFitScore,
           createdAt: m.createdAt,
           matchId: m.id,
           startupId: m.startupId,
@@ -265,11 +280,13 @@ function mergeStartups(pipeline: PipelineData | null, privateStartups: PrivateSt
       stage: s.stage ?? null,
       industry: s.industry ?? null,
       location: s.location ?? null,
+      logoUrl: s.logoUrl ?? null,
       overallScore: s.status === "approved" ? s.overallScore : 0,
+      thesisFitScore: null,
       createdAt: s.createdAt,
       matchId: null,
       startupId: String(s.id),
-      pipelineStatus: mapPrivateStartupStatus(s.status),
+      pipelineStatus: mapPrivateStartupStatus(s.status, s.privateInvestorPipelineStatus ?? null),
       isAnalyzing: s.status === "submitted" || s.status === "analyzing",
       isPrivate: true,
       isSaved: false,
@@ -372,6 +389,8 @@ function filterPipelineItems(
 
 function PipelineCard({ item, onToggleBookmark }: { item: PipelineCardItem; onToggleBookmark?: (startupId: string) => void }) {
   const config = STATUS_CONFIG[item.pipelineStatus];
+  const hasOverallScore = item.overallScore > 0;
+  const hasThesisScore = typeof item.thesisFitScore === "number";
 
   return (
     <Card className="group overflow-hidden border-border/70 transition-all hover:border-primary/30 hover:shadow-md">
@@ -398,19 +417,46 @@ function PipelineCard({ item, onToggleBookmark }: { item: PipelineCardItem; onTo
                 )}
               </div>
               <div>
-                <p className="line-clamp-1 text-base font-semibold">{item.displayName}</p>
-                {item.description && (
-                  <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{item.description}</p>
-                )}
+                <div className="flex items-start gap-3">
+                  <Avatar className="h-10 w-10 shrink-0 rounded-lg border bg-muted/40">
+                    {item.logoUrl ? (
+                      <AvatarImage src={item.logoUrl} alt={item.displayName} className="object-contain" />
+                    ) : null}
+                    <AvatarFallback className="rounded-lg text-xs font-medium">
+                      {item.displayName.charAt(0).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0 flex-1">
+                    <p className="line-clamp-1 text-base font-semibold">{item.displayName}</p>
+                    {item.description && (
+                      <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{item.description}</p>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
-            {item.overallScore > 0 ? (
-              <ScoreRing score={item.overallScore} size="sm" showLabel={false} />
-            ) : (
-              <div className="flex h-11 w-11 items-center justify-center rounded-full bg-muted">
-                <FileSearch className="h-5 w-5 text-muted-foreground" />
-              </div>
-            )}
+            <div className="flex items-center gap-2">
+              {hasThesisScore && (
+                <div className="flex flex-col items-center gap-1">
+                  <ScoreRing score={item.thesisFitScore as number} size="sm" showLabel={false} variant="secondary" />
+                  <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    Thesis
+                  </span>
+                </div>
+              )}
+              {hasOverallScore ? (
+                <div className="flex flex-col items-center gap-1">
+                  <ScoreRing score={item.overallScore} size="sm" showLabel={false} />
+                  <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    Score
+                  </span>
+                </div>
+              ) : (
+                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-muted">
+                  <FileSearch className="h-5 w-5 text-muted-foreground" />
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
@@ -651,21 +697,39 @@ function KanbanCard({
   onToggleBookmark: (startupId: string) => void;
 }) {
   const dragId = item.matchId ?? item.startupId;
+  const navigate = useNavigate();
+  const dragMovedRef = useRef(false);
+  const hasOverallScore = item.overallScore > 0;
+  const hasThesisScore = typeof item.thesisFitScore === "number";
 
   function handleDragStart(e: DragEvent) {
+    dragMovedRef.current = true;
     e.dataTransfer.setData("text/plain", dragId);
     e.dataTransfer.effectAllowed = "move";
     onDragStart(dragId);
+  }
+
+  function handleDragEnd() {
+    window.setTimeout(() => {
+      dragMovedRef.current = false;
+    }, 0);
+    onDragEnd();
+  }
+
+  function handleClick() {
+    if (dragMovedRef.current) return;
+    navigate({ to: "/investor/startup/$id", params: { id: item.startupId } });
   }
 
   return (
     <Card
       draggable={!item.isAnalyzing}
       onDragStart={handleDragStart}
-      onDragEnd={onDragEnd}
+      onDragEnd={handleDragEnd}
+      onClick={handleClick}
       className={
         item.isAnalyzing
-          ? "opacity-75"
+          ? "cursor-pointer opacity-75"
           : dragId === draggingMatchId
             ? "cursor-grabbing opacity-60"
             : "cursor-grab active:cursor-grabbing"
@@ -673,8 +737,18 @@ function KanbanCard({
     >
       <CardContent className="p-3 space-y-2">
         <div className="flex items-start justify-between gap-2">
-          <div className="flex-1 min-w-0">
-            <p className="font-medium text-sm truncate">{item.displayName}</p>
+          <div className="flex min-w-0 flex-1 items-start gap-2">
+            <Avatar className="h-8 w-8 shrink-0 rounded-md border bg-muted/40">
+              {item.logoUrl ? (
+                <AvatarImage src={item.logoUrl} alt={item.displayName} className="object-contain" />
+              ) : null}
+              <AvatarFallback className="rounded-md text-[10px] font-medium">
+                {item.displayName.charAt(0).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex-1 min-w-0">
+              <p className="font-medium text-sm truncate">{item.displayName}</p>
+            </div>
           </div>
           {item.isAnalyzing ? (
             <Badge variant="outline" className="gap-1 shrink-0 text-xs">
@@ -701,8 +775,25 @@ function KanbanCard({
           )}
         </div>
         {!item.isAnalyzing && (
-          <div className="flex items-center gap-2">
-            <ScoreRing score={item.overallScore} size="sm" showLabel={false} />
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              {hasOverallScore ? (
+                <div className="flex items-center gap-2">
+                  <ScoreRing score={item.overallScore} size="sm" showLabel={false} />
+                  <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    Score
+                  </span>
+                </div>
+              ) : null}
+              {hasThesisScore ? (
+                <div className="flex items-center gap-2">
+                  <ScoreRing score={item.thesisFitScore as number} size="sm" showLabel={false} variant="secondary" />
+                  <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    Thesis
+                  </span>
+                </div>
+              ) : null}
+            </div>
             <div className="flex-1 min-w-0 space-y-0.5">
               {item.industry && (
                 <p className="text-xs text-muted-foreground truncate">{item.industry}</p>
@@ -939,6 +1030,18 @@ function InvestorDashboard() {
     },
   });
 
+  const updatePrivateStartup = useStartupControllerUpdate({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getStartupControllerFindAllQueryKey() });
+        toast.success("Status updated");
+      },
+      onError: () => {
+        toast.error("Failed to update status");
+      },
+    },
+  });
+
   const toggleBookmark = useInvestorControllerToggleSaved({
     mutation: {
       onSuccess: () => {
@@ -1028,8 +1131,25 @@ function InvestorDashboard() {
     const itemKey = currentItem.matchId ?? currentItem.startupId;
     setStatusOverrides((current) => ({ ...current, [itemKey]: newStatus }));
 
-    // Private items (no matchId) — visual move only, no API call
+    // Private items persist via startup record update
     if (!currentItem.matchId) {
+      updatePrivateStartup.mutate(
+        {
+          id: currentItem.startupId,
+          data: {
+            privateInvestorPipelineStatus: newStatus as PrivateInvestorPipelineStatus,
+          },
+        },
+        {
+          onError: () => {
+            setStatusOverrides((current) => {
+              const next = { ...current };
+              delete next[itemKey];
+              return next;
+            });
+          },
+        },
+      );
       setDraggingMatchId(null);
       return;
     }

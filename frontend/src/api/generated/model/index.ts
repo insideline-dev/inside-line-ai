@@ -388,6 +388,7 @@ export * from './updateStageWeightsDtoRationale';
 export * from './updateStageWeightsDtoWeights';
 export * from './updateStartupDto';
 export * from './updateStartupDtoFilesItem';
+export * from './updateStartupDtoPrivateInvestorPipelineStatus';
 export * from './updateStartupDtoRaiseType';
 export * from './updateStartupDtoStage';
 export * from './updateStartupDtoTeamMembersItem';

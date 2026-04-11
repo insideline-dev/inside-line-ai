@@ -7744,6 +7744,16 @@
           "demoUrl": {
             "type": "string",
             "format": "uri"
+          },
+          "privateInvestorPipelineStatus": {
+            "type": "string",
+            "enum": [
+              "new",
+              "reviewing",
+              "engaged",
+              "closed",
+              "passed"
+            ]
           }
         }
       },

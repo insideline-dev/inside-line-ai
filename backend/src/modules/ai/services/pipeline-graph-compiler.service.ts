@@ -416,7 +416,11 @@ export class PipelineGraphCompilerService {
     if (nodeId.startsWith("evaluation_")) {
       return PipelinePhase.EVALUATION;
     }
-    if (nodeId === "synthesis_final") {
+    if (
+      nodeId === "synthesis_final" ||
+      nodeId === "synthesis_memo" ||
+      nodeId === "synthesis_report"
+    ) {
       return PipelinePhase.SYNTHESIS;
     }
 

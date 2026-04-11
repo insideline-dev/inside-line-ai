@@ -144,7 +144,7 @@ export function SearchAndFilters({
           <PopoverTrigger asChild>
             <Button
               variant="outline"
-              className="gap-2"
+              className="w-full justify-between gap-2 sm:w-[148px] sm:shrink-0"
               data-testid="button-filters"
             >
               <SlidersHorizontal className="w-4 h-4" />

@@ -21,6 +21,7 @@ import {
   Megaphone,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { HowToStrengthenCard } from "@/components/startup-view/HowToStrengthenCard";
 import type { Evaluation } from "@/types/evaluation";
 import type { TeamMemberSource } from "@/components/TeamProfile";
 
@@ -73,6 +74,7 @@ interface TeamTabContentProps {
   showDataGaps?: boolean;
   teamWeight?: number;
   companyName?: string;
+  onStrengthenExpand?: () => void;
 }
 
 interface SubScoreItem {
@@ -622,6 +624,13 @@ function fmfScoreColor(score: number): string {
 // Main component
 // ---------------------------------------------------------------------------
 
+function getHowToStrengthen(sectionData: unknown): string[] {
+  if (!sectionData || typeof sectionData !== "object") return [];
+  const hts = (sectionData as Record<string, unknown>).howToStrengthen;
+  if (!Array.isArray(hts)) return [];
+  return hts.filter((s): s is string => typeof s === "string" && s.trim().length > 0);
+}
+
 export function TeamTabContent({
   evaluation,
   teamMembers,
@@ -630,6 +639,7 @@ export function TeamTabContent({
   showDataGaps = true,
   teamWeight,
   companyName,
+  onStrengthenExpand,
 }: TeamTabContentProps) {
   const teamData = useMemo(
     () => toRecord(evaluation?.teamData),
@@ -672,6 +682,8 @@ export function TeamTabContent({
 
   const dataGaps = useMemo(() => parseDataGapItems(teamData.dataGaps), [teamData]);
 
+  const teamStrengthenItems = getHowToStrengthen(evaluation?.teamData);
+
   return (
     <div className="space-y-6" data-testid="container-team-tab">
       {/* Section 1: Score Card */}
@@ -688,6 +700,8 @@ export function TeamTabContent({
           confidenceTestId="badge-team-confidence"
         />
       )}
+
+      <HowToStrengthenCard items={teamStrengthenItems} onExpand={onStrengthenExpand} />
 
       {/* Section 2: Team Composition */}
       {teamComposition && (
@@ -728,13 +742,13 @@ export function TeamTabContent({
       )}
 
       {/* Section 3: Founder-Market Fit */}
-      {(roundedFmfScore !== null || fmfWhy) && (
+      {((showScores && roundedFmfScore !== null) || fmfWhy) && (
         <Card className="border-primary/15" data-testid="card-founder-market-fit">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <Users className="h-5 w-5 text-primary" />
               Founder-Market Fit
-              {roundedFmfScore !== null && (
+              {showScores && roundedFmfScore !== null && (
                 <span
                   className={cn("ml-auto text-2xl font-bold tabular-nums", fmfScoreColor(roundedFmfScore))}
                   data-testid="text-fmf-score"

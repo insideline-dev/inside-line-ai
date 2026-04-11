@@ -83,7 +83,13 @@ function resolvePipelinePhase(nodeId: string): string | null {
   }
   if (nodeId.startsWith("research_")) return "research";
   if (nodeId.startsWith("evaluation_")) return "evaluation";
-  if (nodeId === "synthesis_final") return "synthesis";
+  if (
+    nodeId === "synthesis_final" ||
+    nodeId === "synthesis_memo" ||
+    nodeId === "synthesis_report"
+  ) {
+    return "synthesis";
+  }
   return null;
 }
 

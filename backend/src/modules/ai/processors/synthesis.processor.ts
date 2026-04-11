@@ -125,7 +125,10 @@ export class SynthesisProcessor
       pipelineService: this.pipelineService,
       notificationGateway: this.notificationGateway,
       run: async () => {
-        const startedAt = new Date();
+        const memoStartedAt = new Date();
+        let reportStartedAt: Date | null = null;
+        let memoTraceRecorded = false;
+        let reportTraceRecorded = false;
 
         // Initialize both agents: memo running, report pending
         await this.safeUpdateAgentProgress({
@@ -155,6 +158,18 @@ export class SynthesisProcessor
         try {
           const callbacks: SynthesisProgressCallbacks = {
             onMemoCompleted: (trace: SynthesisRunTraceDetails) => {
+              const memoCompletedAt = new Date();
+              memoTraceRecorded = true;
+              void this.safeRecordTrace({
+                startupId,
+                pipelineRunId,
+                trace,
+                startedAt: memoStartedAt,
+                completedAt: memoCompletedAt,
+              });
+              if (trace.usedFallback) {
+                void this.pipelineState.setQuality(startupId, "degraded");
+              }
               void this.safeUpdateAgentProgress({
                 startupId,
                 userId,
@@ -171,6 +186,9 @@ export class SynthesisProcessor
                 rawProviderError: trace.rawProviderError,
                 lifecycleEvent: trace.usedFallback ? "fallback" : "completed",
               });
+            },
+            onReportStarted: () => {
+              reportStartedAt = new Date();
               void this.safeUpdateAgentProgress({
                 startupId,
                 userId,
@@ -185,6 +203,18 @@ export class SynthesisProcessor
               });
             },
             onReportCompleted: (trace: SynthesisRunTraceDetails) => {
+              const reportCompletedAt = new Date();
+              reportTraceRecorded = true;
+              void this.safeRecordTrace({
+                startupId,
+                pipelineRunId,
+                trace,
+                startedAt: reportStartedAt ?? memoStartedAt,
+                completedAt: reportCompletedAt,
+              });
+              if (trace.usedFallback) {
+                void this.pipelineState.setQuality(startupId, "degraded");
+              }
               void this.safeUpdateAgentProgress({
                 startupId,
                 userId,
@@ -205,27 +235,45 @@ export class SynthesisProcessor
           };
 
           const details = await this.synthesisService.runDetailed(startupId, callbacks);
-          const completedAt = new Date();
-
-          // Record traces for each agent
-          for (const trace of details.traces) {
-            await this.safeRecordTrace({
-              startupId,
-              pipelineRunId,
-              trace,
-              startedAt,
-              completedAt,
-            });
-
-            if (trace.usedFallback) {
-              await this.pipelineState.setQuality(startupId, "degraded");
-            }
-          }
 
           return details.synthesis;
         } catch (error) {
           const completedAt = new Date();
           const message = error instanceof Error ? error.message : String(error);
+
+          // Record trace for whichever agent didn't get a chance to record itself
+          if (!memoTraceRecorded) {
+            await this.safeRecordTrace({
+              startupId,
+              pipelineRunId,
+              trace: {
+                agentKey: MEMO_SYNTHESIS_AGENT_KEY,
+                status: "failed",
+                attempt: 1,
+                retryCount: 0,
+                usedFallback: false,
+                error: message,
+              },
+              startedAt: memoStartedAt,
+              completedAt,
+            });
+          }
+          if (!reportTraceRecorded) {
+            await this.safeRecordTrace({
+              startupId,
+              pipelineRunId,
+              trace: {
+                agentKey: REPORT_SYNTHESIS_AGENT_KEY,
+                status: "failed",
+                attempt: 1,
+                retryCount: 0,
+                usedFallback: false,
+                error: message,
+              },
+              startedAt: reportStartedAt ?? memoStartedAt,
+              completedAt,
+            });
+          }
 
           await this.safeUpdateAgentProgress({
             startupId,
@@ -254,21 +302,6 @@ export class SynthesisProcessor
             error: message,
             usedFallback: false,
             lifecycleEvent: "failed",
-          });
-
-          await this.safeRecordTrace({
-            startupId,
-            pipelineRunId,
-            trace: {
-              agentKey: MEMO_SYNTHESIS_AGENT_KEY,
-              status: "failed",
-              attempt: 1,
-              retryCount: 0,
-              usedFallback: false,
-              error: message,
-            },
-            startedAt,
-            completedAt,
           });
 
           throw error;

@@ -242,6 +242,7 @@ export interface TeamEvaluationData {
   teamMembers: EvaluationTeamMember[];
   founderRecommendations: FounderRecommendation[];
   founderPitchRecommendations: FounderPitchRecommendation[];
+  howToStrengthen?: string[];
   keyFindings?: string[];
   dataGaps?: string[];
 }
@@ -301,6 +302,7 @@ export interface MarketEvaluationData {
   dataGaps: string[];
   diligenceItems: string[];
   founderPitchRecommendations: FounderPitchRecommendation[];
+  howToStrengthen?: string[];
   keyFindings?: string[];
   risks?: string[];
 }
@@ -319,6 +321,7 @@ export interface ProductEvaluationData {
   technologyStack: string[];
   narrativeSummary: string;
   founderPitchRecommendations: FounderPitchRecommendation[];
+  howToStrengthen?: string[];
   keyFindings?: string[];
   dataGaps?: string[];
 }
@@ -343,6 +346,7 @@ export interface CompetitiveAdvantageEvaluationData {
   risks: string[];
   narrativeSummary: string;
   founderPitchRecommendations: FounderPitchRecommendation[];
+  howToStrengthen?: string[];
   keyFindings?: string[];
   dataGaps?: string[];
 }
@@ -353,6 +357,7 @@ export interface SimpleEvaluationData {
   score: number;
   confidence: EvaluationConfidence;
   narrativeSummary: string;
+  howToStrengthen?: string[];
   keyFindings?: string[];
   risks?: string[];
   dataGaps?: string[];

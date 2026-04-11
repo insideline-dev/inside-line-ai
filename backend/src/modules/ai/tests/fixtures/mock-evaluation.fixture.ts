@@ -23,6 +23,7 @@ const base = {
     },
   ],
   sources: ["internal://pipeline-state"],
+  howToStrengthen: [],
 };
 
 export function createMockEvaluationResult(

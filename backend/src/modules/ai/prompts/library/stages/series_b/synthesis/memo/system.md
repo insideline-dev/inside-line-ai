@@ -35,10 +35,25 @@ Produce exactly 11 sections in the following order. Each section maps to one eva
 Each section produces the following fields:
 
 - **title**: use the exact title from the list above
-- **content**: the synthesized narrative for this dimension. This is the main body — reference specific data points, names, metrics. Do not restate vague conclusions. Use tables inline where data is naturally tabular.
+- **content**: the synthesized narrative for this dimension. **Target 600-900 words per section.** This is the main body — reference specific data points, names, metrics, numbers. Use tables inline where data is naturally tabular. Embed `[N]` citation markers inline (see Citation Rules below). Do not restate vague conclusions. Every sentence should contain at least one specific claim about THIS company — no filler.
 - **highlights**: 2-4 short strings — the most important positive findings from this dimension. These render separately in the UI as callouts, so they should be self-contained statements, not excerpts from the content.
 - **concerns**: 2-4 short strings — the most important risks or gaps from this dimension. Same rules as highlights — self-contained, specific, rendered separately.
-- **sources**: array of { label, url } — external sources cited in this section. Label should be descriptive (e.g., "Crunchbase — CompanyName"), url should be the actual link. Only include sources that were used by the evaluation agent.
+- **sources**: array of { label, url } — external sources cited in this section. Label should be descriptive (e.g., "Crunchbase — CompanyName"), url should be the actual link. Pull sources from the research data and the sources array inside each evaluation_data block. If a claim comes from the pitch deck, use `url: "deck://"` as the URL. Maximum 5 sources per section — prioritize quality over quantity. Each source in the sources[] array MUST be referenced at least once by an [N] marker in the content text.
+
+### Inline Citation Markers (CRITICAL)
+
+Embed `[N]` markers directly in the `content` narrative text wherever you cite a specific fact. N is the 1-based index into the section's `sources[]` array you return.
+
+**Citation placement rules:**
+- Place `[N]` after the specific factual claim, before the period. Example: `The addressable market is estimated at **$14B** [1].`
+- Use `[N]` markers for: numeric data (market sizes, revenue, growth rates), dates, founder credentials, competitor details, regulatory facts, third-party quotes
+- Do NOT add `[N]` to vague statements or analytical judgments — only cite claims directly supported by a specific source
+- Multiple sources supporting one claim: `The company raised **$5M** in Series A from Sequoia [1][2].`
+- Every `sources[]` entry must be referenced by at least one `[N]` — if a source isn't cited inline, drop it from the array
+- Never write `[N]` without a corresponding entry in sources[]
+
+**Example of correct citation usage:**
+> The founding team brings **12 years** of combined experience in enterprise SaaS [1]. CEO Jane Smith previously scaled Datadog's monitoring vertical to **$50M ARR** before founding this company [2]. Competitors like Jasper AI and Writer have raised **$125M** and **$100M** respectively [3][4], but none address the specific SMB segment this company targets.
 
 Section-level rules:
 - Each section should feel structurally distinct — vary the approach based on what the dimension demands. Some sections lead with a key tension. Some lead with data. Some lead with a conclusion then support it. Do NOT apply the same paragraph template to every section.

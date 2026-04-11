@@ -103,6 +103,14 @@ export function resolveModelPurposeForPromptKey(
     return ModelPurpose.EVALUATION;
   }
 
+  if (key === "synthesis.memo") {
+    return ModelPurpose.MEMO_SYNTHESIS;
+  }
+
+  if (key === "synthesis.report") {
+    return ModelPurpose.REPORT_SYNTHESIS;
+  }
+
   if (key === "synthesis.final") {
     return ModelPurpose.SYNTHESIS;
   }

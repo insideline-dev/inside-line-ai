@@ -5,6 +5,8 @@ import { AiProviderService } from "../../providers/ai-provider.service";
 import { AiConfigService } from "../../services/ai-config.service";
 import { AiPromptService } from "../../services/ai-prompt.service";
 import { AiModelExecutionService } from "../../services/ai-model-execution.service";
+import { resolveProviderForModelName } from "../../services/ai-runtime-config.schema";
+import { OpenAiDirectClientService } from "../../services/openai-direct-client.service";
 import { ModelPurpose } from "../../interfaces/pipeline.interface";
 import type {
   EvaluationResult,
@@ -16,6 +18,7 @@ import type { EvaluationFallbackReason } from "../../interfaces/agent.interface"
 import type { ExitScenario } from "../../schemas/evaluations/exit-potential.schema";
 import type { FounderPitchRecommendation } from "../../schemas/simple-evaluation.schema";
 import type { FounderRecommendation } from "../../schemas/evaluations/team.schema";
+import { ReportSynthesisOutputOpenAiSchema } from "../../schemas/report-synthesis-openai.schema";
 import { ReportSynthesisSchema } from "../../schemas/report-synthesis.schema";
 import type { ReportSynthesis } from "../../schemas/report-synthesis.schema";
 import { sanitizeNarrativeText } from "../../services/narrative-sanitizer";
@@ -86,6 +89,7 @@ export class ReportSynthesisAgent {
     private readonly providers: AiProviderService,
     private readonly aiConfig: AiConfigService,
     private readonly promptService: AiPromptService,
+    private readonly openAiDirect: OpenAiDirectClientService,
     private readonly modelExecution?: AiModelExecutionService,
   ) {}
 
@@ -111,9 +115,16 @@ export class ReportSynthesisAgent {
 
       const model =
         execution?.generateTextOptions.model ??
-        this.providers.resolveModelForPurpose(ModelPurpose.SYNTHESIS);
+        this.providers.resolveModelForPurpose(ModelPurpose.REPORT_SYNTHESIS);
 
       const providerOptions = execution?.generateTextOptions.providerOptions;
+
+      const resolvedModelName =
+        execution?.resolvedConfig.modelName ??
+        this.aiConfig.getModelForPurpose(ModelPurpose.REPORT_SYNTHESIS);
+      const provider = resolveProviderForModelName(resolvedModelName);
+      const useOpenAiDirect =
+        provider === "openai" && this.openAiDirect.isConfigured();
 
       const promptVariables = this.buildPromptVariables(input);
       renderedPrompt = this.promptService.renderTemplate(
@@ -123,8 +134,60 @@ export class ReportSynthesisAgent {
       systemPrompt = promptConfig.systemPrompt;
 
       this.logger.debug(
-        `[ReportSynthesis] Starting | Company: ${input.extraction.companyName} | Stage: ${input.extraction.stage}`,
+        `[ReportSynthesis] Starting | Company: ${input.extraction.companyName} | Stage: ${input.extraction.stage} | Path: ${useOpenAiDirect ? `openai-direct(${resolvedModelName})` : "ai-sdk"}`,
       );
+
+      const callModel = async (
+        remainingMs: number,
+      ): Promise<{ parsedOutput: ReportSynthesisOutput; rawText: string; outputJson: unknown }> => {
+        if (useOpenAiDirect) {
+          const direct = await withTimeout(
+            (abortSignal) =>
+              this.openAiDirect.generateStructured({
+                modelName: resolvedModelName,
+                system: systemPrompt,
+                prompt: renderedPrompt,
+                schema: ReportSynthesisOutputOpenAiSchema,
+                schemaName: "report_synthesis_output",
+                temperature: 0.3,
+                maxOutputTokens: 8000,
+                reasoningEffort: "low",
+                abortSignal,
+              }),
+            remainingMs,
+            "Report synthesis agent timed out",
+          );
+          const parsed = ReportSynthesisSchema.parse(direct.output);
+          const sanitized = this.sanitizeOutput(parsed);
+          return { parsedOutput: sanitized, rawText: direct.rawText, outputJson: sanitized };
+        }
+
+        const response = await withTimeout(
+          (abortSignal) =>
+            generateText({
+              model: model as Parameters<typeof generateText>[0]["model"],
+              output: Output.object({ schema: ReportSynthesisSchema }),
+              temperature: 0.3,
+              maxOutputTokens: 8000,
+              system: systemPrompt,
+              prompt: renderedPrompt,
+              providerOptions:
+                providerOptions as Parameters<typeof generateText>[0]["providerOptions"],
+              abortSignal,
+            }),
+          remainingMs,
+          "Report synthesis agent timed out",
+        );
+
+        const rawOutput = extractStructuredOutput(response);
+        const parsed = ReportSynthesisSchema.parse(rawOutput);
+        const sanitized = this.sanitizeOutput(parsed);
+        return {
+          parsedOutput: sanitized,
+          rawText: resolveRawOutputText(response, rawOutput),
+          outputJson: sanitized,
+        };
+      };
 
       for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
         const remainingBudgetMs = getRemainingBudgetMs(startedAtMs, hardTimeoutMs);
@@ -132,40 +195,19 @@ export class ReportSynthesisAgent {
           return this.buildFallbackResult(renderedPrompt, systemPrompt, new Error("Report synthesis agent timed out"), attempt);
         }
 
-        const timeoutMs = remainingBudgetMs;
-
         try {
-          const response = await withTimeout(
-            (abortSignal) =>
-              generateText({
-                model: model as Parameters<typeof generateText>[0]["model"],
-                output: Output.object({ schema: ReportSynthesisSchema }),
-                temperature: 0.3,
-                maxOutputTokens: 8000,
-                system: systemPrompt,
-                prompt: renderedPrompt,
-                providerOptions:
-                  providerOptions as Parameters<typeof generateText>[0]["providerOptions"],
-                abortSignal,
-              }),
-            timeoutMs,
-            "Report synthesis agent timed out",
-          );
-
-          const rawOutput = extractStructuredOutput(response);
-          const parsed = ReportSynthesisSchema.parse(rawOutput);
-          const sanitized = this.sanitizeOutput(parsed);
+          const { parsedOutput, rawText, outputJson } = await callModel(remainingBudgetMs);
 
           this.logger.log(
-            `[ReportSynthesis] Completed | Strengths: ${sanitized.keyStrengths.length} | Risks: ${sanitized.keyRisks.length}`,
+            `[ReportSynthesis] Completed | Strengths: ${parsedOutput.keyStrengths.length} | Risks: ${parsedOutput.keyRisks.length}`,
           );
 
           return {
-            output: sanitized,
+            output: parsedOutput,
             inputPrompt: renderedPrompt,
             systemPrompt,
-            outputText: resolveRawOutputText(response, rawOutput),
-            outputJson: sanitized,
+            outputText: rawText,
+            outputJson,
             usedFallback: false,
             attempt,
             retryCount: attempt - 1,

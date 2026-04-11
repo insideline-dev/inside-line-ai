@@ -143,3 +143,4 @@ Data Gaps:
 Narrative (not rendered on a tab):
 - narrativeSummary → the 3-4 paragraph narrative (450-650 words)
 - sources → primary sources used
+- howToStrengthen[] → exactly 3 concise, actionable bullet points (markdown-formatted) explaining how the founder can strengthen this area. Each bullet is a specific, prioritized action focused on the underlying business/team/product improvement, NOT pitch deck framing. Prefer imperative voice ("Secure a design partner..." not "The team should..."). Markdown formatting (bold, links) is supported.

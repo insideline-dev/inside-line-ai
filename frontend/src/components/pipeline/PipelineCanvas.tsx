@@ -167,7 +167,11 @@ function resolvePhaseForNodeId(nodeId: string): string | null {
   if (nodeId.startsWith("evaluation_")) {
     return "evaluation";
   }
-  if (nodeId === "synthesis_final") {
+  if (
+    nodeId === "synthesis_final" ||
+    nodeId === "synthesis_memo" ||
+    nodeId === "synthesis_report"
+  ) {
     return "synthesis";
   }
   return null;

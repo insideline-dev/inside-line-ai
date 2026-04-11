@@ -243,12 +243,16 @@ function getMemoSectionKey(title: string):
     gotomarketstrategy: "gtm",
     gtm: "gtm",
     competitiveadvantage: "competitiveAdvantage",
+    competitivelandscape: "competitiveAdvantage",
+    competition: "competitiveAdvantage",
     financials: "financials",
     legal: "legal",
     legalregulatory: "legal",
     legalandregulatory: "legal",
     dealterms: "dealTerms",
+    dealtermsandvaluation: "dealTerms",
     exitpotential: "exitPotential",
+    exitpotentialandscenarios: "exitPotential",
   };
   return map[normalized] ?? null;
 }

@@ -663,40 +663,42 @@ export const outputSchemaMap: Record<string, SchemaNode> = {
     },
   },
 
-  synthesis_final: {
+  synthesis_memo: {
     fields: {
-      dealSnapshot: { type: "string" },
-      keyStrengths: { type: "array", items: { type: "string" } },
-      keyRisks: { type: "array", items: { type: "string" } },
-      investorMemo: {
-        type: "object",
-        fields: {
-          executiveSummary: { type: "string" },
-          sections: {
-            type: "array",
-            items: {
-              type: "object",
-              fields: {
-                title: { type: "string" },
-                content: { type: "string" },
-                highlights: { type: "array", items: { type: "string" } },
-                concerns: { type: "array", items: { type: "string" } },
-                sources: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    fields: {
-                      label: { type: "string" },
-                      url: { type: "string" },
-                    },
-                  },
+      executiveSummary: { type: "string" },
+      sections: {
+        type: "array",
+        items: {
+          type: "object",
+          fields: {
+            title: { type: "string" },
+            content: { type: "string" },
+            highlights: { type: "array", items: { type: "string" } },
+            concerns: { type: "array", items: { type: "string" } },
+            sources: {
+              type: "array",
+              items: {
+                type: "object",
+                fields: {
+                  label: { type: "string" },
+                  url: { type: "string" },
                 },
               },
             },
           },
-          keyDueDiligenceAreas: { type: "array", items: { type: "string" } },
         },
       },
+      keyDueDiligenceAreas: { type: "array", items: { type: "string" } },
+      dataConfidenceNotes: { type: "string" },
+    },
+  },
+
+  synthesis_report: {
+    fields: {
+      dealSnapshot: { type: "string" },
+      keyStrengths: { type: "array", items: { type: "string" } },
+      keyRisks: { type: "array", items: { type: "string" } },
+      exitScenarios: { type: "array", items: exitScenarioItem },
       founderReport: {
         type: "object",
         fields: {
@@ -706,7 +708,6 @@ export const outputSchemaMap: Record<string, SchemaNode> = {
         },
       },
       dataConfidenceNotes: { type: "string" },
-      exitScenarios: { type: "array", items: exitScenarioItem },
     },
   },
 };

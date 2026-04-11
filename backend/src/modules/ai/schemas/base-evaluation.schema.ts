@@ -67,6 +67,14 @@ export const stringArray = z.preprocess(
   z.array(z.string()),
 );
 
+export const howToStrengthenArray = z
+  .preprocess(
+    (value) => normalizeStringArrayInput(value).slice(0, 3),
+    z.array(z.string().min(1)).max(3),
+  )
+  .optional()
+  .default([]);
+
 export const requiredStringFromNull = (fallback: string) =>
   z.preprocess(
     (value) =>
@@ -260,6 +268,7 @@ export function normalizeBaseEvaluationCandidate(candidate: unknown): unknown {
     risks: normalizeStringArrayInput(candidate.risks),
     dataGaps: normalizeStructuredDataGapInput(candidate.dataGaps),
     sources: normalizeStringArrayInput(candidate.sources),
+    howToStrengthen: normalizeStringArrayInput(candidate.howToStrengthen).slice(0, 3),
   };
 }
 
@@ -285,6 +294,7 @@ export const BaseEvaluationSchema = z.object({
   risks: stringArray,
   dataGaps: structuredDataGapArray,
   sources: stringArray,
+  howToStrengthen: howToStrengthenArray,
 });
 
 export type BaseEvaluation = z.infer<typeof BaseEvaluationSchema>;

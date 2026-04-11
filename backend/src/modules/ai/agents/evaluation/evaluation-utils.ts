@@ -48,6 +48,7 @@ export function baseEvaluation(
       },
     ],
     sources: [source],
+    howToStrengthen: [],
   };
 }
 

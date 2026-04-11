@@ -391,15 +391,27 @@ export class StartupService {
         requestedFields.every((field) =>
           field === "teamMembers" || field === "teamSize",
         );
+      const isPrivateInvestorPipelineOnlyUpdate =
+        requestedFields.length > 0 &&
+        requestedFields.every((field) => field === "privateInvestorPipelineStatus");
       const isInvestorPrivateSubmission =
         existing.submittedByRole === UserRole.INVESTOR &&
         existing.isPrivate === true;
 
       if (
+        requestedFields.includes("privateInvestorPipelineStatus") &&
+        !isInvestorPrivateSubmission
+      ) {
+        throw new ForbiddenException(
+          "Only private investor startups can update pipeline status",
+        );
+      }
+
+      if (
         existing.status === StartupStatus.SUBMITTED ||
         existing.status === StartupStatus.APPROVED
       ) {
-        if (!(isInvestorPrivateSubmission && isTeamOnlyUpdate)) {
+        if (!(isInvestorPrivateSubmission && (isTeamOnlyUpdate || isPrivateInvestorPipelineOnlyUpdate))) {
           throw new ForbiddenException(
             "Cannot edit startup while submitted or approved",
           );

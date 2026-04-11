@@ -37,6 +37,22 @@ export const startupStatusEnum = pgEnum('startup_status', [
   StartupStatus.REJECTED,
 ]);
 
+export enum PrivateInvestorPipelineStatus {
+  NEW = 'new',
+  REVIEWING = 'reviewing',
+  ENGAGED = 'engaged',
+  CLOSED = 'closed',
+  PASSED = 'passed',
+}
+
+export const privateInvestorPipelineStatusEnum = pgEnum('private_investor_pipeline_status', [
+  PrivateInvestorPipelineStatus.NEW,
+  PrivateInvestorPipelineStatus.REVIEWING,
+  PrivateInvestorPipelineStatus.ENGAGED,
+  PrivateInvestorPipelineStatus.CLOSED,
+  PrivateInvestorPipelineStatus.PASSED,
+]);
+
 export enum StartupStage {
   PRE_SEED = 'pre_seed',
   SEED = 'seed',
@@ -146,6 +162,7 @@ export const startup = pgTable(
 
     // Status workflow
     status: startupStatusEnum('status').default(StartupStatus.DRAFT).notNull(),
+    privateInvestorPipelineStatus: privateInvestorPipelineStatusEnum('private_investor_pipeline_status'),
 
     // Media URLs
     pitchDeckUrl: text('pitch_deck_url'),

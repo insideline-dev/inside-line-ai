@@ -1697,7 +1697,11 @@ export class AiPromptRuntimeService {
       return loadPhase(PipelinePhase.ENRICHMENT);
     }
 
-    if (nodeId === "synthesis_final") {
+    if (
+      nodeId === "synthesis_final" ||
+      nodeId === "synthesis_memo" ||
+      nodeId === "synthesis_report"
+    ) {
       return loadPhase(PipelinePhase.SYNTHESIS);
     }
 

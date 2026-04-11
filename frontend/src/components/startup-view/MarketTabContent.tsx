@@ -12,6 +12,7 @@ import { DataGapsSection, parseDataGapItems } from "@/components/DataGapsSection
 import { MarkdownText } from "@/components/MarkdownText";
 import { ChartNoAxesColumn, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { HowToStrengthenCard } from "@/components/startup-view/HowToStrengthenCard";
 import type { Evaluation } from "@/types/evaluation";
 
 interface MarketTabContentProps {
@@ -21,6 +22,7 @@ interface MarketTabContentProps {
   showKeyFindingsAndRisks?: boolean;
   showDataGaps?: boolean;
   showScores?: boolean;
+  onStrengthenExpand?: () => void;
 }
 
 function toRecord(value: unknown): Record<string, unknown> {
@@ -331,7 +333,14 @@ function SourceInfoTooltip({ sources }: { sources: MarketSourceView[] }) {
   );
 }
 
-export function MarketTabContent({ evaluation, marketWeight, fundingStage, showKeyFindingsAndRisks = true, showDataGaps = true, showScores = true }: MarketTabContentProps) {
+function getHowToStrengthen(sectionData: unknown): string[] {
+  if (!sectionData || typeof sectionData !== "object") return [];
+  const hts = (sectionData as Record<string, unknown>).howToStrengthen;
+  if (!Array.isArray(hts)) return [];
+  return hts.filter((s): s is string => typeof s === "string" && s.trim().length > 0);
+}
+
+export function MarketTabContent({ evaluation, marketWeight, fundingStage, showKeyFindingsAndRisks = true, showDataGaps = true, showScores = true, onStrengthenExpand }: MarketTabContentProps) {
   if (!evaluation) {
     return (
       <Card className="border-dashed" data-testid="card-market-empty">
@@ -502,7 +511,7 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage, showK
     (a, b) => (severityOrder[a.severity.toLowerCase()] ?? 1) - (severityOrder[b.severity.toLowerCase()] ?? 1),
   );
 
-
+  const marketStrengthenItems = getHowToStrengthen(evaluation?.marketData);
 
   return (
     <div className="space-y-6">
@@ -518,6 +527,8 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage, showK
           confidenceTestId="badge-market-confidence"
         />
       )}
+
+      <HowToStrengthenCard items={marketStrengthenItems} onExpand={onStrengthenExpand} />
 
       {/* --- Market Sizing Inverted Triangle --- */}
       <Card className="border-primary/15">

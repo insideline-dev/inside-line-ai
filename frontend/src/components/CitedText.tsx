@@ -18,6 +18,11 @@ function hasCitations(text: string): boolean {
   return /\[\d+\]/.test(text);
 }
 
+/** Detect GFM markdown tables (pipe row + separator row). */
+function containsMarkdownTable(text: string): boolean {
+  return /^\s*\|.*\|.*$/m.test(text) && /^\s*\|[\s\-:|]+\|\s*$/m.test(text);
+}
+
 function renderCitation(segment: string, index: number, sources: Source[]): ReactNode {
   const match = /^\[(\d+)\]$/.exec(segment);
   if (!match) {
@@ -76,6 +81,15 @@ function parseCitations(paragraph: string, sources: Source[]): ReactNode[] {
 export function CitedText({ text, sources, className }: CitedTextProps) {
   const sourcesList = sources ?? [];
   const textHasCitations = hasCitations(text) && sourcesList.length > 0;
+  const hasTable = containsMarkdownTable(text);
+
+  // Tables require block-level rendering; wrapping them in <p> (our citation
+  // parser's default) is invalid HTML. Defer to MarkdownText for the entire
+  // block — tradeoff: inline [N] citations inside tables lose tooltip
+  // treatment, which is acceptable since source lists render separately.
+  if (hasTable) {
+    return <MarkdownText className={className}>{text}</MarkdownText>;
+  }
 
   // If text has citations, use the citation parser (preserves tooltip behavior)
   if (textHasCitations) {

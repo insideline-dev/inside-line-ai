@@ -201,3 +201,5 @@ From Scoring:
 
 From Narrative:
 - narrativeSummary → 3-4 paragraph assessment (450-650 words)
+
+- howToStrengthen[] → exactly 3 concise, actionable bullet points (markdown-formatted) explaining how the founder can strengthen this area. Each bullet is a specific, prioritized action focused on the underlying business/team/product improvement, NOT pitch deck framing. Prefer imperative voice ("Secure a design partner..." not "The team should..."). Markdown formatting (bold, links) is supported.

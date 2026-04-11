@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { MarkdownText } from "@/components/MarkdownText";
 import { SectionScoreCard } from "@/components/SectionScoreCard";
 import { DataGapsSection, parseDataGapItems } from "@/components/DataGapsSection";
+import { HowToStrengthenCard } from "@/components/startup-view/HowToStrengthenCard";
 import type { Startup } from "@/types/startup";
 import type { Evaluation } from "@/types/evaluation";
 
@@ -39,6 +40,7 @@ interface ProductTabContentProps {
   showScores?: boolean;
   showDataGaps?: boolean;
   productWeight?: number;
+  onStrengthenExpand?: () => void;
 }
 
 interface SubScoreItem {
@@ -299,7 +301,14 @@ function MoatStageIndicator({ stage }: { stage: string }) {
 // Main Component
 // ---------------------------------------------------------------------------
 
-export function ProductTabContent({ startup, evaluation, showScores = true, showDataGaps = true, productWeight }: ProductTabContentProps) {
+function getHowToStrengthen(sectionData: unknown): string[] {
+  if (!sectionData || typeof sectionData !== "object") return [];
+  const hts = (sectionData as Record<string, unknown>).howToStrengthen;
+  if (!Array.isArray(hts)) return [];
+  return hts.filter((s): s is string => typeof s === "string" && s.trim().length > 0);
+}
+
+export function ProductTabContent({ startup, evaluation, showScores = true, showDataGaps = true, productWeight, onStrengthenExpand }: ProductTabContentProps) {
   const productData = (evaluation?.productData ?? {}) as Record<string, unknown>;
   const productOverview = (productData.productOverview ?? {}) as Record<string, unknown>;
   const compAdvData = (evaluation?.competitiveAdvantageData ?? {}) as Record<string, unknown>;
@@ -347,6 +356,8 @@ export function ProductTabContent({ startup, evaluation, showScores = true, show
   const hasMaturity = techStage || claimsAssessment.length > 0 || hasMoat;
   const hasContent = hasOverview || hasMaturity || technologyStack.length > 0 || dataGaps.length > 0 || founderScreenshots.length > 0 || productData;
 
+  const productStrengthenItems = getHowToStrengthen(evaluation?.productData);
+
   if (!hasContent) {
     return (
       <Card className="border-dashed" data-testid="card-product-empty">
@@ -379,6 +390,8 @@ export function ProductTabContent({ startup, evaluation, showScores = true, show
           confidenceTestId="badge-product-confidence"
         />
       )}
+
+      <HowToStrengthenCard items={productStrengthenItems} onExpand={onStrengthenExpand} />
 
       {/* ================================================================= */}
       {/* Product Overview                                                  */}

@@ -12,13 +12,11 @@ import { AiProviderService } from "../../providers/ai-provider.service";
 import { BaseEvaluationAgent } from "./base-evaluation.agent";
 import { baseEvaluation } from "./evaluation-utils";
 import { OpenAiDirectClientService } from "../../services/openai-direct-client.service";
-import { FinancialsEvaluationOpenAiSchema } from "../../schemas/evaluations/openai/financials-openai.schema";
 
 @Injectable()
 export class FinancialsEvaluationAgent extends BaseEvaluationAgent<FinancialsEvaluation> {
   readonly key = "financials" as const;
   protected readonly schema = FinancialsEvaluationSchema;
-  protected readonly openAiSchema = FinancialsEvaluationOpenAiSchema;
   protected readonly systemPrompt =
     "You are a startup investment analyst evaluating financial health, burn, and runway assumptions.";
 
@@ -34,10 +32,6 @@ export class FinancialsEvaluationAgent extends BaseEvaluationAgent<FinancialsEva
 
   protected override getMaxOutputTokens(): number {
     return 120_000;
-  }
-
-  protected override getReasoningEffort(): "low" | "medium" | "high" {
-    return "high";
   }
 
   protected override useDirectGenerateText(): boolean {

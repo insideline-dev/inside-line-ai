@@ -68,6 +68,13 @@ export const ProgressAgentEventSchema = z.object({
   rawProviderError: z.string().optional(),
 });
 
+const OpenAiCostSummarySchema = z.object({
+  inputCostUsd: z.number().optional(),
+  outputCostUsd: z.number().optional(),
+  totalCostUsd: z.number().optional(),
+  tracedCallCount: z.number().int().min(0).optional(),
+});
+
 export const ProgressAgentTraceSchema = z.object({
   id: z.string(),
   pipelineRunId: z.string(),
@@ -117,6 +124,7 @@ export const ProgressSchema = z.object({
   agentEvents: z.array(ProgressAgentEventSchema).optional(),
   agentTraces: z.array(ProgressAgentTraceSchema).optional(),
   phaseResults: z.record(z.string(), z.unknown()).optional(),
+  openAiCostSummary: OpenAiCostSummarySchema.optional(),
 });
 
 export const GetProgressResponseSchema = z.object({

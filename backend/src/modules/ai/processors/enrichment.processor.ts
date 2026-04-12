@@ -282,6 +282,7 @@ export class EnrichmentProcessor
                 retryCount,
                 fallbackReason,
                 rawProviderError,
+                ...(meta ? { meta } : {}),
                 lifecycleEvent,
               })
               .catch((progressError) => {

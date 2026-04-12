@@ -96,7 +96,9 @@ Score 0-100 based on GTM strategy maturity and observable evidence. Reference th
 At Series C, expect substantial evidence of GTM maturity from website and research.
 
 After scoring, provide:
-- scoringBasis: One sentence explaining why this score was assigned (e.g., "Mature multi-motion GTM with strong website and hiring evidence, but international expansion path is undescribed")
+Provide a scoringBasis — a 3-4 sentence overview of this startup's go-to-market approach. Use these as directional anchors, adapting to what's most relevant: What's the GTM motion? Does it fit the target customer? What's missing or unproven? The reader should understand the GTM thesis in under 10 seconds. End with one line connecting the assessment to the investment score.
+
+- scoringBasis: A 3-4 sentence overview of this startup's GTM approach. Use these as directional anchors, adapting to what's most relevant: What's the go-to-market motion? Does it fit the customer and market? What's missing or unscalable? The reader should understand the GTM in under 10 seconds. End with one line connecting the assessment to the investment score.
 - confidence: "high" if strategy is mature and substantial evidence confirms it, "mid" if strategy is strong but evidence gaps exist, "low" if GTM maturity is difficult to assess from available data
 
 --- SCOPE BOUNDARIES ---
@@ -127,7 +129,7 @@ Your evaluation above should populate these structured output fields:
 Scoring:
 - scoring.overallScore → your 0-100 score from the scoring rubric
 - scoring.confidence → "high", "mid", or "low" from the scoring rubric
-- scoring.scoringBasis → one-sentence explanation of what drove the score
+- scoring.scoringBasis → 3-4 sentence GTM overview (key signals, what's missing — ending with investment score tie-in)
 - scoring.subScores[] → array of sub-dimension scores, one per evaluation dimension. Each entry: { dimension (name), weight (decimal), score (0-100) }. Dimensions for this stage: GTM Strategy Maturity (0.35), Observable Evidence (0.40), Diversification & Durability (0.25)
 
 GTM Overview:

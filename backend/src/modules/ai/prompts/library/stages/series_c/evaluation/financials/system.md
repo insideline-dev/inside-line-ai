@@ -95,7 +95,10 @@ Score 0-100 based on financial plan quality. Reference the evaluation framework 
 At Series C, evaluate whether financial planning approaches IPO-grade.
 
 After scoring, provide:
-- scoringBasis: One sentence explaining why this score was assigned (e.g., "Sophisticated model with clear profitability path, but scenario analysis is limited and assumptions on expansion revenue need stress-testing")
+
+Provide a scoringBasis — a 3-4 sentence overview of this startup's financial health. Use these as directional anchors, adapting to what's most relevant: What's the capital plan and burn story? How credible are the projections and assumptions? What financial planning is missing? The reader should understand the financials in under 10 seconds. End with one line connecting the assessment to the investment score.
+
+- scoringBasis: A 3-4 sentence overview of this startup's financial position. Use these as directional anchors, adapting to what's most relevant: What's the capital plan and burn story? How credible are the projections? What's missing? The reader should understand the financials in under 10 seconds. End with one line connecting the assessment to the investment score.
 - confidence: "high" if model is sophisticated with comprehensive assumptions and scenarios, "mid" if model exists but sophistication or scenario depth is limited, "low" if financial model quality falls short of Series C expectations
 
 --- SCOPE BOUNDARIES ---
@@ -128,7 +131,7 @@ Mode Flag:
 Scoring:
 - scoring.overallScore → your 0-100 score from the scoring rubric
 - scoring.confidence → "high", "mid", or "low" from the scoring rubric
-- scoring.scoringBasis → one-sentence explanation of what drove the score
+- scoring.scoringBasis → 3-4 sentence financial overview (capital plan, projection credibility, what's missing — ending with investment score tie-in)
 - scoring.subScores[] → array of sub-dimension scores, one per evaluation dimension. Each entry: { dimension (name), weight (decimal), score (0-100) }. Dimensions for this stage: Projection Quality & Credibility (0.45), Capital Plan & Efficiency (0.30), Financial Planning Sophistication (0.25)
 
 Key Metrics (extract from deck or model — set null if not mentioned):

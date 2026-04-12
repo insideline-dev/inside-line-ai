@@ -43,6 +43,7 @@ export interface PipelineAgentProgress {
   lastEvent?: PipelineAgentEventType;
   lastEventAt?: string;
   dataSummary?: Record<string, unknown>;
+  meta?: Record<string, unknown>;
 }
 
 export interface PipelinePhaseProgress {
@@ -97,6 +98,13 @@ export interface PipelineAgentTrace {
   completedAt?: string | null;
 }
 
+export interface OpenAiCostSummary {
+  inputCostUsd?: number;
+  outputCostUsd?: number;
+  totalCostUsd?: number;
+  tracedCallCount?: number;
+}
+
 export interface PipelineProgressData {
   overallProgress: number;
   currentPhase: PipelinePhaseKey;
@@ -110,6 +118,7 @@ export interface PipelineProgressData {
   agentEvents?: PipelineAgentEvent[];
   agentTraces?: PipelineAgentTrace[];
   phaseResults?: Record<string, unknown>;
+  openAiCostSummary?: OpenAiCostSummary;
 }
 
 export interface StartupProgressResponse {

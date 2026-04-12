@@ -37,6 +37,7 @@ const AgentLifecycleEventSchema = z.object({
   error: z.string().optional(),
   fallbackReason: FallbackReasonSchema.optional(),
   rawProviderError: z.string().optional(),
+  meta: DataSummarySchema.optional(),
 });
 
 const AgentProgressSchema = z.object({
@@ -56,6 +57,7 @@ const AgentProgressSchema = z.object({
   lastEvent: z.enum(["started", "retrying", "completed", "failed", "fallback"]).optional(),
   lastEventAt: z.string().optional(),
   dataSummary: DataSummarySchema.optional(),
+  meta: DataSummarySchema.optional(),
 });
 
 const PhaseProgressSchema = z.object({
@@ -185,6 +187,12 @@ export class ProgressTrackerService {
       };
 
       phase.status = params.status;
+      if (params.status === PhaseStatus.PENDING) {
+        phase.agents = {};
+        delete phase.startedAt;
+        delete phase.completedAt;
+        delete phase.error;
+      }
       if (typeof params.retryCount === "number") {
         phase.retryCount = Math.max(0, Math.floor(params.retryCount));
       } else if (typeof phase.retryCount !== "number") {
@@ -322,6 +330,7 @@ export class ProgressTrackerService {
     rawProviderError?: string;
     lifecycleEvent?: "started" | "retrying" | "completed" | "failed" | "fallback";
     dataSummary?: Record<string, unknown>;
+    meta?: Record<string, unknown>;
   }): Promise<void> {
     await this.withMutationLock(params.startupId, async () => {
       const payload = await this.ensureProgress(
@@ -490,6 +499,9 @@ export class ProgressTrackerService {
       if (params.dataSummary) {
         next.dataSummary = params.dataSummary;
       }
+      if (params.meta) {
+        next.meta = params.meta;
+      }
       if (lifecycleEvent) {
         next.lastEvent = lifecycleEvent;
         next.lastEventAt = now;
@@ -521,6 +533,7 @@ export class ProgressTrackerService {
           error: params.error,
           fallbackReason: params.fallbackReason ?? next.fallbackReason,
           rawProviderError: params.rawProviderError ?? next.rawProviderError,
+          meta: params.meta ?? next.meta,
         });
       }
       payload.updatedAt = now;
@@ -546,6 +559,7 @@ export class ProgressTrackerService {
         lastEvent: next.lastEvent,
         lastEventAt: next.lastEventAt,
         dataSummary: next.dataSummary,
+        meta: next.meta,
       };
       this.notifications.sendPipelineEvent(params.userId, event, {
         startupId: params.startupId,

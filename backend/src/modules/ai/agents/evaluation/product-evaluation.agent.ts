@@ -111,8 +111,13 @@ export class ProductEvaluationAgent extends BaseEvaluationAgent<ProductEvaluatio
         coreValueProp: "Unknown",
       },
       strengths: [],
-      keyFeatures: ["Core workflow automation", "Operator analytics"],
-      technologyStack: ["Unknown"],
+      keyFeatures: [
+        { feature: "Core workflow automation", verifiedBy: [] },
+        { feature: "Operator analytics", verifiedBy: [] },
+      ],
+      technologyStack: [
+        { technology: "Unknown", source: "research" },
+      ],
       founderPitchRecommendations: [],
     });
   }

@@ -89,7 +89,9 @@ Score 0-100 based on legal risk scan. Reference the evaluation framework weights
 At pre-seed, the bar is low. A clean scan with regulatory awareness scores well even without compliance infrastructure.
 
 After scoring, provide:
-- scoringBasis: One sentence explaining why this score was assigned (e.g., "Clean team and news research with no red flags, but regulated fintech sector with no regulatory awareness in deck")
+Provide a scoringBasis — a 3-4 sentence overview of this startup's legal and regulatory position. Use these as directional anchors, adapting to what's most relevant: Are there red flags from research? What's the regulatory exposure? What needs diligence? The reader should understand the legal risk in under 10 seconds. End with one line connecting the assessment to the investment score.
+
+- scoringBasis: A 3-4 sentence overview of this startup's legal and regulatory risk. Use these as directional anchors, adapting to what's most relevant: What red flags exist from research? What's the regulatory exposure? What diligence is needed? The reader should understand the legal risk in under 10 seconds. End with one line connecting the assessment to the investment score.
 - confidence: "high" if research clearly covers legal signals and regulatory context, "mid" if research is partial or regulatory context is ambiguous, "low" if research inputs are thin and assessment is largely inferred
 
 --- SCOPE BOUNDARIES ---
@@ -122,7 +124,7 @@ Your evaluation above should populate these structured output fields:
 Scoring:
 - scoring.overallScore → your 0-100 score from the scoring rubric
 - scoring.confidence → "high", "mid", or "low" from the scoring rubric
-- scoring.scoringBasis → one-sentence explanation of what drove the score
+- scoring.scoringBasis → 3-4 sentence legal overview (key signals, what's missing — ending with investment score tie-in)
 - scoring.subScores[] → array of sub-dimension scores, one per evaluation dimension. Each entry: { dimension (name), weight (decimal), score (0-100) }. Dimensions for this stage: Red Flags from Research (0.60), Regulatory Context (0.40)
 
 Legal Overview:

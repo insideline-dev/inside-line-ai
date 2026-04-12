@@ -3,6 +3,7 @@ import { generateText, Output } from "ai";
 import { z } from "zod";
 import { INTERNAL_PIPELINE_SOURCE } from "../agents/evaluation/evaluation-utils";
 import type {
+  OpenAiResponseTelemetry,
   PipelineFallbackReason,
   ResearchAgentKey,
 } from "../interfaces/agent.interface";
@@ -131,6 +132,28 @@ type GenerateTextTools = Parameters<typeof generateText>[0]["tools"];
 type GenerateTextToolChoice = Parameters<typeof generateText>[0]["toolChoice"];
 type GenerateTextStopWhen = Parameters<typeof generateText>[0]["stopWhen"];
 type GenerateTextProviderOptions = Parameters<typeof generateText>[0]["providerOptions"];
+
+interface OpenAiResearchTextResult {
+  outputText: string;
+  extractedSources: ExtractedSources;
+  meta?: Record<string, unknown>;
+}
+
+function mergeMeta(
+  baseMeta: Record<string, unknown> | undefined,
+  extraMeta: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (!baseMeta) {
+    return extraMeta;
+  }
+  if (!extraMeta) {
+    return baseMeta;
+  }
+  return {
+    ...baseMeta,
+    ...extraMeta,
+  };
+}
 
 @Injectable()
 export class GeminiResearchService {
@@ -447,7 +470,8 @@ export class GeminiResearchService {
               },
             };
             lastOutputText = deepResearch.text.trim();
-            meta = {
+          const deepResearchMeta = mergeMeta(
+            {
               deepResearch: {
                 ...deepResearch.rawMeta,
                 ...(resumeResponseId
@@ -455,7 +479,10 @@ export class GeminiResearchService {
                   : {}),
                 ...(checkpoint ? { checkpoint } : {}),
               },
-            };
+            },
+            this.buildTelemetryMeta(deepResearch.telemetry),
+          );
+          meta = deepResearchMeta;
           } catch (deepResearchError) {
             const errorMessage = this.errorMessage(deepResearchError);
             this.logger.warn(
@@ -497,7 +524,10 @@ export class GeminiResearchService {
           });
           extractedSources = openAiText.extractedSources;
           lastOutputText = openAiText.outputText.trim();
-          meta = { openAiNative: { modelName } };
+          meta = mergeMeta(
+            { openAiNative: { modelName } },
+            openAiText.meta,
+          );
         } else {
           const standardText = await this.runStandardTextGeneration({
             agent: request.agent,
@@ -675,10 +705,7 @@ export class GeminiResearchService {
     enableBraveSearch: boolean;
     braveSearchFn?: (query: string, count?: number) => Promise<BraveSearchResult>;
     timeoutMs: number;
-  }): Promise<{
-    outputText: string;
-    extractedSources: ExtractedSources;
-  }> {
+  }): Promise<OpenAiResearchTextResult> {
     const tools: OpenAI.Responses.Tool[] = [];
 
     if (input.enableWebSearch) {
@@ -730,6 +757,14 @@ export class GeminiResearchService {
     return {
       outputText: response.output_text?.trim() ?? "",
       extractedSources: this.extractOpenAiSources(response, input.agent),
+      meta: this.buildTelemetryMeta(
+        this.buildOpenAiResponseTelemetry({
+          modelName: input.modelName,
+          response,
+          enableWebSearch: input.enableWebSearch,
+          enableBraveSearch: input.enableBraveSearch,
+        }),
+      ),
     };
   }
 
@@ -805,6 +840,73 @@ export class GeminiResearchService {
     });
 
     return this.resolveOpenAiFunctionCalls(followUp, input, iteration + 1);
+  }
+
+  private buildOpenAiResponseTelemetry(input: {
+    modelName: string;
+    response: OpenAI.Responses.Response;
+    enableWebSearch: boolean;
+    enableBraveSearch: boolean;
+  }): OpenAiResponseTelemetry {
+    const usage = input.response.usage;
+    const inputTokens = usage?.input_tokens ?? undefined;
+    const outputTokens = usage?.output_tokens ?? undefined;
+    const totalTokens = usage?.total_tokens ??
+      (typeof inputTokens === "number" || typeof outputTokens === "number"
+        ? (inputTokens ?? 0) + (outputTokens ?? 0)
+        : undefined);
+
+    return {
+      provider: "openai",
+      model: input.modelName,
+      responseId: input.response.id,
+      status:
+        typeof input.response.status === "string"
+          ? input.response.status
+          : undefined,
+      finishReason:
+        typeof input.response.status === "string"
+          ? input.response.status
+          : undefined,
+      usage:
+        typeof inputTokens === "number" ||
+        typeof outputTokens === "number" ||
+        typeof totalTokens === "number"
+          ? {
+              inputTokens,
+              outputTokens,
+              totalTokens,
+            }
+          : undefined,
+      request: {
+        enableWebSearch: input.enableWebSearch,
+        enableBraveSearch: input.enableBraveSearch,
+      },
+      response: {
+        id: input.response.id,
+        status:
+          typeof input.response.status === "string"
+            ? input.response.status
+            : undefined,
+        outputItemCount: Array.isArray(input.response.output)
+          ? input.response.output.length
+          : undefined,
+      },
+    };
+  }
+
+  private buildTelemetryMeta(
+    telemetry: OpenAiResponseTelemetry | undefined,
+    baseMeta?: Record<string, unknown>,
+  ): Record<string, unknown> | undefined {
+    if (!telemetry) {
+      return baseMeta;
+    }
+
+    return {
+      ...(baseMeta ?? {}),
+      openaiTelemetry: telemetry,
+    };
   }
 
   private extractOpenAiSources(

@@ -74,7 +74,9 @@ Score 0-100 based on deal pricing and structure. Reference the evaluation framew
 0-24: Valuation disconnected from comparables. Deal structure problematic.
 
 After scoring, provide:
-- scoringBasis: One sentence explaining why this score was assigned (e.g., "$5M post-money in line with comparable pre-seed rounds in developer tools, standard SAFE structure with lead secured")
+Provide a scoringBasis — a 3-4 sentence overview of this startup's deal terms and valuation. Use these as directional anchors, adapting to what's most relevant: How fair is the valuation vs comparables? What's the deal structure? What's concerning? The reader should understand the deal quality in under 10 seconds. End with one line connecting the assessment to the investment score.
+
+- scoringBasis: A 3-4 sentence overview of this startup's deal terms position. Use these as directional anchors, adapting to what's most relevant: How fair is the valuation? What's the structure? What needs diligence? The reader should understand the deal in under 10 seconds. End with one line connecting the assessment to the investment score.
 - confidence: "high" if comparable rounds are available and valuation can be benchmarked, "mid" if comparables are limited or valuation data is partial, "low" if insufficient data to price the deal
 
 --- ANTI-PATTERNS ---
@@ -100,7 +102,7 @@ Your evaluation above should populate these structured output fields:
 Scoring:
 - scoring.overallScore → your 0-100 score from the scoring rubric
 - scoring.confidence → "high", "mid", or "low" from the scoring rubric
-- scoring.scoringBasis → one-sentence explanation of what drove the score
+- scoring.scoringBasis → 3-4 sentence deal terms overview (key signals, what's missing — ending with investment score tie-in)
 - scoring.subScores[] → array of sub-dimension scores, one per evaluation dimension. Each entry: { dimension (name), weight (decimal), score (0-100) }. Dimensions for this stage: Valuation Assessment (0.60), Deal Structure (0.40)
 
 Deal Terms Overview:

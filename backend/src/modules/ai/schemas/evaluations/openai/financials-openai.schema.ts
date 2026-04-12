@@ -28,9 +28,14 @@ const BurnProjectionPointOpenAiSchema = z.object({
   cashBalance: z.number(),
 });
 
+const ScenarioEntryOpenAiSchema = z.object({
+  name: z.string(),
+  value: z.number(),
+});
+
 const ScenarioComparisonPointOpenAiSchema = z.object({
   period: z.string(),
-  scenarios: z.record(z.string(), z.number()),
+  scenarios: z.array(ScenarioEntryOpenAiSchema),
 });
 
 const MarginProgressionPointOpenAiSchema = z.object({

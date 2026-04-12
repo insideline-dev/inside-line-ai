@@ -39,6 +39,7 @@ describe("GeminiResearchService", () => {
   let aiConfig: jest.Mocked<AiConfigService>;
   let openAiDeepResearch: {
     runResearchText: ReturnType<typeof jest.fn>;
+    createResponse: ReturnType<typeof jest.fn>;
   };
   let pipelineAgentTrace: {
     getLatestDeepResearchCheckpoint: ReturnType<typeof jest.fn>;
@@ -64,6 +65,7 @@ describe("GeminiResearchService", () => {
 
     openAiDeepResearch = {
       runResearchText: jest.fn(),
+      createResponse: jest.fn(),
     };
     pipelineAgentTrace = {
       getLatestDeepResearchCheckpoint: jest.fn().mockResolvedValue(null),
@@ -75,6 +77,7 @@ describe("GeminiResearchService", () => {
       aiConfig: AiConfigService,
       openAiDeepResearch: {
         runResearchText: (...args: unknown[]) => Promise<unknown>;
+        createResponse: (...args: unknown[]) => Promise<unknown>;
       },
       pipelineAgentTrace?: {
         getLatestDeepResearchCheckpoint: (...args: unknown[]) => Promise<unknown>;
@@ -156,6 +159,122 @@ describe("GeminiResearchService", () => {
     );
     expect(googleSearchMock).toHaveBeenCalledTimes(1);
     expect(providers.resolveModelForPurpose).toHaveBeenCalled();
+  });
+
+  it("attaches OpenAI telemetry for standard OpenAI text research", async () => {
+    const response = {
+      id: "resp_text_123",
+      status: "completed",
+      output_text: "Detailed market report",
+      usage: {
+        input_tokens: 1200,
+        output_tokens: 340,
+        total_tokens: 1540,
+      },
+      output: [
+        {
+          type: "message",
+          content: [
+            {
+              type: "output_text",
+              annotations: [
+                {
+                  type: "url_citation",
+                  url: "https://example.com/source",
+                  title: "Example source",
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    openAiDeepResearch.createResponse.mockResolvedValueOnce(response);
+
+    const result = await service.researchText({
+      agent: "market",
+      modelName: "gpt-5.4",
+      prompt: "market prompt",
+      systemPrompt: "market system",
+      minReportLength: 10,
+      searchEnforcement: {
+        requiresProviderEvidence: true,
+        requiresBraveToolCall: false,
+      },
+      fallback: () => "fallback report",
+    });
+
+    expect(result.usedFallback).toBe(false);
+    expect(result.meta).toEqual(
+      expect.objectContaining({
+        openAiNative: expect.objectContaining({ modelName: "gpt-5.4" }),
+        openaiTelemetry: expect.objectContaining({
+          provider: "openai",
+          model: "gpt-5.4",
+          responseId: "resp_text_123",
+          usage: expect.objectContaining({
+            inputTokens: 1200,
+            outputTokens: 340,
+            totalTokens: 1540,
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("attaches OpenAI telemetry for deep research runs", async () => {
+    openAiDeepResearch.runResearchText.mockResolvedValueOnce({
+      text: "Deep research report",
+      sources: [
+        {
+          name: "openai",
+          url: "https://example.com",
+          type: "search",
+          agent: "market",
+          timestamp: new Date().toISOString(),
+        },
+      ],
+      rawMeta: {
+        responseId: "resp_deep_123",
+      },
+      telemetry: {
+        provider: "openai",
+        model: "o4-mini-deep-research",
+        responseId: "resp_deep_123",
+        usage: {
+          inputTokens: 5000,
+          outputTokens: 1200,
+          totalTokens: 6200,
+        },
+      },
+    });
+
+    const result = await service.researchText({
+      agent: "market",
+      modelName: "o4-mini-deep-research",
+      prompt: "market prompt",
+      systemPrompt: "market system",
+      minReportLength: 10,
+      fallback: () => "fallback report",
+    });
+
+    expect(result.usedFallback).toBe(false);
+    expect(result.meta).toEqual(
+      expect.objectContaining({
+        deepResearch: expect.objectContaining({
+          responseId: "resp_deep_123",
+        }),
+        openaiTelemetry: expect.objectContaining({
+          model: "o4-mini-deep-research",
+          responseId: "resp_deep_123",
+          usage: expect.objectContaining({
+            inputTokens: 5000,
+            outputTokens: 1200,
+            totalTokens: 6200,
+          }),
+        }),
+      }),
+    );
   });
 
   it("routes o4-mini-deep-research text research through OpenAI deep research service", async () => {
@@ -717,6 +836,7 @@ describe("GeminiResearchService JSON extraction", () => {
   let aiConfig: jest.Mocked<AiConfigService>;
   let openAiDeepResearch: {
     runResearchText: ReturnType<typeof jest.fn>;
+    createResponse: ReturnType<typeof jest.fn>;
   };
   const modelInstance = { id: "gemini-model-instance" };
 
@@ -735,6 +855,7 @@ describe("GeminiResearchService JSON extraction", () => {
 
     openAiDeepResearch = {
       runResearchText: jest.fn(),
+      createResponse: jest.fn(),
     };
 
     service = new (GeminiResearchServiceClass as unknown as new (
@@ -742,6 +863,7 @@ describe("GeminiResearchService JSON extraction", () => {
       aiConfig: AiConfigService,
       openAiDeepResearch: {
         runResearchText: (...args: unknown[]) => Promise<unknown>;
+        createResponse: (...args: unknown[]) => Promise<unknown>;
       },
     ) => GeminiResearchService)(
       providers as unknown as AiProviderService,

@@ -1345,7 +1345,7 @@ export class MarketEvaluationAgent extends BaseEvaluationAgent<MarketEvaluation>
   }
 
   protected override getReasoningEffort(): "low" | "medium" | "high" {
-    return "medium"; // Large output schema — preserve token budget for structured output
+    return "high";
   }
 
   protected override getEvaluationAttemptTimeoutMs(): number {

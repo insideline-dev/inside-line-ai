@@ -1643,7 +1643,7 @@ describe("PipelineService", () => {
     );
   });
 
-  it("rejects targeted retry when the phase is running", async () => {
+  it("allows targeted retry when the phase is running by creating a fresh manual run", async () => {
     stateService.get.mockResolvedValueOnce(
       createState({}, {
         [PipelinePhase.EVALUATION]: PhaseStatus.RUNNING,
@@ -1655,9 +1655,20 @@ describe("PipelineService", () => {
         phase: PipelinePhase.EVALUATION,
         agentKey: "market",
       }),
-    ).rejects.toThrow(BadRequestException);
+    ).resolves.toBeUndefined();
 
-    expect(queue.addJob).not.toHaveBeenCalled();
+    expect(queue.addJob).toHaveBeenCalledWith(
+      "ai-evaluation",
+      expect.objectContaining({
+        startupId: "startup-1",
+        type: "ai_evaluation",
+        metadata: expect.objectContaining({
+          mode: "agent_retry",
+          agentKey: "market",
+        }),
+      }),
+      expect.any(Object),
+    );
   });
 
   it("rejects manual retry when phase is not failed", async () => {
@@ -1677,9 +1688,17 @@ describe("PipelineService", () => {
     stateService.get
       .mockResolvedValueOnce(
         createState(
-          {},
           {
-            [PipelinePhase.RESEARCH]: PhaseStatus.WAITING,
+            phases: {
+              ...createState().phases,
+              [PipelinePhase.RESEARCH]: {
+                status: PhaseStatus.RUNNING,
+                startedAt: new Date().toISOString(),
+              },
+            },
+          },
+          {
+            [PipelinePhase.RESEARCH]: PhaseStatus.RUNNING,
           },
         ),
       )
@@ -1734,13 +1753,13 @@ describe("PipelineService", () => {
           phases: {
             ...createState().phases,
             [PipelinePhase.RESEARCH]: {
-              status: PhaseStatus.WAITING,
+              status: PhaseStatus.RUNNING,
               startedAt,
             },
           },
         },
         {
-          [PipelinePhase.RESEARCH]: PhaseStatus.WAITING,
+          [PipelinePhase.RESEARCH]: PhaseStatus.RUNNING,
         },
       ),
     );
@@ -1784,7 +1803,7 @@ describe("PipelineService", () => {
         error: 'Phase "research" timed out',
         meta: expect.objectContaining({
           failureSource: "phase_timeout",
-          phaseStatus: PhaseStatus.WAITING,
+          phaseStatus: PhaseStatus.RUNNING,
           timeoutBudgetMs: 3_660_000,
           elapsedMs: expect.any(Number),
         }),
@@ -1900,16 +1919,68 @@ describe("PipelineService", () => {
           delay: 2500,
         }),
       );
+      expect(errorRecovery.schedulePhaseTimeout).not.toHaveBeenCalled();
+    });
+
+    it("starts the phase timeout when execution begins", async () => {
+      stateService.get.mockResolvedValueOnce(
+        createState({}, {
+          [PipelinePhase.EVALUATION]: PhaseStatus.RUNNING,
+        }),
+      );
+
+      await service.onPhaseStarted("startup-1", PipelinePhase.EVALUATION);
+
+      expect(errorRecovery.clearPhaseTimeout).toHaveBeenCalledWith(
+        "startup-1",
+        PipelinePhase.EVALUATION,
+      );
       expect(errorRecovery.schedulePhaseTimeout).toHaveBeenCalledWith(
         expect.objectContaining({
           startupId: "startup-1",
-          phase: PipelinePhase.EXTRACTION,
-          timeoutMs: 1000 + 2500,
+          phase: PipelinePhase.EVALUATION,
+          timeoutMs: 1000,
         }),
       );
     });
 
-    it("queues phase with defaults when optional params omitted", async () => {
+    it("does not fail a phase timeout while the phase is still waiting", async () => {
+      stateService.get.mockResolvedValueOnce(
+        createState(
+          {
+            phases: {
+              ...createState().phases,
+              [PipelinePhase.EVALUATION]: {
+                status: PhaseStatus.WAITING,
+                startedAt: new Date().toISOString(),
+              },
+            },
+          },
+          {
+            [PipelinePhase.EVALUATION]: PhaseStatus.WAITING,
+          },
+        ),
+      );
+
+      await (
+        service as unknown as {
+          handlePhaseTimeout: (
+            startupId: string,
+            phase: PipelinePhase,
+          ) => Promise<void>;
+        }
+      ).handlePhaseTimeout("startup-1", PipelinePhase.EVALUATION);
+
+      expect(stateService.updatePhase).not.toHaveBeenCalledWith(
+        "startup-1",
+        PipelinePhase.EVALUATION,
+        PhaseStatus.FAILED,
+        expect.any(String),
+      );
+      expect(queue.addJob).not.toHaveBeenCalled();
+    });
+
+    it("extends research phase timeout budget to support deep-research agents", async () => {
       stateService.get.mockResolvedValueOnce(
         createState(
           {},
@@ -1945,47 +2016,29 @@ describe("PipelineService", () => {
       );
     });
 
-    it("extends research phase timeout budget to support deep-research agents", async () => {
-      stateService.get.mockResolvedValueOnce(createState());
-
+    it("extends research phase timeout budget to support deep-research agents", () => {
       aiConfig.getResearchAgentHardTimeoutMs = jest.fn().mockReturnValue(3_600_000);
       aiConfig.getResearchAgentStaggerMs = jest.fn().mockReturnValue(180_000);
 
-      await (service as unknown as { queuePhase: (opts: Record<string, unknown>) => Promise<void> }).queuePhase({
-        startupId: "startup-1",
-        pipelineRunId: "run-1",
-        userId: "user-1",
-        phase: PipelinePhase.RESEARCH,
-      });
-
-      expect(errorRecovery.schedulePhaseTimeout).toHaveBeenCalledWith(
-        expect.objectContaining({
-          startupId: "startup-1",
-          phase: PipelinePhase.RESEARCH,
-          timeoutMs: 4_320_000,
-        }),
-      );
+      expect(
+        (
+          service as unknown as {
+            resolvePhaseTimeoutMs: (phase: PipelinePhase, baseTimeoutMs: number) => number;
+          }
+        ).resolvePhaseTimeoutMs(PipelinePhase.RESEARCH, 540_000),
+      ).toBe(4_320_000);
     });
 
-    it("extends synthesis phase timeout budget to match the synthesis runtime budget", async () => {
-      stateService.get.mockResolvedValueOnce(createState());
-
+    it("extends synthesis phase timeout budget to match the synthesis runtime budget", () => {
       aiConfig.getSynthesisAgentHardTimeoutMs = jest.fn().mockReturnValue(10_800_000);
 
-      await (service as unknown as { queuePhase: (opts: Record<string, unknown>) => Promise<void> }).queuePhase({
-        startupId: "startup-1",
-        pipelineRunId: "run-1",
-        userId: "user-1",
-        phase: PipelinePhase.SYNTHESIS,
-      });
-
-      expect(errorRecovery.schedulePhaseTimeout).toHaveBeenCalledWith(
-        expect.objectContaining({
-          startupId: "startup-1",
-          phase: PipelinePhase.SYNTHESIS,
-          timeoutMs: 10_860_000,
-        }),
-      );
+      expect(
+        (
+          service as unknown as {
+            resolvePhaseTimeoutMs: (phase: PipelinePhase, baseTimeoutMs: number) => number;
+          }
+        ).resolvePhaseTimeoutMs(PipelinePhase.SYNTHESIS, 480_000),
+      ).toBe(10_860_000);
     });
   });
 
@@ -2082,7 +2135,7 @@ describe("PipelineService", () => {
       expect(queue.addJob).not.toHaveBeenCalled();
     });
 
-    it("rejects retry when phase is in pending state", async () => {
+    it("allows retry when phase is in pending state by creating a fresh manual run", async () => {
       stateService.get.mockResolvedValueOnce(
         createState({}, {
           [PipelinePhase.EVALUATION]: PhaseStatus.PENDING,
@@ -2094,12 +2147,23 @@ describe("PipelineService", () => {
           phase: PipelinePhase.EVALUATION,
           agentKey: "market",
         }),
-      ).rejects.toThrow(BadRequestException);
+      ).resolves.toBeUndefined();
 
-      expect(queue.addJob).not.toHaveBeenCalled();
+      expect(queue.addJob).toHaveBeenCalledWith(
+        "ai-evaluation",
+        expect.objectContaining({
+          startupId: "startup-1",
+          type: "ai_evaluation",
+          metadata: expect.objectContaining({
+            mode: "agent_retry",
+            agentKey: "market",
+          }),
+        }),
+        expect.any(Object),
+      );
     });
 
-    it("rejects retry when phase is in waiting state", async () => {
+    it("allows retry when phase is in waiting state by creating a fresh manual run", async () => {
       stateService.get.mockResolvedValueOnce(
         createState({}, {
           [PipelinePhase.RESEARCH]: PhaseStatus.WAITING,
@@ -2111,9 +2175,20 @@ describe("PipelineService", () => {
           phase: PipelinePhase.RESEARCH,
           agentKey: "team",
         }),
-      ).rejects.toThrow(BadRequestException);
+      ).resolves.toBeUndefined();
 
-      expect(queue.addJob).not.toHaveBeenCalled();
+      expect(queue.addJob).toHaveBeenCalledWith(
+        "ai-research",
+        expect.objectContaining({
+          startupId: "startup-1",
+          type: "ai_research",
+          metadata: expect.objectContaining({
+            mode: "agent_retry",
+            agentKey: "team",
+          }),
+        }),
+        expect.any(Object),
+      );
     });
   });
 });

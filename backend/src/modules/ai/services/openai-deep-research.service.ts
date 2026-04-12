@@ -5,6 +5,7 @@ import {
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import OpenAI from "openai";
+import type { OpenAiResponseTelemetry } from "../interfaces/agent.interface";
 import type { SourceEntry } from "../interfaces/phase-results.interface";
 
 const DEFAULT_DEEP_RESEARCH_TIMEOUT_MS = 3_600_000;
@@ -25,6 +26,7 @@ interface OpenAiDeepResearchTextResponse {
   text: string;
   sources: SourceEntry[];
   rawMeta: Record<string, unknown>;
+  telemetry?: OpenAiResponseTelemetry;
 }
 
 export interface OpenAiDeepResearchCheckpointEvent {
@@ -35,6 +37,68 @@ export interface OpenAiDeepResearchCheckpointEvent {
   timeoutMs: number;
   pollIntervalMs: number;
   checkpointEvent: "created" | "resumed" | "terminal";
+}
+
+function toOpenAiUsage(
+  usage:
+    | OpenAI.Responses.ResponseUsage
+    | { input_tokens?: number | null; output_tokens?: number | null; total_tokens?: number | null }
+    | undefined,
+): OpenAiResponseTelemetry["usage"] | undefined {
+  if (!usage) {
+    return undefined;
+  }
+
+  const inputTokens = usage.input_tokens ?? undefined;
+  const outputTokens = usage.output_tokens ?? undefined;
+  const totalTokens = usage.total_tokens ??
+    (typeof inputTokens === "number" || typeof outputTokens === "number"
+      ? (inputTokens ?? 0) + (outputTokens ?? 0)
+      : undefined);
+
+  if (
+    typeof inputTokens !== "number" &&
+    typeof outputTokens !== "number" &&
+    typeof totalTokens !== "number"
+  ) {
+    return undefined;
+  }
+
+  return {
+    inputTokens,
+    outputTokens,
+    totalTokens,
+  };
+}
+
+function buildOpenAiTelemetry(input: {
+  model: string;
+  startedAt: Date;
+  completedAt: Date;
+  response: OpenAI.Responses.Response;
+  finishReason?: string;
+  request?: Record<string, unknown>;
+  error?: Record<string, unknown>;
+}): OpenAiResponseTelemetry {
+  const { model, startedAt, completedAt, response, finishReason, request, error } = input;
+  return {
+    provider: "openai",
+    model,
+    responseId: response.id,
+    status: typeof response.status === "string" ? response.status : undefined,
+    finishReason,
+    startedAt: startedAt.toISOString(),
+    completedAt: completedAt.toISOString(),
+    durationMs: completedAt.getTime() - startedAt.getTime(),
+    usage: toOpenAiUsage(response.usage),
+    request,
+    response: {
+      id: response.id,
+      status: typeof response.status === "string" ? response.status : undefined,
+      outputItemCount: Array.isArray(response.output) ? response.output.length : undefined,
+    },
+    error,
+  };
 }
 
 @Injectable()
@@ -96,6 +160,7 @@ export class OpenAiDeepResearchService {
     const client = this.getClient();
     const timeoutMs = this.resolveTimeoutMs(request.timeoutMs);
     const pollIntervalMs = this.getPollIntervalMs();
+    const startedAt = new Date();
     const resumeResponseId = request.resumeResponseId?.trim();
     const resumed = typeof resumeResponseId === "string" && resumeResponseId.length > 0;
     const createdResponse = resumed
@@ -146,6 +211,7 @@ export class OpenAiDeepResearchService {
       pollIntervalMs,
       request.abortSignal,
     );
+    const completedAt = new Date();
     const status = this.readStatus(response);
 
     await this.emitCheckpoint(request.onCheckpoint, {
@@ -184,6 +250,17 @@ export class OpenAiDeepResearchService {
           this.readString(response, "model") ??
           (createdResponse ? this.readString(createdResponse, "model") : undefined),
       },
+      telemetry: buildOpenAiTelemetry({
+        model: request.modelName,
+        startedAt,
+        completedAt,
+        response: response as OpenAI.Responses.Response,
+        finishReason: status ?? undefined,
+        request: {
+          enableWebSearch: request.enableWebSearch,
+          resumed,
+        },
+      }),
     };
   }
 

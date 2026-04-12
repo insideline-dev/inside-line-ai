@@ -688,9 +688,7 @@ export function useStartupRealtimeProgress(
             isOlderTimestamp(data.agent.lastEventAt, existing.lastEventAt) ||
             (isTerminalAgentStatus(existing.status) &&
               !isTerminalAgentStatus(data.agent.status) &&
-              (!isDifferentAttempt ||
-                incomingPhaseRetryCount <=
-                  normalizeNonNegativeInt(existing.phaseRetryCount, 0)))
+              !isDifferentAttempt)
           ) {
             return recomputeProgress(next);
           }

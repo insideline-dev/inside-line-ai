@@ -89,7 +89,10 @@ Score 0-100 based on exit potential and return attractiveness. Reference the eva
 0-24: Public markets don't support entry price. Exit thesis failed.
 
 After scoring, provide:
-- scoringBasis: One sentence explaining why this score was assigned
+
+Provide a scoringBasis — a 3-4 sentence overview of this startup's exit potential. Use these as directional anchors, adapting to what's most relevant: What's the realistic exit scenario and return? Who are the likely acquirers? What's limiting upside? The reader should understand the return thesis in under 10 seconds. End with one line connecting the assessment to the investment score.
+
+- scoringBasis: A 3-4 sentence overview of this startup's exit thesis. Use these as directional anchors, adapting to what's most relevant: What are the realistic exit scenarios and returns? What drives upside or limits it? What assumptions are shaky? The reader should understand the return thesis in under 10 seconds. End with one line connecting the assessment to the investment score.
 - confidence: "high" if public comps are plentiful and scenarios are tight, "mid" if some comps exist but scenarios have meaningful ranges, "low" if insufficient public comps for reliable scenarios
 
 --- ANTI-PATTERNS ---
@@ -113,7 +116,7 @@ Your evaluation above should populate these structured output fields:
 Scoring:
 - scoring.overallScore → your 0-100 score from the scoring rubric
 - scoring.confidence → "high", "mid", or "low" from the scoring rubric
-- scoring.scoringBasis → one-sentence explanation of what drove the score
+- scoring.scoringBasis → 3-4 sentence exit potential overview (key signals, what's missing — ending with investment score tie-in)
 - scoring.subScores[] → array of sub-dimension scores, one per evaluation dimension. Each entry: { dimension (name), weight (decimal), score (0-100) }. Dimensions for this stage: Exit Scenarios (0.40), Return Metrics (0.60)
 
 Exit Scenarios:

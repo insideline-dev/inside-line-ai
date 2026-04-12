@@ -8,6 +8,9 @@ import type {
   EvaluationAgentKey,
   EvaluationPipelineInput,
   EvaluationAgentTraceEvent,
+  EvaluationAgentPollingState,
+  EvaluationAgentPollResult,
+  EvaluationAgentStartResult,
 } from "../interfaces/agent.interface";
 import type {
   EvaluationResult,
@@ -44,6 +47,14 @@ import type { PipelineFlowNodeConfigs } from "./pipeline-graph-compiler.service"
 type PersistedEvaluationTraceEvent = EvaluationAgentTraceEvent & {
   meta?: Record<string, unknown>;
 };
+
+interface EvaluationAgentPreparedRun {
+  agent: EvaluationAgent<unknown>;
+  input: ResolvedEvaluationInput;
+  dataSummary?: Record<string, unknown>;
+  feedbackNotes: EvaluationFeedbackNote[];
+  config: { webSearchEnabled: boolean; braveSearchEnabled: boolean };
+}
 
 @Injectable()
 export class EvaluationAgentRegistryService {
@@ -102,180 +113,113 @@ export class EvaluationAgentRegistryService {
   ): Promise<EvaluationResult> {
     const resolvedAgents = await this.resolveAgents();
     const pipelineRunId = (await this.pipelineState.get(startupId))?.pipelineRunId;
-    const traceWrites: Promise<void>[] = [];
     const outputs = new Map<EvaluationAgentKey, unknown>();
     const failedKeys: EvaluationAgentKey[] = [];
     const errors: Array<{ agent: string; error: string }> = [];
     const fallbackKeys: EvaluationAgentKey[] = [];
     const warnings: Array<{ agent: string; message: string }> = [];
     const fallbackReasonCounts: Partial<Record<EvaluationFallbackReason, number>> = {};
-    const nodeConfigs = await this.loadNodeConfigs();
-    const getEvalAgentConfig = (agentKey: string) => {
-      const config = nodeConfigs?.[`evaluation_${agentKey}`];
-      if (typeof config !== 'object' || config === null) return { webSearchEnabled: false, braveSearchEnabled: false };
-      const c = config as { webSearchEnabled?: boolean; braveSearchEnabled?: boolean };
-      return { webSearchEnabled: c.webSearchEnabled === true, braveSearchEnabled: c.braveSearchEnabled === true };
-    };
-
     const evaluationAgentStaggerMs = Math.max(
       0,
       this.aiConfig?.getEvaluationAgentStaggerMs() ?? 0,
     );
-    await Promise.all(
-      resolvedAgents.map(async (agent, index) => {
-        const startDelayMs = index * evaluationAgentStaggerMs;
-        if (startDelayMs > 0) {
-          await this.sleep(startDelayMs);
-        }
-        const resolvedInput = await this.resolvePipelineInputForAgent(
+    const phaseRetryCount = 0;
+
+    const preparedRuns = await Promise.all(
+      resolvedAgents.map(async (agent) => ({
+        key: agent.key,
+        prepared: await this.prepareAgentRun(
+          startupId,
           agent.key,
           pipelineData,
           agentDocumentMap,
+        ),
+      })),
+    );
+
+    // ── Classify agents into pollable vs blocking ──────────────────
+    const INITIAL_CONCURRENCY = 5;
+    const pollableQueue: Array<{
+      key: EvaluationAgentKey;
+      prepared: EvaluationAgentPreparedRun;
+    }> = [];
+    const blockingQueue: Array<{
+      key: EvaluationAgentKey;
+      prepared: EvaluationAgentPreparedRun;
+    }> = [];
+
+    for (const { key, prepared } of preparedRuns) {
+      const supportsPolling =
+        prepared.agent.supportsDirectPolling();
+      if (supportsPolling) {
+        pollableQueue.push({ key, prepared });
+      } else {
+        blockingQueue.push({ key, prepared });
+      }
+    }
+
+    this.logger.log(
+      `[runAll] Startup ${startupId}: ${pollableQueue.length} agents pollable, ${blockingQueue.length} agents blocking, concurrency=${INITIAL_CONCURRENCY}`,
+    );
+
+    const collectCompletion = (completion: EvaluationAgentCompletion) => {
+      outputs.set(completion.agent, completion.output);
+      const normalizedFallbackReason = completion.usedFallback
+        ? (completion.fallbackReason ?? "UNHANDLED_AGENT_EXCEPTION")
+        : completion.fallbackReason;
+
+      if (completion.usedFallback) {
+        fallbackKeys.push(completion.agent);
+        warnings.push({
+          agent: completion.agent,
+          message:
+            completion.error ??
+            "Agent returned deterministic fallback output; manual review recommended.",
+          ...(normalizedFallbackReason
+            ? { reason: normalizedFallbackReason }
+            : {}),
+        });
+        this.bumpFallbackReasonCount(
+          fallbackReasonCounts,
+          normalizedFallbackReason,
         );
-        const dataSummary = this.buildInputDataSummary(resolvedInput);
-        const startedAt = new Date();
-        this.emitAgentStart(onAgentStart, agent.key);
+      } else if (completion.error) {
+        failedKeys.push(completion.agent);
+        errors.push({ agent: completion.agent, error: completion.error });
+      }
+    };
 
-        try {
-          const feedbackNotes = await this.loadFeedbackNotes(startupId, agent.key);
-          const result = await agent.run(resolvedInput.pipelineData, {
-            feedbackNotes,
-            ...getEvalAgentConfig(agent.key),
-            onLifecycle: (event) =>
-              this.emitAgentLifecycle(onAgentLifecycle, event),
-            onTrace: (event) => {
-              traceWrites.push(
-                this.persistAgentTrace(startupId, pipelineRunId, event),
-              );
-            },
-          });
-          const completedAt = new Date();
-
-          await this.recordTelemetrySafely(startupId, {
-            agentKey: result.key,
-            phase: PipelinePhase.EVALUATION,
-            startedAt: startedAt.toISOString(),
-            completedAt: completedAt.toISOString(),
-            durationMs: completedAt.getTime() - startedAt.getTime(),
-            retryCount: result.retryCount ?? 0,
-          });
-
-          if (!result.usedFallback) {
-            await this.consumeAgentFeedback(startupId, agent.key);
-          }
-
-          outputs.set(result.key, result.output);
-          const normalizedFallbackReason = result.usedFallback
-            ? (result.fallbackReason ?? "UNHANDLED_AGENT_EXCEPTION")
-            : result.fallbackReason;
-          this.emitAgentCompletion(onAgentComplete, {
-            agent: result.key,
-            output: result.output,
-            usedFallback: result.usedFallback,
-            ...(dataSummary ? { dataSummary } : {}),
-            ...(typeof result.attempt === "number"
-              ? { attempt: result.attempt }
-              : {}),
-            ...(typeof result.retryCount === "number"
-              ? { retryCount: result.retryCount }
-              : {}),
-            error: result.error,
-            fallbackReason: normalizedFallbackReason,
-            rawProviderError: result.rawProviderError,
-            meta: result.meta,
-          });
-
-          if (result.usedFallback) {
-            fallbackKeys.push(result.key);
-            warnings.push({
-              agent: result.key,
-              message:
-                result.error ??
-                "Agent returned deterministic fallback output; manual review recommended.",
-              ...(normalizedFallbackReason
-                ? { reason: normalizedFallbackReason }
-                : {}),
-            });
-            this.bumpFallbackReasonCount(
-              fallbackReasonCounts,
-              normalizedFallbackReason,
-            );
-          }
-        } catch (error) {
-          const completedAt = new Date();
-          const errorMessage =
-            error instanceof Error ? error.message : String(error);
-          const fallbackReason: EvaluationFallbackReason =
-            "UNHANDLED_AGENT_EXCEPTION";
-
-          this.emitAgentLifecycle(onAgentLifecycle, {
-            agent: agent.key,
-            event: "fallback",
-            attempt: 1,
-            retryCount: 0,
-            error: errorMessage,
-            fallbackReason,
-            rawProviderError: errorMessage,
-          });
-
-          await this.recordTelemetrySafely(startupId, {
-            agentKey: agent.key,
-            phase: PipelinePhase.EVALUATION,
-            startedAt: startedAt.toISOString(),
-            completedAt: completedAt.toISOString(),
-            durationMs: completedAt.getTime() - startedAt.getTime(),
-            retryCount: 0,
-          });
-
-          const fallbackOutput = agent.fallback(resolvedInput.pipelineData);
-          traceWrites.push(
-            this.persistAgentTrace(startupId, pipelineRunId, {
-              agent: agent.key,
-              status: "fallback",
-              inputPrompt: "",
-              systemPrompt: "",
-              outputText: this.safeStringify(fallbackOutput),
-              outputJson: fallbackOutput,
-              attempt: 1,
-              retryCount: 0,
-              usedFallback: true,
-              error: errorMessage,
-              fallbackReason,
-              rawProviderError: errorMessage,
-              meta: this.buildUnhandledErrorMeta(error),
-            }),
-          );
-
-          fallbackKeys.push(agent.key);
-          warnings.push({
-            agent: agent.key,
-            message: errorMessage,
-            ...(fallbackReason ? { reason: fallbackReason } : {}),
-          });
-          this.bumpFallbackReasonCount(
-            fallbackReasonCounts,
-            fallbackReason,
-          );
-          outputs.set(agent.key, fallbackOutput);
-          this.emitAgentCompletion(onAgentComplete, {
-            agent: agent.key,
-            output: fallbackOutput,
-            usedFallback: true,
-            ...(dataSummary ? { dataSummary } : {}),
-            attempt: 1,
-            retryCount: 0,
-            error: errorMessage,
-            fallbackReason,
-            rawProviderError: errorMessage,
-            meta: this.buildUnhandledErrorMeta(error),
-          });
-        }
+    // ── Run blocking agents + concurrency-limited poll loop in parallel ─
+    const blockingPromise = Promise.all(
+      blockingQueue.map(async ({ prepared }) => {
+        const completion = await this.runPreparedAgent(
+          startupId,
+          pipelineRunId,
+          prepared,
+          onAgentStart,
+          onAgentComplete,
+          onAgentLifecycle,
+        );
+        collectCompletion(completion);
       }),
     );
-    // Fire-and-forget: trace writes already have internal .catch(); awaiting
-    // here previously delayed phase completion by the time it took to flush
-    // all accumulated onTrace events to the pipeline_agent_run table.
-    void Promise.allSettled(traceWrites);
+
+    const pollingPromise = this.runConcurrencyPoolPolling(
+      startupId,
+      pipelineData,
+      pipelineRunId,
+      pollableQueue,
+      INITIAL_CONCURRENCY,
+      phaseRetryCount,
+      evaluationAgentStaggerMs,
+      onAgentStart,
+      onAgentComplete,
+      onAgentLifecycle,
+      agentDocumentMap,
+      collectCompletion,
+    );
+
+    await Promise.all([blockingPromise, pollingPromise]);
 
     for (const agent of this.agents) {
       if (!outputs.has(agent.key)) {
@@ -333,6 +277,331 @@ export class EvaluationAgentRegistryService {
     await new Promise<void>((resolve) => setTimeout(resolve, ms));
   }
 
+  /**
+   * Concurrency-pool polling: submits up to `maxConcurrent` agents at once,
+   * polls all in-flight in a single loop, and flood-fills — each time one
+   * completes, the next waiting agent is submitted immediately.
+   *
+   * This keeps ≤5 concurrent OpenAI background requests at any time, reducing
+   * API rate-limit pressure while keeping throughput high.
+   */
+  private async runConcurrencyPoolPolling(
+    startupId: string,
+    pipelineData: EvaluationPipelineInput,
+    pipelineRunId: string | undefined,
+    pollableQueue: Array<{
+      key: EvaluationAgentKey;
+      prepared: EvaluationAgentPreparedRun;
+    }>,
+    maxConcurrent: number,
+    phaseRetryCount: number,
+    staggerMs: number,
+    onAgentStart?: (agent: EvaluationAgentKey) => void,
+    onAgentComplete?: (payload: EvaluationAgentCompletion) => void,
+    onAgentLifecycle?: (payload: EvaluationAgentLifecycleEvent) => void,
+    agentDocumentMap?: Map<EvaluationAgentKey, string[]>,
+    collectCompletion?: (completion: EvaluationAgentCompletion) => void,
+  ): Promise<void> {
+    if (pollableQueue.length === 0) {
+      return;
+    }
+
+    const UNIFIED_POLL_INTERVAL_MS = 20_000;
+    const POLL_HARD_TIMEOUT_MS = 35 * 60 * 1000; // 35 min safety net
+
+    // Waiting agents not yet submitted
+    const waiting = [...pollableQueue];
+    // In-flight agents being polled
+    const inflight = new Map<
+      EvaluationAgentKey,
+      {
+        state: EvaluationAgentPollingState;
+        prepared: EvaluationAgentPreparedRun;
+      }
+    >();
+
+    const submitNext = async (): Promise<void> => {
+      const next = waiting.shift();
+      if (!next) return;
+
+      const { key, prepared } = next;
+      try {
+        const startResult = await this.startOpenAiPollingRun(
+          startupId,
+          key,
+          pipelineData,
+          phaseRetryCount,
+          onAgentStart,
+          onAgentLifecycle,
+          agentDocumentMap,
+        );
+        inflight.set(key, {
+          prepared,
+          state: {
+            agent: key,
+            responseId: startResult.responseId,
+            status: startResult.resumed ? "resumed" : "queued",
+            modelName: startResult.modelName,
+            pollIntervalMs: startResult.pollIntervalMs,
+            startedAt: startResult.startedAt,
+            phaseRetryCount,
+            agentAttemptId: pipelineRunId
+              ? `${pipelineRunId}:${PipelinePhase.EVALUATION}:${key}:phase-${phaseRetryCount}:attempt-1`
+              : undefined,
+          },
+        });
+        this.logger.log(
+          `[runAll] Agent "${key}" submitted (responseId=${startResult.responseId}). inflight=${inflight.size}, waiting=${waiting.length}`,
+        );
+      } catch (submitError) {
+        const msg = submitError instanceof Error ? submitError.message : String(submitError);
+        this.logger.error(
+          `[runAll] Agent "${key}" failed to submit: ${msg}. Running blocking fallback.`,
+        );
+        // Fall back to blocking execution for this agent
+        const completion = await this.runPreparedAgent(
+          startupId,
+          pipelineRunId,
+          prepared,
+          onAgentStart,
+          onAgentComplete,
+          onAgentLifecycle,
+        );
+        collectCompletion?.(completion);
+      }
+    };
+
+    // ── Seed the pool with initial batch (staggered) ─────────────
+    const initialBatch = Math.min(maxConcurrent, waiting.length);
+    for (let i = 0; i < initialBatch; i++) {
+      if (i > 0 && staggerMs > 0) {
+        await this.sleep(staggerMs);
+      }
+      await submitNext();
+    }
+
+    // ── Polling loop with flood-fill ─────────────────────────────
+    const startedAtMs = Date.now();
+
+    while (inflight.size > 0) {
+      if (Date.now() - startedAtMs > POLL_HARD_TIMEOUT_MS) {
+        this.logger.error(
+          `[runAll] Polling pool exceeded hard timeout (${POLL_HARD_TIMEOUT_MS}ms). ${inflight.size} inflight + ${waiting.length} waiting agents.`,
+        );
+        for (const [key, entry] of inflight) {
+          const fallbackOutput = entry.prepared.agent.fallback(
+            entry.prepared.input.pipelineData,
+          );
+          const completion: EvaluationAgentCompletion = {
+            agent: key,
+            output: fallbackOutput,
+            usedFallback: true,
+            attempt: 1,
+            retryCount: 0,
+            error: "Polling pool exceeded hard timeout",
+            fallbackReason: "TIMEOUT",
+            rawProviderError: "Polling pool exceeded hard timeout",
+          };
+          this.emitAgentCompletion(onAgentComplete, completion);
+          collectCompletion?.(completion);
+        }
+        // Also fallback any remaining waiting agents
+        for (const { key, prepared } of waiting) {
+          const fallbackOutput = prepared.agent.fallback(
+            prepared.input.pipelineData,
+          );
+          const completion: EvaluationAgentCompletion = {
+            agent: key,
+            output: fallbackOutput,
+            usedFallback: true,
+            attempt: 1,
+            retryCount: 0,
+            error: "Polling pool exceeded hard timeout (never submitted)",
+            fallbackReason: "TIMEOUT",
+            rawProviderError: "Polling pool exceeded hard timeout",
+          };
+          this.emitAgentCompletion(onAgentComplete, completion);
+          collectCompletion?.(completion);
+        }
+        waiting.length = 0;
+        break;
+      }
+
+      // Poll each in-flight agent sequentially to avoid burst
+      for (const [key, entry] of inflight) {
+        try {
+          const pollResult = await this.pollOpenAiRun(
+            startupId,
+            key,
+            pipelineData,
+            entry.state,
+            onAgentComplete,
+            onAgentLifecycle,
+            agentDocumentMap,
+          );
+
+          entry.state = {
+            ...entry.state,
+            status: pollResult.status,
+            pollIntervalMs: pollResult.pollIntervalMs,
+          };
+
+          if (pollResult.status !== "running") {
+            if (pollResult.completion) {
+              collectCompletion?.(pollResult.completion);
+            } else {
+              const fallbackOutput = entry.prepared.agent.fallback(
+                entry.prepared.input.pipelineData,
+              );
+              const completion: EvaluationAgentCompletion = {
+                agent: key,
+                output: fallbackOutput,
+                usedFallback: true,
+                attempt: 1,
+                retryCount: 0,
+                error: `Agent "${key}" reached terminal status "${pollResult.status}" without completion`,
+                fallbackReason: "UNHANDLED_AGENT_EXCEPTION",
+              };
+              this.emitAgentCompletion(onAgentComplete, completion);
+              collectCompletion?.(completion);
+            }
+            inflight.delete(key);
+            this.logger.log(
+              `[runAll] Agent "${key}" done (status=${pollResult.status}). inflight=${inflight.size}, waiting=${waiting.length}`,
+            );
+
+            // Flood-fill: submit next waiting agent immediately
+            if (waiting.length > 0) {
+              await submitNext();
+            }
+          }
+        } catch (pollError) {
+          const msg = pollError instanceof Error ? pollError.message : String(pollError);
+          this.logger.error(
+            `[runAll] Polling error for "${key}": ${msg}. Generating fallback.`,
+          );
+          const fallbackOutput = entry.prepared.agent.fallback(
+            entry.prepared.input.pipelineData,
+          );
+          const completion: EvaluationAgentCompletion = {
+            agent: key,
+            output: fallbackOutput,
+            usedFallback: true,
+            attempt: 1,
+            retryCount: 0,
+            error: msg,
+            fallbackReason: "UNHANDLED_AGENT_EXCEPTION",
+            rawProviderError: msg,
+          };
+          this.emitAgentCompletion(onAgentComplete, completion);
+          collectCompletion?.(completion);
+          inflight.delete(key);
+
+          // Flood-fill on error too
+          if (waiting.length > 0) {
+            await submitNext();
+          }
+        }
+      }
+
+      if (inflight.size > 0) {
+        this.logger.debug(
+          `[runAll] ${inflight.size} agents polling, ${waiting.length} waiting. Next check in ${UNIFIED_POLL_INTERVAL_MS}ms.`,
+        );
+        await this.sleep(UNIFIED_POLL_INTERVAL_MS);
+      }
+    }
+  }
+
+  async startOpenAiPollingRun(
+    startupId: string,
+    key: EvaluationAgentKey,
+    pipelineData: EvaluationPipelineInput,
+    phaseRetryCount: number,
+    onAgentStart?: (agent: EvaluationAgentKey) => void,
+    onAgentLifecycle?: (payload: EvaluationAgentLifecycleEvent) => void,
+    agentDocumentMap?: Map<EvaluationAgentKey, string[]>,
+  ): Promise<EvaluationAgentStartResult> {
+    const pipelineRunId = (await this.pipelineState.get(startupId))?.pipelineRunId;
+    const prepared = await this.prepareAgentRun(
+      startupId,
+      key,
+      pipelineData,
+      agentDocumentMap,
+    );
+    if (!prepared.agent.supportsDirectPolling()) {
+      throw new Error(`Evaluation agent "${key}" does not support direct polling`);
+    }
+
+    this.emitAgentStart(onAgentStart, key);
+    const startResult = await prepared.agent.startDirectRun!(
+      prepared.input.pipelineData,
+      {
+        feedbackNotes: prepared.feedbackNotes,
+        pipelineRunId,
+        ...prepared.config,
+        onLifecycle: (event) => this.emitAgentLifecycle(onAgentLifecycle, event),
+        onTrace: (event) => {
+          void this.persistAgentTrace(startupId, pipelineRunId, event);
+        },
+      },
+    );
+
+    return {
+      ...startResult,
+      dataSummary: prepared.dataSummary,
+    };
+  }
+
+  async pollOpenAiRun(
+    startupId: string,
+    key: EvaluationAgentKey,
+    pipelineData: EvaluationPipelineInput,
+    state: EvaluationAgentPollingState,
+    onAgentComplete?: (payload: EvaluationAgentCompletion) => void,
+    onAgentLifecycle?: (payload: EvaluationAgentLifecycleEvent) => void,
+    agentDocumentMap?: Map<EvaluationAgentKey, string[]>,
+  ): Promise<EvaluationAgentPollResult> {
+    const pipelineRunId = (await this.pipelineState.get(startupId))?.pipelineRunId;
+    const prepared = await this.prepareAgentRun(
+      startupId,
+      key,
+      pipelineData,
+      agentDocumentMap,
+    );
+    if (!prepared.agent.supportsDirectPolling()) {
+      throw new Error(`Evaluation agent "${key}" does not support direct polling`);
+    }
+
+    const result = await prepared.agent.pollDirectRun!(
+      prepared.input.pipelineData,
+      state,
+      {
+        feedbackNotes: prepared.feedbackNotes,
+        pipelineRunId,
+        ...prepared.config,
+        onLifecycle: (event) => this.emitAgentLifecycle(onAgentLifecycle, event),
+        onTrace: (event) => {
+          void this.persistAgentTrace(startupId, pipelineRunId, event);
+        },
+      },
+    );
+
+    if (result.completion) {
+      const completion: EvaluationAgentCompletion = {
+        ...result.completion,
+        ...(prepared.dataSummary ? { dataSummary: prepared.dataSummary } : {}),
+      };
+      this.emitAgentCompletion(onAgentComplete, completion);
+      result.completion = completion;
+      if (!completion.usedFallback) {
+        await this.consumeAgentFeedback(startupId, key);
+      }
+    }
+
+    return result;
+  }
+
   async runOne(
     startupId: string,
     key: EvaluationAgentKey,
@@ -341,133 +610,129 @@ export class EvaluationAgentRegistryService {
     onAgentLifecycle?: (payload: EvaluationAgentLifecycleEvent) => void,
     agentDocumentMap?: Map<EvaluationAgentKey, string[]>,
   ): Promise<EvaluationAgentCompletion> {
-    const resolvedAgents = await this.resolveAgents();
     const pipelineRunId = (await this.pipelineState.get(startupId))?.pipelineRunId;
-    const traceWrites: Promise<void>[] = [];
-    const agent = resolvedAgents.find((candidate) => candidate.key === key);
-    if (!agent) {
-      throw new Error(`Unsupported evaluation agent "${key}"`);
-    }
-
-    const nodeConfigs = await this.loadNodeConfigs();
-    const getEvalAgentConfig = (agentKey: string) => {
-      const config = nodeConfigs?.[`evaluation_${agentKey}`];
-      if (typeof config !== 'object' || config === null) return { webSearchEnabled: false, braveSearchEnabled: false };
-      const c = config as { webSearchEnabled?: boolean; braveSearchEnabled?: boolean };
-      return { webSearchEnabled: c.webSearchEnabled === true, braveSearchEnabled: c.braveSearchEnabled === true };
-    };
-
-    const startedAt = new Date();
-    this.emitAgentStart(onAgentStart, key);
-    const resolvedInput = await this.resolvePipelineInputForAgent(
+    const prepared = await this.prepareAgentRun(
+      startupId,
       key,
       pipelineData,
       agentDocumentMap,
     );
-    const dataSummary = this.buildInputDataSummary(resolvedInput);
-    try {
-      const feedbackNotes = await this.loadFeedbackNotes(startupId, key);
-      const result = await agent.run(resolvedInput.pipelineData, {
-        feedbackNotes,
-        pipelineRunId,
-        ...getEvalAgentConfig(key),
-        onLifecycle: (event) =>
-          this.emitAgentLifecycle(onAgentLifecycle, event),
-        onTrace: (event) => {
-          traceWrites.push(
-            this.persistAgentTrace(startupId, pipelineRunId, event),
-          );
-        },
-      });
-      const completedAt = new Date();
 
-      await this.recordTelemetrySafely(startupId, {
-        agentKey: result.key,
-        phase: PipelinePhase.EVALUATION,
-        startedAt: startedAt.toISOString(),
-        completedAt: completedAt.toISOString(),
-        durationMs: completedAt.getTime() - startedAt.getTime(),
-        retryCount: result.retryCount ?? 0,
-      });
+    const completion = await this.runPreparedAgent(
+      startupId,
+      pipelineRunId,
+      prepared,
+      onAgentStart,
+      undefined,
+      onAgentLifecycle,
+    );
 
-      if (!result.usedFallback) {
-        await this.consumeAgentFeedback(startupId, key);
-        await this.consumePhaseFeedback(startupId);
-      }
-      void Promise.allSettled(traceWrites);
-
-      return {
-        agent: result.key,
-        output: result.output,
-        usedFallback: result.usedFallback,
-        ...(dataSummary ? { dataSummary } : {}),
-        ...(typeof result.attempt === "number"
-          ? { attempt: result.attempt }
-          : {}),
-        ...(typeof result.retryCount === "number"
-          ? { retryCount: result.retryCount }
-          : {}),
-        error: result.error,
-        fallbackReason: result.usedFallback
-          ? (result.fallbackReason ?? "UNHANDLED_AGENT_EXCEPTION")
-          : result.fallbackReason,
-        rawProviderError: result.rawProviderError,
-        meta: result.meta,
-      };
-    } catch (error) {
-      const completedAt = new Date();
-      const message = error instanceof Error ? error.message : String(error);
-      const fallbackReason: EvaluationFallbackReason =
-        "UNHANDLED_AGENT_EXCEPTION";
-      this.emitAgentLifecycle(onAgentLifecycle, {
-        agent: key,
-        event: "fallback",
-        attempt: 1,
-        retryCount: 0,
-        error: message,
-        fallbackReason,
-        rawProviderError: message,
-      });
-      await this.recordTelemetrySafely(startupId, {
-        agentKey: key,
-        phase: PipelinePhase.EVALUATION,
-        startedAt: startedAt.toISOString(),
-        completedAt: completedAt.toISOString(),
-        durationMs: completedAt.getTime() - startedAt.getTime(),
-        retryCount: 0,
-      });
-      const fallbackOutput = agent.fallback(resolvedInput.pipelineData);
-      traceWrites.push(
-        this.persistAgentTrace(startupId, pipelineRunId, {
-          agent: key,
-          status: "fallback",
-          inputPrompt: "",
-          systemPrompt: "",
-          outputText: this.safeStringify(fallbackOutput),
-          outputJson: fallbackOutput,
-          attempt: 1,
-          retryCount: 0,
-          usedFallback: true,
-          error: message,
-          fallbackReason,
-          rawProviderError: message,
-          meta: this.buildUnhandledErrorMeta(error),
-        }),
-      );
-      void Promise.allSettled(traceWrites);
-      return {
-        agent: key,
-        output: fallbackOutput,
-        usedFallback: true,
-        ...(dataSummary ? { dataSummary } : {}),
-        attempt: 1,
-        retryCount: 0,
-        error: message,
-        fallbackReason,
-        rawProviderError: message,
-        meta: this.buildUnhandledErrorMeta(error),
-      };
+    if (!completion.usedFallback) {
+      await this.consumePhaseFeedback(startupId);
     }
+
+    return completion;
+  }
+
+  /**
+   * Run a subset of agents through the same concurrency-pool pattern as runAll.
+   * Used for targeted retries so they get unified polling instead of N blocking calls.
+   */
+  async runMany(
+    startupId: string,
+    keys: EvaluationAgentKey[],
+    pipelineData: EvaluationPipelineInput,
+    onAgentStart?: (agent: EvaluationAgentKey) => void,
+    onAgentComplete?: (payload: EvaluationAgentCompletion) => void,
+    onAgentLifecycle?: (payload: EvaluationAgentLifecycleEvent) => void,
+    agentDocumentMap?: Map<EvaluationAgentKey, string[]>,
+  ): Promise<EvaluationAgentCompletion[]> {
+    const pipelineRunId = (await this.pipelineState.get(startupId))?.pipelineRunId;
+    const RETRY_CONCURRENCY = 5;
+    const staggerMs = Math.max(
+      0,
+      this.aiConfig?.getEvaluationAgentStaggerMs() ?? 0,
+    );
+    const completions: EvaluationAgentCompletion[] = [];
+
+    const preparedRuns = await Promise.all(
+      keys.map(async (key) => ({
+        key,
+        prepared: await this.prepareAgentRun(startupId, key, pipelineData, agentDocumentMap),
+      })),
+    );
+
+    const pollableQueue: Array<{
+      key: EvaluationAgentKey;
+      prepared: EvaluationAgentPreparedRun;
+    }> = [];
+    const blockingQueue: Array<{
+      key: EvaluationAgentKey;
+      prepared: EvaluationAgentPreparedRun;
+    }> = [];
+
+    for (const { key, prepared } of preparedRuns) {
+      const supportsPolling =
+        prepared.agent.supportsDirectPolling();
+      if (supportsPolling) {
+        pollableQueue.push({ key, prepared });
+      } else {
+        blockingQueue.push({ key, prepared });
+      }
+    }
+
+    this.logger.log(
+      `[runMany] Startup ${startupId}: ${keys.length} agents targeted, ${pollableQueue.length} pollable, ${blockingQueue.length} blocking`,
+    );
+
+    const collect = (completion: EvaluationAgentCompletion) => {
+      completions.push(completion);
+    };
+
+    // Pre-fire onAgentStart for all pollable agents immediately so the UI shows them
+    // all as "running" at once. runConcurrencyPoolPolling submits agents sequentially
+    // (one HTTP call at a time), so without this pre-fire only the first agent would
+    // appear as running while others wait for the queue to process them.
+    // Blocking agents already fire concurrently via Promise.all below.
+    this.logger.log(
+      `[runMany] PRE-FIRING onAgentStart for ${pollableQueue.length} pollable agents: [${pollableQueue.map((p) => p.key).join(", ")}]`,
+    );
+    for (const { key } of pollableQueue) {
+      this.emitAgentStart(onAgentStart, key);
+    }
+
+    const blockingPromise = Promise.all(
+      blockingQueue.map(async ({ prepared }) => {
+        const completion = await this.runPreparedAgent(
+          startupId,
+          pipelineRunId,
+          prepared,
+          onAgentStart,
+          onAgentComplete,
+          onAgentLifecycle,
+        );
+        collect(completion);
+      }),
+    );
+
+    const pollingPromise = this.runConcurrencyPoolPolling(
+      startupId,
+      pipelineData,
+      pipelineRunId,
+      pollableQueue,
+      RETRY_CONCURRENCY,
+      0, // phaseRetryCount
+      staggerMs,
+      undefined, // onAgentStart — already pre-fired above for all pollable agents
+      onAgentComplete,
+      onAgentLifecycle,
+      agentDocumentMap,
+      collect,
+    );
+
+    await Promise.all([blockingPromise, pollingPromise]);
+
+    return completions;
   }
 
   private async resolveAgents(): Promise<Array<EvaluationAgent<unknown>>> {
@@ -499,6 +764,7 @@ export class EvaluationAgentRegistryService {
 
       resolved.push({
         key: config.agentKey as EvaluationAgentKey,
+        supportsDirectPolling: () => false,
         run: async (pipelineData, options) => {
           const result = await this.dynamicAgentRunner.run({
             agentKey: config.agentKey,
@@ -540,6 +806,169 @@ export class EvaluationAgentRegistryService {
     }
 
     return resolved.length > 0 ? resolved : this.agents;
+  }
+
+  private async prepareAgentRun(
+    startupId: string,
+    key: EvaluationAgentKey,
+    pipelineData: EvaluationPipelineInput,
+    agentDocumentMap?: Map<EvaluationAgentKey, string[]>,
+  ): Promise<EvaluationAgentPreparedRun> {
+    const resolvedAgents = await this.resolveAgents();
+    const agent = resolvedAgents.find((candidate) => candidate.key === key);
+    if (!agent) {
+      throw new Error(`Unsupported evaluation agent "${key}"`);
+    }
+
+    const resolvedInput = await this.resolvePipelineInputForAgent(
+      key,
+      pipelineData,
+      agentDocumentMap,
+    );
+    const dataSummary = this.buildInputDataSummary(resolvedInput);
+    const feedbackNotes = await this.loadFeedbackNotes(startupId, key);
+    const nodeConfigs = await this.loadNodeConfigs();
+    const config = this.getEvalAgentConfig(nodeConfigs, key);
+
+    return {
+      agent,
+      input: resolvedInput,
+      dataSummary,
+      feedbackNotes,
+      config,
+    };
+  }
+
+  private getEvalAgentConfig(
+    nodeConfigs: PipelineFlowNodeConfigs | undefined,
+    agentKey: string,
+  ): { webSearchEnabled: boolean; braveSearchEnabled: boolean } {
+    const config = nodeConfigs?.[`evaluation_${agentKey}`];
+    if (typeof config !== "object" || config === null) {
+      return { webSearchEnabled: false, braveSearchEnabled: false };
+    }
+    const candidate = config as {
+      webSearchEnabled?: boolean;
+      braveSearchEnabled?: boolean;
+    };
+    return {
+      webSearchEnabled: candidate.webSearchEnabled === true,
+      braveSearchEnabled: candidate.braveSearchEnabled === true,
+    };
+  }
+
+  private async runPreparedAgent(
+    startupId: string,
+    pipelineRunId: string | undefined,
+    prepared: EvaluationAgentPreparedRun,
+    onAgentStart?: (agent: EvaluationAgentKey) => void,
+    onAgentComplete?: (payload: EvaluationAgentCompletion) => void,
+    onAgentLifecycle?: (payload: EvaluationAgentLifecycleEvent) => void,
+  ): Promise<EvaluationAgentCompletion> {
+    const traceWrites: Promise<void>[] = [];
+    const startedAt = new Date();
+    this.emitAgentStart(onAgentStart, prepared.agent.key);
+
+    try {
+      const result = await prepared.agent.run(prepared.input.pipelineData, {
+        feedbackNotes: prepared.feedbackNotes,
+        pipelineRunId,
+        ...prepared.config,
+        onLifecycle: (event) => this.emitAgentLifecycle(onAgentLifecycle, event),
+        onTrace: (event) => {
+          traceWrites.push(this.persistAgentTrace(startupId, pipelineRunId, event));
+        },
+      });
+      const completedAt = new Date();
+
+      await this.recordTelemetrySafely(startupId, {
+        agentKey: result.key,
+        phase: PipelinePhase.EVALUATION,
+        startedAt: startedAt.toISOString(),
+        completedAt: completedAt.toISOString(),
+        durationMs: completedAt.getTime() - startedAt.getTime(),
+        retryCount: result.retryCount ?? 0,
+      });
+
+      if (!result.usedFallback) {
+        await this.consumeAgentFeedback(startupId, prepared.agent.key);
+      }
+
+      void Promise.allSettled(traceWrites);
+      const completion: EvaluationAgentCompletion = {
+        agent: result.key,
+        output: result.output,
+        usedFallback: result.usedFallback,
+        ...(prepared.dataSummary ? { dataSummary: prepared.dataSummary } : {}),
+        ...(typeof result.attempt === "number" ? { attempt: result.attempt } : {}),
+        ...(typeof result.retryCount === "number"
+          ? { retryCount: result.retryCount }
+          : {}),
+        error: result.error,
+        fallbackReason: result.usedFallback
+          ? (result.fallbackReason ?? "UNHANDLED_AGENT_EXCEPTION")
+          : result.fallbackReason,
+        rawProviderError: result.rawProviderError,
+        meta: result.meta,
+      };
+      this.emitAgentCompletion(onAgentComplete, completion);
+      return completion;
+    } catch (error) {
+      const completedAt = new Date();
+      const message = error instanceof Error ? error.message : String(error);
+      const fallbackReason: EvaluationFallbackReason =
+        "UNHANDLED_AGENT_EXCEPTION";
+      this.emitAgentLifecycle(onAgentLifecycle, {
+        agent: prepared.agent.key,
+        event: "fallback",
+        attempt: 1,
+        retryCount: 0,
+        error: message,
+        fallbackReason,
+        rawProviderError: message,
+      });
+      await this.recordTelemetrySafely(startupId, {
+        agentKey: prepared.agent.key,
+        phase: PipelinePhase.EVALUATION,
+        startedAt: startedAt.toISOString(),
+        completedAt: completedAt.toISOString(),
+        durationMs: completedAt.getTime() - startedAt.getTime(),
+        retryCount: 0,
+      });
+      const fallbackOutput = prepared.agent.fallback(prepared.input.pipelineData);
+      traceWrites.push(
+        this.persistAgentTrace(startupId, pipelineRunId, {
+          agent: prepared.agent.key,
+          status: "fallback",
+          inputPrompt: "",
+          systemPrompt: "",
+          outputText: this.safeStringify(fallbackOutput),
+          outputJson: fallbackOutput,
+          attempt: 1,
+          retryCount: 0,
+          usedFallback: true,
+          error: message,
+          fallbackReason,
+          rawProviderError: message,
+          meta: this.buildUnhandledErrorMeta(error),
+        }),
+      );
+      void Promise.allSettled(traceWrites);
+      const completion: EvaluationAgentCompletion = {
+        agent: prepared.agent.key,
+        output: fallbackOutput,
+        usedFallback: true,
+        ...(prepared.dataSummary ? { dataSummary: prepared.dataSummary } : {}),
+        attempt: 1,
+        retryCount: 0,
+        error: message,
+        fallbackReason,
+        rawProviderError: message,
+        meta: this.buildUnhandledErrorMeta(error),
+      };
+      this.emitAgentCompletion(onAgentComplete, completion);
+      return completion;
+    }
   }
 
   private persistAgentTrace(

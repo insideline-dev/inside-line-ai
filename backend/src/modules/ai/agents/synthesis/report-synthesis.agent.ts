@@ -14,7 +14,10 @@ import type {
   ResearchResult,
   ScrapingResult,
 } from "../../interfaces/phase-results.interface";
-import type { EvaluationFallbackReason } from "../../interfaces/agent.interface";
+import type {
+  EvaluationFallbackReason,
+  OpenAiResponseTelemetry,
+} from "../../interfaces/agent.interface";
 import type { ExitScenario } from "../../schemas/evaluations/exit-potential.schema";
 import type { FounderPitchRecommendation } from "../../schemas/simple-evaluation.schema";
 import type { FounderRecommendation } from "../../schemas/evaluations/team.schema";
@@ -71,6 +74,7 @@ export interface ReportSynthesisRunResult {
   systemPrompt: string;
   outputText: string;
   outputJson: unknown;
+  meta?: Record<string, unknown>;
   usedFallback: boolean;
   error?: string;
   fallbackReason?: EvaluationFallbackReason;
@@ -139,7 +143,12 @@ export class ReportSynthesisAgent {
 
       const callModel = async (
         remainingMs: number,
-      ): Promise<{ parsedOutput: ReportSynthesisOutput; rawText: string; outputJson: unknown }> => {
+      ): Promise<{
+        parsedOutput: ReportSynthesisOutput;
+        rawText: string;
+        outputJson: unknown;
+        meta?: Record<string, unknown>;
+      }> => {
         if (useOpenAiDirect) {
           const direct = await withTimeout(
             (abortSignal) =>
@@ -159,7 +168,12 @@ export class ReportSynthesisAgent {
           );
           const parsed = ReportSynthesisSchema.parse(direct.output);
           const sanitized = this.sanitizeOutput(parsed);
-          return { parsedOutput: sanitized, rawText: direct.rawText, outputJson: sanitized };
+          return {
+            parsedOutput: sanitized,
+            rawText: direct.rawText,
+            outputJson: sanitized,
+            meta: this.buildTelemetryMeta(direct.telemetry),
+          };
         }
 
         const response = await withTimeout(
@@ -195,7 +209,7 @@ export class ReportSynthesisAgent {
         }
 
         try {
-          const { parsedOutput, rawText, outputJson } = await callModel(remainingBudgetMs);
+          const { parsedOutput, rawText, outputJson, meta } = await callModel(remainingBudgetMs);
 
           this.logger.log(
             `[ReportSynthesis] Completed | Strengths: ${parsedOutput.keyStrengths.length} | Risks: ${parsedOutput.keyRisks.length}`,
@@ -207,6 +221,7 @@ export class ReportSynthesisAgent {
             systemPrompt,
             outputText: rawText,
             outputJson,
+            meta,
             usedFallback: false,
             attempt,
             retryCount: attempt - 1,
@@ -283,6 +298,20 @@ export class ReportSynthesisAgent {
       rawProviderError,
       attempt,
       retryCount: Math.max(0, attempt - 1),
+    };
+  }
+
+  private buildTelemetryMeta(
+    telemetry: OpenAiResponseTelemetry | undefined,
+    baseMeta?: Record<string, unknown>,
+  ): Record<string, unknown> | undefined {
+    if (!telemetry) {
+      return baseMeta;
+    }
+
+    return {
+      ...(baseMeta ?? {}),
+      openaiTelemetry: telemetry,
     };
   }
 

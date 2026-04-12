@@ -10,7 +10,9 @@ import type { RetryAgentDtoPhase } from './retryAgentDtoPhase';
 export interface RetryAgentDto {
   phase: RetryAgentDtoPhase;
   /** @minLength 1 */
-  agent: string;
+  agent?: string;
+  /** @minItems 1 */
+  agents?: string[];
   /**
    * @minLength 10
    * @maxLength 3000

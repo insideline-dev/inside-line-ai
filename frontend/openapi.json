@@ -9693,6 +9693,14 @@
             "type": "string",
             "minLength": 1
           },
+          "agents": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
           "feedback": {
             "type": "string",
             "minLength": 10,
@@ -9704,8 +9712,7 @@
           }
         },
         "required": [
-          "phase",
-          "agent"
+          "phase"
         ]
       },
       "UpdateStageWeightsDto": {

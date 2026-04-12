@@ -3,6 +3,7 @@ import { google } from "@ai-sdk/google";
 import { openai } from "@ai-sdk/openai";
 import { generateText, Output, stepCountIs, tool, type ToolChoice, type ToolSet } from "ai";
 import { z } from "zod";
+import type { OpenAiResponseTelemetry } from "../interfaces/agent.interface";
 import type { StartupStage } from "../../startup/entities/startup.schema";
 import type { AiPromptKey } from "./ai-prompt-catalog";
 import {
@@ -31,6 +32,7 @@ type NormalizedGenerateTextResult<TOutput = unknown> = Pick<
 > & {
   output: TOutput | undefined;
   experimental_output: TOutput | undefined;
+  telemetry?: OpenAiResponseTelemetry;
 };
 
 export interface ModelExecutionResolution {
@@ -319,6 +321,7 @@ export class AiModelExecutionService {
       output: result.output,
       experimental_output: result.experimental_output,
       sources: result.sources as GenerateTextResult["sources"],
+      telemetry: result.telemetry,
     };
   }
 }

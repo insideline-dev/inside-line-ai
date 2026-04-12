@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { FinancialsEvaluationOpenAiSchema } from "../../schemas/evaluations/openai/financials-openai.schema";
 import { CONTENT_PATTERNS } from "../../constants";
 import type { EvaluationPipelineInput } from "../../interfaces/agent.interface";
 import {
@@ -17,6 +18,7 @@ import { OpenAiDirectClientService } from "../../services/openai-direct-client.s
 export class FinancialsEvaluationAgent extends BaseEvaluationAgent<FinancialsEvaluation> {
   readonly key = "financials" as const;
   protected readonly schema = FinancialsEvaluationSchema;
+  protected readonly openAiSchema = FinancialsEvaluationOpenAiSchema;
   protected readonly systemPrompt =
     "You are a startup investment analyst evaluating financial health, burn, and runway assumptions.";
 

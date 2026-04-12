@@ -6,6 +6,7 @@ export const RetryPhaseSchema = z.object({
   phase: z.nativeEnum(PipelinePhase),
   forceRerun: z.boolean().optional().default(false),
   feedback: z.string().trim().min(10).max(3000).optional(),
+  skipSynthesis: z.boolean().optional().default(false),
 });
 
 export type RetryPhase = z.infer<typeof RetryPhaseSchema>;

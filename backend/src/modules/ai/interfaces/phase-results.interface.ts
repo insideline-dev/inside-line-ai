@@ -77,6 +77,7 @@ export interface StartupFormContext {
 
 export interface ExtractionResult {
   companyName: string;
+  description?: string;
   tagline: string;
   founderNames: string[];
   industry: string;

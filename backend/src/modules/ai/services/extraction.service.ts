@@ -646,8 +646,14 @@ export class ExtractionService {
     );
     const stage = this.resolveStage(aiFields.stage, startupRecord.stage, rawText);
 
+    const description =
+      aiFields.description && aiFields.description.trim().length >= 20
+        ? aiFields.description.trim()
+        : undefined;
+
     return ExtractionSchema.parse({
       companyName,
+      description,
       tagline: aiFields.tagline ?? startupRecord.tagline ?? "",
       founderNames,
       industry,

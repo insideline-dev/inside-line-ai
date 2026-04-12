@@ -16,6 +16,19 @@ const AGENT_LABELS: Record<string, string> = {
   exitPotential: "Exit Potential",
 };
 
+export const RESEARCH_AGENT_LABELS: string[] = [
+  "Team Research",
+  "Market Research",
+  "Product Research",
+  "Competitor Research",
+  "News Research",
+];
+
+export const SYNTHESIS_AGENT_LABELS: string[] = [
+  "Investor Memo",
+  "Founder Report",
+];
+
 export function formatAgentLabel(agentKey: string): string {
   return (
     AGENT_LABELS[agentKey] ??

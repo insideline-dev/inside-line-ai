@@ -56,6 +56,11 @@ interface InvestorCandidate {
   notes: string | null;
   businessModels: string[] | null;
   antiPortfolio: string | null;
+  mustHaveFeatures: string[] | null;
+  dealBreakers: string[] | null;
+  minRevenue: number | null;
+  minGrowthRate: number | null;
+  minTeamSize: number | null;
   minThesisFitScore: number | null;
   minStartupScore: number | null;
 }
@@ -118,6 +123,11 @@ export class InvestorMatchingService {
       notes: investorThesis.notes,
       businessModels: investorThesis.businessModels,
       antiPortfolio: investorThesis.antiPortfolio,
+      mustHaveFeatures: investorThesis.mustHaveFeatures,
+      dealBreakers: investorThesis.dealBreakers,
+      minRevenue: investorThesis.minRevenue,
+      minGrowthRate: investorThesis.minGrowthRate,
+      minTeamSize: investorThesis.minTeamSize,
       minThesisFitScore: investorThesis.minThesisFitScore,
       minStartupScore: investorThesis.minStartupScore,
     };
@@ -305,6 +315,7 @@ export class InvestorMatchingService {
           buildThesisSummary(candidate as unknown as Record<string, unknown>),
         investorThesis:
           candidate.thesisNarrative ?? candidate.notes ?? "Not available",
+        investorCriteria: this.renderInvestorCriteria(candidate),
         startupSummary: input.synthesis.dealSnapshot,
         overallScore: input.synthesis.overallScore,
         startupProfile: JSON.stringify({
@@ -472,6 +483,45 @@ export class InvestorMatchingService {
           isNull(startupMatch.fitRationale),
         ),
       );
+  }
+
+  private renderInvestorCriteria(candidate: InvestorCandidate): string {
+    const lines: string[] = [];
+
+    const fmt = (arr: string[] | null) =>
+      arr?.length ? arr.join(", ") : "Not specified";
+
+    lines.push(`- Target Industries: ${fmt(candidate.industries)}`);
+    lines.push(`- Target Stages: ${fmt(candidate.stages)}`);
+    lines.push(`- Geographic Focus: ${fmt(candidate.geographicFocus)}`);
+    lines.push(`- Business Models: ${fmt(candidate.businessModels)}`);
+
+    if (candidate.checkSizeMin != null || candidate.checkSizeMax != null) {
+      const min = candidate.checkSizeMin != null ? `$${candidate.checkSizeMin.toLocaleString()}` : "any";
+      const max = candidate.checkSizeMax != null ? `$${candidate.checkSizeMax.toLocaleString()}` : "any";
+      lines.push(`- Check Size Range: ${min} – ${max}`);
+    }
+
+    if (candidate.minRevenue != null) {
+      lines.push(`- Minimum Revenue: $${candidate.minRevenue.toLocaleString()}`);
+    }
+    if (candidate.minGrowthRate != null) {
+      lines.push(`- Minimum Growth Rate: ${candidate.minGrowthRate}%`);
+    }
+    if (candidate.minTeamSize != null) {
+      lines.push(`- Minimum Team Size: ${candidate.minTeamSize}`);
+    }
+    if (candidate.mustHaveFeatures?.length) {
+      lines.push(`- Must-Have Features: ${candidate.mustHaveFeatures.join(", ")}`);
+    }
+    if (candidate.dealBreakers?.length) {
+      lines.push(`- Deal Breakers: ${candidate.dealBreakers.join(", ")}`);
+    }
+    if (candidate.antiPortfolio) {
+      lines.push(`- Anti-Portfolio / Avoid: ${candidate.antiPortfolio}`);
+    }
+
+    return lines.join("\n");
   }
 
   private async mapWithConcurrency<TInput, TOutput>(

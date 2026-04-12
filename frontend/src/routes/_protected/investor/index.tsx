@@ -1228,7 +1228,6 @@ function InvestorDashboard() {
     mutation: {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getInvestorControllerGetPipelineQueryKey() });
-        toast.success("Status updated");
       },
       onError: () => {
         toast.error("Failed to update status");
@@ -1240,7 +1239,6 @@ function InvestorDashboard() {
     mutation: {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getStartupControllerFindAllQueryKey() });
-        toast.success("Status updated");
       },
       onError: () => {
         toast.error("Failed to update status");

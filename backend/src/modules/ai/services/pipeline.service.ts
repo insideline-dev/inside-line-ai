@@ -8,6 +8,7 @@ import { NotificationType } from "../../../notification/entities";
 import { NotificationService } from "../../../notification/notification.service";
 import { QueueService } from "../../../queue";
 import { startup, StartupStatus } from "../../startup/entities";
+import { STARTUP_DESCRIPTION_PLACEHOLDER } from "../../startup/startup.constants";
 import { UserRole } from "../../../auth/entities/auth.schema";
 import { startupEvaluation } from "../../analysis/entities";
 import { pipelineRun, pipelineAgentRun } from "../entities";
@@ -631,7 +632,9 @@ export class PipelineService {
     startupId: string,
     extraction: ExtractionResult,
     source: "pre-pipeline" | "phase-extraction",
-  ): Promise<Array<"website" | "stage" | "name" | "industry" | "location">> {
+  ): Promise<
+    Array<"website" | "stage" | "name" | "industry" | "location" | "description">
+  > {
     const [record] = await this.drizzle.db
       .select({
         name: startup.name,
@@ -639,6 +642,7 @@ export class PipelineService {
         stage: startup.stage,
         industry: startup.industry,
         location: startup.location,
+        description: startup.description,
         fundingTarget: startup.fundingTarget,
         teamSize: startup.teamSize,
         submittedByRole: startup.submittedByRole,
@@ -654,7 +658,7 @@ export class PipelineService {
 
     const updates: Partial<typeof startup.$inferInsert> = {};
     const updatedFields: Array<
-      "website" | "stage" | "name" | "industry" | "location"
+      "website" | "stage" | "name" | "industry" | "location" | "description"
     > = [];
 
     const normalizedWebsite =
@@ -705,6 +709,16 @@ export class PipelineService {
       updatedFields.push("location");
     }
 
+    const descriptionCandidate = extraction.description?.trim();
+    if (
+      descriptionCandidate &&
+      descriptionCandidate.length >= 20 &&
+      record.description === STARTUP_DESCRIPTION_PLACEHOLDER
+    ) {
+      updates.description = descriptionCandidate;
+      updatedFields.push("description");
+    }
+
     if (updatedFields.length > 0) {
       await this.drizzle.db
         .update(startup)
@@ -727,7 +741,7 @@ export class PipelineService {
 
   async prefillCriticalFieldsFromDeckExtraction(startupId: string): Promise<{
     extractionSource: ExtractionResult["source"];
-    updatedFields: Array<"website" | "stage" | "name" | "industry" | "location">;
+    updatedFields: Array<"website" | "stage" | "name" | "industry" | "location" | "description">;
     missingCriticalFields: Array<"website" | "stage">;
   }> {
     const extraction = await this.extractionService.run(startupId);

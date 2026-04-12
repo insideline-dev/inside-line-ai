@@ -1,5 +1,4 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
-import { createFileRoute } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -38,11 +37,6 @@ import {
   selectInitialFlowConfigCandidate,
   type FlowConfigRecord,
 } from "./-flow-config-helpers";
-
-export const Route = createFileRoute("/_protected/admin/flow")({
-  component: AdminFlowPage,
-});
-
 
 function extractResponseData<T>(payload: unknown): T {
   if (payload && typeof payload === "object" && "data" in payload) {
@@ -180,7 +174,7 @@ function normalizeFlowNodeConfigs(value: unknown): FlowNodeConfigs {
   return normalized;
 }
 
-function AdminFlowPage() {
+export function AdminFlowView() {
   const queryClient = useQueryClient();
   const [selectedFlowId, setSelectedFlowId] = useState<string>("pipeline");
   const [draftId, setDraftId] = useState<string | null>(null);

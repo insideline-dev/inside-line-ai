@@ -82,9 +82,15 @@ export function StartupCard({ startup, basePath, showScore = true, showActions =
                   </a>
                 )}
               </div>
-              <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                {startup.stage && <Badge variant="secondary">{stageLabels[startup.stage] || startup.stage}</Badge>}
-                {startup.sectorIndustry && <span>{startup.sectorIndustry.replace(/_/g, " ")}</span>}
+              <div className="flex items-center gap-2 text-sm text-muted-foreground min-w-0">
+                {startup.stage && (
+                  <Badge variant="secondary" className="shrink-0">
+                    {stageLabels[startup.stage] || startup.stage}
+                  </Badge>
+                )}
+                {startup.sectorIndustry && (
+                  <span className="truncate">{startup.sectorIndustry.replace(/_/g, " ")}</span>
+                )}
               </div>
             </div>
           </div>
@@ -93,7 +99,9 @@ export function StartupCard({ startup, basePath, showScore = true, showActions =
       </CardHeader>
       <CardContent className="flex flex-1 flex-col justify-between gap-4">
         {startup.description && (
-          <p className="text-sm text-muted-foreground line-clamp-2">{startup.description}</p>
+          <p className="text-sm text-muted-foreground line-clamp-2">
+            {startup.description.replace(/\s+/g, " ").trim()}
+          </p>
         )}
 
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
@@ -123,7 +131,7 @@ export function StartupCard({ startup, basePath, showScore = true, showActions =
           />
         )}
 
-        <div className="mt-auto flex items-center justify-between pt-3 border-t">
+        <div className="flex items-center justify-between pt-3 border-t">
           <StatusBadge status={effectiveStatus} />
           {showActions && (
             effectiveStatus === "draft" ? (

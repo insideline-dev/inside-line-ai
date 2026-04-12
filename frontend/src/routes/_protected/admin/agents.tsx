@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
+import { cn } from "@/lib/utils";
 import {
   useAdminControllerGetAiPromptContextSchema,
   useAdminControllerGetAiPromptFlow,
@@ -64,9 +65,58 @@ import {
   Workflow,
 } from "lucide-react";
 
+import { AdminFlowView } from "./-flow-view";
+
 export const Route = createFileRoute("/_protected/admin/agents")({
-  component: AdminAgentsPage,
+  component: AdminAgentsRoute,
 });
+
+function AdminAgentsRoute() {
+  const [tab, setTab] = useState<"flow" | "agents">("flow");
+  return (
+    <div className="flex h-full flex-col gap-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Agents</h1>
+          <p className="text-sm text-muted-foreground">
+            Configure the pipeline flow and tune individual agent prompts.
+          </p>
+        </div>
+        <div className="inline-flex items-center rounded-none border bg-muted/40 p-1">
+          <button
+            type="button"
+            onClick={() => setTab("flow")}
+            className={cn(
+              "inline-flex items-center gap-2 px-4 py-1.5 text-sm font-medium transition-colors",
+              tab === "flow"
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <Workflow className="h-4 w-4" />
+            Flow
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("agents")}
+            className={cn(
+              "inline-flex items-center gap-2 px-4 py-1.5 text-sm font-medium transition-colors",
+              tab === "agents"
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <Bot className="h-4 w-4" />
+            Agents
+          </button>
+        </div>
+      </div>
+      <div className="min-h-0 flex-1">
+        {tab === "flow" ? <AdminFlowView /> : <AdminAgentsPage />}
+      </div>
+    </div>
+  );
+}
 
 type PromptKey = AiPromptFlowResponseDtoFlowsItemNodesItemPromptKeysItem;
 type FlowDefinition = AiPromptFlowResponseDtoFlowsItem;

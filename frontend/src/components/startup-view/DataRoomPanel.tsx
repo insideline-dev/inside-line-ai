@@ -18,13 +18,15 @@ import {
   FileSignature,
   Users,
   FolderOpen,
-  Upload,
+  Search,
+  Eye,
+  EyeOff,
+  Sparkles,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Select,
@@ -34,10 +36,22 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { FileUploadDropzone } from "@/components/FileUploadDropzone";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useStartupControllerUpdateDataRoomCategory } from "@/api/generated/startups/startups";
 import { UpdateDataRoomCategoryDtoCategory } from "@/api/generated/model/updateDataRoomCategoryDtoCategory";
 import { useDataRoomClassification } from "@/lib/auth/useSocket";
-import { formatAgentLabels, formatCategoryLabel } from "@/lib/agent-labels";
+import {
+  RESEARCH_AGENT_LABELS,
+  SYNTHESIS_AGENT_LABELS,
+  formatAgentLabel,
+  formatAgentLabels,
+  formatCategoryLabel,
+} from "@/lib/agent-labels";
 import { customFetch } from "@/api/client";
 import { env } from "@/env";
 import { cn } from "@/lib/utils";
@@ -200,41 +214,6 @@ async function uploadDocument(startupId: string, file: File, category: string) {
   return response.json();
 }
 
-function ClassificationBadge({ doc }: { doc: DataRoomDoc }) {
-  const status = doc.classificationStatus ?? "pending";
-  if (status === "classifying" || status === "pending") {
-    return (
-      <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-        <Loader2 className="size-3.5 animate-spin" />
-        Classifying
-      </span>
-    );
-  }
-  if (status === "failed") {
-    return (
-      <span
-        className="inline-flex items-center gap-1.5 text-xs text-destructive"
-        title={doc.classificationError ?? "Classification failed"}
-      >
-        <AlertCircle className="size-3.5" />
-        Failed
-      </span>
-    );
-  }
-  const confidence =
-    typeof doc.classificationConfidence === "string"
-      ? Number.parseFloat(doc.classificationConfidence)
-      : doc.classificationConfidence;
-  return (
-    <span className="inline-flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400">
-      <CheckCircle2 className="size-3.5" />
-      {typeof confidence === "number" && !Number.isNaN(confidence)
-        ? `${Math.round(confidence * 100)}%`
-        : "Classified"}
-    </span>
-  );
-}
-
 function RowCategorySelect({
   doc,
   startupId,
@@ -269,7 +248,10 @@ function RowCategorySelect({
         })
       }
     >
-      <SelectTrigger className="h-8 w-[180px] text-xs">
+      <SelectTrigger
+        aria-label="Change category"
+        className="h-8 w-[150px] border-transparent bg-transparent text-xs text-muted-foreground shadow-none hover:border-border hover:text-foreground focus:border-border focus:text-foreground"
+      >
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
@@ -280,6 +262,102 @@ function RowCategorySelect({
         ))}
       </SelectContent>
     </Select>
+  );
+}
+
+function AgentsTooltip({ routedAgents }: { routedAgents: string[] }) {
+  const evaluationAgents = routedAgents.map(formatAgentLabel);
+  const evalCount = evaluationAgents.length;
+  const researchCount = RESEARCH_AGENT_LABELS.length;
+  const synthesisCount = SYNTHESIS_AGENT_LABELS.length;
+  const total = evalCount + researchCount + synthesisCount;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          className="cursor-help rounded border-b border-dotted border-muted-foreground/50 tabular-nums underline-offset-2 hover:text-foreground"
+        >
+          {total} {total === 1 ? "agent" : "agents"}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent
+        side="top"
+        align="start"
+        className="max-w-xs space-y-3 p-3 text-xs"
+      >
+        <AgentsTooltipGroup
+          title="Evaluation"
+          count={evalCount}
+          accent="bg-primary"
+          agents={evaluationAgents}
+          emptyHint="No evaluation agents routed"
+        />
+        <AgentsTooltipGroup
+          title="Research"
+          count={researchCount}
+          accent="bg-sky-500"
+          agents={RESEARCH_AGENT_LABELS}
+          note="All research agents receive every document"
+        />
+        <AgentsTooltipGroup
+          title="Synthesis"
+          count={synthesisCount}
+          accent="bg-amber-500"
+          agents={SYNTHESIS_AGENT_LABELS}
+          note="Uses evaluation + research outputs"
+        />
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function AgentsTooltipGroup({
+  title,
+  count,
+  accent,
+  agents,
+  note,
+  emptyHint,
+}: {
+  title: string;
+  count: number;
+  accent: string;
+  agents: string[];
+  note?: string;
+  emptyHint?: string;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center gap-2">
+        <span className={cn("size-1.5 rounded-full", accent)} aria-hidden />
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-foreground">
+          {title}
+        </span>
+        <span className="text-[11px] tabular-nums text-muted-foreground">
+          {count}
+        </span>
+      </div>
+      {agents.length > 0 ? (
+        <ul className="space-y-0.5 pl-3.5 text-[11px] text-muted-foreground">
+          {agents.map((name) => (
+            <li key={name} className="truncate">
+              {name}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="pl-3.5 text-[11px] italic text-muted-foreground">
+          {emptyHint ?? "None"}
+        </p>
+      )}
+      {note && (
+        <p className="pl-3.5 text-[10px] leading-snug text-muted-foreground/80">
+          {note}
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -297,63 +375,92 @@ function DocumentRow({ doc, startupId, allowCategoryEdit }: DocumentRowProps) {
     day: "numeric",
     year: "numeric",
   });
-  const agentLabels = formatAgentLabels(doc.routedAgents ?? []);
+  const agentCount = (doc.routedAgents ?? []).length;
+  const status = doc.classificationStatus ?? "pending";
+  const rawConfidence =
+    typeof doc.classificationConfidence === "string"
+      ? Number.parseFloat(doc.classificationConfidence)
+      : doc.classificationConfidence;
+  const confidencePct =
+    typeof rawConfidence === "number" && !Number.isNaN(rawConfidence)
+      ? Math.round(rawConfidence * 100)
+      : null;
 
   return (
-    <div className="flex items-start gap-3 rounded-lg border bg-background px-3 py-3 transition-colors hover:bg-muted/40">
-      <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted">
-        <FileText className="size-4 text-muted-foreground" />
+    <div className="group flex items-center gap-3 rounded-md border border-transparent bg-background px-3 py-2 transition-all hover:border-border hover:bg-muted/40 hover:shadow-sm">
+      <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+        <FileText className="size-4" />
       </div>
 
-      <div className="min-w-0 flex-1 space-y-1.5">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium" title={fileName}>
-              {fileName}
-            </p>
-            <p className="text-xs text-muted-foreground tabular-nums">
-              {size} · Uploaded {uploaded}
-            </p>
-          </div>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium" title={fileName}>
+          {fileName}
+        </p>
+        <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+          <span className="tabular-nums">{size}</span>
+          <span aria-hidden>·</span>
+          <span className="tabular-nums">{uploaded}</span>
+          {agentCount > 0 && (
+            <>
+              <span aria-hidden>·</span>
+              <AgentsTooltip routedAgents={doc.routedAgents ?? []} />
+            </>
+          )}
+          {status === "completed" && confidencePct !== null && (
+            <>
+              <span aria-hidden>·</span>
+              <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+                <CheckCircle2 className="size-3" />
+                {confidencePct}%
+              </span>
+            </>
+          )}
+          {(status === "pending" || status === "classifying") && (
+            <>
+              <span aria-hidden>·</span>
+              <span className="inline-flex items-center gap-1">
+                <Loader2 className="size-3 animate-spin" />
+                Classifying
+              </span>
+            </>
+          )}
+          {status === "failed" && (
+            <>
+              <span aria-hidden>·</span>
+              <span
+                className="inline-flex items-center gap-1 text-destructive"
+                title={doc.classificationError ?? "Classification failed"}
+              >
+                <AlertCircle className="size-3" />
+                Failed
+              </span>
+            </>
+          )}
+        </div>
+      </div>
 
-          {doc.assetUrl && (
-            <Button
-              asChild
-              size="sm"
-              variant="outline"
-              className="h-8 shrink-0 gap-1.5"
+      <div className="flex shrink-0 items-center gap-1">
+        {allowCategoryEdit && (
+          <RowCategorySelect doc={doc} startupId={startupId} />
+        )}
+        {doc.assetUrl && (
+          <Button
+            asChild
+            variant="ghost"
+            size="icon"
+            className="size-8 text-muted-foreground hover:text-foreground"
+          >
+            <a
+              href={doc.assetUrl}
+              target="_blank"
+              rel="noreferrer"
+              download
+              aria-label={`Download ${fileName}`}
             >
-              <a href={doc.assetUrl} target="_blank" rel="noreferrer" download>
-                <Download className="size-3.5" />
-                <span className="hidden sm:inline">Download</span>
-              </a>
-            </Button>
-          )}
-        </div>
-
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-          <ClassificationBadge doc={doc} />
-
-          {agentLabels.length > 0 && (
-            <div className="flex flex-wrap gap-1">
-              {agentLabels.map((label) => (
-                <Badge
-                  key={label}
-                  variant="secondary"
-                  className="h-5 px-1.5 text-[10px] font-normal"
-                >
-                  {label}
-                </Badge>
-              ))}
-            </div>
-          )}
-
-          {allowCategoryEdit && (
-            <div className="ml-auto">
-              <RowCategorySelect doc={doc} startupId={startupId} />
-            </div>
-          )}
-        </div>
+              <Download className="size-4" />
+            </a>
+          </Button>
+        )}
       </div>
     </div>
   );
@@ -383,39 +490,32 @@ function CategorySection({
     <Collapsible open={open} onOpenChange={setOpen}>
       <div
         className={cn(
-          "rounded-lg border transition-colors",
-          open ? "border-border bg-card" : "border-border/60 bg-card/50",
-          isEmpty && "opacity-75",
+          "overflow-hidden rounded-lg border bg-card",
+          isEmpty && "opacity-70",
         )}
       >
         <CollapsibleTrigger asChild>
           <button
             type="button"
-            className="flex w-full items-center gap-3 rounded-lg px-4 py-3 text-left transition-colors hover:bg-muted/40"
+            className="flex w-full cursor-pointer items-center gap-3 bg-muted/30 px-4 py-3 text-left transition-colors hover:bg-muted/60"
           >
             <div
               className={cn(
                 "flex size-9 shrink-0 items-center justify-center rounded-md",
-                isEmpty ? "bg-muted/50" : "bg-primary/10",
+                isEmpty
+                  ? "bg-background text-muted-foreground"
+                  : "bg-primary/10 text-primary",
               )}
             >
-              <Icon
-                className={cn(
-                  "size-4",
-                  isEmpty ? "text-muted-foreground" : "text-primary",
-                )}
-              />
+              <Icon className="size-4" />
             </div>
 
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <span className="truncate text-sm font-semibold">{label}</span>
-                <Badge
-                  variant={isEmpty ? "outline" : "secondary"}
-                  className="h-5 px-1.5 text-[10px] tabular-nums"
-                >
+                <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary/10 px-1.5 text-[11px] font-medium tabular-nums text-primary">
                   {count}
-                </Badge>
+                </span>
               </div>
               <p className="truncate text-xs text-muted-foreground">
                 {description}
@@ -432,7 +532,7 @@ function CategorySection({
         </CollapsibleTrigger>
 
         <CollapsibleContent>
-          <div className="space-y-2 border-t px-4 py-3">
+          <div className="space-y-1 border-t p-2">
             {isEmpty ? (
               <p className="py-4 text-center text-xs text-muted-foreground">
                 No documents in this section yet.
@@ -468,12 +568,12 @@ export function DataRoomPanel({
     enabled: !!startupId,
   });
 
-  const [uploadCategory, setUploadCategory] = useState<DocumentCategory>(
-    CATEGORY_ORDER[0],
-  );
+  const [searchTerm, setSearchTerm] = useState("");
+  const [showEmpty, setShowEmpty] = useState(false);
 
   const uploadMutation = useMutation({
-    mutationFn: (file: File) => uploadDocument(startupId, file, uploadCategory),
+    mutationFn: (file: File) =>
+      uploadDocument(startupId, file, "miscellaneous"),
     onSuccess: () => {
       toast.success("Document uploaded — classifying…");
       queryClient.invalidateQueries({ queryKey: ["data-room", startupId] });
@@ -514,10 +614,23 @@ export function DataRoomPanel({
     return role === "admin" || role === "founder";
   }, [allowCategoryEdit, role]);
 
+  const allDocs = useMemo(
+    () => (documents as DataRoomDoc[] | undefined) ?? [],
+    [documents],
+  );
+
+  const filteredDocs = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase();
+    if (!q) return allDocs;
+    return allDocs.filter((doc) =>
+      getFileName(doc).toLowerCase().includes(q),
+    );
+  }, [allDocs, searchTerm]);
+
   const docsByCategory = useMemo(() => {
     const map = new Map<string, DataRoomDoc[]>();
     for (const key of CATEGORY_ORDER) map.set(key, []);
-    for (const doc of (documents as DataRoomDoc[] | undefined) ?? []) {
+    for (const doc of filteredDocs) {
       const bucket = map.get(doc.category) ?? map.get("miscellaneous")!;
       bucket.push(doc);
     }
@@ -529,88 +642,87 @@ export function DataRoomPanel({
       map.set(key, list);
     }
     return map;
-  }, [documents]);
+  }, [filteredDocs]);
 
-  const totalDocs =
-    ((documents as DataRoomDoc[] | undefined) ?? []).length ?? 0;
+  const totalDocs = allDocs.length;
+  const filledCategories = useMemo(
+    () =>
+      CATEGORY_ORDER.filter(
+        (key) => (docsByCategory.get(key)?.length ?? 0) > 0,
+      ).length,
+    [docsByCategory],
+  );
+
+  const showEmptyEffective = role === "investor" ? false : showEmpty;
+  const visibleCategories = CATEGORY_ORDER.filter((category) => {
+    const count = docsByCategory.get(category)?.length ?? 0;
+    if (role === "investor") return count > 0;
+    return showEmptyEffective || count > 0;
+  });
+  const hiddenEmptyCount = CATEGORY_ORDER.length - filledCategories;
 
   return (
+    <TooltipProvider delayDuration={100}>
     <div className="space-y-6">
       {effectiveAllowUpload && (
-        <Card>
-          <CardHeader className="pb-4">
-            <div className="flex items-start gap-3">
-              <div className="flex size-9 items-center justify-center rounded-md bg-primary/10">
-                <Upload className="size-4 text-primary" />
-              </div>
-              <div>
-                <CardTitle className="text-base">Upload document</CardTitle>
-                <CardDescription className="text-xs">
-                  Category is auto-detected after upload. You can change it later.
-                </CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <label
-                htmlFor="data-room-upload-category"
-                className="text-xs font-medium text-muted-foreground uppercase tracking-wide"
-              >
-                Category hint
-              </label>
-              <Select
-                value={uploadCategory}
-                onValueChange={(value) =>
-                  setUploadCategory(value as DocumentCategory)
-                }
-              >
-                <SelectTrigger id="data-room-upload-category">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {CATEGORY_ORDER.map((key) => {
-                    const { label, Icon } = getCategoryMeta(key);
-                    return (
-                      <SelectItem key={key} value={key}>
-                        <span className="flex items-center gap-2">
-                          <Icon className="size-3.5 text-muted-foreground" />
-                          {label}
-                        </span>
-                      </SelectItem>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <FileUploadDropzone onUpload={(file) => uploadMutation.mutate(file)} />
-
+        <div className="space-y-2">
+          <FileUploadDropzone
+            onUpload={(file) => uploadMutation.mutate(file)}
+          />
+          <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Sparkles className="size-3.5 text-primary" />
+              Documents are auto-classified into the right section.
+            </p>
             {uploadMutation.isPending && (
-              <p className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1.5 text-xs font-medium text-primary">
                 <Loader2 className="size-3.5 animate-spin" />
                 Uploading…
-              </p>
+              </span>
             )}
-            {uploadMutation.error && (
-              <p className="text-sm text-destructive">
+            {uploadMutation.error && !uploadMutation.isPending && (
+              <span className="text-xs text-destructive">
                 {(uploadMutation.error as Error).message}
-              </p>
+              </span>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       )}
 
       <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-base font-semibold">Documents</h2>
-            <p className="text-xs text-muted-foreground">
-              {totalDocs === 0
-                ? "No documents uploaded yet."
-                : `${totalDocs} document${totalDocs === 1 ? "" : "s"} across ${CATEGORY_ORDER.length} sections.`}
-            </p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative w-full sm:max-w-sm">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              type="search"
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              placeholder="Search documents by name…"
+              className="pl-9"
+              aria-label="Search documents"
+            />
           </div>
+          {role !== "investor" && totalDocs > 0 && hiddenEmptyCount > 0 && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowEmpty((prev) => !prev)}
+              className="h-9 gap-1.5 text-xs"
+            >
+              {showEmptyEffective ? (
+                <>
+                  <EyeOff className="size-3.5" />
+                  Hide empty sections
+                </>
+              ) : (
+                <>
+                  <Eye className="size-3.5" />
+                  Show all sections ({hiddenEmptyCount})
+                </>
+              )}
+            </Button>
+          )}
         </div>
 
         {loadingDocs ? (
@@ -619,11 +731,18 @@ export function DataRoomPanel({
             <Skeleton className="h-16 w-full" />
             <Skeleton className="h-16 w-full" />
           </div>
+        ) : totalDocs === 0 ? (
+          <EmptyState canUpload={effectiveAllowUpload} />
+        ) : visibleCategories.length === 0 ? (
+          <div className="rounded-lg border border-dashed py-12 text-center">
+            <p className="text-sm text-muted-foreground">
+              No documents match "{searchTerm}".
+            </p>
+          </div>
         ) : (
           <div className="space-y-2">
-            {CATEGORY_ORDER.map((category) => {
+            {visibleCategories.map((category) => {
               const docs = docsByCategory.get(category) ?? [];
-              if (role === "investor" && docs.length === 0) return null;
               return (
                 <CategorySection
                   key={category}
@@ -638,6 +757,23 @@ export function DataRoomPanel({
           </div>
         )}
       </div>
+    </div>
+    </TooltipProvider>
+  );
+}
+
+function EmptyState({ canUpload }: { canUpload: boolean }) {
+  return (
+    <div className="flex flex-col items-center justify-center rounded-lg border border-dashed bg-muted/20 px-6 py-16 text-center">
+      <div className="flex size-12 items-center justify-center rounded-full bg-primary/10">
+        <FolderOpen className="size-5 text-primary" />
+      </div>
+      <h3 className="mt-4 text-sm font-semibold">Your data room is empty</h3>
+      <p className="mt-1 max-w-xs text-xs text-muted-foreground">
+        {canUpload
+          ? "Drag a pitch deck, financial model, or cap table above to get started. We'll sort it into the right section automatically."
+          : "No documents have been shared yet."}
+      </p>
     </div>
   );
 }

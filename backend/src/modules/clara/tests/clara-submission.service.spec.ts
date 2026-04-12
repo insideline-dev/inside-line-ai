@@ -9,6 +9,7 @@ import { NotificationService } from "../../../notification/notification.service"
 import { ClaraAiService } from "../clara-ai.service";
 import { ClaraSubmissionService } from "../clara-submission.service";
 import { StartupStatus } from "../../startup/entities/startup.schema";
+import { STARTUP_DESCRIPTION_PLACEHOLDER } from "../../startup/startup.constants";
 import { PipelinePhase } from "../../ai/interfaces/pipeline.interface";
 import type { MessageContext, AttachmentMeta } from "../interfaces/clara.interface";
 
@@ -760,7 +761,7 @@ describe("ClaraSubmissionService", () => {
     );
   });
 
-  it("truncates long body text in description field", async () => {
+  it("uses a neutral placeholder description regardless of the email body", async () => {
     const longText = "a".repeat(6000);
     const ctx = createMessageContext({
       bodyText: longText,
@@ -771,7 +772,7 @@ describe("ClaraSubmissionService", () => {
 
     expect(mockDb.values).toHaveBeenCalledWith(
       expect.objectContaining({
-        description: longText.slice(0, 5000),
+        description: STARTUP_DESCRIPTION_PLACEHOLDER,
       }),
     );
   });

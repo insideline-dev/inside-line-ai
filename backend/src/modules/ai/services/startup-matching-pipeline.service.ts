@@ -16,9 +16,8 @@ import {
   AnalysisJobPriority,
   AnalysisJobStatus,
   AnalysisJobType,
-} from "../../analysis/entities/analysis.schema";
-import { PipelineStateService } from "./pipeline-state.service";
-import { PipelinePhase } from "../interfaces/pipeline.interface";
+  startupEvaluation,
+} from "../../analysis/entities";
 import type { SynthesisResult } from "../interfaces/phase-results.interface";
 import { InvestorMatchingService } from "./investor-matching.service";
 
@@ -66,7 +65,6 @@ export class StartupMatchingPipelineService {
   constructor(
     private drizzle: DrizzleService,
     private queue: QueueService,
-    private pipelineState: PipelineStateService,
     private investorMatching: InvestorMatchingService,
     private notificationService: NotificationService,
   ) {}
@@ -215,15 +213,11 @@ export class StartupMatchingPipelineService {
 
     try {
       const startupRecord = await this.loadStartup(jobData.startupId);
-
-      const synthesis = await this.pipelineState.getPhaseResult(
-        jobData.startupId,
-        PipelinePhase.SYNTHESIS,
-      );
+      const synthesis = await this.loadSynthesisFromDb(jobData.startupId);
 
       if (!synthesis) {
         throw new BadRequestException(
-          `Cannot match startup (status: ${startupRecord.status}) — run AI analysis first so synthesis data is available.`,
+          `Cannot match startup (status: ${startupRecord.status}) — run AI analysis first so evaluation data is available.`,
         );
       }
 
@@ -371,6 +365,42 @@ export class StartupMatchingPipelineService {
     }
     const queueJobId = (value as Record<string, unknown>).queueJobId;
     return typeof queueJobId === "string" ? queueJobId : undefined;
+  }
+
+  private async loadSynthesisFromDb(startupId: string): Promise<SynthesisResult | null> {
+    const [row] = await this.drizzle.db
+      .select({
+        overallScore: startupEvaluation.overallScore,
+        sectionScores: startupEvaluation.sectionScores,
+        keyStrengths: startupEvaluation.keyStrengths,
+        keyRisks: startupEvaluation.keyRisks,
+        executiveSummary: startupEvaluation.executiveSummary,
+        confidenceScore: startupEvaluation.confidenceScore,
+        investorMemo: startupEvaluation.investorMemo,
+        founderReport: startupEvaluation.founderReport,
+        dataConfidenceNotes: startupEvaluation.dataConfidenceNotes,
+      })
+      .from(startupEvaluation)
+      .where(eq(startupEvaluation.startupId, startupId))
+      .limit(1);
+
+    if (!row?.overallScore || !row.sectionScores) {
+      return null;
+    }
+
+    const scores = row.sectionScores as SynthesisResult["sectionScores"];
+    return {
+      dealSnapshot: row.executiveSummary ?? "",
+      keyStrengths: (row.keyStrengths as string[]) ?? [],
+      keyRisks: (row.keyRisks as string[]) ?? [],
+      exitScenarios: [],
+      sectionScores: scores,
+      overallScore: row.overallScore,
+      confidenceScore: (row.confidenceScore as SynthesisResult["confidenceScore"]) ?? undefined,
+      investorMemo: row.investorMemo as SynthesisResult["investorMemo"],
+      founderReport: row.founderReport as SynthesisResult["founderReport"],
+      dataConfidenceNotes: row.dataConfidenceNotes ?? "",
+    };
   }
 
   private async loadStartup(startupId: string): Promise<{

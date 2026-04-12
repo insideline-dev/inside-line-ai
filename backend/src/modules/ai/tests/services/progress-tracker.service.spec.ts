@@ -261,7 +261,7 @@ describe("ProgressTrackerService", () => {
     );
   });
 
-  it("ignores late agent updates after a phase is already terminal", async () => {
+  it("ignores non-terminal agent updates after a phase is already terminal", async () => {
     await service.initProgress({
       startupId: "startup-1",
       userId: "user-1",
@@ -278,15 +278,16 @@ describe("ProgressTrackerService", () => {
       error: "market fallback parse failed",
     });
 
+    // A "running" status update after phase is terminal must be dropped
     await service.updateAgentProgress({
       startupId: "startup-1",
       userId: "user-1",
       pipelineRunId: "run-1",
       phase: PipelinePhase.EVALUATION,
       key: "exitPotential",
-      status: "completed",
-      progress: 100,
-      lifecycleEvent: "completed",
+      status: "running",
+      progress: 50,
+      lifecycleEvent: "started",
     });
 
     const progress = await service.getProgress("startup-1");
@@ -480,6 +481,158 @@ describe("ProgressTrackerService", () => {
     expect(result?.currentPhase).toBe(PipelinePhase.EVALUATION);
     expect(result?.phases.evaluation.agents.team.status).toBe("completed");
     expect(result?.phases.evaluation.agents.market.progress).toBe(50);
+  });
+
+  describe("stale completion handling", () => {
+    it("accepts terminal agent update (completed) when phase is terminal with same retry count", async () => {
+      await service.initProgress({
+        startupId: "startup-1",
+        userId: "user-1",
+        pipelineRunId: "run-1",
+        phases: Object.values(PipelinePhase),
+      });
+
+      await service.updatePhaseProgress({
+        startupId: "startup-1",
+        userId: "user-1",
+        pipelineRunId: "run-1",
+        phase: PipelinePhase.EVALUATION,
+        status: PhaseStatus.COMPLETED,
+      });
+
+      // Agent completes moments after phase was marked terminal — must NOT be dropped
+      await service.updateAgentProgress({
+        startupId: "startup-1",
+        userId: "user-1",
+        pipelineRunId: "run-1",
+        phase: PipelinePhase.EVALUATION,
+        key: "market",
+        status: "completed",
+        progress: 100,
+        lifecycleEvent: "completed",
+      });
+
+      const progress = await service.getProgress("startup-1");
+      const market = progress?.phases.evaluation.agents.market;
+
+      expect(market).toBeDefined();
+      expect(market?.status).toBe("completed");
+    });
+
+    it("accepts terminal agent update (failed) when phase is terminal with same retry count", async () => {
+      await service.initProgress({
+        startupId: "startup-1",
+        userId: "user-1",
+        pipelineRunId: "run-1",
+        phases: Object.values(PipelinePhase),
+      });
+
+      await service.updatePhaseProgress({
+        startupId: "startup-1",
+        userId: "user-1",
+        pipelineRunId: "run-1",
+        phase: PipelinePhase.EVALUATION,
+        status: PhaseStatus.FAILED,
+        error: "phase timed out",
+      });
+
+      // Agent finalizes with failure after phase timeout — must still be recorded
+      await service.updateAgentProgress({
+        startupId: "startup-1",
+        userId: "user-1",
+        pipelineRunId: "run-1",
+        phase: PipelinePhase.EVALUATION,
+        key: "team",
+        status: "failed",
+        error: "provider timeout",
+        attempt: 3,
+        retryCount: 2,
+        usedFallback: true,
+        lifecycleEvent: "fallback",
+      });
+
+      const progress = await service.getProgress("startup-1");
+      const team = progress?.phases.evaluation.agents.team;
+
+      expect(team).toBeDefined();
+      expect(team?.status).toBe("failed");
+    });
+
+    it("rejects non-terminal agent update (running) when phase is terminal with same retry count", async () => {
+      await service.initProgress({
+        startupId: "startup-1",
+        userId: "user-1",
+        pipelineRunId: "run-1",
+        phases: Object.values(PipelinePhase),
+      });
+
+      await service.updatePhaseProgress({
+        startupId: "startup-1",
+        userId: "user-1",
+        pipelineRunId: "run-1",
+        phase: PipelinePhase.EVALUATION,
+        status: PhaseStatus.COMPLETED,
+      });
+
+      // Stale "running" update from a slow worker must be dropped
+      await service.updateAgentProgress({
+        startupId: "startup-1",
+        userId: "user-1",
+        pipelineRunId: "run-1",
+        phase: PipelinePhase.EVALUATION,
+        key: "financials",
+        status: "running",
+        progress: 10,
+        lifecycleEvent: "started",
+      });
+
+      const progress = await service.getProgress("startup-1");
+
+      expect(progress?.phases.evaluation.agents.financials).toBeUndefined();
+    });
+
+    it("still rejects all updates from a prior phase retry cycle", async () => {
+      await service.initProgress({
+        startupId: "startup-1",
+        userId: "user-1",
+        pipelineRunId: "run-1",
+        phases: Object.values(PipelinePhase),
+      });
+
+      // Advance phase to retry cycle 1
+      await service.updateAgentProgress({
+        startupId: "startup-1",
+        userId: "user-1",
+        pipelineRunId: "run-1",
+        phase: PipelinePhase.EVALUATION,
+        key: "gtm",
+        status: "completed",
+        progress: 100,
+        phaseRetryCount: 1,
+        lifecycleEvent: "completed",
+      });
+
+      // Stale update from retry cycle 0 — must be rejected even if terminal
+      await service.updateAgentProgress({
+        startupId: "startup-1",
+        userId: "user-1",
+        pipelineRunId: "run-1",
+        phase: PipelinePhase.EVALUATION,
+        key: "gtm",
+        status: "completed",
+        progress: 100,
+        phaseRetryCount: 0,
+        lifecycleEvent: "completed",
+      });
+
+      const progress = await service.getProgress("startup-1");
+      const gtm = progress?.phases.evaluation.agents.gtm;
+
+      // Agent state should reflect the retry-1 update, not be overwritten
+      expect(gtm?.status).toBe("completed");
+      // retryCount on the phase should be 1 (the highest seen)
+      expect(progress?.phases.evaluation.retryCount).toBe(1);
+    });
   });
 
   it("normalizes minimal legacy payloads with missing required fields", async () => {

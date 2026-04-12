@@ -345,10 +345,17 @@ export class ProgressTrackerService {
         isPhaseTerminal(phase.status) &&
         incomingPhaseRetryCount === currentPhaseRetryCount
       ) {
+        const isTerminalAgentUpdate =
+          params.status === "completed" || params.status === "failed";
+        if (!isTerminalAgentUpdate) {
+          this.logger.debug(
+            `[Pipeline] Ignoring non-terminal agent update for ${params.key} in terminal phase ${params.phase} (status=${phase.status}, phaseRetry=${currentPhaseRetryCount})`,
+          );
+          return;
+        }
         this.logger.debug(
-          `[Pipeline] Ignoring agent update for ${params.key} in terminal phase ${params.phase} (status=${phase.status}, phaseRetry=${currentPhaseRetryCount})`,
+          `[Pipeline] Accepting late terminal agent update for ${params.key} in terminal phase ${params.phase} (agentStatus=${params.status}, phaseRetry=${currentPhaseRetryCount})`,
         );
-        return;
       }
       if (incomingPhaseRetryCount < currentPhaseRetryCount) {
         this.logger.debug(

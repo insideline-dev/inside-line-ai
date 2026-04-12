@@ -10,11 +10,14 @@ import { AiModelExecutionService } from "../../services/ai-model-execution.servi
 import { AiProviderService } from "../../providers/ai-provider.service";
 import { BaseEvaluationAgent } from "./base-evaluation.agent";
 import { baseEvaluation } from "./evaluation-utils";
+import { OpenAiDirectClientService } from "../../services/openai-direct-client.service";
+import { CompetitiveAdvantageEvaluationOpenAiSchema } from "../../schemas/evaluations/openai/competitive-advantage-openai.schema";
 
 @Injectable()
 export class CompetitiveAdvantageEvaluationAgent extends BaseEvaluationAgent<CompetitiveAdvantageEvaluation> {
   readonly key = "competitiveAdvantage" as const;
   protected readonly schema = CompetitiveAdvantageEvaluationSchema;
+  protected readonly openAiSchema = CompetitiveAdvantageEvaluationOpenAiSchema;
   protected readonly systemPrompt =
     "You are a startup investment analyst evaluating defensibility and competitive moats.";
 
@@ -23,8 +26,9 @@ export class CompetitiveAdvantageEvaluationAgent extends BaseEvaluationAgent<Com
     aiConfig: AiConfigService,
     promptService: AiPromptService,
     modelExecution?: AiModelExecutionService,
+    openAiDirect?: OpenAiDirectClientService,
   ) {
-    super(providers, aiConfig, promptService, modelExecution);
+    super(providers, aiConfig, promptService, modelExecution, openAiDirect);
   }
 
   protected override getAgentTemplateVariables(

@@ -148,6 +148,11 @@ export class AuthService {
     return this.jwt.sign(payload, { expiresIn: accessExpiresIn });
   }
 
+  getAccessTokenTtlMs(): number {
+    const raw = this.config.get<string>("JWT_ACCESS_EXPIRES", "15m");
+    return parseDurationToMs(raw, 15 * 60 * 1000);
+  }
+
   /**
    * Generate tokens with refresh token rotation.
    * Creates a new refresh token family for fresh logins.

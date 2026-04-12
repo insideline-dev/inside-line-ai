@@ -500,7 +500,7 @@ export class AuthController {
       secure,
       sameSite,
       path: "/",
-      maxAge: 15 * 60 * 1000,
+      maxAge: this.authService.getAccessTokenTtlMs(),
     });
 
     res.cookie(REFRESH_COOKIE_NAME, refreshToken, {

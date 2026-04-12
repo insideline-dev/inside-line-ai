@@ -275,8 +275,9 @@ export class ScrapingProcessor
                 attempt: resolvedAttempt,
                 retryCount: resolvedRetryCount,
                 lifecycleEvent: isFailed ? "failed" : "completed",
-                dataSummary:
-                  meta && Object.keys(meta).length > 0 ? meta : undefined,
+                ...(meta && Object.keys(meta).length > 0
+                  ? { dataSummary: meta, meta }
+                  : {}),
               })
               .catch((progressError) => {
                 this.logger.warn(

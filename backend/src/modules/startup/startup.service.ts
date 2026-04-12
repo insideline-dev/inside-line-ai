@@ -56,6 +56,21 @@ import {
 import { deriveStartupGeography } from "../geography";
 import { sanitizeNarrativeText } from "../ai/services/narrative-sanitizer";
 
+const GPT_5_4_INPUT_COST_PER_MILLION = 2.5;
+const GPT_5_4_OUTPUT_COST_PER_MILLION = 15;
+
+interface OpenAiUsageSummary {
+  inputTokens?: number;
+  outputTokens?: number;
+}
+
+interface OpenAiCostSummary {
+  inputCostUsd?: number;
+  outputCostUsd?: number;
+  totalCostUsd?: number;
+  tracedCallCount?: number;
+}
+
 function escapeIlike(input: string): string {
   return input.replace(/[%_\\]/g, (ch) => `\\${ch}`).slice(0, 200);
 }
@@ -69,7 +84,8 @@ export interface AdminRetryPhaseRequest {
 
 export interface AdminRetryAgentRequest {
   phase: PipelinePhase.RESEARCH | PipelinePhase.EVALUATION;
-  agent: string;
+  agent?: string;
+  agents?: string[];
   feedback?: string;
   skipSynthesis?: boolean;
 }
@@ -771,27 +787,33 @@ export class StartupService {
     if (!this.aiConfig.isPipelineEnabled()) {
       throw new BadRequestException("AI pipeline is disabled");
     }
-    if (!this.isValidRetryAgentRequest(request.phase, request.agent)) {
-      throw new BadRequestException(
-        `Unsupported agent "${request.agent}" for phase "${String(request.phase)}"`,
-      );
+    const agentList = request.agents ?? (request.agent ? [request.agent] : []);
+    for (const ag of agentList) {
+      if (!this.isValidRetryAgentRequest(request.phase, ag)) {
+        throw new BadRequestException(
+          `Unsupported agent "${ag}" for phase "${String(request.phase)}"`,
+        );
+      }
     }
 
     const feedback = request.feedback?.trim();
 
     if (feedback) {
-      await this.pipelineFeedback.record({
-        startupId: id,
-        phase: request.phase,
-        agentKey: request.agent,
-        feedback,
-        createdBy: adminId,
-        metadata: {
-          source: "admin_retry_agent",
-        },
-      });
+      for (const ag of agentList) {
+        await this.pipelineFeedback.record({
+          startupId: id,
+          phase: request.phase,
+          agentKey: ag,
+          feedback,
+          createdBy: adminId,
+          metadata: {
+            source: "admin_retry_agent",
+          },
+        });
+      }
     }
 
+    const primaryAgent = agentList[0];
     let mode: "agent_retry" | "full_reanalysis_fallback" = "agent_retry";
     const existingState = await this.aiPipeline.getPipelineStatus(id);
     if (!existingState) {
@@ -803,19 +825,21 @@ export class StartupService {
     } else {
       await this.aiPipeline.retryAgent(id, {
         phase: request.phase,
-        agentKey: request.agent as ResearchAgentKey | EvaluationAgentKey,
+        agentKey: primaryAgent as ResearchAgentKey | EvaluationAgentKey,
+        agentKeys: agentList as Array<ResearchAgentKey | EvaluationAgentKey>,
         skipDownstream: request.skipSynthesis,
       });
     }
 
     this.logger.log(
-      `Admin ${adminId} requested agent retry for startup ${id}, phase ${request.phase}, agent ${request.agent}`,
+      `Admin ${adminId} requested agent retry for startup ${id}, phase ${request.phase}, agents ${agentList.join(", ")}`,
     );
 
     return {
       startupId: id,
       phase: request.phase,
-      agent: request.agent,
+      agent: primaryAgent,
+      agents: agentList,
       accepted: true,
       feedbackAccepted: Boolean(feedback),
       mode,
@@ -1671,6 +1695,131 @@ export class StartupService {
     };
   }
 
+  private readOpenAiUsageFromMeta(meta: unknown): OpenAiUsageSummary | undefined {
+    if (!meta || typeof meta !== "object" || Array.isArray(meta)) {
+      return undefined;
+    }
+
+    const openAiTelemetry = (meta as Record<string, unknown>).openaiTelemetry;
+    if (
+      !openAiTelemetry ||
+      typeof openAiTelemetry !== "object" ||
+      Array.isArray(openAiTelemetry)
+    ) {
+      return undefined;
+    }
+
+    const usage = (openAiTelemetry as Record<string, unknown>).usage;
+    if (!usage || typeof usage !== "object" || Array.isArray(usage)) {
+      return undefined;
+    }
+
+    const usageRecord = usage as Record<string, unknown>;
+    const inputTokens =
+      typeof usageRecord.inputTokens === "number"
+        ? usageRecord.inputTokens
+        : undefined;
+    const outputTokens =
+      typeof usageRecord.outputTokens === "number"
+        ? usageRecord.outputTokens
+        : undefined;
+
+    if (inputTokens === undefined && outputTokens === undefined) {
+      return undefined;
+    }
+
+    return {
+      inputTokens,
+      outputTokens,
+    };
+  }
+
+  private buildOpenAiCostSummaryFromUsage(
+    usage: OpenAiUsageSummary | undefined,
+  ): OpenAiCostSummary | undefined {
+    if (!usage) {
+      return undefined;
+    }
+
+    const inputCostUsd =
+      typeof usage.inputTokens === "number"
+        ? (usage.inputTokens / 1_000_000) * GPT_5_4_INPUT_COST_PER_MILLION
+        : undefined;
+    const outputCostUsd =
+      typeof usage.outputTokens === "number"
+        ? (usage.outputTokens / 1_000_000) * GPT_5_4_OUTPUT_COST_PER_MILLION
+        : undefined;
+    const totalCostUsd =
+      inputCostUsd !== undefined || outputCostUsd !== undefined
+        ? (inputCostUsd ?? 0) + (outputCostUsd ?? 0)
+        : undefined;
+
+    if (
+      inputCostUsd === undefined &&
+      outputCostUsd === undefined &&
+      totalCostUsd === undefined
+    ) {
+      return undefined;
+    }
+
+    return {
+      inputCostUsd,
+      outputCostUsd,
+      totalCostUsd,
+      tracedCallCount: 1,
+    };
+  }
+
+  private aggregateOpenAiCostSummary(
+    traces: Array<{ meta?: Record<string, unknown> }>,
+  ): OpenAiCostSummary | undefined {
+    let inputCostUsd = 0;
+    let outputCostUsd = 0;
+    let tracedCallCount = 0;
+
+    for (const trace of traces) {
+      const usage = this.readOpenAiUsageFromMeta(trace.meta);
+      const cost = this.buildOpenAiCostSummaryFromUsage(usage);
+      if (!cost?.totalCostUsd && cost?.totalCostUsd !== 0) {
+        continue;
+      }
+
+      inputCostUsd += cost.inputCostUsd ?? 0;
+      outputCostUsd += cost.outputCostUsd ?? 0;
+      tracedCallCount += 1;
+    }
+
+    if (tracedCallCount === 0) {
+      return undefined;
+    }
+
+    return {
+      inputCostUsd,
+      outputCostUsd,
+      totalCostUsd: inputCostUsd + outputCostUsd,
+      tracedCallCount,
+    };
+  }
+
+  private withOpenAiCostMeta(
+    meta: Record<string, unknown> | undefined,
+  ): Record<string, unknown> | undefined {
+    const usage = this.readOpenAiUsageFromMeta(meta);
+    const cost = this.buildOpenAiCostSummaryFromUsage(usage);
+    if (!cost) {
+      return meta;
+    }
+
+    return {
+      ...(meta ?? {}),
+      openAiCost: {
+        inputCostUsd: cost.inputCostUsd,
+        outputCostUsd: cost.outputCostUsd,
+        totalCostUsd: cost.totalCostUsd,
+      },
+    };
+  }
+
   private async buildProgressResponse(
     db: DrizzleService["db"],
     startupId: string,
@@ -1707,6 +1856,9 @@ export class StartupService {
       const agentTraces = includeAdminDetails
         ? await this.loadAgentTraces(startupId, trackedProgress.pipelineRunId)
         : [];
+      const openAiCostSummary = includeAdminDetails
+        ? this.aggregateOpenAiCostSummary(agentTraces)
+        : undefined;
 
       const effectiveStatus = orphanTrackedProgress
         ? "failed"
@@ -1807,6 +1959,7 @@ export class StartupService {
                 rawProviderError: event.rawProviderError,
               })),
               agentTraces,
+              ...(openAiCostSummary ? { openAiCostSummary } : {}),
             }
           : {}),
       };
@@ -1817,6 +1970,9 @@ export class StartupService {
       const agentTraces = includeAdminDetails
         ? await this.loadAgentTraces(startupId, pipelineState.pipelineRunId)
         : [];
+      const openAiCostSummary = includeAdminDetails
+        ? this.aggregateOpenAiCostSummary(agentTraces)
+        : undefined;
       const totalPhases = Object.keys(pipelineState.phases).length;
       const completedCount = Object.values(pipelineState.phases).filter(
         (phase) => phase.status === "completed",
@@ -1878,7 +2034,11 @@ export class StartupService {
           ]),
         ),
         ...(includeAdminDetails
-          ? { phaseResults: pipelineState.results ?? {}, agentTraces }
+          ? {
+              phaseResults: pipelineState.results ?? {},
+              agentTraces,
+              ...(openAiCostSummary ? { openAiCostSummary } : {}),
+            }
           : {}),
       };
       return response;
@@ -2004,6 +2164,11 @@ export class StartupService {
             ? "provider_error_only"
             : "missing";
 
+      const baseMeta =
+        row.meta && typeof row.meta === "object" && !Array.isArray(row.meta)
+          ? (row.meta as Record<string, unknown>)
+          : undefined;
+
       return {
         ...traceMeta,
         id: row.id,
@@ -2021,10 +2186,7 @@ export class StartupService {
         systemPrompt,
         inputJson: row.inputJson,
         outputText,
-        meta:
-          row.meta && typeof row.meta === "object" && !Array.isArray(row.meta)
-            ? (row.meta as Record<string, unknown>)
-            : undefined,
+        meta: this.withOpenAiCostMeta(baseMeta),
         error: row.error ?? null,
         captureStatus,
         startedAt: row.startedAt ? row.startedAt.toISOString() : undefined,

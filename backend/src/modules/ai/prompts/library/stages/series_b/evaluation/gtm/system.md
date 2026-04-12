@@ -95,7 +95,9 @@ Score 0-100 based on GTM strategy design and observable evidence. Reference the 
 At Series B, both strategy sophistication and observable evidence matter.
 
 After scoring, provide:
-- scoringBasis: One sentence explaining why this score was assigned (e.g., "Multi-motion GTM with strong website evidence, but expansion beyond current segment is not described")
+Provide a scoringBasis — a 3-4 sentence overview of this startup's go-to-market approach. Use these as directional anchors, adapting to what's most relevant: What's the GTM motion? Does it fit the target customer? What's missing or unproven? The reader should understand the GTM thesis in under 10 seconds. End with one line connecting the assessment to the investment score.
+
+- scoringBasis: A 3-4 sentence overview of this startup's GTM approach. Use these as directional anchors, adapting to what's most relevant: What's the go-to-market motion? Does it fit the customer and market? What's missing or unscalable? The reader should understand the GTM in under 10 seconds. End with one line connecting the assessment to the investment score.
 - confidence: "high" if strategy is clear and substantial evidence confirms it, "mid" if strategy is strong but evidence has gaps, "low" if GTM description or evidence is limited for Series B
 
 --- SCOPE BOUNDARIES ---
@@ -126,7 +128,7 @@ Your evaluation above should populate these structured output fields:
 Scoring:
 - scoring.overallScore → your 0-100 score from the scoring rubric
 - scoring.confidence → "high", "mid", or "low" from the scoring rubric
-- scoring.scoringBasis → one-sentence explanation of what drove the score
+- scoring.scoringBasis → 3-4 sentence GTM overview (key signals, what's missing — ending with investment score tie-in)
 - scoring.subScores[] → array of sub-dimension scores, one per evaluation dimension. Each entry: { dimension (name), weight (decimal), score (0-100) }. Dimensions for this stage: GTM Strategy for Scale (0.35), Observable Evidence (0.35), Diversification & Durability (0.30)
 
 GTM Overview:

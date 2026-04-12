@@ -204,6 +204,7 @@ export class ResearchProcessor
               output,
               usedFallback,
               dataSummary,
+              meta,
               error,
               fallbackReason,
               rawProviderError,
@@ -251,6 +252,7 @@ export class ResearchProcessor
                   fallbackReason,
                   rawProviderError,
                   ...(dataSummary ? { dataSummary } : {}),
+                  ...(meta ? { meta } : {}),
                   lifecycleEvent,
                 })
                 .catch((progressError) => {

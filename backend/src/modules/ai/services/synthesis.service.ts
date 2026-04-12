@@ -42,6 +42,7 @@ export interface SynthesisRunTraceDetails {
   systemPrompt: string;
   outputText?: string;
   outputJson?: unknown;
+  meta?: Record<string, unknown>;
   error?: string;
   fallbackReason?: EvaluationFallbackReason;
   rawProviderError?: string;
@@ -119,6 +120,7 @@ export class SynthesisService {
       systemPrompt: memoResult.systemPrompt,
       outputText: memoResult.outputText,
       outputJson: memoOutput,
+      meta: memoResult.meta,
       error: memoResult.error,
       fallbackReason: memoResult.fallbackReason,
       rawProviderError: memoResult.rawProviderError,
@@ -148,6 +150,7 @@ export class SynthesisService {
       systemPrompt: reportResult.systemPrompt,
       outputText: reportResult.outputText,
       outputJson: reportResult.outputJson,
+      meta: reportResult.meta,
       error: reportResult.error,
       fallbackReason: reportResult.fallbackReason,
       rawProviderError: reportResult.rawProviderError,

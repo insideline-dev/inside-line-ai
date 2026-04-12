@@ -1,7 +1,10 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { generateText, Output } from "ai";
 
-import type { EvaluationFallbackReason } from "../../interfaces/agent.interface";
+import type {
+  EvaluationFallbackReason,
+  OpenAiResponseTelemetry,
+} from "../../interfaces/agent.interface";
 import { ModelPurpose } from "../../interfaces/pipeline.interface";
 import type {
   EvaluationResult,
@@ -57,6 +60,7 @@ export interface MemoSynthesisRunResult {
   systemPrompt: string;
   outputText: string;
   outputJson: unknown;
+  meta?: Record<string, unknown>;
   usedFallback: boolean;
   error?: string;
   fallbackReason?: EvaluationFallbackReason;
@@ -126,7 +130,12 @@ export class MemoSynthesisAgent {
 
       const callModel = async (
         remainingMs: number,
-      ): Promise<{ parsedOutput: MemoSynthesisOutput; rawText: string; outputJson: unknown }> => {
+      ): Promise<{
+        parsedOutput: MemoSynthesisOutput;
+        rawText: string;
+        outputJson: unknown;
+        meta?: Record<string, unknown>;
+      }> => {
         if (useOpenAiDirect) {
           const direct = await withTimeout(
             (abortSignal) =>
@@ -146,7 +155,12 @@ export class MemoSynthesisAgent {
           );
           const parsed = MemoSynthesisOutputSchema.parse(direct.output);
           const sanitized = this.sanitizeOutput(parsed);
-          return { parsedOutput: sanitized, rawText: direct.rawText, outputJson: sanitized };
+          return {
+            parsedOutput: sanitized,
+            rawText: direct.rawText,
+            outputJson: sanitized,
+            meta: this.buildTelemetryMeta(direct.telemetry),
+          };
         }
 
         const strippedProviderOptions = stripReasoningEffort(providerOptions);
@@ -188,7 +202,7 @@ export class MemoSynthesisAgent {
         }
 
         try {
-          const { parsedOutput, rawText, outputJson } = await callModel(remainingMs);
+          const { parsedOutput, rawText, outputJson, meta } = await callModel(remainingMs);
 
           this.logger.log(
             `[MemoSynthesis] Completed | Sections: ${parsedOutput.sections.length} | DDAs: ${parsedOutput.keyDueDiligenceAreas.length}`,
@@ -200,6 +214,7 @@ export class MemoSynthesisAgent {
             systemPrompt,
             outputText: rawText,
             outputJson,
+            meta,
             usedFallback: false,
             attempt,
             retryCount: attempt - 1,
@@ -268,6 +283,20 @@ export class MemoSynthesisAgent {
       rawProviderError: sanitizeRawProviderError(message),
       attempt,
       retryCount: Math.max(0, attempt - 1),
+    };
+  }
+
+  private buildTelemetryMeta(
+    telemetry: OpenAiResponseTelemetry | undefined,
+    baseMeta?: Record<string, unknown>,
+  ): Record<string, unknown> | undefined {
+    if (!telemetry) {
+      return baseMeta;
+    }
+
+    return {
+      ...(baseMeta ?? {}),
+      openaiTelemetry: telemetry,
     };
   }
 

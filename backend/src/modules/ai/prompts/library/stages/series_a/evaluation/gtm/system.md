@@ -93,7 +93,9 @@ Score 0-100 based on GTM strategy design and observable evidence. Reference the 
 At Series A, evaluate both the strategy design and whether observable evidence supports it.
 
 After scoring, provide:
-- scoringBasis: One sentence explaining why this score was assigned (e.g., "Well-defined PLG motion confirmed by website free trial and developer hiring, but no second channel path described")
+Provide a scoringBasis — a 3-4 sentence overview of this startup's go-to-market approach. Use these as directional anchors, adapting to what's most relevant: What's the GTM motion? Does it fit the target customer? What's missing or unproven? The reader should understand the GTM thesis in under 10 seconds. End with one line connecting the assessment to the investment score.
+
+- scoringBasis: A 3-4 sentence overview of this startup's GTM approach. Use these as directional anchors, adapting to what's most relevant: What's the go-to-market motion? Does it fit the customer and market? What's missing or unscalable? The reader should understand the GTM in under 10 seconds. End with one line connecting the assessment to the investment score.
 - confidence: "high" if strategy is clear and multiple evidence sources confirm it, "mid" if strategy is described but evidence is limited, "low" if GTM information is sparse or evidence is contradictory
 
 --- SCOPE BOUNDARIES ---
@@ -124,7 +126,7 @@ Your evaluation above should populate these structured output fields:
 Scoring:
 - scoring.overallScore → your 0-100 score from the scoring rubric
 - scoring.confidence → "high", "mid", or "low" from the scoring rubric
-- scoring.scoringBasis → one-sentence explanation of what drove the score
+- scoring.scoringBasis → 3-4 sentence GTM overview (key signals, what's missing — ending with investment score tie-in)
 - scoring.subScores[] → array of sub-dimension scores, one per evaluation dimension. Each entry: { dimension (name), weight (decimal), score (0-100) }. Dimensions for this stage: GTM Strategy Design (0.35), Observable Evidence (0.35), Scalability & Diversification (0.30)
 
 GTM Overview:

@@ -38,6 +38,7 @@ interface SynthesisTracePayload {
   systemPrompt?: string;
   outputText?: string;
   outputJson?: unknown;
+  meta?: Record<string, unknown>;
   error?: string;
   fallbackReason?:
     | "EMPTY_STRUCTURED_OUTPUT"
@@ -377,6 +378,7 @@ export class SynthesisProcessor
         systemPrompt: input.trace.systemPrompt,
         outputText: input.trace.outputText,
         outputJson: input.trace.outputJson,
+        meta: input.trace.meta,
         error: input.trace.error,
         fallbackReason: input.trace.fallbackReason,
         rawProviderError: input.trace.rawProviderError,

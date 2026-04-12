@@ -86,10 +86,15 @@ export class EvaluationProcessor
     job: Job<AiEvaluationJobData>,
   ): Promise<Omit<AiEvaluationJobResult, "jobId" | "duration" | "success">> {
     const { startupId, pipelineRunId, userId } = job.data;
-    const agentKey = this.readAgentRetryKey(job.data.metadata);
+    const agentRetryKeys = this.readAgentRetryKeys(job.data.metadata);
+    const agentKey = agentRetryKeys?.[0];
     const phaseRetryCount = this.readPhaseRetryCount(job.data.metadata);
     const agentAttemptIds = new Map<EvaluationAgentKey, string>();
     const agentAttemptNumbers = new Map<EvaluationAgentKey, number>();
+
+    this.logger.log(
+      `[EvalProcessor] Job ${job.id} | agentRetryKeys=${agentRetryKeys ? `[${agentRetryKeys.join(", ")}]` : "none (full run)"} | metadata.agentKeys=${JSON.stringify(job.data.metadata?.agentKeys)} | metadata.agentKey=${job.data.metadata?.agentKey} | Startup: ${startupId}`,
+    );
 
     if (job.data.type !== "ai_evaluation") {
       throw new Error("Invalid job type for evaluation processor");
@@ -105,6 +110,7 @@ export class EvaluationProcessor
       run: () =>
         this.evaluationService.run(startupId, {
           agentKey,
+          agentKeys: agentRetryKeys,
           onAgentStart: (agent) => {
             const attemptId = this.buildAgentAttemptId(
               pipelineRunId,
@@ -149,6 +155,7 @@ export class EvaluationProcessor
             error,
             fallbackReason,
             rawProviderError,
+            meta,
           }) => {
             const resolvedAttempt = Math.max(
               1,
@@ -187,6 +194,7 @@ export class EvaluationProcessor
                 fallbackReason,
                 rawProviderError,
                 ...(dataSummary ? { dataSummary } : {}),
+                ...(meta ? { meta } : {}),
                 lifecycleEvent: usedFallback
                   ? "fallback"
                   : isFailed
@@ -286,25 +294,37 @@ export class EvaluationProcessor
   private readAgentRetryKey(
     metadata: Record<string, unknown> | undefined,
   ): EvaluationAgentKey | undefined {
+    const keys = this.readAgentRetryKeys(metadata);
+    return keys?.[0];
+  }
+
+  private readAgentRetryKeys(
+    metadata: Record<string, unknown> | undefined,
+  ): EvaluationAgentKey[] | undefined {
     if (!metadata || metadata.mode !== "agent_retry") {
       return undefined;
     }
 
-    const agentKey = metadata.agentKey;
-    if (
-      agentKey === "team" ||
-      agentKey === "market" ||
-      agentKey === "product" ||
-      agentKey === "traction" ||
-      agentKey === "businessModel" ||
-      agentKey === "gtm" ||
-      agentKey === "financials" ||
-      agentKey === "competitiveAdvantage" ||
-      agentKey === "legal" ||
-      agentKey === "dealTerms" ||
-      agentKey === "exitPotential"
-    ) {
-      return agentKey;
+    const isValidKey = (k: unknown): k is EvaluationAgentKey =>
+      k === "team" ||
+      k === "market" ||
+      k === "product" ||
+      k === "traction" ||
+      k === "businessModel" ||
+      k === "gtm" ||
+      k === "financials" ||
+      k === "competitiveAdvantage" ||
+      k === "legal" ||
+      k === "dealTerms" ||
+      k === "exitPotential";
+
+    if (Array.isArray(metadata.agentKeys)) {
+      const valid = metadata.agentKeys.filter(isValidKey);
+      if (valid.length > 0) return valid;
+    }
+
+    if (isValidKey(metadata.agentKey)) {
+      return [metadata.agentKey];
     }
 
     return undefined;

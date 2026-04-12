@@ -91,6 +91,18 @@ class TestEvaluationAgent extends BaseEvaluationAgent<TestOutput> {
   readonly exposeBuildResearchReportText = (
     pipelineData: EvaluationPipelineInput,
   ): string => this.buildResearchReportText(pipelineData);
+
+  readonly exposeGetAttemptTimeoutMs = (remainingBudgetMs: number): number =>
+    (this as unknown as { getAttemptTimeoutMs(r: number): number }).getAttemptTimeoutMs(remainingBudgetMs);
+
+  readonly exposeGetEvaluationAgentHardTimeoutMs = (): number =>
+    this.getEvaluationAgentHardTimeoutMs();
+
+  readonly exposeGetEvaluationAttemptTimeoutMs = (): number =>
+    this.getEvaluationAttemptTimeoutMs();
+
+  readonly exposeGetEvaluationMaxAttempts = (): number =>
+    this.getEvaluationMaxAttempts();
 }
 
 class NarrativeEvaluationAgent extends BaseEvaluationAgent<NarrativeOutput> {
@@ -787,6 +799,61 @@ describe("BaseEvaluationAgent", () => {
 
     const result = await narrativeAgent.run(pipelineData);
     expect(result.output.narrativeSummary).toBe(longNarrative);
+  });
+
+  describe("timeout budgeting", () => {
+    it("gives late retry attempt at least 50% of configured timeout as floor", () => {
+      // getEvaluationTimeoutMs returns 120_000 (2 min) from aiConfig mock
+      // minAttemptFloorMs = Math.max(60_000, 120_000 * 0.5) = 60_000
+      // With near-zero remaining budget (1ms), bounded = Math.max(60_000, 1 - 5_000)
+      // Final return must still be >= 60_000 (the floor)
+      const result = agent.exposeGetAttemptTimeoutMs(1);
+      expect(result).toBeGreaterThanOrEqual(60_000);
+    });
+
+    it("gives late retry attempt floor of 50% when configured timeout exceeds 120s", () => {
+      // Override to 200_000ms — floor becomes Math.max(60_000, 200_000 * 0.5) = 100_000
+      aiConfig.getEvaluationTimeoutMs.mockReturnValue(200_000);
+      const freshAgent = new TestEvaluationAgent(
+        providers as unknown as AiProviderService,
+        aiConfig as unknown as AiConfigService,
+        promptService as unknown as AiPromptService,
+        modelExecution as unknown as AiModelExecutionService,
+      );
+      const result = freshAgent.exposeGetAttemptTimeoutMs(1);
+      expect(result).toBeGreaterThanOrEqual(100_000);
+    });
+
+    it("hard timeout is generous enough to cover all attempts", () => {
+      // attemptBased = getEvaluationAttemptTimeoutMs() * getEvaluationMaxAttempts() = 120_000 * 3 = 360_000
+      // hard = attemptBased + Math.max(60_000, 360_000 * 0.3) = 360_000 + 108_000 = 468_000
+      const hardTimeout = agent.exposeGetEvaluationAgentHardTimeoutMs();
+      const attemptTimeout = agent.exposeGetEvaluationAttemptTimeoutMs();
+      const maxAttempts = agent.exposeGetEvaluationMaxAttempts();
+      expect(hardTimeout).toBeGreaterThan(attemptTimeout * maxAttempts);
+    });
+
+    it("hard timeout buffer is at least 60s regardless of attempt budget size", () => {
+      // With a very small configured timeout, buffer = Math.max(60_000, small * 0.3) still >= 60_000
+      aiConfig.getEvaluationTimeoutMs.mockReturnValue(10_000);
+      const freshAgent = new TestEvaluationAgent(
+        providers as unknown as AiProviderService,
+        aiConfig as unknown as AiConfigService,
+        promptService as unknown as AiPromptService,
+        modelExecution as unknown as AiModelExecutionService,
+      );
+      const hardTimeout = freshAgent.exposeGetEvaluationAgentHardTimeoutMs();
+      const attemptTimeout = freshAgent.exposeGetEvaluationAttemptTimeoutMs();
+      const maxAttempts = freshAgent.exposeGetEvaluationMaxAttempts();
+      const buffer = hardTimeout - attemptTimeout * maxAttempts;
+      expect(buffer).toBeGreaterThanOrEqual(60_000);
+    });
+
+    it("normal attempt with full remaining budget receives up to configured timeout", () => {
+      // With plenty of budget (999_999ms), result should be capped at configuredTimeout (120_000)
+      const result = agent.exposeGetAttemptTimeoutMs(999_999);
+      expect(result).toBeLessThanOrEqual(120_000);
+    });
   });
 
   it("strips score/confidence phrasing from existing narrative text", async () => {

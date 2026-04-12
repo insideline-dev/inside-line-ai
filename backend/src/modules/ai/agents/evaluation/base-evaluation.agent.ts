@@ -18,6 +18,8 @@ import { AiPromptService } from "../../services/ai-prompt.service";
 import { EVALUATION_PROMPT_KEY_BY_AGENT } from "../../services/ai-prompt-catalog";
 import { buildEvaluationCommonBaseline } from "../../services/evaluation-prompt-baseline";
 import { AiModelExecutionService } from "../../services/ai-model-execution.service";
+import { OpenAiDirectClientService } from "../../services/openai-direct-client.service";
+import { resolveProviderForModelName } from "../../services/ai-runtime-config.schema";
 import { sanitizeNarrativeText } from "../../services/narrative-sanitizer";
 import { normalizeBaseEvaluationCandidate } from "../../schemas";
 
@@ -43,11 +45,15 @@ export abstract class BaseEvaluationAgent<TOutput>
   protected abstract readonly systemPrompt: string;
   protected readonly logger = new Logger(this.constructor.name);
 
+  /** OpenAI-compatible schema (no preprocess/default). Set by subclasses to enable direct OpenAI routing. */
+  protected readonly openAiSchema?: z.ZodTypeAny;
+
   constructor(
     protected providers: AiProviderService,
     protected aiConfig: AiConfigService,
     protected promptService: AiPromptService,
     protected modelExecution?: AiModelExecutionService,
+    protected openAiDirect?: OpenAiDirectClientService,
   ) {}
 
   abstract buildContext(pipelineData: EvaluationPipelineInput): Record<string, unknown>;
@@ -219,12 +225,18 @@ export abstract class BaseEvaluationAgent<TOutput>
     let lastCapturedOutputText: string | undefined;
     const maxAttempts = this.getEvaluationMaxAttempts();
     const hardTimeoutMs = this.getEvaluationAgentHardTimeoutMs();
+    const attemptTimeoutMs = this.getEvaluationAttemptTimeoutMs();
+    const graceMs = this.getTimeoutGraceMs();
     const startedAtMs = Date.now();
+    this.logger.log(
+      `[${this.key}] Timeout config: attempt=${attemptTimeoutMs}ms, hard=${hardTimeoutMs}ms, grace=${graceMs}ms, maxAttempts=${maxAttempts}`,
+    );
     let context: Record<string, unknown>;
     let composedSystemPrompt: string;
     let renderedPrompt: string;
     let execution: Awaited<ReturnType<NonNullable<typeof this.modelExecution>["resolveForPrompt"]>> | null = null;
     let useTextOnlyStructuredMode = false;
+    let useOpenAiDirect = false;
     let evaluationTemperature: number | undefined;
     let resolvedModel:
       | NonNullable<
@@ -266,6 +278,16 @@ export abstract class BaseEvaluationAgent<TOutput>
         modelName: execution?.resolvedConfig.modelName,
         configuredTemperature: this.aiConfig.getEvaluationTemperature(),
       });
+      const resolvedModelName =
+        execution?.resolvedConfig.modelName ??
+        this.aiConfig.getModelForPurpose(ModelPurpose.EVALUATION);
+      useOpenAiDirect =
+        this.openAiSchema != null &&
+        resolveProviderForModelName(resolvedModelName) === "openai" &&
+        this.openAiDirect?.isConfigured() === true;
+      this.logger.log(
+        `[${this.key}] Execution path: ${useOpenAiDirect ? `openai-direct(${resolvedModelName})` : "ai-sdk"}`,
+      );
       const contextSections = this.formatContext(promptContext);
       const contextJson = JSON.stringify(promptContext);
       const commonVars = this.buildCommonTemplateVariables(pipelineData, feedbackNotes);
@@ -337,6 +359,57 @@ export abstract class BaseEvaluationAgent<TOutput>
         retryCount: Math.max(0, attempt - 1),
       });
       try {
+        // ── OpenAI Direct Client path ──────────────────────────────────
+        if (useOpenAiDirect) {
+          const direct = await this.withTimeout(
+            (abortSignal) =>
+              this.openAiDirect!.generateStructured({
+                modelName:
+                  execution?.resolvedConfig.modelName ??
+                  this.aiConfig.getModelForPurpose(ModelPurpose.EVALUATION),
+                system: composedSystemPrompt,
+                prompt: renderedPrompt,
+                schema: this.openAiSchema!,
+                schemaName: `${this.key}_evaluation`,
+                temperature: evaluationTemperature,
+                maxOutputTokens: this.getMaxOutputTokens(),
+                abortSignal,
+              }),
+            attemptTimeoutMs,
+            `${this.key} evaluation timed out`,
+            this.getTimeoutGraceMs(),
+          );
+
+          // Two-stage parse: OpenAI strict output → normalizeCandidate → standard schema (applies fallback defaults)
+          const normalizedOutput = this.normalizeNarrativeFields(
+            this.schema.parse(this.normalizeOutputCandidate(direct.output)),
+          );
+
+          this.emitTraceEvent(options, {
+            agent: this.key,
+            status: "completed",
+            inputPrompt: renderedPrompt,
+            systemPrompt: composedSystemPrompt,
+            outputText: direct.rawText,
+            outputJson: normalizedOutput,
+            attempt,
+            retryCount: Math.max(0, attempt - 1),
+            usedFallback: false,
+          });
+          this.emitLifecycleEvent(options, {
+            agent: this.key,
+            event: "completed",
+            attempt,
+            retryCount: Math.max(0, attempt - 1),
+          });
+          return {
+            key: this.key,
+            output: normalizedOutput,
+            usedFallback: false,
+          };
+        }
+
+        // ── AI SDK / Model Execution path ──────────────────────────────
         const useNativeExecution =
           this.modelExecution && !this.useDirectGenerateText();
         const response = await this.withTimeout<unknown>(
@@ -374,6 +447,7 @@ export abstract class BaseEvaluationAgent<TOutput>
                 ),
           attemptTimeoutMs,
           `${this.key} evaluation timed out`,
+          this.getTimeoutGraceMs(),
         );
 
         const responseOutput = useNativeExecution
@@ -1438,8 +1512,13 @@ export abstract class BaseEvaluationAgent<TOutput>
 
   private getAttemptTimeoutMs(remainingBudgetMs: number): number {
     const configuredTimeout = this.getEvaluationAttemptTimeoutMs();
-    const bounded = Math.min(configuredTimeout, remainingBudgetMs);
-    return Math.max(1, bounded);
+    const graceMs = this.getTimeoutGraceMs();
+    const minAttemptFloorMs = Math.max(60_000, configuredTimeout * 0.5);
+    const bounded = Math.min(
+      configuredTimeout,
+      Math.max(minAttemptFloorMs, remainingBudgetMs - graceMs),
+    );
+    return Math.max(minAttemptFloorMs, bounded);
   }
 
   private getRemainingBudgetMs(startedAtMs: number, hardTimeoutMs: number): number {
@@ -1463,7 +1542,7 @@ export abstract class BaseEvaluationAgent<TOutput>
     if (typeof config.getEvaluationTimeoutMs === "function") {
       return config.getEvaluationTimeoutMs();
     }
-    return 90_000;
+    return 600_000;
   }
 
   protected getEvaluationMaxAttempts(): number {
@@ -1479,13 +1558,26 @@ export abstract class BaseEvaluationAgent<TOutput>
     if (typeof config.getEvaluationAgentHardTimeoutMs === "function") {
       return config.getEvaluationAgentHardTimeoutMs();
     }
-    return this.getEvaluationAttemptTimeoutMs() * this.getEvaluationMaxAttempts() + 30_000;
+    const attemptBased =
+      this.getEvaluationAttemptTimeoutMs() * this.getEvaluationMaxAttempts();
+    return attemptBased + Math.max(60_000, attemptBased * 0.3);
+  }
+
+  protected getTimeoutGraceMs(): number {
+    const config = this.aiConfig as Partial<AiConfigService> & {
+      getEvaluationTimeoutGraceMs?: () => number;
+    };
+    if (typeof config.getEvaluationTimeoutGraceMs === "function") {
+      return Math.max(0, config.getEvaluationTimeoutGraceMs());
+    }
+    return 5_000;
   }
 
   private async withTimeout<T>(
     operation: (abortSignal: AbortSignal | undefined) => Promise<T>,
     timeoutMs: number,
     message: string,
+    graceMs: number = 0,
   ): Promise<T> {
     if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
       return operation(undefined);
@@ -1495,22 +1587,49 @@ export abstract class BaseEvaluationAgent<TOutput>
       const controller =
         typeof AbortController === "undefined" ? undefined : new AbortController();
       let settled = false;
+      let timeoutTriggered = false;
+      let graceTimer: ReturnType<typeof setTimeout> | undefined;
+      const normalizedGraceMs = Math.max(0, graceMs);
       const complete = (fn: () => void) => {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
+        if (graceTimer) {
+          clearTimeout(graceTimer);
+        }
         fn();
       };
-      const timer = setTimeout(() => {
+      const rejectTimeout = () => {
         try {
           controller?.abort(new Error(message));
         } catch {
           controller?.abort();
         }
         complete(() => reject(new Error(message)));
+      };
+      const timer = setTimeout(() => {
+        timeoutTriggered = true;
+        this.logger.warn(
+          `[${this.key}] Provider call exceeded attempt timeout (${timeoutMs}ms), grace=${normalizedGraceMs}ms`,
+        );
+        if (normalizedGraceMs <= 0) {
+          rejectTimeout();
+          return;
+        }
+        graceTimer = setTimeout(() => {
+          this.logger.warn(
+            `[${this.key}] Provider did not respond within grace window — aborting`,
+          );
+          rejectTimeout();
+        }, normalizedGraceMs);
       }, timeoutMs);
       Promise.resolve(operation(controller?.signal))
         .then((result) => {
+          if (timeoutTriggered && normalizedGraceMs > 0) {
+            this.logger.warn(
+              `[${this.key}] Provider response arrived during timeout grace window (${normalizedGraceMs}ms)`,
+            );
+          }
           complete(() => resolve(result));
         })
         .catch((error) => {

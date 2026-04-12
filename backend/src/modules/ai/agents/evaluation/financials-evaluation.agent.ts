@@ -11,11 +11,14 @@ import { AiModelExecutionService } from "../../services/ai-model-execution.servi
 import { AiProviderService } from "../../providers/ai-provider.service";
 import { BaseEvaluationAgent } from "./base-evaluation.agent";
 import { baseEvaluation } from "./evaluation-utils";
+import { OpenAiDirectClientService } from "../../services/openai-direct-client.service";
+import { FinancialsEvaluationOpenAiSchema } from "../../schemas/evaluations/openai/financials-openai.schema";
 
 @Injectable()
 export class FinancialsEvaluationAgent extends BaseEvaluationAgent<FinancialsEvaluation> {
   readonly key = "financials" as const;
   protected readonly schema = FinancialsEvaluationSchema;
+  protected readonly openAiSchema = FinancialsEvaluationOpenAiSchema;
   protected readonly systemPrompt =
     "You are a startup investment analyst evaluating financial health, burn, and runway assumptions.";
 
@@ -24,8 +27,9 @@ export class FinancialsEvaluationAgent extends BaseEvaluationAgent<FinancialsEva
     aiConfig: AiConfigService,
     promptService: AiPromptService,
     modelExecution?: AiModelExecutionService,
+    openAiDirect?: OpenAiDirectClientService,
   ) {
-    super(providers, aiConfig, promptService, modelExecution);
+    super(providers, aiConfig, promptService, modelExecution, openAiDirect);
   }
 
   protected override getMaxOutputTokens(): number {

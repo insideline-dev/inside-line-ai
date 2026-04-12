@@ -10,6 +10,8 @@ import { AiModelExecutionService } from "../../services/ai-model-execution.servi
 import { AiProviderService } from "../../providers/ai-provider.service";
 import { BaseEvaluationAgent } from "./base-evaluation.agent";
 import { baseEvaluation } from "./evaluation-utils";
+import { OpenAiDirectClientService } from "../../services/openai-direct-client.service";
+import { ExitPotentialEvaluationOpenAiSchema } from "../../schemas/evaluations/openai/exit-potential-openai.schema";
 
 @Injectable()
 export class ExitPotentialEvaluationAgent extends BaseEvaluationAgent<ExitPotentialEvaluation> {
@@ -29,13 +31,16 @@ export class ExitPotentialEvaluationAgent extends BaseEvaluationAgent<ExitPotent
     series_f_plus: 0.05,
   };
 
+  protected readonly openAiSchema = ExitPotentialEvaluationOpenAiSchema;
+
   constructor(
     providers: AiProviderService,
     aiConfig: AiConfigService,
     promptService: AiPromptService,
     modelExecution?: AiModelExecutionService,
+    openAiDirect?: OpenAiDirectClientService,
   ) {
-    super(providers, aiConfig, promptService, modelExecution);
+    super(providers, aiConfig, promptService, modelExecution, openAiDirect);
   }
 
   protected override getAgentTemplateVariables(

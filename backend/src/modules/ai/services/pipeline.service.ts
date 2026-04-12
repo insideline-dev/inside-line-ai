@@ -1072,6 +1072,10 @@ export class PipelineService {
       agentKey: request.agentKey,
     };
 
+    this.logger.log(
+      `[retryAgent] Targeted rerun: phase=${request.phase}, agent=${request.agentKey} | Startup: ${startupId}`,
+    );
+
     const newRunId = await this.beginManualRun(state, request.phase);
     await this.queue.removePipelineJobs(startupId);
     await this.updateStartupStatus(startupId, StartupStatus.ANALYZING);

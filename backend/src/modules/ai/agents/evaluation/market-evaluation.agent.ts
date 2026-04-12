@@ -8,11 +8,14 @@ import { AiProviderService } from "../../providers/ai-provider.service";
 import { BaseEvaluationAgent } from "./base-evaluation.agent";
 import { baseEvaluation } from "./evaluation-utils";
 import { normalizeBaseEvaluationCandidate } from "../../schemas";
+import { OpenAiDirectClientService } from "../../services/openai-direct-client.service";
+import { MarketEvaluationOpenAiSchema } from "../../schemas/evaluations/openai/market-openai.schema";
 
 @Injectable()
 export class MarketEvaluationAgent extends BaseEvaluationAgent<MarketEvaluation> {
   readonly key = "market" as const;
   protected readonly schema = MarketEvaluationSchema;
+  protected readonly openAiSchema = MarketEvaluationOpenAiSchema;
   protected readonly systemPrompt =
     "You are a startup investment analyst evaluating market quality and TAM credibility.";
 
@@ -25,8 +28,9 @@ export class MarketEvaluationAgent extends BaseEvaluationAgent<MarketEvaluation>
     aiConfig: AiConfigService,
     promptService: AiPromptService,
     modelExecution?: AiModelExecutionService,
+    openAiDirect?: OpenAiDirectClientService,
   ) {
-    super(providers, aiConfig, promptService, modelExecution);
+    super(providers, aiConfig, promptService, modelExecution, openAiDirect);
   }
 
   protected override getAgentTemplateVariables(

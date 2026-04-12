@@ -8,11 +8,14 @@ import { AiModelExecutionService } from "../../services/ai-model-execution.servi
 import { AiProviderService } from "../../providers/ai-provider.service";
 import { BaseEvaluationAgent } from "./base-evaluation.agent";
 import { baseEvaluation, tryPathname } from "./evaluation-utils";
+import { OpenAiDirectClientService } from "../../services/openai-direct-client.service";
+import { ProductEvaluationOpenAiSchema } from "../../schemas/evaluations/openai/product-openai.schema";
 
 @Injectable()
 export class ProductEvaluationAgent extends BaseEvaluationAgent<ProductEvaluation> {
   readonly key = "product" as const;
   protected readonly schema = ProductEvaluationSchema;
+  protected readonly openAiSchema = ProductEvaluationOpenAiSchema;
   protected readonly systemPrompt =
     "You are a startup investment analyst evaluating product quality and technical differentiation.";
 
@@ -21,8 +24,9 @@ export class ProductEvaluationAgent extends BaseEvaluationAgent<ProductEvaluatio
     aiConfig: AiConfigService,
     promptService: AiPromptService,
     modelExecution?: AiModelExecutionService,
+    openAiDirect?: OpenAiDirectClientService,
   ) {
-    super(providers, aiConfig, promptService, modelExecution);
+    super(providers, aiConfig, promptService, modelExecution, openAiDirect);
   }
 
   protected override getAgentTemplateVariables(

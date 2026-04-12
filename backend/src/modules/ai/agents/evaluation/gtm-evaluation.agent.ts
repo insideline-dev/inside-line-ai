@@ -8,6 +8,8 @@ import { AiModelExecutionService } from "../../services/ai-model-execution.servi
 import { AiProviderService } from "../../providers/ai-provider.service";
 import { BaseEvaluationAgent } from "./base-evaluation.agent";
 import { baseEvaluation, tryPathname } from "./evaluation-utils";
+import { OpenAiDirectClientService } from "../../services/openai-direct-client.service";
+import { GtmEvaluationOpenAiSchema } from "../../schemas/evaluations/openai/gtm-openai.schema";
 
 @Injectable()
 export class GtmEvaluationAgent extends BaseEvaluationAgent<GtmEvaluation> {
@@ -16,13 +18,16 @@ export class GtmEvaluationAgent extends BaseEvaluationAgent<GtmEvaluation> {
   protected readonly systemPrompt =
     "You are a startup investment analyst evaluating go-to-market strategy and distribution quality.";
 
+  protected readonly openAiSchema = GtmEvaluationOpenAiSchema;
+
   constructor(
     providers: AiProviderService,
     aiConfig: AiConfigService,
     promptService: AiPromptService,
     modelExecution?: AiModelExecutionService,
+    openAiDirect?: OpenAiDirectClientService,
   ) {
-    super(providers, aiConfig, promptService, modelExecution);
+    super(providers, aiConfig, promptService, modelExecution, openAiDirect);
   }
 
   buildContext(pipelineData: EvaluationPipelineInput) {

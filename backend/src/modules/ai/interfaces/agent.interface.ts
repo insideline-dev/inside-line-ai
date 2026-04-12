@@ -122,6 +122,7 @@ export interface EvaluationAgentTraceEvent {
 
 export interface EvaluationAgentRunOptions {
   feedbackNotes?: EvaluationFeedbackNote[];
+  pipelineRunId?: string;
   webSearchEnabled?: boolean;
   braveSearchEnabled?: boolean;
   onLifecycle?: (event: EvaluationAgentLifecycleEvent) => void;

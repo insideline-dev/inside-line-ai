@@ -550,11 +550,6 @@
             "description": "Rate limit exceeded"
           }
         },
-        "security": [
-          {
-            "JWT": []
-          }
-        ],
         "summary": "Logout and clear tokens",
         "tags": [
           "auth"
@@ -5645,6 +5640,52 @@
         ]
       }
     },
+    "/investor/startups/{id}/match": {
+      "post": {
+        "operationId": "InvestorController_triggerStartupMatching",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Investor"
+        ]
+      }
+    },
+    "/investor/startups/{id}/matching/status": {
+      "get": {
+        "operationId": "InvestorController_getStartupMatchingStatus",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Investor"
+        ]
+      }
+    },
     "/investor/messaging/conversations": {
       "get": {
         "operationId": "InvestorController_getConversations",
@@ -9611,6 +9652,7 @@
           "phase": {
             "type": "string",
             "enum": [
+              "classification",
               "extraction",
               "enrichment",
               "scraping",
@@ -9627,6 +9669,10 @@
             "type": "string",
             "minLength": 10,
             "maxLength": 3000
+          },
+          "skipSynthesis": {
+            "default": false,
+            "type": "boolean"
           }
         },
         "required": [
@@ -9651,6 +9697,10 @@
             "type": "string",
             "minLength": 10,
             "maxLength": 3000
+          },
+          "skipSynthesis": {
+            "default": false,
+            "type": "boolean"
           }
         },
         "required": [

@@ -16,4 +16,5 @@ export interface RetryAgentDto {
    * @maxLength 3000
    */
   feedback?: string;
+  skipSynthesis?: boolean;
 }

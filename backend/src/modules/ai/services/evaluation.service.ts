@@ -85,20 +85,6 @@ export class EvaluationService {
         PipelinePhase.EVALUATION,
       );
 
-      if (!current) {
-        this.logger.warn(
-          `[Evaluation] No existing result for targeted rerun of ${options.agentKey}, running all agents | Startup: ${startupId}`,
-        );
-        return this.registry.runAll(
-          startupId,
-          pipelineInput,
-          handleAgentStart,
-          handleAgentComplete,
-          handleAgentLifecycle,
-          agentDocumentMap,
-        );
-      }
-
       const rerun = await this.registry.runOne(
         startupId,
         options.agentKey,
@@ -108,6 +94,13 @@ export class EvaluationService {
         agentDocumentMap,
       );
       handleAgentComplete(rerun);
+
+      if (!current) {
+        this.logger.warn(
+          `[Evaluation] No existing result for targeted rerun of ${options.agentKey}, returning single agent result | Startup: ${startupId}`,
+        );
+        return this.buildSingleAgentResult(rerun);
+      }
 
       return this.mergeAgentResult(current, rerun);
     }
@@ -223,6 +216,37 @@ export class EvaluationService {
     }
 
     return map;
+  }
+
+  private buildSingleAgentResult(
+    rerun: EvaluationAgentCompletion,
+  ): EvaluationResult {
+    const schema = EVALUATION_SCHEMAS[rerun.agent];
+    const parsed = schema.safeParse(rerun.output);
+    const result: Record<string, unknown> = {
+      [rerun.agent]: parsed.success ? parsed.data : rerun.output,
+      summary: {
+        failedKeys: rerun.error && !rerun.usedFallback ? [rerun.agent] : [],
+        failedAgents: rerun.error && !rerun.usedFallback ? 1 : 0,
+        completedAgents: 1,
+        fallbackKeys: rerun.usedFallback ? [rerun.agent] : [],
+        fallbackAgents: rerun.usedFallback ? 1 : 0,
+        fallbackReasonCounts: {},
+        errors: rerun.error && !rerun.usedFallback
+          ? [{ agent: rerun.agent, error: rerun.error }]
+          : [],
+        warnings: rerun.usedFallback
+          ? [{
+              agent: rerun.agent,
+              message: rerun.error ?? "Agent returned deterministic fallback output; manual review recommended.",
+              ...(rerun.fallbackReason ? { reason: rerun.fallbackReason } : {}),
+            }]
+          : [],
+        minimumRequired: 8,
+        degraded: true,
+      },
+    };
+    return result as unknown as EvaluationResult;
   }
 
   private mergeAgentResult(

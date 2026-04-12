@@ -369,6 +369,7 @@ export class EvaluationAgentRegistryService {
       const feedbackNotes = await this.loadFeedbackNotes(startupId, key);
       const result = await agent.run(resolvedInput.pipelineData, {
         feedbackNotes,
+        pipelineRunId,
         ...getEvalAgentConfig(key),
         onLifecycle: (event) =>
           this.emitAgentLifecycle(onAgentLifecycle, event),

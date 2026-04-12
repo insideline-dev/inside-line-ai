@@ -53,6 +53,11 @@ function extractShortValue(raw: string | undefined): string {
   return raw.slice(0, 25) + "…";
 }
 
+/** Abbreviate "year-over-year" → "YoY". */
+function normalizeGrowthDisplay(val: string): string {
+  return val.replace(/year[- ]over[- ]year/gi, "YoY");
+}
+
 // ---------------------------------------------------------------------------
 // Formatting helpers
 // ---------------------------------------------------------------------------
@@ -202,6 +207,8 @@ export function extractKpiMetrics(
       : cagrDisplay;
   }
 
+  if (growthRateVal !== DASH) growthRateVal = normalizeGrowthDisplay(growthRateVal);
+
   // --- Gross Margin: structured KPI → deck string → chart data → legacy keyMetrics ---
   const grossMarginKpi = rec(deckFinancials.grossMarginKpi);
   const gmKpiValue = safeStr(grossMarginKpi.value);
@@ -264,6 +271,7 @@ export function extractKpiMetrics(
     const val = extractShortValue(deckMarketGrowth);
     marketGrowth = val.includes("CAGR") ? val : `${val} CAGR`;
   }
+  if (marketGrowth !== DASH) marketGrowth = normalizeGrowthDisplay(marketGrowth);
 
   // Product Stage
   const techStage =

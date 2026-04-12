@@ -77,12 +77,18 @@ export class EvaluationService {
 
     const { pipelineInput, agentDocumentMap } = await this.loadPipelineInput(startupId);
     if (options?.agentKey) {
+      this.logger.log(
+        `[Evaluation] Targeted rerun: agent=${options.agentKey} | Startup: ${startupId}`,
+      );
       const current = await this.pipelineState.getPhaseResult(
         startupId,
         PipelinePhase.EVALUATION,
       );
 
       if (!current) {
+        this.logger.warn(
+          `[Evaluation] No existing result for targeted rerun of ${options.agentKey}, running all agents | Startup: ${startupId}`,
+        );
         return this.registry.runAll(
           startupId,
           pipelineInput,

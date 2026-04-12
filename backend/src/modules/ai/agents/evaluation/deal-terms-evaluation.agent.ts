@@ -7,6 +7,8 @@ import { AiModelExecutionService } from "../../services/ai-model-execution.servi
 import { AiProviderService } from "../../providers/ai-provider.service";
 import { BaseEvaluationAgent } from "./base-evaluation.agent";
 import { baseEvaluation } from "./evaluation-utils";
+import { OpenAiDirectClientService } from "../../services/openai-direct-client.service";
+import { DealTermsEvaluationOpenAiSchema } from "../../schemas/evaluations/openai/deal-terms-openai.schema";
 
 @Injectable()
 export class DealTermsEvaluationAgent extends BaseEvaluationAgent<DealTermsEvaluation> {
@@ -15,13 +17,16 @@ export class DealTermsEvaluationAgent extends BaseEvaluationAgent<DealTermsEvalu
   protected readonly systemPrompt =
     "You are a startup investment analyst evaluating valuation and round terms quality.";
 
+  protected readonly openAiSchema = DealTermsEvaluationOpenAiSchema;
+
   constructor(
     providers: AiProviderService,
     aiConfig: AiConfigService,
     promptService: AiPromptService,
     modelExecution?: AiModelExecutionService,
+    openAiDirect?: OpenAiDirectClientService,
   ) {
-    super(providers, aiConfig, promptService, modelExecution);
+    super(providers, aiConfig, promptService, modelExecution, openAiDirect);
   }
 
   protected override getAgentTemplateVariables(

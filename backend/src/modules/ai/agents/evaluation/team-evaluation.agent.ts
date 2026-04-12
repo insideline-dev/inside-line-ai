@@ -7,11 +7,14 @@ import { AiModelExecutionService } from "../../services/ai-model-execution.servi
 import { AiProviderService } from "../../providers/ai-provider.service";
 import { BaseEvaluationAgent } from "./base-evaluation.agent";
 import { baseEvaluation, clampScore, stageMultiplier } from "./evaluation-utils";
+import { OpenAiDirectClientService } from "../../services/openai-direct-client.service";
+import { TeamEvaluationOpenAiSchema } from "../../schemas/evaluations/openai/team-openai.schema";
 
 @Injectable()
 export class TeamEvaluationAgent extends BaseEvaluationAgent<TeamEvaluation> {
   readonly key = "team" as const;
   protected readonly schema = TeamEvaluationSchema;
+  protected readonly openAiSchema = TeamEvaluationOpenAiSchema;
   protected readonly systemPrompt =
     "You are a startup investment analyst evaluating founder and leadership quality.";
 
@@ -20,8 +23,9 @@ export class TeamEvaluationAgent extends BaseEvaluationAgent<TeamEvaluation> {
     aiConfig: AiConfigService,
     promptService: AiPromptService,
     modelExecution?: AiModelExecutionService,
+    openAiDirect?: OpenAiDirectClientService,
   ) {
-    super(providers, aiConfig, promptService, modelExecution);
+    super(providers, aiConfig, promptService, modelExecution, openAiDirect);
   }
 
   protected override getAgentTemplateVariables(

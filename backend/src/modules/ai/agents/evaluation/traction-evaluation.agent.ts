@@ -8,6 +8,8 @@ import { AiModelExecutionService } from "../../services/ai-model-execution.servi
 import { AiProviderService } from "../../providers/ai-provider.service";
 import { BaseEvaluationAgent } from "./base-evaluation.agent";
 import { baseEvaluation } from "./evaluation-utils";
+import { OpenAiDirectClientService } from "../../services/openai-direct-client.service";
+import { TractionEvaluationOpenAiSchema } from "../../schemas/evaluations/openai/traction-openai.schema";
 
 @Injectable()
 export class TractionEvaluationAgent extends BaseEvaluationAgent<TractionEvaluation> {
@@ -16,13 +18,16 @@ export class TractionEvaluationAgent extends BaseEvaluationAgent<TractionEvaluat
   protected readonly systemPrompt =
     "You are a startup investment analyst evaluating traction, growth signals, and KPI credibility.";
 
+  protected readonly openAiSchema = TractionEvaluationOpenAiSchema;
+
   constructor(
     providers: AiProviderService,
     aiConfig: AiConfigService,
     promptService: AiPromptService,
     modelExecution?: AiModelExecutionService,
+    openAiDirect?: OpenAiDirectClientService,
   ) {
-    super(providers, aiConfig, promptService, modelExecution);
+    super(providers, aiConfig, promptService, modelExecution, openAiDirect);
   }
 
   protected override getAgentTemplateVariables(

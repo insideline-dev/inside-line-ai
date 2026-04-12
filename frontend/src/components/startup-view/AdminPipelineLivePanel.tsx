@@ -1685,7 +1685,7 @@ export function AdminPipelineLivePanel({
                               ) : (
                                 <RotateCcw className="h-3 w-3" />
                               )}
-                              Retry
+                              Rerun agent
                             </Button>
                           )}
                         </div>

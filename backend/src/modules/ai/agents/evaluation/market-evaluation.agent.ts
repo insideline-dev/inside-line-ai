@@ -49,6 +49,13 @@ export class MarketEvaluationAgent extends BaseEvaluationAgent<MarketEvaluation>
       typeof marketData.marketGrowthRate === "object"
         ? (marketData.marketGrowthRate as Record<string, unknown>)
         : null;
+    const deckMarketData =
+      (pipelineData.extraction.deckStructuredData as Record<string, unknown> | undefined)
+        ?.market;
+    const deckMarketGrowth =
+      deckMarketData && typeof deckMarketData === "object"
+        ? (deckMarketData as Record<string, unknown>).marketGrowthRate
+        : null;
 
     // Try extracting a claim line, return null if not found (instead of "Not provided")
     const tryExtract = (text: string, pattern: RegExp): string | null => {
@@ -59,9 +66,9 @@ export class MarketEvaluationAgent extends BaseEvaluationAgent<MarketEvaluation>
     const tamPattern = /(tam|total addressable market|market size)/i;
     const samPattern = /(sam|serviceable addressable market|serviceable available market)/i;
     const somPattern = /(som|serviceable obtainable market)/i;
-    const growthPattern = /(cagr|growth rate|year[- ]over[- ]year|yoy|market growth)/i;
+    const growthPattern = /(market growth|industry growth|category growth|sector growth|market cagr|industry cagr|category cagr|sector cagr)/i;
 
-    // Fallback chain: structured JSON → market research text → pitch deck rawText
+    // Fallback chain: explicit structured market fields → market research text → pitch deck rawText
     const claimedTAM =
       (tamObj?.value != null ? String(tamObj.value) : null) ??
       (marketSize?.tam != null ? String(marketSize.tam) : null) ??
@@ -80,8 +87,9 @@ export class MarketEvaluationAgent extends BaseEvaluationAgent<MarketEvaluation>
 
     const claimedGrowthRate =
       (growthObj?.value != null ? String(growthObj.value) : null) ??
+      (typeof deckMarketGrowth === "string" ? deckMarketGrowth : null) ??
       tryExtract(marketText ?? "", growthPattern) ??
-      this.extractClaimLine(rawText, growthPattern);
+      tryExtract(rawText, growthPattern);
 
     // Store deck claims for post-processing alignment scores
     this._deckClaims = {
@@ -96,10 +104,10 @@ export class MarketEvaluationAgent extends BaseEvaluationAgent<MarketEvaluation>
           this.normalizePromptText(pipelineData.research.market),
           8_000,
         ) || "Not provided",
-      claimedTAM,
-      claimedSAM,
-      claimedSOM,
-      claimedGrowthRate,
+      claimedTAM: claimedTAM ?? "Not provided",
+      claimedSAM: claimedSAM ?? "Not provided",
+      claimedSOM: claimedSOM ?? "Not provided",
+      claimedGrowthRate: claimedGrowthRate ?? "Not provided",
       claimedGrowthRatePeriod:
         (pipelineData.extraction.deckStructuredData as Record<string, Record<string, unknown>> | undefined)
           ?.financials?.growthRatePeriod as string ?? "Not provided",
@@ -583,7 +591,7 @@ export class MarketEvaluationAgent extends BaseEvaluationAgent<MarketEvaluation>
     const { sizeGrowth, momentum, confidence, normalizedSources, score } = params;
     const growthRationale = this.toString(sizeGrowth?.rationale) ?? "Unknown";
     const momentumRationale = this.toString(momentum?.rationale) ?? "Unknown";
-    const cagr = this.extractPercent(growthRationale) ?? "Unknown";
+    const cagr = this.extractMarketSpecificPercent(growthRationale) ?? "Unknown";
 
     const timingAssessment =
       score >= 80 ? "right_time" : score >= 65 ? "slightly_early" : "too_early";
@@ -728,6 +736,25 @@ export class MarketEvaluationAgent extends BaseEvaluationAgent<MarketEvaluation>
     return match?.[0] ?? null;
   }
 
+  private extractMarketSpecificPercent(text: string): string | null {
+    if (!text) return null;
+
+    const lines = text
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+
+    const marketLine = lines.find((line) =>
+      /(market|industry|category|sector|segment|addressable market|tam|sam|som|market growth|industry growth|market size|category growth)/i.test(line)
+      && /\d+(?:\.\d+)?%/.test(line),
+    );
+
+    if (!marketLine) return null;
+
+    const match = marketLine.match(/\d+(?:\.\d+)?%/);
+    return match?.[0] ?? null;
+  }
+
   /**
    * When the model generates rich narrative but leaves structured objects empty,
    * extract data from the narrative/keyFindings/risks to populate them.
@@ -804,7 +831,7 @@ export class MarketEvaluationAgent extends BaseEvaluationAgent<MarketEvaluation>
 
     // Enrich marketGrowthAndTiming if empty
     if (!this.hasPopulatedNestedFields(candidate.marketGrowthAndTiming)) {
-      const cagr = this.extractPercent(corpus) ?? "Unknown";
+      const cagr = this.extractMarketSpecificPercent(corpus) ?? "Unknown";
       const whyNowThesis = this.extractWhyNow(corpus);
       const lifecycle = score >= 80 ? "growth" : score >= 65 ? "early_growth" : "emerging";
       const trajectory = corpus.toLowerCase().includes("accelerat") ? "accelerating"

@@ -35,8 +35,9 @@ describe("NewsResearchAgent", () => {
       "industry",
       "knownFunding",
       "specificMarket",
+      "teamMembers",
     ]);
-    expect(context).not.toHaveProperty("teamMembers");
+    expect(context.teamMembers).toEqual(pipelineInput.scraping.teamMembers);
     expect(context).not.toHaveProperty("productDescription");
     expect(context).not.toHaveProperty("claimedTAM");
     expect(context.specificMarket).toBeUndefined();

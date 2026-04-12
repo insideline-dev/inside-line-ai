@@ -13,7 +13,7 @@ import {
 import type { PhaseProgressCallback } from "../interfaces/progress-callback.interface";
 import { ExtractionSchema } from "../schemas";
 import { FieldExtractorService, type ExtractedFields } from "./field-extractor.service";
-import { MistralOcrService } from "./mistral-ocr.service";
+import { PdfOcrService } from "./pdf-ocr.service";
 import { PdfTextExtractorService } from "./pdf-text-extractor.service";
 import { ExcelTextExtractorService } from "./excel-text-extractor.service";
 import { PptxTextExtractorService } from "./pptx-text-extractor.service";
@@ -64,7 +64,7 @@ export class ExtractionService {
     private pdfTextExtractor: PdfTextExtractorService,
     private pptxTextExtractor: PptxTextExtractorService,
     private excelTextExtractor: ExcelTextExtractorService,
-    private mistralOcr: MistralOcrService,
+    private pdfOcr: PdfOcrService,
     private fieldExtractor: FieldExtractorService,
   ) {
     this.maxTextChars = this.config.get<number>(
@@ -465,7 +465,7 @@ export class ExtractionService {
       ocrAttempted = true;
       progress?.onStepStart("ocr_fallback", {
         inputJson: {
-          method: "mistral-ocr",
+          method: "ocr",
           deckUrl,
         },
       });
@@ -473,16 +473,18 @@ export class ExtractionService {
         this.logger.log(
           `[Extraction] Running OCR fallback for startup ${startupId} using ${this.redactUrl(deckUrl)}`,
         );
-        const ocrResult = await this.mistralOcr.extractFromPdf(deckUrl);
+        const ocrResult = await this.pdfOcr.extractFromPdf(deckUrl);
         extractedText = ocrResult.text;
         pageCount = Math.max(pageCount, ocrResult.pages.length);
-        source = "mistral-ocr";
+        source = "ocr";
         this.logger.log(
-          `[Extraction] OCR succeeded | pages=${ocrResult.pages.length} | chars=${ocrResult.text.length}`,
+          `[Extraction] OCR succeeded | provider=${ocrResult.provider} | model=${ocrResult.model} | pages=${ocrResult.pages.length} | chars=${ocrResult.text.length}`,
         );
         progress?.onStepComplete("ocr_fallback", {
           summary: {
-            method: "mistral-ocr",
+            method: "ocr",
+            provider: ocrResult.provider,
+            model: ocrResult.model,
             pages: ocrResult.pages.length,
             chars: ocrResult.text.length,
           },
@@ -492,7 +494,7 @@ export class ExtractionService {
       } catch (error) {
         const message = this.asMessage(error);
         ocrFailureMessage = message;
-        warnings.push(`Mistral OCR failed: ${message}`);
+        warnings.push(`OCR failed: ${message}`);
         this.logger.warn(`[Extraction] OCR failed: ${message}`);
         progress?.onStepFailed("ocr_fallback", message, {
           outputJson: {
@@ -1275,7 +1277,7 @@ export class ExtractionService {
         return pdfResult.text;
       }
 
-      const ocrResult = await this.mistralOcr.extractFromPdf(downloadUrl);
+      const ocrResult = await this.pdfOcr.extractFromPdf(downloadUrl);
       return ocrResult.text;
     }
 

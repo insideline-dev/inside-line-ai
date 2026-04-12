@@ -41,6 +41,7 @@ import { ExtractionService } from "./services/extraction.service";
 import { FieldExtractorService } from "./services/field-extractor.service";
 import { GeminiResearchService } from "./services/gemini-research.service";
 import { MistralOcrService } from "./services/mistral-ocr.service";
+import { PdfOcrService } from "./services/pdf-ocr.service";
 import { PipelineService } from "./services/pipeline.service";
 import { PipelineStateService } from "./services/pipeline-state.service";
 import { PipelineStateSnapshotService } from "./services/pipeline-state-snapshot.service";
@@ -120,6 +121,7 @@ import { OpenAiTextGenerationService } from "./services/openai-text-generation.s
     PptxTextExtractorService,
     ExcelTextExtractorService,
     MistralOcrService,
+    PdfOcrService,
     FieldExtractorService,
     ScrapingService,
     WebsiteScraperService,

@@ -1,41 +1,49 @@
-import { useMemo, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
-import { Building2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { ArrowLeft } from "lucide-react";
 import { DataRoomPanel } from "@/components/startup-view/DataRoomPanel";
+import {
+  DataRoomStartupGrid,
+  type DataRoomStartupItem,
+} from "@/components/startup-view/DataRoomStartupGrid";
 import { customFetch } from "@/api/client";
 
 export const Route = createFileRoute("/_protected/investor/data-room")({
   component: InvestorDataRoomPage,
+  validateSearch: (search: Record<string, unknown>) => ({
+    startupId: (search.startupId as string | undefined) || null,
+  }),
 });
 
-type StartupItem = { id: string; name: string };
-
 function InvestorDataRoomPage() {
-  const { data: startups, isLoading, error } = useQuery<StartupItem[]>({
+  const { startupId } = Route.useSearch();
+  const navigate = useNavigate();
+
+  const { data: startups, isLoading, error } = useQuery<DataRoomStartupItem[]>({
     queryKey: ["investor", "startups-list"],
     queryFn: async () => {
-      const json = await customFetch<{ data?: StartupItem[] }>("/startups?limit=100");
-      return ((json as { data?: StartupItem[] }).data ?? json) as StartupItem[];
+      const json = await customFetch<{ data?: DataRoomStartupItem[] }>(
+        "/startups?limit=100",
+      );
+      return ((json as { data?: DataRoomStartupItem[] }).data ??
+        json) as DataRoomStartupItem[];
     },
   });
 
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = startupId
+    ? startups?.find((s) => s.id === startupId) ?? null
+    : null;
 
-  const activeStartupId = useMemo(
-    () => selectedId ?? startups?.[0]?.id ?? null,
-    [selectedId, startups],
-  );
+  const handleSelect = (id: string) => {
+    navigate({ to: "/investor/data-room", search: { startupId: id } });
+  };
+
+  const handleBack = () => {
+    navigate({ to: "/investor/data-room", search: { startupId: null } });
+  };
 
   if (isLoading) {
     return (
@@ -46,7 +54,11 @@ function InvestorDataRoomPage() {
             View startup documents shared with you.
           </p>
         </div>
-        <Skeleton className="h-32 w-full" />
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <Skeleton className="h-36 w-full" />
+          <Skeleton className="h-36 w-full" />
+          <Skeleton className="h-36 w-full" />
+        </div>
       </div>
     );
   }
@@ -71,52 +83,47 @@ function InvestorDataRoomPage() {
     );
   }
 
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-balance">Data Room</h1>
-          <p className="text-muted-foreground text-pretty">
-            View startup documents shared with you.
-          </p>
+  if (selected) {
+    return (
+      <div className="space-y-6">
+        <div className="space-y-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleBack}
+            className="-ml-2 gap-1.5 text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="size-4" />
+            All startups
+          </Button>
+          <div>
+            <h1 className="text-2xl font-bold text-balance">{selected.name}</h1>
+            <p className="text-muted-foreground text-pretty">
+              Review documents shared by the founder, organized by section.
+            </p>
+          </div>
         </div>
 
-        <div className="w-full space-y-1.5 sm:w-72">
-          <Label
-            htmlFor="investor-data-room-startup"
-            className="text-xs font-medium text-muted-foreground uppercase tracking-wide"
-          >
-            Startup
-          </Label>
-          <Select
-            value={activeStartupId ?? ""}
-            onValueChange={setSelectedId}
-          >
-            <SelectTrigger id="investor-data-room-startup" className="w-full">
-              <span className="flex items-center gap-2 truncate">
-                <Building2 className="size-4 shrink-0 text-muted-foreground" />
-                <SelectValue placeholder="Select startup" />
-              </span>
-            </SelectTrigger>
-            <SelectContent>
-              {startups.map((s) => (
-                <SelectItem key={s.id} value={s.id}>
-                  {s.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      {activeStartupId && (
         <DataRoomPanel
-          startupId={activeStartupId}
+          startupId={selected.id}
           role="investor"
           allowUpload={false}
           allowCategoryEdit={false}
         />
-      )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-balance">Data Room</h1>
+        <p className="text-muted-foreground text-pretty">
+          Select a startup to review its shared documents.
+        </p>
+      </div>
+
+      <DataRoomStartupGrid startups={startups} onSelect={handleSelect} />
     </div>
   );
 }

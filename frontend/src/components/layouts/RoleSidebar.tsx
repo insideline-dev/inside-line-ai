@@ -3,6 +3,11 @@ import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { NotificationCenter } from "@/components/NotificationCenter";
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -21,6 +26,9 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
   SidebarProvider,
   SidebarTrigger,
   useSidebar,
@@ -40,7 +48,6 @@ import {
   Link2,
   MessageSquare,
   Binoculars,
-  Workflow,
   Plus,
   ChevronsUpDown,
   Calendar,
@@ -49,6 +56,7 @@ import {
   DollarSign,
   Trophy,
   UserRoundSearch,
+  ChevronRight,
   type LucideIcon,
 } from "lucide-react";
 import insideLineLogo from "@/assets/icon-insideline.svg";
@@ -58,10 +66,17 @@ import { useMockAuthStore } from "@/stores";
 import { env } from "@/env";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
+interface NavSubItem {
+  title: string;
+  url: string;
+  icon: LucideIcon;
+}
+
 interface NavItem {
   title: string;
   url: string;
   icon: LucideIcon;
+  items?: NavSubItem[];
 }
 
 const roleNavItems: Record<UserRole, NavItem[]> = {
@@ -84,11 +99,17 @@ const roleNavItems: Record<UserRole, NavItem[]> = {
     { title: "Review Queue", url: "/admin", icon: Shield },
     { title: "Data Room", url: "/admin/data-room", icon: Folder },
     { title: "Analytics", url: "/admin/analytics", icon: BarChart3 },
-    { title: "Users", url: "/admin/users", icon: Users },
-    { title: "Investors", url: "/admin/investors", icon: UserRoundSearch },
-    { title: "Scouts", url: "/admin/scouts", icon: Binoculars },
+    {
+      title: "Users",
+      url: "/admin/users",
+      icon: Users,
+      items: [
+        { title: "All Users", url: "/admin/users", icon: Users },
+        { title: "Investors", url: "/admin/investors", icon: UserRoundSearch },
+        { title: "Scouts", url: "/admin/scouts", icon: Binoculars },
+      ],
+    },
     { title: "Agents", url: "/admin/agents", icon: Bot },
-    { title: "Flow", url: "/admin/flow", icon: Workflow },
     { title: "Conversations", url: "/admin/conversations", icon: MessageSquare },
     { title: "Scoring", url: "/admin/scoring", icon: Scale },
     { title: "Integrations", url: "/admin/integrations", icon: Link2 },
@@ -114,6 +135,13 @@ interface RoleSidebarProps {
   children: React.ReactNode;
 }
 
+function isItemActive(url: string, pathname: string) {
+  const isRoleIndex = ["/investor", "/founder", "/admin", "/scout"].includes(url);
+  return isRoleIndex
+    ? pathname === url
+    : pathname === url || pathname.startsWith(url + "/");
+}
+
 function NavContent({ role }: { role: UserRole }) {
   const location = useLocation();
   const items = roleNavItems[role];
@@ -125,11 +153,55 @@ function NavContent({ role }: { role: UserRole }) {
       <SidebarGroupContent>
         <SidebarMenu>
           {items.map((item) => {
-            const isRoleIndex = ["/investor", "/founder", "/admin", "/scout"].includes(item.url);
-            const isActive = isRoleIndex
-              ? location.pathname === item.url
-              : location.pathname === item.url || location.pathname.startsWith(item.url + "/");
+            if (item.items?.length) {
+              const anySubActive = item.items.some((sub) =>
+                isItemActive(sub.url, location.pathname),
+              );
+              return (
+                <Collapsible
+                  key={item.title}
+                  asChild
+                  defaultOpen={anySubActive}
+                  className="group/collapsible"
+                >
+                  <SidebarMenuItem>
+                    <CollapsibleTrigger asChild>
+                      <SidebarMenuButton
+                        tooltip={item.title}
+                        isActive={anySubActive}
+                      >
+                        <item.icon />
+                        <span>{item.title}</span>
+                        <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+                      </SidebarMenuButton>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <SidebarMenuSub>
+                        {item.items.map((sub) => {
+                          const subActive = isItemActive(sub.url, location.pathname);
+                          return (
+                            <SidebarMenuSubItem key={sub.url}>
+                              <SidebarMenuSubButton
+                                asChild
+                                isActive={subActive}
+                                onClick={() => setOpenMobile(false)}
+                              >
+                                <Link to={sub.url}>
+                                  <sub.icon />
+                                  <span>{sub.title}</span>
+                                </Link>
+                              </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                          );
+                        })}
+                      </SidebarMenuSub>
+                    </CollapsibleContent>
+                  </SidebarMenuItem>
+                </Collapsible>
+              );
+            }
 
+            const isActive = isItemActive(item.url, location.pathname);
             return (
               <SidebarMenuItem key={item.url}>
                 <SidebarMenuButton

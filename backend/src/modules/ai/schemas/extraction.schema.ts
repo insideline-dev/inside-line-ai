@@ -48,6 +48,13 @@ const StartupFormContextSchema = z.object({
 
 export const ExtractionSchema = z.object({
   companyName: z.string().min(1),
+  description: z
+    .string()
+    .min(20)
+    .optional()
+    .describe(
+      "A concise 1-2 sentence description of what the company does, grounded strictly in the pitch deck content. Minimum 20 characters. No marketing fluff, no first-person.",
+    ),
   tagline: z.string().optional().default(""),
   founderNames: z.array(z.string()).default([]),
   industry: z.string().min(1),

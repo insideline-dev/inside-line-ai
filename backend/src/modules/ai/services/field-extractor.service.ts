@@ -24,6 +24,14 @@ const DeckClassificationSchema = z.object({
 
 const ExtractedFieldsSchema = z.object({
   companyName: z.string().min(1).nullable().optional(),
+  description: z
+    .string()
+    .min(20)
+    .nullable()
+    .optional()
+    .describe(
+      "A concise 1-2 sentence description of what the company does, grounded strictly in the pitch deck content. Minimum 20 characters. No marketing fluff, no first-person.",
+    ),
   tagline: z.string().nullable().optional(),
   founderNames: z.array(z.string().min(1)).nullable().optional(),
   industry: z.string().min(1).nullable().optional(),

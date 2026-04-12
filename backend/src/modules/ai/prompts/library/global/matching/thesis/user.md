@@ -1,12 +1,15 @@
 ## Investor Thesis Summary
 {{investorThesisSummary}}
 
-## Investor Thesis Details
+## Investor Thesis Narrative
 {{investorThesis}}
+
+## Investor Structured Criteria
+{{investorCriteria}}
 
 ## Startup Profile
 Summary: {{startupSummary}}
 Overall Score: {{overallScore}}
 
-## Full Startup Profile
+## Full Startup Evaluation
 {{startupProfile}}

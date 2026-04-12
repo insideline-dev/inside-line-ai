@@ -1,7 +1,16 @@
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { SectionScoreCard } from "@/components/SectionScoreCard";
-import { DataGapsSection, parseDataGapItems } from "@/components/DataGapsSection";
+import {
+  DataGapsSection,
+  parseDataGapItems,
+} from "@/components/DataGapsSection";
 import { MarkdownText } from "@/components/MarkdownText";
 import { cn } from "@/lib/utils";
 import {
@@ -66,7 +75,9 @@ function toRecord(value: unknown): GenericRecord {
 }
 
 function toString(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+  return typeof value === "string" && value.trim().length > 0
+    ? value.trim()
+    : undefined;
 }
 
 function toStringArray(value: unknown): string[] {
@@ -202,8 +213,10 @@ function countTrue(values: Array<boolean | null>): number {
 }
 
 function formatCompactCurrency(value: number): string {
-  if (Math.abs(value) >= 1_000_000_000) return `$${(value / 1_000_000_000).toFixed(1)}B`;
-  if (Math.abs(value) >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`;
+  if (Math.abs(value) >= 1_000_000_000)
+    return `$${(value / 1_000_000_000).toFixed(1)}B`;
+  if (Math.abs(value) >= 1_000_000)
+    return `$${(value / 1_000_000).toFixed(1)}M`;
   if (Math.abs(value) >= 1_000) return `$${Math.round(value / 1_000)}K`;
   return `$${Math.round(value)}`;
 }
@@ -212,10 +225,24 @@ function formatCompactCurrency(value: number): string {
 // Chart data parsers
 // ---------------------------------------------------------------------------
 
-interface RevenuePoint { period: string; revenue: number }
-interface BurnPoint { period: string; burn: number; cashBalance: number }
-interface ScenarioPoint { period: string; [scenario: string]: string | number }
-interface MarginPoint { period: string; grossMargin: number; operatingMargin: number }
+interface RevenuePoint {
+  period: string;
+  revenue: number;
+}
+interface BurnPoint {
+  period: string;
+  burn: number;
+  cashBalance: number;
+}
+interface ScenarioPoint {
+  period: string;
+  [scenario: string]: string | number;
+}
+interface MarginPoint {
+  period: string;
+  grossMargin: number;
+  operatingMargin: number;
+}
 
 function parseRevenueProjection(raw: unknown[]): RevenuePoint[] {
   return raw
@@ -242,7 +269,10 @@ function parseBurnProjection(raw: unknown[]): BurnPoint[] {
     .filter((item): item is BurnPoint => item !== null);
 }
 
-function parseScenarioComparison(raw: unknown[]): { data: ScenarioPoint[]; scenarioNames: string[] } {
+function parseScenarioComparison(raw: unknown[]): {
+  data: ScenarioPoint[];
+  scenarioNames: string[];
+} {
   const scenarioNames = new Set<string>();
   const data = raw
     .map((item) => {
@@ -289,7 +319,16 @@ function parseMarginProgression(raw: unknown[]): MarginPoint[] {
 }
 
 const SCENARIO_COLORS = ["#8b5cf6", "#3b82f6", "#10b981", "#f59e0b", "#ef4444"];
-const DONUT_COLORS = ["#8b5cf6", "#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#ec4899", "#06b6d4", "#84cc16"];
+const DONUT_COLORS = [
+  "#8b5cf6",
+  "#3b82f6",
+  "#10b981",
+  "#f59e0b",
+  "#ef4444",
+  "#ec4899",
+  "#06b6d4",
+  "#84cc16",
+];
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -307,7 +346,8 @@ function Gauge({
 }) {
   const normalized = activeValue?.replace(/-/g, "_");
   const activeIndex = steps.findIndex((step) => step === normalized);
-  const progressPercent = activeIndex >= 0 ? ((activeIndex + 1) / steps.length) * 100 : 0;
+  const progressPercent =
+    activeIndex >= 0 ? ((activeIndex + 1) / steps.length) * 100 : 0;
 
   return (
     <div className="space-y-3">
@@ -334,7 +374,12 @@ function Gauge({
         </div>
       </div>
       {/* Step indicators */}
-      <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))` }}>
+      <div
+        className="grid gap-2"
+        style={{
+          gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))`,
+        }}
+      >
         {steps.map((step, index) => {
           const isActive = activeIndex >= 0 && index === activeIndex;
           const filled = activeIndex >= 0 && index <= activeIndex;
@@ -344,7 +389,10 @@ function Gauge({
               className={cn(
                 "rounded-lg border px-2 py-2 text-center text-xs transition-all",
                 isActive
-                  ? cn("ring-2 ring-offset-1 font-semibold", labelBadgeClass(step))
+                  ? cn(
+                      "ring-2 ring-offset-1 font-semibold",
+                      labelBadgeClass(step),
+                    )
                   : filled
                     ? labelBadgeClass(step)
                     : "border-slate-200 bg-muted/20 text-muted-foreground dark:border-slate-700",
@@ -360,7 +408,13 @@ function Gauge({
 }
 
 /** Enhanced coverage cell with filled/empty circle states */
-function CoverageCell({ label, value }: { label: string; value: boolean | null }) {
+function CoverageCell({
+  label,
+  value,
+}: {
+  label: string;
+  value: boolean | null;
+}) {
   return (
     <div
       className={cn(
@@ -382,10 +436,14 @@ function CoverageCell({ label, value }: { label: string; value: boolean | null }
           </div>
         )}
       </div>
-      <p className={cn(
-        "mt-2 text-xs",
-        value === true ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground",
-      )}>
+      <p
+        className={cn(
+          "mt-2 text-xs",
+          value === true
+            ? "text-emerald-600 dark:text-emerald-400"
+            : "text-muted-foreground",
+        )}
+      >
         {value === null ? "Not covered" : value ? "Covered" : "Not covered"}
       </p>
     </div>
@@ -398,12 +456,24 @@ function CoverageArc({ count, total }: { count: number; total: number }) {
   const circumference = 2 * Math.PI * radius;
   const ratio = total > 0 ? count / total : 0;
   const dashOffset = circumference * (1 - ratio);
-  const color = ratio >= 0.8 ? "stroke-emerald-500" : ratio >= 0.5 ? "stroke-amber-500" : "stroke-rose-400";
+  const color =
+    ratio >= 0.8
+      ? "stroke-emerald-500"
+      : ratio >= 0.5
+        ? "stroke-amber-500"
+        : "stroke-rose-400";
 
   return (
     <div className="flex items-center gap-4">
       <svg width="80" height="80" viewBox="0 0 80 80" className="shrink-0">
-        <circle cx="40" cy="40" r={radius} fill="none" strokeWidth="6" className="stroke-muted/40" />
+        <circle
+          cx="40"
+          cy="40"
+          r={radius}
+          fill="none"
+          strokeWidth="6"
+          className="stroke-muted/40"
+        />
         <circle
           cx="40"
           cy="40"
@@ -416,7 +486,13 @@ function CoverageArc({ count, total }: { count: number; total: number }) {
           strokeDashoffset={dashOffset}
           transform="rotate(-90 40 40)"
         />
-        <text x="40" y="40" textAnchor="middle" dominantBaseline="central" className="fill-foreground text-lg font-bold">
+        <text
+          x="40"
+          y="40"
+          textAnchor="middle"
+          dominantBaseline="central"
+          className="fill-foreground text-lg font-bold"
+        >
           {count}/{total}
         </text>
       </svg>
@@ -436,14 +512,16 @@ function CoverageArc({ count, total }: { count: number; total: number }) {
 function CredibilityMeter({ level }: { level: string }) {
   const levels = ["none", "weak", "moderate", "strong"];
   const activeIndex = levels.indexOf(level.toLowerCase());
-  const percent = activeIndex >= 0 ? ((activeIndex + 1) / levels.length) * 100 : 0;
-  const barColor = activeIndex >= 3
-    ? "bg-emerald-500"
-    : activeIndex >= 2
-      ? "bg-amber-500"
-      : activeIndex >= 1
-        ? "bg-orange-400"
-        : "bg-rose-400";
+  const percent =
+    activeIndex >= 0 ? ((activeIndex + 1) / levels.length) * 100 : 0;
+  const barColor =
+    activeIndex >= 3
+      ? "bg-emerald-500"
+      : activeIndex >= 2
+        ? "bg-amber-500"
+        : activeIndex >= 1
+          ? "bg-orange-400"
+          : "bg-rose-400";
 
   return (
     <div className="space-y-1.5">
@@ -455,13 +533,21 @@ function CredibilityMeter({ level }: { level: string }) {
       </div>
       <div className="h-2.5 rounded-full bg-muted/50 dark:bg-muted/30">
         <div
-          className={cn("h-full rounded-full transition-all duration-500", barColor)}
+          className={cn(
+            "h-full rounded-full transition-all duration-500",
+            barColor,
+          )}
           style={{ width: `${percent}%` }}
         />
       </div>
       <div className="flex justify-between text-[10px] text-muted-foreground">
         {levels.map((l) => (
-          <span key={l} className={cn(l === level.toLowerCase() && "font-semibold text-foreground")}>
+          <span
+            key={l}
+            className={cn(
+              l === level.toLowerCase() && "font-semibold text-foreground",
+            )}
+          >
             {formatEnumLabel(l)}
           </span>
         ))}
@@ -474,7 +560,10 @@ function CredibilityMeter({ level }: { level: string }) {
 // Main component
 // ---------------------------------------------------------------------------
 
-export function FinancialsTabContent({ evaluation, financialsWeight }: FinancialsTabContentProps) {
+export function FinancialsTabContent({
+  evaluation,
+  financialsWeight,
+}: FinancialsTabContentProps) {
   if (!evaluation) {
     return (
       <Card className="border-dashed" data-testid="card-financials-empty">
@@ -509,7 +598,8 @@ export function FinancialsTabContent({ evaluation, financialsWeight }: Financial
   const scoringBasis = toString(scoring.scoringBasis);
   const subScores = toSubScores(scoring.subScores);
 
-  const financialModelProvided = toBoolean(financialsData.financialModelProvided) ?? false;
+  const financialModelProvided =
+    toBoolean(financialsData.financialModelProvided) ?? false;
   const strengths = toStringArray(financialsData.strengths);
   const risks = toStringArray(financialsData.risks);
   const dataGaps = parseDataGapItems(financialsData.dataGaps);
@@ -534,7 +624,9 @@ export function FinancialsTabContent({ evaluation, financialsWeight }: Financial
     runwayEstimated: toBoolean(capitalPlan.runwayEstimated),
     raiseJustified: toBoolean(capitalPlan.raiseJustified),
     milestoneTied: toBoolean(capitalPlan.milestoneTied),
-    capitalEfficiencyAddressed: toBoolean(capitalPlan.capitalEfficiencyAddressed),
+    capitalEfficiencyAddressed: toBoolean(
+      capitalPlan.capitalEfficiencyAddressed,
+    ),
   };
   const capitalCoverageCount = countTrue(Object.values(capitalCoverage));
   const capitalPlanAvailable = capitalCoverageCount > 0;
@@ -561,10 +653,18 @@ export function FinancialsTabContent({ evaluation, financialsWeight }: Financial
   const showUploadPrompt = !financialModelProvided;
   const showProjectionCoverage = projectionsProvided || financialModelProvided;
 
-  const revenueProjection = Array.isArray(charts.revenueProjection) ? charts.revenueProjection as unknown[] : [];
-  const burnProjection = Array.isArray(charts.burnProjection) ? charts.burnProjection as unknown[] : [];
-  const scenarioComparison = Array.isArray(charts.scenarioComparison) ? charts.scenarioComparison as unknown[] : [];
-  const marginProgression = Array.isArray(charts.marginProgression) ? charts.marginProgression as unknown[] : [];
+  const revenueProjection = Array.isArray(charts.revenueProjection)
+    ? (charts.revenueProjection as unknown[])
+    : [];
+  const burnProjection = Array.isArray(charts.burnProjection)
+    ? (charts.burnProjection as unknown[])
+    : [];
+  const scenarioComparison = Array.isArray(charts.scenarioComparison)
+    ? (charts.scenarioComparison as unknown[])
+    : [];
+  const marginProgression = Array.isArray(charts.marginProgression)
+    ? (charts.marginProgression as unknown[])
+    : [];
 
   const sophisticationLevel = toString(financialPlanning.sophisticationLevel);
   const diligenceFlags = Array.isArray(financialPlanning.diligenceFlags)
@@ -580,7 +680,8 @@ export function FinancialsTabContent({ evaluation, financialsWeight }: Financial
 
   // Max runway for the visual bar (cap at 36 months)
   const maxRunway = 36;
-  const runwayBarPercent = runwayMonths !== null ? Math.min((runwayMonths / maxRunway) * 100, 100) : 0;
+  const runwayBarPercent =
+    runwayMonths !== null ? Math.min((runwayMonths / maxRunway) * 100, 100) : 0;
 
   return (
     <div className="space-y-6" data-testid="financials-tab-content">
@@ -590,7 +691,9 @@ export function FinancialsTabContent({ evaluation, financialsWeight }: Financial
       <SectionScoreCard
         title="Financial Plan Score"
         score={score}
-        weight={typeof financialsWeight === "number" ? financialsWeight : undefined}
+        weight={
+          typeof financialsWeight === "number" ? financialsWeight : undefined
+        }
         confidence={confidence}
         scoringBasis={
           scoringBasis ??
@@ -608,7 +711,10 @@ export function FinancialsTabContent({ evaluation, financialsWeight }: Financial
       {/* ================================================================= */}
       {/* Hero Stat Cards                                                   */}
       {/* ================================================================= */}
-      {(raiseAmount || monthlyBurn || runway || useOfFundsBreakdown.length > 0) && (
+      {(raiseAmount ||
+        monthlyBurn ||
+        runway ||
+        useOfFundsBreakdown.length > 0) && (
         <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
           {raiseAmount && (
             <Card className="col-span-2 overflow-hidden border-0 bg-gradient-to-br from-violet-500/10 via-background to-background shadow-sm ring-1 ring-violet-500/10 xl:col-span-2">
@@ -620,7 +726,9 @@ export function FinancialsTabContent({ evaluation, financialsWeight }: Financial
                 <MarkdownText className="text-3xl font-bold tracking-tight text-foreground [&>p]:mb-0 [&_strong]:font-bold">
                   {raiseAmount}
                 </MarkdownText>
-                <p className="mt-2 text-xs text-muted-foreground">Target capital raise</p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Target capital raise
+                </p>
               </CardContent>
             </Card>
           )}
@@ -631,16 +739,22 @@ export function FinancialsTabContent({ evaluation, financialsWeight }: Financial
                   <Flame className="h-4 w-4 text-orange-500" />
                   <span>Monthly Burn</span>
                 </div>
-                <p className="text-2xl font-bold tracking-tight">{monthlyBurn}</p>
-                <p className="mt-1 text-[11px] text-muted-foreground">Operating cash outflow</p>
+                <p className="text-2xl font-bold tracking-tight">
+                  <MarkdownText>{monthlyBurn}</MarkdownText>
+                </p>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Operating cash outflow
+                </p>
               </CardContent>
             </Card>
           )}
           {runway && (
-            <Card className={cn(
-              "overflow-hidden border-0 shadow-sm bg-gradient-to-br via-background to-background",
-              runwayColorClass(runwayMonths),
-            )}>
+            <Card
+              className={cn(
+                "overflow-hidden border-0 shadow-sm bg-gradient-to-br via-background to-background",
+                runwayColorClass(runwayMonths),
+              )}
+            >
               <CardContent className="p-4">
                 <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
                   <Clock className="h-4 w-4" />
@@ -653,19 +767,30 @@ export function FinancialsTabContent({ evaluation, financialsWeight }: Financial
                   <div className="mt-2 space-y-1">
                     <div className="h-2 rounded-full bg-muted/40">
                       <div
-                        className={cn("h-full rounded-full transition-all duration-500", runwayBarColor(runwayMonths))}
+                        className={cn(
+                          "h-full rounded-full transition-all duration-500",
+                          runwayBarColor(runwayMonths),
+                        )}
                         style={{ width: `${runwayBarPercent}%` }}
                       />
                     </div>
                     <div className="flex justify-between text-[10px] text-muted-foreground">
                       <span>0</span>
-                      <span>{runwayMonths >= 18 ? "Healthy" : runwayMonths >= 12 ? "Adequate" : "Low"}</span>
+                      <span>
+                        {runwayMonths >= 18
+                          ? "Healthy"
+                          : runwayMonths >= 12
+                            ? "Adequate"
+                            : "Low"}
+                      </span>
                       <span>36mo</span>
                     </div>
                   </div>
                 )}
                 {runwayMonths === null && (
-                  <p className="mt-1 text-[11px] text-muted-foreground">No numeric estimate</p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    No numeric estimate
+                  </p>
                 )}
               </CardContent>
             </Card>
@@ -677,8 +802,12 @@ export function FinancialsTabContent({ evaluation, financialsWeight }: Financial
                   <Target className="h-4 w-4 text-blue-500" />
                   <span>Fund Allocation</span>
                 </div>
-                <p className="text-2xl font-bold tracking-tight">{useOfFundsBreakdown.length}</p>
-                <p className="mt-1 text-[11px] text-muted-foreground">Allocation categories</p>
+                <p className="text-2xl font-bold tracking-tight">
+                  {useOfFundsBreakdown.length}
+                </p>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Allocation categories
+                </p>
               </CardContent>
             </Card>
           )}
@@ -691,7 +820,9 @@ export function FinancialsTabContent({ evaluation, financialsWeight }: Financial
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Capital Plan Assessment</CardTitle>
-          <CardDescription>Coverage, allocation clarity, and milestone alignment.</CardDescription>
+          <CardDescription>
+            Coverage, allocation clarity, and milestone alignment.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
           {capitalPlanAvailable ? (
@@ -701,8 +832,16 @@ export function FinancialsTabContent({ evaluation, financialsWeight }: Financial
                 <CoverageArc count={capitalCoverageCount} total={6} />
                 {milestoneAlignment && (
                   <div className="text-right">
-                    <p className="text-xs text-muted-foreground mb-1">Milestone Alignment</p>
-                    <Badge variant="outline" className={cn("text-sm", labelBadgeClass(milestoneAlignment))}>
+                    <p className="text-xs text-muted-foreground mb-1">
+                      Milestone Alignment
+                    </p>
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-sm",
+                        labelBadgeClass(milestoneAlignment),
+                      )}
+                    >
                       {formatEnumLabel(milestoneAlignment)}
                     </Badge>
                   </div>
@@ -710,21 +849,46 @@ export function FinancialsTabContent({ evaluation, financialsWeight }: Financial
               </div>
 
               {/* Coverage cells + Donut side by side */}
-              <div className={cn("grid gap-4", useOfFundsBreakdown.length > 0 ? "lg:grid-cols-2" : "")}>
+              <div
+                className={cn(
+                  "grid gap-4",
+                  useOfFundsBreakdown.length > 0 ? "lg:grid-cols-2" : "",
+                )}
+              >
                 <div className="grid grid-cols-2 gap-3 xl:grid-cols-3 content-start">
-                  <CoverageCell label="Burn Plan Described" value={capitalCoverage.burnPlanDescribed} />
-                  <CoverageCell label="Use of Funds Breakdown" value={capitalCoverage.useOfFundsDescribed} />
-                  <CoverageCell label="Runway Estimated" value={capitalCoverage.runwayEstimated} />
-                  <CoverageCell label="Raise Justified" value={capitalCoverage.raiseJustified} />
-                  <CoverageCell label="Milestones Tied to Capital" value={capitalCoverage.milestoneTied} />
-                  <CoverageCell label="Capital Efficiency Addressed" value={capitalCoverage.capitalEfficiencyAddressed} />
+                  <CoverageCell
+                    label="Burn Plan Described"
+                    value={capitalCoverage.burnPlanDescribed}
+                  />
+                  <CoverageCell
+                    label="Use of Funds Breakdown"
+                    value={capitalCoverage.useOfFundsDescribed}
+                  />
+                  <CoverageCell
+                    label="Runway Estimated"
+                    value={capitalCoverage.runwayEstimated}
+                  />
+                  <CoverageCell
+                    label="Raise Justified"
+                    value={capitalCoverage.raiseJustified}
+                  />
+                  <CoverageCell
+                    label="Milestones Tied to Capital"
+                    value={capitalCoverage.milestoneTied}
+                  />
+                  <CoverageCell
+                    label="Capital Efficiency Addressed"
+                    value={capitalCoverage.capitalEfficiencyAddressed}
+                  />
                 </div>
 
                 {useOfFundsBreakdown.length > 0 && (
                   <div className="rounded-xl border bg-muted/10 p-4">
                     <div className="flex items-center gap-2 mb-3">
                       <Target className="h-4 w-4 text-primary" />
-                      <p className="text-sm font-medium">Use of Funds Breakdown</p>
+                      <p className="text-sm font-medium">
+                        Use of Funds Breakdown
+                      </p>
                     </div>
                     {/* Horizontal layout: donut + legend */}
                     <div className="flex items-center gap-4">
@@ -742,22 +906,39 @@ export function FinancialsTabContent({ evaluation, financialsWeight }: Financial
                               paddingAngle={2}
                             >
                               {useOfFundsBreakdown.map((_, idx) => (
-                                <Cell key={idx} fill={DONUT_COLORS[idx % DONUT_COLORS.length]} />
+                                <Cell
+                                  key={idx}
+                                  fill={DONUT_COLORS[idx % DONUT_COLORS.length]}
+                                />
                               ))}
                             </Pie>
-                            <Tooltip formatter={(value) => `${Number(value).toFixed(0)}%`} />
+                            <Tooltip
+                              formatter={(value) =>
+                                `${Number(value).toFixed(0)}%`
+                              }
+                            />
                           </PieChart>
                         </ResponsiveContainer>
                       </div>
                       <div className="flex-1 space-y-1.5">
                         {useOfFundsBreakdown.map((item, idx) => (
-                          <div key={item.category} className="flex items-center gap-2 text-xs">
+                          <div
+                            key={item.category}
+                            className="flex items-center gap-2 text-xs"
+                          >
                             <span
                               className="h-2.5 w-2.5 shrink-0 rounded-full"
-                              style={{ backgroundColor: DONUT_COLORS[idx % DONUT_COLORS.length] }}
+                              style={{
+                                backgroundColor:
+                                  DONUT_COLORS[idx % DONUT_COLORS.length],
+                              }}
                             />
-                            <span className="flex-1 truncate">{item.category}</span>
-                            <span className="font-semibold tabular-nums">{formatPercent(item.percentage)}</span>
+                            <span className="flex-1 truncate">
+                              {item.category}
+                            </span>
+                            <span className="font-semibold tabular-nums">
+                              {formatPercent(item.percentage)}
+                            </span>
                           </div>
                         ))}
                       </div>
@@ -776,7 +957,8 @@ export function FinancialsTabContent({ evaluation, financialsWeight }: Financial
             </>
           ) : (
             <div className="rounded-xl border border-dashed bg-muted/10 p-5 text-sm text-muted-foreground">
-              Capital plan not covered in this deck. This has been flagged in Data Gaps below.
+              Capital plan not covered in this deck. This has been flagged in
+              Data Gaps below.
             </div>
           )}
         </CardContent>
@@ -788,7 +970,9 @@ export function FinancialsTabContent({ evaluation, financialsWeight }: Financial
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Projection Assessment</CardTitle>
-          <CardDescription>Projection coverage, credibility, and model depth.</CardDescription>
+          <CardDescription>
+            Projection coverage, credibility, and model depth.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
           {showUploadPrompt && (
@@ -799,19 +983,37 @@ export function FinancialsTabContent({ evaluation, financialsWeight }: Financial
                 </div>
                 <div className="flex-1 space-y-3">
                   <div>
-                    <p className="font-semibold">Upload Financial Model for Full Analysis</p>
+                    <p className="font-semibold">
+                      Upload Financial Model for Full Analysis
+                    </p>
                     <p className="mt-1 text-sm text-muted-foreground">
-                      Upload a financial model or projections spreadsheet to unlock detailed analysis.
+                      Upload a financial model or projections spreadsheet to
+                      unlock detailed analysis.
                     </p>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     {[
-                      { icon: TrendingUp, label: "Revenue & burn projection charts" },
-                      { icon: BarChart3, label: "Assumption-by-assumption stress test" },
-                      { icon: Target, label: "Scenario comparison visualization" },
-                      { icon: Wallet, label: "Profitability path & margin trajectory" },
+                      {
+                        icon: TrendingUp,
+                        label: "Revenue & burn projection charts",
+                      },
+                      {
+                        icon: BarChart3,
+                        label: "Assumption-by-assumption stress test",
+                      },
+                      {
+                        icon: Target,
+                        label: "Scenario comparison visualization",
+                      },
+                      {
+                        icon: Wallet,
+                        label: "Profitability path & margin trajectory",
+                      },
                     ].map(({ icon: Icon, label }) => (
-                      <div key={label} className="flex items-start gap-2 rounded-lg border bg-background p-2.5">
+                      <div
+                        key={label}
+                        className="flex items-start gap-2 rounded-lg border bg-background p-2.5"
+                      >
                         <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
                         <span className="text-xs font-medium">{label}</span>
                       </div>
@@ -825,9 +1027,18 @@ export function FinancialsTabContent({ evaluation, financialsWeight }: Financial
           {showProjectionCoverage ? (
             <>
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                <CoverageCell label="Projections Provided" value={projectionsProvided} />
-                <CoverageCell label="Assumptions Stated" value={assumptionsStated} />
-                <CoverageCell label="Internally Consistent" value={projectionsProvided ? internallyConsistent : null} />
+                <CoverageCell
+                  label="Projections Provided"
+                  value={projectionsProvided}
+                />
+                <CoverageCell
+                  label="Assumptions Stated"
+                  value={assumptionsStated}
+                />
+                <CoverageCell
+                  label="Internally Consistent"
+                  value={projectionsProvided ? internallyConsistent : null}
+                />
               </div>
 
               {/* Credibility meter */}
@@ -853,7 +1064,9 @@ export function FinancialsTabContent({ evaluation, financialsWeight }: Financial
       {(strengths.length > 0 || risks.length > 0) && (
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Financial Strengths & Risks</CardTitle>
+            <CardTitle className="text-base">
+              Financial Strengths & Risks
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid gap-6 md:grid-cols-2">
@@ -873,12 +1086,16 @@ export function FinancialsTabContent({ evaluation, financialsWeight }: Financial
                         <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-[10px] font-bold text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-400">
                           {index + 1}
                         </span>
-                        <MarkdownText className="inline text-sm [&>p]:inline [&>p]:mb-0">{item}</MarkdownText>
+                        <MarkdownText className="inline text-sm [&>p]:inline [&>p]:mb-0">
+                          {item}
+                        </MarkdownText>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-muted-foreground">No explicit financial strengths captured.</p>
+                  <p className="text-sm text-muted-foreground">
+                    No explicit financial strengths captured.
+                  </p>
                 )}
               </div>
 
@@ -898,12 +1115,16 @@ export function FinancialsTabContent({ evaluation, financialsWeight }: Financial
                         <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-rose-100 text-[10px] font-bold text-rose-700 dark:bg-rose-900/50 dark:text-rose-400">
                           {index + 1}
                         </span>
-                        <MarkdownText className="inline text-sm [&>p]:inline [&>p]:mb-0">{item}</MarkdownText>
+                        <MarkdownText className="inline text-sm [&>p]:inline [&>p]:mb-0">
+                          {item}
+                        </MarkdownText>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-muted-foreground">No explicit financial risks captured.</p>
+                  <p className="text-sm text-muted-foreground">
+                    No explicit financial risks captured.
+                  </p>
                 )}
               </div>
             </div>
@@ -927,9 +1148,14 @@ export function FinancialsTabContent({ evaluation, financialsWeight }: Financial
           {(() => {
             const revData = parseRevenueProjection(revenueProjection);
             const burnData = parseBurnProjection(burnProjection);
-            const { data: scenarioData, scenarioNames } = parseScenarioComparison(scenarioComparison);
+            const { data: scenarioData, scenarioNames } =
+              parseScenarioComparison(scenarioComparison);
             const marginData = parseMarginProgression(marginProgression);
-            const hasCharts = revData.length > 0 || burnData.length > 0 || scenarioData.length > 0 || marginData.length > 0;
+            const hasCharts =
+              revData.length > 0 ||
+              burnData.length > 0 ||
+              scenarioData.length > 0 ||
+              marginData.length > 0;
             if (!hasCharts) return null;
             return (
               <Card>
@@ -938,23 +1164,46 @@ export function FinancialsTabContent({ evaluation, financialsWeight }: Financial
                     <BarChart3 className="h-5 w-5 text-primary" />
                     Financial Projections
                   </CardTitle>
-                  <CardDescription>Charts derived from the uploaded financial model.</CardDescription>
+                  <CardDescription>
+                    Charts derived from the uploaded financial model.
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="grid gap-6 lg:grid-cols-2">
                     {revData.length > 0 && (
                       <div className="rounded-xl border bg-muted/10 p-4 space-y-3">
                         <div>
-                          <p className="text-sm font-medium">Revenue Projection</p>
-                          <p className="text-xs text-muted-foreground">Forecasted revenue over time</p>
+                          <p className="text-sm font-medium">
+                            Revenue Projection
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Forecasted revenue over time
+                          </p>
                         </div>
                         <ResponsiveContainer width="100%" height={220}>
                           <LineChart data={revData}>
-                            <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                            <CartesianGrid
+                              strokeDasharray="3 3"
+                              className="stroke-border"
+                            />
                             <XAxis dataKey="period" tick={{ fontSize: 10 }} />
-                            <YAxis tickFormatter={formatCompactCurrency} tick={{ fontSize: 10 }} width={60} />
-                            <Tooltip formatter={(value) => formatCompactCurrency(Number(value))} />
-                            <Line type="monotone" dataKey="revenue" stroke="#8b5cf6" strokeWidth={2} dot={{ r: 3 }} />
+                            <YAxis
+                              tickFormatter={formatCompactCurrency}
+                              tick={{ fontSize: 10 }}
+                              width={60}
+                            />
+                            <Tooltip
+                              formatter={(value) =>
+                                formatCompactCurrency(Number(value))
+                              }
+                            />
+                            <Line
+                              type="monotone"
+                              dataKey="revenue"
+                              stroke="#8b5cf6"
+                              strokeWidth={2}
+                              dot={{ r: 3 }}
+                            />
                           </LineChart>
                         </ResponsiveContainer>
                       </div>
@@ -963,20 +1212,67 @@ export function FinancialsTabContent({ evaluation, financialsWeight }: Financial
                     {burnData.length > 0 && (
                       <div className="rounded-xl border bg-muted/10 p-4 space-y-3">
                         <div>
-                          <p className="text-sm font-medium">Burn & Cash Runway</p>
-                          <p className="text-xs text-muted-foreground">Monthly burn rate vs remaining cash</p>
+                          <p className="text-sm font-medium">
+                            Burn & Cash Runway
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Monthly burn rate vs remaining cash
+                          </p>
                         </div>
                         <ResponsiveContainer width="100%" height={220}>
                           <ComposedChart data={burnData}>
-                            <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                            <CartesianGrid
+                              strokeDasharray="3 3"
+                              className="stroke-border"
+                            />
                             <XAxis dataKey="period" tick={{ fontSize: 10 }} />
-                            <YAxis yAxisId="left" tickFormatter={formatCompactCurrency} tick={{ fontSize: 10 }} width={60} />
-                            <YAxis yAxisId="right" orientation="right" tickFormatter={formatCompactCurrency} tick={{ fontSize: 10 }} width={60} />
-                            <Tooltip formatter={(value) => formatCompactCurrency(Number(value))} />
+                            <YAxis
+                              yAxisId="left"
+                              tickFormatter={formatCompactCurrency}
+                              tick={{ fontSize: 10 }}
+                              width={60}
+                            />
+                            <YAxis
+                              yAxisId="right"
+                              orientation="right"
+                              tickFormatter={formatCompactCurrency}
+                              tick={{ fontSize: 10 }}
+                              width={60}
+                            />
+                            <Tooltip
+                              formatter={(value) =>
+                                formatCompactCurrency(Number(value))
+                              }
+                            />
                             <Legend wrapperStyle={{ fontSize: 10 }} />
-                            <Bar yAxisId="left" dataKey="burn" fill="#ef4444" opacity={0.7} name="Monthly Burn" />
-                            <Line yAxisId="right" type="monotone" dataKey="cashBalance" stroke="#3b82f6" strokeWidth={2} dot={{ r: 3 }} name="Cash Balance" />
-                            <ReferenceLine yAxisId="right" y={0} stroke="#94a3b8" strokeDasharray="4 4" label={{ value: "Zero Cash", position: "right", fontSize: 10, fill: "#94a3b8" }} />
+                            <Bar
+                              yAxisId="left"
+                              dataKey="burn"
+                              fill="#ef4444"
+                              opacity={0.7}
+                              name="Monthly Burn"
+                            />
+                            <Line
+                              yAxisId="right"
+                              type="monotone"
+                              dataKey="cashBalance"
+                              stroke="#3b82f6"
+                              strokeWidth={2}
+                              dot={{ r: 3 }}
+                              name="Cash Balance"
+                            />
+                            <ReferenceLine
+                              yAxisId="right"
+                              y={0}
+                              stroke="#94a3b8"
+                              strokeDasharray="4 4"
+                              label={{
+                                value: "Zero Cash",
+                                position: "right",
+                                fontSize: 10,
+                                fill: "#94a3b8",
+                              }}
+                            />
                           </ComposedChart>
                         </ResponsiveContainer>
                       </div>
@@ -985,18 +1281,42 @@ export function FinancialsTabContent({ evaluation, financialsWeight }: Financial
                     {scenarioData.length > 0 && scenarioNames.length > 0 && (
                       <div className="rounded-xl border bg-muted/10 p-4 space-y-3">
                         <div>
-                          <p className="text-sm font-medium">Scenario Comparison</p>
-                          <p className="text-xs text-muted-foreground">Best, base, and worst case projections</p>
+                          <p className="text-sm font-medium">
+                            Scenario Comparison
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Best, base, and worst case projections
+                          </p>
                         </div>
                         <ResponsiveContainer width="100%" height={220}>
                           <LineChart data={scenarioData}>
-                            <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                            <CartesianGrid
+                              strokeDasharray="3 3"
+                              className="stroke-border"
+                            />
                             <XAxis dataKey="period" tick={{ fontSize: 10 }} />
-                            <YAxis tickFormatter={formatCompactCurrency} tick={{ fontSize: 10 }} width={60} />
-                            <Tooltip formatter={(value) => formatCompactCurrency(Number(value))} />
+                            <YAxis
+                              tickFormatter={formatCompactCurrency}
+                              tick={{ fontSize: 10 }}
+                              width={60}
+                            />
+                            <Tooltip
+                              formatter={(value) =>
+                                formatCompactCurrency(Number(value))
+                              }
+                            />
                             <Legend wrapperStyle={{ fontSize: 10 }} />
                             {scenarioNames.map((name, idx) => (
-                              <Line key={name} type="monotone" dataKey={name} stroke={SCENARIO_COLORS[idx % SCENARIO_COLORS.length]} strokeWidth={2} dot={{ r: 2 }} />
+                              <Line
+                                key={name}
+                                type="monotone"
+                                dataKey={name}
+                                stroke={
+                                  SCENARIO_COLORS[idx % SCENARIO_COLORS.length]
+                                }
+                                strokeWidth={2}
+                                dot={{ r: 2 }}
+                              />
                             ))}
                           </LineChart>
                         </ResponsiveContainer>
@@ -1006,19 +1326,54 @@ export function FinancialsTabContent({ evaluation, financialsWeight }: Financial
                     {marginData.length > 0 && (
                       <div className="rounded-xl border bg-muted/10 p-4 space-y-3">
                         <div>
-                          <p className="text-sm font-medium">Margin Progression</p>
-                          <p className="text-xs text-muted-foreground">Gross and operating margin trajectory</p>
+                          <p className="text-sm font-medium">
+                            Margin Progression
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Gross and operating margin trajectory
+                          </p>
                         </div>
                         <ResponsiveContainer width="100%" height={220}>
                           <AreaChart data={marginData}>
-                            <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                            <CartesianGrid
+                              strokeDasharray="3 3"
+                              className="stroke-border"
+                            />
                             <XAxis dataKey="period" tick={{ fontSize: 10 }} />
-                            <YAxis tickFormatter={(v: number) => `${v}%`} tick={{ fontSize: 10 }} width={45} />
-                            <Tooltip formatter={(value) => `${Number(value).toFixed(1)}%`} />
+                            <YAxis
+                              tickFormatter={(v: number) => `${v}%`}
+                              tick={{ fontSize: 10 }}
+                              width={45}
+                            />
+                            <Tooltip
+                              formatter={(value) =>
+                                `${Number(value).toFixed(1)}%`
+                              }
+                            />
                             <Legend wrapperStyle={{ fontSize: 10 }} />
-                            <Area type="monotone" dataKey="grossMargin" stroke="#10b981" fill="#10b981" fillOpacity={0.15} strokeWidth={2} name="Gross Margin" />
-                            <Area type="monotone" dataKey="operatingMargin" stroke="#f59e0b" fill="#f59e0b" fillOpacity={0.15} strokeWidth={2} name="Operating Margin" />
-                            <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="4 4" />
+                            <Area
+                              type="monotone"
+                              dataKey="grossMargin"
+                              stroke="#10b981"
+                              fill="#10b981"
+                              fillOpacity={0.15}
+                              strokeWidth={2}
+                              name="Gross Margin"
+                            />
+                            <Area
+                              type="monotone"
+                              dataKey="operatingMargin"
+                              stroke="#f59e0b"
+                              fill="#f59e0b"
+                              fillOpacity={0.15}
+                              strokeWidth={2}
+                              name="Operating Margin"
+                            />
+                            <ReferenceLine
+                              y={0}
+                              stroke="#94a3b8"
+                              strokeDasharray="4 4"
+                            />
                           </AreaChart>
                         </ResponsiveContainer>
                       </div>
@@ -1035,7 +1390,9 @@ export function FinancialsTabContent({ evaluation, financialsWeight }: Financial
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Assumption Deep Dive</CardTitle>
-              <CardDescription>Individual assumption assessment and verdicts.</CardDescription>
+              <CardDescription>
+                Individual assumption assessment and verdicts.
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
               {assumptions.length > 0 ? (
@@ -1043,9 +1400,15 @@ export function FinancialsTabContent({ evaluation, financialsWeight }: Financial
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b text-xs text-muted-foreground">
-                        <th className="pb-3 pr-4 text-left font-medium">Assumption</th>
-                        <th className="pb-3 pr-4 text-left font-medium">Value</th>
-                        <th className="pb-3 pr-4 text-left font-medium">Assessment</th>
+                        <th className="pb-3 pr-4 text-left font-medium">
+                          Assumption
+                        </th>
+                        <th className="pb-3 pr-4 text-left font-medium">
+                          Value
+                        </th>
+                        <th className="pb-3 pr-4 text-left font-medium">
+                          Assessment
+                        </th>
                         <th className="pb-3 text-left font-medium">Verdict</th>
                       </tr>
                     </thead>
@@ -1071,7 +1434,10 @@ export function FinancialsTabContent({ evaluation, financialsWeight }: Financial
                             </MarkdownText>
                           </td>
                           <td className="py-3 align-top">
-                            <Badge variant="outline" className={labelBadgeClass(item.verdict)}>
+                            <Badge
+                              variant="outline"
+                              className={labelBadgeClass(item.verdict)}
+                            >
                               {formatEnumLabel(item.verdict)}
                             </Badge>
                           </td>
@@ -1089,7 +1455,13 @@ export function FinancialsTabContent({ evaluation, financialsWeight }: Financial
               <div className="rounded-lg border bg-muted/10 p-4">
                 <Gauge
                   label="Profitability Path"
-                  steps={["pre_revenue", "revenue_not_profitable", "path_described", "path_clear", "profitable"]}
+                  steps={[
+                    "pre_revenue",
+                    "revenue_not_profitable",
+                    "path_described",
+                    "path_clear",
+                    "profitable",
+                  ]}
                   activeValue={profitabilityPath}
                 />
               </div>
@@ -1101,14 +1473,24 @@ export function FinancialsTabContent({ evaluation, financialsWeight }: Financial
           {/* ============================================================= */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Financial Planning Maturity</CardTitle>
-              <CardDescription>Sophistication level and diligence readiness.</CardDescription>
+              <CardTitle className="text-base">
+                Financial Planning Maturity
+              </CardTitle>
+              <CardDescription>
+                Sophistication level and diligence readiness.
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="rounded-lg border bg-muted/10 p-4">
                 <Gauge
                   label="Planning Sophistication"
-                  steps={["basic", "developing", "solid", "advanced", "ipo_grade"]}
+                  steps={[
+                    "basic",
+                    "developing",
+                    "solid",
+                    "advanced",
+                    "ipo_grade",
+                  ]}
                   activeValue={sophisticationLevel}
                 />
               </div>
@@ -1135,7 +1517,13 @@ export function FinancialsTabContent({ evaluation, financialsWeight }: Financial
                             {item.flag}
                           </MarkdownText>
                         </div>
-                        <Badge variant="outline" className={cn("shrink-0", priorityBadgeClass(item.priority))}>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "shrink-0",
+                            priorityBadgeClass(item.priority),
+                          )}
+                        >
                           {formatEnumLabel(item.priority)}
                         </Badge>
                       </div>

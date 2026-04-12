@@ -19,6 +19,9 @@ Financial model (if provided):
 
 {{adminGuidance}}
 
+=== SUPPORTING DOCUMENTS (Data Room) ===
+{{supportingDocuments}}
+
 ANALYSIS INSTRUCTIONS:
 1. Identify what financial projections and model data are provided
 2. Evaluate the quality and credibility of the assumptions

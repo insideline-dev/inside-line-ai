@@ -140,6 +140,7 @@ export abstract class BaseEvaluationAgent<TOutput>
       adminGuidance,
       webResearch: this.buildResearchReportText(pipelineData),
       websiteContent: pipelineData.scraping.website?.fullText ?? "Not provided",
+      supportingDocuments: pipelineData.relevantSupportingDocuments ?? "None",
     };
   }
 
@@ -246,7 +247,7 @@ export abstract class BaseEvaluationAgent<TOutput>
     try {
       context = this.buildContext(pipelineData);
       const feedbackNotes = options?.feedbackNotes ?? [];
-      const promptContext = {
+      const promptContext: Record<string, unknown> = {
         startupSnapshot: buildEvaluationCommonBaseline({
           extraction: pipelineData.extraction,
           adminFeedback: feedbackNotes,
@@ -255,6 +256,9 @@ export abstract class BaseEvaluationAgent<TOutput>
         startupFormContext: pipelineData.extraction.startupContext ?? {},
         adminFeedback: feedbackNotes,
       };
+      if (pipelineData.relevantSupportingDocuments) {
+        promptContext.supportingDocuments = pipelineData.relevantSupportingDocuments;
+      }
       const promptConfig = await this.promptService.resolve({
         key: EVALUATION_PROMPT_KEY_BY_AGENT[this.key],
         stage: pipelineData.extraction.stage,
@@ -373,6 +377,7 @@ export abstract class BaseEvaluationAgent<TOutput>
                 schemaName: `${this.key}_evaluation`,
                 temperature: evaluationTemperature,
                 maxOutputTokens: this.getMaxOutputTokens(),
+                reasoningEffort: this.getReasoningEffort(),
                 jobKey: `${pipelineData.extraction.companyName}:${this.key}`,
                 abortSignal,
               }),
@@ -1533,6 +1538,11 @@ export abstract class BaseEvaluationAgent<TOutput>
     return undefined; // Let the model use its full output capacity
   }
 
+  /** Override to adjust reasoning effort for the OpenAI direct path. Agents with large output schemas should use "medium" to preserve output token budget. */
+  protected getReasoningEffort(): "low" | "medium" | "high" {
+    return "high";
+  }
+
   protected getEvaluationAttemptTimeoutMs(): number {
     const config = this.aiConfig as Partial<AiConfigService> & {
       getEvaluationTimeoutMs?: () => number;
@@ -1806,6 +1816,10 @@ export abstract class BaseEvaluationAgent<TOutput>
           : String(startupContext.leadSecured),
       leadInvestorName: this.normalizePromptText(startupContext.leadInvestorName),
       adminGuidance: this.truncatePromptText(adminGuidance, 8_000),
+      supportingDocuments: this.truncatePromptText(
+        this.normalizePromptText(pipelineData.relevantSupportingDocuments),
+        12_000,
+      ),
     };
   }
 

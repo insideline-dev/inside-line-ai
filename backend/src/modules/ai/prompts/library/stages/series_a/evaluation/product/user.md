@@ -21,6 +21,9 @@ Stage: {{stage}}
 
 {{adminGuidance}}
 
+=== SUPPORTING DOCUMENTS (Data Room) ===
+{{supportingDocuments}}
+
 === ANALYSIS INSTRUCTIONS ===
 1. Compare what the deck claims about the product to what you can observe from research and website
 2. Note where claims and evidence align, where they diverge, and what can't be assessed from desk research alone

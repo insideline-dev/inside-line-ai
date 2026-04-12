@@ -18,6 +18,9 @@ Business model details from pitch deck:
 
 {{adminGuidance}}
 
+=== SUPPORTING DOCUMENTS (Data Room) ===
+{{supportingDocuments}}
+
 ANALYSIS INSTRUCTIONS:
 1. Identify the revenue model type (subscription, transactional, marketplace, advertising, licensing, etc.)
 2. Assess whether the model type makes sense for the product and market

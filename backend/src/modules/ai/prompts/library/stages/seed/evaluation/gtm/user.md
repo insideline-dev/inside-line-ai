@@ -18,6 +18,9 @@ Web research:
 
 {{adminGuidance}}
 
+=== SUPPORTING DOCUMENTS (Data Room) ===
+{{supportingDocuments}}
+
 ANALYSIS INSTRUCTIONS:
 1. Identify the GTM approach described in the deck (self-serve, sales-led, PLG, partnerships, community, etc.)
 2. Assess whether the approach makes sense for the product and target customer

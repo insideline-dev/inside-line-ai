@@ -31,6 +31,9 @@ MARKET RESEARCH (context only — do NOT assess market structure, that's the Mar
 
 {{adminGuidance}}
 
+=== SUPPORTING DOCUMENTS (Data Room) ===
+{{supportingDocuments}}
+
 ANALYSIS INSTRUCTIONS:
 1. Use competition research as your primary source
 2. Compare deck's differentiation claims against competition research findings

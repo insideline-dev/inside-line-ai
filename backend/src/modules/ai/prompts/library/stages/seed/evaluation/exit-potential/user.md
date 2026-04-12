@@ -24,6 +24,9 @@ MARKET RESEARCH (TAM, comparable public companies and their revenue multiples):
 
 {{adminGuidance}}
 
+=== SUPPORTING DOCUMENTS (Data Room) ===
+{{supportingDocuments}}
+
 INSTRUCTIONS:
 1. Map the exit landscape: comparable exits, acquirers, public comparables from research
 2. Build THREE EXIT SCENARIOS (conservative, moderate, optimistic):

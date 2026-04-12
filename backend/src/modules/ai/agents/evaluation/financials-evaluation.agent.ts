@@ -36,6 +36,10 @@ export class FinancialsEvaluationAgent extends BaseEvaluationAgent<FinancialsEva
     return 120_000;
   }
 
+  protected override getReasoningEffort(): "low" | "medium" | "high" {
+    return "high";
+  }
+
   protected override useDirectGenerateText(): boolean {
     return true;
   }

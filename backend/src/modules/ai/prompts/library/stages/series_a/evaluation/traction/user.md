@@ -15,6 +15,9 @@ Additional deck context:
 
 {{adminGuidance}}
 
+=== SUPPORTING DOCUMENTS (Data Room) ===
+{{supportingDocuments}}
+
 === ANALYSIS INSTRUCTIONS ===
 1. List all traction metrics the deck provides
 2. Assess whether those metrics are appropriate for this stage

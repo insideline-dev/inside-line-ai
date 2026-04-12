@@ -1344,6 +1344,10 @@ export class MarketEvaluationAgent extends BaseEvaluationAgent<MarketEvaluation>
     return 120_000;
   }
 
+  protected override getReasoningEffort(): "low" | "medium" | "high" {
+    return "medium"; // Large output schema — preserve token budget for structured output
+  }
+
   protected override getEvaluationAttemptTimeoutMs(): number {
     return 900_000; // 15 min — market schema is the largest and 120K output tokens needs more time
   }

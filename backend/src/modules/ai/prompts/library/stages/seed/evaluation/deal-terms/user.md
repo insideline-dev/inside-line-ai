@@ -25,6 +25,9 @@ COMPETITION RESEARCH (competitor funding rounds — use as direct comparables):
 
 {{adminGuidance}}
 
+=== SUPPORTING DOCUMENTS (Data Room) ===
+{{supportingDocuments}}
+
 INSTRUCTIONS:
 1. IF valuation is provided: sanity-check it against comparable rounds and traction data. Calculate implied revenue multiple if revenue is in the deck.
 2. IF valuation is NOT provided: suggest a target valuation RANGE (low/mid/high) based on comparable rounds from research and traction from deck.

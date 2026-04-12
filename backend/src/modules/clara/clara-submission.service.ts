@@ -9,6 +9,7 @@ import { DataRoomService } from "../startup/data-room.service";
 import { UserRole } from "../../auth/entities/auth.schema";
 import { AgentMailClientService } from "../integrations/agentmail/agentmail-client.service";
 import { startup, StartupStatus, StartupStage } from "../startup/entities/startup.schema";
+import { STARTUP_DESCRIPTION_PLACEHOLDER } from "../startup/startup.constants";
 import { PipelineService } from "../ai/services/pipeline.service";
 import { PipelinePhase } from "../ai/interfaces/pipeline.interface";
 import {
@@ -187,7 +188,7 @@ export class ClaraSubmissionService {
         name: companyName,
         slug,
         tagline: `Submitted via email by ${ctx.fromEmail}`,
-        description: ctx.bodyText?.slice(0, 5000) || "Submitted via Clara email assistant. Details will be extracted from the pitch deck.",
+        description: STARTUP_DESCRIPTION_PLACEHOLDER,
         website: websiteFromEmail ?? "",
         location,
         normalizedRegion: geography.normalizedRegion,

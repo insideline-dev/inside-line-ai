@@ -692,6 +692,7 @@ export class LinkedinEnrichmentService {
         adjudicatedBy: "deterministic",
         attemptedUrls,
         rejectedCandidates,
+        technicalFailure: true,
       });
       return {
         name: member.name,
@@ -1596,11 +1597,12 @@ export class LinkedinEnrichmentService {
       adjudicatedBy: "deterministic" | "ai";
       attemptedUrls: string[];
       rejectedCandidates: RejectedCandidateDecision[];
+      technicalFailure?: boolean;
     },
   ): void {
     this.emitTrace(options, {
       operation: "linkedin.match_decision",
-      status: params.accepted ? "completed" : "failed",
+      status: params.technicalFailure ? "failed" : "completed",
       inputJson: {
         requestedMember: params.requestedMember,
       },

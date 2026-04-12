@@ -138,6 +138,7 @@ export class MemoSynthesisAgent {
                 schemaName: "memo_synthesis_output",
                 maxOutputTokens: 128000,
                 reasoningEffort: "low",
+                jobKey: `${input.extraction.companyName}:memo_synthesis`,
                 abortSignal,
               }),
             remainingMs,

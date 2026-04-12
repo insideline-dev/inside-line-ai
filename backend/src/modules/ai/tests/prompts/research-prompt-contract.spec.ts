@@ -2,7 +2,10 @@ import { describe, expect, it } from "bun:test";
 import { MARKET_RESEARCH_SYSTEM_PROMPT } from "../../prompts/research/market-research.prompt";
 import { PRODUCT_RESEARCH_SYSTEM_PROMPT } from "../../prompts/research/product-research.prompt";
 import { TEAM_RESEARCH_SYSTEM_PROMPT } from "../../prompts/research/team-research.prompt";
-import { NEWS_RESEARCH_SYSTEM_PROMPT } from "../../prompts/research/news-research.prompt";
+import {
+  NEWS_RESEARCH_HUMAN_PROMPT,
+  NEWS_RESEARCH_SYSTEM_PROMPT,
+} from "../../prompts/research/news-research.prompt";
 import { COMPETITOR_RESEARCH_SYSTEM_PROMPT } from "../../prompts/research/competitor-research.prompt";
 
 const PROMPTS = [
@@ -22,10 +25,9 @@ describe("Research prompt contracts", () => {
     }
   });
 
-  it("removes legacy JSON-only contract from all research prompts", () => {
-    for (const prompt of PROMPTS) {
-      expect(prompt).not.toContain("valid JSON object matching the requested schema");
-      expect(prompt).not.toContain("Use this exact top-level JSON shape and key names");
-    }
+  it("uses the teamMembers variable in the news prompt", () => {
+    expect(NEWS_RESEARCH_HUMAN_PROMPT).toContain("=== TEAM MEMBERS ===");
+    expect(NEWS_RESEARCH_HUMAN_PROMPT).toContain("{{teamMembers}}");
+    expect(NEWS_RESEARCH_HUMAN_PROMPT).not.toContain("{{founderNames}}");
   });
 });

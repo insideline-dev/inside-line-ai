@@ -591,7 +591,7 @@ export const AI_PROMPT_CATALOG: Record<AiPromptKey, PromptCatalogEntry> = {
       "These are separate structured fields displayed as badges in the UI. Narratives must contain only qualitative analysis.",
     ].join("\n"),
     defaultUserPrompt: SHARED_EVALUATION_USER_PROMPT,
-    allowedVariables: [...COMMON_EVAL_VARIABLES, "marketResearchOutput", "claimedTAM", "claimedSAM", "claimedSOM", "claimedGrowthRate", "targetMarketDescription"],
+    allowedVariables: [...COMMON_EVAL_VARIABLES, "marketResearchOutput", "claimedTAM", "claimedSAM", "claimedSOM", "claimedGrowthRate", "claimedGrowthRatePeriod", "targetMarketDescription"],
     requiredVariables: [],
   },
   "evaluation.product": {

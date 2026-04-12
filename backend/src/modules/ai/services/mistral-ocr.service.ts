@@ -1,8 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import type { OCRResponse } from "@mistralai/mistralai/models/components";
-import { ModelPurpose } from "../interfaces/pipeline.interface";
 import { AiProviderService } from "../providers/ai-provider.service";
-import { AiConfigService } from "./ai-config.service";
 
 export interface MistralOcrPage {
   pageNumber: number;
@@ -16,16 +14,13 @@ export interface MistralOcrResult {
 
 @Injectable()
 export class MistralOcrService {
-  constructor(
-    private providers: AiProviderService,
-    private aiConfig: AiConfigService,
-  ) {}
+  constructor(private providers: AiProviderService) {}
 
   async extractFromPdf(presignedUrl: string): Promise<MistralOcrResult> {
     const mistral = this.providers.getMistral();
 
     const response = await mistral.ocr.process({
-      model: this.aiConfig.getModelForPurpose(ModelPurpose.OCR),
+      model: "mistral-ocr-latest",
       document: {
         type: "document_url",
         documentUrl: presignedUrl,

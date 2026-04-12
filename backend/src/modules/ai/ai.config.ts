@@ -31,7 +31,7 @@ export const DEFAULT_MODEL_BY_PURPOSE: Record<ModelPurpose, string> = {
   [ModelPurpose.REPORT_SYNTHESIS]: "gpt-5.4",
   [ModelPurpose.THESIS_ALIGNMENT]: "gemini-3-flash-preview",
   [ModelPurpose.LOCATION_NORMALIZATION]: "gemini-3-flash-preview",
-  [ModelPurpose.OCR]: "mistral-ocr-latest",
+  [ModelPurpose.OCR]: "gpt-5.4-mini",
   [ModelPurpose.CLARA]: "gpt-5.4",
   [ModelPurpose.CLASSIFICATION]: "gpt-5.4-mini",
 };

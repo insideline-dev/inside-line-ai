@@ -66,7 +66,7 @@ export const ExtractionSchema = z.object({
   rawText: z.string().default(""),
   startupContext: StartupFormContextSchema.optional().default({}),
   source: z
-    .enum(["pdf-parse", "pptx-parse", "mistral-ocr", "startup-context"])
+    .enum(["pdf-parse", "pptx-parse", "ocr", "startup-context"])
     .optional()
     .default("startup-context"),
   pageCount: z.number().int().nonnegative().optional(),

@@ -12,7 +12,7 @@ export const NewsResearchAgent: ResearchAgentConfig<string> = {
   systemPrompt: NEWS_RESEARCH_SYSTEM_PROMPT,
   humanPromptTemplate: NEWS_RESEARCH_HUMAN_PROMPT,
   schema: z.string(),
-  contextBuilder: ({ extraction, researchParameters }) => ({
+  contextBuilder: ({ extraction, scraping, researchParameters }) => ({
     companyName: extraction.companyName,
     industry: extraction.industry,
     geographicFocus: researchParameters?.geographicFocus ?? extraction.location,
@@ -22,6 +22,7 @@ export const NewsResearchAgent: ResearchAgentConfig<string> = {
         ? [{ date: "unknown", amount: extraction.fundingAsk }]
         : [],
     specificMarket: researchParameters?.specificMarket,
+    teamMembers: scraping.teamMembers,
   }),
   fallback: ({ extraction }) => {
     const websiteUrl = toValidUrl(extraction.website);

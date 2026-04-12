@@ -208,6 +208,11 @@ Extract every quantitative metric and key fact you can find. For each value, pre
 Rules:
 - Only extract values explicitly stated in the deck text. Do not infer or calculate.
 - If a metric is not present, leave it as null.
+- Keep company/startup growth separate from market/industry growth.
+- financials.growthRate / growthRateKpi are only for startup traction or company performance growth.
+- market.marketGrowthRate is only for market / industry / category growth explicitly stated in the uploaded file text.
+- Never copy a startup/company growth figure into market.marketGrowthRate.
+- If the deck does not explicitly state market or industry growth, leave market.marketGrowthRate as null.
 - For growthRatePeriod, you MUST identify the time period of the growth rate: "MoM" (month-over-month), "QoQ" (quarter-over-quarter), or "YoY" (year-over-year). Infer from context — e.g. "monthly growth" or consecutive monthly revenue figures → "MoM", "annual growth" or "CAGR" → "YoY". Only use null if absolutely no growth rate is stated.
 - For notableClaims, extract up to 5 standout traction/business claims.
 - For useOfFunds, extract the breakdown items (e.g. "40% Engineering", "30% Sales").

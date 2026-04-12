@@ -90,6 +90,78 @@ describe("extractKpiMetrics", () => {
     });
   });
 
+  it("does not mirror market growth from researched CAGR when deck market growth is missing", () => {
+    const evaluation = {
+      id: "eval_no_market_growth",
+      startupId: startup.id,
+      financialsData: {
+        charts: {
+          revenueProjection: [],
+          marginProgression: [],
+        },
+        keyMetrics: {},
+      },
+      deckData: {
+        financials: {
+          growthRate: "48% YoY",
+        },
+        market: {},
+      },
+      marketData: {
+        marketGrowthAndTiming: {
+          growthRate: {
+            deckClaimed: "48% YoY",
+            cagr: "22%",
+            period: "2025-2030",
+          },
+        },
+      },
+      createdAt: "2026-04-02T00:00:00.000Z",
+    } as unknown as Evaluation;
+
+    expect(extractKpiMetrics(startup, evaluation)).toMatchObject({
+      growthRate: "48% YoY",
+      marketGrowth: "—",
+    });
+  });
+
+  it("keeps market growth when explicit deck market-growth evidence exists", () => {
+    const evaluation = {
+      id: "eval_market_growth_present",
+      startupId: startup.id,
+      financialsData: {
+        charts: {
+          revenueProjection: [],
+          marginProgression: [],
+        },
+        keyMetrics: {},
+      },
+      deckData: {
+        financials: {
+          growthRate: "48% YoY",
+        },
+        market: {
+          marketGrowthRate: "22% CAGR",
+        },
+      },
+      marketData: {
+        marketGrowthAndTiming: {
+          growthRate: {
+            deckClaimed: "48% YoY",
+            cagr: "22%",
+            period: "2025-2030",
+          },
+        },
+      },
+      createdAt: "2026-04-02T00:00:00.000Z",
+    } as unknown as Evaluation;
+
+    expect(extractKpiMetrics(startup, evaluation)).toMatchObject({
+      growthRate: "48% YoY",
+      marketGrowth: "22% CAGR",
+    });
+  });
+
   it("falls back to legacy keyMetrics and CAGR fields when new-style fields are absent", () => {
     const evaluation = {
       id: "eval_2",

@@ -41,7 +41,7 @@ describe("AiConfigService", () => {
       "gpt-5.4",
     );
     expect(service.getModelForPurpose(ModelPurpose.OCR)).toBe(
-      "mistral-ocr-latest",
+      "gpt-5.4-mini",
     );
   });
 

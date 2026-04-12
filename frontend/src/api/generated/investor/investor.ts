@@ -1564,6 +1564,185 @@ export function useInvestorControllerGetPipeline<TData = Awaited<ReturnType<type
 
 
 
+export type investorControllerTriggerStartupMatchingResponse201 = {
+  data: void
+  status: 201
+}
+    
+export type investorControllerTriggerStartupMatchingResponseSuccess = (investorControllerTriggerStartupMatchingResponse201) & {
+  headers: Headers;
+};
+;
+
+export type investorControllerTriggerStartupMatchingResponse = (investorControllerTriggerStartupMatchingResponseSuccess)
+
+export const getInvestorControllerTriggerStartupMatchingUrl = (id: string,) => {
+
+
+  
+
+  return `/investor/startups/${id}/match`
+}
+
+export const investorControllerTriggerStartupMatching = async (id: string, options?: RequestInit): Promise<investorControllerTriggerStartupMatchingResponse> => {
+  
+  return customFetch<investorControllerTriggerStartupMatchingResponse>(getInvestorControllerTriggerStartupMatchingUrl(id),
+  {      
+    ...options,
+    method: 'POST'
+    
+    
+  }
+);}
+
+
+
+
+export const getInvestorControllerTriggerStartupMatchingMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof investorControllerTriggerStartupMatching>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof investorControllerTriggerStartupMatching>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['investorControllerTriggerStartupMatching'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof investorControllerTriggerStartupMatching>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  investorControllerTriggerStartupMatching(id,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type InvestorControllerTriggerStartupMatchingMutationResult = NonNullable<Awaited<ReturnType<typeof investorControllerTriggerStartupMatching>>>
+    
+    export type InvestorControllerTriggerStartupMatchingMutationError = ErrorType<unknown>
+
+    export const useInvestorControllerTriggerStartupMatching = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof investorControllerTriggerStartupMatching>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof investorControllerTriggerStartupMatching>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getInvestorControllerTriggerStartupMatchingMutationOptions(options), queryClient);
+    }
+    export type investorControllerGetStartupMatchingStatusResponse200 = {
+  data: void
+  status: 200
+}
+    
+export type investorControllerGetStartupMatchingStatusResponseSuccess = (investorControllerGetStartupMatchingStatusResponse200) & {
+  headers: Headers;
+};
+;
+
+export type investorControllerGetStartupMatchingStatusResponse = (investorControllerGetStartupMatchingStatusResponseSuccess)
+
+export const getInvestorControllerGetStartupMatchingStatusUrl = (id: string,) => {
+
+
+  
+
+  return `/investor/startups/${id}/matching/status`
+}
+
+export const investorControllerGetStartupMatchingStatus = async (id: string, options?: RequestInit): Promise<investorControllerGetStartupMatchingStatusResponse> => {
+  
+  return customFetch<investorControllerGetStartupMatchingStatusResponse>(getInvestorControllerGetStartupMatchingStatusUrl(id),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getInvestorControllerGetStartupMatchingStatusQueryKey = (id: string,) => {
+    return [
+    `/investor/startups/${id}/matching/status`
+    ] as const;
+    }
+
+    
+export const getInvestorControllerGetStartupMatchingStatusQueryOptions = <TData = Awaited<ReturnType<typeof investorControllerGetStartupMatchingStatus>>, TError = ErrorType<unknown>>(id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetStartupMatchingStatus>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getInvestorControllerGetStartupMatchingStatusQueryKey(id);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof investorControllerGetStartupMatchingStatus>>> = ({ signal }) => investorControllerGetStartupMatchingStatus(id, { signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetStartupMatchingStatus>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type InvestorControllerGetStartupMatchingStatusQueryResult = NonNullable<Awaited<ReturnType<typeof investorControllerGetStartupMatchingStatus>>>
+export type InvestorControllerGetStartupMatchingStatusQueryError = ErrorType<unknown>
+
+
+export function useInvestorControllerGetStartupMatchingStatus<TData = Awaited<ReturnType<typeof investorControllerGetStartupMatchingStatus>>, TError = ErrorType<unknown>>(
+ id: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetStartupMatchingStatus>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof investorControllerGetStartupMatchingStatus>>,
+          TError,
+          Awaited<ReturnType<typeof investorControllerGetStartupMatchingStatus>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useInvestorControllerGetStartupMatchingStatus<TData = Awaited<ReturnType<typeof investorControllerGetStartupMatchingStatus>>, TError = ErrorType<unknown>>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetStartupMatchingStatus>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof investorControllerGetStartupMatchingStatus>>,
+          TError,
+          Awaited<ReturnType<typeof investorControllerGetStartupMatchingStatus>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useInvestorControllerGetStartupMatchingStatus<TData = Awaited<ReturnType<typeof investorControllerGetStartupMatchingStatus>>, TError = ErrorType<unknown>>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetStartupMatchingStatus>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useInvestorControllerGetStartupMatchingStatus<TData = Awaited<ReturnType<typeof investorControllerGetStartupMatchingStatus>>, TError = ErrorType<unknown>>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetStartupMatchingStatus>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getInvestorControllerGetStartupMatchingStatusQueryOptions(id,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
 export type investorControllerGetConversationsResponse200 = {
   data: void
   status: 200

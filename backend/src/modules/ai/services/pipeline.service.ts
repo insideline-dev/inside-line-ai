@@ -81,6 +81,7 @@ type DiagnosticFailureSource =
 export interface RetryAgentRequest {
   phase: PipelinePhase.RESEARCH | PipelinePhase.EVALUATION;
   agentKey: ResearchAgentKey | EvaluationAgentKey;
+  skipDownstream?: boolean;
 }
 
 interface QueuePhaseParams {
@@ -984,14 +985,21 @@ export class PipelineService {
     await this.queuePhase({ startupId, pipelineRunId: newRunId, userId: state.userId, phase });
   }
 
-  async rerunFromPhase(startupId: string, phase: PipelinePhase): Promise<void> {
+  async rerunFromPhase(
+    startupId: string,
+    phase: PipelinePhase,
+    options?: { skipDownstream?: boolean },
+  ): Promise<void> {
     const rerunStartedAt = Date.now();
     const state = await this.getPipelineStateWithSnapshotFallback(startupId);
     if (!state) {
       throw new Error(`Pipeline state for startup ${startupId} not found`);
     }
 
-    const phasesToReset = this.getPhasesFrom(phase);
+    let phasesToReset = this.getPhasesFrom(phase);
+    if (options?.skipDownstream) {
+      phasesToReset = phasesToReset.filter((p) => p === phase);
+    }
     if (!phasesToReset.length) {
       throw new BadRequestException(`Unknown phase "${phase}"`);
     }
@@ -1060,12 +1068,9 @@ export class PipelineService {
         `Agent "${request.agentKey}" is not valid for phase "${request.phase}"`,
       );
     }
-    const phaseStatus = state.phases[request.phase].status;
-    if (phaseStatus !== PhaseStatus.FAILED && phaseStatus !== PhaseStatus.COMPLETED) {
-      throw new BadRequestException(
-        `Agent retry is only allowed when phase "${request.phase}" is failed or completed`,
-      );
-    }
+    // No phase status guard — retryAgent creates a fresh manual run and
+    // clears queued jobs, so it's safe even if the phase is stale/running
+    // after a cancelled pipeline.
 
     const metadata: AgentRetryMetadata = {
       mode: "agent_retry",
@@ -1122,13 +1127,16 @@ export class PipelineService {
       clearResult: false,
       preserveTelemetry: true,
     });
-    await this.resetPhaseForRerun({
-      startupId,
-      userId: state.userId,
-      pipelineRunId: newRunId,
-      phase: PipelinePhase.SYNTHESIS,
-      clearResult: true,
-    });
+
+    if (!request.skipDownstream) {
+      await this.resetPhaseForRerun({
+        startupId,
+        userId: state.userId,
+        pipelineRunId: newRunId,
+        phase: PipelinePhase.SYNTHESIS,
+        clearResult: true,
+      });
+    }
 
     await this.queuePhase({
       startupId,

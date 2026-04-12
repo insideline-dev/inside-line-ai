@@ -34,7 +34,7 @@ import {
 interface AdminPipelineLivePanelProps {
   startupId: string;
   startupStatus: string;
-  onRetryAgent?: (phase: "research" | "evaluation", agentKey: string) => Promise<void>;
+  onRetryAgent?: (phase: "research" | "evaluation", agentKey: string, options?: { skipSynthesis?: boolean }) => Promise<void>;
   trackedRetry?: {
     phase: "research" | "evaluation";
     agentKey: string;
@@ -1657,36 +1657,71 @@ export function AdminPipelineLivePanel({
                             </Badge>
                           )}
                           {canRetry && item.agent && (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="ml-auto h-6 gap-1 px-2 text-[10px]"
-                              disabled={retryingAgentKey === `${item.agent.phase}:${item.agent.key}`}
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                const agent = item.agent!;
-                                const actionKey = `${agent.phase}:${agent.key}`;
-                                setRetryingAgentKey(actionKey);
-                                try {
-                                  await onRetryAgent!(
-                                    agent.phase as "research" | "evaluation",
-                                    agent.key,
-                                  );
-                                } finally {
-                                  setRetryingAgentKey((current) =>
-                                    current === actionKey ? null : current,
-                                  );
-                                }
-                              }}
-                            >
-                              {retryingAgentKey === `${item.agent.phase}:${item.agent.key}` ? (
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                              ) : (
-                                <RotateCcw className="h-3 w-3" />
+                            <div className="ml-auto flex items-center gap-1">
+                              {item.agent.phase === "evaluation" && (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-6 gap-1 px-2 text-[10px]"
+                                  disabled={retryingAgentKey === `${item.agent.phase}:${item.agent.key}`}
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    const agent = item.agent!;
+                                    const actionKey = `${agent.phase}:${agent.key}`;
+                                    setRetryingAgentKey(actionKey);
+                                    try {
+                                      await onRetryAgent!(
+                                        agent.phase as "evaluation",
+                                        agent.key,
+                                        { skipSynthesis: true },
+                                      );
+                                    } finally {
+                                      setRetryingAgentKey((current) =>
+                                        current === actionKey ? null : current,
+                                      );
+                                    }
+                                  }}
+                                >
+                                  {retryingAgentKey === `${item.agent.phase}:${item.agent.key}` ? (
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                  ) : (
+                                    <RotateCcw className="h-3 w-3" />
+                                  )}
+                                  Retry only
+                                </Button>
                               )}
-                              Rerun agent
-                            </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-6 gap-1 px-2 text-[10px]"
+                                disabled={retryingAgentKey === `${item.agent.phase}:${item.agent.key}`}
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  const agent = item.agent!;
+                                  const actionKey = `${agent.phase}:${agent.key}`;
+                                  setRetryingAgentKey(actionKey);
+                                  try {
+                                    await onRetryAgent!(
+                                      agent.phase as "research" | "evaluation",
+                                      agent.key,
+                                    );
+                                  } finally {
+                                    setRetryingAgentKey((current) =>
+                                      current === actionKey ? null : current,
+                                    );
+                                  }
+                                }}
+                              >
+                                {retryingAgentKey === `${item.agent.phase}:${item.agent.key}` ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <RotateCcw className="h-3 w-3" />
+                                )}
+                                Rerun agent
+                              </Button>
+                            </div>
                           )}
                         </div>
                       )}

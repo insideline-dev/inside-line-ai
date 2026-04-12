@@ -1352,7 +1352,4 @@ export class MarketEvaluationAgent extends BaseEvaluationAgent<MarketEvaluation>
     return 900_000; // 15 min — market schema is the largest and 120K output tokens needs more time
   }
 
-  protected override getEvaluationAgentHardTimeoutMs(): number {
-    return 2_700_000; // 45 min — headroom for 3 × 15 min attempts
-  }
 }

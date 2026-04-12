@@ -131,7 +131,15 @@ export class OpenAiDirectClientService {
     }
 
     // ── 2. Poll until terminal ─────────────────────────────────────
-    const response = await this.awaitTerminal(responseId, input.abortSignal);
+    let response: OpenAI.Responses.Response;
+    try {
+      response = await this.awaitTerminal(responseId, input.abortSignal);
+    } catch (error) {
+      if (redisKey) {
+        await this.redis.del(redisKey);
+      }
+      throw error;
+    }
 
     // Clean up persisted ID once we have a terminal result
     if (redisKey) {
@@ -144,8 +152,36 @@ export class OpenAiDirectClientService {
     if (status === "incomplete") {
       const reason = incompleteDetails?.reason ?? "unknown";
       this.logger.warn(
-        `[OpenAIDirect] Response ${responseId} incomplete: reason=${reason}. Output may be truncated.`,
+        `[OpenAIDirect] Response ${responseId} incomplete: reason=${reason}. Attempting partial output recovery.`,
       );
+
+      // Attempt to recover valid output before throwing
+      const partialText = this.extractOutputText(response);
+      if (partialText && partialText.trim().length > 0) {
+        try {
+          const parsed = input.schema.parse(this.extractJsonCandidate(partialText));
+          this.logger.warn(
+            `[OpenAIDirect] Recovered valid output from incomplete response ${responseId} (reason: ${reason})`,
+          );
+          return {
+            output: parsed,
+            rawText: partialText,
+            usage: response.usage
+              ? {
+                  inputTokens: response.usage.input_tokens ?? 0,
+                  outputTokens: response.usage.output_tokens ?? 0,
+                }
+              : undefined,
+            finishReason: "incomplete",
+          };
+        } catch {
+          // Partial output didn't parse — fall through to throw
+          this.logger.warn(
+            `[OpenAIDirect] Partial output from ${responseId} failed to parse, throwing.`,
+          );
+        }
+      }
+
       throw new Error(
         `OpenAI response ${responseId} incomplete (reason: ${reason}). The model hit its output token limit. Try reducing prompt size or simplifying the schema.`,
       );
@@ -182,8 +218,7 @@ export class OpenAiDirectClientService {
 
     let parsed: T;
     try {
-      const json = JSON.parse(rawText) as unknown;
-      parsed = input.schema.parse(json);
+      parsed = input.schema.parse(this.extractJsonCandidate(rawText));
     } catch (error) {
       const errMessage =
         error instanceof Error ? error.message : String(error);
@@ -212,7 +247,7 @@ export class OpenAiDirectClientService {
     responseId: string,
     abortSignal?: AbortSignal,
   ): Promise<OpenAI.Responses.Response> {
-    // eslint-disable-next-line no-constant-condition
+     
     while (true) {
       this.throwIfAborted(abortSignal);
       const response = await this.client!.responses.retrieve(responseId);
@@ -224,16 +259,120 @@ export class OpenAiDirectClientService {
   }
 
   private extractOutputText(response: OpenAI.Responses.Response): string {
+    if (
+      typeof response.output_text === "string" &&
+      response.output_text.length > 0
+    ) {
+      return response.output_text;
+    }
+
+    const textParts: string[] = [];
     for (const item of response.output) {
       if (item.type === "message") {
         for (const content of item.content) {
-          if (content.type === "output_text") {
-            return content.text;
+          if (
+            content.type === "output_text" &&
+            typeof content.text === "string"
+          ) {
+            textParts.push(content.text);
           }
         }
       }
     }
-    return "";
+    return textParts.join("\n");
+  }
+
+  private extractJsonCandidate(text: string): unknown {
+    const trimmed = text.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const direct = this.tryParseJsonObject(trimmed);
+    if (direct) {
+      return direct;
+    }
+
+    const fencedMatches = text.matchAll(/```(?:json)?\s*([\s\S]*?)\s*```/gi);
+    for (const match of fencedMatches) {
+      if (!match[1]) {
+        continue;
+      }
+      const parsed = this.tryParseJsonObject(match[1]);
+      if (parsed) {
+        return parsed;
+      }
+    }
+
+    const candidates = this.extractBalancedJsonObjects(text);
+    for (const candidate of candidates) {
+      const parsed = this.tryParseJsonObject(candidate);
+      if (parsed) {
+        return parsed;
+      }
+    }
+
+    return null;
+  }
+
+  private tryParseJsonObject(text: string): unknown {
+    if (!text) {
+      return null;
+    }
+
+    try {
+      const parsed = JSON.parse(text);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return null;
+      }
+      return parsed;
+    } catch {
+      return null;
+    }
+  }
+
+  private extractBalancedJsonObjects(text: string): string[] {
+    const candidates: string[] = [];
+    let start = -1;
+    let depth = 0;
+    let inString = false;
+    let escaping = false;
+
+    for (let index = 0; index < text.length; index += 1) {
+      const char = text[index];
+
+      if (escaping) {
+        escaping = false;
+        continue;
+      }
+      if (char === "\\") {
+        escaping = true;
+        continue;
+      }
+      if (char === '"') {
+        inString = !inString;
+        continue;
+      }
+      if (inString) {
+        continue;
+      }
+      if (char === "{") {
+        if (depth === 0) {
+          start = index;
+        }
+        depth += 1;
+        continue;
+      }
+      if (char === "}" && depth > 0) {
+        depth -= 1;
+        if (depth === 0 && start >= 0) {
+          candidates.push(text.slice(start, index + 1));
+          start = -1;
+        }
+      }
+    }
+
+    return candidates;
   }
 
   private throwIfAborted(signal?: AbortSignal): void {

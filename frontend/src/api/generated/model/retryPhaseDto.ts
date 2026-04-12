@@ -15,4 +15,5 @@ export interface RetryPhaseDto {
    * @maxLength 3000
    */
   feedback?: string;
+  skipSynthesis?: boolean;
 }

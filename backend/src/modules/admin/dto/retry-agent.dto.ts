@@ -23,6 +23,7 @@ export const RetryAgentSchema = z
     phase: z.enum([PipelinePhase.RESEARCH, PipelinePhase.EVALUATION]),
     agent: z.string().min(1),
     feedback: z.string().trim().min(10).max(3000).optional(),
+    skipSynthesis: z.boolean().optional().default(false),
   })
   .superRefine((value, ctx) => {
     if (value.phase === PipelinePhase.RESEARCH) {

@@ -378,7 +378,7 @@ export abstract class BaseEvaluationAgent<TOutput>
                 temperature: evaluationTemperature,
                 maxOutputTokens: this.getMaxOutputTokens(),
                 reasoningEffort: this.getReasoningEffort(),
-                jobKey: `${pipelineData.extraction.companyName}:${this.key}`,
+                jobKey: this.buildOpenAiDirectJobKey(options),
                 abortSignal,
               }),
             attemptTimeoutMs,
@@ -1541,6 +1541,17 @@ export abstract class BaseEvaluationAgent<TOutput>
   /** Override to adjust reasoning effort for the OpenAI direct path. Agents with large output schemas should use "medium" to preserve output token budget. */
   protected getReasoningEffort(): "low" | "medium" | "high" {
     return "high";
+  }
+
+  protected buildOpenAiDirectJobKey(
+    options?: EvaluationAgentRunOptions,
+  ): string | undefined {
+    const pipelineRunId = options?.pipelineRunId?.trim();
+    if (!pipelineRunId) {
+      return undefined;
+    }
+
+    return `evaluation:${pipelineRunId}:${this.key}`;
   }
 
   protected getEvaluationAttemptTimeoutMs(): number {

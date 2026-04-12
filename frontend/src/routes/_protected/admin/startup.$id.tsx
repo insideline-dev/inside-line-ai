@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { z } from "zod";
+import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -180,6 +182,20 @@ const PHASE_RERUN_OPTIONS: Array<{
   },
 ];
 
+const EVAL_AGENT_OPTIONS = [
+  { key: "team", label: "Team" },
+  { key: "market", label: "Market" },
+  { key: "product", label: "Product" },
+  { key: "traction", label: "Traction" },
+  { key: "businessModel", label: "Business Model" },
+  { key: "gtm", label: "Go-to-Market" },
+  { key: "financials", label: "Financials" },
+  { key: "competitiveAdvantage", label: "Competitive Adv." },
+  { key: "legal", label: "Legal" },
+  { key: "dealTerms", label: "Deal Terms" },
+  { key: "exitPotential", label: "Exit Potential" },
+] as const;
+
 function formatLabel(value: string): string {
   return value
     .replace(/([a-z])([A-Z])/g, "$1 $2")
@@ -250,6 +266,8 @@ function AdminReviewPage() {
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showMatchDialog, setShowMatchDialog] = useState(false);
+  const [showEvalRerunDialog, setShowEvalRerunDialog] = useState(false);
+  const [selectedEvalAgents, setSelectedEvalAgents] = useState<Set<string>>(new Set());
   const [reanalyzingSection, setReanalyzingSection] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
   const [activeTab, setActiveTab] = useState<AdminStartupTab>("pipeline-live");
@@ -582,6 +600,7 @@ function AdminReviewPage() {
   const handleLiveAgentRetry = async (
     phase: "research" | "evaluation",
     agentKey: string,
+    options?: { skipSynthesis?: boolean },
   ) => {
     setTrackedRetry({
       phase,
@@ -594,6 +613,7 @@ function AdminReviewPage() {
       data: {
         phase,
         agent: agentKey,
+        ...(options?.skipSynthesis ? { skipSynthesis: true } : {}),
       },
     });
   };
@@ -703,6 +723,10 @@ function AdminReviewPage() {
                       reanalyzeMutation.isPending
                     }
                     onClick={() => {
+                      if (option.value === RetryPhaseDtoPhase.evaluation) {
+                        setShowEvalRerunDialog(true);
+                        return;
+                      }
                       handlePhaseRerun(option.value);
                     }}
                     className="flex flex-col items-start gap-0.5 py-2"
@@ -1011,6 +1035,106 @@ function AdminReviewPage() {
             >
               {deleteMutation.isPending ? "Deleting..." : "Delete Submission"}
             </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={showEvalRerunDialog}
+        onOpenChange={(open) => {
+          setShowEvalRerunDialog(open);
+          if (!open) setSelectedEvalAgents(new Set());
+        }}
+      >
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Re-run Evaluation</AlertDialogTitle>
+            <AlertDialogDescription>
+              Select which sections to re-evaluate, then choose whether to regenerate the memo.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <div className="-mx-1 flex flex-col">
+            <button
+              type="button"
+              className="mb-1 px-3 py-1.5 text-left text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+              onClick={() => {
+                const allKeys = EVAL_AGENT_OPTIONS.map((a) => a.key);
+                setSelectedEvalAgents((prev) =>
+                  prev.size === allKeys.length ? new Set() : new Set(allKeys),
+                );
+              }}
+            >
+              {selectedEvalAgents.size === EVAL_AGENT_OPTIONS.length
+                ? "Deselect all"
+                : "Select all"}
+            </button>
+
+            <div className="grid grid-cols-2 gap-1">
+              {EVAL_AGENT_OPTIONS.map((agent) => {
+                const checked = selectedEvalAgents.has(agent.key);
+                return (
+                  <label
+                    key={agent.key}
+                    className={cn(
+                      "flex cursor-pointer items-center gap-2.5 px-3 py-2.5 transition-colors hover:bg-muted/60",
+                      checked && "bg-primary/5",
+                    )}
+                  >
+                    <Checkbox
+                      checked={checked}
+                      onCheckedChange={() => {
+                        setSelectedEvalAgents((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(agent.key)) {
+                            next.delete(agent.key);
+                          } else {
+                            next.add(agent.key);
+                          }
+                          return next;
+                        });
+                      }}
+                    />
+                    <span className="text-sm">{agent.label}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+
+          {selectedEvalAgents.size > 0 && (
+            <p className="text-xs text-muted-foreground">
+              {selectedEvalAgents.size} {selectedEvalAgents.size === 1 ? "section" : "sections"} selected
+            </p>
+          )}
+
+          <AlertDialogFooter className="gap-2 sm:gap-2">
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <Button
+              variant="outline"
+              disabled={selectedEvalAgents.size === 0 || retryAgentMutation.isPending}
+              onClick={async () => {
+                const agents = [...selectedEvalAgents];
+                setShowEvalRerunDialog(false);
+                for (const agentKey of agents) {
+                  await handleLiveAgentRetry("evaluation", agentKey, { skipSynthesis: true });
+                }
+              }}
+            >
+              Re-run only
+            </Button>
+            <Button
+              disabled={selectedEvalAgents.size === 0 || retryAgentMutation.isPending}
+              onClick={async () => {
+                const agents = [...selectedEvalAgents];
+                setShowEvalRerunDialog(false);
+                for (const agentKey of agents) {
+                  await handleLiveAgentRetry("evaluation", agentKey);
+                }
+              }}
+            >
+              Re-run + Synthesis
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

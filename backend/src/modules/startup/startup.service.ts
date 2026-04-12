@@ -64,12 +64,14 @@ export interface AdminRetryPhaseRequest {
   phase: PipelinePhase;
   forceRerun?: boolean;
   feedback?: string;
+  skipSynthesis?: boolean;
 }
 
 export interface AdminRetryAgentRequest {
   phase: PipelinePhase.RESEARCH | PipelinePhase.EVALUATION;
   agent: string;
   feedback?: string;
+  skipSynthesis?: boolean;
 }
 
 @Injectable()
@@ -722,7 +724,9 @@ export class StartupService {
 
     try {
       if (request.forceRerun) {
-        await this.aiPipeline.rerunFromPhase(id, request.phase);
+        await this.aiPipeline.rerunFromPhase(id, request.phase, {
+          skipDownstream: request.skipSynthesis,
+        });
       } else {
         await this.aiPipeline.retryPhase(id, request.phase);
       }
@@ -800,6 +804,7 @@ export class StartupService {
       await this.aiPipeline.retryAgent(id, {
         phase: request.phase,
         agentKey: request.agent as ResearchAgentKey | EvaluationAgentKey,
+        skipDownstream: request.skipSynthesis,
       });
     }
 

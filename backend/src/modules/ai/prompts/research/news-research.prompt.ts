@@ -44,7 +44,7 @@ Company: {{companyName}}
 Website: {{website}}
 
 === TEAM MEMBERS ===
-{{founderNames}}
+{{teamMembers}}
 
 === TIMEFRAME ===
 Focus on the last 2 years, but include any significant historical events.

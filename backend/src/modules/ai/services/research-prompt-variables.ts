@@ -265,7 +265,7 @@ export const buildResearchPromptVariables = (input: {
   );
   const claimedGrowthRate = extractClaimLine(
     rawText,
-    /(cagr|growth|year[- ]over[- ]year|yoy|%)/i,
+    /(monthly recurring revenue|mrr|annual recurring revenue|arr|revenue growth|user growth|customer growth|company growth|traction|year[- ]over[- ]year|yoy|month[- ]over[- ]month|mom|quarter[- ]over[- ]quarter|qoq|cagr)/i,
   );
   const targetMarket =
     firstNonEmpty(

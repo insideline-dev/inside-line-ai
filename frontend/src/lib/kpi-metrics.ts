@@ -257,15 +257,12 @@ export function extractKpiMetrics(
       : tamValue ? extractShortValue(tamValue) : DASH;
   }
 
-  // --- Market Growth: deck first → researched CAGR ---
+  // --- Market Growth: only from explicit deck market-growth evidence ---
   const deckMarketGrowth = safeStr(deckMarket.marketGrowthRate);
   let marketGrowth = DASH;
   if (deckMarketGrowth && deckMarketGrowth !== "Unknown") {
     const val = extractShortValue(deckMarketGrowth);
     marketGrowth = val.includes("CAGR") ? val : `${val} CAGR`;
-  } else if (cagrStr && cagrStr !== "Unknown") {
-    const cagrVal = extractShortValue(cagrStr);
-    marketGrowth = cagrVal.includes("CAGR") ? cagrVal : `${cagrVal} CAGR`;
   }
 
   // Product Stage

@@ -129,6 +129,7 @@ describe("Evaluation variable mapping", () => {
         "claimedSAM",
         "claimedSOM",
         "claimedGrowthRate",
+        "claimedGrowthRatePeriod",
         "targetMarketDescription",
       ],
       product: ["productResearchOutput"],
@@ -205,6 +206,43 @@ describe("Evaluation variable mapping", () => {
         }
       });
     }
+  });
+
+  it("uses explicit deck market growth for claimedGrowthRate instead of company growth text", () => {
+    const pipelineData = createEvaluationPipelineInput();
+    pipelineData.extraction.rawText = [
+      "Clipaf has 35% month-over-month revenue growth.",
+      "The workflow automation market is expanding quickly.",
+    ].join("\n");
+    pipelineData.extraction.deckStructuredData = {
+      market: {
+        marketGrowthRate: "22% CAGR",
+      },
+    } as unknown as typeof pipelineData.extraction.deckStructuredData;
+
+    const agent = new MarketEvaluationAgent(providers, aiConfig, promptService) as unknown as {
+      getAgentTemplateVariables: (data: typeof pipelineData) => Record<string, string>;
+    };
+
+    const vars = agent.getAgentTemplateVariables(pipelineData);
+    expect(vars.claimedGrowthRate).toBe("22% CAGR");
+  });
+
+  it("does not treat company growth text as claimed market growth when market evidence is missing", () => {
+    const pipelineData = createEvaluationPipelineInput();
+    pipelineData.extraction.rawText = [
+      "Clipaf has 35% month-over-month revenue growth.",
+      "The company grew 120% year-over-year.",
+    ].join("\n");
+    pipelineData.extraction.deckStructuredData = undefined;
+    pipelineData.research.market = "Market report text focused on compliance tailwinds and buyer urgency.";
+
+    const agent = new MarketEvaluationAgent(providers, aiConfig, promptService) as unknown as {
+      getAgentTemplateVariables: (data: typeof pipelineData) => Record<string, string>;
+    };
+
+    const vars = agent.getAgentTemplateVariables(pipelineData);
+    expect(vars.claimedGrowthRate).toBe("Not provided");
   });
 
   describe("agent variables match catalog allowedVariables", () => {
@@ -499,7 +537,7 @@ describe("Evaluation variable mapping", () => {
           score: 88,
           confidence: "high",
           rationale:
-            "Growth claims align with independent CAGR estimates between 17.9% and 18.9%.",
+            "Independent market sources estimate category growth at 17.9% to 18.9% CAGR for the orchestration segment.",
         },
         marketStructureDynamics: {
           score: 84,

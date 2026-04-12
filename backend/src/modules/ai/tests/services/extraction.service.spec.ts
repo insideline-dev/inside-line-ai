@@ -3,8 +3,9 @@ import { ConfigService } from "@nestjs/config";
 import { DrizzleService } from "../../../../database";
 import { StorageService } from "../../../../storage";
 import { ExtractionService } from "../../services/extraction.service";
+import { ExcelTextExtractorService } from "../../services/excel-text-extractor.service";
 import { FieldExtractorService } from "../../services/field-extractor.service";
-import { MistralOcrService } from "../../services/mistral-ocr.service";
+import { PdfOcrService } from "../../services/pdf-ocr.service";
 import { PdfTextExtractorService } from "../../services/pdf-text-extractor.service";
 import { PptxTextExtractorService } from "../../services/pptx-text-extractor.service";
 
@@ -15,7 +16,8 @@ describe("ExtractionService", () => {
   let storage: jest.Mocked<StorageService>;
   let pdfTextExtractor: jest.Mocked<PdfTextExtractorService>;
   let pptxTextExtractor: jest.Mocked<PptxTextExtractorService>;
-  let mistralOcr: jest.Mocked<MistralOcrService>;
+  let excelTextExtractor: jest.Mocked<ExcelTextExtractorService>;
+  let pdfOcr: jest.Mocked<PdfOcrService>;
   let fieldExtractor: jest.Mocked<FieldExtractorService>;
 
   const startupRecord = {
@@ -96,17 +98,26 @@ describe("ExtractionService", () => {
         sparsePageCount: 0,
       }),
     } as unknown as jest.Mocked<PptxTextExtractorService>;
-    mistralOcr = {
+    excelTextExtractor = {
+      extractText: jest.fn().mockReturnValue({
+        text: "Spreadsheet text",
+        hasContent: true,
+      }),
+    } as unknown as jest.Mocked<ExcelTextExtractorService>;
+    pdfOcr = {
       extractFromPdf: jest.fn().mockResolvedValue({
         text: "OCR text",
         pages: [{ pageNumber: 1, content: "OCR text" }],
+        provider: "openai",
+        model: "gpt-5.4-mini",
       }),
-    } as unknown as jest.Mocked<MistralOcrService>;
+    } as unknown as jest.Mocked<PdfOcrService>;
     fieldExtractor = {
       extractFields: jest.fn().mockResolvedValue({
         companyName: "Inside Line AI",
         founderNames: ["Alex Founder"],
       }),
+      extractDeckStructuredData: jest.fn().mockResolvedValue(null),
     } as unknown as jest.Mocked<FieldExtractorService>;
 
     globalThis.fetch = jest.fn().mockResolvedValue({
@@ -122,7 +133,8 @@ describe("ExtractionService", () => {
       storage,
       pdfTextExtractor,
       pptxTextExtractor,
-      mistralOcr,
+      excelTextExtractor,
+      pdfOcr,
       fieldExtractor,
     );
   });
@@ -196,7 +208,7 @@ describe("ExtractionService", () => {
       900,
     );
     expect(pdfTextExtractor.extractText).toHaveBeenCalledTimes(1);
-    expect(mistralOcr.extractFromPdf).not.toHaveBeenCalled();
+    expect(pdfOcr.extractFromPdf).not.toHaveBeenCalled();
     expect(result.source).toBe("pdf-parse");
     expect(result.pageCount).toBe(12);
     expect(result.companyName).toBe("Inside Line AI");
@@ -235,10 +247,10 @@ describe("ExtractionService", () => {
 
     const result = await service.run("startup-1");
 
-    expect(mistralOcr.extractFromPdf).toHaveBeenCalledWith(
+    expect(pdfOcr.extractFromPdf).toHaveBeenCalledWith(
       "https://storage.test/deck.pdf",
     );
-    expect(result.source).toBe("mistral-ocr");
+    expect(result.source).toBe("ocr");
     expect(result.warnings).toContain(
       "PDF appears scanned/image-only; switching to OCR",
     );
@@ -248,13 +260,13 @@ describe("ExtractionService", () => {
     pdfTextExtractor.extractText.mockRejectedValueOnce(
       new Error("invalid PDF"),
     );
-    mistralOcr.extractFromPdf.mockRejectedValueOnce(new Error("OCR timeout"));
+    pdfOcr.extractFromPdf.mockRejectedValueOnce(new Error("OCR timeout"));
     const result = await service.run("startup-1");
 
     expect(result.source).toBe("startup-context");
     expect(result.rawText).toContain("AI diligence pipeline");
     expect(result.warnings).toContain("pdf-parse failed: invalid PDF");
-    expect(result.warnings).toContain("Mistral OCR failed: OCR timeout");
+    expect(result.warnings).toContain("OCR failed: OCR timeout");
     expect(result.warnings).toContain(
       "No extractable deck text; falling back to startup form data",
     );
@@ -279,7 +291,7 @@ describe("ExtractionService", () => {
       onStepFailed,
     });
 
-    expect(result.source).toBe("mistral-ocr");
+    expect(result.source).toBe("ocr");
     expect(onStepFailed).not.toHaveBeenCalledWith(
       "text_extraction",
       expect.any(String),
@@ -289,7 +301,9 @@ describe("ExtractionService", () => {
       "text_extraction",
       expect.objectContaining({
         summary: expect.objectContaining({
+          method: "pdf-parse",
           fallbackRequired: true,
+          reason: "no_extractable_text",
         }),
       }),
     );

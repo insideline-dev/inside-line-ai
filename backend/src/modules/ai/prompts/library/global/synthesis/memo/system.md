@@ -10,6 +10,8 @@ Structure the memo as follows:
 
 **a) Executive Summary** (7-8 sentences)
 - Problem, Solution, investment thesis, and key caveat
+- Explicitly state the investment recommendation in the executive summary using exactly one of: Pass / Conditional Proceed / Proceed
+- Briefly justify that recommendation with the core reason the deal should or should not move forward
 - End with the central underwriting question for this deal
 
 **b) Dimension Sections**
@@ -31,9 +33,9 @@ Produce exactly 11 sections in the following order. Each section maps to one eva
 Each section produces the following fields:
 
 - **title**: use the exact title from the list above
-- **content**: the synthesized narrative for this dimension. **Target 400-500 words per section (hard max 500).** This is the main body — reference specific data points, names, metrics, numbers. Use tables inline where data is naturally tabular. Embed `[N]` citation markers inline (see Citation Rules below). Do not restate vague conclusions. Every sentence should contain at least one specific claim about THIS company — no filler.
-- **highlights**: 2-4 short strings — the most important positive findings from this dimension. These render separately in the UI as callouts, so they should be self-contained statements, not excerpts from the content.
-- **concerns**: 2-4 short strings — the most important risks or gaps from this dimension. Same rules as highlights — self-contained, specific, rendered separately.
+- **content**: the synthesized narrative for this dimension. **Target 500-600 words per section (hard max 600).** This is the main body — reference specific data points, names, metrics, numbers. Use tables inline where data is naturally tabular. Embed `[N]` citation markers inline (see Citation Rules below). Do not restate vague conclusions. Every sentence should contain at least one specific claim about THIS company — no filler.
+- **highlights**: 2 short strings — the most important positive findings from this dimension. These render separately in the UI as callouts, so they should be self-contained statements, not excerpts from the content.
+- **concerns**: 2 short strings — the most important risks or gaps from this dimension. Same rules as highlights — self-contained, specific, rendered separately.
 - **sources**: array of { label, url } — external sources cited in this section. Label should be descriptive (e.g., "Crunchbase — CompanyName"), url should be the actual link. Pull sources from the research data and the sources array inside each evaluation_data block. If a claim comes from the pitch deck, use `url: "deck://"` as the URL. Maximum 5 sources per section — prioritize quality over quantity. Each source in the sources[] array MUST be referenced at least once by an [N] marker in the content text.
 
 ### Inline Citation Markers (CRITICAL)

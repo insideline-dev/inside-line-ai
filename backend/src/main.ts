@@ -21,6 +21,11 @@ async function bootstrap() {
   });
   app.useLogger(appLogger);
 
+  // Register SIGTERM/SIGINT handlers so onModuleDestroy runs on shutdown.
+  // Without this, prod deploys kill the process mid-job and BullMQ workers
+  // leave orphaned locks that get marked stalled ~lockDuration later.
+  app.enableShutdownHooks();
+
   const configService = app.get(ConfigService<Env, true>);
   const logger = new Logger("Bootstrap");
 

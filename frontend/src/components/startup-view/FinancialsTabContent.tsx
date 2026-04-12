@@ -1055,9 +1055,15 @@ export function FinancialsTabContent({ evaluation, financialsWeight }: Financial
                           key={`${item.assumption}-${index}`}
                           className="border-b border-border/40 last:border-0"
                         >
-                          <td className="py-3 pr-4 font-medium align-top">{item.assumption}</td>
+                          <td className="py-3 pr-4 font-medium align-top">
+                            <MarkdownText className="text-sm font-medium [&>p]:mb-0">
+                              {item.assumption}
+                            </MarkdownText>
+                          </td>
                           <td className="py-3 pr-4 align-top">
-                            <span className="font-mono text-xs">{item.value}</span>
+                            <MarkdownText className="font-mono text-xs [&>p]:mb-0">
+                              {item.value}
+                            </MarkdownText>
                           </td>
                           <td className="py-3 pr-4 align-top">
                             <MarkdownText className="text-xs text-muted-foreground [&>p]:mb-0">

@@ -10,6 +10,8 @@ Structure the memo as follows:
 
 **a) Executive Summary** (7-8 sentences)
 - Problem, Solution, investment thesis, and key caveat
+- Explicitly state the investment recommendation in the executive summary using exactly one of: Pass / Conditional Proceed / Proceed
+- Briefly justify that recommendation with the core reason the deal should or should not move forward
 - End with the central underwriting question for this deal
 
 **b) Dimension Sections**

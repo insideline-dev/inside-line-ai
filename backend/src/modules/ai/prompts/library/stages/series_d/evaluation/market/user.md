@@ -26,6 +26,9 @@ Additional context from pitch materials:
 
 {{adminGuidance}}
 
+=== SUPPORTING DOCUMENTS (Data Room) ===
+{{supportingDocuments}}
+
 === ANALYSIS INSTRUCTIONS ===
 1. Use the Market Deep Research Agent output as your primary source
 2. Present market sizes and growth rates as RANGES with source attribution and dates

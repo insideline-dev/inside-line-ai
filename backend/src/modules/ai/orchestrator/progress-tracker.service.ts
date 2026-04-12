@@ -387,7 +387,9 @@ export class ProgressTrackerService {
           ? "started"
           : params.status === "completed"
             ? "completed"
-            : "failed");
+            : params.status === "failed"
+              ? "failed"
+              : undefined);
 
       if (
         this.isAgentTerminalStatus(existing.status) &&
@@ -481,8 +483,10 @@ export class ProgressTrackerService {
       if (params.dataSummary) {
         next.dataSummary = params.dataSummary;
       }
-      next.lastEvent = lifecycleEvent;
-      next.lastEventAt = now;
+      if (lifecycleEvent) {
+        next.lastEvent = lifecycleEvent;
+        next.lastEventAt = now;
+      }
       next.phaseRetryCount = incomingPhaseRetryCount;
       if (incomingAgentAttemptId) {
         next.agentAttemptId = incomingAgentAttemptId;
@@ -492,24 +496,26 @@ export class ProgressTrackerService {
 
       phase.agents[params.key] = next;
       payload.phases[params.phase] = phase;
-      payload.agentEvents = this.appendAgentEvent(payload.agentEvents ?? [], {
-        id: `${now}:${params.phase}:${params.key}:${lifecycleEvent}:${next.agentAttemptId ?? "na"}:${next.attempts ?? 1}:${next.retryCount ?? 0}`,
-        pipelineRunId: params.pipelineRunId,
-        phase: params.phase,
-        agentKey: params.key,
-        event: lifecycleEvent,
-        timestamp: now,
-        attempt:
-          typeof params.attempt === "number"
-            ? Math.max(1, Math.floor(params.attempt))
-            : next.attempts,
-        retryCount: next.retryCount,
-        phaseRetryCount: next.phaseRetryCount,
-        agentAttemptId: next.agentAttemptId,
-        error: params.error,
-        fallbackReason: params.fallbackReason ?? next.fallbackReason,
-        rawProviderError: params.rawProviderError ?? next.rawProviderError,
-      });
+      if (lifecycleEvent) {
+        payload.agentEvents = this.appendAgentEvent(payload.agentEvents ?? [], {
+          id: `${now}:${params.phase}:${params.key}:${lifecycleEvent}:${next.agentAttemptId ?? "na"}:${next.attempts ?? 1}:${next.retryCount ?? 0}`,
+          pipelineRunId: params.pipelineRunId,
+          phase: params.phase,
+          agentKey: params.key,
+          event: lifecycleEvent,
+          timestamp: now,
+          attempt:
+            typeof params.attempt === "number"
+              ? Math.max(1, Math.floor(params.attempt))
+              : next.attempts,
+          retryCount: next.retryCount,
+          phaseRetryCount: next.phaseRetryCount,
+          agentAttemptId: next.agentAttemptId,
+          error: params.error,
+          fallbackReason: params.fallbackReason ?? next.fallbackReason,
+          rawProviderError: params.rawProviderError ?? next.rawProviderError,
+        });
+      }
       payload.updatedAt = now;
 
       await this.persistProgress(params.startupId, payload);

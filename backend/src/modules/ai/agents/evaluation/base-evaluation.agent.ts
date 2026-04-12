@@ -373,6 +373,7 @@ export abstract class BaseEvaluationAgent<TOutput>
                 schemaName: `${this.key}_evaluation`,
                 temperature: evaluationTemperature,
                 maxOutputTokens: this.getMaxOutputTokens(),
+                jobKey: `${pipelineData.extraction.companyName}:${this.key}`,
                 abortSignal,
               }),
             attemptTimeoutMs,

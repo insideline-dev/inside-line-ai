@@ -151,6 +151,7 @@ export class ReportSynthesisAgent {
                 schemaName: "report_synthesis_output",
                 maxOutputTokens: 8000,
                 reasoningEffort: "low",
+                jobKey: `${input.extraction.companyName}:report_synthesis`,
                 abortSignal,
               }),
             remainingMs,

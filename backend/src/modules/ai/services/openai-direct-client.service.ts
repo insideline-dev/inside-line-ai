@@ -139,6 +139,18 @@ export class OpenAiDirectClientService {
     }
 
     const status = response.status;
+    const incompleteDetails = (response as { incomplete_details?: { reason?: string } }).incomplete_details;
+
+    if (status === "incomplete") {
+      const reason = incompleteDetails?.reason ?? "unknown";
+      this.logger.warn(
+        `[OpenAIDirect] Response ${responseId} incomplete: reason=${reason}. Output may be truncated.`,
+      );
+      throw new Error(
+        `OpenAI response ${responseId} incomplete (reason: ${reason}). The model hit its output token limit. Try reducing prompt size or simplifying the schema.`,
+      );
+    }
+
     if (status !== "completed") {
       throw new Error(
         `OpenAI response ${responseId} ended with status ${status}`,
@@ -152,6 +164,15 @@ export class OpenAiDirectClientService {
     this.logger.debug(
       `[OpenAIDirect] model=${input.modelName} status=${status} rawTextLength=${rawText.length} usage=${usage ? `in:${usage.input_tokens},out:${usage.output_tokens}` : "unknown"} responseId=${responseId}`,
     );
+
+    if (usage) {
+      const outputTokens = usage.output_tokens ?? 0;
+      if (input.maxOutputTokens && outputTokens >= input.maxOutputTokens * 0.95) {
+        this.logger.warn(
+          `[OpenAIDirect] Response ${responseId} used ${outputTokens}/${input.maxOutputTokens} output tokens (near limit). Output may be truncated.`,
+        );
+      }
+    }
 
     if (!rawText || rawText.trim().length === 0) {
       throw new Error(

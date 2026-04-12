@@ -275,7 +275,7 @@ const COMMON_EVAL_VARIABLES = [
   "contextSections", "contextJson",
   "companyName", "companyDescription", "sector", "stage",
   "website", "location", "deckContext", "adminGuidance",
-  "webResearch", "websiteContent",
+  "webResearch", "websiteContent", "supportingDocuments",
 ];
 
 export const AI_PROMPT_CATALOG: Record<AiPromptKey, PromptCatalogEntry> = {

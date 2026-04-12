@@ -21,6 +21,9 @@ PRODUCT RESEARCH (scan for compliance certifications — SOC 2, HIPAA, ISO, GDPR
 
 {{adminGuidance}}
 
+=== SUPPORTING DOCUMENTS (Data Room) ===
+{{supportingDocuments}}
+
 INSTRUCTIONS:
 1. Scan team research for founder red flags (lawsuits, fraud, regulatory actions)
 2. Scan news research for regulatory issues and sector legal landscape

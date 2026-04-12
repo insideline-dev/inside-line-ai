@@ -26,6 +26,9 @@ The following research was conducted by the Team Deep Research Agent. This conta
 
 {{adminGuidance}}
 
+=== SUPPORTING DOCUMENTS (Data Room) ===
+{{supportingDocuments}}
+
 === CRITICAL INSTRUCTIONS ===
 1. You MUST evaluate EVERY SINGLE PERSON listed in the team data above
 2. Count the number of team members provided and ensure your "members" array has an entry for each one

@@ -21,28 +21,40 @@ const ResearchAgentKeys = ["team", "market", "product", "news", "competitor"] as
 export const RetryAgentSchema = z
   .object({
     phase: z.enum([PipelinePhase.RESEARCH, PipelinePhase.EVALUATION]),
-    agent: z.string().min(1),
+    agent: z.string().min(1).optional(),
+    agents: z.array(z.string().min(1)).min(1).optional(),
     feedback: z.string().trim().min(10).max(3000).optional(),
     skipSynthesis: z.boolean().optional().default(false),
   })
   .superRefine((value, ctx) => {
-    if (value.phase === PipelinePhase.RESEARCH) {
-      if (!ResearchAgentKeys.includes(value.agent as (typeof ResearchAgentKeys)[number])) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: `Unsupported research agent "${value.agent}"`,
-          path: ["agent"],
-        });
-      }
+    const agentList = value.agents ?? (value.agent ? [value.agent] : []);
+    if (agentList.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Either 'agent' or 'agents' must be provided",
+        path: ["agent"],
+      });
       return;
     }
 
-    if (!EvaluationAgentKeys.includes(value.agent as (typeof EvaluationAgentKeys)[number])) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: `Unsupported evaluation agent "${value.agent}"`,
-        path: ["agent"],
-      });
+    for (const ag of agentList) {
+      if (value.phase === PipelinePhase.RESEARCH) {
+        if (!ResearchAgentKeys.includes(ag as (typeof ResearchAgentKeys)[number])) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Unsupported research agent "${ag}"`,
+            path: ["agents"],
+          });
+        }
+      } else {
+        if (!EvaluationAgentKeys.includes(ag as (typeof EvaluationAgentKeys)[number])) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Unsupported evaluation agent "${ag}"`,
+            path: ["agents"],
+          });
+        }
+      }
     }
   });
 

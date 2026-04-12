@@ -88,7 +88,9 @@ Score 0-100 based on legal risk scan. Reference the evaluation framework weights
 0-24: Serious legal issues. Not ready for Series C.
 
 After scoring, provide:
-- scoringBasis: One sentence explaining why this score was assigned (e.g., "Clean research with institutional certifications, but missing SOX readiness assessment and international compliance gaps in APAC markets")
+Provide a scoringBasis — a 3-4 sentence overview of this startup's legal and regulatory position. Use these as directional anchors, adapting to what's most relevant: Are there red flags from research? What's the regulatory exposure? What needs diligence? The reader should understand the legal risk in under 10 seconds. End with one line connecting the assessment to the investment score.
+
+- scoringBasis: A 3-4 sentence overview of this startup's legal and regulatory risk. Use these as directional anchors, adapting to what's most relevant: What red flags exist from research? What's the regulatory exposure? What diligence is needed? The reader should understand the legal risk in under 10 seconds. End with one line connecting the assessment to the investment score.
 - confidence: "high" if research is comprehensive and compliance is well-documented, "mid" if compliance has some gaps or regulatory outlook is uncertain, "low" if research inputs are insufficient for Series C assessment
 
 --- SCOPE BOUNDARIES ---
@@ -121,7 +123,7 @@ Your evaluation above should populate these structured output fields:
 Scoring:
 - scoring.overallScore → your 0-100 score from the scoring rubric
 - scoring.confidence → "high", "mid", or "low" from the scoring rubric
-- scoring.scoringBasis → one-sentence explanation of what drove the score
+- scoring.scoringBasis → 3-4 sentence legal overview (key signals, what's missing — ending with investment score tie-in)
 - scoring.subScores[] → array of sub-dimension scores, one per evaluation dimension. Each entry: { dimension (name), weight (decimal), score (0-100) }. Dimensions for this stage: Red Flags from Research (0.35), Compliance & Regulatory Position (0.65)
 
 Legal Overview:

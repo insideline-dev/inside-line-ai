@@ -454,6 +454,146 @@ function formatDurationMs(value: number | undefined): string | undefined {
   return `${minutes}m ${seconds}s`;
 }
 
+function formatUsd(value: number | undefined): string | undefined {
+  if (!Number.isFinite(value) || value == null) {
+    return undefined;
+  }
+
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: value < 1 ? 4 : 2,
+    maximumFractionDigits: value < 1 ? 4 : 2,
+  }).format(value);
+}
+
+function readOpenAiTelemetry(
+  trace: PipelineAgentTrace | null,
+): Record<string, unknown> | undefined {
+  if (!trace?.meta || typeof trace.meta !== "object") {
+    return undefined;
+  }
+  const value = trace.meta.openaiTelemetry;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  return value as Record<string, unknown>;
+}
+
+function readTelemetryRecord(
+  value: unknown,
+): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  return value as Record<string, unknown>;
+}
+
+function readTelemetryPrimitive(
+  record: Record<string, unknown> | undefined,
+  key: string,
+): string | number | undefined {
+  if (!record) {
+    return undefined;
+  }
+  const value = record[key];
+  return typeof value === "string" || typeof value === "number" ? value : undefined;
+}
+
+function formatTelemetryLine(
+  label: string,
+  value: string | number | undefined,
+): string | null {
+  if (value === undefined || value === "") {
+    return null;
+  }
+  return `${label}: ${value}`;
+}
+
+function readOpenAiCost(
+  trace: PipelineAgentTrace | null,
+): Record<string, unknown> | undefined {
+  if (!trace?.meta || typeof trace.meta !== "object") {
+    return undefined;
+  }
+  const value = trace.meta.openAiCost;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  return value as Record<string, unknown>;
+}
+
+function readOpenAiCostTotalUsd(trace: PipelineAgentTrace | null): number | undefined {
+  const cost = readOpenAiCost(trace);
+  const total = readTelemetryPrimitive(cost, "totalCostUsd");
+  return typeof total === "number" ? total : undefined;
+}
+
+function buildOpenAiTelemetryLines(trace: PipelineAgentTrace | null): string[] {
+  const telemetry = readOpenAiTelemetry(trace);
+  const usage = readTelemetryRecord(telemetry?.usage);
+  const request = readTelemetryRecord(telemetry?.request);
+  const cost = readOpenAiCost(trace);
+  if (!telemetry) {
+    return [];
+  }
+
+  return [
+    formatTelemetryLine("Provider", readTelemetryPrimitive(telemetry, "provider")),
+    formatTelemetryLine("Model", readTelemetryPrimitive(telemetry, "model")),
+    formatTelemetryLine("Response ID", readTelemetryPrimitive(telemetry, "responseId")),
+    formatTelemetryLine("Status", readTelemetryPrimitive(telemetry, "status")),
+    formatTelemetryLine("Finish reason", readTelemetryPrimitive(telemetry, "finishReason")),
+    formatTelemetryLine(
+      "Duration",
+      formatDurationMs(
+        typeof readTelemetryPrimitive(telemetry, "durationMs") === "number"
+          ? (readTelemetryPrimitive(telemetry, "durationMs") as number)
+          : undefined,
+      ),
+    ),
+    formatTelemetryLine("Input tokens", readTelemetryPrimitive(usage, "inputTokens")),
+    formatTelemetryLine("Output tokens", readTelemetryPrimitive(usage, "outputTokens")),
+    formatTelemetryLine("Total tokens", readTelemetryPrimitive(usage, "totalTokens")),
+    formatTelemetryLine(
+      "Input cost",
+      formatUsd(
+        typeof readTelemetryPrimitive(cost, "inputCostUsd") === "number"
+          ? (readTelemetryPrimitive(cost, "inputCostUsd") as number)
+          : undefined,
+      ),
+    ),
+    formatTelemetryLine(
+      "Output cost",
+      formatUsd(
+        typeof readTelemetryPrimitive(cost, "outputCostUsd") === "number"
+          ? (readTelemetryPrimitive(cost, "outputCostUsd") as number)
+          : undefined,
+      ),
+    ),
+    formatTelemetryLine(
+      "Estimated cost",
+      formatUsd(
+        typeof readTelemetryPrimitive(cost, "totalCostUsd") === "number"
+          ? (readTelemetryPrimitive(cost, "totalCostUsd") as number)
+          : undefined,
+      ),
+    ),
+    formatTelemetryLine("Temperature", readTelemetryPrimitive(request, "temperature")),
+    formatTelemetryLine("Max output tokens", readTelemetryPrimitive(request, "maxOutputTokens")),
+    formatTelemetryLine("Reasoning effort", readTelemetryPrimitive(request, "reasoningEffort")),
+  ].filter((line): line is string => Boolean(line));
+}
+
+function toPrettyTelemetry(trace: PipelineAgentTrace | null): string {
+  const telemetry = readOpenAiTelemetry(trace);
+  if (!telemetry) {
+    return "OpenAI telemetry not captured";
+  }
+
+  return toPrettyJson(telemetry);
+}
+
 function readTraceFailureSource(
   trace: PipelineAgentTrace,
 ): "phase_timeout" | "worker_stalled" | undefined {
@@ -893,6 +1033,19 @@ export function AdminPipelineLivePanel({
   });
 
   const phaseEntries = useMemo(() => {
+    const tracesByPhaseAgent = new Map<string, number>();
+    for (const trace of progress?.agentTraces ?? []) {
+      if (isPhaseStepTrace(trace)) {
+        continue;
+      }
+      const cost = readOpenAiCostTotalUsd(trace);
+      if (typeof cost !== "number") {
+        continue;
+      }
+      const key = `${String(trace.phase)}:${trace.agentKey}`;
+      tracesByPhaseAgent.set(key, (tracesByPhaseAgent.get(key) ?? 0) + cost);
+    }
+
     const keys = new Set<string>([
       ...PIPELINE_PHASE_ORDER,
       ...Object.keys(progress?.phases ?? {}),
@@ -905,9 +1058,10 @@ export function AdminPipelineLivePanel({
           progress: 0,
         };
         const agentEntries = Object.entries(data.agents ?? {});
-        const visibleAgents = agentEntries
-          .filter(([agentKey]) => !PHASE_STEP_AGENT_KEYS.has(agentKey))
-          .map(([, agent]) => agent);
+        const visibleAgentEntries = agentEntries.filter(
+          ([agentKey]) => !PHASE_STEP_AGENT_KEYS.has(agentKey),
+        );
+        const visibleAgents = visibleAgentEntries.map(([, agent]) => agent);
         const retryingAgentCount = visibleAgents.filter(
           (agent) =>
             data.status === "running" &&
@@ -924,6 +1078,9 @@ export function AdminPipelineLivePanel({
         const failedAgentCount = visibleAgents.filter(
           (agent) => isHardFailedAgent(agent),
         ).length;
+        const totalOpenAiCostUsd = visibleAgentEntries.reduce((sum, [agentKey]) => {
+          return sum + (tracesByPhaseAgent.get(`${phase}:${agentKey}`) ?? 0);
+        }, 0);
         return {
           phase,
           data,
@@ -934,9 +1091,10 @@ export function AdminPipelineLivePanel({
           retriedAgentCount,
           fallbackAgentCount,
           failedAgentCount,
+          totalOpenAiCostUsd,
         };
       });
-  }, [progress?.phases]);
+  }, [progress?.agentTraces, progress?.phases, progress?.pipelineStatus]);
 
   const flattenedAgents = useMemo<FlattenedAgent[]>(() => {
     const rows: FlattenedAgent[] = [];
@@ -1268,6 +1426,8 @@ export function AdminPipelineLivePanel({
   const selectedTraceDiagnostics = selectedTrace
     ? buildTraceDiagnostics(selectedTrace)
     : [];
+  const selectedTraceTelemetryLines = buildOpenAiTelemetryLines(selectedTrace);
+  const totalOpenAiCost = formatUsd(progress?.openAiCostSummary?.totalCostUsd);
   const emptyTelemetryMessage =
     startupStatus === "submitted"
       ? "Awaiting founder info. Clara has requested missing required details (website and funding stage). Pipeline will resume after the startup is updated."
@@ -1306,6 +1466,11 @@ export function AdminPipelineLivePanel({
         <CardTitle className="flex flex-wrap items-center gap-2 text-lg">
           <Activity className="h-5 w-5 text-primary" />
           Pipeline Live
+          {totalOpenAiCost && (
+            <Badge variant="outline" className="border-border bg-muted/50 text-xs text-foreground">
+              Total cost {totalOpenAiCost}
+            </Badge>
+          )}
           {isLive ? (
             <Badge className="bg-chart-5/10 text-chart-5 border-chart-5/30">Live</Badge>
           ) : (
@@ -1423,6 +1588,11 @@ export function AdminPipelineLivePanel({
                       <span className="text-xs text-muted-foreground tabular-nums">{entry.agentCount} agents</span>
                     )}
                     <div className="ml-auto flex items-center gap-1.5">
+                      {entry.totalOpenAiCostUsd > 0 && (
+                        <Badge variant="outline" className="h-5 px-1.5 text-[10px] border-border bg-muted/50 text-muted-foreground">
+                          OpenAI {formatUsd(entry.totalOpenAiCostUsd)}
+                        </Badge>
+                      )}
                       {hasSignals && (
                         <>
                           {entry.retryingAgentCount > 0 && (
@@ -1793,6 +1963,27 @@ export function AdminPipelineLivePanel({
                     {selectedTraceDiagnostic}
                   </div>
                 )}
+                <details className="rounded-md border bg-muted/20">
+                  <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-muted-foreground">
+                    OpenAI Telemetry
+                  </summary>
+                  <div className="space-y-2 border-t px-3 py-3 text-xs">
+                    {selectedTraceTelemetryLines.length > 0 ? (
+                      selectedTraceTelemetryLines.map((line) => (
+                        <div key={line} className="text-muted-foreground">
+                          {line}
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-muted-foreground">
+                        OpenAI telemetry not captured for this trace.
+                      </div>
+                    )}
+                    <pre className="max-h-[220px] overflow-auto rounded-md border bg-muted/30 p-3 text-xs leading-relaxed whitespace-pre-wrap">
+                      {toPrettyTelemetry(selectedTrace)}
+                    </pre>
+                  </div>
+                </details>
                 <details className="rounded-md border bg-muted/20">
                   <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-muted-foreground">
                     Diagnostics

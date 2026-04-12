@@ -10,6 +10,7 @@ import { AiConfigService } from "../../services/ai-config.service";
 import { AiPromptService } from "../../services/ai-prompt.service";
 import { AiModelExecutionService } from "../../services/ai-model-execution.service";
 import { AiProviderService } from "../../providers/ai-provider.service";
+import { normalizeBaseEvaluationCandidate } from "../../schemas";
 import { BaseEvaluationAgent } from "./base-evaluation.agent";
 import { baseEvaluation } from "./evaluation-utils";
 import { OpenAiDirectClientService } from "../../services/openai-direct-client.service";
@@ -34,6 +35,49 @@ export class FinancialsEvaluationAgent extends BaseEvaluationAgent<FinancialsEva
 
   protected override getMaxOutputTokens(): number {
     return 120_000;
+  }
+
+  protected override getReasoningEffort(): "low" | "medium" | "high" {
+    return "high";
+  }
+
+  /**
+   * Convert array-based scenarios from OpenAI strict schema back to Record<string, number>
+   * for the standard schema. OpenAI strict mode doesn't support z.record() (requires
+   * additionalProperties: false), so we use an array of {name, value} in the OpenAI schema.
+   */
+  protected override normalizeOutputCandidate(candidate: unknown): unknown {
+    const base = normalizeBaseEvaluationCandidate(candidate);
+    if (!base || typeof base !== "object" || Array.isArray(base)) return base;
+
+    const record = base as Record<string, unknown>;
+    const charts = record.charts;
+    if (!charts || typeof charts !== "object" || Array.isArray(charts)) return base;
+
+    const chartsRecord = charts as Record<string, unknown>;
+    const scenarioComparison = chartsRecord.scenarioComparison;
+    if (!Array.isArray(scenarioComparison)) return base;
+
+    const normalized = scenarioComparison.map((point: unknown) => {
+      if (!point || typeof point !== "object" || Array.isArray(point)) return point;
+      const p = point as Record<string, unknown>;
+      const scenarios = p.scenarios;
+      if (!Array.isArray(scenarios)) return point;
+
+      const scenarioRecord: Record<string, number> = {};
+      for (const entry of scenarios) {
+        if (entry && typeof entry === "object" && "name" in entry && "value" in entry) {
+          const e = entry as { name: string; value: number };
+          scenarioRecord[e.name] = e.value;
+        }
+      }
+      return { ...p, scenarios: scenarioRecord };
+    });
+
+    return {
+      ...record,
+      charts: { ...chartsRecord, scenarioComparison: normalized },
+    };
   }
 
   protected override useDirectGenerateText(): boolean {

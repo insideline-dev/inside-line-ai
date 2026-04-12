@@ -5,10 +5,77 @@ import { type ModelMessage } from "ai";
 import OpenAI from "openai";
 import { zodResponsesFunction, zodTextFormat } from "openai/helpers/zod";
 import type { ZodTypeAny } from "zod";
+import type { OpenAiResponseTelemetry } from "../interfaces/agent.interface";
 
 const DEFAULT_MAX_TOOL_ROUNDTRIPS = 6;
 
 type GenerateTextToolChoice = ToolChoice<ToolSet>;
+
+function toOpenAiUsage(
+  usage:
+    | OpenAI.Responses.ResponseUsage
+    | { input_tokens?: number | null; output_tokens?: number | null; total_tokens?: number | null }
+    | undefined,
+): OpenAiResponseTelemetry["usage"] | undefined {
+  if (!usage) {
+    return undefined;
+  }
+
+  const inputTokens = usage.input_tokens ?? undefined;
+  const outputTokens = usage.output_tokens ?? undefined;
+  const totalTokens = usage.total_tokens ??
+    (typeof inputTokens === "number" || typeof outputTokens === "number"
+      ? (inputTokens ?? 0) + (outputTokens ?? 0)
+      : undefined);
+
+  if (
+    typeof inputTokens !== "number" &&
+    typeof outputTokens !== "number" &&
+    typeof totalTokens !== "number"
+  ) {
+    return undefined;
+  }
+
+  return {
+    inputTokens,
+    outputTokens,
+    totalTokens,
+  };
+}
+
+function buildOpenAiTelemetry(input: {
+  model: string;
+  startedAt: Date;
+  completedAt: Date;
+  response: OpenAI.Responses.Response;
+  finishReason?: string;
+  request?: Record<string, unknown>;
+  error?: Record<string, unknown>;
+}): OpenAiResponseTelemetry {
+  const { model, startedAt, completedAt, response, finishReason, request, error } = input;
+  return {
+    provider: "openai",
+    model,
+    responseId: response.id,
+    status: typeof response.status === "string" ? response.status : undefined,
+    finishReason,
+    startedAt: startedAt.toISOString(),
+    completedAt: completedAt.toISOString(),
+    durationMs: completedAt.getTime() - startedAt.getTime(),
+    usage: toOpenAiUsage(response.usage),
+    request,
+    response: {
+      id: response.id,
+      status: typeof response.status === "string" ? response.status : undefined,
+      incompleteDetails:
+        response.incomplete_details && typeof response.incomplete_details === "object"
+          ? response.incomplete_details
+          : undefined,
+      outputItemCount: Array.isArray(response.output) ? response.output.length : undefined,
+    },
+    error,
+  };
+}
 
 export interface OpenAiTextGenerationResult<TOutput = unknown> {
   text: string;
@@ -17,6 +84,24 @@ export interface OpenAiTextGenerationResult<TOutput = unknown> {
   sources: Array<{ title?: string; url?: string }>;
   responseId?: string;
   finishReason?: string;
+  telemetry?: {
+    provider: "openai";
+    model?: string;
+    responseId?: string;
+    status?: string;
+    finishReason?: string;
+    startedAt?: string;
+    completedAt?: string;
+    durationMs?: number;
+    usage?: {
+      inputTokens?: number;
+      outputTokens?: number;
+      totalTokens?: number;
+    };
+    request?: Record<string, unknown>;
+    response?: Record<string, unknown>;
+    error?: Record<string, unknown>;
+  };
 }
 
 export interface OpenAiTextGenerationParams {
@@ -59,6 +144,7 @@ export class OpenAiTextGenerationService {
     const shouldUseParse = Boolean(params.schema) && tools.length === 0;
 
     if (shouldUseParse && params.schema) {
+      const startedAt = new Date();
       const response = await client.responses.parse(
         {
           model: params.modelName,
@@ -74,6 +160,7 @@ export class OpenAiTextGenerationService {
           signal: params.abortSignal,
         },
       );
+      const completedAt = new Date();
 
       return {
         text: this.extractOutputText(response).trim(),
@@ -82,6 +169,21 @@ export class OpenAiTextGenerationService {
           (response.output_parsed as TOutput | null) ?? undefined,
         sources: this.extractSources(response),
         responseId: response.id,
+        finishReason: this.readString(response, "status"),
+        telemetry: buildOpenAiTelemetry({
+          model: params.modelName,
+          startedAt,
+          completedAt,
+          response,
+          finishReason: this.readString(response, "status"),
+          request: {
+            temperature,
+            maxOutputTokens: params.maxOutputTokens,
+            reasoningEffort: params.reasoningEffort,
+            mode: "parse",
+            toolCount: tools.length,
+          },
+        }),
       };
     }
 
@@ -104,6 +206,7 @@ export class OpenAiTextGenerationService {
       sources: response.sources,
       responseId: response.responseId,
       finishReason: response.finishReason,
+      telemetry: response.telemetry,
     };
   }
 
@@ -126,11 +229,13 @@ export class OpenAiTextGenerationService {
     sources: Array<{ title?: string; url?: string }>;
     responseId?: string;
     finishReason?: string;
+    telemetry?: OpenAiResponseTelemetry;
   }> {
     const { client, params, tools, toolChoice, maxToolRoundtrips } = input;
     const temperature = this.supportsTemperature(params.modelName)
       ? params.temperature
       : undefined;
+    const startedAt = new Date();
     const textConfig: OpenAI.Responses.ResponseTextConfig | undefined =
       params.schema
         ? { format: zodTextFormat(params.schema, "response") as OpenAI.Responses.ResponseFormatTextJSONSchemaConfig }
@@ -223,13 +328,36 @@ export class OpenAiTextGenerationService {
 
     const text = this.extractOutputText(response).trim();
     const structured = params.schema ? this.parseStructuredText<TOutput>(text) : null;
+    const completedAt = new Date();
+    const finishReason = this.readString(response, "status");
 
     return {
       text,
       structured,
       sources: this.extractSources(response),
       responseId: response.id,
-      finishReason: this.readString(response, "status"),
+      finishReason,
+      telemetry: buildOpenAiTelemetry({
+        model: params.modelName,
+        startedAt,
+        completedAt,
+        response,
+        finishReason,
+        request: {
+          temperature,
+          maxOutputTokens: params.maxOutputTokens,
+          reasoningEffort: params.reasoningEffort,
+          mode: "create",
+          toolCount: tools.length,
+          toolChoice:
+            typeof toolChoice === "string"
+              ? toolChoice
+              : toolChoice && typeof toolChoice === "object" && "type" in toolChoice
+                ? String(toolChoice.type)
+                : undefined,
+          maxToolRoundtrips,
+        },
+      }),
     };
   }
 

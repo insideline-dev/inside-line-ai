@@ -923,6 +923,132 @@ describe("StartupService", () => {
       );
     });
 
+    it("should include OpenAI cost summary for admin progress responses", async () => {
+      const analyzingStartup = {
+        ...mockStartup,
+        status: StartupStatus.ANALYZING,
+      };
+      mockDb.limit
+        .mockResolvedValueOnce([analyzingStartup])
+        .mockResolvedValueOnce([
+          {
+            id: "trace-1",
+            pipelineRunId: "run-telemetry",
+            startupId: mockStartupId,
+            phase: PipelinePhase.EVALUATION,
+            agentKey: "financials",
+            traceKind: "ai_agent",
+            stepKey: null,
+            status: "completed",
+            attempt: 1,
+            retryCount: 0,
+            usedFallback: false,
+            inputPrompt: "prompt",
+            systemPrompt: "system",
+            inputJson: null,
+            outputText: "done",
+            outputJson: null,
+            meta: {
+              openaiTelemetry: {
+                provider: "openai",
+                model: "gpt-5.4",
+                usage: {
+                  inputTokens: 66668,
+                  outputTokens: 10547,
+                  totalTokens: 77215,
+                },
+              },
+            },
+            error: null,
+            startedAt: new Date("2026-04-12T20:45:35.840Z"),
+            completedAt: new Date("2026-04-12T20:58:13.435Z"),
+          },
+        ]);
+      pipelineService.getPipelineStatus.mockResolvedValueOnce({
+        pipelineRunId: "run-telemetry",
+        startupId: mockStartupId,
+        userId: mockUserId,
+        status: PipelineStatus.RUNNING,
+        currentPhase: PipelinePhase.EVALUATION,
+        phases: {
+          [PipelinePhase.EXTRACTION]: { phase: PipelinePhase.EXTRACTION, status: "completed" as const },
+          [PipelinePhase.ENRICHMENT]: { phase: PipelinePhase.ENRICHMENT, status: "completed" as const },
+          [PipelinePhase.SCRAPING]: { phase: PipelinePhase.SCRAPING, status: "completed" as const },
+          [PipelinePhase.RESEARCH]: { phase: PipelinePhase.RESEARCH, status: "completed" as const },
+          [PipelinePhase.EVALUATION]: { phase: PipelinePhase.EVALUATION, status: "running" as const },
+          [PipelinePhase.SYNTHESIS]: { phase: PipelinePhase.SYNTHESIS, status: "pending" as const },
+        },
+        results: {},
+        metadata: {
+          startedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      } as unknown as PipelineState);
+      pipelineService.getTrackedProgress.mockResolvedValueOnce({
+        pipelineRunId: "run-telemetry",
+        startupId: mockStartupId,
+        status: PipelineStatus.RUNNING,
+        currentPhase: PipelinePhase.EVALUATION,
+        overallProgress: 65,
+        phasesCompleted: [PipelinePhase.EXTRACTION, PipelinePhase.SCRAPING],
+        phases: {
+          [PipelinePhase.EXTRACTION]: {
+            status: "completed",
+            agents: {},
+          },
+          [PipelinePhase.SCRAPING]: {
+            status: "completed",
+            agents: {},
+          },
+          [PipelinePhase.RESEARCH]: {
+            status: "completed",
+            agents: {},
+          },
+          [PipelinePhase.EVALUATION]: {
+            status: "running",
+            retryCount: 2,
+            agents: {
+              traction: {
+                key: "traction",
+                status: "running",
+                progress: 0,
+                attempts: 3,
+                retryCount: 2,
+                usedFallback: false,
+                lastEvent: "retrying",
+                lastEventAt: new Date().toISOString(),
+              },
+            },
+          },
+          [PipelinePhase.SYNTHESIS]: {
+            status: "pending",
+            agents: {},
+          },
+        },
+        agentEvents: [],
+        updatedAt: new Date().toISOString(),
+      } as unknown);
+
+      const result = await service.adminGetProgress(mockStartupId);
+      const trace = result.progress?.agentTraces?.[0];
+
+      expect(result.progress?.openAiCostSummary).toEqual(
+        expect.objectContaining({
+          tracedCallCount: 1,
+          inputCostUsd: 0.16667,
+          outputCostUsd: 0.158205,
+          totalCostUsd: 0.324875,
+        }),
+      );
+      expect(trace?.meta?.openAiCost).toEqual(
+        expect.objectContaining({
+          inputCostUsd: 0.16667,
+          outputCostUsd: 0.158205,
+          totalCostUsd: 0.324875,
+        }),
+      );
+    });
+
     it("should include detailed agent telemetry for admin progress responses", async () => {
       const analyzingStartup = {
         ...mockStartup,

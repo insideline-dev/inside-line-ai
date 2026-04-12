@@ -95,7 +95,10 @@ Score 0-100 based on financial plan quality. Reference the evaluation framework 
 Evaluate plan quality and projection credibility, not revenue performance.
 
 After scoring, provide:
-- scoringBasis: One sentence explaining why this score was assigned (e.g., "Efficient burn with clear milestones, but projections lack stated assumptions and no scenario analysis")
+
+Provide a scoringBasis — a 3-4 sentence overview of this startup's financial health. Use these as directional anchors, adapting to what's most relevant: What's the capital plan and burn story? How credible are the projections and assumptions? What financial planning is missing? The reader should understand the financials in under 10 seconds. End with one line connecting the assessment to the investment score.
+
+- scoringBasis: A 3-4 sentence overview of this startup's financial position. Use these as directional anchors, adapting to what's most relevant: What's the capital plan and burn story? How credible are the projections? What's missing? The reader should understand the financials in under 10 seconds. End with one line connecting the assessment to the investment score.
 - confidence: "high" if capital plan and projections are clearly described with assumptions, "mid" if financial data is partial or assumptions are implicit, "low" if financial information is limited
 
 --- SCOPE BOUNDARIES ---
@@ -128,7 +131,7 @@ Mode Flag:
 Scoring:
 - scoring.overallScore → your 0-100 score from the scoring rubric
 - scoring.confidence → "high", "mid", or "low" from the scoring rubric
-- scoring.scoringBasis → one-sentence explanation of what drove the score
+- scoring.scoringBasis → 3-4 sentence financial overview (capital plan, projection credibility, what's missing — ending with investment score tie-in)
 - scoring.subScores[] → array of sub-dimension scores, one per evaluation dimension. Each entry: { dimension (name), weight (decimal), score (0-100) }. Dimensions for this stage: Capital Plan (0.40), Projection Quality (0.35), Financial Planning Quality (0.25)
 
 Key Metrics (extract from deck or model — set null if not mentioned):

@@ -14,6 +14,7 @@ import { startupEvaluation } from "../../analysis/entities";
 import { pipelineRun, pipelineAgentRun } from "../entities";
 import type {
   EnrichmentResult,
+  EvaluationResult,
   ExtractionResult,
   ScrapingResult,
 } from "../interfaces/phase-results.interface";
@@ -72,6 +73,7 @@ function toJsonRecord(value: unknown, context: string): Record<string, unknown> 
 type AgentRetryMetadata = {
   mode: "agent_retry";
   agentKey: string;
+  agentKeys?: string[];
 };
 
 type DiagnosticFailureSource =
@@ -81,6 +83,7 @@ type DiagnosticFailureSource =
 export interface RetryAgentRequest {
   phase: PipelinePhase.RESEARCH | PipelinePhase.EVALUATION;
   agentKey: ResearchAgentKey | EvaluationAgentKey;
+  agentKeys?: Array<ResearchAgentKey | EvaluationAgentKey>;
   skipDownstream?: boolean;
 }
 
@@ -1072,13 +1075,15 @@ export class PipelineService {
     // clears queued jobs, so it's safe even if the phase is stale/running
     // after a cancelled pipeline.
 
+    const allKeys = request.agentKeys ?? [request.agentKey];
     const metadata: AgentRetryMetadata = {
       mode: "agent_retry",
-      agentKey: request.agentKey,
+      agentKey: allKeys[0],
+      agentKeys: allKeys.length > 1 ? allKeys : undefined,
     };
 
     this.logger.log(
-      `[retryAgent] Targeted rerun: phase=${request.phase}, agent=${request.agentKey} | Startup: ${startupId}`,
+      `[retryAgent] Targeted rerun: phase=${request.phase}, agents=[${allKeys.join(", ")}], skipDownstream=${Boolean(request.skipDownstream)} | Startup: ${startupId}`,
     );
 
     const newRunId = await this.beginManualRun(state, request.phase);
@@ -1136,6 +1141,21 @@ export class PipelineService {
         phase: PipelinePhase.SYNTHESIS,
         clearResult: true,
       });
+    } else {
+      // Ensure synthesis stays in a terminal state so applyTransitions won't queue it.
+      // beginManualRun → initProgress seeds from the old state, but if synthesis was
+      // PENDING from a prior non-skip retry, it would get re-queued after evaluation completes.
+      const synthStatus = (await this.pipelineState.get(startupId))?.phases[PipelinePhase.SYNTHESIS]?.status;
+      if (synthStatus && !this.isPhaseStatusTerminal(synthStatus)) {
+        await this.pipelineState.updatePhase(startupId, PipelinePhase.SYNTHESIS, PhaseStatus.COMPLETED);
+        await this.progressTracker.updatePhaseProgress({
+          startupId,
+          userId: state.userId,
+          pipelineRunId: newRunId,
+          phase: PipelinePhase.SYNTHESIS,
+          status: PhaseStatus.COMPLETED,
+        });
+      }
     }
 
     await this.queuePhase({
@@ -1323,6 +1343,7 @@ export class PipelineService {
 
     if (phase === PipelinePhase.EVALUATION) {
       await this.updatePipelineQualityFromEvaluation(state.startupId);
+      await this.persistEvaluationSectionData(state.startupId);
     }
     await this.applyTransitions(startupId);
   }
@@ -1335,6 +1356,17 @@ export class PipelineService {
     if (!state) {
       return;
     }
+
+    const phaseConfig = this.phaseTransition.getPhaseConfig(phase);
+    this.errorRecovery.clearPhaseTimeout(startupId, phase);
+    this.errorRecovery.schedulePhaseTimeout({
+      startupId,
+      phase,
+      timeoutMs: this.resolvePhaseTimeoutMs(phase, phaseConfig.timeoutMs),
+      onTimeout: () => {
+        void this.handlePhaseTimeout(startupId, phase);
+      },
+    });
 
     await this.progressTracker.updatePhaseProgress({
       startupId,
@@ -1420,6 +1452,7 @@ export class PipelineService {
     rawProviderError?: string;
     lifecycleEvent?: "started" | "retrying" | "completed" | "failed" | "fallback";
     dataSummary?: Record<string, unknown>;
+    meta?: Record<string, unknown>;
   }): Promise<void> {
     await this.progressTracker.updateAgentProgress(params);
     if (!params.usedFallback) {
@@ -1628,15 +1661,6 @@ export class PipelineService {
         attempts: 1,
       },
     );
-
-    this.errorRecovery.schedulePhaseTimeout({
-      startupId,
-      phase,
-      timeoutMs: this.resolvePhaseTimeoutMs(phase, phaseConfig.timeoutMs) + delayMs,
-      onTimeout: () => {
-        void this.handlePhaseTimeout(startupId, phase);
-      },
-    });
   }
 
   private resolvePhaseTimeoutMs(
@@ -1850,6 +1874,63 @@ export class PipelineService {
 
     if (degraded) {
       await this.pipelineState.setQuality(startupId, "degraded");
+    }
+  }
+
+  /**
+   * Persist per-agent evaluation data directly to the database.
+   * This ensures results are visible immediately after evaluation completes,
+   * even when synthesis is skipped (e.g. "Re-run only" agent retry).
+   */
+  private async persistEvaluationSectionData(startupId: string): Promise<void> {
+    try {
+      const evaluation = (await this.pipelineState.getPhaseResult(
+        startupId,
+        PipelinePhase.EVALUATION,
+      )) as EvaluationResult | null;
+      if (!evaluation) return;
+
+      const sectionValues: Record<string, unknown> = {
+        teamData: evaluation.team,
+        teamScore: evaluation.team?.score ?? null,
+        marketData: evaluation.market,
+        marketScore: evaluation.market?.score ?? null,
+        productData: evaluation.product,
+        productScore: evaluation.product?.score ?? null,
+        tractionData: evaluation.traction,
+        tractionScore: evaluation.traction?.score ?? null,
+        businessModelData: evaluation.businessModel,
+        businessModelScore: evaluation.businessModel?.score ?? null,
+        gtmData: evaluation.gtm,
+        gtmScore: evaluation.gtm?.score ?? null,
+        financialsData: evaluation.financials,
+        financialsScore: evaluation.financials?.score ?? null,
+        competitiveAdvantageData: evaluation.competitiveAdvantage,
+        competitiveAdvantageScore: evaluation.competitiveAdvantage?.score ?? null,
+        legalData: evaluation.legal,
+        legalScore: evaluation.legal?.score ?? null,
+        dealTermsData: evaluation.dealTerms,
+        dealTermsScore: evaluation.dealTerms?.score ?? null,
+        exitPotentialData: evaluation.exitPotential,
+        exitPotentialScore: evaluation.exitPotential?.score ?? null,
+      };
+
+      await this.drizzle.db
+        .insert(startupEvaluation)
+        .values({ startupId, ...sectionValues })
+        .onConflictDoUpdate({
+          target: startupEvaluation.startupId,
+          set: sectionValues,
+        });
+
+      this.logger.log(
+        `[Pipeline] Persisted evaluation section data for ${startupId}`,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `[Pipeline] Failed to persist evaluation section data for ${startupId}: ${message}`,
+      );
     }
   }
 
@@ -2267,7 +2348,7 @@ export class PipelineService {
     }
 
     const status = state.phases[phase].status;
-    if (status !== PhaseStatus.RUNNING && status !== PhaseStatus.WAITING) {
+    if (status !== PhaseStatus.RUNNING) {
       return;
     }
 

@@ -55,6 +55,25 @@ export interface ResearchAgentConfig<TOutput> {
   fallback: (pipelineData: ResearchPipelineInput) => TOutput;
 }
 
+export interface OpenAiResponseTelemetry {
+  provider: "openai";
+  model?: string;
+  responseId?: string;
+  status?: string;
+  finishReason?: string;
+  startedAt?: string;
+  completedAt?: string;
+  durationMs?: number;
+  usage?: {
+    inputTokens?: number;
+    outputTokens?: number;
+    totalTokens?: number;
+  };
+  request?: Record<string, unknown>;
+  response?: Record<string, unknown>;
+  error?: Record<string, unknown>;
+}
+
 export interface EvaluationAgentResult<TOutput> {
   key: EvaluationAgentKey;
   output: TOutput;
@@ -64,6 +83,7 @@ export interface EvaluationAgentResult<TOutput> {
   error?: string;
   fallbackReason?: EvaluationFallbackReason;
   rawProviderError?: string;
+  dataSummary?: Record<string, unknown>;
   meta?: Record<string, unknown>;
 }
 
@@ -120,6 +140,38 @@ export interface EvaluationAgentTraceEvent {
   meta?: Record<string, unknown>;
 }
 
+export interface EvaluationAgentStartResult {
+  agent: EvaluationAgentKey;
+  responseId: string;
+  resumed: boolean;
+  modelName: string;
+  pollIntervalMs: number;
+  startedAt?: string;
+  dataSummary?: Record<string, unknown>;
+}
+
+export interface EvaluationAgentPollResult {
+  agent: EvaluationAgentKey;
+  status: "running" | "completed" | "failed" | "fallback";
+  responseId: string;
+  modelName: string;
+  pollIntervalMs: number;
+  completion?: EvaluationAgentCompletion;
+}
+
+export interface EvaluationAgentPollingState {
+  agent: EvaluationAgentKey;
+  responseId: string;
+  status: string;
+  modelName?: string;
+  pollIntervalMs?: number;
+  timeoutMs?: number;
+  startedAt?: string;
+  phaseRetryCount: number;
+  agentAttemptId?: string;
+  checkpointEvent?: string;
+}
+
 export interface EvaluationAgentRunOptions {
   feedbackNotes?: EvaluationFeedbackNote[];
   pipelineRunId?: string;
@@ -144,9 +196,20 @@ export interface EvaluationAgentCompletion {
 
 export interface EvaluationAgent<TOutput> {
   key: EvaluationAgentKey;
+  /** Returns true only when OpenAI direct polling is actually available for this agent (correct model + schema configured). */
+  supportsDirectPolling(): boolean;
   run(
     pipelineData: EvaluationPipelineInput,
     options?: EvaluationAgentRunOptions,
   ): Promise<EvaluationAgentResult<TOutput>>;
+  startDirectRun?(
+    pipelineData: EvaluationPipelineInput,
+    options?: EvaluationAgentRunOptions,
+  ): Promise<EvaluationAgentStartResult>;
+  pollDirectRun?(
+    pipelineData: EvaluationPipelineInput,
+    state: EvaluationAgentPollingState,
+    options?: EvaluationAgentRunOptions,
+  ): Promise<EvaluationAgentPollResult>;
   fallback(pipelineData: EvaluationPipelineInput): TOutput;
 }

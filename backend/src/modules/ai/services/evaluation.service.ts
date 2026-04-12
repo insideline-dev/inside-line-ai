@@ -32,6 +32,7 @@ export interface EvaluationRunOptions {
   onAgentComplete?: (payload: EvaluationAgentCompletion) => void;
   onAgentLifecycle?: (payload: EvaluationAgentLifecycleEvent) => void;
   agentKey?: EvaluationAgentKey;
+  agentKeys?: EvaluationAgentKey[];
 }
 
 @Injectable()
@@ -76,33 +77,42 @@ export class EvaluationService {
     };
 
     const { pipelineInput, agentDocumentMap } = await this.loadPipelineInput(startupId);
-    if (options?.agentKey) {
+    const targetKeys = options?.agentKeys ?? (options?.agentKey ? [options.agentKey] : null);
+    if (targetKeys && targetKeys.length > 0) {
       this.logger.log(
-        `[Evaluation] Targeted rerun: agent=${options.agentKey} | Startup: ${startupId}`,
+        `[Evaluation] Targeted rerun: agents=${targetKeys.join(", ")} | Startup: ${startupId}`,
       );
-      const current = await this.pipelineState.getPhaseResult(
-        startupId,
-        PipelinePhase.EVALUATION,
-      );
+      let result =
+        (await this.pipelineState.getPhaseResult(
+          startupId,
+          PipelinePhase.EVALUATION,
+        )) as EvaluationResult | null;
 
-      const rerun = await this.registry.runOne(
+      this.logger.log(
+        `[Evaluation] Dispatching runMany for ${targetKeys.length} agents: [${targetKeys.join(", ")}] | Startup: ${startupId}`,
+      );
+      const completions = await this.registry.runMany(
         startupId,
-        options.agentKey,
+        targetKeys,
         pipelineInput,
         handleAgentStart,
+        handleAgentComplete,
         handleAgentLifecycle,
         agentDocumentMap,
       );
-      handleAgentComplete(rerun);
+      this.logger.log(
+        `[Evaluation] runMany returned ${completions.length} completions for agents: [${completions.map((c) => c.agent).join(", ")}] | Startup: ${startupId}`,
+      );
 
-      if (!current) {
-        this.logger.warn(
-          `[Evaluation] No existing result for targeted rerun of ${options.agentKey}, returning single agent result | Startup: ${startupId}`,
-        );
-        return this.buildSingleAgentResult(rerun);
+      for (const rerun of completions) {
+        if (!result) {
+          result = this.buildSingleAgentResult(rerun);
+        } else {
+          result = this.mergeAgentResult(result, rerun);
+        }
       }
 
-      return this.mergeAgentResult(current, rerun);
+      return result!;
     }
 
     return this.registry.runAll(

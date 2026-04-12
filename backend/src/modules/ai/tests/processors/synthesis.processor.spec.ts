@@ -14,7 +14,10 @@ import type { SynthesisService } from "../../services/synthesis.service";
 import type { NotificationGateway } from "../../../../notification/notification.gateway";
 import type { AiSynthesisJobData } from "../../../../queue/interfaces";
 import { createMockSynthesisResult } from "../fixtures/mock-synthesis.fixture";
-import { SYNTHESIS_AGENT_KEY } from "../../services/synthesis.service";
+import {
+  MEMO_SYNTHESIS_AGENT_KEY,
+  REPORT_SYNTHESIS_AGENT_KEY,
+} from "../../constants/agent-keys";
 
 describe("SynthesisProcessor", () => {
   let processor: SynthesisProcessor;
@@ -34,19 +37,42 @@ describe("SynthesisProcessor", () => {
     } as unknown as jest.Mocked<ConfigService>;
 
     synthesisService = {
-      runDetailed: jest.fn().mockResolvedValue({
-        synthesis: createMockSynthesisResult(),
-        trace: {
-          agentKey: SYNTHESIS_AGENT_KEY,
+      runDetailed: jest.fn().mockImplementation(async (_startupId, callbacks) => {
+        callbacks?.onMemoCompleted?.({
+          agentKey: MEMO_SYNTHESIS_AGENT_KEY,
           status: "completed",
           attempt: 1,
           retryCount: 0,
           usedFallback: false,
-          inputPrompt: "Synthesis prompt",
-          systemPrompt: "Synthesis system prompt",
+          inputPrompt: "Memo prompt",
+          systemPrompt: "Memo system prompt",
           outputText: JSON.stringify(createMockSynthesisResult()),
           outputJson: createMockSynthesisResult(),
-        },
+          meta: {
+            openaiTelemetry: {
+              provider: "openai",
+              model: "gpt-5.4",
+              usage: { inputTokens: 1000, outputTokens: 200, totalTokens: 1200 },
+            },
+          },
+        });
+        callbacks?.onReportStarted?.();
+        callbacks?.onReportCompleted?.({
+          agentKey: REPORT_SYNTHESIS_AGENT_KEY,
+          status: "completed",
+          attempt: 1,
+          retryCount: 0,
+          usedFallback: false,
+          inputPrompt: "Report prompt",
+          systemPrompt: "Report system prompt",
+          outputText: JSON.stringify(createMockSynthesisResult()),
+          outputJson: createMockSynthesisResult(),
+        });
+
+        return {
+          synthesis: createMockSynthesisResult(),
+          traces: [],
+        };
       }),
     } as unknown as jest.Mocked<SynthesisService>;
 
@@ -158,13 +184,16 @@ describe("SynthesisProcessor", () => {
       PipelinePhase.SYNTHESIS,
       PhaseStatus.RUNNING,
     );
-    expect(synthesisService.runDetailed).toHaveBeenCalledWith("startup-1");
+    expect(synthesisService.runDetailed).toHaveBeenCalledWith(
+      "startup-1",
+      expect.any(Object),
+    );
     expect(pipelineService.onAgentProgress).toHaveBeenCalledWith(
       expect.objectContaining({
         startupId: "startup-1",
         pipelineRunId: "run-1",
         phase: PipelinePhase.SYNTHESIS,
-        key: SYNTHESIS_AGENT_KEY,
+        key: MEMO_SYNTHESIS_AGENT_KEY,
         status: "running",
         lifecycleEvent: "started",
       }),
@@ -174,7 +203,27 @@ describe("SynthesisProcessor", () => {
         startupId: "startup-1",
         pipelineRunId: "run-1",
         phase: PipelinePhase.SYNTHESIS,
-        key: SYNTHESIS_AGENT_KEY,
+        key: MEMO_SYNTHESIS_AGENT_KEY,
+        status: "completed",
+        lifecycleEvent: "completed",
+      }),
+    );
+    expect(pipelineService.onAgentProgress).toHaveBeenCalledWith(
+      expect.objectContaining({
+        startupId: "startup-1",
+        pipelineRunId: "run-1",
+        phase: PipelinePhase.SYNTHESIS,
+        key: REPORT_SYNTHESIS_AGENT_KEY,
+        status: "running",
+        lifecycleEvent: "started",
+      }),
+    );
+    expect(pipelineService.onAgentProgress).toHaveBeenCalledWith(
+      expect.objectContaining({
+        startupId: "startup-1",
+        pipelineRunId: "run-1",
+        phase: PipelinePhase.SYNTHESIS,
+        key: REPORT_SYNTHESIS_AGENT_KEY,
         status: "completed",
         lifecycleEvent: "completed",
       }),
@@ -184,7 +233,21 @@ describe("SynthesisProcessor", () => {
         startupId: "startup-1",
         pipelineRunId: "run-1",
         phase: PipelinePhase.SYNTHESIS,
-        agentKey: SYNTHESIS_AGENT_KEY,
+        agentKey: MEMO_SYNTHESIS_AGENT_KEY,
+        status: "completed",
+        meta: expect.objectContaining({
+          openaiTelemetry: expect.objectContaining({
+            model: "gpt-5.4",
+          }),
+        }),
+      }),
+    );
+    expect(pipelineAgentTrace.recordRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        startupId: "startup-1",
+        pipelineRunId: "run-1",
+        phase: PipelinePhase.SYNTHESIS,
+        agentKey: REPORT_SYNTHESIS_AGENT_KEY,
         status: "completed",
       }),
     );
@@ -243,7 +306,7 @@ describe("SynthesisProcessor", () => {
         startupId: "startup-1",
         pipelineRunId: "run-1",
         phase: PipelinePhase.SYNTHESIS,
-        key: SYNTHESIS_AGENT_KEY,
+        key: MEMO_SYNTHESIS_AGENT_KEY,
         status: "failed",
         lifecycleEvent: "failed",
         error: "synthesis failed",
@@ -254,7 +317,7 @@ describe("SynthesisProcessor", () => {
         startupId: "startup-1",
         pipelineRunId: "run-1",
         phase: PipelinePhase.SYNTHESIS,
-        agentKey: SYNTHESIS_AGENT_KEY,
+        agentKey: MEMO_SYNTHESIS_AGENT_KEY,
         status: "failed",
         error: "synthesis failed",
       }),
@@ -262,10 +325,9 @@ describe("SynthesisProcessor", () => {
   });
 
   it("marks lifecycle as fallback when synthesis returns fallback output", async () => {
-    synthesisService.runDetailed.mockResolvedValueOnce({
-      synthesis: createMockSynthesisResult(),
-      trace: {
-        agentKey: SYNTHESIS_AGENT_KEY,
+    synthesisService.runDetailed.mockImplementationOnce(async (_startupId, callbacks) => {
+      callbacks?.onMemoCompleted?.({
+        agentKey: MEMO_SYNTHESIS_AGENT_KEY,
         status: "fallback",
         attempt: 1,
         retryCount: 0,
@@ -277,7 +339,12 @@ describe("SynthesisProcessor", () => {
         error: "Model returned empty structured output; fallback result generated.",
         fallbackReason: "EMPTY_STRUCTURED_OUTPUT",
         rawProviderError: "No object generated",
-      },
+      });
+
+      return {
+        synthesis: createMockSynthesisResult(),
+        traces: [],
+      };
     });
 
     const job = {
@@ -301,7 +368,7 @@ describe("SynthesisProcessor", () => {
         startupId: "startup-1",
         pipelineRunId: "run-1",
         phase: PipelinePhase.SYNTHESIS,
-        key: SYNTHESIS_AGENT_KEY,
+        key: MEMO_SYNTHESIS_AGENT_KEY,
         status: "completed",
         lifecycleEvent: "fallback",
         usedFallback: true,
@@ -312,7 +379,7 @@ describe("SynthesisProcessor", () => {
         startupId: "startup-1",
         pipelineRunId: "run-1",
         phase: PipelinePhase.SYNTHESIS,
-        agentKey: SYNTHESIS_AGENT_KEY,
+        agentKey: MEMO_SYNTHESIS_AGENT_KEY,
         status: "fallback",
         usedFallback: true,
       }),

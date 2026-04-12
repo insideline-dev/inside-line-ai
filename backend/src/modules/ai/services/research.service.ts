@@ -51,6 +51,7 @@ export interface ResearchRunOptions {
     output?: ResearchAgentOutput;
     usedFallback: boolean;
     dataSummary?: Record<string, unknown>;
+    meta?: Record<string, unknown>;
     error?: string;
     fallbackReason?: PipelineFallbackReason;
     rawProviderError?: string;
@@ -199,6 +200,7 @@ export class ResearchService {
         output: agentResult.output,
         usedFallback: agentResult.usedFallback,
         dataSummary: agentResult.dataSummary,
+        meta: agentResult.meta,
         error: agentResult.error,
         fallbackReason: agentResult.fallbackReason,
         rawProviderError: agentResult.rawProviderError,
@@ -634,6 +636,7 @@ export class ResearchService {
       output?: ResearchAgentOutput;
       usedFallback: boolean;
       dataSummary?: Record<string, unknown>;
+      meta?: Record<string, unknown>;
       error?: string;
       fallbackReason?: PipelineFallbackReason;
       rawProviderError?: string;
@@ -657,6 +660,7 @@ export class ResearchService {
       output: agentResult.output,
       usedFallback: agentResult.usedFallback,
       dataSummary: agentResult.dataSummary,
+      meta: agentResult.meta,
       error: agentResult.error,
       fallbackReason: agentResult.fallbackReason,
       rawProviderError: agentResult.rawProviderError,

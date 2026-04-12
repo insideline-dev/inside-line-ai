@@ -450,15 +450,14 @@ function AdminReviewPage() {
           retryResult && typeof retryResult.mode === "string"
             ? (retryResult.mode as string)
             : undefined;
+        const agentLabel = variables.data.agents
+          ? variables.data.agents.map(formatLabel).join(", ")
+          : formatLabel(variables.data.agent ?? "agent");
         toast.success("Section re-analysis triggered", {
           description:
             mode === "full_reanalysis_fallback"
-              ? `No cached pipeline state found. Full reanalysis started with guidance for ${formatLabel(
-                  variables.data.agent,
-                )}.`
-              : `${formatLabel(
-                  variables.data.agent,
-                )} has been queued. Tracking progress in Pipeline Live.`,
+              ? `No cached pipeline state found. Full reanalysis started with guidance for ${agentLabel}.`
+              : `${agentLabel} ${variables.data.agents && variables.data.agents.length > 1 ? "have" : "has"} been queued. Tracking progress in Pipeline Live.`,
         });
       },
       onError: (error: Error, variables) => {
@@ -466,8 +465,9 @@ function AdminReviewPage() {
           if (!current) {
             return current;
           }
+          const retryAgents = variables.data.agents ?? (variables.data.agent ? [variables.data.agent] : []);
           return current.phase === variables.data.phase &&
-            current.agentKey === variables.data.agent
+            retryAgents.includes(current.agentKey)
             ? null
             : current;
         });
@@ -1116,9 +1116,20 @@ function AdminReviewPage() {
               onClick={async () => {
                 const agents = [...selectedEvalAgents];
                 setShowEvalRerunDialog(false);
-                for (const agentKey of agents) {
-                  await handleLiveAgentRetry("evaluation", agentKey, { skipSynthesis: true });
-                }
+                setTrackedRetry({
+                  phase: "evaluation",
+                  agentKey: agents[0],
+                  requestedAt: new Date().toISOString(),
+                });
+                setActiveTab("pipeline-live");
+                await retryAgentMutation.mutateAsync({
+                  id,
+                  data: {
+                    phase: "evaluation",
+                    agents,
+                    skipSynthesis: true,
+                  },
+                });
               }}
             >
               Re-run only
@@ -1128,9 +1139,19 @@ function AdminReviewPage() {
               onClick={async () => {
                 const agents = [...selectedEvalAgents];
                 setShowEvalRerunDialog(false);
-                for (const agentKey of agents) {
-                  await handleLiveAgentRetry("evaluation", agentKey);
-                }
+                setTrackedRetry({
+                  phase: "evaluation",
+                  agentKey: agents[0],
+                  requestedAt: new Date().toISOString(),
+                });
+                setActiveTab("pipeline-live");
+                await retryAgentMutation.mutateAsync({
+                  id,
+                  data: {
+                    phase: "evaluation",
+                    agents,
+                  },
+                });
               }}
             >
               Re-run + Synthesis

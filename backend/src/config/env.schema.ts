@@ -180,7 +180,7 @@ export const envSchema = z.object({
   AI_EVALUATION_TIMEOUT_MS: z.coerce.number().default(300000),
   AI_EVALUATION_ATTEMPT_TIMEOUT_MS: z.coerce.number().default(300000),
   AI_EVALUATION_MAX_ATTEMPTS: z.coerce.number().default(2),
-  AI_EVALUATION_AGENT_HARD_TIMEOUT_MS: z.coerce.number().default(660000),
+  AI_EVALUATION_AGENT_HARD_TIMEOUT_MS: z.coerce.number().default(7200000),
   AI_SYNTHESIS_TEMPERATURE: z.coerce.number().default(0.2),
   AI_SYNTHESIS_MAX_OUTPUT_TOKENS: z.coerce.number().default(50000),
   AI_SYNTHESIS_ATTEMPT_TIMEOUT_MS: z.coerce.number().default(10800000),

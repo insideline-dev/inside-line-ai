@@ -40,7 +40,7 @@ const ExtractedFieldsSchema = z.object({
   website: z.preprocess(
     (value) =>
       typeof value === "string" && value.trim().length === 0 ? null : value,
-    z.string().url().nullable().optional(),
+    z.string().nullable().optional(),
   ),
   fundingAsk: z.number().nonnegative().nullable().optional(),
   valuation: z.number().nonnegative().nullable().optional(),

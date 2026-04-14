@@ -90,7 +90,7 @@ export const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
       phase: PipelinePhase.EVALUATION,
       dependsOn: [PipelinePhase.RESEARCH],
       canRunParallelWith: [],
-      timeoutMs: 40 * 60 * 1000,
+      timeoutMs: 150 * 60 * 1000, // 2.5 hours — server-side polling, let agents finish
       maxRetries: 2,
       required: true,
       queue: QUEUE_NAMES.AI_EVALUATION,

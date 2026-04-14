@@ -802,6 +802,8 @@ export class PipelineService {
 
     await this.assertPitchDeckStorageReady(startupId);
 
+    await this.queue.removePipelineJobs(startupId);
+
     const state = await this.pipelineState.init(startupId, userId);
     await this.pipelineAgentTrace?.cleanupExpired().catch((error) => {
       const message = error instanceof Error ? error.message : String(error);

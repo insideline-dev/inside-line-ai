@@ -185,6 +185,7 @@ export class SynthesisProcessor
                 error: trace.error,
                 fallbackReason: trace.fallbackReason as SynthesisTracePayload["fallbackReason"],
                 rawProviderError: trace.rawProviderError,
+                ...(trace.meta ? { meta: trace.meta } : {}),
                 lifecycleEvent: trace.usedFallback ? "fallback" : "completed",
               });
             },
@@ -230,6 +231,7 @@ export class SynthesisProcessor
                 error: trace.error,
                 fallbackReason: trace.fallbackReason as SynthesisTracePayload["fallbackReason"],
                 rawProviderError: trace.rawProviderError,
+                ...(trace.meta ? { meta: trace.meta } : {}),
                 lifecycleEvent: trace.usedFallback ? "fallback" : "completed",
               });
             },

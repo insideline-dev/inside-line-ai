@@ -3891,6 +3891,62 @@
         ]
       }
     },
+    "/admin/matching-logs": {
+      "get": {
+        "operationId": "AdminController_getMatchingLogs",
+        "parameters": [
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "List all investor matching jobs across all startups",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
+    "/admin/matching-logs/{jobId}/investors": {
+      "get": {
+        "operationId": "AdminController_getMatchingJobInvestors",
+        "parameters": [
+          {
+            "name": "jobId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get all investor evaluations for a specific matching job",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
     "/admin/startups/{id}/reanalyze": {
       "post": {
         "operationId": "AdminController_reanalyzeStartup",
@@ -8199,6 +8255,25 @@
               "phaseResults": {
                 "type": "object",
                 "additionalProperties": true
+              },
+              "openAiCostSummary": {
+                "type": "object",
+                "properties": {
+                  "inputCostUsd": {
+                    "type": "number"
+                  },
+                  "outputCostUsd": {
+                    "type": "number"
+                  },
+                  "totalCostUsd": {
+                    "type": "number"
+                  },
+                  "tracedCallCount": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                }
               }
             },
             "required": [

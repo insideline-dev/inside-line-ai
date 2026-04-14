@@ -46,6 +46,7 @@ import { Route as ProtectedFounderDataRoomRouteImport } from './routes/_protecte
 import { Route as ProtectedAdminUsersRouteImport } from './routes/_protected/admin/users'
 import { Route as ProtectedAdminScoutsRouteImport } from './routes/_protected/admin/scouts'
 import { Route as ProtectedAdminScoringRouteImport } from './routes/_protected/admin/scoring'
+import { Route as ProtectedAdminMatchingLogsRouteImport } from './routes/_protected/admin/matching-logs'
 import { Route as ProtectedAdminInvestorsRouteImport } from './routes/_protected/admin/investors'
 import { Route as ProtectedAdminIntegrationsRouteImport } from './routes/_protected/admin/integrations'
 import { Route as ProtectedAdminDataRoomRouteImport } from './routes/_protected/admin/data-room'
@@ -250,6 +251,12 @@ const ProtectedAdminScoringRoute = ProtectedAdminScoringRouteImport.update({
   path: '/scoring',
   getParentRoute: () => ProtectedAdminRoute,
 } as any)
+const ProtectedAdminMatchingLogsRoute =
+  ProtectedAdminMatchingLogsRouteImport.update({
+    id: '/matching-logs',
+    path: '/matching-logs',
+    getParentRoute: () => ProtectedAdminRoute,
+  } as any)
 const ProtectedAdminInvestorsRoute = ProtectedAdminInvestorsRouteImport.update({
   id: '/investors',
   path: '/investors',
@@ -324,6 +331,7 @@ export interface FileRoutesByFullPath {
   '/admin/data-room': typeof ProtectedAdminDataRoomRoute
   '/admin/integrations': typeof ProtectedAdminIntegrationsRoute
   '/admin/investors': typeof ProtectedAdminInvestorsRoute
+  '/admin/matching-logs': typeof ProtectedAdminMatchingLogsRoute
   '/admin/scoring': typeof ProtectedAdminScoringRoute
   '/admin/scouts': typeof ProtectedAdminScoutsRoute
   '/admin/users': typeof ProtectedAdminUsersRoute
@@ -368,6 +376,7 @@ export interface FileRoutesByTo {
   '/admin/data-room': typeof ProtectedAdminDataRoomRoute
   '/admin/integrations': typeof ProtectedAdminIntegrationsRoute
   '/admin/investors': typeof ProtectedAdminInvestorsRoute
+  '/admin/matching-logs': typeof ProtectedAdminMatchingLogsRoute
   '/admin/scoring': typeof ProtectedAdminScoringRoute
   '/admin/scouts': typeof ProtectedAdminScoutsRoute
   '/admin/users': typeof ProtectedAdminUsersRoute
@@ -418,6 +427,7 @@ export interface FileRoutesById {
   '/_protected/admin/data-room': typeof ProtectedAdminDataRoomRoute
   '/_protected/admin/integrations': typeof ProtectedAdminIntegrationsRoute
   '/_protected/admin/investors': typeof ProtectedAdminInvestorsRoute
+  '/_protected/admin/matching-logs': typeof ProtectedAdminMatchingLogsRoute
   '/_protected/admin/scoring': typeof ProtectedAdminScoringRoute
   '/_protected/admin/scouts': typeof ProtectedAdminScoutsRoute
   '/_protected/admin/users': typeof ProtectedAdminUsersRoute
@@ -468,6 +478,7 @@ export interface FileRouteTypes {
     | '/admin/data-room'
     | '/admin/integrations'
     | '/admin/investors'
+    | '/admin/matching-logs'
     | '/admin/scoring'
     | '/admin/scouts'
     | '/admin/users'
@@ -512,6 +523,7 @@ export interface FileRouteTypes {
     | '/admin/data-room'
     | '/admin/integrations'
     | '/admin/investors'
+    | '/admin/matching-logs'
     | '/admin/scoring'
     | '/admin/scouts'
     | '/admin/users'
@@ -561,6 +573,7 @@ export interface FileRouteTypes {
     | '/_protected/admin/data-room'
     | '/_protected/admin/integrations'
     | '/_protected/admin/investors'
+    | '/_protected/admin/matching-logs'
     | '/_protected/admin/scoring'
     | '/_protected/admin/scouts'
     | '/_protected/admin/users'
@@ -862,6 +875,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProtectedAdminScoringRouteImport
       parentRoute: typeof ProtectedAdminRoute
     }
+    '/_protected/admin/matching-logs': {
+      id: '/_protected/admin/matching-logs'
+      path: '/matching-logs'
+      fullPath: '/admin/matching-logs'
+      preLoaderRoute: typeof ProtectedAdminMatchingLogsRouteImport
+      parentRoute: typeof ProtectedAdminRoute
+    }
     '/_protected/admin/investors': {
       id: '/_protected/admin/investors'
       path: '/investors'
@@ -942,6 +962,7 @@ interface ProtectedAdminRouteChildren {
   ProtectedAdminDataRoomRoute: typeof ProtectedAdminDataRoomRoute
   ProtectedAdminIntegrationsRoute: typeof ProtectedAdminIntegrationsRoute
   ProtectedAdminInvestorsRoute: typeof ProtectedAdminInvestorsRoute
+  ProtectedAdminMatchingLogsRoute: typeof ProtectedAdminMatchingLogsRoute
   ProtectedAdminScoringRoute: typeof ProtectedAdminScoringRoute
   ProtectedAdminScoutsRoute: typeof ProtectedAdminScoutsRoute
   ProtectedAdminUsersRoute: typeof ProtectedAdminUsersRoute
@@ -956,6 +977,7 @@ const ProtectedAdminRouteChildren: ProtectedAdminRouteChildren = {
   ProtectedAdminDataRoomRoute: ProtectedAdminDataRoomRoute,
   ProtectedAdminIntegrationsRoute: ProtectedAdminIntegrationsRoute,
   ProtectedAdminInvestorsRoute: ProtectedAdminInvestorsRoute,
+  ProtectedAdminMatchingLogsRoute: ProtectedAdminMatchingLogsRoute,
   ProtectedAdminScoringRoute: ProtectedAdminScoringRoute,
   ProtectedAdminScoutsRoute: ProtectedAdminScoutsRoute,
   ProtectedAdminUsersRoute: ProtectedAdminUsersRoute,

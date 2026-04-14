@@ -139,4 +139,14 @@ export type GetProgressResponseDtoProgress = {
   completedAt?: string | null;
 })[];
   phaseResults?: { [key: string]: unknown };
+  openAiCostSummary?: {
+  inputCostUsd?: number;
+  outputCostUsd?: number;
+  totalCostUsd?: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  tracedCallCount?: number;
+};
 } | null;

@@ -158,8 +158,8 @@ export class ReportSynthesisAgent {
                 prompt: renderedPrompt,
                 schema: ReportSynthesisOutputOpenAiSchema,
                 schemaName: "report_synthesis_output",
-                maxOutputTokens: 8000,
-                reasoningEffort: "low",
+                maxOutputTokens: 120000,
+                reasoningEffort: "high",
                 jobKey: `${input.extraction.companyName}:report_synthesis`,
                 abortSignal,
               }),
@@ -181,7 +181,7 @@ export class ReportSynthesisAgent {
             generateText({
               model: model as Parameters<typeof generateText>[0]["model"],
               output: Output.object({ schema: ReportSynthesisSchema }),
-              maxOutputTokens: 8000,
+              maxOutputTokens: 120000,
               system: systemPrompt,
               prompt: renderedPrompt,
               providerOptions:

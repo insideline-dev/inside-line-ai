@@ -177,13 +177,11 @@ export class SynthesisAgent {
           const synthesisPrompt = useTextOnlyStructuredMode
             ? this.buildJsonObjectPrompt(renderedPrompt)
             : renderedPrompt;
-          // For text-only mode (reasoning models): set reasoningEffort to "low" so the model
-          // spends its token budget on the large JSON output rather than hidden reasoning.
-          // Stripping entirely defaults to "medium" which still consumes ~45K tokens.
+          // For text-only mode (reasoning models): set reasoningEffort to "high" for best output quality.
           const synthesisProviderOptions = useTextOnlyStructuredMode
             ? this.overrideReasoningEffort(
                 execution?.generateTextOptions.providerOptions as Record<string, unknown> | undefined,
-                "low",
+                "high",
               )
             : execution?.generateTextOptions.providerOptions;
           const response: Awaited<ReturnType<AiModelExecutionService["generateText"]>> | Awaited<ReturnType<typeof generateText>> = await this.withTimeout(

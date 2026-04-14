@@ -135,7 +135,7 @@ export class AiConfigService {
   }
 
   getSynthesisMaxOutputTokens(): number {
-    return this.config.get<number>("AI_SYNTHESIS_MAX_OUTPUT_TOKENS", 50000);
+    return this.config.get<number>("AI_SYNTHESIS_MAX_OUTPUT_TOKENS", 120000);
   }
 
   getSynthesisTimeoutMs(): number {

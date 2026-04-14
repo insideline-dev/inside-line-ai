@@ -296,6 +296,26 @@ export class AdminController {
     return this.adminMatchingService.getLatestMatchingStatus(id);
   }
 
+  @Get('matching-logs')
+  @ApiOperation({ summary: 'List all investor matching jobs across all startups' })
+  async getMatchingLogs(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.adminMatchingService.getMatchingLogs(
+      page ? parseInt(page, 10) : 1,
+      limit ? parseInt(limit, 10) : 20,
+    );
+  }
+
+  @Get('matching-logs/:jobId/investors')
+  @ApiOperation({ summary: 'Get all investor evaluations for a specific matching job' })
+  async getMatchingJobInvestors(
+    @Param('jobId', ParseUUIDPipe) jobId: string,
+  ) {
+    return this.adminMatchingService.getMatchingJobInvestors(jobId);
+  }
+
   @Post('startups/:id/reanalyze')
   async reanalyzeStartup(
     @CurrentUser() admin: User,

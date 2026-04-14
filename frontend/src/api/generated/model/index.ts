@@ -22,6 +22,7 @@ export * from './adminControllerGetAllStartupsParams';
 export * from './adminControllerGetAllStartupsStage';
 export * from './adminControllerGetAllStartupsStatus';
 export * from './adminControllerGetConversationsParams';
+export * from './adminControllerGetMatchingLogsParams';
 export * from './adminControllerGetPendingStartupsParams';
 export * from './adminControllerGetPendingStartupsStage';
 export * from './adminControllerGetPendingStartupsStatus';

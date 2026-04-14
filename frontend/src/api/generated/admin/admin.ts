@@ -31,6 +31,7 @@ import type {
   AdminControllerGetAiPromptCoverageAuditParams,
   AdminControllerGetAllStartupsParams,
   AdminControllerGetConversationsParams,
+  AdminControllerGetMatchingLogsParams,
   AdminControllerGetPendingStartupsParams,
   AdminControllerGetStartupStatsParams,
   AdminControllerGetUsersParams,
@@ -2332,6 +2333,233 @@ export function useAdminControllerGetStartupMatchingStatus<TData = Awaited<Retur
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getAdminControllerGetStartupMatchingStatusQueryOptions(id,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+/**
+ * @summary List all investor matching jobs across all startups
+ */
+export type adminControllerGetMatchingLogsResponse200 = {
+  data: void
+  status: 200
+}
+    
+export type adminControllerGetMatchingLogsResponseSuccess = (adminControllerGetMatchingLogsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerGetMatchingLogsResponse = (adminControllerGetMatchingLogsResponseSuccess)
+
+export const getAdminControllerGetMatchingLogsUrl = (params: AdminControllerGetMatchingLogsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/admin/matching-logs?${stringifiedParams}` : `/admin/matching-logs`
+}
+
+export const adminControllerGetMatchingLogs = async (params: AdminControllerGetMatchingLogsParams, options?: RequestInit): Promise<adminControllerGetMatchingLogsResponse> => {
+  
+  return customFetch<adminControllerGetMatchingLogsResponse>(getAdminControllerGetMatchingLogsUrl(params),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getAdminControllerGetMatchingLogsQueryKey = (params?: AdminControllerGetMatchingLogsParams,) => {
+    return [
+    `/admin/matching-logs`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+    
+export const getAdminControllerGetMatchingLogsQueryOptions = <TData = Awaited<ReturnType<typeof adminControllerGetMatchingLogs>>, TError = ErrorType<unknown>>(params: AdminControllerGetMatchingLogsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetMatchingLogs>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAdminControllerGetMatchingLogsQueryKey(params);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof adminControllerGetMatchingLogs>>> = ({ signal }) => adminControllerGetMatchingLogs(params, { signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetMatchingLogs>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type AdminControllerGetMatchingLogsQueryResult = NonNullable<Awaited<ReturnType<typeof adminControllerGetMatchingLogs>>>
+export type AdminControllerGetMatchingLogsQueryError = ErrorType<unknown>
+
+
+export function useAdminControllerGetMatchingLogs<TData = Awaited<ReturnType<typeof adminControllerGetMatchingLogs>>, TError = ErrorType<unknown>>(
+ params: AdminControllerGetMatchingLogsParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetMatchingLogs>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof adminControllerGetMatchingLogs>>,
+          TError,
+          Awaited<ReturnType<typeof adminControllerGetMatchingLogs>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAdminControllerGetMatchingLogs<TData = Awaited<ReturnType<typeof adminControllerGetMatchingLogs>>, TError = ErrorType<unknown>>(
+ params: AdminControllerGetMatchingLogsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetMatchingLogs>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof adminControllerGetMatchingLogs>>,
+          TError,
+          Awaited<ReturnType<typeof adminControllerGetMatchingLogs>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAdminControllerGetMatchingLogs<TData = Awaited<ReturnType<typeof adminControllerGetMatchingLogs>>, TError = ErrorType<unknown>>(
+ params: AdminControllerGetMatchingLogsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetMatchingLogs>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List all investor matching jobs across all startups
+ */
+
+export function useAdminControllerGetMatchingLogs<TData = Awaited<ReturnType<typeof adminControllerGetMatchingLogs>>, TError = ErrorType<unknown>>(
+ params: AdminControllerGetMatchingLogsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetMatchingLogs>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getAdminControllerGetMatchingLogsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+/**
+ * @summary Get all investor evaluations for a specific matching job
+ */
+export type adminControllerGetMatchingJobInvestorsResponse200 = {
+  data: void
+  status: 200
+}
+    
+export type adminControllerGetMatchingJobInvestorsResponseSuccess = (adminControllerGetMatchingJobInvestorsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerGetMatchingJobInvestorsResponse = (adminControllerGetMatchingJobInvestorsResponseSuccess)
+
+export const getAdminControllerGetMatchingJobInvestorsUrl = (jobId: string,) => {
+
+
+  
+
+  return `/admin/matching-logs/${jobId}/investors`
+}
+
+export const adminControllerGetMatchingJobInvestors = async (jobId: string, options?: RequestInit): Promise<adminControllerGetMatchingJobInvestorsResponse> => {
+  
+  return customFetch<adminControllerGetMatchingJobInvestorsResponse>(getAdminControllerGetMatchingJobInvestorsUrl(jobId),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getAdminControllerGetMatchingJobInvestorsQueryKey = (jobId: string,) => {
+    return [
+    `/admin/matching-logs/${jobId}/investors`
+    ] as const;
+    }
+
+    
+export const getAdminControllerGetMatchingJobInvestorsQueryOptions = <TData = Awaited<ReturnType<typeof adminControllerGetMatchingJobInvestors>>, TError = ErrorType<unknown>>(jobId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetMatchingJobInvestors>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAdminControllerGetMatchingJobInvestorsQueryKey(jobId);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof adminControllerGetMatchingJobInvestors>>> = ({ signal }) => adminControllerGetMatchingJobInvestors(jobId, { signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(jobId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetMatchingJobInvestors>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type AdminControllerGetMatchingJobInvestorsQueryResult = NonNullable<Awaited<ReturnType<typeof adminControllerGetMatchingJobInvestors>>>
+export type AdminControllerGetMatchingJobInvestorsQueryError = ErrorType<unknown>
+
+
+export function useAdminControllerGetMatchingJobInvestors<TData = Awaited<ReturnType<typeof adminControllerGetMatchingJobInvestors>>, TError = ErrorType<unknown>>(
+ jobId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetMatchingJobInvestors>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof adminControllerGetMatchingJobInvestors>>,
+          TError,
+          Awaited<ReturnType<typeof adminControllerGetMatchingJobInvestors>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAdminControllerGetMatchingJobInvestors<TData = Awaited<ReturnType<typeof adminControllerGetMatchingJobInvestors>>, TError = ErrorType<unknown>>(
+ jobId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetMatchingJobInvestors>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof adminControllerGetMatchingJobInvestors>>,
+          TError,
+          Awaited<ReturnType<typeof adminControllerGetMatchingJobInvestors>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAdminControllerGetMatchingJobInvestors<TData = Awaited<ReturnType<typeof adminControllerGetMatchingJobInvestors>>, TError = ErrorType<unknown>>(
+ jobId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetMatchingJobInvestors>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get all investor evaluations for a specific matching job
+ */
+
+export function useAdminControllerGetMatchingJobInvestors<TData = Awaited<ReturnType<typeof adminControllerGetMatchingJobInvestors>>, TError = ErrorType<unknown>>(
+ jobId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof adminControllerGetMatchingJobInvestors>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getAdminControllerGetMatchingJobInvestorsQueryOptions(jobId,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

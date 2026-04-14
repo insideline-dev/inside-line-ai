@@ -2,8 +2,7 @@ import { Inject, Injectable, forwardRef } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { QueueName, QUEUE_NAMES } from "../../../queue";
 import { DEFAULT_MODEL_BY_PURPOSE } from "../ai.config";
-import { DEFAULT_PIPELINE_CONFIG, getPhaseConfig } from "../orchestrator/pipeline.config";
-import { ModelPurpose, PipelinePhase } from "../interfaces/pipeline.interface";
+import { ModelPurpose } from "../interfaces/pipeline.interface";
 import { ResearchAgentKey } from "../interfaces/agent.interface";
 import { AiModelOverrideService } from "./ai-model-override.service";
 
@@ -132,17 +131,7 @@ export class AiConfigService {
 
   getEvaluationAgentHardTimeoutMs(): number {
     const configured = this.config.get<number>("AI_EVALUATION_AGENT_HARD_TIMEOUT_MS");
-    const configuredTimeoutMs = this.toPositiveInt(configured, 2_400_000);
-    const evaluationPhaseTimeoutMs = getPhaseConfig(
-      DEFAULT_PIPELINE_CONFIG,
-      PipelinePhase.EVALUATION,
-    ).timeoutMs;
-    const safetyMarginMs = 60_000;
-
-    return Math.min(
-      configuredTimeoutMs,
-      Math.max(60_000, evaluationPhaseTimeoutMs - safetyMarginMs),
-    );
+    return this.toPositiveInt(configured, 2 * 60 * 60 * 1000); // 2 hours default
   }
 
   getSynthesisMaxOutputTokens(): number {

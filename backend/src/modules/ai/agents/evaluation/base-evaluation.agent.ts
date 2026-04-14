@@ -229,6 +229,7 @@ export abstract class BaseEvaluationAgent<TOutput>
     let lastFallbackMessage: string | undefined;
     let lastRawProviderError: string | undefined;
     let lastCapturedOutputText: string | undefined;
+    let lastTelemetryMeta: Record<string, unknown> | undefined;
     const maxAttempts = this.getEvaluationMaxAttempts();
     const hardTimeoutMs = this.getEvaluationAgentHardTimeoutMs();
     const attemptTimeoutMs = this.getEvaluationAttemptTimeoutMs();
@@ -392,12 +393,15 @@ export abstract class BaseEvaluationAgent<TOutput>
             this.getTimeoutGraceMs(),
           );
 
+          // Capture telemetry immediately — before parsing, so fallback paths retain it
+          lastTelemetryMeta = this.buildTelemetryMeta(direct.telemetry);
+
           // Two-stage parse: OpenAI strict output → normalizeCandidate → standard schema (applies fallback defaults)
           const normalizedOutput = this.normalizeNarrativeFields(
             this.schema.parse(this.normalizeOutputCandidate(direct.output)),
           );
 
-          const telemetryMeta = this.buildTelemetryMeta(direct.telemetry);
+          const telemetryMeta = lastTelemetryMeta;
           const telemetrySummary = this.buildTelemetrySummary(direct.telemetry);
           this.emitTraceEvent(options, {
             agent: this.key,
@@ -476,7 +480,7 @@ export abstract class BaseEvaluationAgent<TOutput>
         const responseTelemetry = useNativeExecution
           ? (response as Awaited<ReturnType<AiModelExecutionService["generateText"]>>)
               .telemetry
-          : undefined;
+          : this.extractAiSdkTelemetry(response);
         const normalizedOutput = this.normalizeNarrativeFields(
           useTextOnlyStructuredMode
             ? this.parseTextOnlyStructuredResponse(
@@ -627,13 +631,14 @@ export abstract class BaseEvaluationAgent<TOutput>
         lastRawProviderError = rawProviderError;
 
         const fallbackMeta =
-          fallbackReason === "TIMEOUT"
+          lastTelemetryMeta ??
+          (fallbackReason === "TIMEOUT"
             ? {
                 timeoutMs: hardTimeoutMs,
                 timedOut: true,
                 timeoutScope: "agent",
               }
-            : undefined;
+            : undefined);
 
         this.emitLifecycleEvent(options, {
           agent: this.key,
@@ -700,13 +705,14 @@ export abstract class BaseEvaluationAgent<TOutput>
       lastFallbackMessage ??
       "Model returned empty structured output; fallback result generated.";
     const finalFallbackMeta =
-      finalFallbackReason === "TIMEOUT"
+      lastTelemetryMeta ??
+      (finalFallbackReason === "TIMEOUT"
         ? {
             timeoutMs: hardTimeoutMs,
             timedOut: true,
             timeoutScope: "agent",
           }
-        : undefined;
+        : undefined);
 
     this.emitLifecycleEvent(options, {
       agent: this.key,
@@ -1085,6 +1091,34 @@ export abstract class BaseEvaluationAgent<TOutput>
       inputTokens: usage?.inputTokens,
       outputTokens: usage?.outputTokens,
       totalTokens: usage?.totalTokens,
+    };
+  }
+
+  private extractAiSdkTelemetry(
+    response: unknown,
+  ): OpenAiResponseTelemetry | undefined {
+    if (!response || typeof response !== "object") {
+      return undefined;
+    }
+    const res = response as Record<string, unknown>;
+    const usage = res.usage as
+      | { promptTokens?: number; completionTokens?: number }
+      | undefined;
+    if (!usage) {
+      return undefined;
+    }
+    const inputTokens = usage.promptTokens ?? 0;
+    const outputTokens = usage.completionTokens ?? 0;
+    return {
+      provider: "openai",
+      model: typeof res.model === "string" ? res.model : undefined,
+      finishReason:
+        typeof res.finishReason === "string" ? res.finishReason : undefined,
+      usage: {
+        inputTokens,
+        outputTokens,
+        totalTokens: inputTokens + outputTokens,
+      },
     };
   }
 

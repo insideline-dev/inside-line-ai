@@ -53,13 +53,48 @@ export const FinancialsEvaluationOpenAiSchema =
   BaseEvaluationOpenAiSchema.extend({
     financialModelProvided: z.boolean(),
     keyMetrics: z.object({
-      raiseAmount: z.string().nullable(),
-      monthlyBurn: z.string().nullable(),
-      runway: z.string().nullable(),
-      runwayMonths: z.number().nullable(),
-      arr: z.string().nullable(),
-      annualRecurringRevenue: z.string().nullable(),
-      grossMargin: z.string().nullable(),
+      raiseAmount: z
+        .string()
+        .nullable()
+        .describe(
+          "The raise amount as a bare monetary string ONLY — e.g. '$4M', '€2M', '$500K'. No justifications, context, or additional text. Null if not stated.",
+        ),
+      monthlyBurn: z
+        .string()
+        .nullable()
+        .describe(
+          "Monthly burn rate as a bare string ONLY — e.g. '$150K/mo', '$50K'. No additional text. Null if not stated.",
+        ),
+      runway: z
+        .string()
+        .nullable()
+        .describe(
+          "Runway as a bare string ONLY — e.g. '18 months', '24 months post-raise'. No additional text. Null if not stated.",
+        ),
+      runwayMonths: z
+        .number()
+        .nullable()
+        .describe(
+          "Runway as a number in months only — e.g. 18, 24. Null if not stated.",
+        ),
+      arr: z
+        .string()
+        .nullable()
+        .describe(
+          "ARR as a bare string ONLY — e.g. '$2M ARR', '$500K'. No additional text. Null if not stated.",
+        ),
+      annualRecurringRevenue: z
+        .string()
+        .nullable()
+        .describe(
+          "Annual recurring revenue as a bare string ONLY. Null if not stated.",
+        ),
+      grossMargin: z
+        .string()
+        .nullable()
+        .describe(
+          "Gross margin as a bare string ONLY — e.g. '72%', '65%'. No additional text. Null if not stated.",
+        ),
     }),
     capitalPlan: z.object({
       burnPlanDescribed: z.boolean(),

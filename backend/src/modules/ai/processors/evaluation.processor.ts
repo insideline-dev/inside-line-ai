@@ -100,7 +100,21 @@ export class EvaluationProcessor
       throw new Error("Invalid job type for evaluation processor");
     }
 
-    const runResult = await runPipelinePhase({
+    // Evaluation phase can run for 2+ hours — extend BullMQ lock every 10 min
+    // to prevent the job from being marked stalled due to missed auto-renewals.
+    const HEARTBEAT_MS = 10 * 60 * 1000;
+    const LOCK_DURATION_MS = 15 * 60 * 1000;
+    const heartbeat = setInterval(() => {
+      job.extendLock(job.token!, LOCK_DURATION_MS).catch((err: unknown) => {
+        this.logger.warn(
+          `[EvalProcessor] Failed to extend job lock: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
+    }, HEARTBEAT_MS);
+
+    let runResult: Awaited<ReturnType<typeof runPipelinePhase>>;
+    try {
+      runResult = await runPipelinePhase({
       job,
       phase: PipelinePhase.EVALUATION,
       jobType: "ai_evaluation",
@@ -282,6 +296,9 @@ export class EvaluationProcessor
           },
         }),
     });
+    } finally {
+      clearInterval(heartbeat);
+    }
 
     return {
       type: "ai_evaluation",

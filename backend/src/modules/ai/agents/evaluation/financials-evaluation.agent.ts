@@ -87,6 +87,47 @@ export class FinancialsEvaluationAgent extends BaseEvaluationAgent<FinancialsEva
   protected override getAgentTemplateVariables(
     _pipelineData: EvaluationPipelineInput,
   ): Record<string, string> {
+    const structured = _pipelineData.extraction.deckStructuredData as
+      | Record<string, Record<string, unknown>>
+      | undefined;
+    const financials = structured?.financials ?? {};
+    const fundraising = structured?.fundraising ?? {};
+
+    // Build structured KPIs from extraction
+    const kpiLines: string[] = [];
+    const kpiMap: Record<string, unknown> = {
+      ARR: financials.arr,
+      MRR: financials.mrr,
+      Revenue: financials.revenue,
+      "Growth Rate": financials.growthRate,
+      "Growth Rate Period": financials.growthRatePeriod,
+      "Gross Margin": financials.grossMargin,
+      "Burn Rate": financials.burnRate,
+      Runway: financials.runway,
+      LTV: financials.ltv,
+      CAC: financials.cac,
+      NRR: financials.nrr,
+      "Previous Funding": fundraising.previousFunding,
+    };
+    for (const [label, value] of Object.entries(kpiMap)) {
+      if (value != null && value !== "") kpiLines.push(`- ${label}: ${String(value)}`);
+    }
+
+    // Use of funds from extraction
+    const useOfFunds = Array.isArray(fundraising.useOfFunds)
+      ? (fundraising.useOfFunds as string[]).filter(Boolean)
+      : [];
+
+    // Financial claims from scraping (no cap — pass everything relevant)
+    const claims = Array.isArray(_pipelineData.scraping.notableClaims)
+      ? _pipelineData.scraping.notableClaims.filter((claim) =>
+          /revenue|mrr|arr|funding|raised|burn|runway|profit|margin|valuation|capital|cash|cost|expense|budget|forecast|projection|growth|ltv|cac|nrr|churn|unit econom/i.test(
+            claim,
+          ),
+        )
+      : [];
+
+    // Financial lines from raw text (expanded regex, no arbitrary cap)
     const rawText = _pipelineData.extraction.rawText ?? "";
     const financialLines = rawText
       .split(/\r?\n/)
@@ -94,30 +135,35 @@ export class FinancialsEvaluationAgent extends BaseEvaluationAgent<FinancialsEva
       .filter(
         (line) =>
           line.length > 0 &&
-          /revenue|mrr|arr|burn rate|runway|gross margin|unit economics|ltv|cac|ebitda|net income|recurring revenue/i.test(
+          /revenue|mrr|arr|burn.?rate|runway|gross.?margin|unit.?economics|ltv|cac|ebitda|net.?income|recurring.?revenue|opex|capex|cash.?flow|operating.?margin|cost.?of|expense|budget|forecast|projection|nrr|churn|payback|break.?even|profit|loss|cogs|working.?capital/i.test(
             line,
           ),
-      )
-      .slice(0, 15)
-      .join("\n");
-
-    const claims = Array.isArray(_pipelineData.scraping.notableClaims)
-      ? _pipelineData.scraping.notableClaims
-          .filter((claim) =>
-            /revenue|mrr|arr|funding|raised|burn|runway|profit|margin/i.test(claim),
-          )
-          .slice(0, 5)
-          .join("\n")
-      : "";
-
-    const combined = [financialLines, claims].filter(Boolean).join("\n");
+      );
 
     return {
-      valuation: _pipelineData.extraction.valuation?.toString() ?? "Not provided",
-      valuationType: _pipelineData.extraction.startupContext?.valuationType ?? "Not provided",
-      roundSize: _pipelineData.extraction.fundingAsk?.toString() ?? "Not provided",
-      roundCurrency: _pipelineData.extraction.startupContext?.roundCurrency ?? "USD",
-      financialModel: combined || "Not provided",
+      valuation:
+        _pipelineData.extraction.valuation?.toString() ??
+        (fundraising.valuation as string) ??
+        "Not provided",
+      valuationType:
+        _pipelineData.extraction.startupContext?.valuationType ?? "Not provided",
+      roundSize:
+        _pipelineData.extraction.fundingAsk?.toString() ??
+        (fundraising.askAmount as string) ??
+        "Not provided",
+      roundCurrency:
+        _pipelineData.extraction.startupContext?.roundCurrency ?? "USD",
+      extractedKpis: kpiLines.length > 0 ? kpiLines.join("\n") : "None extracted",
+      useOfFunds:
+        useOfFunds.length > 0
+          ? useOfFunds.map((f) => `- ${f}`).join("\n")
+          : "Not provided",
+      financialClaims:
+        claims.length > 0 ? claims.map((c) => `- ${c}`).join("\n") : "None found",
+      financialLines:
+        financialLines.length > 0
+          ? financialLines.join("\n")
+          : "No financial lines found in deck text",
     };
   }
 

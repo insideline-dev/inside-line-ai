@@ -306,17 +306,16 @@ export class EvaluationAgentRegistryService {
       return;
     }
 
-    const UNIFIED_POLL_INTERVAL_MS = 20_000;
-    const POLL_HARD_TIMEOUT_MS = 35 * 60 * 1000; // 35 min safety net
+    const POLL_INTERVAL_MS = 60_000; // 1 minute — gentle on the server
+    const AGENT_TIMEOUT_MS = 2 * 60 * 60 * 1000; // 2 hours — let OpenAI respond
 
-    // Waiting agents not yet submitted
     const waiting = [...pollableQueue];
-    // In-flight agents being polled
     const inflight = new Map<
       EvaluationAgentKey,
       {
         state: EvaluationAgentPollingState;
         prepared: EvaluationAgentPreparedRun;
+        startedAtMs: number;
       }
     >();
 
@@ -337,6 +336,7 @@ export class EvaluationAgentRegistryService {
         );
         inflight.set(key, {
           prepared,
+          startedAtMs: Date.now(),
           state: {
             agent: key,
             responseId: startResult.responseId,
@@ -358,7 +358,6 @@ export class EvaluationAgentRegistryService {
         this.logger.error(
           `[runAll] Agent "${key}" failed to submit: ${msg}. Running blocking fallback.`,
         );
-        // Fall back to blocking execution for this agent
         const completion = await this.runPreparedAgent(
           startupId,
           pipelineRunId,
@@ -381,54 +380,31 @@ export class EvaluationAgentRegistryService {
     }
 
     // ── Polling loop with flood-fill ─────────────────────────────
-    const startedAtMs = Date.now();
-
     while (inflight.size > 0) {
-      if (Date.now() - startedAtMs > POLL_HARD_TIMEOUT_MS) {
-        this.logger.error(
-          `[runAll] Polling pool exceeded hard timeout (${POLL_HARD_TIMEOUT_MS}ms). ${inflight.size} inflight + ${waiting.length} waiting agents.`,
-        );
-        for (const [key, entry] of inflight) {
-          const fallbackOutput = entry.prepared.agent.fallback(
-            entry.prepared.input.pipelineData,
-          );
-          const completion: EvaluationAgentCompletion = {
-            agent: key,
-            output: fallbackOutput,
-            usedFallback: true,
-            attempt: 1,
-            retryCount: 0,
-            error: "Polling pool exceeded hard timeout",
-            fallbackReason: "TIMEOUT",
-            rawProviderError: "Polling pool exceeded hard timeout",
-          };
-          this.emitAgentCompletion(onAgentComplete, completion);
-          collectCompletion?.(completion);
-        }
-        // Also fallback any remaining waiting agents
-        for (const { key, prepared } of waiting) {
-          const fallbackOutput = prepared.agent.fallback(
-            prepared.input.pipelineData,
-          );
-          const completion: EvaluationAgentCompletion = {
-            agent: key,
-            output: fallbackOutput,
-            usedFallback: true,
-            attempt: 1,
-            retryCount: 0,
-            error: "Polling pool exceeded hard timeout (never submitted)",
-            fallbackReason: "TIMEOUT",
-            rawProviderError: "Polling pool exceeded hard timeout",
-          };
-          this.emitAgentCompletion(onAgentComplete, completion);
-          collectCompletion?.(completion);
-        }
-        waiting.length = 0;
-        break;
-      }
-
-      // Poll each in-flight agent sequentially to avoid burst
       for (const [key, entry] of inflight) {
+        // 2-hour per-agent safety net — if OpenAI hasn't responded in 2 hours, it's not going to
+        if (Date.now() - entry.startedAtMs > AGENT_TIMEOUT_MS) {
+          this.logger.warn(
+            `[runAll] Agent "${key}" timed out after ${Math.round(AGENT_TIMEOUT_MS / 60_000)}min. Generating fallback.`,
+          );
+          const fallbackOutput = entry.prepared.agent.fallback(entry.prepared.input.pipelineData);
+          const completion: EvaluationAgentCompletion = {
+            agent: key,
+            output: fallbackOutput,
+            usedFallback: true,
+            attempt: 1,
+            retryCount: 0,
+            error: `Agent timed out after ${Math.round(AGENT_TIMEOUT_MS / 60_000)} minutes`,
+            fallbackReason: "TIMEOUT",
+            rawProviderError: `Agent timed out after ${Math.round(AGENT_TIMEOUT_MS / 60_000)} minutes`,
+          };
+          this.emitAgentCompletion(onAgentComplete, completion);
+          collectCompletion?.(completion);
+          inflight.delete(key);
+          if (waiting.length > 0) await submitNext();
+          continue;
+        }
+
         try {
           const pollResult = await this.pollOpenAiRun(
             startupId,
@@ -450,9 +426,7 @@ export class EvaluationAgentRegistryService {
             if (pollResult.completion) {
               collectCompletion?.(pollResult.completion);
             } else {
-              const fallbackOutput = entry.prepared.agent.fallback(
-                entry.prepared.input.pipelineData,
-              );
+              const fallbackOutput = entry.prepared.agent.fallback(entry.prepared.input.pipelineData);
               const completion: EvaluationAgentCompletion = {
                 agent: key,
                 output: fallbackOutput,
@@ -469,20 +443,12 @@ export class EvaluationAgentRegistryService {
             this.logger.log(
               `[runAll] Agent "${key}" done (status=${pollResult.status}). inflight=${inflight.size}, waiting=${waiting.length}`,
             );
-
-            // Flood-fill: submit next waiting agent immediately
-            if (waiting.length > 0) {
-              await submitNext();
-            }
+            if (waiting.length > 0) await submitNext();
           }
         } catch (pollError) {
           const msg = pollError instanceof Error ? pollError.message : String(pollError);
-          this.logger.error(
-            `[runAll] Polling error for "${key}": ${msg}. Generating fallback.`,
-          );
-          const fallbackOutput = entry.prepared.agent.fallback(
-            entry.prepared.input.pipelineData,
-          );
+          this.logger.error(`[runAll] Polling error for "${key}": ${msg}. Generating fallback.`);
+          const fallbackOutput = entry.prepared.agent.fallback(entry.prepared.input.pipelineData);
           const completion: EvaluationAgentCompletion = {
             agent: key,
             output: fallbackOutput,
@@ -496,19 +462,15 @@ export class EvaluationAgentRegistryService {
           this.emitAgentCompletion(onAgentComplete, completion);
           collectCompletion?.(completion);
           inflight.delete(key);
-
-          // Flood-fill on error too
-          if (waiting.length > 0) {
-            await submitNext();
-          }
+          if (waiting.length > 0) await submitNext();
         }
       }
 
       if (inflight.size > 0) {
         this.logger.debug(
-          `[runAll] ${inflight.size} agents polling, ${waiting.length} waiting. Next check in ${UNIFIED_POLL_INTERVAL_MS}ms.`,
+          `[runAll] ${inflight.size} agents polling, ${waiting.length} waiting. Next poll in ${POLL_INTERVAL_MS / 1000}s.`,
         );
-        await this.sleep(UNIFIED_POLL_INTERVAL_MS);
+        await this.sleep(POLL_INTERVAL_MS);
       }
     }
   }
@@ -573,6 +535,7 @@ export class EvaluationAgentRegistryService {
       throw new Error(`Evaluation agent "${key}" does not support direct polling`);
     }
 
+    const traceWrites: Promise<void>[] = [];
     const result = await prepared.agent.pollDirectRun!(
       prepared.input.pipelineData,
       state,
@@ -582,10 +545,11 @@ export class EvaluationAgentRegistryService {
         ...prepared.config,
         onLifecycle: (event) => this.emitAgentLifecycle(onAgentLifecycle, event),
         onTrace: (event) => {
-          void this.persistAgentTrace(startupId, pipelineRunId, event);
+          traceWrites.push(this.persistAgentTrace(startupId, pipelineRunId, event));
         },
       },
     );
+    await Promise.allSettled(traceWrites);
 
     if (result.completion) {
       const completion: EvaluationAgentCompletion = {
@@ -894,7 +858,7 @@ export class EvaluationAgentRegistryService {
         await this.consumeAgentFeedback(startupId, prepared.agent.key);
       }
 
-      void Promise.allSettled(traceWrites);
+      await Promise.allSettled(traceWrites);
       const completion: EvaluationAgentCompletion = {
         agent: result.key,
         output: result.output,
@@ -953,7 +917,7 @@ export class EvaluationAgentRegistryService {
           meta: this.buildUnhandledErrorMeta(error),
         }),
       );
-      void Promise.allSettled(traceWrites);
+      await Promise.allSettled(traceWrites);
       const completion: EvaluationAgentCompletion = {
         agent: prepared.agent.key,
         output: fallbackOutput,
@@ -983,6 +947,14 @@ export class EvaluationAgentRegistryService {
       return Promise.resolve();
     }
 
+    const hasOaiTelemetry =
+      event.meta &&
+      typeof event.meta === "object" &&
+      "openaiTelemetry" in event.meta;
+    this.logger.log(
+      `[persistAgentTrace] agent=${event.agent} status=${event.status} hasMeta=${!!event.meta} hasOaiTelemetry=${hasOaiTelemetry}`,
+    );
+
     return this.pipelineAgentTrace
       .recordRun({
         startupId,
@@ -1004,8 +976,8 @@ export class EvaluationAgentRegistryService {
       })
       .catch((error) => {
         const message = error instanceof Error ? error.message : String(error);
-        this.logger.warn(
-          `Failed to persist evaluation trace for ${event.agent}: ${message}`,
+        this.logger.error(
+          `[persistAgentTrace] FAILED for ${event.agent}: ${message}`,
         );
       });
   }

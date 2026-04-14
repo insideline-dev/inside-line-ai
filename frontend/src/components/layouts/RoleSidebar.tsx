@@ -57,6 +57,7 @@ import {
   Trophy,
   UserRoundSearch,
   ChevronRight,
+  Network,
   type LucideIcon,
 } from "lucide-react";
 import insideLineLogo from "@/assets/icon-insideline.svg";
@@ -109,6 +110,7 @@ const roleNavItems: Record<UserRole, NavItem[]> = {
         { title: "Scouts", url: "/admin/scouts", icon: Binoculars },
       ],
     },
+    { title: "Matching Logs", url: "/admin/matching-logs", icon: Network },
     { title: "Agents", url: "/admin/agents", icon: Bot },
     { title: "Conversations", url: "/admin/conversations", icon: MessageSquare },
     { title: "Scoring", url: "/admin/scoring", icon: Scale },

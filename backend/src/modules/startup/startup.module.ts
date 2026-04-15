@@ -11,6 +11,8 @@ import { DataRoomService } from './data-room.service';
 import { InvestorInterestService } from './investor-interest.service';
 import { MeetingService } from './meeting.service';
 import { StartupIntakeService } from './startup-intake.service';
+import { PdfRenderService } from './pdf/pdf-render.service';
+import { PrintTokenService } from './pdf/print-token.service';
 
 @Module({
   imports: [DatabaseModule, QueueModule, StorageModule, NotificationModule],
@@ -19,6 +21,8 @@ import { StartupIntakeService } from './startup-intake.service';
     StartupService,
     DraftService,
     PdfService,
+    PdfRenderService,
+    PrintTokenService,
     DataRoomService,
     InvestorInterestService,
     MeetingService,
@@ -28,6 +32,8 @@ import { StartupIntakeService } from './startup-intake.service';
     StartupService,
     DraftService,
     PdfService,
+    PdfRenderService,
+    PrintTokenService,
     DataRoomService,
     InvestorInterestService,
     MeetingService,

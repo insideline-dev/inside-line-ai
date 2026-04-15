@@ -55,6 +55,7 @@ import type { Evaluation } from "@/types/evaluation";
 interface FinancialsTabContentProps {
   evaluation: Evaluation | null;
   financialsWeight?: number;
+  forcePrint?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -563,7 +564,9 @@ function CredibilityMeter({ level }: { level: string }) {
 export function FinancialsTabContent({
   evaluation,
   financialsWeight,
+  forcePrint: _forcePrint = false,
 }: FinancialsTabContentProps) {
+  void _forcePrint;
   if (!evaluation) {
     return (
       <Card className="border-dashed" data-testid="card-financials-empty">

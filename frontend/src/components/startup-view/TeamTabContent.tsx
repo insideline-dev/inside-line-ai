@@ -73,6 +73,7 @@ interface TeamTabContentProps {
   showDataGaps?: boolean;
   teamWeight?: number;
   companyName?: string;
+  forcePrint?: boolean;
 }
 
 interface SubScoreItem {
@@ -660,7 +661,9 @@ export function TeamTabContent({
   showDataGaps = true,
   teamWeight,
   companyName,
+  forcePrint: _forcePrint = false,
 }: TeamTabContentProps) {
+  void _forcePrint;
   const teamData = useMemo(
     () => toRecord(evaluation?.teamData),
     [evaluation],

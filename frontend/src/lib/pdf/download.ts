@@ -1,7 +1,6 @@
-import { pdf } from "@react-pdf/renderer";
-import { InvestmentMemoPDF } from "./memo-pdf";
-import { AnalysisReportPDF } from "./report-pdf";
-import type { PdfData } from "./shared";
+import { env } from "@/env";
+
+const API_BASE_URL = env.VITE_API_BASE_URL;
 
 async function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
@@ -11,7 +10,6 @@ async function downloadBlob(blob: Blob, filename: string) {
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-  // Revoke asynchronously to avoid intermittent browser download failures.
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
@@ -20,14 +18,29 @@ function sanitizeFilename(name: string): string {
   return sanitized || "startup";
 }
 
-export async function downloadMemo(data: PdfData): Promise<void> {
-  const doc = InvestmentMemoPDF(data);
-  const blob = await pdf(doc).toBlob();
+async function fetchPdf(path: string): Promise<Blob> {
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    method: "GET",
+    credentials: "include",
+    headers: { Accept: "application/pdf" },
+  });
+  if (!res.ok) {
+    const message = await res.text().catch(() => `HTTP ${res.status}`);
+    throw new Error(message || `HTTP ${res.status}`);
+  }
+  return res.blob();
+}
+
+export interface PdfDownloadTarget {
+  startup: { id: string; name: string };
+}
+
+export async function downloadMemo(data: PdfDownloadTarget): Promise<void> {
+  const blob = await fetchPdf(`/startups/${data.startup.id}/memo.pdf`);
   await downloadBlob(blob, `${sanitizeFilename(data.startup.name)}-Investment-Memo.pdf`);
 }
 
-export async function downloadReport(data: PdfData): Promise<void> {
-  const doc = AnalysisReportPDF(data);
-  const blob = await pdf(doc).toBlob();
+export async function downloadReport(data: PdfDownloadTarget): Promise<void> {
+  const blob = await fetchPdf(`/startups/${data.startup.id}/report.pdf`);
   await downloadBlob(blob, `${sanitizeFilename(data.startup.name)}-Analysis-Report.pdf`);
 }

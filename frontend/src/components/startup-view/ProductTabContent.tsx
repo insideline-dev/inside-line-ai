@@ -11,20 +11,24 @@ import type { Startup } from "@/types/startup";
 import type { Evaluation } from "@/types/evaluation";
 
 
-function DescriptionBlock({ text }: { text: string }) {
+function DescriptionBlock({ text, forcePrint = false }: { text: string; forcePrint?: boolean }) {
   const [expanded, setExpanded] = useState(false);
+  const isExpanded = forcePrint || expanded;
   return (
     <div>
       <h4 className="mb-1 text-sm font-medium">Description</h4>
-      <div className={cn("text-sm leading-relaxed text-muted-foreground", !expanded && "line-clamp-4")}>
+      <div className={cn("text-sm leading-relaxed text-muted-foreground", !isExpanded && "line-clamp-4")}>
         <MarkdownText className="[&>p]:mb-2 [&>p:last-child]:mb-0">{text}</MarkdownText>
       </div>
-      <button
-        onClick={() => setExpanded(v => !v)}
-        className="mt-1 text-xs text-primary hover:underline"
-      >
-        {expanded ? "Show less" : "Show more"}
-      </button>
+      {!forcePrint && (
+        <button
+          onClick={() => setExpanded(v => !v)}
+          className="mt-1 text-xs text-primary hover:underline"
+          data-print-hide="true"
+        >
+          {expanded ? "Show less" : "Show more"}
+        </button>
+      )}
     </div>
   );
 }
@@ -39,6 +43,7 @@ interface ProductTabContentProps {
   showScores?: boolean;
   showDataGaps?: boolean;
   productWeight?: number;
+  forcePrint?: boolean;
 }
 
 interface SubScoreItem {
@@ -299,7 +304,7 @@ function MoatStageIndicator({ stage }: { stage: string }) {
 // Main Component
 // ---------------------------------------------------------------------------
 
-export function ProductTabContent({ startup, evaluation, showScores = true, showDataGaps = true, productWeight }: ProductTabContentProps) {
+export function ProductTabContent({ startup, evaluation, showScores = true, showDataGaps = true, productWeight, forcePrint = false }: ProductTabContentProps) {
   const productData = (evaluation?.productData ?? {}) as Record<string, unknown>;
   const productOverview = (productData.productOverview ?? {}) as Record<string, unknown>;
   const compAdvData = (evaluation?.competitiveAdvantageData ?? {}) as Record<string, unknown>;
@@ -447,7 +452,7 @@ export function ProductTabContent({ startup, evaluation, showScores = true, show
 
             {/* Description — unified display */}
             {productDescription && (
-              <DescriptionBlock text={productDescription} />
+              <DescriptionBlock text={productDescription} forcePrint={forcePrint} />
             )}
 
             {/* Key Features — within description area */}

@@ -14,6 +14,7 @@ import {
   UploadedFile,
   BadRequestException,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
@@ -33,6 +34,7 @@ type User = {
 import { StartupService } from './startup.service';
 import { DraftService } from './draft.service';
 import { PdfService } from './pdf.service';
+import { PdfRenderService } from './pdf/pdf-render.service';
 import { DataRoomService } from './data-room.service';
 import { InvestorInterestService } from './investor-interest.service';
 import { MeetingService } from './meeting.service';
@@ -64,10 +66,13 @@ import { Public } from '../../auth/decorators';
 @ApiTags('Startups')
 @ApiBearerAuth('JWT')
 export class StartupController {
+  private readonly logger = new Logger(StartupController.name);
+
   constructor(
     private startupService: StartupService,
     private draftService: DraftService,
     private pdfService: PdfService,
+    private pdfRenderService: PdfRenderService,
     private dataRoomService: DataRoomService,
     private interestService: InvestorInterestService,
     private meetingService: MeetingService,
@@ -196,7 +201,7 @@ export class StartupController {
     @CurrentUser() user: User,
     @Res() res: Response,
   ) {
-    const buffer = await this.pdfService.generateMemo(id, user.id);
+    const buffer = await this.generateWithFallback('memo', id, user.id);
     res.set({
       'Content-Disposition': `attachment; filename="${id}-memo.pdf"`,
       'Content-Length': buffer.length,
@@ -212,12 +217,32 @@ export class StartupController {
     @CurrentUser() user: User,
     @Res() res: Response,
   ) {
-    const buffer = await this.pdfService.generateReport(id, user.id);
+    const buffer = await this.generateWithFallback('report', id, user.id);
     res.set({
       'Content-Disposition': `attachment; filename="${id}-report.pdf"`,
       'Content-Length': buffer.length,
     });
     res.end(buffer);
+  }
+
+  private async generateWithFallback(
+    kind: 'memo' | 'report',
+    startupId: string,
+    userId: string,
+  ): Promise<Buffer> {
+    await this.pdfService.verifyAccess(startupId, userId);
+    try {
+      return kind === 'memo'
+        ? await this.pdfRenderService.renderMemo(startupId, userId)
+        : await this.pdfRenderService.renderReport(startupId, userId);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      // Fallback to legacy PDFKit templates on render failure.
+      this.logger.warn(`Puppeteer ${kind} render failed, falling back to PDFKit: ${message}`);
+      return kind === 'memo'
+        ? await this.pdfService.generateMemo(startupId, userId)
+        : await this.pdfService.generateReport(startupId, userId);
+    }
   }
 
   // ============ FOUNDER DATA ROOM & MEETINGS ============

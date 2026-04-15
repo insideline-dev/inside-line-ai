@@ -54,6 +54,14 @@ export class PdfService {
   }
 
   /**
+   * Verify the user has access to the startup. Throws on denial.
+   * Used by other PDF services (e.g. PdfRenderService) before rendering.
+   */
+  async verifyAccess(startupId: string, userId: string): Promise<void> {
+    await this.getStartupWithAccess(startupId, userId);
+  }
+
+  /**
    * Fetch startup + evaluation data and verify user access
    */
   private async getStartupWithAccess(

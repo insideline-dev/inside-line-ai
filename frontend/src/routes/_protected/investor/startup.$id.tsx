@@ -1,9 +1,8 @@
 import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ScoreRing } from "@/components/analysis/ScoreRing";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   BarChart2,
   ChevronDown,
@@ -216,43 +215,6 @@ function InvestorStartupDetailPage() {
         }
       />
 
-      {(typeof match?.thesisFitScore === "number" || typeof thesisRationaleText === "string") && (
-        <Card className="border-2 border-primary/30 bg-gradient-to-br from-primary/5 to-primary/10 shadow-md">
-          <CardHeader className="pb-2">
-            <div className="flex items-center gap-2">
-              <div className="rounded-full bg-primary/10 p-1.5">
-                <BarChart2 className="h-4 w-4 text-primary" />
-              </div>
-              <CardTitle className="text-lg">Thesis Alignment</CardTitle>
-            </div>
-            <CardDescription>How this startup fits your investment thesis.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {typeof match?.thesisFitScore === "number" && (
-              <div className="flex items-center gap-4 rounded-lg bg-background/60 p-4 border">
-                <ScoreRing score={match.thesisFitScore as number} size="lg" showLabel variant="secondary" />
-                <div className="flex-1">
-                  <p className="text-lg font-semibold">
-                    {match.thesisFitScore >= 80 ? "Strong Fit" :
-                     match.thesisFitScore >= 60 ? "Good Fit" :
-                     match.thesisFitScore >= 40 ? "Moderate Fit" : "Low Fit"}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    Based on your investment thesis and scoring preferences
-                  </p>
-                </div>
-              </div>
-            )}
-            {typeof thesisRationaleText === "string" && thesisRationaleText.trim().length > 0 && (
-              <div className="rounded-lg bg-muted/50 p-3">
-                <p className="text-sm font-medium mb-1">AI Analysis</p>
-                <p className="text-sm text-muted-foreground">{thesisRationaleText}</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
       <Tabs
         value={activeTab}
         onValueChange={(value) => setActiveTab(value as InvestorStartupTab)}
@@ -281,6 +243,11 @@ function InvestorStartupDetailPage() {
                 evaluation={evaluation}
                 weights={weights}
                 onNavigateTab={(tab) => setActiveTab(tab as InvestorStartupTab)}
+                thesisAlignment={
+                  typeof match?.thesisFitScore === "number"
+                    ? { thesisFitScore: match.thesisFitScore as number, rationale: thesisRationaleText ?? "" }
+                    : null
+                }
               />
             </TabsContent>
 

@@ -16,6 +16,7 @@ services:
       NODE_ENV: development
       PORT: 8080
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-inside_line}
+      DEV_DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-inside_line}
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ""

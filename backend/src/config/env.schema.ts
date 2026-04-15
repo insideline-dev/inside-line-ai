@@ -11,7 +11,7 @@ export const envSchema = z.object({
   DATABASE_URL: z
     .string()
     .url("DATABASE_URL must be a valid PostgreSQL connection string"),
-  PROD_DATABASE_URL: z.string().optional(),
+  DEV_DATABASE_URL: z.string().url().optional(), // Overrides DATABASE_URL when NODE_ENV=development
   DB_POOL_MAX: z.coerce.number().int().positive().default(20),
   DB_CONNECT_TIMEOUT_SECONDS: z.coerce.number().positive().default(10),
   DB_IDLE_TIMEOUT_SECONDS: z.coerce.number().positive().default(30),

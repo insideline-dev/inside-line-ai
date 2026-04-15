@@ -3,7 +3,8 @@ import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ConfidenceBadge } from "@/components/ConfidenceBadge";
 import { MarkdownText } from "@/components/MarkdownText";
-import { CheckCircle2, AlertTriangle, ChevronRight, Sparkles, TrendingUp, AlertCircle, ChevronDown, ChevronUp } from "lucide-react";
+import { ScoreRing } from "@/components/analysis/ScoreRing";
+import { CheckCircle2, AlertTriangle, ChevronRight, Sparkles, TrendingUp, AlertCircle, ChevronDown, ChevronUp, BarChart2 } from "lucide-react";
 import type { Startup } from "@/types/startup";
 import type { Evaluation, ExitScenario } from "@/types/evaluation";
 import type { ScoringWeights } from "@/lib/score-utils";
@@ -31,6 +32,10 @@ import { KpiGrid } from "@/components/startup-view/KpiGrid";
 
 interface AdminSummaryTabProps {
   startup: Startup;
+  thesisAlignment?: {
+    thesisFitScore: number;
+    rationale: string;
+  } | null;
   evaluation?: Evaluation;
   weights?: ScoringWeights | null;
   onNavigateTab?: (tab: string) => void;
@@ -399,6 +404,7 @@ export function AdminSummaryTab({
   evaluation,
   weights,
   onNavigateTab,
+  thesisAlignment,
 }: AdminSummaryTabProps) {
   const score = getDisplayOverallScore(evaluation, startup.overallScore);
   const percentileRank = getDisplayPercentileRank(evaluation, startup.percentileRank);
@@ -583,6 +589,28 @@ export function AdminSummaryTab({
             </div>
           </CardContent>
         </Card>
+
+        {thesisAlignment && (
+          <div className="rounded-lg bg-primary/5 border border-primary/20 p-4 flex items-start gap-4">
+            <ScoreRing score={thesisAlignment.thesisFitScore} size="md" showLabel variant="secondary" />
+            <div className="flex-1 min-w-0 pt-1">
+              <div className="flex items-center gap-2 mb-1">
+                <BarChart2 className="h-4 w-4 text-primary shrink-0" />
+                <span className="text-sm font-semibold text-foreground">Thesis Fit</span>
+                <span className={cn(
+                  "ml-auto text-xs font-bold tabular-nums",
+                  thesisAlignment.thesisFitScore >= 80 ? "text-emerald-600 dark:text-emerald-400" :
+                  thesisAlignment.thesisFitScore >= 60 ? "text-green-600 dark:text-green-400" :
+                  thesisAlignment.thesisFitScore >= 40 ? "text-amber-600 dark:text-amber-400" :
+                  "text-rose-600 dark:text-rose-400"
+                )}>{thesisAlignment.thesisFitScore}</span>
+              </div>
+              {thesisAlignment.rationale && (
+                <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">{thesisAlignment.rationale}</p>
+              )}
+            </div>
+          </div>
+        )}
 
         <Card className="bg-primary/[0.04] border-primary/15">
           <CardHeader className="pb-2">

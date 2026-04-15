@@ -26,6 +26,8 @@ import { Route as ProtectedScoutIndexRouteImport } from './routes/_protected/sco
 import { Route as ProtectedInvestorIndexRouteImport } from './routes/_protected/investor/index'
 import { Route as ProtectedFounderIndexRouteImport } from './routes/_protected/founder/index'
 import { Route as ProtectedAdminIndexRouteImport } from './routes/_protected/admin/index'
+import { Route as PrintReportIdRouteImport } from './routes/print.report.$id'
+import { Route as PrintMemoIdRouteImport } from './routes/print.memo.$id'
 import { Route as ProtectedScoutSubmitRouteImport } from './routes/_protected/scout/submit'
 import { Route as ProtectedScoutMetricsRouteImport } from './routes/_protected/scout/metrics'
 import { Route as ProtectedScoutLeaderboardRouteImport } from './routes/_protected/scout/leaderboard'
@@ -141,6 +143,16 @@ const ProtectedAdminIndexRoute = ProtectedAdminIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => ProtectedAdminRoute,
+} as any)
+const PrintReportIdRoute = PrintReportIdRouteImport.update({
+  id: '/print/report/$id',
+  path: '/print/report/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrintMemoIdRoute = PrintMemoIdRouteImport.update({
+  id: '/print/memo/$id',
+  path: '/print/memo/$id',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ProtectedScoutSubmitRoute = ProtectedScoutSubmitRouteImport.update({
   id: '/submit',
@@ -352,6 +364,8 @@ export interface FileRoutesByFullPath {
   '/scout/leaderboard': typeof ProtectedScoutLeaderboardRoute
   '/scout/metrics': typeof ProtectedScoutMetricsRoute
   '/scout/submit': typeof ProtectedScoutSubmitRoute
+  '/print/memo/$id': typeof PrintMemoIdRoute
+  '/print/report/$id': typeof PrintReportIdRoute
   '/admin/': typeof ProtectedAdminIndexRoute
   '/founder/': typeof ProtectedFounderIndexRoute
   '/investor/': typeof ProtectedInvestorIndexRoute
@@ -397,6 +411,8 @@ export interface FileRoutesByTo {
   '/scout/leaderboard': typeof ProtectedScoutLeaderboardRoute
   '/scout/metrics': typeof ProtectedScoutMetricsRoute
   '/scout/submit': typeof ProtectedScoutSubmitRoute
+  '/print/memo/$id': typeof PrintMemoIdRoute
+  '/print/report/$id': typeof PrintReportIdRoute
   '/admin': typeof ProtectedAdminIndexRoute
   '/founder': typeof ProtectedFounderIndexRoute
   '/investor': typeof ProtectedInvestorIndexRoute
@@ -448,6 +464,8 @@ export interface FileRoutesById {
   '/_protected/scout/leaderboard': typeof ProtectedScoutLeaderboardRoute
   '/_protected/scout/metrics': typeof ProtectedScoutMetricsRoute
   '/_protected/scout/submit': typeof ProtectedScoutSubmitRoute
+  '/print/memo/$id': typeof PrintMemoIdRoute
+  '/print/report/$id': typeof PrintReportIdRoute
   '/_protected/admin/': typeof ProtectedAdminIndexRoute
   '/_protected/founder/': typeof ProtectedFounderIndexRoute
   '/_protected/investor/': typeof ProtectedInvestorIndexRoute
@@ -499,6 +517,8 @@ export interface FileRouteTypes {
     | '/scout/leaderboard'
     | '/scout/metrics'
     | '/scout/submit'
+    | '/print/memo/$id'
+    | '/print/report/$id'
     | '/admin/'
     | '/founder/'
     | '/investor/'
@@ -544,6 +564,8 @@ export interface FileRouteTypes {
     | '/scout/leaderboard'
     | '/scout/metrics'
     | '/scout/submit'
+    | '/print/memo/$id'
+    | '/print/report/$id'
     | '/admin'
     | '/founder'
     | '/investor'
@@ -594,6 +616,8 @@ export interface FileRouteTypes {
     | '/_protected/scout/leaderboard'
     | '/_protected/scout/metrics'
     | '/_protected/scout/submit'
+    | '/print/memo/$id'
+    | '/print/report/$id'
     | '/_protected/admin/'
     | '/_protected/founder/'
     | '/_protected/investor/'
@@ -612,6 +636,8 @@ export interface RootRouteChildren {
   ApplySlugRoute: typeof ApplySlugRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
   AuthMagicLinkRoute: typeof AuthMagicLinkRoute
+  PrintMemoIdRoute: typeof PrintMemoIdRoute
+  PrintReportIdRoute: typeof PrintReportIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -734,6 +760,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin/'
       preLoaderRoute: typeof ProtectedAdminIndexRouteImport
       parentRoute: typeof ProtectedAdminRoute
+    }
+    '/print/report/$id': {
+      id: '/print/report/$id'
+      path: '/print/report/$id'
+      fullPath: '/print/report/$id'
+      preLoaderRoute: typeof PrintReportIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/print/memo/$id': {
+      id: '/print/memo/$id'
+      path: '/print/memo/$id'
+      fullPath: '/print/memo/$id'
+      preLoaderRoute: typeof PrintMemoIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_protected/scout/submit': {
       id: '/_protected/scout/submit'
@@ -1093,6 +1133,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApplySlugRoute: ApplySlugRoute,
   AuthCallbackRoute: AuthCallbackRoute,
   AuthMagicLinkRoute: AuthMagicLinkRoute,
+  PrintMemoIdRoute: PrintMemoIdRoute,
+  PrintReportIdRoute: PrintReportIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -10,7 +10,12 @@ export class DrizzleService implements OnModuleDestroy {
   private client: postgres.Sql;
 
   constructor(private configService: ConfigService) {
-    const databaseUrl = this.configService.get<string>('DATABASE_URL')!;
+    const nodeEnv = this.configService.get<string>("NODE_ENV", "development");
+    const devDbUrl = this.configService.get<string | undefined>(
+      "DEV_DATABASE_URL",
+    );
+    const databaseUrl =
+      nodeEnv === "development" && devDbUrl ? devDbUrl : this.configService.get<string>("DATABASE_URL")!;
     const max = this.configService.get<number>('DB_POOL_MAX', 20);
     const connectTimeout = this.configService.get<number>(
       'DB_CONNECT_TIMEOUT_SECONDS',

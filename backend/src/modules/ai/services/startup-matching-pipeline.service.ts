@@ -11,6 +11,7 @@ import type { AiMatchingJobData } from "../../../queue/interfaces";
 import { NotificationService } from "../../../notification/notification.service";
 import { NotificationType } from "../../../notification/entities";
 import { startup, StartupStatus } from "../../startup/entities/startup.schema";
+import { UserRole } from "../../../auth/entities/auth.schema";
 import {
   analysisJob,
   AnalysisJobPriority,

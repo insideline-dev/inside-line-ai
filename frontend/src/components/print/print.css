@@ -1,0 +1,106 @@
+/* Print-only layout styles. Loaded on /print/* routes. */
+
+@page {
+  size: A4 portrait;
+  margin: 0;
+}
+
+html,
+body {
+  background: #ffffff !important;
+}
+
+body.print-mode {
+  margin: 0;
+  padding: 0;
+  color: #0a1017;
+  font-family: "DM Sans Variable", "DM Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+  font-size: 10.5pt;
+  line-height: 1.45;
+}
+
+.print-mode .print-page {
+  width: 210mm;
+  min-height: 297mm;
+  padding: 16mm 14mm 18mm 14mm;
+  box-sizing: border-box;
+  margin: 0 auto;
+  background: #ffffff;
+  page-break-after: always;
+  break-after: page;
+}
+
+.print-mode .print-page:last-child {
+  page-break-after: auto;
+  break-after: auto;
+}
+
+.print-mode .print-section {
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+.print-mode .print-section-divider {
+  page-break-before: always;
+  break-before: page;
+}
+
+.print-mode .print-cover {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 265mm;
+}
+
+.print-mode h1,
+.print-mode h2,
+.print-mode h3 {
+  font-family: "Instrument Serif", ui-serif, Georgia, "Times New Roman", serif;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+.print-mode h1 { font-size: 36pt; line-height: 1.05; }
+.print-mode h2 { font-size: 20pt; line-height: 1.15; margin: 0 0 6mm 0; }
+.print-mode h3 { font-size: 14pt; line-height: 1.2; margin: 0 0 3mm 0; }
+
+/* Hide interactive chrome on print routes */
+.print-mode [data-print-hide="true"],
+.print-mode button[aria-label*="dropdown" i],
+.print-mode [role="tooltip"] {
+  display: none !important;
+}
+
+/* Force all collapsibles open in print mode */
+.print-mode [data-state="closed"] {
+  display: block !important;
+}
+.print-mode details {
+  display: block !important;
+}
+.print-mode details > summary {
+  list-style: none;
+}
+
+/* Kill box-shadows for crisper print */
+.print-mode * {
+  box-shadow: none !important;
+}
+
+/* Card tweaks */
+.print-mode .card,
+.print-mode [data-slot="card"] {
+  border-color: #e5e7eb !important;
+  background: #ffffff !important;
+}
+
+/* Fix score ring sizing in print */
+.print-mode svg {
+  max-width: 100%;
+}
+
+/* Utility: page break hints */
+.print-break-before { page-break-before: always; break-before: page; }
+.print-break-inside-avoid { page-break-inside: avoid; break-inside: avoid; }

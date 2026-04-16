@@ -105,17 +105,17 @@ export class PdfRenderService implements OnModuleDestroy {
     }
 
     this.browserPromise = (async () => {
-      const executablePath =
-        this.config.get<string>("PUPPETEER_EXECUTABLE_PATH") ??
-        (await this.resolveExecutablePath());
+      const { executablePath, useChromiumArgs } = await this.resolveExecutablePath();
 
       return puppeteer.launch({
-        args: [
-          ...chromium.args,
-          "--no-sandbox",
-          "--disable-setuid-sandbox",
-          "--disable-dev-shm-usage",
-        ],
+        args: useChromiumArgs
+          ? [
+              ...chromium.args,
+              "--no-sandbox",
+              "--disable-setuid-sandbox",
+              "--disable-dev-shm-usage",
+            ]
+          : [],
         executablePath,
         headless: true,
         defaultViewport: { width: 1200, height: 1600 },
@@ -129,19 +129,57 @@ export class PdfRenderService implements OnModuleDestroy {
     return browser;
   }
 
-  private async resolveExecutablePath(): Promise<string> {
-    try {
-      return await chromium.executablePath();
-    } catch {
-      // On macOS/dev, fall back to local Chrome.
-      if (process.platform === "darwin") {
-        return "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-      }
-      if (process.platform === "linux") {
-        return "/usr/bin/google-chrome";
-      }
-      throw new Error("No Chrome executable found for Puppeteer");
+  private async resolveExecutablePath(): Promise<{
+    executablePath: string;
+    useChromiumArgs: boolean;
+  }> {
+    const configuredPath = this.config.get<string>("PUPPETEER_EXECUTABLE_PATH");
+    if (configuredPath) {
+      return { executablePath: configuredPath, useChromiumArgs: false };
     }
+
+    try {
+      const bundledPath = await chromium.executablePath();
+      if (bundledPath) {
+        return { executablePath: bundledPath, useChromiumArgs: true };
+      }
+    } catch {
+      // Fall through to local browser discovery.
+    }
+
+    const { access } = await import("node:fs/promises");
+    const candidates =
+      process.platform === "darwin"
+        ? [
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "/Applications/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
+            "/Applications/Chromium.app/Contents/MacOS/Chromium",
+            "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+            "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+            "/Applications/Arc.app/Contents/MacOS/Arc",
+          ]
+        : process.platform === "linux"
+          ? [
+              "/usr/bin/google-chrome",
+              "/usr/bin/google-chrome-stable",
+              "/usr/bin/chromium",
+              "/usr/bin/chromium-browser",
+              "/snap/bin/chromium",
+            ]
+          : [];
+
+    for (const candidate of candidates) {
+      try {
+        await access(candidate);
+        return { executablePath: candidate, useChromiumArgs: false };
+      } catch {
+        continue;
+      }
+    }
+
+    throw new Error(
+      "No Chrome/Chromium found. Install Google Chrome or Chromium, or set PUPPETEER_EXECUTABLE_PATH / CHROME_PATH.",
+    );
   }
 
   private async safeClosePage(page: Page | null): Promise<void> {

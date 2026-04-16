@@ -1758,7 +1758,8 @@ export class PipelineService {
     }
 
     // Auto-approve investor private submissions after pipeline completion
-    // so they appear in the investor dashboard with matching scores.
+    // so they appear in the investor dashboard. Matching is siloed to that investor only
+    // (see StartupMatchingPipelineService + InvestorMatchingService restrictToInvestorId).
     const shouldAutoApprove = await this.isInvestorPrivateSubmission(startupId);
     if (shouldAutoApprove) {
       await this.drizzle.db

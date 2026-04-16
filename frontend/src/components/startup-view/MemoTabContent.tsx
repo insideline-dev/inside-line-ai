@@ -68,6 +68,7 @@ interface MemoTabContentProps {
   showScores?: boolean;
   weights?: ScoringWeights | null;
   animateOnMount?: boolean;
+  forcePrint?: boolean;
 }
 
 type MemoScoreKey =
@@ -329,6 +330,7 @@ export function MemoTabContent({
   showScores = true,
   weights,
   animateOnMount = false,
+  forcePrint = false,
 }: MemoTabContentProps) {
   const memo = (investorMemo ?? (evaluation.investorMemo as InvestorMemo | null | undefined)) ?? null;
   const memoSections = toMemoSections(memo?.sections);
@@ -354,7 +356,6 @@ export function MemoTabContent({
       isReanalyzing: adminFeedback.reanalyzingSection === sectionKey,
     };
   };
-
   const executiveSummaryText =
     memo?.executiveSummary ||
     evaluation.executiveSummary ||
@@ -374,22 +375,26 @@ export function MemoTabContent({
             </CardDescription>
           </div>
           <div className="flex gap-2 shrink-0">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => window.open(`/api/startups/${evaluation.startupId}/memo.pdf`, "_blank")}
-            >
-              <Download className="w-4 h-4 mr-1" />
-              Memo PDF
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => window.open(`/api/startups/${evaluation.startupId}/report.pdf`, "_blank")}
-            >
-              <Download className="w-4 h-4 mr-1" />
-              Report PDF
-            </Button>
+            {!forcePrint && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => window.open(`/api/startups/${evaluation.startupId}/memo.pdf`, "_blank")}
+                >
+                  <Download className="w-4 h-4 mr-1" />
+                  Memo PDF
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => window.open(`/api/startups/${evaluation.startupId}/report.pdf`, "_blank")}
+                >
+                  <Download className="w-4 h-4 mr-1" />
+                  Report PDF
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </CardHeader>
@@ -401,6 +406,7 @@ export function MemoTabContent({
           summary={executiveSummaryText}
           sources={executiveSummarySources}
           defaultExpanded={true}
+          forcePrint={forcePrint}
         />
 
         {SECTION_CONFIG.map((config) => {
@@ -420,7 +426,8 @@ export function MemoTabContent({
               sources={sectionSources}
               details={sectionDetails}
               evaluationNote={config.evaluationNote}
-              adminFeedback={getAdminFeedbackProps(config.key)}
+              adminFeedback={forcePrint ? undefined : getAdminFeedbackProps(config.key)}
+              forcePrint={forcePrint}
             />
           );
         })}

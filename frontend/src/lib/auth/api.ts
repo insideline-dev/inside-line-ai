@@ -1,5 +1,4 @@
 import { customFetch } from "@/api/client";
-import { env } from "@/env";
 import type {
   AuthResponse,
   LoginRequest,
@@ -52,9 +51,6 @@ export const authApi = {
       method: "POST",
       body: JSON.stringify(data),
     }),
-
-  // Google OAuth (redirect-based)
-  getGoogleAuthUrl: () => `${env.VITE_API_BASE_URL}/auth/google`,
 
   // Onboarding
   selectRole: (role: "founder" | "investor") =>

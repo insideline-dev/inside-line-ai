@@ -305,4 +305,72 @@ describe("InvestorMatchingService", () => {
     expect(result.candidatesEvaluated).toBe(1);
     expect(generateTextMock).toHaveBeenCalledTimes(1);
   });
+
+  it("restricts candidate pool to one investor when restrictToInvestorId is set", async () => {
+    generateTextMock.mockResolvedValue({
+      output: {
+        thesisFitScore: 88,
+        fitRationale: "Siloed investor fit.",
+      },
+    });
+
+    const candidates = createMockInvestorCandidates();
+    const one = [candidates[0]];
+    let siloSelectCalls = 0;
+    const drizzleSilo = {
+      db: {
+        select: jest.fn().mockImplementation(() => {
+          siloSelectCalls += 1;
+          if (siloSelectCalls === 1) {
+            return {
+              from: jest.fn().mockReturnValue({
+                leftJoin: jest.fn().mockReturnValue({
+                  where: jest.fn().mockResolvedValue(one),
+                }),
+              }),
+            };
+          }
+          return {
+            from: jest.fn().mockReturnValue({
+              where: jest.fn().mockReturnValue({
+                limit: jest.fn().mockResolvedValue([]),
+              }),
+            }),
+          };
+        }),
+        update: jest.fn().mockReturnValue({
+          set: jest.fn().mockReturnValue({
+            where: jest.fn().mockResolvedValue(undefined),
+          }),
+        }),
+        insert: jest.fn().mockReturnValue({
+          values: jest.fn().mockResolvedValue(undefined),
+        }),
+      },
+    } as unknown as jest.Mocked<DrizzleService>;
+
+    const serviceSilo = new InvestorMatchingService(
+      drizzleSilo as unknown as DrizzleService,
+      providers as unknown as AiProviderService,
+      promptService as unknown as AiPromptService,
+      aiConfig as unknown as AiConfigService,
+      scoreComputation as unknown as ScoreComputationService,
+    );
+
+    const result = await serviceSilo.matchStartup({
+      startupId: "startup-silo",
+      startup: {
+        industry: "saas",
+        sectorIndustryGroup: "software",
+        stage: StartupStage.SEED,
+        fundingTarget: 2_500_000,
+        location: "San Francisco, CA",
+      },
+      synthesis: createMockSynthesisResult(),
+      restrictToInvestorId: "investor-us-seed",
+    });
+
+    expect(result.candidatesEvaluated).toBe(1);
+    expect(generateTextMock).toHaveBeenCalledTimes(1);
+  });
 });

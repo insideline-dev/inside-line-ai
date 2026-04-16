@@ -8,12 +8,14 @@ interface CompetitorsTabContentProps {
   evaluation: Evaluation | null;
   companyName: string;
   showScores?: boolean;
+  forcePrint?: boolean;
 }
 
 export function CompetitorsTabContent({
   evaluation,
   companyName,
   showScores = true,
+  forcePrint = false,
 }: CompetitorsTabContentProps) {
   if (!evaluation) {
     return (
@@ -221,8 +223,9 @@ export function CompetitorsTabContent({
         competitiveAdvantageConfidence={competitiveConfidence}
         subScores={competitiveSubScores}
         scoringBasis={competitiveScoringBasis}
+        forcePrint={forcePrint}
       />
-      <DataGapsSection gaps={competitiveDataGaps} />
+      {!forcePrint && <DataGapsSection gaps={competitiveDataGaps} />}
     </div>
   );
 }

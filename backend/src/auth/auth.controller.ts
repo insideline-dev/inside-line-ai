@@ -29,8 +29,6 @@ import { AuthService } from "./auth.service";
 import { UserAuthService, type DbUser } from "./user-auth.service";
 import { ProfileService } from "./profile.service";
 import { EmailService } from "../email";
-import { EarlyAccessService } from "../modules/early-access";
-import { GoogleAuthGuard } from "./guards";
 import { Public, CurrentUser } from "./decorators";
 import { JWT_COOKIE_NAME, REFRESH_COOKIE_NAME } from "./auth.constants";
 import { UserRole } from "./entities/auth.schema";
@@ -48,9 +46,11 @@ import {
   SelectRoleDto,
 } from "./dto";
 import {
+  EarlyAccessService,
   JoinWaitlistDto,
   RedeemEarlyAccessInviteDto,
 } from "../modules/early-access";
+import { GoogleAuthGuard } from "./guards/google-auth.guard";
 
 // Rate limit configs (requests per TTL window in seconds)
 const AUTH_RATE_LIMIT = { limit: 5, ttl: 60000 }; // 5 requests per minute
@@ -60,20 +60,17 @@ const MAGIC_LINK_RATE_LIMIT = { limit: 3, ttl: 300000 }; // 3 requests per 5 min
 @Controller("auth")
 @ApiTooManyRequestsResponse({ description: "Rate limit exceeded" })
 export class AuthController {
-  private readonly isGoogleOAuthConfigured: boolean;
-
   constructor(
     private authService: AuthService,
     private userAuthService: UserAuthService,
     private profileService: ProfileService,
     private emailService: EmailService,
-    private earlyAccess: EarlyAccessService,
     private config: ConfigService,
-  ) {
-    this.isGoogleOAuthConfigured = !!(
-      config.get<string>("GOOGLE_CLIENT_ID") &&
-      config.get<string>("GOOGLE_CLIENT_SECRET")
-    );
+    private earlyAccess: EarlyAccessService,
+  ) {}
+
+  private get isGoogleOAuthConfigured(): boolean {
+    return Boolean(this.config.get<string>("GOOGLE_CLIENT_ID")?.trim());
   }
 
   // ============ EMAIL/PASSWORD ============

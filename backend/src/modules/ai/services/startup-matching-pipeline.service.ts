@@ -11,7 +11,8 @@ import type { AiMatchingJobData } from "../../../queue/interfaces";
 import { NotificationService } from "../../../notification/notification.service";
 import { NotificationType } from "../../../notification/entities";
 import { startup, StartupStatus } from "../../startup/entities/startup.schema";
-import { UserRole } from "../../../auth/entities/auth.schema";
+import { user, UserRole } from "../../../auth/entities/auth.schema";
+import { scoutSubmission } from "../../scout/entities/scout.schema";
 import {
   analysisJob,
   AnalysisJobPriority,
@@ -222,6 +223,13 @@ export class StartupMatchingPipelineService {
         );
       }
 
+      const restrictToInvestorId =
+        await this.resolveRestrictToInvestorId(startupRecord);
+      const forceIncludeInvestorId = await this.resolveForceIncludeInvestorId(
+        jobData.userId,
+        restrictToInvestorId,
+      );
+
       const matching = await this.investorMatching.matchStartup({
         startupId: jobData.startupId,
         startup: {
@@ -233,7 +241,8 @@ export class StartupMatchingPipelineService {
           geoPath: startupRecord.geoPath ?? null,
         },
         synthesis: synthesis as SynthesisResult,
-        forceIncludeInvestorId: jobData.userId,
+        forceIncludeInvestorId,
+        restrictToInvestorId,
       });
 
       let notificationsSent = 0;
@@ -406,6 +415,8 @@ export class StartupMatchingPipelineService {
 
   private async loadStartup(startupId: string): Promise<{
     id: string;
+    userId: string;
+    submittedByRole: UserRole;
     status: StartupStatus;
     industry: string;
     sectorIndustryGroup: string | null;
@@ -417,6 +428,8 @@ export class StartupMatchingPipelineService {
     const [found] = await this.drizzle.db
       .select({
         id: startup.id,
+        userId: startup.userId,
+        submittedByRole: startup.submittedByRole,
         status: startup.status,
         industry: startup.industry,
         sectorIndustryGroup: startup.sectorIndustryGroup,
@@ -436,8 +449,55 @@ export class StartupMatchingPipelineService {
     return {
       ...found,
       status: found.status as StartupStatus,
+      submittedByRole: found.submittedByRole as UserRole,
       sectorIndustryGroup: found.sectorIndustryGroup ?? null,
       geoPath: found.geoPath ?? null,
     };
+  }
+
+  /**
+   * Investor-private and scout-referral startups are siloed: thesis matching runs only for the
+   * owning/target investor, not the full investor pool.
+   */
+  private async resolveRestrictToInvestorId(record: {
+    id: string;
+    userId: string;
+    submittedByRole: UserRole;
+  }): Promise<string | undefined> {
+    if (record.submittedByRole === UserRole.INVESTOR) {
+      return record.userId;
+    }
+    if (record.submittedByRole === UserRole.SCOUT) {
+      const [row] = await this.drizzle.db
+        .select({ investorId: scoutSubmission.investorId })
+        .from(scoutSubmission)
+        .where(eq(scoutSubmission.startupId, record.id))
+        .limit(1);
+      return row?.investorId;
+    }
+    return undefined;
+  }
+
+  /**
+   * When the cross-investor pool is used, allow the requesting investor to be evaluated even if
+   * they would be filtered out by coarse checks (e.g. inactive thesis). Must not pass startup
+   * owners who are founders — that previously forced founders into the investor candidate list.
+   */
+  private async resolveForceIncludeInvestorId(
+    requestedByUserId: string,
+    restrictToInvestorId: string | undefined,
+  ): Promise<string | undefined> {
+    if (restrictToInvestorId) {
+      return undefined;
+    }
+    const [row] = await this.drizzle.db
+      .select({ role: user.role })
+      .from(user)
+      .where(eq(user.id, requestedByUserId))
+      .limit(1);
+    if (row?.role === UserRole.INVESTOR) {
+      return requestedByUserId;
+    }
+    return undefined;
   }
 }

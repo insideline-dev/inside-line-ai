@@ -8,8 +8,10 @@ import { AuthService } from "./auth.service";
 import { UserAuthService } from "./user-auth.service";
 import { ProfileService } from "./profile.service";
 import { AuthController } from "./auth.controller";
-import { JwtStrategy, GoogleStrategy } from "./strategies";
+import { JwtStrategy } from "./strategies";
+import { GoogleStrategy } from "./strategies/google.strategy";
 import { JwtAuthGuard } from "./guards";
+import { GoogleAuthGuard } from "./guards/google-auth.guard";
 import { EarlyAccessModule } from "../modules/early-access";
 
 @Global()
@@ -43,6 +45,7 @@ import { EarlyAccessModule } from "../modules/early-access";
     ProfileService,
     JwtStrategy,
     GoogleStrategy,
+    GoogleAuthGuard,
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,

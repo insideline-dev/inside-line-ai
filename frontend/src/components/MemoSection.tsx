@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { TrendingUp, TrendingDown, Minus, Info, RefreshCw, MessageSquare, ChevronDown, ChevronUp } from "lucide-react";
 import { CitedText } from "./CitedText";
+import { MarkdownText } from "./MarkdownText";
 import { toast } from "sonner";
 import type { LucideIcon } from "lucide-react";
 
@@ -31,6 +32,7 @@ interface MemoSectionProps {
   adminFeedback?: AdminFeedbackProps;
   animateOnChange?: boolean;
   animateOnMount?: boolean;
+  forcePrint?: boolean;
 }
 
 export function MemoSection({
@@ -46,6 +48,7 @@ export function MemoSection({
   adminFeedback,
   animateOnChange = true,
   animateOnMount = false,
+  forcePrint = false,
 }: MemoSectionProps) {
   const [showFeedback, setShowFeedback] = useState(false);
   const [feedbackComment, setFeedbackComment] = useState(adminFeedback?.existingComment || "");
@@ -201,11 +204,19 @@ export function MemoSection({
         )}
 
         {summary && (
-          <CitedText
-            text={summary}
-            sources={sources}
-            className={`text-sm text-muted-foreground leading-relaxed rounded-md ${isAnimating ? "animate-content-update" : ""}`}
-          />
+          forcePrint ? (
+            <MarkdownText
+              className={`text-sm text-muted-foreground leading-relaxed rounded-md [&>p]:mb-4 [&>p:last-child]:mb-0 ${isAnimating ? "animate-content-update" : ""}`}
+            >
+              {summary}
+            </MarkdownText>
+          ) : (
+            <CitedText
+              text={summary}
+              sources={sources}
+              className={`text-sm text-muted-foreground leading-relaxed rounded-md ${isAnimating ? "animate-content-update" : ""}`}
+            />
+          )
         )}
 
         {details && (

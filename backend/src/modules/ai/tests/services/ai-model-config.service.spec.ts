@@ -13,7 +13,7 @@ describe("AiModelConfigService defaults", () => {
     service = new AiModelConfigService(aiConfig as never);
   });
 
-  it("uses gemini + provider search as default for research keys", () => {
+  it("uses configured research model + provider search as default for research keys", () => {
     const resolved = (
       service as unknown as {
         buildDefaultResolvedConfig: (
@@ -27,7 +27,7 @@ describe("AiModelConfigService defaults", () => {
       }
     ).buildDefaultResolvedConfig("research.market", null, ModelPurpose.RESEARCH);
 
-    expect(resolved.modelName).toBe("gemini-3-flash-preview");
+    expect(resolved.modelName).toBe("gpt-5.2");
     expect(resolved.searchMode).toBe("provider_grounded_search");
   });
 

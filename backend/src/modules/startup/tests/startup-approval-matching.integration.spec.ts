@@ -8,7 +8,6 @@ import { StorageService } from "../../../storage";
 import { StartupStatus, StartupStage, startup } from "../entities/startup.schema";
 import { AiConfigService } from "../../ai/services/ai-config.service";
 import { PipelineService } from "../../ai/services/pipeline.service";
-import { PipelineStateSnapshotService } from "../../ai/services/pipeline-state-snapshot.service";
 import { PipelineFeedbackService } from "../../ai/services/pipeline-feedback.service";
 import { StartupMatchingPipelineService } from "../../ai/services/startup-matching-pipeline.service";
 import { EnrichmentService } from "../../ai/services/enrichment.service";
@@ -26,7 +25,9 @@ import {
   AnalysisJobStatus,
   AnalysisJobType,
   analysisJob,
+  startupEvaluation,
 } from "../../analysis/entities/analysis.schema";
+import { user } from "../../../auth/entities/auth.schema";
 import {
   PhaseStatus,
   PipelinePhase,
@@ -177,6 +178,38 @@ describe("Startup lifecycle integration: submit -> pipeline complete -> approve 
       if (context.table === analysisJob) {
         const latest = analysisJobs.at(-1);
         return latest ? [{ ...latest }] : [];
+      }
+
+      if (context.table === startupEvaluation) {
+        return [
+          {
+            overallScore: 88,
+            sectionScores: {
+              team: 86,
+              market: 87,
+              product: 89,
+              traction: 84,
+              businessModel: 85,
+              gtm: 83,
+              financials: 80,
+              competitiveAdvantage: 84,
+              legal: 82,
+              dealTerms: 79,
+              exitPotential: 81,
+            },
+            keyStrengths: [] as string[],
+            keyRisks: [] as string[],
+            executiveSummary: "Strong seed SaaS company",
+            confidenceScore: "high",
+            investorMemo: null,
+            founderReport: null,
+            dataConfidenceNotes: "",
+          },
+        ];
+      }
+
+      if (context.table === user) {
+        return [{ role: "admin" }];
       }
 
       return [];
@@ -364,7 +397,6 @@ describe("Startup lifecycle integration: submit -> pipeline complete -> approve 
     matchingPipelineService = new StartupMatchingPipelineService(
       drizzle,
       queue,
-      matchingState,
       investorMatching,
       notifications,
     );
@@ -511,6 +543,14 @@ describe("Startup lifecycle integration: submit -> pipeline complete -> approve 
       userId: "admin-1",
       priority: 2,
     });
+
+    expect(investorMatching.matchStartup).toHaveBeenCalledWith(
+      expect.objectContaining({
+        startupId: "startup-1",
+        restrictToInvestorId: undefined,
+        forceIncludeInvestorId: undefined,
+      }),
+    );
 
     expect(matchingResult).toEqual(
       expect.objectContaining({

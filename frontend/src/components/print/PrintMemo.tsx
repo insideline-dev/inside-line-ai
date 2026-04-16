@@ -9,16 +9,28 @@ interface PrintMemoProps {
   evaluation: Evaluation;
   weights: ScoringWeights | null;
   ready: boolean;
+  generatedBy?: string | null;
 }
 
-export function PrintMemo({ startup, evaluation, weights, ready }: PrintMemoProps) {
+export function PrintMemo({ startup, evaluation, weights, ready, generatedBy }: PrintMemoProps) {
+  const stage = typeof startup.stage === "string" ? startup.stage : undefined;
+  const overallScore =
+    typeof evaluation.overallScore === "number"
+      ? evaluation.overallScore
+      : typeof startup.overallScore === "number"
+        ? startup.overallScore
+        : undefined;
+
   return (
     <PrintLayout ready={ready}>
       <PrintCover
         title="Investment Memo"
         startupName={startup.name}
-        stage={typeof startup.stage === "string" ? startup.stage : undefined}
+        stage={stage}
         subtitle={startup.description ?? undefined}
+        generatedBy={generatedBy}
+        score={overallScore}
+        logoUrl={startup.logoUrl ?? undefined}
       />
       <PrintPage>
         <MemoTabContent
@@ -26,6 +38,7 @@ export function PrintMemo({ startup, evaluation, weights, ready }: PrintMemoProp
           evaluation={evaluation}
           weights={weights}
           animateOnMount={false}
+          forcePrint
         />
       </PrintPage>
     </PrintLayout>

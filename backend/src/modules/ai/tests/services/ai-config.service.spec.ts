@@ -28,10 +28,10 @@ describe("AiConfigService", () => {
     );
 
     expect(service.getModelForPurpose(ModelPurpose.EXTRACTION)).toBe(
-      "gemini-3-flash-preview",
+      "gpt-5.4-mini",
     );
     expect(service.getModelForPurpose(ModelPurpose.ENRICHMENT)).toBe(
-      "gemini-3-flash-preview",
+      "gpt-5.4-mini",
     );
     expect(service.getModelForPurpose(ModelPurpose.SYNTHESIS)).toBe("gpt-5.4");
     expect(service.getModelForPurpose(ModelPurpose.MEMO_SYNTHESIS)).toBe(

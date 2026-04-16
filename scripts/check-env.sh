@@ -49,14 +49,12 @@ check_required "STORAGE_BUCKET" "R2/S3 bucket name"
 
 echo ""
 echo "=== Auth ==="
-check_optional "GOOGLE_CLIENT_ID" "Google OAuth (login with Google won't work)"
-check_optional "GOOGLE_CLIENT_SECRET" "Google OAuth secret"
 
 echo ""
 echo "=== AI Pipeline ==="
-check_optional "GOOGLE_AI_API_KEY" "Gemini API key (AI pipeline won't work)"
 check_optional "OPENAI_API_KEY" "OpenAI API key"
 check_optional "MISTRAL_API_KEY" "Mistral API key (OCR won't work)"
+check_optional "GOOGLE_AI_API_KEY" "Gemini only; omit if using OpenAI models"
 
 echo ""
 echo "=== Email ==="

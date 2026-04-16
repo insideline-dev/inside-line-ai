@@ -191,6 +191,7 @@ interface CompetitorAnalysisProps {
   competitiveAdvantageConfidence?: string;
   subScores?: Array<{ dimension: string; weight: number; score: number }>;
   scoringBasis?: string;
+  forcePrint?: boolean;
 }
 
 function getThreatBadgeVariant(
@@ -1542,6 +1543,7 @@ export function CompetitorAnalysis({
   competitiveAdvantageConfidence = "unknown",
   subScores,
   scoringBasis,
+  forcePrint = false,
 }: CompetitorAnalysisProps) {
   const hasDetailedCompetitorData =
     directCompetitors.length > 0 ||
@@ -1587,7 +1589,7 @@ export function CompetitorAnalysis({
         <MarketLandscapeCard landscape={marketLandscape} />
       )}
 
-      {sourceSummary && (
+      {!forcePrint && sourceSummary && (
         <SourcesCard sources={sourceSummary} />
       )}
 

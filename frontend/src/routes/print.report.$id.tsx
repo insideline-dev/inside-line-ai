@@ -9,6 +9,7 @@ import { useInvestorControllerGetEffectiveWeights } from "@/api/generated/invest
 import type { Startup } from "@/types/startup";
 import type { Evaluation } from "@/types/evaluation";
 import type { ScoringWeights } from "@/lib/score-utils";
+import { useCurrentUser } from "@/lib/auth/hooks";
 
 export const Route = createFileRoute("/print/report/$id")({
   component: PrintReportRoute,
@@ -35,6 +36,7 @@ function PrintReportRoute() {
     useStartupControllerFindApprovedById(id, { query: { retry: false } });
   const { data: evalRes, isLoading: l3 } = useStartupControllerGetEvaluation(id);
 
+  const { data: currentUser } = useCurrentUser();
   const startup = ownStartupRes
     ? unwrap<Startup & { evaluation?: Evaluation }>(ownStartupRes)
     : approvedStartupRes
@@ -69,6 +71,7 @@ function PrintReportRoute() {
       evaluation={evaluation as Evaluation}
       weights={weights}
       ready
+      generatedBy={currentUser?.name ?? currentUser?.email ?? null}
     />
   );
 }

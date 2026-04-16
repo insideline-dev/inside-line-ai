@@ -22,15 +22,15 @@ export const AI_PHASE_QUEUE_MAP: Record<PipelinePhase, QueueName> = {
 };
 
 export const DEFAULT_MODEL_BY_PURPOSE: Record<ModelPurpose, string> = {
-  [ModelPurpose.EXTRACTION]: "gemini-3-flash-preview",
-  [ModelPurpose.ENRICHMENT]: "gemini-3-flash-preview",
-  [ModelPurpose.RESEARCH]: "gemini-3-flash-preview",
-  [ModelPurpose.EVALUATION]: "gemini-3-flash-preview",
+  [ModelPurpose.EXTRACTION]: "gpt-5.4-mini",
+  [ModelPurpose.ENRICHMENT]: "gpt-5.4-mini",
+  [ModelPurpose.RESEARCH]: "gpt-5.4-mini",
+  [ModelPurpose.EVALUATION]: "gpt-5.4-mini",
   [ModelPurpose.SYNTHESIS]: "gpt-5.4",
   [ModelPurpose.MEMO_SYNTHESIS]: "gpt-5.4",
   [ModelPurpose.REPORT_SYNTHESIS]: "gpt-5.4",
-  [ModelPurpose.THESIS_ALIGNMENT]: "gemini-3-flash-preview",
-  [ModelPurpose.LOCATION_NORMALIZATION]: "gemini-3-flash-preview",
+  [ModelPurpose.THESIS_ALIGNMENT]: "gpt-5.4-mini",
+  [ModelPurpose.LOCATION_NORMALIZATION]: "gpt-5.4-mini",
   [ModelPurpose.OCR]: "gpt-5.4-mini",
   [ModelPurpose.CLARA]: "gpt-5.4",
   [ModelPurpose.CLASSIFICATION]: "gpt-5.4-mini",

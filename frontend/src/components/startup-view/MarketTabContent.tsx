@@ -21,6 +21,7 @@ interface MarketTabContentProps {
   showKeyFindingsAndRisks?: boolean;
   showDataGaps?: boolean;
   showScores?: boolean;
+  forcePrint?: boolean;
 }
 
 function toRecord(value: unknown): Record<string, unknown> {
@@ -340,7 +341,7 @@ function SourceInfoTooltip({ sources }: { sources: MarketSourceView[] }) {
   );
 }
 
-export function MarketTabContent({ evaluation, marketWeight, fundingStage, showKeyFindingsAndRisks = true, showDataGaps = true, showScores = true }: MarketTabContentProps) {
+export function MarketTabContent({ evaluation, marketWeight, fundingStage, showKeyFindingsAndRisks = true, showDataGaps = true, showScores = true, forcePrint = false }: MarketTabContentProps) {
   if (!evaluation) {
     return (
       <Card className="border-dashed" data-testid="card-market-empty">
@@ -571,7 +572,7 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage, showK
                 {/* Source info */}
                 {tamSources.length > 0 && (
                   <div className="mt-1">
-                    <SourceInfoTooltip sources={tamSources} />
+                    {!forcePrint && <SourceInfoTooltip sources={tamSources} />}
                   </div>
                 )}
 

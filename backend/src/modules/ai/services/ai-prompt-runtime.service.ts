@@ -1166,9 +1166,7 @@ export class AiPromptRuntimeService {
 
   private resolveModelPreview(key: AiPromptKey) {
     const purpose = this.resolveModelPurpose(key);
-    const modelName = key.startsWith("research.")
-      ? "gemini-3-flash-preview"
-      : this.aiConfig.getModelForPurpose(purpose);
+    const modelName = this.aiConfig.getModelForPurpose(purpose);
     const provider = this.resolveProviderForModel(modelName);
 
     const supportedSearchModes: Array<

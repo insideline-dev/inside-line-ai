@@ -61,9 +61,7 @@ export class AiModelConfigService {
     purpose: ModelPurpose,
     enableWebSearch?: boolean,
   ): ResolvedModelConfig {
-    const modelName = isResearchPromptKey(key)
-      ? "gemini-3-flash-preview"
-      : this.aiConfig.getModelForPurpose(purpose);
+    const modelName = this.aiConfig.getModelForPurpose(purpose);
     const provider = resolveProviderForModelName(modelName);
     const supportedSearchModes = this.getSupportedSearchModes(key, provider, modelName, enableWebSearch);
 

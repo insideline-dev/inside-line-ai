@@ -65,10 +65,6 @@ export const envSchema = z.object({
   JWT_SECRET: z.string().min(32, "JWT_SECRET must be at least 32 characters"),
   JWT_ACCESS_EXPIRES: z.string().default("15m"),
   JWT_REFRESH_EXPIRES: z.string().default("30d"),
-  // OAuth Providers (optional)
-  GOOGLE_CLIENT_ID: z.string().optional(),
-  GOOGLE_CLIENT_SECRET: z.string().optional(),
-
   // App URLs
   APP_URL: z.string().url().default("http://localhost:8080"),
   FRONTEND_URL: z.string().url().default("http://localhost:3030"),
@@ -141,8 +137,6 @@ export const envSchema = z.object({
 
   // AI Providers
   OPENAI_API_KEY: z.string().optional(),
-  GOOGLE_API_KEY: z.string().optional(), // Backward-compatible alias
-  GOOGLE_AI_API_KEY: z.string().optional(), // Preferred key from AI pipeline docs
   MISTRAL_API_KEY: z.string().optional(), // For OCR
   BRAVE_SEARCH_API_KEY: z.string().optional(),
   AI_PIPELINE_ENABLED: z.coerce.boolean().default(true),
@@ -150,15 +144,16 @@ export const envSchema = z.object({
   AI_PIPELINE_EDGE_DRIVEN_ENABLED: z.coerce.boolean().default(false),
   AI_EDGE_DRIVEN_EVAL_INPUTS: z.coerce.boolean().default(false),
   AI_PIPELINE_TTL_SECONDS: z.coerce.number().default(86400),
-  AI_MODEL_EXTRACTION: z.string().default("gemini-3-flash-preview"),
-  AI_MODEL_RESEARCH: z.string().default("gemini-3-flash-preview"),
-  AI_MODEL_EVALUATION: z.string().default("gemini-3-flash-preview"),
-  AI_MODEL_SYNTHESIS: z.string().default("gemini-3-flash-preview"),
-  AI_MODEL_THESIS_ALIGNMENT: z.string().default("gemini-3-flash-preview"),
-  AI_MODEL_LOCATION_NORMALIZATION: z.string().default("gemini-3-flash-preview"),
+  // Defaults match `ai.config.ts` / OpenAI-first stack — no Google API key required unless you switch models to Gemini.
+  AI_MODEL_EXTRACTION: z.string().default("gpt-5.4-mini"),
+  AI_MODEL_RESEARCH: z.string().default("gpt-5.4-mini"),
+  AI_MODEL_EVALUATION: z.string().default("gpt-5.4-mini"),
+  AI_MODEL_SYNTHESIS: z.string().default("gpt-5.4"),
+  AI_MODEL_THESIS_ALIGNMENT: z.string().default("gpt-5.4-mini"),
+  AI_MODEL_LOCATION_NORMALIZATION: z.string().default("gpt-5.4-mini"),
   AI_MODEL_OCR: z.string().default("mistral-ocr-latest"),
   AI_MODEL_CLARA: z.string().default("gpt-4o"),
-  AI_MODEL_ENRICHMENT: z.string().default("gemini-3-flash-preview"),
+  AI_MODEL_ENRICHMENT: z.string().default("gpt-5.4-mini"),
   AI_ENRICHMENT_ENABLED: z.coerce.boolean().default(true),
   AI_SOURCE_SANITIZATION_ENABLED: z.coerce.boolean().default(true),
   LINKEDIN_AI_VERIFIER_ENABLED: z.coerce.boolean().default(true),

@@ -23,8 +23,6 @@ services:
       JWT_SECRET: ${JWT_SECRET:-dev-secret-key-at-least-32-characters-long!!}
       JWT_ACCESS_EXPIRES: ${JWT_ACCESS_EXPIRES:-15m}
       JWT_REFRESH_EXPIRES: ${JWT_REFRESH_EXPIRES:-7d}
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
-      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       APP_URL: http://localhost:8080
       FRONTEND_URL: http://localhost:3000
       ENABLE_SWAGGER: "true"

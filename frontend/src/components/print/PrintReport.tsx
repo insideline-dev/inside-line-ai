@@ -16,6 +16,7 @@ interface PrintReportProps {
   evaluation: Evaluation;
   weights: ScoringWeights | null;
   ready: boolean;
+  generatedBy?: string | null;
 }
 
 type TeamMember = { name: string; role: string; linkedinUrl?: string };
@@ -36,7 +37,7 @@ function PrintSectionTitle({ label }: { label: string }) {
   );
 }
 
-export function PrintReport({ startup, evaluation, weights, ready }: PrintReportProps) {
+export function PrintReport({ startup, evaluation, weights, ready, generatedBy }: PrintReportProps) {
   const teamMembers =
     (startup.teamMembers as TeamMember[] | undefined) ?? [];
   const stage = typeof startup.stage === "string" ? startup.stage : undefined;
@@ -48,6 +49,9 @@ export function PrintReport({ startup, evaluation, weights, ready }: PrintReport
         startupName={startup.name}
         stage={stage}
         subtitle={startup.description ?? undefined}
+        generatedBy={generatedBy}
+        score={typeof evaluation.overallScore === "number" ? evaluation.overallScore : undefined}
+        logoUrl={startup.logoUrl ?? undefined}
       />
 
       <PrintPage>
@@ -61,6 +65,10 @@ export function PrintReport({ startup, evaluation, weights, ready }: PrintReport
           evaluation={evaluation}
           marketWeight={weights?.market}
           fundingStage={stage}
+          showDataGaps={false}
+          showKeyFindingsAndRisks={true}
+          showScores
+          forcePrint
         />
       </PrintPage>
 
@@ -96,7 +104,11 @@ export function PrintReport({ startup, evaluation, weights, ready }: PrintReport
 
       <PrintPage>
         <PrintSectionTitle label="Competitors" />
-        <CompetitorsTabContent evaluation={evaluation} companyName={startup.name} />
+        <CompetitorsTabContent
+          evaluation={evaluation}
+          companyName={startup.name}
+          forcePrint
+        />
       </PrintPage>
     </PrintLayout>
   );

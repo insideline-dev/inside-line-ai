@@ -167,11 +167,3 @@ export function useSelectRole() {
   });
 }
 
-// Google auth (redirect)
-export function useGoogleAuth() {
-  return {
-    signIn: () => {
-      window.location.href = authApi.getGoogleAuthUrl();
-    },
-  };
-}

@@ -40,6 +40,11 @@ interface StartupMatchInput {
   synthesis: SynthesisResult;
   threshold?: number;
   forceIncludeInvestorId?: string;
+  /**
+   * When set (e.g. investor-private or scout-referral startups), only this investor
+   * is evaluated — no cross-investor matching.
+   */
+  restrictToInvestorId?: string;
 }
 
 interface InvestorCandidate {
@@ -132,14 +137,20 @@ export class InvestorMatchingService {
       minStartupScore: investorThesis.minStartupScore,
     };
 
+    const restrictWhere = input.restrictToInvestorId
+      ? and(
+          eq(user.id, input.restrictToInvestorId),
+          inArray(user.role, [UserRole.INVESTOR, UserRole.ADMIN]),
+        )
+      : candidateConditions;
+
     let candidates = await this.drizzle.db
       .select(selectFields)
       .from(user)
       .leftJoin(investorThesis, eq(investorThesis.userId, user.id))
-      .where(candidateConditions);
+      .where(restrictWhere);
 
-    // ALWAYS include the requesting investor, regardless of role or thesis status
-    if (input.forceIncludeInvestorId) {
+    if (!input.restrictToInvestorId && input.forceIncludeInvestorId) {
       const forcedUserExists = candidates.some(
         (c) => c.userId === input.forceIncludeInvestorId,
       );
@@ -163,10 +174,19 @@ export class InvestorMatchingService {
       }
     }
 
-    const firstFilterPassed = candidates.filter((candidate) =>
-      candidate.userId === input.forceIncludeInvestorId ||
-      this.passesFirstFilter(candidate, input, startupGeoPath),
-    );
+    if (input.restrictToInvestorId) {
+      this.logger.log(
+        `Matching ${input.startupId} in restricted mode: investor=${input.restrictToInvestorId} (candidates=${candidates.length})`,
+      );
+    }
+
+    const firstFilterPassed = input.restrictToInvestorId
+      ? candidates
+      : candidates.filter(
+          (candidate) =>
+            candidate.userId === input.forceIncludeInvestorId ||
+            this.passesFirstFilter(candidate, input, startupGeoPath),
+        );
 
     const forcedInCandidates = input.forceIncludeInvestorId
       ? candidates.some((c) => c.userId === input.forceIncludeInvestorId)

@@ -1,6 +1,11 @@
 FROM oven/bun:1.2.5-alpine AS builder
 WORKDIR /app
 
+# Same-origin `/api` is proxied to `backend:8080` by nginx.conf — avoids relying on
+# external API hostnames/DNS when frontend and API share docker-compose.
+ARG VITE_API_BASE_URL=/api
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile
 COPY . .

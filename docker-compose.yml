@@ -65,6 +65,9 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        # Keep API on same origin as the SPA; nginx proxies /api → backend (no public API domain).
+        VITE_API_BASE_URL: /api
     container_name: inside-line-frontend
     restart: unless-stopped
     # ports:

@@ -38,6 +38,8 @@ services:
         required: false
     environment:
       REDIS_URL: redis://redis:6379
+      # Required for nginx (and any other container) to connect — localhost-only bind causes 502.
+      HOST: 0.0.0.0
     depends_on:
       redis:
         condition: service_healthy
@@ -73,7 +75,8 @@ services:
     # ports:
     #   - "${PORT:-80}:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - inside-line
     healthcheck:

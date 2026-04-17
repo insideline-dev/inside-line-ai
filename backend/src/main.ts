@@ -74,9 +74,10 @@ async function bootstrap() {
   }
 
   const port = configService.get("PORT", { infer: true });
-  await app.listen(port);
+  const host = configService.get("HOST", { infer: true });
+  await app.listen(port, host);
 
-  logger.log(`Application running on http://localhost:${port}`);
+  logger.log(`Application running on http://${host}:${port}`);
   logger.log(`Environment: ${configService.get("NODE_ENV", { infer: true })}`);
 }
 

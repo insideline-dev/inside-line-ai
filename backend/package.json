@@ -25,7 +25,8 @@
     "db:studio": "drizzle-kit studio",
     "db:drop": "drizzle-kit drop",
     "db:seed:investors": "bun run scripts/seed-investors.ts",
-    "db:seed": "bun run db:seed:investors"
+    "db:seed": "bun run db:seed:investors",
+    "storage:sync-r2": "bun run scripts/sync-r2-buckets.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.22",

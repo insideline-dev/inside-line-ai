@@ -128,14 +128,16 @@ function sanitizeMarkdown(text: string): string {
 }
 
 export function MarkdownText({ children, className, inline = false }: MarkdownTextProps) {
+  const Wrapper = inline ? "span" : "div";
+
   return (
-    <div className={className}>
+    <Wrapper className={className}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={getComponents(inline)}
       >
         {sanitizeMarkdown(children)}
       </ReactMarkdown>
-    </div>
+    </Wrapper>
   );
 }

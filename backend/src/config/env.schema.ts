@@ -6,8 +6,6 @@ export const envSchema = z.object({
     .enum(["development", "production", "test"])
     .default("development"),
   PORT: z.coerce.number().default(8080),
-  /** HTTP bind address. Use 0.0.0.0 in Docker so other containers (e.g. nginx) can reach the API. */
-  HOST: z.string().default("0.0.0.0"),
 
   // Database
   DATABASE_URL: z

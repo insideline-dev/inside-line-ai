@@ -74,10 +74,12 @@ async function bootstrap() {
   }
 
   const port = configService.get("PORT", { infer: true });
-  const host = configService.get("HOST", { infer: true });
-  await app.listen(port, host);
+  // Hardcoded bind: must reach all interfaces so sibling containers (nginx)
+  // can connect. HOST env name collides with platform-injected vars (Coolify
+  // et al.) — do not read from env here.
+  await app.listen(port, "0.0.0.0");
 
-  logger.log(`Application running on http://${host}:${port}`);
+  logger.log(`Application running on http://0.0.0.0:${port}`);
   logger.log(`Environment: ${configService.get("NODE_ENV", { infer: true })}`);
 }
 

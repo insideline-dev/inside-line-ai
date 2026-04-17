@@ -6,7 +6,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { TrendingUp, TrendingDown, Minus, Info, RefreshCw, MessageSquare, ChevronDown, ChevronUp } from "lucide-react";
 import { CitedText } from "./CitedText";
-import { MarkdownText } from "./MarkdownText";
 import { toast } from "sonner";
 import type { LucideIcon } from "lucide-react";
 
@@ -139,7 +138,7 @@ export function MemoSection({
               "text-muted-foreground"
             }`} />
           )}
-          {evaluationNote && (
+          {!forcePrint && evaluationNote && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Info className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
@@ -204,19 +203,12 @@ export function MemoSection({
         )}
 
         {summary && (
-          forcePrint ? (
-            <MarkdownText
-              className={`text-sm text-muted-foreground leading-relaxed rounded-md [&>p]:mb-4 [&>p:last-child]:mb-0 ${isAnimating ? "animate-content-update" : ""}`}
-            >
-              {summary}
-            </MarkdownText>
-          ) : (
-            <CitedText
-              text={summary}
-              sources={sources}
-              className={`text-sm text-muted-foreground leading-relaxed rounded-md ${isAnimating ? "animate-content-update" : ""}`}
-            />
-          )
+          <CitedText
+            text={summary}
+            sources={sources}
+            stripCitations={forcePrint}
+            className={`text-sm text-muted-foreground leading-relaxed rounded-md ${isAnimating ? "animate-content-update" : ""}`}
+          />
         )}
 
         {details && (

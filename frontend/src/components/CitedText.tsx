@@ -2,6 +2,10 @@ import type { ReactNode } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { MarkdownText } from "./MarkdownText";
 
+function stripCitationMarkers(text: string): string {
+  return text.replace(/\[(\d+)\]/g, "").replace(/[ \t]+\n/g, "\n").replace(/ {2,}/g, " ").trim();
+}
+
 interface Source {
   label: string;
   url: string;
@@ -11,6 +15,7 @@ interface CitedTextProps {
   text: string;
   sources?: Source[];
   className?: string;
+  stripCitations?: boolean;
 }
 
 /** Check if text contains citation markers like [1], [2] */
@@ -78,24 +83,20 @@ function parseCitations(paragraph: string, sources: Source[]): ReactNode[] {
   return segments.map((segment, index) => renderCitation(segment, index, sources));
 }
 
-export function CitedText({ text, sources, className }: CitedTextProps) {
+export function CitedText({ text, sources, className, stripCitations = false }: CitedTextProps) {
   const sourcesList = sources ?? [];
-  const textHasCitations = hasCitations(text) && sourcesList.length > 0;
-  const hasTable = containsMarkdownTable(text);
+  const renderedText = stripCitations ? stripCitationMarkers(text) : text;
+  const textHasCitations = !stripCitations && hasCitations(renderedText) && sourcesList.length > 0;
+  const hasTable = containsMarkdownTable(renderedText);
 
-  // Tables require block-level rendering; wrapping them in <p> (our citation
-  // parser's default) is invalid HTML. Defer to MarkdownText for the entire
-  // block — tradeoff: inline [N] citations inside tables lose tooltip
-  // treatment, which is acceptable since source lists render separately.
   if (hasTable) {
-    return <MarkdownText className={className}>{text}</MarkdownText>;
+    return <MarkdownText className={className}>{renderedText}</MarkdownText>;
   }
 
-  // If text has citations, use the citation parser (preserves tooltip behavior)
   if (textHasCitations) {
     return (
       <div className={className}>
-        {text.split("\n\n").map((paragraph, idx) => (
+        {renderedText.split("\n\n").map((paragraph, idx) => (
           <p key={idx} className="mb-2 last:mb-0">
             {parseCitations(paragraph, sourcesList)}
           </p>
@@ -104,10 +105,9 @@ export function CitedText({ text, sources, className }: CitedTextProps) {
     );
   }
 
-  // Otherwise render as markdown
   return (
     <MarkdownText className={className}>
-      {text}
+      {renderedText}
     </MarkdownText>
   );
 }

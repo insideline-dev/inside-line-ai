@@ -128,8 +128,14 @@ export const FinancialsEvaluationSchema = BaseEvaluationSchema.extend({
       credibility: z.enum(["strong", "moderate", "weak", "none"]).default("none"),
       summary: z.string().min(1).default("Projection assessment pending"),
       scenarioAnalysis: z.boolean().default(false),
-      scenarioDetail: z.string().min(1).default("Scenario detail not provided"),
-      assumptionAssessment: z.string().min(1).default("Assumption assessment pending"),
+      scenarioDetail: z.preprocess(
+        (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+        z.string().min(1).default("Scenario detail not provided"),
+      ),
+      assumptionAssessment: z.preprocess(
+        (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+        z.string().min(1).default("Assumption assessment pending"),
+      ),
       assumptions: z.array(ProjectionAssumptionSchema).default([]),
       profitabilityPath: z.enum([
         "pre-revenue",

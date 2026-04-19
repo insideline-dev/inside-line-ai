@@ -804,7 +804,7 @@ export function TeamTabContent({
               </CardDescription>
             </CardHeader>
           </Card>
-          <TeamGrid members={mergedMembers} showTimelines={true} />
+          <TeamGrid members={mergedMembers} showTimelines={true} forcePrint={_forcePrint} />
         </div>
       ) : (
         <Card className="border-dashed" data-testid="card-no-team-data">

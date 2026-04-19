@@ -61,13 +61,15 @@ interface TeamMember {
 interface TeamProfileCardProps {
   member: TeamMember;
   showTimelines?: boolean;
+  forcePrint?: boolean;
 }
 
 export function TeamProfileCard({
   member,
   showTimelines = true,
+  forcePrint = false,
 }: TeamProfileCardProps) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(forcePrint);
 
   const getInitials = (name: string) => {
     return name
@@ -135,7 +137,7 @@ export function TeamProfileCard({
                 </div>
 
                 {member.headline && (
-                  <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                  <p className={cn("text-sm text-muted-foreground mt-1", !forcePrint && "line-clamp-2")}>
                     {member.headline}
                   </p>
                 )}
@@ -178,7 +180,7 @@ export function TeamProfileCard({
           </div>
 
           {/* Expand trigger */}
-          {hasExpandableContent && (
+          {hasExpandableContent && !forcePrint && (
             <CollapsibleTrigger className="w-full">
               <div className="flex items-center justify-center gap-1.5 py-2 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer border-t">
                 <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", expanded && "rotate-180")} />
@@ -204,7 +206,7 @@ export function TeamProfileCard({
 
             {showTimelines && (hasExperience || hasEducation) && (
               <div className="p-6 space-y-6">
-                <ExperienceTimeline experiences={member.experience || []} />
+                <ExperienceTimeline experiences={member.experience || []} forcePrint={forcePrint} />
                 {hasEducation && (
                   <EducationTimeline education={member.education!} />
                 )}
@@ -239,9 +241,10 @@ export function TeamProfileCard({
 
 interface ExperienceTimelineProps {
   experiences: Experience[];
+  forcePrint?: boolean;
 }
 
-export function ExperienceTimeline({ experiences }: ExperienceTimelineProps) {
+export function ExperienceTimeline({ experiences, forcePrint = false }: ExperienceTimelineProps) {
   if (!experiences || experiences.length === 0) {
     return (
       <div className="space-y-3">
@@ -301,7 +304,7 @@ export function ExperienceTimeline({ experiences }: ExperienceTimelineProps) {
                 )}
               </div>
               {exp.description && (
-                <p className="text-xs text-muted-foreground line-clamp-2">
+                <p className={cn("text-xs text-muted-foreground", !forcePrint && "line-clamp-2")}>
                   {exp.description}
                 </p>
               )}
@@ -369,9 +372,10 @@ export function EducationTimeline({ education }: EducationTimelineProps) {
 interface TeamGridProps {
   members: TeamMember[];
   showTimelines?: boolean;
+  forcePrint?: boolean;
 }
 
-export function TeamGrid({ members, showTimelines = true }: TeamGridProps) {
+export function TeamGrid({ members, showTimelines = true, forcePrint = false }: TeamGridProps) {
   if (!members || members.length === 0) {
     return (
       <div className="text-center py-12 text-muted-foreground">
@@ -387,6 +391,7 @@ export function TeamGrid({ members, showTimelines = true }: TeamGridProps) {
           key={idx}
           member={member}
           showTimelines={showTimelines}
+          forcePrint={forcePrint}
         />
       ))}
     </div>

@@ -80,7 +80,7 @@ export class PdfRenderService implements OnModuleDestroy {
         displayHeaderFooter: true,
         headerTemplate: this.headerTemplate(),
         footerTemplate: this.footerTemplate(),
-        margin: { top: "22mm", bottom: "18mm", left: "14mm", right: "14mm" },
+        margin: { top: "28mm", bottom: "22mm", left: "14mm", right: "14mm" },
         preferCSSPageSize: false,
       });
 
@@ -138,13 +138,19 @@ export class PdfRenderService implements OnModuleDestroy {
       return { executablePath: configuredPath, useChromiumArgs: false };
     }
 
-    try {
-      const bundledPath = await chromium.executablePath();
-      if (bundledPath) {
-        return { executablePath: bundledPath, useChromiumArgs: true };
+    // `@sparticuz/chromium` ships a Linux x86-64 ELF binary for Lambda-style
+    // deploys. On macOS/Windows it unpacks a binary that cannot execute, so
+    // only consult it on Linux. Everywhere else fall through to the locally
+    // installed browser discovery below.
+    if (process.platform === "linux") {
+      try {
+        const bundledPath = await chromium.executablePath();
+        if (bundledPath) {
+          return { executablePath: bundledPath, useChromiumArgs: true };
+        }
+      } catch {
+        // Fall through to local browser discovery.
       }
-    } catch {
-      // Fall through to local browser discovery.
     }
 
     const { access } = await import("node:fs/promises");
@@ -196,14 +202,14 @@ export class PdfRenderService implements OnModuleDestroy {
   }
 
   private headerTemplate(): string {
-    return `<div style="font-family: 'DM Sans', Helvetica, Arial, sans-serif; font-size: 8px; color: #6b7280; width: 100%; padding: 0 14mm; display: flex; justify-content: space-between; align-items: center;">
+    return `<div style="font-family: 'DM Sans', Helvetica, Arial, sans-serif; font-size: 8px; color: #6b7280; width: 100%; padding: 10mm 14mm 0; display: flex; justify-content: space-between; align-items: flex-start; box-sizing: border-box;">
       <span style="letter-spacing: 0.08em; text-transform: uppercase;">Inside Line</span>
       <span class="date"></span>
     </div>`;
   }
 
   private footerTemplate(): string {
-    return `<div style="font-family: 'DM Sans', Helvetica, Arial, sans-serif; font-size: 8px; color: #6b7280; width: 100%; padding: 0 14mm; display: flex; justify-content: space-between; align-items: center;">
+    return `<div style="font-family: 'DM Sans', Helvetica, Arial, sans-serif; font-size: 8px; color: #6b7280; width: 100%; padding: 0 14mm 8mm; display: flex; justify-content: space-between; align-items: flex-end; box-sizing: border-box;">
       <span>Confidential</span>
       <span><span class="pageNumber"></span> / <span class="totalPages"></span></span>
     </div>`;

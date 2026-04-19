@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from "react";
+import insideLineLogo from "@/assets/icon-insideline.svg";
 import "@fontsource-variable/dm-sans/index.css";
 import "@fontsource/instrument-serif/400.css";
 import "./print.css";
@@ -16,9 +17,24 @@ declare global {
 
 export function PrintLayout({ ready, children }: PrintLayoutProps) {
   useEffect(() => {
+    // Only toggle body class on real /print/* routes. When rendered inside a
+    // hidden container already tagged `.print-mode` (PDF export path), skip
+    // body mutation so the visible app doesn't reflow.
+    if (document.querySelector(".print-mode")) return;
     document.body.classList.add("print-mode");
+    // Force light theme on print routes regardless of system or stored preference.
+    const root = document.documentElement;
+    const hadDark = root.classList.contains("dark");
+    root.classList.remove("dark");
+    root.classList.add("light");
+    root.style.colorScheme = "light";
     return () => {
       document.body.classList.remove("print-mode");
+      if (hadDark) {
+        root.classList.remove("light");
+        root.classList.add("dark");
+        root.style.colorScheme = "dark";
+      }
     };
   }, []);
 
@@ -72,63 +88,45 @@ export function PrintCover({ title, startupName, stage, generatedAt, subtitle, g
     month: "long",
     day: "numeric",
   });
+  const formattedStage = stage
+    ? stage
+        .split("_")
+        .filter(Boolean)
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+        .join(" ")
+    : null;
+
   return (
     <section className="print-page print-cover">
-      <div>
-        <div
-          style={{
-            fontSize: "9pt",
-            letterSpacing: "0.24em",
-            textTransform: "uppercase",
-            color: "#163F67",
-            marginBottom: "12mm",
-          }}
-        >
-          Inside Line
+      <div className="print-cover__top">
+        <div className="print-cover__brand">
+          <img src={insideLineLogo} alt="Inside Line" className="print-cover__brand-icon" />
+          <span className="print-cover__brand-text">Inside Line</span>
         </div>
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "12mm" }}>
-          <div style={{ flex: 1 }}>
-            <h1 style={{ marginBottom: "4mm" }}>{title}</h1>
-            {subtitle ? (
-              <div style={{ fontSize: "11pt", color: "#475569", maxWidth: "160mm" }}>{subtitle}</div>
+        <div className="print-cover__hero-split">
+          <div className="print-cover__title-block">
+            <p className="print-cover__kicker">{title}</p>
+            <p className="print-cover__company-hero">{startupName}</p>
+            {subtitle ? <p className="print-cover__subtitle">{subtitle}</p> : null}
+          </div>
+          <div className="print-cover__aside-hero">
+            {logoUrl ? <img src={logoUrl} alt={`${startupName} logo`} className="print-cover__logo" /> : null}
+            {score !== undefined ? (
+              <div className="print-cover__score-card" aria-label={`Overall score ${Math.round(score)} out of 100`}>
+                <span className="print-cover__score-caption">Overall score</span>
+                <div className="print-cover__score print-cover__score--hero">
+                  <span className="print-cover__score-value">{Math.round(score)}</span>
+                  <span className="print-cover__score-scale">/100</span>
+                </div>
+              </div>
             ) : null}
           </div>
-          {(logoUrl || score !== undefined) ? (
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4mm" }}>
-              {logoUrl ? (
-                <img
-                  src={logoUrl}
-                  alt={`${startupName} logo`}
-                  style={{ width: "18mm", height: "18mm", objectFit: "contain", borderRadius: "4mm" }}
-                />
-              ) : null}
-              {score !== undefined ? (
-                <div
-                  style={{
-                    minWidth: "28mm",
-                    padding: "4mm 5mm",
-                    border: "1px solid #cbd5e1",
-                    borderRadius: "4mm",
-                    textAlign: "center",
-                    background: "#f8fafc",
-                  }}
-                >
-                  <div style={{ fontSize: "7pt", letterSpacing: "0.12em", textTransform: "uppercase", color: "#64748b" }}>
-                    Total Score
-                  </div>
-                  <div style={{ fontSize: "18pt", fontWeight: 700, color: "#163F67", lineHeight: 1.1 }}>
-                    {Math.round(score)}
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
         </div>
       </div>
-      <div style={{ borderTop: "1px solid #163F67", paddingTop: "6mm" }}>
-        <div style={{ fontSize: "20pt", fontFamily: "Instrument Serif, serif" }}>{startupName}</div>
-        <div style={{ display: "flex", gap: "10mm", flexWrap: "wrap", marginTop: "3mm", fontSize: "9pt", color: "#475569" }}>
-          {stage ? <span>Stage: {stage}</span> : null}
+
+      <div className="print-cover__bottom">
+        <div className="print-cover__meta">
+          {formattedStage ? <span>Stage {formattedStage}</span> : null}
           <span>Generated {date}</span>
           {generatedBy ? <span>Generated by {generatedBy}</span> : null}
         </div>

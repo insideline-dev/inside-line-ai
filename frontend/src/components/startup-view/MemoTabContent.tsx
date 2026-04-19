@@ -363,8 +363,8 @@ export function MemoTabContent({
   const executiveSummarySources = toEvaluationSourceArray(evaluation.sources);
 
   return (
-    <Card data-testid="card-investment-memo">
-      <CardHeader className="pb-4">
+    <Card data-testid="card-investment-memo" className={forcePrint ? "border-0 bg-transparent shadow-none" : undefined}>
+      <CardHeader className={forcePrint ? "hidden" : "pb-4"}>
         <div className="flex items-start justify-between">
           <div>
             <CardTitle className="text-lg" data-testid="text-memo-title">
@@ -398,7 +398,7 @@ export function MemoTabContent({
           </div>
         </div>
       </CardHeader>
-      <CardContent className="space-y-6" data-testid="container-memo-sections">
+      <CardContent className={forcePrint ? "p-0 space-y-6" : "space-y-6"} data-testid="container-memo-sections">
         <MemoSection
           title="Executive Summary"
           icon={FileText}

@@ -2,6 +2,7 @@ import { MemoTabContent } from "@/components/startup-view";
 import type { Startup } from "@/types/startup";
 import type { Evaluation } from "@/types/evaluation";
 import type { ScoringWeights } from "@/lib/score-utils";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { PrintLayout, PrintPage, PrintCover } from "./PrintLayout";
 
 interface PrintMemoProps {
@@ -22,25 +23,27 @@ export function PrintMemo({ startup, evaluation, weights, ready, generatedBy }: 
         : undefined;
 
   return (
-    <PrintLayout ready={ready}>
-      <PrintCover
-        title="Investment Memo"
-        startupName={startup.name}
-        stage={stage}
-        subtitle={startup.description ?? undefined}
-        generatedBy={generatedBy}
-        score={overallScore}
-        logoUrl={startup.logoUrl ?? undefined}
-      />
-      <PrintPage>
-        <MemoTabContent
-          startup={startup}
-          evaluation={evaluation}
-          weights={weights}
-          animateOnMount={false}
-          forcePrint
+    <TooltipProvider>
+      <PrintLayout ready={ready}>
+        <PrintCover
+          title="Investment Memo"
+          startupName={startup.name}
+          stage={stage}
+          subtitle={startup.description ?? undefined}
+          generatedBy={generatedBy}
+          score={overallScore}
+          logoUrl={startup.logoUrl ?? undefined}
         />
-      </PrintPage>
-    </PrintLayout>
+        <PrintPage>
+          <MemoTabContent
+            startup={startup}
+            evaluation={evaluation}
+            weights={weights}
+            animateOnMount={false}
+            forcePrint
+          />
+        </PrintPage>
+      </PrintLayout>
+    </TooltipProvider>
   );
 }

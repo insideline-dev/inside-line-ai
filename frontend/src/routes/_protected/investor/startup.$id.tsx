@@ -139,12 +139,6 @@ function InvestorStartupDetailPage() {
 
   const handleDownload = async (type: "memo" | "report") => {
     if (!pdfData) return;
-    if (!pdfData.watermarkEmail) {
-      toast.error("Unable to generate watermark", {
-        description: "User email is required for PDF watermarking.",
-      });
-      return;
-    }
     setDownloading(true);
     try {
       if (type === "memo") await downloadMemo(pdfData as Parameters<typeof downloadMemo>[0]);

@@ -2,7 +2,8 @@
 
 @page {
   size: A4 portrait;
-  margin: 0;
+  /* Puppeteer's pdf() options set the actual print margins. Leave CSS @page
+     margin unset so on-screen preview matches without fighting the renderer. */
 }
 
 html,
@@ -10,7 +11,13 @@ body {
   background: #ffffff !important;
 }
 
-body.print-mode {
+/* Force light theme on print routes no matter what the OS or stored prefs say. */
+html.print-mode,
+html:has(body.print-mode) {
+  color-scheme: light !important;
+}
+
+.print-mode {
   margin: 0;
   padding: 0;
   color: #0a1017;
@@ -19,12 +26,49 @@ body.print-mode {
   print-color-adjust: exact;
   font-size: 10.5pt;
   line-height: 1.45;
+  color-scheme: light;
+  --color-background: #ffffff;
+  --color-foreground: #0a1017;
+  --color-card: #ffffff;
+  --color-card-foreground: #0a1017;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #0a1017;
+  --color-primary: #163f67;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #eef2f6;
+  --color-secondary-foreground: #0a1017;
+  --color-muted: #f8fafc;
+  --color-muted-foreground: #475569;
+  --color-accent: #e8edf3;
+  --color-accent-foreground: #0a1017;
+  --color-destructive: #dc2626;
+  --color-destructive-foreground: #ffffff;
+  --color-border: #e5e7eb;
+  --color-input: #e5e7eb;
+  --color-ring: #163f67;
+  --color-sidebar: #eef2f6;
+  --color-sidebar-foreground: #0a1017;
+  --color-sidebar-border: #e5e7eb;
+  --color-sidebar-primary: #163f67;
+  --color-sidebar-primary-foreground: #ffffff;
+  --color-sidebar-accent: #e8edf3;
+  --color-sidebar-accent-foreground: #0a1017;
+  --color-sidebar-ring: #163f67;
+  --button-outline: rgba(0, 0, 0, 0.1);
+  --badge-outline: rgba(0, 0, 0, 0.05);
+  --opaque-button-border-intensity: -8;
+  --elevate-1: rgba(0, 0, 0, 0.03);
+  --elevate-2: rgba(0, 0, 0, 0.08);
+  --primary-border: #0f3558;
+  --destructive-border: #b91c1c;
+  --secondary-border: #d7dee7;
 }
 
+/* Each section starts on a new page. Let height flow naturally so long
+   content paginates cleanly under Puppeteer's reserved header/footer
+   margins instead of overflowing into them. */
 .print-mode .print-page {
-  width: 210mm;
-  min-height: 297mm;
-  padding: 16mm 14mm 18mm 14mm;
+  width: 100%;
   box-sizing: border-box;
   margin: 0 auto;
   background: #ffffff;
@@ -51,7 +95,133 @@ body.print-mode {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  min-height: 265mm;
+  /* A4 content area = 297mm − 28mm top − 22mm bottom Puppeteer margins. */
+  min-height: 247mm;
+}
+
+.print-mode .print-cover__top {
+  display: flex;
+  flex-direction: column;
+  gap: 10mm;
+}
+
+.print-mode .print-cover__brand {
+  display: flex;
+  align-items: center;
+  gap: 2.5mm;
+}
+
+.print-mode .print-cover__brand-icon {
+  width: 8.5mm;
+  height: 8.5mm;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.print-mode .print-cover__brand-text {
+  font-family: "Instrument Serif", ui-serif, Georgia, "Times New Roman", serif;
+  font-size: 19pt;
+  line-height: 1;
+  color: #163f67;
+}
+
+.print-mode .print-cover__kicker,
+.print-mode .print-cover__score-caption {
+  font-size: 8pt;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #163f67;
+}
+
+.print-mode .print-cover__hero-split {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18mm;
+}
+
+.print-mode .print-cover__title-block {
+  flex: 1;
+  max-width: 122mm;
+}
+
+.print-mode .print-cover__company-hero {
+  margin: 3mm 0 0;
+  font-family: "Instrument Serif", ui-serif, Georgia, "Times New Roman", serif;
+  font-size: 34pt;
+  line-height: 0.95;
+  color: #0a1017;
+  text-wrap: balance;
+}
+
+.print-mode .print-cover__subtitle {
+  margin: 5mm 0 0;
+  max-width: 102mm;
+  font-size: 12pt;
+  line-height: 1.55;
+  color: #475569;
+}
+
+.print-mode .print-cover__aside-hero {
+  display: flex;
+  min-width: 42mm;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5mm;
+}
+
+.print-mode .print-cover__logo {
+  width: 24mm;
+  height: 24mm;
+  object-fit: contain;
+}
+
+.print-mode .print-cover__score-card {
+  display: flex;
+  min-width: 42mm;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1.5mm;
+}
+
+.print-mode .print-cover__score {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+  gap: 1mm;
+}
+
+.print-mode .print-cover__score--hero {
+  gap: 1.2mm;
+}
+
+.print-mode .print-cover__score-value {
+  font-family: "Instrument Serif", ui-serif, Georgia, "Times New Roman", serif;
+  font-size: 30pt;
+  line-height: 0.95;
+  color: #163f67;
+}
+
+.print-mode .print-cover__score-scale {
+  margin-top: 0;
+  font-size: 13pt;
+  line-height: 1;
+  color: #64748b;
+}
+
+.print-mode .print-cover__bottom {
+  border-top: 1px solid #163f67;
+  padding-top: 6mm;
+}
+
+.print-mode .print-cover__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4mm 10mm;
+  margin-top: 0;
+  font-size: 9pt;
+  color: #475569;
 }
 
 .print-mode h1,
@@ -69,7 +239,8 @@ body.print-mode {
 /* Hide interactive chrome on print routes */
 .print-mode [data-print-hide="true"],
 .print-mode button[aria-label*="dropdown" i],
-.print-mode [role="tooltip"] {
+.print-mode [role="tooltip"],
+.print-mode [aria-describedby^="radix-"] {
   display: none !important;
 }
 
@@ -104,3 +275,101 @@ body.print-mode {
 /* Utility: page break hints */
 .print-break-before { page-break-before: always; break-before: page; }
 .print-break-inside-avoid { page-break-inside: avoid; break-inside: avoid; }
+
+.print-mode .tsqd-parent-container,
+.print-mode [aria-label="Open Tanstack query devtools"] {
+  display: none !important;
+}
+
+.print-mode [data-print-badge="weight"] {
+  background: #ffffff !important;
+  color: #475569 !important;
+  border-color: #dbe2ea !important;
+}
+
+.print-mode [data-print-badge="score"] {
+  background: #ffffff !important;
+}
+
+.print-mode [data-print-badge="score"].bg-emerald-50,
+.print-mode [data-print-badge="score"][class*="bg-emerald"] {
+  color: #047857 !important;
+  border-color: #a7f3d0 !important;
+}
+
+.print-mode [data-print-badge="score"].bg-amber-50,
+.print-mode [data-print-badge="score"][class*="bg-amber"] {
+  color: #b45309 !important;
+  border-color: #fde68a !important;
+}
+
+.print-mode [data-print-badge="score"].bg-orange-50,
+.print-mode [data-print-badge="score"][class*="bg-orange"] {
+  color: #c2410c !important;
+  border-color: #fdba74 !important;
+}
+
+.print-mode [data-print-badge="score"].bg-rose-50,
+.print-mode [data-print-badge="score"][class*="bg-rose"] {
+  color: #be123c !important;
+  border-color: #fda4af !important;
+}
+
+.print-mode [data-print-memo-section="true"] .print-memo-section__header {
+  align-items: center;
+  gap: 1.5mm;
+}
+
+.print-mode [data-print-memo-section="true"] .print-memo-section__icon {
+  margin-top: 0;
+  transform: translateY(-0.25mm);
+}
+
+.print-mode [data-print-memo-section="true"] h3 {
+  margin: 0;
+  line-height: 1.1;
+}
+
+/* Force light surfaces for every card/background in print — defends against
+   any remaining dark-mode styles that leak through. */
+.print-mode,
+.print-mode * {
+  color-scheme: light !important;
+}
+
+.print-mode [class*="bg-background"],
+.print-mode [class*="bg-card"],
+.print-mode [class*="bg-popover"],
+.print-mode [class*="bg-muted"],
+.print-mode [class*="bg-sidebar"] {
+  background-color: #ffffff !important;
+  color: #0a1017 !important;
+}
+
+/* Collapse the summary card's multi-column grid in print so score, radar,
+   and metadata stack vertically and stay centered on the page. */
+.print-mode [class*="md:grid-cols-[auto_1px_260px"],
+.print-mode [class*="md:grid-cols-[auto_1px_1fr"] {
+  grid-template-columns: 1fr !important;
+  justify-items: center;
+  text-align: center;
+}
+
+.print-mode [class*="md:grid-cols-[auto_1px_260px"] > *,
+.print-mode [class*="md:grid-cols-[auto_1px_1fr"] > * {
+  width: 100%;
+  max-width: 120mm;
+}
+
+/* Hide the vertical divider spacers between columns when we collapse the grid. */
+.print-mode [class*="md:grid-cols-[auto_1px_260px"] > .hidden.md\:block,
+.print-mode [class*="md:grid-cols-[auto_1px_1fr"] > .hidden.md\:block {
+  display: none !important;
+}
+
+/* Center the radar chart and score ring visuals in print. */
+.print-mode .recharts-responsive-container,
+.print-mode .recharts-wrapper {
+  margin-left: auto !important;
+  margin-right: auto !important;
+}

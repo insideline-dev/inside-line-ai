@@ -9,6 +9,7 @@ import {
 import type { Startup } from "@/types/startup";
 import type { Evaluation } from "@/types/evaluation";
 import type { ScoringWeights } from "@/lib/score-utils";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { PrintLayout, PrintPage, PrintCover } from "./PrintLayout";
 
 interface PrintReportProps {
@@ -21,18 +22,10 @@ interface PrintReportProps {
 
 type TeamMember = { name: string; role: string; linkedinUrl?: string };
 
-function PrintSectionTitle({ label }: { label: string }) {
+function PrintSectionTitle({ title }: { title: string }) {
   return (
-    <div
-      style={{
-        fontFamily: "Instrument Serif, serif",
-        fontSize: "18pt",
-        letterSpacing: "-0.01em",
-        marginBottom: "6mm",
-        color: "#163F67",
-      }}
-    >
-      {label}
+    <div className="mb-5 border-b border-border pb-2">
+      <h2 className="text-xl text-[#163F67]">{title}</h2>
     </div>
   );
 }
@@ -43,9 +36,10 @@ export function PrintReport({ startup, evaluation, weights, ready, generatedBy }
   const stage = typeof startup.stage === "string" ? startup.stage : undefined;
 
   return (
-    <PrintLayout ready={ready}>
+    <TooltipProvider>
+      <PrintLayout ready={ready}>
       <PrintCover
-        title="Analysis Report"
+        title="Startup Report"
         startupName={startup.name}
         stage={stage}
         subtitle={startup.description ?? undefined}
@@ -55,12 +49,12 @@ export function PrintReport({ startup, evaluation, weights, ready, generatedBy }
       />
 
       <PrintPage>
-        <PrintSectionTitle label="Summary" />
+        <PrintSectionTitle title="Summary" />
         <AdminSummaryTab startup={startup} evaluation={evaluation} weights={weights} />
       </PrintPage>
 
       <PrintPage>
-        <PrintSectionTitle label="Market" />
+        <PrintSectionTitle title="Market" />
         <MarketTabContent
           evaluation={evaluation}
           marketWeight={weights?.market}
@@ -73,7 +67,7 @@ export function PrintReport({ startup, evaluation, weights, ready, generatedBy }
       </PrintPage>
 
       <PrintPage>
-        <PrintSectionTitle label="Product" />
+        <PrintSectionTitle title="Product" />
         <ProductTabContent
           startup={startup}
           evaluation={evaluation}
@@ -83,7 +77,7 @@ export function PrintReport({ startup, evaluation, weights, ready, generatedBy }
       </PrintPage>
 
       <PrintPage>
-        <PrintSectionTitle label="Team" />
+        <PrintSectionTitle title="Team" />
         <TeamTabContent
           evaluation={evaluation}
           teamMembers={teamMembers}
@@ -94,7 +88,7 @@ export function PrintReport({ startup, evaluation, weights, ready, generatedBy }
       </PrintPage>
 
       <PrintPage>
-        <PrintSectionTitle label="Financials" />
+        <PrintSectionTitle title="Financials" />
         <FinancialsTabContent
           evaluation={evaluation}
           financialsWeight={weights?.financials}
@@ -103,7 +97,7 @@ export function PrintReport({ startup, evaluation, weights, ready, generatedBy }
       </PrintPage>
 
       <PrintPage>
-        <PrintSectionTitle label="Competitors" />
+        <PrintSectionTitle title="Competitors" />
         <CompetitorsTabContent
           evaluation={evaluation}
           companyName={startup.name}
@@ -111,5 +105,6 @@ export function PrintReport({ startup, evaluation, weights, ready, generatedBy }
         />
       </PrintPage>
     </PrintLayout>
+    </TooltipProvider>
   );
 }

@@ -116,18 +116,18 @@ export function MemoSection({
   if (!summary && !details) return null;
 
   return (
-    <Card className="border-0 shadow-none bg-transparent">
+    <Card className="border-0 shadow-none bg-transparent" data-print-memo-section={forcePrint ? "true" : undefined}>
       <CardContent className="p-0 space-y-2">
-        <div className="flex items-center gap-2 flex-wrap">
-          <Icon className="w-4 h-4 text-primary" />
+        <div className="flex items-center gap-2 flex-wrap print-memo-section__header">
+          <Icon className="w-4 h-4 text-primary print-memo-section__icon" />
           <h3 className="text-sm font-semibold">{title}</h3>
           {weight && (
-            <Badge variant="outline" className="text-xs font-normal py-0 h-5">
+            <Badge variant="outline" className="text-xs font-normal py-0 h-5" data-print-badge={forcePrint ? "weight" : undefined}>
               Weight: {weight}
             </Badge>
           )}
           {score !== null && score !== undefined && (
-            <Badge variant="outline" className={`${getScoreColor(score)} py-0 h-5`}>
+            <Badge variant="outline" className={`${getScoreColor(score)} py-0 h-5`} data-print-badge={forcePrint ? "score" : undefined}>
               Score: {Math.round(score)}/100
             </Badge>
           )}

@@ -40,27 +40,47 @@ export function PrintLayout({ ready, children }: PrintLayoutProps) {
 
   useEffect(() => {
     if (!ready) return;
+
     let cancelled = false;
+    let fallbackTimer: number | null = null;
+
+    const signalReady = (reason: string) => {
+      if (cancelled || window.__PRINT_READY__ === true) return;
+      console.info(`[print] ready via ${reason}`);
+      window.__PRINT_READY__ = true;
+    };
+
     const markReady = async () => {
+      fallbackTimer = window.setTimeout(() => {
+        signalReady("timeout");
+      }, 5000);
+
       try {
         if (document.fonts && document.fonts.ready) {
-          await document.fonts.ready;
+          await Promise.race([
+            document.fonts.ready,
+            new Promise((resolve) => window.setTimeout(resolve, 3000)),
+          ]);
         }
       } catch {
         // ignore font-readiness errors
       }
+
       // Double rAF ensures React commits + layout + paints before signaling.
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          if (!cancelled) {
-            window.__PRINT_READY__ = true;
-          }
+          signalReady("layout");
         });
       });
     };
+
     markReady();
+
     return () => {
       cancelled = true;
+      if (fallbackTimer !== null) {
+        window.clearTimeout(fallbackTimer);
+      }
     };
   }, [ready]);
 

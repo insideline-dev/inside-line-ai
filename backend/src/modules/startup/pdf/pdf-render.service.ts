@@ -54,18 +54,32 @@ export class PdfRenderService implements OnModuleDestroy {
 
     const browser = await this.getBrowser();
     const page = await browser.newPage();
+    page.on("console", (msg) => {
+      this.logger.debug(`[print:${kind}] console.${msg.type()}: ${msg.text()}`);
+    });
+    page.on("pageerror", (err) => {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`[print:${kind}] pageerror: ${message}`);
+    });
+    page.on("requestfailed", (request) => {
+      const failure = request.failure();
+      this.logger.warn(
+        `[print:${kind}] requestfailed ${request.method()} ${request.url()}: ${failure?.errorText ?? "unknown"}`,
+      );
+    });
     try {
       await page.setViewport({ width: 1200, height: 1600, deviceScaleFactor: 2 });
       await page.emulateMediaType("print");
 
-      const cookieDomain = new URL(frontendUrl).hostname;
+      const frontendOrigin = new URL(frontendUrl);
       await page.setCookie({
         name: JWT_COOKIE_NAME,
         value: token,
-        domain: cookieDomain,
+        domain: frontendOrigin.hostname,
         path: "/",
         httpOnly: true,
-        secure: !this.isDev(),
+        sameSite: "Lax",
+        secure: frontendOrigin.protocol === "https:",
       });
 
       this.logger.log(`Rendering ${kind} PDF for startup ${startupId} at ${url}`);
@@ -86,8 +100,9 @@ export class PdfRenderService implements OnModuleDestroy {
 
       return Buffer.from(pdf);
     } catch (err) {
+      const currentUrl = page.url();
       this.logger.error(
-        `Puppeteer render failed for ${kind} ${startupId}: ${(err as Error).message}`,
+        `Puppeteer render failed for ${kind} ${startupId} at ${currentUrl}: ${(err as Error).message}`,
       );
       throw new InternalServerErrorException(
         `Failed to render ${kind} PDF: ${(err as Error).message}`,
@@ -106,19 +121,24 @@ export class PdfRenderService implements OnModuleDestroy {
 
     this.browserPromise = (async () => {
       const { executablePath, useChromiumArgs } = await this.resolveExecutablePath();
-
-      return puppeteer.launch({
-        args: useChromiumArgs
+      const linuxArgs =
+        process.platform === "linux"
           ? [
-              ...chromium.args,
               "--no-sandbox",
               "--disable-setuid-sandbox",
               "--disable-dev-shm-usage",
+              "--disable-gpu",
             ]
-          : [],
+          : [];
+
+      return puppeteer.launch({
+        args: useChromiumArgs
+          ? [...chromium.args, ...linuxArgs]
+          : linuxArgs,
         executablePath,
         headless: true,
         defaultViewport: { width: 1200, height: 1600 },
+        protocolTimeout: 120000,
       });
     })();
 
@@ -136,21 +156,6 @@ export class PdfRenderService implements OnModuleDestroy {
     const configuredPath = this.config.get<string>("PUPPETEER_EXECUTABLE_PATH");
     if (configuredPath) {
       return { executablePath: configuredPath, useChromiumArgs: false };
-    }
-
-    // `@sparticuz/chromium` ships a Linux x86-64 ELF binary for Lambda-style
-    // deploys. On macOS/Windows it unpacks a binary that cannot execute, so
-    // only consult it on Linux. Everywhere else fall through to the locally
-    // installed browser discovery below.
-    if (process.platform === "linux") {
-      try {
-        const bundledPath = await chromium.executablePath();
-        if (bundledPath) {
-          return { executablePath: bundledPath, useChromiumArgs: true };
-        }
-      } catch {
-        // Fall through to local browser discovery.
-      }
     }
 
     const { access } = await import("node:fs/promises");
@@ -180,6 +185,20 @@ export class PdfRenderService implements OnModuleDestroy {
         return { executablePath: candidate, useChromiumArgs: false };
       } catch {
         continue;
+      }
+    }
+
+    // `@sparticuz/chromium` ships a Linux x86-64 ELF binary for Lambda-style
+    // deploys. Prefer a system browser in containers; fall back to Sparticuz
+    // only when no stable local executable is present.
+    if (process.platform === "linux") {
+      try {
+        const bundledPath = await chromium.executablePath();
+        if (bundledPath) {
+          return { executablePath: bundledPath, useChromiumArgs: true };
+        }
+      } catch {
+        // Fall through to final error.
       }
     }
 

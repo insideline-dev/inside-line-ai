@@ -68,6 +68,7 @@ export const envSchema = z.object({
   // App URLs
   APP_URL: z.string().url().default("http://localhost:8080"),
   FRONTEND_URL: z.string().url().default("http://localhost:3030"),
+  PUPPETEER_EXECUTABLE_PATH: z.string().optional(),
 
   // Feature Flags
   ENABLE_SWAGGER: z.coerce.boolean().default(true),

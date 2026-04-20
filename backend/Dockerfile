@@ -38,10 +38,12 @@ RUN bun install --frozen-lockfile --production && \
 FROM oven/bun:1.2.5-alpine AS runner
 WORKDIR /app
 
-RUN addgroup --system --gid 1001 nodejs && \
+RUN apk add --no-cache chromium nss freetype harfbuzz ca-certificates ttf-freefont && \
+    addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nestjs
 
-ENV NODE_ENV=production
+ENV NODE_ENV=production \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
 COPY --from=prod-deps --chown=nestjs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nestjs:nodejs /app/dist ./dist

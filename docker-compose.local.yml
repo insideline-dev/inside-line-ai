@@ -1,0 +1,10 @@
+services:
+  backend:
+    environment:
+      QUEUE_PREFIX: inside-line-local-compose
+    ports:
+      - "8080:8080"
+
+  frontend:
+    ports:
+      - "3000:80"

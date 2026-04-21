@@ -258,13 +258,15 @@ html:has(body.print-mode) {
 /* Kill box-shadows for crisper print */
 .print-mode * {
   box-shadow: none !important;
+  -webkit-print-color-adjust: exact !important;
+  print-color-adjust: exact !important;
 }
 
 /* Card tweaks */
 .print-mode .card,
 .print-mode [data-slot="card"] {
   border-color: #e5e7eb !important;
-  background: #ffffff !important;
+  background: var(--color-card, #ffffff) !important;
 }
 
 /* Fix score ring sizing in print */
@@ -330,21 +332,39 @@ html:has(body.print-mode) {
   line-height: 1.1;
 }
 
-/* Force light surfaces for every card/background in print — defends against
-   any remaining dark-mode styles that leak through. */
+/* Force light theme tokens in print without flattening muted surfaces. */
 .print-mode,
 .print-mode * {
   color-scheme: light !important;
 }
 
-.print-mode [class*="bg-background"],
-.print-mode [class*="bg-card"],
-.print-mode [class*="bg-popover"],
-.print-mode [class*="bg-muted"],
-.print-mode [class*="bg-sidebar"] {
+.print-mode [class*="bg-background"] {
   background-color: #ffffff !important;
   color: #0a1017 !important;
 }
+
+.print-mode [class*="bg-card"],
+.print-mode [class*="bg-popover"] {
+  background-color: var(--color-card, #ffffff) !important;
+  color: #0a1017 !important;
+}
+
+.print-mode [class*="bg-muted"] {
+  background-color: var(--color-muted, #f8fafc) !important;
+  color: #0a1017 !important;
+}
+
+.print-mode [class*="bg-secondary"],
+.print-mode [class*="bg-sidebar"] {
+  background-color: var(--color-secondary, #eef2f6) !important;
+  color: #0a1017 !important;
+}
+
+.print-mode [class*="bg-chart-1"] { background-color: #163f67 !important; }
+.print-mode [class*="bg-chart-2"] { background-color: #0f766e !important; }
+.print-mode [class*="bg-chart-4"] { background-color: #b45309 !important; }
+.print-mode [class*="bg-destructive"] { background-color: #dc2626 !important; }
+.print-mode [class*="bg-primary"] { background-color: #163f67 !important; }
 
 /* Collapse the summary card's multi-column grid in print so score, radar,
    and metadata stack vertically and stay centered on the page. */

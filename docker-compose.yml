@@ -38,7 +38,6 @@ services:
         required: false
     environment:
       REDIS_URL: redis://redis:6379
-      FRONTEND_URL: http://frontend
       PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
     depends_on:
       redis:

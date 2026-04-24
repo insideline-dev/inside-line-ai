@@ -360,11 +360,11 @@ html:has(body.print-mode) {
   color: #0a1017 !important;
 }
 
-.print-mode [class*="bg-chart-1"] { background-color: #163f67 !important; }
-.print-mode [class*="bg-chart-2"] { background-color: #0f766e !important; }
-.print-mode [class*="bg-chart-4"] { background-color: #b45309 !important; }
-.print-mode [class*="bg-destructive"] { background-color: #dc2626 !important; }
-.print-mode [class*="bg-primary"] { background-color: #163f67 !important; }
+.print-mode .bg-chart-1 { background-color: #163f67 !important; }
+.print-mode .bg-chart-2 { background-color: #0f766e !important; }
+.print-mode .bg-chart-4 { background-color: #b45309 !important; }
+.print-mode .bg-destructive { background-color: #dc2626 !important; }
+.print-mode .bg-primary { background-color: #163f67 !important; }
 
 /* Collapse the summary card's multi-column grid in print so score, radar,
    and metadata stack vertically and stay centered on the page. */

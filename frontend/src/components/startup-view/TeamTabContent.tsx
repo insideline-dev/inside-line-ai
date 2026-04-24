@@ -428,7 +428,7 @@ function deduplicateMembers(members: TeamMember[]): TeamMember[] {
   return result;
 }
 
-function buildTeamMembers(
+export function buildTeamMembers(
   evaluation: Evaluation | null,
   submittedMembers: TeamMember[],
   companyName?: string,

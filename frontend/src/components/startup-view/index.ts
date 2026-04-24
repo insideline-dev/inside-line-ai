@@ -1,7 +1,7 @@
 export { StartupHeader } from "./StartupHeader";
 export { SummaryCard } from "./SummaryCard";
 export { MemoTabContent } from "./MemoTabContent";
-export { TeamTabContent } from "./TeamTabContent";
+export { TeamTabContent, buildTeamMembers } from "./TeamTabContent";
 export { CompetitorsTabContent } from "./CompetitorsTabContent";
 export { ProductTabContent } from "./ProductTabContent";
 export { MarketTabContent } from "./MarketTabContent";

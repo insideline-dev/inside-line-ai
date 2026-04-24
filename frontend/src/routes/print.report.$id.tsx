@@ -5,7 +5,10 @@ import {
   useStartupControllerFindOne,
   useStartupControllerGetEvaluation,
 } from "@/api/generated/startups/startups";
-import { useInvestorControllerGetEffectiveWeights } from "@/api/generated/investor/investor";
+import {
+  useInvestorControllerGetEffectiveWeights,
+  useInvestorControllerGetMatchDetails,
+} from "@/api/generated/investor/investor";
 import type { Startup } from "@/types/startup";
 import type { Evaluation } from "@/types/evaluation";
 import type { ScoringWeights } from "@/lib/score-utils";
@@ -35,6 +38,9 @@ function PrintReportRoute() {
   const { data: approvedStartupRes, isLoading: l2 } =
     useStartupControllerFindApprovedById(id, { query: { retry: false } });
   const { data: evalRes, isLoading: l3 } = useStartupControllerGetEvaluation(id);
+  const { data: matchRes, isLoading: l5 } = useInvestorControllerGetMatchDetails(id, {
+    query: { retry: false },
+  });
 
   const { data: currentUser } = useCurrentUser();
   const startup = ownStartupRes
@@ -54,7 +60,19 @@ function PrintReportRoute() {
     ? unwrap<Evaluation>(evalRes)
     : startup?.evaluation;
 
-  const loading = l1 || l2 || l3 || (Boolean(stage) && l4);
+  const match = matchRes ? unwrap<Record<string, unknown>>(matchRes) : undefined;
+  const thesisRationaleText =
+    typeof match?.fitRationale === "string" && match.fitRationale.trim().length > 0
+      ? match.fitRationale
+      : typeof match?.matchReason === "string" && match.matchReason.trim().length > 0
+        ? match.matchReason
+        : "";
+  const thesisAlignment =
+    typeof match?.thesisFitScore === "number"
+      ? { thesisFitScore: match.thesisFitScore as number, rationale: thesisRationaleText }
+      : null;
+
+  const loading = l1 || l2 || l3 || l5 || (Boolean(stage) && l4);
   const ready = !loading && Boolean(startup) && Boolean(evaluation);
 
   if (!ready) {
@@ -72,6 +90,7 @@ function PrintReportRoute() {
       weights={weights}
       ready
       generatedBy={currentUser?.name ?? currentUser?.email ?? null}
+      thesisAlignment={thesisAlignment}
     />
   );
 }

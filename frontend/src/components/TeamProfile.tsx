@@ -115,19 +115,19 @@ export function TeamProfileCard({
                     <h3 className="text-lg font-semibold">{member.name}</h3>
                     <div className="mt-0.5 flex items-center gap-2">
                       <p className="text-sm text-primary font-medium">{member.role}</p>
-                      {member.discovered && (
+                      {!forcePrint && member.discovered && (
                         <Badge variant="secondary" className="h-5 px-2 text-[10px] uppercase tracking-wide">
                           Discovered
                         </Badge>
                       )}
-                      {member.source && member.source !== "submitted" && (
+                      {!forcePrint && member.source && member.source !== "submitted" && (
                         <Badge variant="outline" className="h-5 px-2 text-[10px] uppercase tracking-wide text-muted-foreground">
                           {member.source}
                         </Badge>
                       )}
                     </div>
                   </div>
-                  {member.fmfScore !== undefined && member.fmfScore !== null && (
+                  {!forcePrint && member.fmfScore !== undefined && member.fmfScore !== null && (
                     <Badge
                       className={`${getScoreColor(member.fmfScore)} border-0 shrink-0`}
                     >
@@ -142,33 +142,35 @@ export function TeamProfileCard({
                   </p>
                 )}
 
-                <div className="flex items-center gap-3 mt-2 flex-wrap">
-                  {member.location && (
-                    <span className="text-xs text-muted-foreground flex items-center gap-1">
-                      <MapPin className="w-3 h-3" />
-                      {member.location}
-                    </span>
-                  )}
-                  {member.linkedinUrl && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 px-2 text-xs"
-                      asChild
-                    >
-                      <a
-                        href={member.linkedinUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-1"
+                {!forcePrint && (
+                  <div className="flex items-center gap-3 mt-2 flex-wrap">
+                    {member.location && (
+                      <span className="text-xs text-muted-foreground flex items-center gap-1">
+                        <MapPin className="w-3 h-3" />
+                        {member.location}
+                      </span>
+                    )}
+                    {member.linkedinUrl && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-xs"
+                        asChild
                       >
-                        <Linkedin className="w-3 h-3" />
-                        LinkedIn
-                        <ExternalLink className="w-3 h-3" />
-                      </a>
-                    </Button>
-                  )}
-                </div>
+                        <a
+                          href={member.linkedinUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1"
+                        >
+                          <Linkedin className="w-3 h-3" />
+                          LinkedIn
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      </Button>
+                    )}
+                  </div>
+                )}
 
                 {(member.summary || member.background) && (
                   <MarkdownText className="text-sm text-muted-foreground leading-relaxed mt-3">

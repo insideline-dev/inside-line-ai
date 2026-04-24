@@ -606,7 +606,7 @@ export function ProductTabContent({ startup, evaluation, showScores = true, show
               <div className="flex flex-wrap gap-2">
                 {technologyStack.map((item, idx) => {
                   const { name, detail } = parseTechBrackets(item.technology);
-                  const tooltipText = [detail, item.source ? `Source: ${item.source}` : ""]
+                  const tooltipText = [detail, !forcePrint && item.source ? `Source: ${item.source}` : ""]
                     .filter(Boolean)
                     .join(" \u00b7 ");
                   return tooltipText ? (

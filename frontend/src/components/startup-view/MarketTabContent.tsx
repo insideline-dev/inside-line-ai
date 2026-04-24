@@ -577,7 +577,7 @@ export function MarketTabContent({ evaluation, marketWeight, fundingStage, showK
                 )}
 
                 {/* Deck vs Research comparison table */}
-                {(dvr.tam.claimed || dvr.tam.researched || dvr.sam.claimed || dvr.sam.researched || dvr.som.claimed || dvr.som.researched || tamSources.length > 0 || samSources.length > 0 || somSources.length > 0) && (
+                {!forcePrint && (dvr.tam.claimed || dvr.tam.researched || dvr.sam.claimed || dvr.sam.researched || dvr.som.claimed || dvr.som.researched || tamSources.length > 0 || samSources.length > 0 || somSources.length > 0) && (
                   <div className="w-full mt-2 rounded-lg border text-xs">
                     <div className="grid grid-cols-[50px_1fr_1fr_1fr] border-b bg-muted/30">
                       <div className="px-2 py-1.5 font-medium text-muted-foreground" />

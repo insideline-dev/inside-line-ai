@@ -63,8 +63,7 @@ export class EvolutionLinkingService {
         return { processed: true, reason: "invalid_link_code" };
       }
 
-      await this.sendWhatsApp(params.phone, "Your WhatsApp is verified and linked. Clara will respond here now.");
-      return { processed: false, reason: "linked_contact", contact };
+      return { processed: true, reason: "linked_contact" };
     }
 
     if (this.isEmail(text)) {

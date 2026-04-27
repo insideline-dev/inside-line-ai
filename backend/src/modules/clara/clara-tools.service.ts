@@ -24,15 +24,19 @@ import type { CreateNote, UpdateMatchStatus } from "../investor/dto";
 import type { ClaraAgentRuntimeState } from "./interfaces/clara.interface";
 import { ClaraChannelService, type ClaraChannelKind } from "./clara-channel.service";
 
-type BuildToolsInput = {
-  actorUserId: string | null;
-  actorRole?: string | null;
-  linkedStartupId?: string | null;
-  channel?: ClaraChannelKind;
-  inboxId?: string;
-  inReplyToMessageId?: string;
-  runtime?: ClaraAgentRuntimeState;
-};
+type BuildToolsInput =
+  | string
+  | null
+  | {
+      actorUserId: string | null;
+      actorRole?: string | null;
+      linkedStartupId?: string | null;
+      channel?: ClaraChannelKind;
+      inboxId?: string;
+      inReplyToMessageId?: string;
+      whatsappTo?: string | null;
+      runtime?: ClaraAgentRuntimeState;
+    };
 
 type ResolvedToolActor = {
   actorUserId: string | null;
@@ -41,6 +45,7 @@ type ResolvedToolActor = {
   channel: ClaraChannelKind;
   inboxId: string | null;
   inReplyToMessageId: string | null;
+  whatsappTo: string | null;
   runtime?: ClaraAgentRuntimeState;
 };
 
@@ -394,7 +399,6 @@ export class ClaraToolsService {
           limit: z.number().min(1).max(10).default(5).describe("Max results"),
         }),
         execute: async ({ query, limit }) => {
-          if (!actor.actorUserId) return { message: noAccount };
           const escaped = `%${query}%`;
           return this.drizzle.db
             .select({
@@ -457,7 +461,7 @@ export class ClaraToolsService {
 
       sendStartupReportPdf: tool({
         description:
-          "Email the analysis report PDF as an attachment in this email thread for the linked or requested startup.",
+          "Send the analysis report PDF as an attachment for the linked or requested startup. On email, reply with an email attachment. On WhatsApp, send the PDF directly to the current WhatsApp sender; never ask for their phone number.",
         inputSchema: z.object({
           startupId: z.string().nullable().optional(),
           startupName: z.string().nullable().optional(),
@@ -474,7 +478,7 @@ export class ClaraToolsService {
 
       sendStartupMemoPdf: tool({
         description:
-          "Email the investment memo PDF as an attachment in this email thread for the linked or requested startup.",
+          "Send the investment memo PDF as an attachment for the linked or requested startup. On email, reply with an email attachment. On WhatsApp, send the PDF directly to the current WhatsApp sender; never ask for their phone number.",
         inputSchema: z.object({
           startupId: z.string().nullable().optional(),
           startupName: z.string().nullable().optional(),
@@ -783,14 +787,27 @@ export class ClaraToolsService {
   }
 
   private normalizeActor(input: BuildToolsInput): ResolvedToolActor {
+    if (typeof input === "string") {
+      return {
+        actorUserId: input,
+        actorRole: "investor",
+        linkedStartupId: null,
+        channel: "email",
+        inboxId: null,
+        inReplyToMessageId: null,
+        whatsappTo: null,
+      };
+    }
+
     return {
-      actorUserId: input.actorUserId ?? null,
-      actorRole: input.actorRole ?? null,
-      linkedStartupId: input.linkedStartupId ?? null,
-      channel: input.channel ?? "email",
-      inboxId: input.inboxId ?? null,
-      inReplyToMessageId: input.inReplyToMessageId ?? null,
-      runtime: input.runtime,
+      actorUserId: input?.actorUserId ?? null,
+      actorRole: input?.actorRole ?? null,
+      linkedStartupId: input?.linkedStartupId ?? null,
+      channel: input?.channel ?? "email",
+      inboxId: input?.inboxId ?? null,
+      inReplyToMessageId: input?.inReplyToMessageId ?? null,
+      whatsappTo: input?.whatsappTo ?? null,
+      runtime: input?.runtime,
     };
   }
 
@@ -992,10 +1009,17 @@ export class ClaraToolsService {
       };
     }
 
-    if (!actor.inboxId || !actor.inReplyToMessageId) {
+    if (actor.channel === "email" && (!actor.inboxId || !actor.inReplyToMessageId)) {
       return {
         sent: false,
         message: "This email thread context is missing, so I could not send the PDF attachment.",
+      };
+    }
+
+    if (actor.channel === "whatsapp" && !actor.whatsappTo) {
+      return {
+        sent: false,
+        message: "This WhatsApp conversation is missing the sender phone, so I could not send the PDF attachment.",
       };
     }
 
@@ -1046,6 +1070,12 @@ export class ClaraToolsService {
           ? {
               inboxId: actor.inboxId!,
               inReplyToMessageId: actor.inReplyToMessageId!,
+            }
+          : undefined,
+      whatsapp:
+        actor.channel === "whatsapp"
+          ? {
+              to: actor.whatsappTo!,
             }
           : undefined,
       text,

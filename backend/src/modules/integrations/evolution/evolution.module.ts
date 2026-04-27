@@ -6,6 +6,7 @@ import { ClaraModule } from "../../clara/clara.module";
 import { EvolutionApiClientService } from "./evolution-api-client.service";
 import { EvolutionContactResolverService } from "./evolution-contact-resolver.service";
 import { EvolutionController } from "./evolution.controller";
+import { EvolutionLinkingService } from "./evolution-linking.service";
 import { EvolutionMediaService } from "./evolution-media.service";
 import { EvolutionService } from "./evolution.service";
 
@@ -15,6 +16,7 @@ import { EvolutionService } from "./evolution.service";
   providers: [
     EvolutionApiClientService,
     EvolutionContactResolverService,
+    EvolutionLinkingService,
     EvolutionMediaService,
     EvolutionService,
   ],

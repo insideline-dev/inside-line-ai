@@ -1,6 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ClaraService } from "../../clara/clara.service";
 import { EvolutionContactResolverService } from "./evolution-contact-resolver.service";
+import { EvolutionLinkingService } from "./evolution-linking.service";
 import { EvolutionMediaService } from "./evolution-media.service";
 import { normalizeWhatsAppPhone } from "./evolution-phone.util";
 import type { EvolutionInboundMessage } from "./evolution.types";
@@ -12,6 +13,7 @@ export class EvolutionService {
   constructor(
     private readonly clara: ClaraService,
     private readonly contacts: EvolutionContactResolverService,
+    private readonly linking: EvolutionLinkingService,
     private readonly media: EvolutionMediaService,
   ) {}
 
@@ -38,10 +40,17 @@ export class EvolutionService {
       return { processed: false, reason: "invalid_phone" };
     }
 
-    const contact = await this.contacts.resolveByPhone(phone);
+    let contact = await this.contacts.resolveByPhone(phone);
     if (!contact) {
-      this.logger.warn(`Ignoring WhatsApp message from unknown number ${phone}`);
-      return { processed: false, reason: "unknown_contact" };
+      const linkingResult = await this.linking.handleUnknownContact({
+        phone,
+        text: this.extractText(data.message ?? {}),
+      });
+      if (!linkingResult.contact) {
+        this.logger.warn(`Handled unlinked WhatsApp message from ${phone}: ${linkingResult.reason}`);
+        return { processed: linkingResult.processed, reason: linkingResult.reason };
+      }
+      contact = linkingResult.contact;
     }
 
     const { attachments, transcriptText } = await this.media.extractInboundMedia(

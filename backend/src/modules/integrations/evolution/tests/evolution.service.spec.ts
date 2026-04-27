@@ -16,6 +16,10 @@ describe("EvolutionService", () => {
     })),
   };
 
+  const linking = {
+    handleUnknownContact: mock(async () => ({ processed: true, reason: "link_email_requested" })),
+  };
+
   const media = {
     extractInboundMedia: mock(async () => ({ attachments: [], transcriptText: null })),
   };
@@ -25,8 +29,9 @@ describe("EvolutionService", () => {
   beforeEach(() => {
     clara.handleIncomingWhatsAppMessage.mockClear();
     contacts.resolveByPhone.mockClear();
+    linking.handleUnknownContact.mockClear();
     media.extractInboundMedia.mockClear();
-    service = new EvolutionService(clara as never, contacts as never, media as never);
+    service = new EvolutionService(clara as never, contacts as never, linking as never, media as never);
   });
 
   it("normalizes inbound text webhook into Clara WhatsApp message", async () => {
@@ -101,7 +106,7 @@ describe("EvolutionService", () => {
     expect(clara.handleIncomingWhatsAppMessage).not.toHaveBeenCalled();
   });
 
-  it("blocks unknown contacts", async () => {
+  it("starts linking flow for unknown contacts", async () => {
     contacts.resolveByPhone.mockResolvedValueOnce(null);
 
     const result = await service.handleWebhook({
@@ -117,8 +122,45 @@ describe("EvolutionService", () => {
       },
     });
 
-    expect(result).toEqual({ processed: false, reason: "unknown_contact" });
+    expect(result).toEqual({ processed: true, reason: "link_email_requested" });
+    expect(linking.handleUnknownContact).toHaveBeenCalledWith({
+      phone: "+15551234567",
+      text: "hello",
+    });
     expect(clara.handleIncomingWhatsAppMessage).not.toHaveBeenCalled();
+  });
+
+  it("continues to Clara after a verification code links the contact", async () => {
+    contacts.resolveByPhone.mockResolvedValueOnce(null);
+    linking.handleUnknownContact.mockResolvedValueOnce({
+      processed: false,
+      reason: "linked_contact",
+      contact: {
+        phone: "+15551234567",
+        email: "founder@example.com",
+        name: "Founder",
+        userId: "user-1",
+        role: "founder",
+        startupId: "startup-1",
+      },
+    });
+
+    const result = await service.handleWebhook({
+      event: "messages.upsert",
+      instance: "clara",
+      data: {
+        key: {
+          id: "msg-code-1",
+          remoteJid: "15551234567@s.whatsapp.net",
+          fromMe: false,
+        },
+        pushName: "Founder",
+        message: { conversation: "123456" },
+      },
+    });
+
+    expect(result).toEqual({ processed: true });
+    expect(clara.handleIncomingWhatsAppMessage).toHaveBeenCalled();
   });
 
   it("passes audio-only inbound messages to Clara with transcript and attachments", async () => {

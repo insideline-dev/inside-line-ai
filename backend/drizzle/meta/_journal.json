@@ -71,6 +71,13 @@
       "when": 1777137135328,
       "tag": "0009_workable_raza",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1777286346676,
+      "tag": "0010_milky_lifeguard",
+      "breakpoints": true
     }
   ]
 }

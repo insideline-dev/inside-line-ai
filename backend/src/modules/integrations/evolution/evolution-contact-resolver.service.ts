@@ -3,6 +3,7 @@ import { eq, or } from "drizzle-orm";
 import { DrizzleService } from "../../../database";
 import { user } from "../../../auth/entities/auth.schema";
 import { startup } from "../../startup/entities/startup.schema";
+import { evolutionWhatsappLink } from "./entities/evolution-whatsapp-link.schema";
 import { normalizeWhatsAppPhone } from "./evolution-phone.util";
 
 export interface EvolutionKnownContact {
@@ -57,6 +58,30 @@ export class EvolutionContactResolverService {
       };
     }
 
-    return null;
+    const [linkedContact] = await this.drizzle.db
+      .select({
+        email: evolutionWhatsappLink.email,
+        userId: evolutionWhatsappLink.userId,
+        startupId: evolutionWhatsappLink.startupId,
+        userName: user.name,
+        userRole: user.role,
+        startupName: startup.contactName,
+      })
+      .from(evolutionWhatsappLink)
+      .leftJoin(user, eq(user.id, evolutionWhatsappLink.userId))
+      .leftJoin(startup, eq(startup.id, evolutionWhatsappLink.startupId))
+      .where(eq(evolutionWhatsappLink.phone, normalized))
+      .limit(1);
+
+    if (!linkedContact) return null;
+
+    return {
+      phone: normalized,
+      email: linkedContact.email,
+      name: linkedContact.startupName ?? linkedContact.userName ?? null,
+      userId: linkedContact.userId,
+      role: linkedContact.userRole,
+      startupId: linkedContact.startupId,
+    };
   }
 }

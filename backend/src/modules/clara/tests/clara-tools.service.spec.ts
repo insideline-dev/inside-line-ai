@@ -108,6 +108,8 @@ describe("ClaraToolsService", () => {
   let noteService: jest.Mocked<InvestorNoteService>;
   let portfolioService: jest.Mocked<PortfolioService>;
   let startupService: { reanalyze: jest.Mock; getProgress: jest.Mock; adminGetProgress: jest.Mock };
+  let claraChannel: { reply: jest.Mock; send: jest.Mock };
+  let pdfService: { generatePdf: jest.Mock; extractText: jest.Mock; generateMemo: jest.Mock; generateReport: jest.Mock };
 
   beforeEach(async () => {
     mockDb = createMockDb();
@@ -145,6 +147,16 @@ describe("ClaraToolsService", () => {
       getProgress: jest.fn(),
       adminGetProgress: jest.fn(),
     };
+    claraChannel = {
+      reply: jest.fn().mockResolvedValue(undefined),
+      send: jest.fn().mockResolvedValue(undefined),
+    };
+    pdfService = {
+      generatePdf: jest.fn().mockResolvedValue(Buffer.from("")),
+      extractText: jest.fn().mockResolvedValue(""),
+      generateMemo: jest.fn().mockResolvedValue(Buffer.from("memo-pdf")),
+      generateReport: jest.fn().mockResolvedValue(Buffer.from("report-pdf")),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -157,11 +169,11 @@ describe("ClaraToolsService", () => {
         { provide: PortfolioService, useValue: portfolioService },
         {
           provide: ClaraChannelService,
-          useValue: { reply: jest.fn().mockResolvedValue(undefined), send: jest.fn().mockResolvedValue(undefined) },
+          useValue: claraChannel,
         },
         {
           provide: PdfService,
-          useValue: { generatePdf: jest.fn().mockResolvedValue(Buffer.from('')), extractText: jest.fn().mockResolvedValue('') },
+          useValue: pdfService,
         },
         {
           provide: AnalyticsService,
@@ -291,6 +303,54 @@ describe("ClaraToolsService", () => {
         message: "The note was saved.",
       }),
     );
+  });
+
+  it("sends memo PDFs to the current WhatsApp sender", async () => {
+    mockDb.limit.mockResolvedValueOnce([
+      {
+        id: "startup-1",
+        name: "Stream AI",
+        status: "approved",
+        overallScore: 82,
+        stage: "seed",
+        industry: "AI",
+      },
+    ]);
+    const runtime = {
+      replyHandled: false,
+      replyText: null,
+      replyAttachments: [],
+      pendingAction: null,
+    };
+    const tools = service.buildTools({
+      actorUserId: "investor-1",
+      actorRole: "investor",
+      linkedStartupId: "startup-1",
+      channel: "whatsapp",
+      inboxId: "whatsapp",
+      inReplyToMessageId: "msg-1",
+      whatsappTo: "+212682860421",
+      runtime,
+    });
+
+    const result = await tools.sendStartupMemoPdf.execute({ startupId: "startup-1" });
+
+    expect(pdfService.generateMemo).toHaveBeenCalledWith("startup-1", "investor-1");
+    expect(claraChannel.reply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        channel: "whatsapp",
+        whatsapp: { to: "+212682860421" },
+        attachments: [
+          expect.objectContaining({
+            filename: "stream-ai-memo.pdf",
+            contentType: "application/pdf",
+            content: Buffer.from("memo-pdf").toString("base64"),
+          }),
+        ],
+      }),
+    );
+    expect(runtime.replyHandled).toBe(true);
+    expect(result).toEqual(expect.objectContaining({ sent: true, filename: "stream-ai-memo.pdf" }));
   });
 
   it("executes admin reanalysis through the allowlisted action executor", async () => {

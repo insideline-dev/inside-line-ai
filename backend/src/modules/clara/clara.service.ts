@@ -923,6 +923,7 @@ export class ClaraService {
               channel: "whatsapp",
               inboxId: ctx.inboxId,
               inReplyToMessageId: ctx.messageId,
+              whatsappTo: ctx.fromPhone,
               runtime: agentRuntime,
             });
             return this.claraAi.runAgentLoop(ctx, tools, {

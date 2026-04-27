@@ -15,6 +15,7 @@ import { AdminModule } from "./modules/admin";
 import { AnalysisModule } from "./modules/analysis";
 import { TwilioModule } from "./modules/integrations/twilio/twilio.module";
 import { AgentMailModule } from "./modules/integrations/agentmail/agentmail.module";
+import { EvolutionModule } from "./modules/integrations/evolution/evolution.module";
 import { UnipileModule } from "./modules/integrations/unipile/unipile.module";
 import { AiModule } from "./modules/ai";
 import { ClaraModule } from "./modules/clara/clara.module";
@@ -37,6 +38,7 @@ import { ClaraModule } from "./modules/clara/clara.module";
     AiModule,
     TwilioModule,
     AgentMailModule,
+    EvolutionModule,
     ClaraModule,
     UnipileModule,
     HealthModule,

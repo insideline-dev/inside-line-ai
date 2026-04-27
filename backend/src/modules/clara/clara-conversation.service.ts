@@ -34,13 +34,38 @@ export class ClaraConversationService {
     return row ?? null;
   }
 
+  async findByChannelThread(
+    channel: string,
+    externalThreadId: string,
+  ): Promise<ClaraConversationRecord | null> {
+    const [row] = await this.drizzle.db
+      .select()
+      .from(claraConversation)
+      .where(
+        and(
+          eq(claraConversation.channel, channel),
+          eq(claraConversation.externalThreadId, externalThreadId),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
+  }
+
   async findOrCreate(
     threadId: string,
     investorEmail: string,
     investorName: string | null,
     investorUserId: string | null,
+    options?: {
+      channel?: string;
+      externalThreadId?: string | null;
+      normalizedPhone?: string | null;
+      providerMetadata?: Record<string, unknown> | null;
+    },
   ): Promise<ClaraConversationRecord> {
-    const existing = await this.findByThreadId(threadId);
+    const existing = options?.channel && options.externalThreadId
+      ? await this.findByChannelThread(options.channel, options.externalThreadId)
+      : await this.findByThreadId(threadId);
     if (existing) {
       const shouldRefreshIdentity =
         existing.investorEmail !== investorEmail ||
@@ -54,6 +79,8 @@ export class ClaraConversationService {
             investorEmail,
             investorName: investorName ?? existing.investorName,
             investorUserId: investorUserId ?? existing.investorUserId,
+            normalizedPhone: options?.normalizedPhone ?? existing.normalizedPhone,
+            providerMetadata: options?.providerMetadata ?? existing.providerMetadata,
             updatedAt: new Date(),
           })
           .where(eq(claraConversation.id, existing.id))
@@ -64,6 +91,8 @@ export class ClaraConversationService {
           investorEmail,
           investorName: investorName ?? existing.investorName,
           investorUserId: investorUserId ?? existing.investorUserId,
+          normalizedPhone: options?.normalizedPhone ?? existing.normalizedPhone,
+          providerMetadata: options?.providerMetadata ?? existing.providerMetadata,
         };
       }
 
@@ -72,6 +101,10 @@ export class ClaraConversationService {
 
     const values: NewClaraConversationRecord = {
       threadId,
+      channel: options?.channel ?? "email",
+      externalThreadId: options?.externalThreadId ?? threadId,
+      normalizedPhone: options?.normalizedPhone ?? null,
+      providerMetadata: options?.providerMetadata ?? {},
       investorEmail,
       investorName,
       investorUserId,
@@ -139,6 +172,24 @@ export class ClaraConversationService {
     return row ?? null;
   }
 
+  async findByStartupIdAndChannel(
+    startupId: string,
+    channel: string,
+  ): Promise<ClaraConversationRecord | null> {
+    const [row] = await this.drizzle.db
+      .select()
+      .from(claraConversation)
+      .where(
+        and(
+          eq(claraConversation.startupId, startupId),
+          eq(claraConversation.channel, channel),
+        ),
+      )
+      .orderBy(desc(claraConversation.lastMessageAt))
+      .limit(1);
+    return row ?? null;
+  }
+
   async findLatestAwaitingInfoByInvestorEmail(
     investorEmail: string,
     excludeConversationId?: string,
@@ -198,6 +249,9 @@ export class ClaraConversationService {
     attachments?: AttachmentMeta[] | null;
     processed?: boolean;
     errorMessage?: string | null;
+    channel?: string;
+    externalMessageId?: string | null;
+    providerMetadata?: Record<string, unknown> | null;
   }): Promise<void> {
     const alreadyLogged = await this.hasMessage(
       params.conversationId,
@@ -214,6 +268,9 @@ export class ClaraConversationService {
     const values: NewClaraMessageRecord = {
       conversationId: params.conversationId,
       messageId: params.messageId,
+      channel: params.channel ?? "email",
+      externalMessageId: params.externalMessageId ?? params.messageId,
+      providerMetadata: params.providerMetadata ?? {},
       direction: params.direction,
       fromEmail: params.fromEmail,
       subject: params.subject ?? null,

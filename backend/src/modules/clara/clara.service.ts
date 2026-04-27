@@ -16,10 +16,12 @@ import { PdfService } from "../startup/pdf.service";
 import { CopilotService } from "../copilot";
 import type { CopilotPendingAction } from "../copilot";
 import { ClaraConversationService } from "./clara-conversation.service";
+import type { ClaraConversationRecord } from "./entities/clara-conversation.schema";
 import { ClaraAiService } from "./clara-ai.service";
 import { ClaraSubmissionService } from "./clara-submission.service";
 import { ClaraToolsService } from "./clara-tools.service";
 import { ClaraChannelService } from "./clara-channel.service";
+import { normalizeWhatsAppPhone } from "../integrations/evolution/evolution-phone.util";
 import {
   ClaraIntent,
   ConversationStatus,
@@ -720,6 +722,275 @@ export class ClaraService {
     }
   }
 
+  async handleIncomingWhatsAppMessage(params: {
+    messageId: string;
+    phone: string;
+    fromName: string | null;
+    fromEmail: string;
+    actorUserId: string | null;
+    actorRole: string | null;
+    investorUserId: string | null;
+    startupId: string | null;
+    bodyText: string;
+    attachments?: AttachmentMeta[];
+    providerMetadata?: Record<string, unknown>;
+  }): Promise<void> {
+    if (!this.adminUserId) {
+      this.logger.warn("Clara not configured, skipping WhatsApp message");
+      return;
+    }
+
+    const threadId = `whatsapp:${params.phone}`;
+    const lockKey = `clara:lock:whatsapp:${params.phone}:${params.messageId}`;
+    const acquired = await this.webhookLock.setNx(lockKey, "1", 120);
+    if (!acquired) {
+      this.logger.warn(
+        `[Clara] Skipping concurrent duplicate WhatsApp message ${params.messageId} from ${params.phone}`,
+      );
+      return;
+    }
+
+    try {
+      let conversation = await this.conversationService.findOrCreate(
+        threadId,
+        params.fromEmail,
+        params.fromName,
+        params.investorUserId,
+        {
+          channel: "whatsapp",
+          externalThreadId: params.phone,
+          normalizedPhone: params.phone,
+          providerMetadata: params.providerMetadata ?? {},
+        },
+      );
+
+      if (params.startupId && !conversation.startupId) {
+        await this.conversationService.linkStartup(conversation.id, params.startupId);
+        conversation = { ...conversation, startupId: params.startupId };
+      }
+
+      const alreadyRepliedToMessage = await this.conversationService.hasMessage(
+        conversation.id,
+        `reply-${params.messageId}`,
+        MessageDirection.OUTBOUND,
+      );
+      if (alreadyRepliedToMessage) return;
+
+      const alreadyProcessedInbound = await this.conversationService.hasMessage(
+        conversation.id,
+        params.messageId,
+        MessageDirection.INBOUND,
+      );
+      if (alreadyProcessedInbound) return;
+
+      const history = await this.conversationService.getRecentMessages(conversation.id);
+      const startupContext = await this.getStartupExtra(conversation.startupId);
+      const ctx: MessageContext = {
+        channel: "whatsapp",
+        threadId,
+        messageId: params.messageId,
+        inboxId: "whatsapp",
+        subject: null,
+        bodyText: params.bodyText,
+        fromEmail: params.fromEmail,
+        fromName: params.fromName,
+        fromPhone: params.phone,
+        attachments: params.attachments ?? [],
+        actorUserId: params.actorUserId,
+        actorRole: params.actorRole,
+        conversationHistory: history,
+        investorUserId: params.investorUserId,
+        startupId: conversation.startupId,
+        startupStage: startupContext.startupStage ?? null,
+        conversationStatus: conversation.status as ConversationStatus,
+        conversationMemory:
+          conversation.context && typeof conversation.context === "object"
+            ? (conversation.context as Record<string, unknown>)
+            : null,
+      };
+
+      const intentClassification = await this.claraAi.classifyIntent(ctx);
+      let intent = intentClassification.intent;
+      const agentRuntime: ClaraAgentRuntimeState = {
+        replyHandled: false,
+        replyText: null,
+        replyAttachments: [],
+        pendingAction: null,
+      };
+      let pendingActionForMemory = this.readPendingActionFromMemory(
+        ctx.conversationMemory,
+      );
+      let finalStartupId = conversation.startupId;
+      let finalStartupExtra = startupContext;
+
+      const hasSubmissionAttachment = ctx.attachments.some((attachment) =>
+        Boolean(attachment.isPitchDeck),
+      );
+      const shouldProcessAsSubmission =
+        hasSubmissionAttachment ||
+        intentClassification.intent === ClaraIntent.SUBMISSION ||
+        this.claraAi.isLikelySubmission(ctx);
+
+      await this.conversationService.logMessage({
+        conversationId: conversation.id,
+        messageId: params.messageId,
+        direction: MessageDirection.INBOUND,
+        fromEmail: params.fromEmail,
+        bodyText: params.bodyText,
+        intent,
+        intentConfidence: intentClassification.confidence,
+        attachments: ctx.attachments,
+        processed: true,
+        channel: "whatsapp",
+        externalMessageId: params.messageId,
+        providerMetadata: params.providerMetadata ?? {},
+      });
+      await this.conversationService.updateLastIntent(conversation.id, intent);
+
+      let replyText: string;
+      if (shouldProcessAsSubmission) {
+        intent = ClaraIntent.SUBMISSION;
+        const result = await this.submissionService.handleSubmission(
+          ctx,
+          this.adminUserId,
+          intentClassification.extractedCompanyName ?? undefined,
+        );
+        if (result.noPitchDeck) {
+          replyText = [
+            `Hi ${params.fromName ?? "there"},`,
+            "",
+            "I got your WhatsApp message, but I still need a pitch deck PDF or presentation file before I can start the analysis.",
+            "",
+            "Send the deck here and I’ll kick off the full Clara workflow.",
+          ].join("\n");
+        } else if (result.isDuplicate) {
+          if (result.duplicateBlocked) {
+            replyText = [
+              `We already have ${result.startupName} in our system.`,
+              "",
+              "Delete the existing startup first, then resend the latest deck if you want a fresh analysis run.",
+            ].join("\n");
+          } else {
+            replyText = `I linked this to existing startup ${result.startupName} and restarted analysis.`;
+          }
+        } else {
+          finalStartupId = result.startupId;
+          finalStartupExtra = {
+            ...startupContext,
+            startupName: result.startupName,
+            startupStatus: result.status,
+          };
+          await this.conversationService.linkStartup(conversation.id, result.startupId);
+          if ((result.missingFields ?? []).length > 0 && !result.pipelineStarted) {
+            const missingLabels = this.formatMissingFieldLabels(result.missingFields ?? []);
+            replyText = [
+              `Got ${result.startupName}. Before I run the full analysis, I still need:`,
+              ...missingLabels.map((label) => `- ${label}`),
+              "",
+              "Reply here with those details and I’ll continue immediately.",
+            ].join("\n");
+            await this.conversationService.updateStatus(
+              conversation.id,
+              ConversationStatus.AWAITING_INFO,
+            );
+          } else {
+            replyText = `Got ${result.startupName}. Clara is running the full analysis now — I’ll send the results here when it’s done.`;
+            await this.conversationService.updateStatus(
+              conversation.id,
+              ConversationStatus.PROCESSING,
+            );
+          }
+        }
+      } else {
+        const copilotResult = await this.copilotService.handleTurn({
+          ctx: {
+            bodyText: ctx.bodyText,
+            fromEmail: ctx.fromEmail,
+            threadId: ctx.threadId,
+          },
+          actor: {
+            userId: params.actorUserId,
+            role: params.actorRole,
+          },
+          conversationId: conversation.id,
+          conversationMemory: ctx.conversationMemory,
+          runtime: agentRuntime,
+          runAgentLoop: async () => {
+            const tools = this.toolsService.buildTools({
+              actorUserId: params.actorUserId,
+              actorRole: params.actorRole,
+              linkedStartupId: conversation.startupId,
+              channel: "whatsapp",
+              inboxId: ctx.inboxId,
+              inReplyToMessageId: ctx.messageId,
+              runtime: agentRuntime,
+            });
+            return this.claraAi.runAgentLoop(ctx, tools, {
+              actorRole: params.actorRole,
+              conversationMemory: ctx.conversationMemory,
+            });
+          },
+          executePendingAction: (pendingAction) =>
+            this.toolsService.executePendingAction(pendingAction, {
+              actorUserId: params.actorUserId,
+              actorRole: params.actorRole,
+            }),
+        });
+
+        replyText = copilotResult.replyText;
+        pendingActionForMemory = copilotResult.clearPendingAction
+          ? null
+          : copilotResult.pendingAction;
+      }
+
+      if (!agentRuntime.replyHandled) {
+        await this.claraChannel.reply({
+          channel: "whatsapp",
+          whatsapp: { to: params.phone },
+          text: replyText,
+        });
+      }
+
+      const outboundText = agentRuntime.replyHandled
+        ? (agentRuntime.replyText ?? replyText)
+        : replyText;
+
+      await this.conversationService.logMessage({
+        conversationId: conversation.id,
+        messageId: `reply-${params.messageId}`,
+        direction: MessageDirection.OUTBOUND,
+        fromEmail: "clara@whatsapp.local",
+        bodyText: outboundText,
+        processed: true,
+        channel: "whatsapp",
+        externalMessageId: `reply-${params.messageId}`,
+      });
+
+      await this.conversationService.updateContext(
+        conversation.id,
+        this.mergeConversationContext(
+          conversation.context as Record<string, unknown> | null | undefined,
+          this.buildConversationMemoryPatch({
+            ctx,
+            intent,
+            intentClassification,
+            replyText: outboundText,
+            startupId: finalStartupId,
+            startupExtra: finalStartupExtra,
+            attachmentReply: agentRuntime.replyAttachments,
+            pendingAction: pendingActionForMemory,
+          }),
+        ),
+      );
+
+      this.logger.log(
+        `Processed WhatsApp message ${params.messageId}: intent=${intent}`,
+      );
+    } finally {
+      await this.webhookLock.del(lockKey);
+    }
+  }
+
   async notifyPipelineComplete(
     startupId: string,
     overallScore?: number,
@@ -732,10 +1003,19 @@ export class ClaraService {
 
     const conversation =
       await this.conversationService.findByStartupId(startupId);
-    if (!conversation) return;
+    const whatsappConversation =
+      await this.conversationService.findByStartupIdAndChannel(
+        startupId,
+        "whatsapp",
+      );
+    if (!conversation && !whatsappConversation) return;
 
     const [startupRecord] = await this.drizzle.db
-      .select({ name: startup.name, status: startup.status })
+      .select({
+        name: startup.name,
+        status: startup.status,
+        contactPhone: startup.contactPhone,
+      })
       .from(startup)
       .where(eq(startup.id, startupId))
       .limit(1);
@@ -748,11 +1028,13 @@ export class ClaraService {
     const warningMessage = options?.warningMessage?.trim() ?? "";
     const completedWithWarnings = warningMessage.length > 0;
 
-    const pdfAttachments = await this.buildCompletionPdfAttachments(
-      startupId,
-      startupRecord.name,
-      conversation.investorUserId ?? null,
-    );
+    const pdfAttachments = conversation
+      ? await this.buildCompletionPdfAttachments(
+          startupId,
+          startupRecord.name,
+          conversation.investorUserId ?? null,
+        )
+      : [];
 
     const attachedDocsText =
       pdfAttachments.length > 0
@@ -760,7 +1042,7 @@ export class ClaraService {
         : "The analysis is complete. I wasn't able to attach the PDFs in this email, but you can download the memo and report from the platform.";
 
     const replyText = [
-      `Hi ${conversation.investorName ?? "there"},`,
+      `Hi ${conversation?.investorName ?? whatsappConversation?.investorName ?? "there"},`,
       "",
       completedWithWarnings
         ? `The analysis for ${startupRecord.name} is complete${scoreText}, but it finished with warnings and should be reviewed carefully.`
@@ -781,52 +1063,85 @@ export class ClaraService {
       "Clara",
     ].join("\n");
 
-    await this.sendConversationEmail({
-      conversation,
-      recipientEmail: conversation.investorEmail,
-      subject: completedWithWarnings
-        ? `Analysis Complete With Warnings: ${startupRecord.name}`
-        : `Analysis Complete: ${startupRecord.name}`,
-      text: replyText,
-      attachments: pdfAttachments.length > 0 ? pdfAttachments : undefined,
-    });
+    if (conversation) {
+      await this.sendConversationEmail({
+        conversation,
+        recipientEmail: conversation.investorEmail,
+        subject: completedWithWarnings
+          ? `Analysis Complete With Warnings: ${startupRecord.name}`
+          : `Analysis Complete: ${startupRecord.name}`,
+        text: replyText,
+        attachments: pdfAttachments.length > 0 ? pdfAttachments : undefined,
+      });
 
-    this.logger.log(
-      `Pipeline completion email sent for startup ${startupId} to ${conversation.investorEmail} (attachments=${pdfAttachments.length})`,
+      this.logger.log(
+        `Pipeline completion email sent for startup ${startupId} to ${conversation.investorEmail} (attachments=${pdfAttachments.length})`,
+      );
+    }
+
+    const completionWhatsAppConversation = whatsappConversation ?? conversation;
+    const completionWhatsAppPhone = normalizeWhatsAppPhone(
+      completionWhatsAppConversation?.normalizedPhone ?? startupRecord.contactPhone,
     );
+    if (completionWhatsAppConversation && completionWhatsAppPhone) {
+      const whatsappText = [
+        completedWithWarnings
+          ? `Analysis for ${startupRecord.name} is complete with warnings${scoreText}.`
+          : `Great news — analysis for ${startupRecord.name} is complete${scoreText}.`,
+        completedWithWarnings ? `Warning: ${warningMessage}` : null,
+        "Open Inside Line to review the memo, scores, and full report. You can reply here with follow-up questions.",
+      ]
+        .filter((line): line is string => Boolean(line))
+        .join("\n\n");
+      await this.sendConversationWhatsApp({
+        conversation: completionWhatsAppConversation,
+        to: completionWhatsAppPhone,
+        text: whatsappText,
+        messageId: `${this.buildPipelineCompletionMessageId(startupId, options?.pipelineRunId)}-whatsapp`,
+      });
+    }
 
-    await this.conversationService.logMessage({
-      conversationId: conversation.id,
-      messageId: this.buildPipelineCompletionMessageId(
-        startupId,
-        options?.pipelineRunId,
+    if (conversation) {
+      await this.conversationService.logMessage({
+        conversationId: conversation.id,
+        messageId: this.buildPipelineCompletionMessageId(
+          startupId,
+          options?.pipelineRunId,
+        ),
+        direction: MessageDirection.OUTBOUND,
+        fromEmail: `clara@agentmail.to`,
+        subject: completedWithWarnings
+          ? `Analysis Complete With Warnings: ${startupRecord.name}`
+          : `Analysis Complete: ${startupRecord.name}`,
+        bodyText: replyText,
+        attachments:
+          pdfAttachments.length > 0
+            ? pdfAttachments.map((att, index) => ({
+                filename: att.filename ?? `attachment-${index}.pdf`,
+                contentType: att.contentType ?? "application/pdf",
+                attachmentId: `pipeline-complete-${startupId}-${index}`,
+                isPitchDeck: false,
+                status: "uploaded" as const,
+              }))
+            : null,
+        processed: true,
+      });
+    }
+
+    const completionConversations = [conversation, whatsappConversation].filter(
+      (value): value is ClaraConversationRecord => Boolean(value),
+    );
+    await Promise.all(
+      completionConversations.map((conv) =>
+        this.conversationService.updateStatus(
+          conv.id,
+          ConversationStatus.COMPLETED,
+        ),
       ),
-      direction: MessageDirection.OUTBOUND,
-      fromEmail: `clara@agentmail.to`,
-      subject: completedWithWarnings
-        ? `Analysis Complete With Warnings: ${startupRecord.name}`
-        : `Analysis Complete: ${startupRecord.name}`,
-      bodyText: replyText,
-      attachments:
-        pdfAttachments.length > 0
-          ? pdfAttachments.map((att, index) => ({
-              filename: att.filename ?? `attachment-${index}.pdf`,
-              contentType: att.contentType ?? "application/pdf",
-              attachmentId: `pipeline-complete-${startupId}-${index}`,
-              isPitchDeck: false,
-              status: "uploaded" as const,
-            }))
-          : null,
-      processed: true,
-    });
-
-    await this.conversationService.updateStatus(
-      conversation.id,
-      ConversationStatus.COMPLETED,
     );
 
     this.logger.log(
-      `Sent pipeline completion notification for startup ${startupId} to ${conversation.investorEmail}`,
+      `Sent pipeline completion notification for startup ${startupId}`,
     );
   }
 
@@ -855,6 +1170,7 @@ export class ClaraService {
         teamSize: startup.teamSize,
         contactEmail: startup.contactEmail,
         contactName: startup.contactName,
+        contactPhone: startup.contactPhone,
       })
       .from(startup)
       .where(eq(startup.id, startupId))
@@ -925,6 +1241,34 @@ export class ClaraService {
     this.logger.log(
       `Sent Clara missing-info request for startup ${startupId} to ${recipient.email} (fields=${unresolvedMissing.join(",")}, scope=${dedupeScope})`,
     );
+
+    const whatsappPhone = normalizeWhatsAppPhone(startupRecord.contactPhone);
+    if (whatsappPhone) {
+      const whatsappConversation = await this.conversationService.findOrCreate(
+        `whatsapp:${whatsappPhone}`,
+        recipient.email,
+        recipient.name,
+        null,
+        {
+          channel: "whatsapp",
+          externalThreadId: whatsappPhone,
+          normalizedPhone: whatsappPhone,
+        },
+      );
+      if (!whatsappConversation.startupId) {
+        await this.conversationService.linkStartup(whatsappConversation.id, startupId);
+      }
+      await this.sendConversationWhatsApp({
+        conversation: { ...whatsappConversation, startupId },
+        to: whatsappPhone,
+        text: replyText,
+        messageId: `${messageId}-whatsapp`,
+      });
+      await this.conversationService.updateStatus(
+        whatsappConversation.id,
+        ConversationStatus.AWAITING_INFO,
+      );
+    }
 
     if (!conv) {
       conv = await this.conversationService.findOrCreate(
@@ -1381,6 +1725,42 @@ export class ClaraService {
       html: this.toHtml(params.text),
       attachments: params.attachments,
     });
+  }
+
+  private async sendConversationWhatsApp(params: {
+    conversation: ClaraConversationRecord;
+    to: string;
+    text: string;
+    messageId: string;
+  }): Promise<boolean> {
+    const phone = normalizeWhatsAppPhone(params.to);
+    if (!phone) return false;
+
+    const alreadySent = await this.conversationService.hasMessage(
+      params.conversation.id,
+      params.messageId,
+      MessageDirection.OUTBOUND,
+    );
+    if (alreadySent) return false;
+
+    await this.claraChannel.send({
+      channel: "whatsapp",
+      whatsapp: { to: phone },
+      text: params.text,
+    });
+
+    await this.conversationService.logMessage({
+      conversationId: params.conversation.id,
+      messageId: params.messageId,
+      direction: MessageDirection.OUTBOUND,
+      fromEmail: "clara@whatsapp.local",
+      bodyText: params.text,
+      processed: true,
+      channel: "whatsapp",
+      externalMessageId: params.messageId,
+    });
+
+    return true;
   }
 
   private toHtml(text: string): string {

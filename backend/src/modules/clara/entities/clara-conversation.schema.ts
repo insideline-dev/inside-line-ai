@@ -26,6 +26,10 @@ export const claraConversation = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     threadId: text("thread_id").notNull(),
+    channel: text("channel").default("email").notNull(),
+    externalThreadId: text("external_thread_id"),
+    normalizedPhone: text("normalized_phone"),
+    providerMetadata: jsonb("provider_metadata").default({}).notNull(),
     investorUserId: uuid("investor_user_id").references(() => user.id, {
       onDelete: "set null",
     }),
@@ -46,6 +50,11 @@ export const claraConversation = pgTable(
   },
   (table) => [
     uniqueIndex("clara_conv_thread_id_idx").on(table.threadId),
+    uniqueIndex("clara_conv_channel_thread_idx").on(
+      table.channel,
+      table.externalThreadId,
+    ),
+    index("clara_conv_normalized_phone_idx").on(table.normalizedPhone),
     index("clara_conv_investor_email_idx").on(table.investorEmail),
     index("clara_conv_startup_id_idx").on(table.startupId),
     index("clara_conv_status_idx").on(table.status),

@@ -25,6 +25,9 @@ export const claraMessage = pgTable(
       .notNull()
       .references(() => claraConversation.id, { onDelete: "cascade" }),
     messageId: text("message_id").notNull(),
+    channel: text("channel").default("email").notNull(),
+    externalMessageId: text("external_message_id"),
+    providerMetadata: jsonb("provider_metadata").default({}).notNull(),
     direction: claraMessageDirectionEnum("direction").notNull(),
     fromEmail: text("from_email").notNull(),
     subject: text("subject"),
@@ -39,6 +42,8 @@ export const claraMessage = pgTable(
   (table) => [
     index("clara_msg_conversation_id_idx").on(table.conversationId),
     index("clara_msg_message_id_idx").on(table.messageId),
+    index("clara_msg_external_message_id_idx").on(table.externalMessageId),
+    index("clara_msg_channel_idx").on(table.channel),
     index("clara_msg_direction_idx").on(table.direction),
   ],
 );

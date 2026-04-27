@@ -130,19 +130,11 @@ describe("EvolutionService", () => {
     expect(clara.handleIncomingWhatsAppMessage).not.toHaveBeenCalled();
   });
 
-  it("continues to Clara after a verification code links the contact", async () => {
+  it("links a verification code without sending the code message to Clara", async () => {
     contacts.resolveByPhone.mockResolvedValueOnce(null);
     linking.handleUnknownContact.mockResolvedValueOnce({
-      processed: false,
+      processed: true,
       reason: "linked_contact",
-      contact: {
-        phone: "+15551234567",
-        email: "founder@example.com",
-        name: "Founder",
-        userId: "user-1",
-        role: "founder",
-        startupId: "startup-1",
-      },
     });
 
     const result = await service.handleWebhook({
@@ -159,8 +151,8 @@ describe("EvolutionService", () => {
       },
     });
 
-    expect(result).toEqual({ processed: true });
-    expect(clara.handleIncomingWhatsAppMessage).toHaveBeenCalled();
+    expect(result).toEqual({ processed: true, reason: "linked_contact" });
+    expect(clara.handleIncomingWhatsAppMessage).not.toHaveBeenCalled();
   });
 
   it("passes audio-only inbound messages to Clara with transcript and attachments", async () => {

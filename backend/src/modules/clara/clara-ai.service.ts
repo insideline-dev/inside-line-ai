@@ -288,8 +288,11 @@ export class ClaraAiService {
         )
         .join("\n");
 
+      const channelGuidelines = this.buildChannelGuidelines(ctx.channel);
       const systemPrompt = [
         "You are Clara, a smart and friendly AI assistant for Inside Line, an investor deal-flow platform.",
+        "",
+        channelGuidelines,
         "",
         "## Your Capabilities",
         "You can look up and act on platform information using the tools available to you.",
@@ -319,8 +322,7 @@ export class ClaraAiService {
         "- When asked about specific analysis topics (competitors, market size, team, product, financials, etc.), use getStartupAnalysis with the appropriate section instead of getStartupDetails.",
         "- If the user doesn't specify a startup name, check conversation memory for a linked startup or ask which startup they mean.",
         "- Prefer answering from the platform data and tools, not generic advice.",
-        "- Sign off as Clara.",
-        "- Format responses using markdown (bold, lists, headings) for readability. The response will be rendered as HTML in email.",
+        "- Follow the channel format instructions exactly.",
         "- Never fabricate data. If a tool returns no results, say so.",
       ].join("\n");
 
@@ -361,7 +363,7 @@ export class ClaraAiService {
             prompt: userPrompt,
           });
 
-      return text;
+      return this.formatForChannel(text, ctx.channel);
     } catch (error) {
       this.logger.error(
         `Agent loop failed for ${ctx.fromEmail}: ${error}`,
@@ -369,6 +371,36 @@ export class ClaraAiService {
       );
       return "I'm sorry, I ran into a technical issue processing your message. Please try again shortly.";
     }
+  }
+
+  private buildChannelGuidelines(channel?: string): string {
+    if (channel === "whatsapp") {
+      return [
+        "## WhatsApp Reply Format",
+        "- You are replying in WhatsApp, not email.",
+        "- Send one short chat message only.",
+        "- Do not include email greetings like 'Hi Name,' unless it feels necessary.",
+        "- Do not include sign-offs such as 'Best,' or 'Clara'.",
+        "- Do not use headings, email layout, or long markdown blocks.",
+        "- Keep the reply under 600 characters unless the user asks for detail.",
+      ].join("\n");
+    }
+
+    return [
+      "## Email Reply Format",
+      "- You are replying by email.",
+      "- Use clear paragraphs or short markdown lists when useful.",
+      "- A brief sign-off as Clara is allowed when it fits.",
+    ].join("\n");
+  }
+
+  private formatForChannel(text: string, channel?: string): string {
+    if (channel !== "whatsapp") return text;
+    return text
+      .replace(/^\s*hi\s+[^,\n]+,\s*/i, "")
+      .replace(/\n{2,}\s*(best|regards|thanks),?\s*\n\s*clara\s*$/i, "")
+      .replace(/\n{2,}\s*clara\s*$/i, "")
+      .trim();
   }
 
   extractCompanyFromFilename(

@@ -81,13 +81,9 @@ export class EvolutionApiClientService {
   }
 
   isValidWebhookKey(receivedKey: string | undefined): boolean {
-    if (!receivedKey) return false;
-    const validKeys = [
-      this.config.get("EVOLUTION_API_KEY", { infer: true }),
-      this.config.get("EVOLUTION_INSTANCE_API_KEY", { infer: true }),
-      this.config.get("EVOLUTION_WEBHOOK_SECRET", { infer: true }),
-    ].filter((value): value is string => Boolean(value));
-    return validKeys.includes(receivedKey);
+    const webhookSecret = this.config.get("EVOLUTION_WEBHOOK_SECRET", { infer: true });
+    if (!webhookSecret) return true;
+    return receivedKey === webhookSecret;
   }
 
   private async request<T>(path: string, body: Record<string, unknown>): Promise<T> {

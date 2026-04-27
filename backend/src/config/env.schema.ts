@@ -99,6 +99,13 @@ export const envSchema = z.object({
   TWILIO_AUTH_TOKEN: z.string().optional(),
   TWILIO_WHATSAPP_NUMBER: z.string().optional(),
 
+  // Evolution WhatsApp Integration
+  EVOLUTION_API_URL: z.string().url().optional(),
+  EVOLUTION_API_KEY: z.string().optional(),
+  EVOLUTION_INSTANCE_NAME: z.string().optional(),
+  EVOLUTION_INSTANCE_API_KEY: z.string().optional(),
+  EVOLUTION_WEBHOOK_SECRET: z.string().optional(),
+
   // AgentMail Integration
   AGENTMAIL_WEBHOOK_SECRET: z.string().optional(),
   AGENTMAIL_API_KEY: z.string().optional(),

@@ -47,6 +47,7 @@ export interface MessageContext {
   bodyText: string | null;
   fromEmail: string;
   fromName: string | null;
+  fromPhone?: string | null;
   attachments: AttachmentMeta[];
   conversationHistory: ConversationMessage[];
   actorUserId: string | null;

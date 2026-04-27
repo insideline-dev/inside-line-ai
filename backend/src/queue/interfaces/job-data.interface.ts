@@ -102,9 +102,15 @@ export interface DocumentClassificationJobData extends BaseJobData {
   pipelineRunId: string;
 }
 
+export interface EvolutionWhatsAppWebhookJobData extends BaseJobData {
+  type: "evolution_whatsapp_webhook";
+  payload: unknown;
+}
+
 export type JobData =
   | TaskJobData
   | AnalysisJobData
   | AiPipelineJobData
   | AiMatchingJobData
-  | DocumentClassificationJobData;
+  | DocumentClassificationJobData
+  | EvolutionWhatsAppWebhookJobData;

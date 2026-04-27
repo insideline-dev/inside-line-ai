@@ -12,7 +12,7 @@ import {
   isLikelyPlaceholderStage,
   type StartupFieldRecord,
 } from "../ai/utils/startup-field-utils";
-import { PdfService } from "../startup/pdf.service";
+import { PdfRenderService } from "../startup/pdf/pdf-render.service";
 import { CopilotService } from "../copilot";
 import type { CopilotPendingAction } from "../copilot";
 import { ClaraConversationService } from "./clara-conversation.service";
@@ -50,7 +50,7 @@ export class ClaraService {
     private submissionService: ClaraSubmissionService,
     private toolsService: ClaraToolsService,
     private copilotService: CopilotService,
-    private pdfService: PdfService,
+    private pdfRenderService: PdfRenderService,
   ) {
     this.claraInboxId = this.config.get<string>("CLARA_INBOX_ID") ?? null;
     this.adminUserId =
@@ -1563,8 +1563,8 @@ export class ClaraService {
       for (let attempt = 1; attempt <= 3; attempt += 1) {
         try {
           const [memoBuffer, reportBuffer] = await Promise.all([
-            this.pdfService.generateMemo(startupId, accessorUserId),
-            this.pdfService.generateReport(startupId, accessorUserId),
+            this.pdfRenderService.renderMemo(startupId, accessorUserId),
+            this.pdfRenderService.renderReport(startupId, accessorUserId),
           ]);
 
           return [

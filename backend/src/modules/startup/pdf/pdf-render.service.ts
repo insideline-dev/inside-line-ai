@@ -63,6 +63,7 @@ export class PdfRenderService implements OnModuleDestroy {
     });
     page.on("requestfailed", (request) => {
       const failure = request.failure();
+      if (failure?.errorText === "net::ERR_ABORTED") return;
       this.logger.warn(
         `[print:${kind}] requestfailed ${request.method()} ${request.url()}: ${failure?.errorText ?? "unknown"}`,
       );

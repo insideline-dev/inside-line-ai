@@ -61,6 +61,25 @@ describe("EvolutionService", () => {
     expect(call.providerMetadata).toBeDefined();
   });
 
+  it("accepts Evolution lowercase dotted messages upsert events", async () => {
+    const result = await service.handleWebhook({
+      event: "messages.upsert",
+      instance: "Clara",
+      data: {
+        key: {
+          id: "msg-lowercase-1",
+          remoteJid: "212682860421@s.whatsapp.net",
+          fromMe: false,
+        },
+        pushName: "Yusuf",
+        message: { conversation: "Hi" },
+      },
+    });
+
+    expect(result).toEqual({ processed: true });
+    expect(clara.handleIncomingWhatsAppMessage).toHaveBeenCalled();
+  });
+
   it("skips fromMe and group messages", async () => {
     const fromMe = await service.handleWebhook({
       event: "MESSAGES_UPSERT",

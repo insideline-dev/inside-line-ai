@@ -16,7 +16,7 @@ export class EvolutionService {
   ) {}
 
   async handleWebhook(payload: EvolutionInboundMessage): Promise<{ processed: boolean; reason?: string }> {
-    if (payload.event !== "MESSAGES_UPSERT") {
+    if (!this.isMessagesUpsertEvent(payload.event)) {
       return { processed: false, reason: "unsupported_event" };
     }
 
@@ -73,6 +73,10 @@ export class EvolutionService {
     });
 
     return { processed: true };
+  }
+
+  private isMessagesUpsertEvent(event: string): boolean {
+    return event.toLowerCase().replace(/[_-]/g, ".") === "messages.upsert";
   }
 
   private extractText(message: Record<string, unknown>): string | null {

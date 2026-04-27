@@ -1,4 +1,4 @@
-import { Injectable, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { drizzle, PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
@@ -6,6 +6,7 @@ import * as schema from './schema';
 
 @Injectable()
 export class DrizzleService implements OnModuleDestroy {
+  private readonly logger = new Logger(DrizzleService.name);
   public db: PostgresJsDatabase<typeof schema>;
   private client: postgres.Sql;
 
@@ -15,7 +16,10 @@ export class DrizzleService implements OnModuleDestroy {
       "DEV_DATABASE_URL",
     );
     const databaseUrl =
-      nodeEnv === "development" && devDbUrl ? devDbUrl : this.configService.get<string>("DATABASE_URL")!;
+      nodeEnv === "development" && devDbUrl
+        ? devDbUrl
+        : this.configService.getOrThrow<string>("DATABASE_URL");
+    const usingDevDatabaseUrl = databaseUrl === devDbUrl;
     const max = this.configService.get<number>('DB_POOL_MAX', 20);
     const connectTimeout = this.configService.get<number>(
       'DB_CONNECT_TIMEOUT_SECONDS',
@@ -35,6 +39,10 @@ export class DrizzleService implements OnModuleDestroy {
     );
     const looksLikePooler =
       /-pooler\./i.test(databaseUrl) || /pgbouncer=true/i.test(databaseUrl);
+
+    this.logger.log(
+      `Database connection source: ${usingDevDatabaseUrl ? "DEV_DATABASE_URL" : "DATABASE_URL"}`,
+    );
 
     this.client = postgres(databaseUrl, {
       max,

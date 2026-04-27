@@ -13,6 +13,7 @@ export const QUEUE_NAMES = {
   AI_SYNTHESIS: "ai-synthesis",
   AI_MATCHING: "ai-matching",
   DOCUMENT_CLASSIFICATION: "document-classification",
+  EVOLUTION_WHATSAPP_WEBHOOK: "evolution-whatsapp-webhook",
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
@@ -50,6 +51,7 @@ export const QUEUE_CONCURRENCY = {
   [QUEUE_NAMES.AI_SYNTHESIS]: 2,
   [QUEUE_NAMES.AI_MATCHING]: 3,
   [QUEUE_NAMES.DOCUMENT_CLASSIFICATION]: 5,
+  [QUEUE_NAMES.EVOLUTION_WHATSAPP_WEBHOOK]: 5,
 } as const;
 
 // Safe defaults; real values should be resolved via ConfigService.
@@ -89,6 +91,10 @@ export const DEFAULT_QUEUE_DEPTH_LIMITS: QueueDepthLimits = {
   [QUEUE_NAMES.DOCUMENT_CLASSIFICATION]: {
     maxDepth: 500,
     maxPerUser: 10,
+  },
+  [QUEUE_NAMES.EVOLUTION_WHATSAPP_WEBHOOK]: {
+    maxDepth: 1000,
+    maxPerUser: 1000,
   },
 } as const;
 
@@ -193,6 +199,16 @@ export function resolveQueueDepthLimits(
       maxPerUser: toPositiveInt(
         getNumber("QUEUE_MAX_PER_USER_DOCUMENT_CLASSIFICATION", DEFAULT_QUEUE_DEPTH_LIMITS[QUEUE_NAMES.DOCUMENT_CLASSIFICATION].maxPerUser),
         DEFAULT_QUEUE_DEPTH_LIMITS[QUEUE_NAMES.DOCUMENT_CLASSIFICATION].maxPerUser,
+      ),
+    },
+    [QUEUE_NAMES.EVOLUTION_WHATSAPP_WEBHOOK]: {
+      maxDepth: toPositiveInt(
+        getNumber("QUEUE_MAX_DEPTH_EVOLUTION_WHATSAPP_WEBHOOK", DEFAULT_QUEUE_DEPTH_LIMITS[QUEUE_NAMES.EVOLUTION_WHATSAPP_WEBHOOK].maxDepth),
+        DEFAULT_QUEUE_DEPTH_LIMITS[QUEUE_NAMES.EVOLUTION_WHATSAPP_WEBHOOK].maxDepth,
+      ),
+      maxPerUser: toPositiveInt(
+        getNumber("QUEUE_MAX_PER_USER_EVOLUTION_WHATSAPP_WEBHOOK", DEFAULT_QUEUE_DEPTH_LIMITS[QUEUE_NAMES.EVOLUTION_WHATSAPP_WEBHOOK].maxPerUser),
+        DEFAULT_QUEUE_DEPTH_LIMITS[QUEUE_NAMES.EVOLUTION_WHATSAPP_WEBHOOK].maxPerUser,
       ),
     },
   };

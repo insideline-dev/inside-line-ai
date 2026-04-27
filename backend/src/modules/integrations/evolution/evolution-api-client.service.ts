@@ -4,6 +4,14 @@ import type { Env } from "../../../config/env.schema";
 import { toEvolutionNumber } from "./evolution-phone.util";
 import type { EvolutionInboundMessage, EvolutionTextSendResult } from "./evolution.types";
 
+type EvolutionMediaBase64Response = {
+  base64?: unknown;
+  media?: unknown;
+  mimetype?: unknown;
+  mimeType?: unknown;
+  data?: unknown;
+};
+
 @Injectable()
 export class EvolutionApiClientService {
   private readonly logger = new Logger(EvolutionApiClientService.name);
@@ -61,22 +69,20 @@ export class EvolutionApiClientService {
     payload: EvolutionInboundMessage,
     options?: { convertToMp4?: boolean },
   ): Promise<{ base64: string | null; mimetype: string | null }> {
-    const response = await this.request<{
-      base64?: string;
-      mimetype?: string;
-      mediaType?: string;
-    }>(`/chat/getBase64FromMediaMessage/${encodeURIComponent(this.getInstanceName())}`, {
-      message: {
-        key: {
-          id: payload.data?.key?.id,
+    const response = await this.request<EvolutionMediaBase64Response>(
+      `/chat/getBase64FromMediaMessage/${encodeURIComponent(this.getInstanceName())}`,
+      {
+        message: {
+          key: payload.data?.key,
+          message: payload.data?.message,
         },
+        convertToMp4: options?.convertToMp4 ?? false,
       },
-      convertToMp4: options?.convertToMp4 ?? false,
-    });
+    );
 
     return {
-      base64: response.base64 ?? null,
-      mimetype: response.mimetype ?? null,
+      base64: this.extractBase64(response),
+      mimetype: this.extractMimetype(response),
     };
   }
 
@@ -84,6 +90,28 @@ export class EvolutionApiClientService {
     const webhookSecret = this.config.get("EVOLUTION_WEBHOOK_SECRET", { infer: true });
     if (!webhookSecret) return true;
     return receivedKey === webhookSecret;
+  }
+
+  private extractBase64(response: EvolutionMediaBase64Response): string | null {
+    if (typeof response.base64 === "string") return response.base64;
+    if (typeof response.media === "string") return response.media;
+    if (response.data && typeof response.data === "object") {
+      const data = response.data as Record<string, unknown>;
+      if (typeof data.base64 === "string") return data.base64;
+      if (typeof data.media === "string") return data.media;
+    }
+    return null;
+  }
+
+  private extractMimetype(response: EvolutionMediaBase64Response): string | null {
+    if (typeof response.mimetype === "string") return response.mimetype;
+    if (typeof response.mimeType === "string") return response.mimeType;
+    if (response.data && typeof response.data === "object") {
+      const data = response.data as Record<string, unknown>;
+      if (typeof data.mimetype === "string") return data.mimetype;
+      if (typeof data.mimeType === "string") return data.mimeType;
+    }
+    return null;
   }
 
   private async request<T>(path: string, body: Record<string, unknown>): Promise<T> {

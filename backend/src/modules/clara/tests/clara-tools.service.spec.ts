@@ -8,7 +8,7 @@ import { ThesisService } from "../../investor/thesis.service";
 import { InvestorNoteService } from "../../investor/investor-note.service";
 import { PortfolioService } from "../../investor/portfolio.service";
 import { ClaraChannelService } from "../clara-channel.service";
-import { PdfService } from "../../startup/pdf.service";
+import { PdfRenderService } from "../../startup/pdf/pdf-render.service";
 import { AnalyticsService } from "../../admin/analytics.service";
 import { StartupService } from "../../startup/startup.service";
 
@@ -109,7 +109,7 @@ describe("ClaraToolsService", () => {
   let portfolioService: jest.Mocked<PortfolioService>;
   let startupService: { reanalyze: jest.Mock; getProgress: jest.Mock; adminGetProgress: jest.Mock };
   let claraChannel: { reply: jest.Mock; send: jest.Mock };
-  let pdfService: { generatePdf: jest.Mock; extractText: jest.Mock; generateMemo: jest.Mock; generateReport: jest.Mock };
+  let pdfRenderService: { renderMemo: jest.Mock; renderReport: jest.Mock };
 
   beforeEach(async () => {
     mockDb = createMockDb();
@@ -151,11 +151,9 @@ describe("ClaraToolsService", () => {
       reply: jest.fn().mockResolvedValue(undefined),
       send: jest.fn().mockResolvedValue(undefined),
     };
-    pdfService = {
-      generatePdf: jest.fn().mockResolvedValue(Buffer.from("")),
-      extractText: jest.fn().mockResolvedValue(""),
-      generateMemo: jest.fn().mockResolvedValue(Buffer.from("memo-pdf")),
-      generateReport: jest.fn().mockResolvedValue(Buffer.from("report-pdf")),
+    pdfRenderService = {
+      renderMemo: jest.fn().mockResolvedValue(Buffer.from("memo-pdf")),
+      renderReport: jest.fn().mockResolvedValue(Buffer.from("report-pdf")),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -172,8 +170,8 @@ describe("ClaraToolsService", () => {
           useValue: claraChannel,
         },
         {
-          provide: PdfService,
-          useValue: pdfService,
+          provide: PdfRenderService,
+          useValue: pdfRenderService,
         },
         {
           provide: AnalyticsService,
@@ -335,7 +333,7 @@ describe("ClaraToolsService", () => {
 
     const result = await tools.sendStartupMemoPdf.execute({ startupId: "startup-1" });
 
-    expect(pdfService.generateMemo).toHaveBeenCalledWith("startup-1", "investor-1");
+    expect(pdfRenderService.renderMemo).toHaveBeenCalledWith("startup-1", "investor-1");
     expect(claraChannel.reply).toHaveBeenCalledWith(
       expect.objectContaining({
         channel: "whatsapp",

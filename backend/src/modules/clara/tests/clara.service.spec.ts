@@ -6,7 +6,7 @@ import { ClaraAiService } from '../clara-ai.service';
 import { ClaraSubmissionService } from '../clara-submission.service';
 import { ClaraToolsService } from '../clara-tools.service';
 import { ClaraChannelService } from '../clara-channel.service';
-import { PdfService } from '../../startup/pdf.service';
+import { PdfRenderService } from '../../startup/pdf/pdf-render.service';
 import { CopilotService } from '../../copilot';
 import { ConversationStatus, MessageDirection } from '../interfaces/clara.interface';
 
@@ -17,6 +17,7 @@ describe('ClaraService', () => {
   let claraChannel: Record<string, jest.Mock>;
   let conversationService: Record<string, jest.Mock>;
   let claraAi: {
+    classifyIntent: jest.Mock;
     isLikelySubmission: jest.Mock;
     runAgentLoop: jest.Mock;
     generateResponse: jest.Mock;
@@ -30,9 +31,9 @@ describe('ClaraService', () => {
   };
   let toolsService: { buildTools: jest.Mock };
   let copilotService: { handleTurn: jest.Mock };
-  let pdfService: {
-    generateMemo: jest.Mock;
-    generateReport: jest.Mock;
+  let pdfRenderService: {
+    renderMemo: jest.Mock;
+    renderReport: jest.Mock;
   };
 
   const mockConversation = {
@@ -102,7 +103,7 @@ describe('ClaraService', () => {
     submissionService?: typeof submissionService;
     toolsService?: typeof toolsService;
     copilotService?: typeof copilotService;
-    pdfService?: typeof pdfService;
+    pdfRenderService?: typeof pdfRenderService;
   }) =>
     new ClaraService(
       (overrides?.configService ?? configService) as unknown as ConfigService,
@@ -113,7 +114,7 @@ describe('ClaraService', () => {
       (overrides?.submissionService ?? submissionService) as unknown as ClaraSubmissionService,
       (overrides?.toolsService ?? toolsService) as unknown as ClaraToolsService,
       (overrides?.copilotService ?? copilotService) as unknown as CopilotService,
-      (overrides?.pdfService ?? pdfService) as unknown as PdfService,
+      (overrides?.pdfRenderService ?? pdfRenderService) as unknown as PdfRenderService,
     );
 
   beforeEach(async () => {
@@ -134,10 +135,16 @@ describe('ClaraService', () => {
       updateStatus: jest.fn().mockResolvedValue({}),
       linkStartup: jest.fn().mockResolvedValue({}),
       findByStartupId: jest.fn().mockResolvedValue(null),
+      findByStartupIdAndChannel: jest.fn().mockResolvedValue(null),
       hasMessage: jest.fn().mockResolvedValue(false),
       updateContext: jest.fn().mockResolvedValue({}),
     };
     claraAi = {
+      classifyIntent: jest.fn().mockResolvedValue({
+        intent: 'greeting',
+        confidence: 0.8,
+        reasoning: 'test',
+      }),
       isLikelySubmission: jest.fn().mockReturnValue(false),
       runAgentLoop: jest.fn().mockResolvedValue('Agent response'),
       generateResponse: jest.fn().mockResolvedValue('Generated response'),
@@ -164,9 +171,9 @@ describe('ClaraService', () => {
         clearPendingAction: false,
       }),
     };
-    pdfService = {
-      generateMemo: jest.fn().mockResolvedValue({ url: 'https://example.com/memo.pdf' }),
-      generateReport: jest.fn().mockResolvedValue({ url: 'https://example.com/report.pdf' }),
+    pdfRenderService = {
+      renderMemo: jest.fn().mockResolvedValue(Buffer.from('memo-pdf')),
+      renderReport: jest.fn().mockResolvedValue(Buffer.from('report-pdf')),
     };
 
     service = createService();
@@ -243,7 +250,7 @@ describe('ClaraService', () => {
         'John Doe',
         null,
       );
-      expect(claraAi.isLikelySubmission).toHaveBeenCalled();
+      expect(claraAi.classifyIntent).toHaveBeenCalled();
       expect(submissionService.handleSubmission).toHaveBeenCalledWith(
         expect.objectContaining({
           messageId: 'msg-123',
@@ -378,10 +385,22 @@ describe('ClaraService', () => {
       await service.notifyPipelineComplete('startup-1', 85.5);
 
       expect(conversationService.findByStartupId).toHaveBeenCalledWith('startup-1');
+      expect(pdfRenderService.renderMemo).toHaveBeenCalledWith('startup-1', 'admin-user-1');
+      expect(pdfRenderService.renderReport).toHaveBeenCalledWith('startup-1', 'admin-user-1');
       expect(claraChannel.send).toHaveBeenCalledWith(
         expect.objectContaining({
           channel: 'email',
           text: expect.stringContaining('overall score of 85.5/100'),
+          attachments: [
+            expect.objectContaining({
+              filename: 'testco-memo.pdf',
+              content: Buffer.from('memo-pdf').toString('base64'),
+            }),
+            expect.objectContaining({
+              filename: 'testco-report.pdf',
+              content: Buffer.from('report-pdf').toString('base64'),
+            }),
+          ],
         }),
       );
       expect(conversationService.logMessage).toHaveBeenCalledWith(

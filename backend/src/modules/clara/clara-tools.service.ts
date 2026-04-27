@@ -13,7 +13,7 @@ import { InvestorNoteService } from "../investor/investor-note.service";
 import { PortfolioService } from "../investor/portfolio.service";
 import { startupMatch } from "../investor/entities/investor.schema";
 import { investorNote } from "../investor/entities/investor-note.schema";
-import { PdfService } from "../startup/pdf.service";
+import { PdfRenderService } from "../startup/pdf/pdf-render.service";
 import { AnalyticsService } from "../admin/analytics.service";
 import { StartupService } from "../startup/startup.service";
 import type {
@@ -80,7 +80,7 @@ export class ClaraToolsService {
     private noteService: InvestorNoteService,
     private portfolioService: PortfolioService,
     private claraChannel: ClaraChannelService,
-    private pdfService: PdfService,
+    private pdfRenderService: PdfRenderService,
     private analyticsService: AnalyticsService,
     private startupService: StartupService,
   ) {}
@@ -1040,8 +1040,8 @@ export class ClaraToolsService {
 
     const buffer =
       kind === "memo"
-        ? await this.pdfService.generateMemo(target.id, actor.actorUserId)
-        : await this.pdfService.generateReport(target.id, actor.actorUserId);
+        ? await this.pdfRenderService.renderMemo(target.id, actor.actorUserId)
+        : await this.pdfRenderService.renderReport(target.id, actor.actorUserId);
 
     const safeName = (target.name ?? "startup")
       .toLowerCase()

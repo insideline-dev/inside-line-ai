@@ -106,6 +106,44 @@ describe("EvolutionService", () => {
     expect(clara.handleIncomingWhatsAppMessage).not.toHaveBeenCalled();
   });
 
+  it("routes linked investor phones to Clara without restarting verification", async () => {
+    contacts.resolveByPhone.mockResolvedValueOnce({
+      phone: "+15551234567",
+      email: "investor@example.com",
+      name: "Investor",
+      userId: "investor-1",
+      role: "investor",
+      startupId: null,
+    });
+
+    const result = await service.handleWebhook({
+      event: "messages.upsert",
+      instance: "clara",
+      data: {
+        key: {
+          id: "msg-investor-1",
+          remoteJid: "15551234567@s.whatsapp.net",
+          fromMe: false,
+        },
+        pushName: "Investor",
+        message: { conversation: "show me my deals" },
+      },
+    });
+
+    expect(result).toEqual({ processed: true });
+    expect(linking.handleUnknownContact).not.toHaveBeenCalled();
+    expect(clara.handleIncomingWhatsAppMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fromEmail: "investor@example.com",
+        actorUserId: "investor-1",
+        actorRole: "investor",
+        investorUserId: "investor-1",
+        startupId: null,
+        bodyText: "show me my deals",
+      }),
+    );
+  });
+
   it("starts linking flow for unknown contacts", async () => {
     contacts.resolveByPhone.mockResolvedValueOnce(null);
 

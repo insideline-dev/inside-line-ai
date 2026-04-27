@@ -132,9 +132,16 @@ export interface DocumentClassificationJobResult extends BaseJobResult {
   classifiedCount: number;
 }
 
+export interface EvolutionWhatsAppWebhookJobResult extends BaseJobResult {
+  type: "evolution_whatsapp_webhook";
+  processed: boolean;
+  reason?: string;
+}
+
 export type JobResult =
   | TaskJobResult
   | AnalysisJobResult
   | AiPipelineJobResult
   | AiMatchingJobResult
-  | DocumentClassificationJobResult;
+  | DocumentClassificationJobResult
+  | EvolutionWhatsAppWebhookJobResult;

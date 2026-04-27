@@ -15,6 +15,13 @@ const createChain = <T>(result: T) => {
   return chain;
 };
 
+const platformUser = {
+  id: "user-1",
+  email: "founder@example.com",
+  name: "Founder",
+  role: "founder",
+};
+
 describe("EvolutionLinkingService", () => {
   it("asks unknown WhatsApp users for their Inside Line email", async () => {
     const sendText = mock(async () => ({ status: "ok" }));
@@ -33,11 +40,32 @@ describe("EvolutionLinkingService", () => {
     });
   });
 
-  it("does not send a code when multiple startup contacts share the same email", async () => {
-    const chains = [createChain([]), createChain([{ email: "founder@example.com" }, { email: "founder@example.com" }])];
+  it("does not send a code for unknown platform emails", async () => {
     const db = {
-      delete: mock(() => chains[0]),
-      select: mock(() => chains[1]),
+      delete: mock(() => createChain([])),
+      select: mock(() => createChain([])),
+    };
+    const send = mock(async () => ({ id: "email-1" }));
+    const sendText = mock(async () => ({ status: "ok" }));
+    const service = new EvolutionLinkingService(
+      { db } as never,
+      { send } as never,
+      { sendText } as never,
+    );
+
+    const result = await service.handleUnknownContact({ phone: "+212682860421", text: "missing@example.com" });
+
+    expect(result).toEqual({ processed: true, reason: "link_code_sent" });
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("sends a code to an existing platform user email", async () => {
+    const db = {
+      delete: mock(() => createChain([])),
+      insert: mock(() => createChain([])),
+      select: mock()
+        .mockImplementationOnce(() => createChain([platformUser]))
+        .mockImplementationOnce(() => createChain([{ email: "founder@example.com", name: "Founder", startupId: "startup-1", startupUserId: "user-1" }])),
     };
     const send = mock(async () => ({ id: "email-1" }));
     const sendText = mock(async () => ({ status: "ok" }));
@@ -50,19 +78,23 @@ describe("EvolutionLinkingService", () => {
     const result = await service.handleUnknownContact({ phone: "+212682860421", text: "founder@example.com" });
 
     expect(result).toEqual({ processed: true, reason: "link_code_sent" });
-    expect(send).not.toHaveBeenCalled();
+    expect(send).toHaveBeenCalledWith(expect.objectContaining({ to: "founder@example.com" }));
     expect(sendText).toHaveBeenCalledWith({
       to: "+212682860421",
       text: "If that email exists on Inside Line, I sent it a 6-digit verification code. Reply here with only the code.",
     });
   });
 
-  it("sends a code email without revealing whether the email exists", async () => {
-    const chains = [createChain([]), createChain([]), createChain([{ email: "founder@example.com", name: "Founder", startupId: "startup-1", startupUserId: "user-1", userId: "user-1", role: "founder", userName: "Founder" }])];
+  it("still sends a code when one user email matches multiple startups", async () => {
     const db = {
-      delete: mock(() => chains[0]),
-      insert: mock(() => chains[1]),
-      select: mock(() => chains[2]),
+      delete: mock(() => createChain([])),
+      insert: mock(() => createChain([])),
+      select: mock()
+        .mockImplementationOnce(() => createChain([platformUser]))
+        .mockImplementationOnce(() => createChain([
+          { email: "founder@example.com", startupId: "startup-1" },
+          { email: "founder@example.com", startupId: "startup-2" },
+        ])),
     };
     const send = mock(async () => ({ id: "email-1" }));
     const sendText = mock(async () => ({ status: "ok" }));
@@ -75,10 +107,6 @@ describe("EvolutionLinkingService", () => {
     const result = await service.handleUnknownContact({ phone: "+212682860421", text: "founder@example.com" });
 
     expect(result).toEqual({ processed: true, reason: "link_code_sent" });
-    expect(send).toHaveBeenCalled();
-    expect(sendText).toHaveBeenCalledWith({
-      to: "+212682860421",
-      text: "If that email exists on Inside Line, I sent it a 6-digit verification code. Reply here with only the code.",
-    });
+    expect(send).toHaveBeenCalledWith(expect.objectContaining({ to: "founder@example.com" }));
   });
 });

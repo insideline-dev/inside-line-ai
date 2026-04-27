@@ -84,7 +84,10 @@ export class EvolutionLinkingService {
       .delete(verification)
       .where(and(eq(verification.identifier, this.identifier(phone)), eq(verification.type, "whatsapp_link")));
 
-    if (!target) return;
+    if (!target) {
+      this.logger.warn(`WhatsApp link requested for unknown platform email ${email} from ${phone}`);
+      return;
+    }
 
     const code = randomInt(0, 1_000_000).toString().padStart(6, "0");
     await this.drizzle.db.insert(verification).values({
@@ -94,12 +97,19 @@ export class EvolutionLinkingService {
       expiresAt: new Date(Date.now() + CODE_TTL_MS),
     });
 
-    await this.email.send({
+    this.logger.log(`Sending WhatsApp link verification code to ${email} for ${phone}`);
+    const result = await this.email.send({
       to: email,
       subject: "Your Clara WhatsApp verification code",
       html: `<p>Your Clara WhatsApp verification code is <strong>${code}</strong>.</p><p>This code expires in 10 minutes.</p>`,
       text: `Your Clara WhatsApp verification code is ${code}. This code expires in 10 minutes.`,
     });
+
+    if (result) {
+      this.logger.log(`WhatsApp link verification email sent to ${email}: ${result.id}`);
+    } else {
+      this.logger.error(`Failed to send WhatsApp link verification email to ${email}`);
+    }
   }
 
   private async verifyCode(phone: string, code: string): Promise<EvolutionKnownContact | null> {
@@ -137,10 +147,12 @@ export class EvolutionLinkingService {
           },
         });
 
-      await tx
-        .update(startup)
-        .set({ contactPhone: phone })
-        .where(eq(startup.id, target.startupId));
+      if (target.startupId) {
+        await tx
+          .update(startup)
+          .set({ contactPhone: phone })
+          .where(eq(startup.id, target.startupId));
+      }
     });
 
     return {
@@ -158,32 +170,45 @@ export class EvolutionLinkingService {
     name: string | null;
     userId: string | null;
     role: string | null;
-    startupId: string;
+    startupId: string | null;
   } | null> {
-    const targets = await this.drizzle.db
+    const [platformUser] = await this.drizzle.db
+      .select({ id: user.id, email: user.email, name: user.name, role: user.role })
+      .from(user)
+      .where(eq(user.email, email))
+      .limit(1);
+
+    if (!platformUser) return null;
+
+    const startups = await this.drizzle.db
       .select({
         email: startup.contactEmail,
         name: startup.contactName,
         startupId: startup.id,
         startupUserId: startup.userId,
-        userId: user.id,
-        role: user.role,
-        userName: user.name,
       })
       .from(startup)
-      .leftJoin(user, or(eq(user.email, startup.contactEmail), eq(user.id, startup.userId)))
-      .where(eq(startup.contactEmail, email))
+      .where(or(eq(startup.contactEmail, email), eq(startup.userId, platformUser.id)))
       .limit(2);
 
-    const target = targets[0];
-    if (!target?.email || targets.length > 1) return null;
+    if (startups.length > 1) {
+      this.logger.warn(`WhatsApp link email ${email} matched multiple startups; refusing automatic startup phone update`);
+      return {
+        email: platformUser.email,
+        name: platformUser.name,
+        userId: platformUser.id,
+        role: platformUser.role,
+        startupId: null,
+      };
+    }
 
+    const matchedStartup = startups[0];
     return {
-      email: target.email,
-      name: target.name ?? target.userName ?? null,
-      userId: target.userId ?? target.startupUserId,
-      role: target.role,
-      startupId: target.startupId,
+      email: platformUser.email,
+      name: matchedStartup?.name ?? platformUser.name,
+      userId: platformUser.id,
+      role: platformUser.role,
+      startupId: matchedStartup?.startupId ?? null,
     };
   }
 

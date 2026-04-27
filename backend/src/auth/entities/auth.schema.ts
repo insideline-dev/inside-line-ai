@@ -115,7 +115,7 @@ export const verification = pgTable(
     identifier: text("identifier").notNull(),
     value: text("value").notNull(),
     // Type: 'email' for email verification, 'magic_link' for passwordless login
-    type: text("type", { enum: ["email", "magic_link"] })
+    type: text("type", { enum: ["email", "magic_link", "whatsapp_link"] })
       .default("magic_link")
       .notNull(),
     expiresAt: timestamp("expires_at").notNull(),

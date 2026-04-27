@@ -65,11 +65,9 @@ export class EvolutionContactResolverService {
         startupId: evolutionWhatsappLink.startupId,
         userName: user.name,
         userRole: user.role,
-        startupName: startup.contactName,
       })
       .from(evolutionWhatsappLink)
       .leftJoin(user, eq(user.id, evolutionWhatsappLink.userId))
-      .leftJoin(startup, eq(startup.id, evolutionWhatsappLink.startupId))
       .where(eq(evolutionWhatsappLink.phone, normalized))
       .limit(1);
 
@@ -78,7 +76,7 @@ export class EvolutionContactResolverService {
     return {
       phone: normalized,
       email: linkedContact.email,
-      name: linkedContact.startupName ?? linkedContact.userName ?? null,
+      name: linkedContact.userName ?? null,
       userId: linkedContact.userId,
       role: linkedContact.userRole,
       startupId: linkedContact.startupId,

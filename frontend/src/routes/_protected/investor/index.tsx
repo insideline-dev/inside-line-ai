@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScoreRing } from "@/components/analysis/ScoreRing";
+import { DealCard } from "@/components/deal-card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SearchAndFilters, defaultFilters, type FilterState, STAGES, REGIONS, SOURCE_OPTIONS } from "@/components/SearchAndFilters";
 import {
@@ -1623,15 +1624,26 @@ function InvestorDashboard() {
         </div>
       )}
 
-      {/* ─── Content Area ─── */}
+      {/* ─── Content Area ───
+          Small shortlists render as triage DealCards (one-screen, no-scroll).
+          Larger lists fall back to the existing CardsView. Mutually exclusive
+          to avoid double-rendering the same startup. */}
       {viewMode === "list" ? (
-        <CardsView
-          items={filteredItems}
-          onStatusChange={handleDrop}
-          onToggleBookmark={handleToggleBookmark}
-          onRunMatching={handleRunMatching}
-          matchingJobs={matchingJobs}
-        />
+        filteredItems.length > 0 && filteredItems.length <= 3 ? (
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
+            {filteredItems.map((item) => (
+              <DealCard key={item.startupId} startupId={item.startupId} />
+            ))}
+          </div>
+        ) : (
+          <CardsView
+            items={filteredItems}
+            onStatusChange={handleDrop}
+            onToggleBookmark={handleToggleBookmark}
+            onRunMatching={handleRunMatching}
+            matchingJobs={matchingJobs}
+          />
+        )
       ) : (
         <BoardView
           grouped={filteredGrouped}

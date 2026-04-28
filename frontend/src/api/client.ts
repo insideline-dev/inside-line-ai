@@ -77,12 +77,27 @@ export async function customFetch<T>(
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(error.message || `HTTP ${response.status}`);
+    throw new ApiError(
+      error.message || `HTTP ${response.status}`,
+      response.status,
+    );
   }
 
   // Handle empty responses (204, etc.)
   const text = await response.text();
   return text ? JSON.parse(text) : (null as T);
+}
+
+// Error thrown by `customFetch` for non-OK HTTP responses. Callers can branch
+// on `err.status` instead of string-matching the message — relied on by
+// `useTriageDecision` and any other hook that wants to degrade on 404.
+export class ApiError extends Error {
+  readonly status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
 }
 
 // Orval mutator signature exports

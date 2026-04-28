@@ -51,6 +51,7 @@ export interface AiPipelineBaseJobData extends BaseJobData {
     | "ai_enrichment"
     | "ai_scraping"
     | "ai_research"
+    | "ai_screening"
     | "ai_evaluation"
     | "ai_synthesis";
   startupId: string;
@@ -73,6 +74,10 @@ export interface AiResearchJobData extends AiPipelineBaseJobData {
   type: "ai_research";
 }
 
+export interface AiScreeningJobData extends AiPipelineBaseJobData {
+  type: "ai_screening";
+}
+
 export interface AiEvaluationJobData extends AiPipelineBaseJobData {
   type: "ai_evaluation";
 }
@@ -93,6 +98,7 @@ export type AiPipelineJobData =
   | AiEnrichmentJobData
   | AiScrapingJobData
   | AiResearchJobData
+  | AiScreeningJobData
   | AiEvaluationJobData
   | AiSynthesisJobData;
 

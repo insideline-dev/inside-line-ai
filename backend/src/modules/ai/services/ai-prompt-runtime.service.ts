@@ -608,6 +608,50 @@ const RUNTIME_SCHEMA_BY_KEY: Record<AiPromptKey, PromptRuntimeSchema> = {
     ],
     notes: ["Clara agent loop context. Tools handle data retrieval; prompt provides sender identity and conversation history."],
   },
+  "investor.thesis_from_website": {
+    requiredPhases: [],
+    fields: [
+      { path: "websiteText", label: "Website Text", type: "string", sourceVariable: "websiteText" },
+      { path: "portfolioPagesText", label: "Portfolio Pages Text", type: "string", sourceVariable: "portfolioPagesText" },
+      { path: "aboutPageText", label: "About / Team Pages Text", type: "string", sourceVariable: "aboutPageText" },
+    ],
+    notes: [
+      "Investor onboarding — input is scraped fund website content; output drafts thesis summary + portfolio companies.",
+    ],
+  },
+  "lens.market": {
+    requiredPhases: [PipelinePhase.RESEARCH],
+    fields: [
+      { path: "startupName", label: "Startup Name", type: "string", sourceVariable: "startupName" },
+      { path: "sector", label: "Sector", type: "string", sourceVariable: "sector" },
+      { path: "stage", label: "Stage", type: "string", sourceVariable: "stage" },
+      { path: "startupDescription", label: "Startup Description", type: "string", sourceVariable: "startupDescription" },
+      { path: "contextNotes", label: "Context Notes", type: "string", sourceVariable: "contextNotes" },
+    ],
+    notes: ["Screening lens — short structured generation, no DB context required beyond startup intake."],
+  },
+  "lens.team": {
+    requiredPhases: [PipelinePhase.RESEARCH],
+    fields: [
+      { path: "startupName", label: "Startup Name", type: "string", sourceVariable: "startupName" },
+      { path: "sector", label: "Sector", type: "string", sourceVariable: "sector" },
+      { path: "stage", label: "Stage", type: "string", sourceVariable: "stage" },
+      { path: "startupDescription", label: "Startup Description", type: "string", sourceVariable: "startupDescription" },
+      { path: "contextNotes", label: "Context Notes", type: "string", sourceVariable: "contextNotes" },
+    ],
+    notes: ["Screening lens — short structured generation, no DB context required beyond startup intake."],
+  },
+  "lens.traction": {
+    requiredPhases: [PipelinePhase.RESEARCH],
+    fields: [
+      { path: "startupName", label: "Startup Name", type: "string", sourceVariable: "startupName" },
+      { path: "sector", label: "Sector", type: "string", sourceVariable: "sector" },
+      { path: "stage", label: "Stage", type: "string", sourceVariable: "stage" },
+      { path: "startupDescription", label: "Startup Description", type: "string", sourceVariable: "startupDescription" },
+      { path: "contextNotes", label: "Context Notes", type: "string", sourceVariable: "contextNotes" },
+    ],
+    notes: ["Screening lens — short structured generation, no DB context required beyond startup intake."],
+  },
 };
 
 @Injectable()

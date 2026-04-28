@@ -8,6 +8,7 @@ export type JobType =
   | "ai_enrichment"
   | "ai_scraping"
   | "ai_research"
+  | "ai_screening"
   | "ai_evaluation"
   | "ai_synthesis";
 export type JobStatus = "pending" | "processing" | "completed" | "failed";

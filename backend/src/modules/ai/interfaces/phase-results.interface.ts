@@ -227,6 +227,28 @@ export interface ResearchResult {
   };
 }
 
+/**
+ * Screening lens output recorded as the SCREENING phase result. Each lens
+ * contributes one entry to `lenses`. The first-pass triage layer (DS-E7-F1-S1)
+ * will read this and decide ADVANCE/REVIEW/REJECT — for S1 we just persist.
+ */
+export interface ScreeningLensSummary {
+  key: string;
+  score: number;
+  signal: "advance" | "review" | "reject";
+  rationale: string;
+  modelId: string;
+  promptKey: string;
+  latencyMs: number;
+  usedFallback: boolean;
+  error?: string;
+}
+
+export interface ScreeningResult {
+  lenses: ScreeningLensSummary[];
+  failedKeys: string[];
+}
+
 export interface EvaluationSummary {
   completedAgents: number;
   failedAgents: number;

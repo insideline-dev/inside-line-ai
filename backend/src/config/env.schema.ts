@@ -39,6 +39,8 @@ export const envSchema = z.object({
   QUEUE_MAX_PER_USER_AI_SCRAPING: z.coerce.number().default(5),
   QUEUE_MAX_DEPTH_AI_RESEARCH: z.coerce.number().default(500),
   QUEUE_MAX_PER_USER_AI_RESEARCH: z.coerce.number().default(5),
+  QUEUE_MAX_DEPTH_AI_SCREENING: z.coerce.number().default(500),
+  QUEUE_MAX_PER_USER_AI_SCREENING: z.coerce.number().default(5),
   QUEUE_MAX_DEPTH_AI_EVALUATION: z.coerce.number().default(500),
   QUEUE_MAX_PER_USER_AI_EVALUATION: z.coerce.number().default(5),
   QUEUE_MAX_DEPTH_AI_SYNTHESIS: z.coerce.number().default(500),
@@ -50,6 +52,7 @@ export const envSchema = z.object({
   AI_QUEUE_CONCURRENCY_ENRICHMENT: z.coerce.number().default(4),
   AI_QUEUE_CONCURRENCY_SCRAPING: z.coerce.number().default(4),
   AI_QUEUE_CONCURRENCY_RESEARCH: z.coerce.number().default(6),
+  AI_QUEUE_CONCURRENCY_SCREENING: z.coerce.number().default(3),
   AI_QUEUE_CONCURRENCY_EVALUATION: z.coerce.number().default(8),
   AI_QUEUE_CONCURRENCY_SYNTHESIS: z.coerce.number().default(2),
   AI_QUEUE_CONCURRENCY_MATCHING: z.coerce.number().default(3),
@@ -80,6 +83,7 @@ export const envSchema = z.object({
   LOG_RUN_FILES_ENABLED: z.coerce.boolean().default(true),
   LOG_RUN_FILES_DIR: z.string().default("logs/runs"),
   LOG_MAX_FILE_SIZE: z.coerce.number().default(52428800), // 50 MB
+  LOG_RETENTION_DAYS: z.coerce.number().default(14),
 
   // Storage Configuration (R2/S3)
   STORAGE_PROVIDER: z.enum(["r2", "s3", "backblaze"]).default("r2"),
@@ -162,6 +166,10 @@ export const envSchema = z.object({
   AI_MODEL_OCR: z.string().default("mistral-ocr-latest"),
   AI_MODEL_CLARA: z.string().default("gpt-4o"),
   AI_MODEL_ENRICHMENT: z.string().default("gpt-5.4-mini"),
+  // Screening lens model — kept cheap & cheerful so the screening phase stays
+  // <3 min and 1-2 orders of magnitude cheaper than evaluation. Override per
+  // env to swap providers without code changes (DS-E2-F1-S1 acceptance).
+  SCREENING_LENS_MODEL: z.string().default("gpt-5.4-mini"),
   AI_ENRICHMENT_ENABLED: z.coerce.boolean().default(true),
   AI_SOURCE_SANITIZATION_ENABLED: z.coerce.boolean().default(true),
   LINKEDIN_AI_VERIFIER_ENABLED: z.coerce.boolean().default(true),

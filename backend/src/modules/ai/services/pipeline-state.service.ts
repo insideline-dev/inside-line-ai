@@ -149,6 +149,12 @@ export class PipelineStateService implements OnModuleDestroy {
               successCount: 0,
               failedCount: 0,
             },
+            [PipelinePhase.SCREENING]: {
+              phase: PipelinePhase.SCREENING,
+              agentCount: 0,
+              successCount: 0,
+              failedCount: 0,
+            },
             [PipelinePhase.EVALUATION]: {
               phase: PipelinePhase.EVALUATION,
               agentCount: 0,
@@ -449,6 +455,7 @@ export class PipelineStateService implements OnModuleDestroy {
       [PipelinePhase.ENRICHMENT]: { status: PhaseStatus.PENDING },
       [PipelinePhase.SCRAPING]: { status: PhaseStatus.PENDING },
       [PipelinePhase.RESEARCH]: { status: PhaseStatus.PENDING },
+      [PipelinePhase.SCREENING]: { status: PhaseStatus.PENDING },
       [PipelinePhase.EVALUATION]: { status: PhaseStatus.PENDING },
       [PipelinePhase.SYNTHESIS]: { status: PhaseStatus.PENDING },
     };

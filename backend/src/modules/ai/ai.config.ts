@@ -7,6 +7,7 @@ export const AI_PIPELINE_PHASES: PipelinePhase[] = [
   PipelinePhase.ENRICHMENT,
   PipelinePhase.SCRAPING,
   PipelinePhase.RESEARCH,
+  PipelinePhase.SCREENING,
   PipelinePhase.EVALUATION,
   PipelinePhase.SYNTHESIS,
 ];
@@ -17,6 +18,7 @@ export const AI_PHASE_QUEUE_MAP: Record<PipelinePhase, QueueName> = {
   [PipelinePhase.ENRICHMENT]: QUEUE_NAMES.AI_ENRICHMENT,
   [PipelinePhase.SCRAPING]: QUEUE_NAMES.AI_SCRAPING,
   [PipelinePhase.RESEARCH]: QUEUE_NAMES.AI_RESEARCH,
+  [PipelinePhase.SCREENING]: QUEUE_NAMES.AI_SCREENING,
   [PipelinePhase.EVALUATION]: QUEUE_NAMES.AI_EVALUATION,
   [PipelinePhase.SYNTHESIS]: QUEUE_NAMES.AI_SYNTHESIS,
 };

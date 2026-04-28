@@ -5,6 +5,9 @@ import { QueueModule } from "../../queue";
 import { UnipileModule } from "../integrations/unipile/unipile.module";
 import { StartupModule } from "../startup";
 import { OrchestratorModule } from "./orchestrator";
+import { LensesModule } from "./lenses";
+import { ContractsModule } from "./contracts/contracts.module";
+import { ScreeningTriageModule } from "./screening/triage";
 import { AiProviderService } from "./providers/ai-provider.service";
 import {
   BusinessModelEvaluationAgent,
@@ -33,6 +36,7 @@ import {
   MatchingProcessor,
   ResearchProcessor,
   ScrapingProcessor,
+  ScreeningProcessor,
   SynthesisProcessor,
 } from "./processors";
 import { EvaluationAgentRegistryService } from "./services/evaluation-agent-registry.service";
@@ -89,6 +93,9 @@ import { OpenAiTextGenerationService } from "./services/openai-text-generation.s
     UnipileModule,
     StartupModule,
     OrchestratorModule,
+    LensesModule,
+    ContractsModule,
+    ScreeningTriageModule,
   ],
   providers: [
     AiProviderService,
@@ -158,6 +165,7 @@ import { OpenAiTextGenerationService } from "./services/openai-text-generation.s
     EnrichmentProcessor,
     ScrapingProcessor,
     ResearchProcessor,
+    ScreeningProcessor,
     EvaluationProcessor,
     SynthesisProcessor,
     MatchingProcessor,
@@ -175,6 +183,7 @@ import { OpenAiTextGenerationService } from "./services/openai-text-generation.s
     DynamicFlowCatalogService,
     DynamicAgentRunnerService,
     AiModelExecutionService,
+    WebsiteScraperService,
     PipelineTemplateService,
     EvaluationInputResolverService,
     OpenAiDeepResearchService,
@@ -188,6 +197,9 @@ import { OpenAiTextGenerationService } from "./services/openai-text-generation.s
     InvestorMatchingService,
     StartupMatchingPipelineService,
     OrchestratorModule,
+    LensesModule,
+    ContractsModule,
+    ScreeningTriageModule,
   ],
 })
 export class AiModule {}

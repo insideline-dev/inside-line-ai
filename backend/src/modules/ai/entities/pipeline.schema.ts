@@ -28,6 +28,7 @@ export const pipelinePhaseEnum = pgEnum("pipeline_phase", [
   PipelinePhase.ENRICHMENT,
   PipelinePhase.SCRAPING,
   PipelinePhase.RESEARCH,
+  PipelinePhase.SCREENING,
   PipelinePhase.EVALUATION,
   PipelinePhase.SYNTHESIS,
 ]);

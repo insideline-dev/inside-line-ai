@@ -205,4 +205,29 @@ export class NotificationGateway
     this.server.to(`user:${userId}`).emit(event, payload);
     this.logger.debug(`Sent pipeline event to user ${userId}: ${event}`);
   }
+
+  sendInvestorEvent<E extends keyof InvestorEventPayloads>(
+    userId: string,
+    event: E,
+    payload: InvestorEventPayloads[E],
+  ) {
+    this.server.to(`user:${userId}`).emit(event, payload);
+    this.logger.debug(`Sent investor event to user ${userId}: ${event}`);
+  }
+}
+
+// Investor-scoped events kept in a sibling map (rather than widening the
+// pipeline map) so the onboarding namespace can evolve independently of the
+// startup-pipeline contract — smaller blast radius for frontend listeners.
+export interface InvestorEventPayloads {
+  'investor.onboarding.completed': {
+    userId: string;
+    website: string;
+    portfolioCount: number;
+  };
+  'investor.onboarding.failed': {
+    userId: string;
+    website: string;
+    error: string;
+  };
 }

@@ -156,6 +156,9 @@ export const investorThesis = pgTable(
     thesisSummary: text('thesis_summary'),
     portfolioCompanies: jsonb('portfolio_companies'),
     thesisSummaryGeneratedAt: timestamp('thesis_summary_generated_at'),
+    // Onboarding scrape lifecycle (DS-E3-F1-S2): set when website submitted/scraped, set after LLM portfolio extraction
+    websiteScrapedAt: timestamp('website_scraped_at', { withTimezone: true }),
+    portfolioGeneratedAt: timestamp('portfolio_generated_at', { withTimezone: true }),
 
     // Active status
     isActive: boolean('is_active').default(true).notNull(),

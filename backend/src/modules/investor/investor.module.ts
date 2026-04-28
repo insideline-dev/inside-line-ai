@@ -1,8 +1,9 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { DatabaseModule } from '../../database';
 import { QueueModule } from '../../queue';
 import { AdminModule } from '../admin';
 import { AiModule } from '../ai';
+import { InvestorOnboardingModule } from './onboarding/investor-onboarding.module';
 import { ThesisService } from './thesis.service';
 import { MatchService } from './match.service';
 import { TeamService } from './team.service';
@@ -17,7 +18,13 @@ import {
 } from './investor.controller';
 
 @Module({
-  imports: [DatabaseModule, QueueModule, AdminModule, AiModule],
+  imports: [
+    DatabaseModule,
+    QueueModule,
+    AdminModule,
+    AiModule,
+    forwardRef(() => InvestorOnboardingModule),
+  ],
   controllers: [InvestorController, InvestorTeamPublicController],
   providers: [
     ThesisService,

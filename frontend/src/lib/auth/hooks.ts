@@ -162,7 +162,17 @@ export function useSelectRole() {
     onSuccess: (data) => {
       queryClient.setQueryData(authKeys.user, data.user);
       const redirect = consumeRedirect();
-      navigate({ to: redirect || `/${data.user.role}` });
+      if (redirect) {
+        navigate({ to: redirect });
+        return;
+      }
+      // DS-E3-F1-S2: new investors get a dedicated website-capture step before
+      // landing on the dashboard. Founders/scouts go straight to their role hub.
+      if (data.user.role === "investor") {
+        navigate({ to: "/investor/onboarding/website" });
+        return;
+      }
+      navigate({ to: `/${data.user.role}` });
     },
   });
 }

@@ -118,6 +118,7 @@ export class PipelineService {
     | "ai_enrichment"
     | "ai_scraping"
     | "ai_research"
+    | "ai_screening"
     | "ai_evaluation"
     | "ai_synthesis"
   > = {
@@ -126,6 +127,7 @@ export class PipelineService {
     [PipelinePhase.ENRICHMENT]: "ai_enrichment",
     [PipelinePhase.SCRAPING]: "ai_scraping",
     [PipelinePhase.RESEARCH]: "ai_research",
+    [PipelinePhase.SCREENING]: "ai_screening",
     [PipelinePhase.EVALUATION]: "ai_evaluation",
     [PipelinePhase.SYNTHESIS]: "ai_synthesis",
   };

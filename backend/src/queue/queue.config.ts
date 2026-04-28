@@ -9,6 +9,7 @@ export const QUEUE_NAMES = {
   AI_ENRICHMENT: "ai-enrichment",
   AI_SCRAPING: "ai-scraping",
   AI_RESEARCH: "ai-research",
+  AI_SCREENING: "ai-screening",
   AI_EVALUATION: "ai-evaluation",
   AI_SYNTHESIS: "ai-synthesis",
   AI_MATCHING: "ai-matching",
@@ -47,6 +48,7 @@ export const QUEUE_CONCURRENCY = {
   [QUEUE_NAMES.AI_ENRICHMENT]: 4,
   [QUEUE_NAMES.AI_SCRAPING]: 4,
   [QUEUE_NAMES.AI_RESEARCH]: 6,
+  [QUEUE_NAMES.AI_SCREENING]: 3,
   [QUEUE_NAMES.AI_EVALUATION]: 8,
   [QUEUE_NAMES.AI_SYNTHESIS]: 2,
   [QUEUE_NAMES.AI_MATCHING]: 3,
@@ -73,6 +75,10 @@ export const DEFAULT_QUEUE_DEPTH_LIMITS: QueueDepthLimits = {
     maxPerUser: 5,
   },
   [QUEUE_NAMES.AI_RESEARCH]: {
+    maxDepth: 500,
+    maxPerUser: 5,
+  },
+  [QUEUE_NAMES.AI_SCREENING]: {
     maxDepth: 500,
     maxPerUser: 5,
   },
@@ -159,6 +165,16 @@ export function resolveQueueDepthLimits(
       maxPerUser: toPositiveInt(
         getNumber("QUEUE_MAX_PER_USER_AI_RESEARCH", DEFAULT_QUEUE_DEPTH_LIMITS[QUEUE_NAMES.AI_RESEARCH].maxPerUser),
         DEFAULT_QUEUE_DEPTH_LIMITS[QUEUE_NAMES.AI_RESEARCH].maxPerUser,
+      ),
+    },
+    [QUEUE_NAMES.AI_SCREENING]: {
+      maxDepth: toPositiveInt(
+        getNumber("QUEUE_MAX_DEPTH_AI_SCREENING", DEFAULT_QUEUE_DEPTH_LIMITS[QUEUE_NAMES.AI_SCREENING].maxDepth),
+        DEFAULT_QUEUE_DEPTH_LIMITS[QUEUE_NAMES.AI_SCREENING].maxDepth,
+      ),
+      maxPerUser: toPositiveInt(
+        getNumber("QUEUE_MAX_PER_USER_AI_SCREENING", DEFAULT_QUEUE_DEPTH_LIMITS[QUEUE_NAMES.AI_SCREENING].maxPerUser),
+        DEFAULT_QUEUE_DEPTH_LIMITS[QUEUE_NAMES.AI_SCREENING].maxPerUser,
       ),
     },
     [QUEUE_NAMES.AI_EVALUATION]: {

@@ -4,3 +4,5 @@ export * from "./ai-agent-config.schema";
 export * from "./pipeline-template.schema";
 export * from "./pipeline-flow-config.schema";
 export * from "./ai-model-override.schema";
+export * from "./lens-result.schema";
+export * from "./screening-decision.schema";

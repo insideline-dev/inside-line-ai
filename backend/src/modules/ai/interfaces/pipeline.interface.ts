@@ -4,6 +4,7 @@ import type {
   ExtractionResult,
   ScrapingResult,
   ResearchResult,
+  ScreeningResult,
   EvaluationResult,
   SynthesisResult,
 } from './phase-results.interface';
@@ -14,6 +15,7 @@ export enum PipelinePhase {
   ENRICHMENT = "enrichment",
   SCRAPING = "scraping",
   RESEARCH = "research",
+  SCREENING = "screening",
   EVALUATION = "evaluation",
   SYNTHESIS = "synthesis",
 }
@@ -100,6 +102,7 @@ export interface PhaseResultMap {
   [PipelinePhase.ENRICHMENT]: EnrichmentResult;
   [PipelinePhase.SCRAPING]: ScrapingResult;
   [PipelinePhase.RESEARCH]: ResearchResult;
+  [PipelinePhase.SCREENING]: ScreeningResult;
   [PipelinePhase.EVALUATION]: EvaluationResult;
   [PipelinePhase.SYNTHESIS]: SynthesisResult;
 }

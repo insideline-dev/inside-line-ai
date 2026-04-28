@@ -8,6 +8,9 @@ import {
 import { dirname, resolve } from "node:path";
 import { rotateIfNeeded } from "./rotate-log";
 import { resolveBackendLogPath } from "./resolve-log-path";
+import { sweepOldLogs } from "./sweep-old-logs";
+
+const SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 type LogEntry = {
   timestamp: string;
@@ -34,6 +37,8 @@ export class AppFileLogger extends ConsoleLogger {
   private readonly runFileLoggingEnabled: boolean;
   private readonly runFilesDir: string;
   private readonly maxFileBytes: number;
+  private readonly retentionMs: number;
+  private sweepTimer: NodeJS.Timeout | null = null;
   private stream: WriteStream | null = null;
   private bytesWritten = 0;
   private rotationPending = false;
@@ -49,10 +54,13 @@ export class AppFileLogger extends ConsoleLogger {
     this.runFileLoggingEnabled = this.readRunFileLoggingEnabled();
     this.runFilesDir = this.resolveRunFilesDir();
     this.maxFileBytes = this.readMaxFileBytes();
+    this.retentionMs = this.readRetentionMs();
 
     if (!this.fileLoggingEnabled) {
       return;
     }
+
+    this.startRetentionSweep();
 
     mkdirSync(dirname(this.filePath), { recursive: true });
     this.stream = createWriteStream(this.filePath, { flags: "a" });
@@ -117,6 +125,48 @@ export class AppFileLogger extends ConsoleLogger {
     const raw = process.env.LOG_RUN_FILES_DIR?.trim();
     const configured = raw && raw.length > 0 ? raw : "logs/runs";
     return resolveBackendLogPath(configured);
+  }
+
+  private readRetentionMs(): number {
+    const raw = process.env.LOG_RETENTION_DAYS?.trim();
+    const parsed = raw ? Number(raw) : 14;
+    const days = Number.isFinite(parsed) && parsed > 0 ? parsed : 14;
+    return days * 24 * 60 * 60 * 1000;
+  }
+
+  private startRetentionSweep(): void {
+    if (this.retentionMs <= 0) {
+      return;
+    }
+    const sweep = () => {
+      void this.runRetentionSweep();
+    };
+    sweep();
+    this.sweepTimer = setInterval(sweep, SWEEP_INTERVAL_MS);
+    this.sweepTimer.unref?.();
+  }
+
+  private async runRetentionSweep(): Promise<void> {
+    const targets = [
+      this.runFilesDir,
+      this.contextFilesDir,
+      dirname(this.filePath),
+    ];
+    const seen = new Set<string>();
+    for (const target of targets) {
+      if (!target || seen.has(target)) continue;
+      seen.add(target);
+      try {
+        const deleted = await sweepOldLogs(target, this.retentionMs);
+        if (deleted > 0) {
+          super.log(
+            `Log retention sweep removed ${deleted} file(s) older than ${this.retentionMs}ms in ${target}`,
+          );
+        }
+      } catch (error) {
+        super.error(`Log retention sweep failed for ${target}: ${String(error)}`);
+      }
+    }
   }
 
   private readMaxFileBytes(): number {

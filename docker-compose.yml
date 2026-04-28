@@ -1,8 +1,15 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
 services:
   # ============================================
   # Redis (BullMQ queues)
   # ============================================
   redis:
+    logging: *default-logging
     image: redis:7-alpine
     container_name: inside-line-redis
     restart: unless-stopped
@@ -31,6 +38,7 @@ services:
       dockerfile: Dockerfile
     container_name: inside-line-api
     restart: unless-stopped
+    logging: *default-logging
     # ports:
     #   - "${API_PORT:-8080}:8080"
     env_file:
@@ -71,6 +79,7 @@ services:
         VITE_API_BASE_URL: /api
     container_name: inside-line-frontend
     restart: unless-stopped
+    logging: *default-logging
     # ports:
     #   - "${PORT:-80}:80"
     depends_on:

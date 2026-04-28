@@ -1,0 +1,2 @@
+ALTER TABLE "investor_theses" ADD COLUMN "website_scraped_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "investor_theses" ADD COLUMN "portfolio_generated_at" timestamp with time zone;

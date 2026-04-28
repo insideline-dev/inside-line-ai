@@ -6001,6 +6001,69 @@
         ]
       }
     },
+    "/screening/{startupId}/decision": {
+      "get": {
+        "operationId": "ScreeningTriageController_getLatest",
+        "parameters": [
+          {
+            "name": "startupId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScreeningDecisionResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No decision recorded yet"
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "summary": "Get the latest triage decision for a startup",
+        "tags": [
+          "Screening"
+        ]
+      }
+    },
+    "/investor/onboarding/website": {
+      "post": {
+        "operationId": "InvestorOnboardingController_submitWebsite",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitWebsiteDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "InvestorOnboarding"
+        ]
+      }
+    },
     "/integrations/twilio/webhook": {
       "post": {
         "operationId": "TwilioController_handleWebhook",
@@ -6853,6 +6916,55 @@
         "summary": "Save AgentMail config",
         "tags": [
           "integrations/agentmail"
+        ]
+      }
+    },
+    "/webhooks/evolution/whatsapp": {
+      "post": {
+        "operationId": "EvolutionController_handleWhatsAppWebhook",
+        "parameters": [
+          {
+            "name": "apikey",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x-api-key",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "authorization",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvolutionWebhookDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Evolution"
         ]
       }
     },
@@ -9732,6 +9844,7 @@
               "enrichment",
               "scraping",
               "research",
+              "screening",
               "evaluation",
               "synthesis"
             ]
@@ -9957,6 +10070,9 @@
                 "evaluation.legal",
                 "evaluation.dealTerms",
                 "evaluation.exitPotential",
+                "lens.market",
+                "lens.team",
+                "lens.traction",
                 "synthesis.final",
                 "synthesis.memo",
                 "synthesis.memo-chunk",
@@ -9967,6 +10083,7 @@
                 "extraction.linkedin",
                 "research.orchestrator",
                 "matching.investorThesis",
+                "investor.thesis_from_website",
                 "clara.intent",
                 "clara.response",
                 "clara.agent"
@@ -10281,6 +10398,9 @@
                             "evaluation.legal",
                             "evaluation.dealTerms",
                             "evaluation.exitPotential",
+                            "lens.market",
+                            "lens.team",
+                            "lens.traction",
                             "synthesis.final",
                             "synthesis.memo",
                             "synthesis.memo-chunk",
@@ -10291,6 +10411,7 @@
                             "extraction.linkedin",
                             "research.orchestrator",
                             "matching.investorThesis",
+                            "investor.thesis_from_website",
                             "clara.intent",
                             "clara.response",
                             "clara.agent"
@@ -10444,6 +10565,9 @@
                   "evaluation.legal",
                   "evaluation.dealTerms",
                   "evaluation.exitPotential",
+                  "lens.market",
+                  "lens.team",
+                  "lens.traction",
                   "synthesis.final",
                   "synthesis.memo",
                   "synthesis.memo-chunk",
@@ -10454,6 +10578,7 @@
                   "extraction.linkedin",
                   "research.orchestrator",
                   "matching.investorThesis",
+                  "investor.thesis_from_website",
                   "clara.intent",
                   "clara.response",
                   "clara.agent"
@@ -11055,6 +11180,9 @@
               "evaluation.legal",
               "evaluation.dealTerms",
               "evaluation.exitPotential",
+              "lens.market",
+              "lens.team",
+              "lens.traction",
               "synthesis.final",
               "synthesis.memo",
               "synthesis.memo-chunk",
@@ -11065,6 +11193,7 @@
               "extraction.linkedin",
               "research.orchestrator",
               "matching.investorThesis",
+              "investor.thesis_from_website",
               "clara.intent",
               "clara.response",
               "clara.agent"
@@ -11263,6 +11392,9 @@
               "evaluation.legal",
               "evaluation.dealTerms",
               "evaluation.exitPotential",
+              "lens.market",
+              "lens.team",
+              "lens.traction",
               "synthesis.final",
               "synthesis.memo",
               "synthesis.memo-chunk",
@@ -11273,6 +11405,7 @@
               "extraction.linkedin",
               "research.orchestrator",
               "matching.investorThesis",
+              "investor.thesis_from_website",
               "clara.intent",
               "clara.response",
               "clara.agent"
@@ -11532,6 +11665,9 @@
                     "evaluation.legal",
                     "evaluation.dealTerms",
                     "evaluation.exitPotential",
+                    "lens.market",
+                    "lens.team",
+                    "lens.traction",
                     "synthesis.final",
                     "synthesis.memo",
                     "synthesis.memo-chunk",
@@ -11542,6 +11678,7 @@
                     "extraction.linkedin",
                     "research.orchestrator",
                     "matching.investorThesis",
+                    "investor.thesis_from_website",
                     "clara.intent",
                     "clara.response",
                     "clara.agent"
@@ -12762,6 +12899,108 @@
           "role"
         ]
       },
+      "ScreeningDecisionResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "startupId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "pipelineRunId": {
+            "type": "string",
+            "nullable": true
+          },
+          "classification": {
+            "type": "string",
+            "enum": [
+              "advance",
+              "review",
+              "reject"
+            ]
+          },
+          "overallScore": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "reasonCodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "lensSnapshot": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "score": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 100
+                },
+                "signal": {
+                  "type": "string",
+                  "enum": [
+                    "advance",
+                    "review",
+                    "reject"
+                  ]
+                }
+              },
+              "required": [
+                "key",
+                "score",
+                "signal"
+              ]
+            }
+          },
+          "policyVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+          }
+        },
+        "required": [
+          "id",
+          "startupId",
+          "pipelineRunId",
+          "classification",
+          "overallScore",
+          "reasonCodes",
+          "lensSnapshot",
+          "policyVersion",
+          "createdAt"
+        ]
+      },
+      "SubmitWebsiteDto": {
+        "type": "object",
+        "properties": {
+          "website": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          }
+        },
+        "required": [
+          "website"
+        ]
+      },
       "TwilioWebhookDto": {
         "type": "object",
         "properties": {
@@ -12852,6 +13091,65 @@
       "Function": {
         "type": "object",
         "properties": {}
+      },
+      "EvolutionWebhookDto": {
+        "type": "object",
+        "properties": {
+          "event": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "remoteJid": {
+                    "type": "string"
+                  },
+                  "fromMe": {
+                    "type": "boolean"
+                  }
+                }
+              },
+              "pushName": {
+                "type": "string"
+              },
+              "message": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "messageType": {
+                "type": "string"
+              },
+              "messageTimestamp": {
+                "type": "number"
+              }
+            }
+          },
+          "apikey": {
+            "type": "string"
+          },
+          "server_url": {
+            "type": "string"
+          },
+          "date_time": {
+            "type": "string"
+          },
+          "sender": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "event",
+          "instance"
+        ]
       },
       "HealthResponseDto": {
         "type": "object",

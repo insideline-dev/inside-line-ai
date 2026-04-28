@@ -5,6 +5,6 @@ import { TaskProcessor } from './processors/task.processor';
 @Global()
 @Module({
   providers: [QueueService, TaskProcessor],
-  exports: [QueueService],
+  exports: [QueueService, TaskProcessor],
 })
 export class QueueModule {}

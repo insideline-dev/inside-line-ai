@@ -361,3 +361,50 @@ export function usePipelineStatus(
 
   return socket;
 }
+
+// ── Investor onboarding (DS-E3-F1-S2) ───────────────────────────────
+
+export interface InvestorOnboardingCompletedEvent {
+  userId: string;
+  website: string;
+  portfolioCount: number;
+}
+
+export interface InvestorOnboardingFailedEvent {
+  userId: string;
+  website: string;
+  error: string;
+}
+
+export function useInvestorOnboardingEvents(handlers?: {
+  onCompleted?: (event: InvestorOnboardingCompletedEvent) => void;
+  onFailed?: (event: InvestorOnboardingFailedEvent) => void;
+}) {
+  const socket = useSocket();
+  const handlersRef = useRef(handlers);
+
+  useEffect(() => {
+    handlersRef.current = handlers;
+  });
+
+  useEffect(() => {
+    if (!socket) return;
+
+    const onCompleted = (data: InvestorOnboardingCompletedEvent) => {
+      handlersRef.current?.onCompleted?.(data);
+    };
+    const onFailed = (data: InvestorOnboardingFailedEvent) => {
+      handlersRef.current?.onFailed?.(data);
+    };
+
+    socket.on("investor.onboarding.completed", onCompleted);
+    socket.on("investor.onboarding.failed", onFailed);
+
+    return () => {
+      socket.off("investor.onboarding.completed", onCompleted);
+      socket.off("investor.onboarding.failed", onFailed);
+    };
+  }, [socket]);
+
+  return socket;
+}

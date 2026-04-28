@@ -40,6 +40,17 @@ import {
   type GeographyNode,
   type ThesisFormData,
 } from "./-thesis.helpers";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { OnboardingWebsiteForm } from "@/components/investor/OnboardingWebsiteForm";
+import { ThesisGeneratingBanner } from "@/components/investor/ThesisGeneratingBanner";
+import { useSubmitOnboardingWebsite } from "@/lib/investor/useSubmitOnboardingWebsite";
+import { useInvestorOnboardingEvents } from "@/lib/auth/useSocket";
 
 export const Route = createFileRoute("/_protected/investor/thesis")({
   component: InvestorThesisPage,
@@ -234,6 +245,56 @@ function InvestorThesisPage() {
     generateSummary();
   }, [generateSummary]);
 
+  const websiteScrapedAt = typeof thesis?.websiteScrapedAt === "string" ? thesis.websiteScrapedAt : null;
+  const thesisSummaryGeneratedAt =
+    typeof thesis?.thesisSummaryGeneratedAt === "string" ? thesis.thesisSummaryGeneratedAt : null;
+  const persistedWebsite = typeof thesis?.website === "string" ? thesis.website : "";
+
+  // Generating banner shows when a scrape was queued but the LLM hasn't written
+  // a thesis newer than that scrape yet. Covers first-run AND re-scan-in-flight.
+  const isThesisGenerating = useMemo(() => {
+    if (!websiteScrapedAt) return false;
+    if (!thesisSummaryGeneratedAt) return true;
+    return new Date(thesisSummaryGeneratedAt).getTime() < new Date(websiteScrapedAt).getTime();
+  }, [websiteScrapedAt, thesisSummaryGeneratedAt]);
+
+  const [isRescanOpen, setIsRescanOpen] = useState(false);
+  const { mutate: submitOnboardingWebsite, isPending: isSubmittingWebsite } =
+    useSubmitOnboardingWebsite();
+
+  const handleRescanSubmit = useCallback(
+    (website: string) => {
+      submitOnboardingWebsite(
+        { website },
+        {
+          onSuccess: () => {
+            toast.success("Re-scanning your website…", {
+              description: "We'll refresh your thesis once the draft is ready.",
+            });
+            setIsRescanOpen(false);
+          },
+          onError: (error: Error) => {
+            toast.error("Couldn't queue a re-scan", { description: error.message });
+          },
+        },
+      );
+    },
+    [submitOnboardingWebsite, toast],
+  );
+
+  useInvestorOnboardingEvents({
+    onCompleted: () => {
+      toast.success("Your thesis is ready");
+      queryClient.invalidateQueries({ queryKey: getInvestorControllerGetThesisQueryKey() });
+    },
+    onFailed: (event) => {
+      toast.error("Couldn't draft your thesis", {
+        description: event.error || "Please try again from Re-scan my website.",
+      });
+      queryClient.invalidateQueries({ queryKey: getInvestorControllerGetThesisQueryKey() });
+    },
+  });
+
   const { mutate: saveThesis, isPending: isSaving } = useInvestorControllerCreateOrUpdateThesis({
     mutation: {
       onSuccess: () => {
@@ -384,17 +445,55 @@ function InvestorThesisPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold">Investment Thesis</h1>
           <p className="text-muted-foreground">Configure your investment preferences</p>
         </div>
-        <Button className="gap-2" onClick={handleSave} disabled={isSaving}>
-          {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-          Save Changes
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={() => setIsRescanOpen(true)}
+            disabled={isThesisGenerating}
+          >
+            <Globe className="h-4 w-4" />
+            Re-scan my website
+          </Button>
+          <Button className="gap-2" onClick={handleSave} disabled={isSaving}>
+            {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            Save Changes
+          </Button>
+        </div>
       </div>
 
+      {isThesisGenerating ? <ThesisGeneratingBanner website={persistedWebsite} /> : null}
+
+      <Dialog open={isRescanOpen} onOpenChange={setIsRescanOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Re-scan your website</DialogTitle>
+            <DialogDescription>
+              We'll re-read your site and refresh your thesis summary and portfolio. Your manual edits to other fields stay put.
+            </DialogDescription>
+          </DialogHeader>
+          <OnboardingWebsiteForm
+            initialWebsite={persistedWebsite}
+            isSubmitting={isSubmittingWebsite}
+            submitLabel="Re-scan"
+            onSubmit={handleRescanSubmit}
+          />
+        </DialogContent>
+      </Dialog>
+
+      {isThesisGenerating ? (
+        <div className="grid gap-6 lg:grid-cols-2">
+          {[1, 2, 3, 4].map((i) => (
+            <Skeleton key={i} className="h-64 rounded-lg" />
+          ))}
+        </div>
+      ) : (
+        <>
       {thesis && (
         <Card>
           <CardHeader>
@@ -747,6 +846,8 @@ function InvestorThesisPage() {
           </CardContent>
         </Card>
       </div>
+        </>
+      )}
     </div>
   );
 }

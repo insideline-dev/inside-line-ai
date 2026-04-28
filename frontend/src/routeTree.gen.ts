@@ -57,6 +57,7 @@ import { Route as ProtectedAdminAnalyticsRouteImport } from './routes/_protected
 import { Route as ProtectedAdminAgentsRouteImport } from './routes/_protected/admin/agents'
 import { Route as ProtectedScoutStartupIdRouteImport } from './routes/_protected/scout/startup.$id'
 import { Route as ProtectedInvestorStartupIdRouteImport } from './routes/_protected/investor/startup.$id'
+import { Route as ProtectedInvestorOnboardingWebsiteRouteImport } from './routes/_protected/investor/onboarding.website'
 import { Route as ProtectedFounderStartupIdRouteImport } from './routes/_protected/founder/startup.$id'
 import { Route as ProtectedAdminStartupIdRouteImport } from './routes/_protected/admin/startup.$id'
 
@@ -312,6 +313,12 @@ const ProtectedInvestorStartupIdRoute =
     path: '/startup/$id',
     getParentRoute: () => ProtectedInvestorRoute,
   } as any)
+const ProtectedInvestorOnboardingWebsiteRoute =
+  ProtectedInvestorOnboardingWebsiteRouteImport.update({
+    id: '/onboarding/website',
+    path: '/onboarding/website',
+    getParentRoute: () => ProtectedInvestorRoute,
+  } as any)
 const ProtectedFounderStartupIdRoute =
   ProtectedFounderStartupIdRouteImport.update({
     id: '/startup/$id',
@@ -372,6 +379,7 @@ export interface FileRoutesByFullPath {
   '/scout/': typeof ProtectedScoutIndexRoute
   '/admin/startup/$id': typeof ProtectedAdminStartupIdRoute
   '/founder/startup/$id': typeof ProtectedFounderStartupIdRoute
+  '/investor/onboarding/website': typeof ProtectedInvestorOnboardingWebsiteRoute
   '/investor/startup/$id': typeof ProtectedInvestorStartupIdRoute
   '/scout/startup/$id': typeof ProtectedScoutStartupIdRoute
 }
@@ -419,6 +427,7 @@ export interface FileRoutesByTo {
   '/scout': typeof ProtectedScoutIndexRoute
   '/admin/startup/$id': typeof ProtectedAdminStartupIdRoute
   '/founder/startup/$id': typeof ProtectedFounderStartupIdRoute
+  '/investor/onboarding/website': typeof ProtectedInvestorOnboardingWebsiteRoute
   '/investor/startup/$id': typeof ProtectedInvestorStartupIdRoute
   '/scout/startup/$id': typeof ProtectedScoutStartupIdRoute
 }
@@ -472,6 +481,7 @@ export interface FileRoutesById {
   '/_protected/scout/': typeof ProtectedScoutIndexRoute
   '/_protected/admin/startup/$id': typeof ProtectedAdminStartupIdRoute
   '/_protected/founder/startup/$id': typeof ProtectedFounderStartupIdRoute
+  '/_protected/investor/onboarding/website': typeof ProtectedInvestorOnboardingWebsiteRoute
   '/_protected/investor/startup/$id': typeof ProtectedInvestorStartupIdRoute
   '/_protected/scout/startup/$id': typeof ProtectedScoutStartupIdRoute
 }
@@ -525,6 +535,7 @@ export interface FileRouteTypes {
     | '/scout/'
     | '/admin/startup/$id'
     | '/founder/startup/$id'
+    | '/investor/onboarding/website'
     | '/investor/startup/$id'
     | '/scout/startup/$id'
   fileRoutesByTo: FileRoutesByTo
@@ -572,6 +583,7 @@ export interface FileRouteTypes {
     | '/scout'
     | '/admin/startup/$id'
     | '/founder/startup/$id'
+    | '/investor/onboarding/website'
     | '/investor/startup/$id'
     | '/scout/startup/$id'
   id:
@@ -624,6 +636,7 @@ export interface FileRouteTypes {
     | '/_protected/scout/'
     | '/_protected/admin/startup/$id'
     | '/_protected/founder/startup/$id'
+    | '/_protected/investor/onboarding/website'
     | '/_protected/investor/startup/$id'
     | '/_protected/scout/startup/$id'
   fileRoutesById: FileRoutesById
@@ -978,6 +991,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProtectedInvestorStartupIdRouteImport
       parentRoute: typeof ProtectedInvestorRoute
     }
+    '/_protected/investor/onboarding/website': {
+      id: '/_protected/investor/onboarding/website'
+      path: '/onboarding/website'
+      fullPath: '/investor/onboarding/website'
+      preLoaderRoute: typeof ProtectedInvestorOnboardingWebsiteRouteImport
+      parentRoute: typeof ProtectedInvestorRoute
+    }
     '/_protected/founder/startup/$id': {
       id: '/_protected/founder/startup/$id'
       path: '/startup/$id'
@@ -1060,6 +1080,7 @@ interface ProtectedInvestorRouteChildren {
   ProtectedInvestorSubmitRoute: typeof ProtectedInvestorSubmitRoute
   ProtectedInvestorThesisRoute: typeof ProtectedInvestorThesisRoute
   ProtectedInvestorIndexRoute: typeof ProtectedInvestorIndexRoute
+  ProtectedInvestorOnboardingWebsiteRoute: typeof ProtectedInvestorOnboardingWebsiteRoute
   ProtectedInvestorStartupIdRoute: typeof ProtectedInvestorStartupIdRoute
 }
 
@@ -1073,6 +1094,8 @@ const ProtectedInvestorRouteChildren: ProtectedInvestorRouteChildren = {
   ProtectedInvestorSubmitRoute: ProtectedInvestorSubmitRoute,
   ProtectedInvestorThesisRoute: ProtectedInvestorThesisRoute,
   ProtectedInvestorIndexRoute: ProtectedInvestorIndexRoute,
+  ProtectedInvestorOnboardingWebsiteRoute:
+    ProtectedInvestorOnboardingWebsiteRoute,
   ProtectedInvestorStartupIdRoute: ProtectedInvestorStartupIdRoute,
 }
 

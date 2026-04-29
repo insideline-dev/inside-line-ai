@@ -11,7 +11,10 @@ export const OnboardingLlmOutputSchema = z.object({
       z.object({
         name: z.string().min(1).max(120),
         description: z.string().max(280),
-        websiteUrl: z.string().url().optional(),
+        // OpenAI structured outputs reject `.optional()` without `.nullable()`.
+        // Use nullish so the LLM can return null OR omit the field; the
+        // processor coerces null → undefined before persistence.
+        websiteUrl: z.string().url().nullish(),
       }),
     )
     .max(50),

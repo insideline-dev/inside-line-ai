@@ -97,9 +97,11 @@ async function buildService(
 describe("policy snapshot", () => {
   it("locks the (version, thresholds) tuple — bump POLICY_VERSION when changing any threshold", () => {
     expect(POLICY_SNAPSHOT).toStrictEqual({
-      POLICY_VERSION: 1,
+      POLICY_VERSION: 2,
       LOW_SCORE_THRESHOLD: 40,
       ADVANCE_SCORE_THRESHOLD: 60,
+      OUT_OF_SCOPE_THESIS_THRESHOLD: 30,
+      MIN_ADVANCE_EVIDENCE_COUNT: 2,
     });
   });
 });
@@ -193,6 +195,196 @@ describe("applyTriagePolicy (pure)", () => {
       lens("c", 49, "advance"),
     ]);
     expect(out.overallScore).toBe(48);
+  });
+
+  // ─── DS-E4-F1-S1 — out-of-thesis-scope short-circuit ─────────────────
+  it("thesisFitScore < 30 → reject(out_of_thesis_scope), short-circuits lens evaluation", () => {
+    const out = applyTriagePolicy(
+      [
+        lens("market", 90, "advance"),
+        lens("team", 85, "advance"),
+        lens("traction", 80, "advance"),
+      ],
+      { thesisFitScore: 12 },
+    );
+    expect(out.classification).toBe("reject");
+    expect(out.reasonCodes).toEqual(["out_of_thesis_scope"]);
+    expect(out.overallScore).toBe(85); // still computed for audit trail
+  });
+
+  it("thesisFitScore >= 30 → policy proceeds normally", () => {
+    const out = applyTriagePolicy(
+      [
+        lens("market", 90, "advance"),
+        lens("team", 85, "advance"),
+        lens("traction", 80, "advance"),
+      ],
+      { thesisFitScore: 30 },
+    );
+    expect(out.classification).toBe("advance");
+    expect(out.reasonCodes).toEqual([]);
+  });
+
+  it("thesisFitScore null → policy proceeds normally (opt-out)", () => {
+    const out = applyTriagePolicy(
+      [
+        lens("market", 90, "advance"),
+        lens("team", 85, "advance"),
+        lens("traction", 80, "advance"),
+      ],
+      { thesisFitScore: null },
+    );
+    expect(out.classification).toBe("advance");
+    expect(out.reasonCodes).toEqual([]);
+  });
+
+  // ─── DS-E7-F2-S1 — no auto-advance without evidence ──────────────────
+  it("advance with < 2 evidence items → downgrades to review(low_evidence)", () => {
+    const out = applyTriagePolicy([
+      {
+        key: "market",
+        score: 90,
+        signal: "advance",
+        evidence: [{ confidence: "high" }],
+      },
+      {
+        key: "team",
+        score: 85,
+        signal: "advance",
+        evidence: [
+          { confidence: "high" },
+          { confidence: "medium" },
+        ],
+      },
+      {
+        key: "traction",
+        score: 80,
+        signal: "advance",
+        evidence: [
+          { confidence: "high" },
+          { confidence: "medium" },
+        ],
+      },
+    ]);
+    expect(out.classification).toBe("review");
+    expect(out.reasonCodes).toContain("lens.market.low_evidence");
+    expect(out.reasonCodes).not.toContain("lens.team.low_evidence");
+  });
+
+  it("advance with no high-confidence evidence → downgrades to review(low_evidence)", () => {
+    const out = applyTriagePolicy([
+      {
+        key: "market",
+        score: 90,
+        signal: "advance",
+        evidence: [
+          { confidence: "low" },
+          { confidence: "medium" },
+        ],
+      },
+      {
+        key: "team",
+        score: 85,
+        signal: "advance",
+        evidence: [
+          { confidence: "high" },
+          { confidence: "medium" },
+        ],
+      },
+      {
+        key: "traction",
+        score: 80,
+        signal: "advance",
+        evidence: [
+          { confidence: "high" },
+          { confidence: "medium" },
+        ],
+      },
+    ]);
+    expect(out.classification).toBe("review");
+    expect(out.reasonCodes).toEqual(["lens.market.low_evidence"]);
+  });
+
+  it("advance with sufficient strong evidence → stays advance", () => {
+    const strong = [{ confidence: "high" as const }, { confidence: "high" as const }];
+    const out = applyTriagePolicy([
+      { key: "market", score: 90, signal: "advance", evidence: strong },
+      { key: "team", score: 85, signal: "advance", evidence: strong },
+      { key: "traction", score: 80, signal: "advance", evidence: strong },
+    ]);
+    expect(out.classification).toBe("advance");
+    expect(out.reasonCodes).toEqual([]);
+  });
+
+  it("evidence omitted → trusts signal as-is (backward compatibility)", () => {
+    const out = applyTriagePolicy([
+      lens("market", 90, "advance"),
+      lens("team", 85, "advance"),
+      lens("traction", 80, "advance"),
+    ]);
+    expect(out.classification).toBe("advance");
+  });
+
+  it("low_evidence + borderline score stack reason codes", () => {
+    // One advance lens with thin evidence is downgraded; remaining lenses
+    // produce a borderline overall score. Both reasons must surface.
+    const out = applyTriagePolicy([
+      {
+        key: "market",
+        score: 50,
+        signal: "advance",
+        evidence: [{ confidence: "low" }],
+      },
+      {
+        key: "team",
+        score: 50,
+        signal: "advance",
+        evidence: [
+          { confidence: "high" },
+          { confidence: "high" },
+        ],
+      },
+      {
+        key: "traction",
+        score: 50,
+        signal: "advance",
+        evidence: [
+          { confidence: "high" },
+          { confidence: "high" },
+        ],
+      },
+    ]);
+    expect(out.classification).toBe("review");
+    expect(out.overallScore).toBe(50);
+    expect(out.reasonCodes).toEqual([
+      "lens.market.low_evidence",
+      "borderline_overall_score",
+    ]);
+  });
+
+  it("low_evidence does not trigger when lens already says review", () => {
+    const out = applyTriagePolicy([
+      {
+        key: "market",
+        score: 60,
+        signal: "review",
+        evidence: [{ confidence: "low" }],
+      },
+      {
+        key: "team",
+        score: 85,
+        signal: "advance",
+        evidence: [{ confidence: "high" }, { confidence: "high" }],
+      },
+      {
+        key: "traction",
+        score: 80,
+        signal: "advance",
+        evidence: [{ confidence: "high" }, { confidence: "high" }],
+      },
+    ]);
+    expect(out.classification).toBe("review");
+    expect(out.reasonCodes).toEqual(["lens.market.review"]);
   });
 
   it("empty lens list → review(no_lens_signals)", () => {

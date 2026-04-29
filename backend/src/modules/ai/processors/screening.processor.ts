@@ -5,7 +5,7 @@ import {
   OnModuleInit,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { Job } from "bullmq";
 import {
   AiScreeningJobData,
@@ -19,6 +19,7 @@ import {
 import { DrizzleService } from "../../../database";
 import { NotificationGateway } from "../../../notification/notification.gateway";
 import { startup } from "../../startup/entities";
+import { startupMatch } from "../../investor/entities/investor.schema";
 import { startupLensResult } from "../entities";
 import { PipelinePhase } from "../interfaces/pipeline.interface";
 import type {
@@ -32,6 +33,18 @@ import { ScreeningTriageService } from "../screening/triage";
 import { PipelineStateService } from "../services/pipeline-state.service";
 import { PipelineService } from "../services/pipeline.service";
 import { runPipelinePhase } from "./run-phase.util";
+
+/**
+ * Project lens evidence into the minimal shape the triage policy needs.
+ * Triage shouldn't see the raw evidence payload — it only cares whether
+ * each item carries a confidence label, so a future lens schema change
+ * doesn't ripple into the triage policy file.
+ */
+function projectEvidence(
+  evidence: ReadonlyArray<{ confidence: "low" | "medium" | "high" }>,
+): Array<{ confidence: "low" | "medium" | "high" }> {
+  return evidence.map((e) => ({ confidence: e.confidence }));
+}
 
 @Injectable()
 export class ScreeningProcessor
@@ -197,11 +210,23 @@ export class ScreeningProcessor
       }
     }
 
-    // Deal-level triage (DS-E7-F1-S1). Combine the lens signals into a single
-    // ADVANCE / REVIEW / REJECT classification so investors only manually
-    // triage the REVIEW bucket. Triage failures must never break screening;
-    // the lens rows are the source of truth and the decision can be recomputed.
+    // Deal-level triage (DS-E7-F1-S1 + DS-E7-F2-S1 + DS-E4-F1-S1).
+    // Combine the lens signals into a single ADVANCE / REVIEW / REJECT
+    // classification so investors only manually triage the REVIEW bucket.
+    // - Evidence projection per lens enables the no-auto-advance-without-
+    //   evidence pre-pass (DS-E7-F2-S1).
+    // - Thesis-fit score (max across active investors, when known) enables
+    //   the out-of-thesis-scope short-circuit (DS-E4-F1-S1).
+    // Triage failures must never break screening; the lens rows are the
+    // source of truth and the decision can be recomputed.
     try {
+      const evidenceByKey = new Map<string, ReturnType<typeof projectEvidence>>(
+        Object.values(results).map((r) => [
+          r.key,
+          projectEvidence(r.output.evidence),
+        ]),
+      );
+      const thesisFitScore = await this.maxThesisFitScore(startupId);
       const decision = await this.screeningTriage.decide({
         startupId,
         pipelineRunId,
@@ -209,10 +234,12 @@ export class ScreeningProcessor
           key,
           score,
           signal,
+          evidence: evidenceByKey.get(key),
         })),
+        thesisFitScore,
       });
       this.logger.log(
-        `[ScreeningProcessor] Triage v${decision.policyVersion} for ${startupId}: ${decision.classification}@${decision.overallScore}`,
+        `[ScreeningProcessor] Triage v${decision.policyVersion} for ${startupId}: ${decision.classification}@${decision.overallScore} (thesisFit=${thesisFitScore ?? "null"})`,
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -239,6 +266,40 @@ export class ScreeningProcessor
     }
 
     return { lenses, failedKeys };
+  }
+
+  /**
+   * Returns the highest `thesisFitScore` recorded across all investors for
+   * this startup, or null if no matches exist yet. The triage policy
+   * treats null as "skip the out-of-scope check" — never reject for lack
+   * of data.
+   *
+   * Aggregation choice: MAX. If even one investor's thesis loosely matches,
+   * the deal isn't out-of-scope platform-wide. This errs on the side of
+   * keeping deals alive at the cost of never auto-rejecting deals that
+   * SOME investor wants to see.
+   *
+   * KNOWN LIMITATION (DS-E4-F1-S1): SCREENING runs as a pipeline phase
+   * (after RESEARCH, parallel with EVALUATION — see pipeline.config.ts).
+   * `startupMatch` rows are produced by post-pipeline `analysis/` work,
+   * not before screening. So on a FIRST run for a new startup this method
+   * always returns null and the out-of-thesis-scope gate never fires.
+   * The gate only kicks in on RE-SCREENS — when an investor updates their
+   * thesis (which calls MatchService.regenerateMatches and then the next
+   * screening run sees populated rows). Path forward: either move match
+   * computation into the pipeline before SCREENING, or add a post-matching
+   * hook that re-decides triage. Tracked separately.
+   */
+  private async maxThesisFitScore(
+    startupId: string,
+  ): Promise<number | null> {
+    const rows = await this.drizzle.db
+      .select({ score: startupMatch.thesisFitScore })
+      .from(startupMatch)
+      .where(eq(startupMatch.startupId, startupId))
+      .orderBy(desc(startupMatch.thesisFitScore))
+      .limit(1);
+    return rows[0]?.score ?? null;
   }
 
   private async buildContext(startupId: string): Promise<LensInput> {

@@ -250,13 +250,23 @@ function InvestorThesisPage() {
     typeof thesis?.thesisSummaryGeneratedAt === "string" ? thesis.thesisSummaryGeneratedAt : null;
   const persistedWebsite = typeof thesis?.website === "string" ? thesis.website : "";
 
+  // Tracks whether the most recent in-flight scrape failed. Backend never
+  // clears `websiteScrapedAt` on failure (we want to preserve "we did try"
+  // for audit), so without this flag a failed run leaves the banner stuck
+  // on forever. Cleared whenever a fresh re-scan is queued or the thesis
+  // populates successfully.
+  const [hasRecentFailure, setHasRecentFailure] = useState(false);
+
   // Generating banner shows when a scrape was queued but the LLM hasn't written
   // a thesis newer than that scrape yet. Covers first-run AND re-scan-in-flight.
+  // Suppressed once the WS reports a failure for the in-flight run; the user
+  // is shown the failure toast and the Re-scan button re-enables.
   const isThesisGenerating = useMemo(() => {
+    if (hasRecentFailure) return false;
     if (!websiteScrapedAt) return false;
     if (!thesisSummaryGeneratedAt) return true;
     return new Date(thesisSummaryGeneratedAt).getTime() < new Date(websiteScrapedAt).getTime();
-  }, [websiteScrapedAt, thesisSummaryGeneratedAt]);
+  }, [websiteScrapedAt, thesisSummaryGeneratedAt, hasRecentFailure]);
 
   const [isRescanOpen, setIsRescanOpen] = useState(false);
   const { mutate: submitOnboardingWebsite, isPending: isSubmittingWebsite } =
@@ -268,6 +278,9 @@ function InvestorThesisPage() {
         { website },
         {
           onSuccess: () => {
+            // Fresh attempt — clear any stale failure marker so the banner
+            // shows again for the new run.
+            setHasRecentFailure(false);
             toast.success("Re-scanning your website…", {
               description: "We'll refresh your thesis once the draft is ready.",
             });
@@ -284,10 +297,12 @@ function InvestorThesisPage() {
 
   useInvestorOnboardingEvents({
     onCompleted: () => {
+      setHasRecentFailure(false);
       toast.success("Your thesis is ready");
       queryClient.invalidateQueries({ queryKey: getInvestorControllerGetThesisQueryKey() });
     },
     onFailed: (event) => {
+      setHasRecentFailure(true);
       toast.error("Couldn't draft your thesis", {
         description: event.error || "Please try again from Re-scan my website.",
       });

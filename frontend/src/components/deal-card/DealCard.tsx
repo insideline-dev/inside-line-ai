@@ -32,6 +32,10 @@ import {
   evaluateDealbreakers,
   hasHardViolation,
 } from "@/lib/screening/thesis-rules";
+import {
+  findPortfolioConflicts,
+  reasonLabel,
+} from "@/lib/screening/portfolio-conflicts";
 import { useInvestorControllerGetThesis } from "@/api/generated/investor/investor";
 import type { InvestmentThesis } from "@/types/investor";
 import type { Startup } from "@/types/startup";
@@ -159,6 +163,8 @@ export function DealCard({ startupId, className, startup: startupProp }: DealCar
   const lensTiles = buildLensTiles(decision);
   const dealbreakers = evaluateDealbreakers(startup, thesis);
   const hasHardDealbreaker = hasHardViolation(dealbreakers);
+  // DS-E4-F2-S1 — surface portfolio conflicts before the partner advances.
+  const portfolioConflicts = findPortfolioConflicts(startup, thesis);
   const why =
     decision && decision.reasonCodes.length > 0
       ? summarizeReasonCodes(decision.reasonCodes)
@@ -304,6 +310,39 @@ export function DealCard({ startupId, className, startup: startupProp }: DealCar
             );
           })}
         </div>
+
+        {/* Portfolio conflicts — DS-E4-F2-S1. Flagged before any partner
+            advances so we don't silently compete with our own portfolio. */}
+        {portfolioConflicts.length > 0 && (
+          <div
+            className="space-y-1.5 rounded-md border border-orange-300/60 bg-orange-50 px-2.5 py-2 text-xs text-orange-900"
+            data-testid="deal-card-portfolio-conflicts"
+          >
+            <div className="flex items-center gap-1.5">
+              <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+              <span className="font-medium">
+                Possible portfolio conflict
+                {portfolioConflicts.length > 1 ? "s" : ""}
+              </span>
+            </div>
+            <ul className="space-y-0.5 pl-5">
+              {portfolioConflicts.slice(0, 3).map((c) => (
+                <li key={c.portfolioName} className="text-[11px]">
+                  <span className="font-medium">{c.portfolioName}</span>
+                  <span className="opacity-80">
+                    {" "}
+                    — {c.reasons.map(reasonLabel).join(", ")}
+                  </span>
+                </li>
+              ))}
+              {portfolioConflicts.length > 3 && (
+                <li className="text-[11px] opacity-70">
+                  +{portfolioConflicts.length - 3} more
+                </li>
+              )}
+            </ul>
+          </div>
+        )}
 
         {/* Dealbreakers — DS-E4-F3-S1. Deterministic per-investor checks
             against thesis fields. Hard violations show first as a clear

@@ -12,6 +12,7 @@ import { PortfolioService } from './portfolio.service';
 import { DealPipelineService } from './deal-pipeline.service';
 import { MessagingService } from './messaging.service';
 import { ScoringPreferencesService } from './scoring-preferences.service';
+import { DealDecisionService } from './deal-decision.service';
 import {
   InvestorController,
   InvestorTeamPublicController,
@@ -35,6 +36,7 @@ import {
     DealPipelineService,
     MessagingService,
     ScoringPreferencesService,
+    DealDecisionService,
   ],
   exports: [
     ThesisService,
@@ -45,6 +47,7 @@ import {
     DealPipelineService,
     MessagingService,
     ScoringPreferencesService,
+    DealDecisionService,
   ],
 })
 export class InvestorModule {}

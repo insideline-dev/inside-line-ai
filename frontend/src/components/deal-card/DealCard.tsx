@@ -24,6 +24,12 @@ import {
 } from "@/lib/screening/useTriageDecision";
 import { ClassificationBadge } from "./ClassificationBadge";
 import { summarizeReasonCodes } from "@/lib/screening/reason-codes";
+import {
+  evaluateDealbreakers,
+  hasHardViolation,
+} from "@/lib/screening/thesis-rules";
+import { useInvestorControllerGetThesis } from "@/api/generated/investor/investor";
+import type { InvestmentThesis } from "@/types/investor";
 import type { Startup } from "@/types/startup";
 import { cn } from "@/lib/utils";
 
@@ -98,6 +104,21 @@ export function DealCard({ startupId, className, startup: startupProp }: DealCar
   const triage = useTriageDecision(startupId);
   const decision: TriageDecision | null | undefined = triage.data;
 
+  // DS-E4-F3-S1 — deterministic dealbreaker check against the current
+  // investor's thesis. Cheap, runs client-side, no LLM round-trip.
+  // 404s if no thesis exists yet (fresh investor) — degrades to no
+  // violations rather than blocking the card. Disabled until the startup
+  // resolves so we don't 404-spam from non-investor render paths.
+  const thesisRes = useInvestorControllerGetThesis({
+    query: {
+      retry: false,
+      staleTime: 60_000,
+      refetchOnWindowFocus: false,
+      enabled: !!startupId,
+    },
+  });
+  const thesis = unwrap<InvestmentThesis>(thesisRes.data) ?? null;
+
   const isLoading =
     !startupProp && (ownStartupRes.isLoading || approvedStartupRes.isLoading);
 
@@ -119,6 +140,8 @@ export function DealCard({ startupId, className, startup: startupProp }: DealCar
   const stage = formatStage(startup.stage);
   const sector = startup.sectorIndustryGroup ?? startup.industry ?? null;
   const lensTiles = buildLensTiles(decision);
+  const dealbreakers = evaluateDealbreakers(startup, thesis);
+  const hasHardDealbreaker = hasHardViolation(dealbreakers);
   const why =
     decision && decision.reasonCodes.length > 0
       ? summarizeReasonCodes(decision.reasonCodes)
@@ -226,7 +249,11 @@ export function DealCard({ startupId, className, startup: startupProp }: DealCar
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="max-w-xs text-xs">
                     {lens?.rationale ||
-                      (lens ? `${label}: ${lens.signal}` : "No data yet")}
+                      (lens
+                        ? `${label}: ${lens.signal}`
+                        : decision
+                          ? `${label}: no signal in this run`
+                          : "No screening data yet — run the pipeline to populate")}
                   </TooltipContent>
                 </Tooltip>
               );
@@ -234,8 +261,37 @@ export function DealCard({ startupId, className, startup: startupProp }: DealCar
           </div>
         </TooltipProvider>
 
-        {/* Why line */}
-        {why && (
+        {/* Dealbreakers — DS-E4-F3-S1. Deterministic per-investor checks
+            against thesis fields. Hard violations show first as a clear
+            "doesn't match your thesis" surface; soft ones below. */}
+        {dealbreakers.length > 0 && (
+          <div
+            className={cn(
+              "flex flex-wrap items-center gap-1.5 rounded-md border px-2.5 py-2 text-xs",
+              hasHardDealbreaker
+                ? "border-destructive/40 bg-destructive/5 text-destructive"
+                : "border-amber-300/60 bg-amber-50 text-amber-900",
+            )}
+            data-testid="deal-card-dealbreakers"
+          >
+            <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+            <span className="font-medium">
+              {hasHardDealbreaker
+                ? "Doesn't match your thesis"
+                : "Thesis-fit notes"}
+            </span>
+            <span className="text-[11px] opacity-90">
+              {dealbreakers
+                .map((v) => (v.detail ? `${v.label} (${v.detail})` : v.label))
+                .join(" • ")}
+            </span>
+          </div>
+        )}
+
+        {/* Why line — suppressed when a hard dealbreaker fires (the
+            dealbreaker IS the user-facing reason; stacking three error-
+            toned rows is visual noise). */}
+        {why && !hasHardDealbreaker && (
           <p
             className="flex items-center gap-1.5 text-sm text-muted-foreground"
             data-testid="deal-card-why"

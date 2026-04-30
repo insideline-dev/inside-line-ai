@@ -14,6 +14,7 @@ import { DealPipelineService } from './deal-pipeline.service';
 import { MessagingService } from './messaging.service';
 import { ScoringPreferencesService } from './scoring-preferences.service';
 import { DealDecisionService } from './deal-decision.service';
+import { CalibrationService } from './calibration.service';
 import {
   InvestorController,
   InvestorTeamPublicController,
@@ -39,6 +40,7 @@ import {
     MessagingService,
     ScoringPreferencesService,
     DealDecisionService,
+    CalibrationService,
   ],
   exports: [
     ThesisService,

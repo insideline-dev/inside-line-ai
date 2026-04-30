@@ -5493,6 +5493,20 @@
         ]
       }
     },
+    "/investor/calibration": {
+      "get": {
+        "operationId": "InvestorController_getCalibration",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Investor"
+        ]
+      }
+    },
     "/investor/matches": {
       "get": {
         "operationId": "InvestorController_getMatches",

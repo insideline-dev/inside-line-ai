@@ -28,6 +28,7 @@ import { MessagingService } from './messaging.service';
 import { ScoringPreferencesService } from './scoring-preferences.service';
 import { DealDecisionService } from './deal-decision.service';
 import { RecordDealDecisionDto } from './dto/record-deal-decision.dto';
+import { CalibrationService } from './calibration.service';
 import { ScoringConfigService } from '../admin/scoring-config.service';
 import { StartupMatchingPipelineService } from '../ai/services/startup-matching-pipeline.service';
 import {
@@ -64,6 +65,7 @@ export class InvestorController {
     private messagingService: MessagingService,
     private scoringPreferencesService: ScoringPreferencesService,
     private dealDecisionService: DealDecisionService,
+    private calibrationService: CalibrationService,
     private scoringConfigService: ScoringConfigService,
     private startupMatching: StartupMatchingPipelineService,
   ) {}
@@ -118,6 +120,15 @@ export class InvestorController {
     @Param('startupId', new ParseUUIDPipe()) startupId: string,
   ) {
     return this.dealDecisionService.latest(user.id, startupId);
+  }
+
+  // DS-E7-F3-S1 — calibration aggregates over the investor's own decisions
+  // vs the system's triage classifications snapshotted at decision time.
+  // Drives the "Calibration" panel on the investor dashboard so the loop
+  // visibly closes on each verdict the investor records.
+  @Get('calibration')
+  async getCalibration(@CurrentUser() user: User) {
+    return this.calibrationService.getStatsForInvestor(user.id);
   }
 
   // ============ MATCHES ENDPOINTS ============

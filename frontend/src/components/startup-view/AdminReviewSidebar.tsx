@@ -11,6 +11,7 @@ import {
   Globe,
   Link2,
   Play,
+  Sparkles,
   Trash2,
   Users,
   XCircle,
@@ -27,10 +28,12 @@ interface AdminReviewSidebarProps {
   onReject: () => void;
   onDeleteSubmission: () => void;
   onMatchInvestors?: () => void;
+  onRunScreening?: () => void;
   approveDisabled?: boolean;
   rejectDisabled?: boolean;
   deleteDisabled?: boolean;
   matchDisabled?: boolean;
+  screenDisabled?: boolean;
   canApproveReject: boolean;
 }
 
@@ -94,10 +97,12 @@ export function AdminReviewSidebar({
   onReject,
   onDeleteSubmission,
   onMatchInvestors,
+  onRunScreening,
   approveDisabled,
   rejectDisabled,
   deleteDisabled,
   matchDisabled,
+  screenDisabled,
   canApproveReject,
 }: AdminReviewSidebarProps) {
   const score = evaluation?.overallScore ?? startup.overallScore ?? 0;
@@ -164,6 +169,18 @@ export function AdminReviewSidebar({
             >
               <Users className="h-4 w-4 mr-2" />
               {matchDisabled ? "Matching..." : "Match Investors"}
+            </Button>
+          )}
+
+          {startup.status === "approved" && onRunScreening && (
+            <Button
+              onClick={onRunScreening}
+              disabled={screenDisabled}
+              variant="outline"
+              className="h-10 w-full rounded-md text-sm font-medium"
+            >
+              <Sparkles className="h-4 w-4 mr-2" />
+              {screenDisabled ? "Queuing screening…" : "Re-run screening"}
             </Button>
           )}
 

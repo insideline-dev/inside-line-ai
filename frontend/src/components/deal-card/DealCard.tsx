@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScoreRing } from "@/components/analysis/ScoreRing";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowRight, AlertCircle, CheckCheck } from "lucide-react";
+import { ArrowRight, AlertCircle, CheckCheck, Download, Loader2 } from "lucide-react";
+import { downloadScreening } from "@/lib/pdf/download";
 import {
   useStartupControllerFindOne,
   useStartupControllerFindApprovedById,
@@ -188,6 +189,21 @@ export function DealCard({ startupId, className, startup: startupProp }: DealCar
 
   const handleOpenMemo = () => {
     void navigate({ to: "/investor/startup/$id", params: { id: startupId } });
+  };
+
+  // DS-E10-F4-S1 — share-safe 1-page screening PDF.
+  const [isDownloadingScreening, setIsDownloadingScreening] = useState(false);
+  const handleDownloadScreening = async () => {
+    if (!screeningOutput.data || isDownloadingScreening) return;
+    setIsDownloadingScreening(true);
+    try {
+      await downloadScreening({ startup });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Download failed";
+      toast.error("Couldn't generate PDF", { description: message });
+    } finally {
+      setIsDownloadingScreening(false);
+    }
   };
 
   // DS-E11-F1-S1 — 30-second close/pass capture. The investor's verdict
@@ -429,6 +445,27 @@ export function DealCard({ startupId, className, startup: startupProp }: DealCar
 
         {/* Actions */}
         <div className="flex flex-wrap items-center justify-end gap-2 border-t pt-3">
+          {/* DS-E10-F4-S1 — share-safe screening PDF. Disabled while no
+              screening output exists yet (button stays discoverable). */}
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={!screeningOutput.data || isDownloadingScreening}
+            onClick={handleDownloadScreening}
+            data-testid="deal-card-download-screening"
+            title={
+              screeningOutput.data
+                ? "Download a 1-page screening summary you can share"
+                : "Run screening first to enable download"
+            }
+          >
+            {isDownloadingScreening ? (
+              <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="mr-1.5 h-4 w-4" />
+            )}
+            Share PDF
+          </Button>
           <Button
             variant={latestDecision ? "secondary" : "outline"}
             size="sm"

@@ -227,6 +227,27 @@ export class StartupController {
     res.end(buffer);
   }
 
+  // DS-E10-F4-S1 — 1-page screening report. NO DD content — strict by
+  // design; the print route only renders ScreeningOutput v1 fields. Safe
+  // to share with a partner / LP / scout without exposing memo or
+  // evaluation internals.
+  @Get(':id/screening.pdf')
+  @Roles(UserRole.FOUNDER, UserRole.INVESTOR, UserRole.ADMIN)
+  @Header('Content-Type', 'application/pdf')
+  async downloadScreening(
+    @Param('id') id: string,
+    @CurrentUser() user: User,
+    @Res() res: Response,
+  ) {
+    await this.pdfService.verifyAccess(id, user.id);
+    const buffer = await this.pdfRenderService.renderScreening(id, user.id);
+    res.set({
+      'Content-Disposition': `attachment; filename="${id}-screening.pdf"`,
+      'Content-Length': buffer.length,
+    });
+    res.end(buffer);
+  }
+
   private async generateWithFallback(
     kind: 'memo' | 'report',
     startupId: string,

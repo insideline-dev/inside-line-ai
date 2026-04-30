@@ -26,6 +26,7 @@ import { Route as ProtectedScoutIndexRouteImport } from './routes/_protected/sco
 import { Route as ProtectedInvestorIndexRouteImport } from './routes/_protected/investor/index'
 import { Route as ProtectedFounderIndexRouteImport } from './routes/_protected/founder/index'
 import { Route as ProtectedAdminIndexRouteImport } from './routes/_protected/admin/index'
+import { Route as PrintScreeningIdRouteImport } from './routes/print.screening.$id'
 import { Route as PrintReportIdRouteImport } from './routes/print.report.$id'
 import { Route as PrintMemoIdRouteImport } from './routes/print.memo.$id'
 import { Route as ProtectedScoutSubmitRouteImport } from './routes/_protected/scout/submit'
@@ -144,6 +145,11 @@ const ProtectedAdminIndexRoute = ProtectedAdminIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => ProtectedAdminRoute,
+} as any)
+const PrintScreeningIdRoute = PrintScreeningIdRouteImport.update({
+  id: '/print/screening/$id',
+  path: '/print/screening/$id',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const PrintReportIdRoute = PrintReportIdRouteImport.update({
   id: '/print/report/$id',
@@ -373,6 +379,7 @@ export interface FileRoutesByFullPath {
   '/scout/submit': typeof ProtectedScoutSubmitRoute
   '/print/memo/$id': typeof PrintMemoIdRoute
   '/print/report/$id': typeof PrintReportIdRoute
+  '/print/screening/$id': typeof PrintScreeningIdRoute
   '/admin/': typeof ProtectedAdminIndexRoute
   '/founder/': typeof ProtectedFounderIndexRoute
   '/investor/': typeof ProtectedInvestorIndexRoute
@@ -421,6 +428,7 @@ export interface FileRoutesByTo {
   '/scout/submit': typeof ProtectedScoutSubmitRoute
   '/print/memo/$id': typeof PrintMemoIdRoute
   '/print/report/$id': typeof PrintReportIdRoute
+  '/print/screening/$id': typeof PrintScreeningIdRoute
   '/admin': typeof ProtectedAdminIndexRoute
   '/founder': typeof ProtectedFounderIndexRoute
   '/investor': typeof ProtectedInvestorIndexRoute
@@ -475,6 +483,7 @@ export interface FileRoutesById {
   '/_protected/scout/submit': typeof ProtectedScoutSubmitRoute
   '/print/memo/$id': typeof PrintMemoIdRoute
   '/print/report/$id': typeof PrintReportIdRoute
+  '/print/screening/$id': typeof PrintScreeningIdRoute
   '/_protected/admin/': typeof ProtectedAdminIndexRoute
   '/_protected/founder/': typeof ProtectedFounderIndexRoute
   '/_protected/investor/': typeof ProtectedInvestorIndexRoute
@@ -529,6 +538,7 @@ export interface FileRouteTypes {
     | '/scout/submit'
     | '/print/memo/$id'
     | '/print/report/$id'
+    | '/print/screening/$id'
     | '/admin/'
     | '/founder/'
     | '/investor/'
@@ -577,6 +587,7 @@ export interface FileRouteTypes {
     | '/scout/submit'
     | '/print/memo/$id'
     | '/print/report/$id'
+    | '/print/screening/$id'
     | '/admin'
     | '/founder'
     | '/investor'
@@ -630,6 +641,7 @@ export interface FileRouteTypes {
     | '/_protected/scout/submit'
     | '/print/memo/$id'
     | '/print/report/$id'
+    | '/print/screening/$id'
     | '/_protected/admin/'
     | '/_protected/founder/'
     | '/_protected/investor/'
@@ -651,6 +663,7 @@ export interface RootRouteChildren {
   AuthMagicLinkRoute: typeof AuthMagicLinkRoute
   PrintMemoIdRoute: typeof PrintMemoIdRoute
   PrintReportIdRoute: typeof PrintReportIdRoute
+  PrintScreeningIdRoute: typeof PrintScreeningIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -773,6 +786,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin/'
       preLoaderRoute: typeof ProtectedAdminIndexRouteImport
       parentRoute: typeof ProtectedAdminRoute
+    }
+    '/print/screening/$id': {
+      id: '/print/screening/$id'
+      path: '/print/screening/$id'
+      fullPath: '/print/screening/$id'
+      preLoaderRoute: typeof PrintScreeningIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/print/report/$id': {
       id: '/print/report/$id'
@@ -1158,6 +1178,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthMagicLinkRoute: AuthMagicLinkRoute,
   PrintMemoIdRoute: PrintMemoIdRoute,
   PrintReportIdRoute: PrintReportIdRoute,
+  PrintScreeningIdRoute: PrintScreeningIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

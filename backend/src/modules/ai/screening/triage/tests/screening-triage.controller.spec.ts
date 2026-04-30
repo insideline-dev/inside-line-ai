@@ -1,6 +1,7 @@
 import { describe, expect, it, jest } from "bun:test";
 import { Test } from "@nestjs/testing";
 import { NotFoundException } from "@nestjs/common";
+import { ScreeningOutputService } from "../../../contracts/screening-output";
 import { ScreeningTriageController } from "../screening-triage.controller";
 import {
   POLICY_VERSION,
@@ -26,6 +27,7 @@ function buildDecision(): ScreeningDecision {
 
 async function buildController(
   latestForStartup: jest.Mock,
+  latestOutputForStartup: jest.Mock = jest.fn().mockResolvedValue(null),
 ): Promise<ScreeningTriageController> {
   const moduleRef = await Test.createTestingModule({
     controllers: [ScreeningTriageController],
@@ -33,6 +35,10 @@ async function buildController(
       {
         provide: ScreeningTriageService,
         useValue: { latestForStartup },
+      },
+      {
+        provide: ScreeningOutputService,
+        useValue: { latestForStartup: latestOutputForStartup },
       },
     ],
   }).compile();
@@ -56,6 +62,53 @@ describe("ScreeningTriageController", () => {
     const controller = await buildController(latestForStartup);
 
     await expect(controller.getLatest(STARTUP_ID)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+  });
+
+  // DS-E9-F1-S1 — ScreeningOutput v1 endpoint feeds the deal-card
+  // evidence popover.
+  it("GET :startupId/output returns the latest screening output", async () => {
+    const output = {
+      version: 1 as const,
+      startupId: STARTUP_ID,
+      pipelineRunId: null,
+      generatedAt: "2026-04-30T10:00:00.000Z",
+      overall: { score: 82, signal: "advance" as const, missingMaterials: [] },
+      lenses: [
+        {
+          key: "market",
+          score: 82,
+          signal: "advance" as const,
+          rationale: "Strong TAM",
+          evidence: [
+            {
+              claim: "Market size $5B per Gartner 2025",
+              source: "https://gartner.com/report",
+              confidence: "high" as const,
+            },
+          ],
+          modelId: "gpt-5.4-mini",
+          promptKey: "lens.market",
+          latencyMs: 1234,
+          usedFallback: false,
+        },
+      ],
+    };
+    const latestOutput = jest.fn().mockResolvedValue(output);
+    const controller = await buildController(jest.fn(), latestOutput);
+
+    const out = await controller.getOutput(STARTUP_ID);
+
+    expect(latestOutput).toHaveBeenCalledWith(STARTUP_ID);
+    expect(out).toEqual(output);
+  });
+
+  it("GET :startupId/output throws 404 when no output exists", async () => {
+    const latestOutput = jest.fn().mockResolvedValue(null);
+    const controller = await buildController(jest.fn(), latestOutput);
+
+    await expect(controller.getOutput(STARTUP_ID)).rejects.toBeInstanceOf(
       NotFoundException,
     );
   });

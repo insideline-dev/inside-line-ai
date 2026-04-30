@@ -31,7 +31,12 @@ export interface InvestmentThesis {
   website?: string;
   fundSize?: number;
   thesisSummary?: string;
-  portfolioCompanies?: { name: string; description: string }[];
+  portfolioCompanies?: {
+    name: string;
+    description: string;
+    /** DS-E3-F1-S2 — populated by the onboarding website scrape. */
+    websiteUrl?: string;
+  }[];
   thesisSummaryGeneratedAt?: string;
   mustHaveFeatures?: string[];
   dealBreakers?: string[];

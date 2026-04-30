@@ -2,6 +2,7 @@ import { Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { and, desc, eq } from "drizzle-orm";
 import { DrizzleService } from "../../database";
 import { startup } from "../startup/entities/startup.schema";
+import { DealEventService } from "../startup/deal-event.service";
 import {
   investorDealDecision,
   type InvestorDealDecisionRow,
@@ -22,7 +23,10 @@ import type { RecordDealDecision } from "./dto/record-deal-decision.dto";
 export class DealDecisionService {
   private readonly logger = new Logger(DealDecisionService.name);
 
-  constructor(private readonly drizzle: DrizzleService) {}
+  constructor(
+    private readonly drizzle: DrizzleService,
+    private readonly dealEvents: DealEventService,
+  ) {}
 
   async record(
     investorId: string,
@@ -59,6 +63,20 @@ export class DealDecisionService {
     this.logger.log(
       `Decision recorded investor=${investorId} startup=${startupId} verdict=${input.verdict} tags=${input.reasonTags?.join(",") ?? "-"}`,
     );
+
+    // DS-E8-F1-S1 — audit event so the timeline shows the partner's call.
+    void this.dealEvents.record({
+      startupId,
+      actorUserId: investorId,
+      type: "decision.recorded",
+      payload: {
+        verdict: input.verdict,
+        reasonTags: input.reasonTags ?? [],
+        hasNotes: Boolean(input.notes && input.notes.trim().length > 0),
+        triageClassificationAtDecision:
+          input.triageClassificationAtDecision ?? null,
+      },
+    });
 
     return row;
   }

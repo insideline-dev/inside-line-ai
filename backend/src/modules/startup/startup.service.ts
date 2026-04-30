@@ -29,6 +29,7 @@ import {
 import { PipelineFeedbackService } from "../ai/services/pipeline-feedback.service";
 import { StartupMatchingPipelineService } from "../ai/services/startup-matching-pipeline.service";
 import { DataRoomService } from "./data-room.service";
+import { DealEventService } from "./deal-event.service";
 import { PipelineStateService } from "../ai/services/pipeline-state.service";
 import {
   pipelineAgentRun,
@@ -222,6 +223,7 @@ export class StartupService {
     private pipelineFeedback: PipelineFeedbackService,
     private startupMatching: StartupMatchingPipelineService,
     private dataRoomService: DataRoomService,
+    private dealEvents: DealEventService,
     @Optional() private pipelineState?: PipelineStateService,
   ) {}
 
@@ -601,6 +603,12 @@ export class StartupService {
     }
 
     this.logger.log(`Approved startup ${id} by ${actorRole} ${actorId}`);
+    void this.dealEvents.record({
+      startupId: id,
+      actorUserId: actorId,
+      type: "startup.approved",
+      payload: { actorRole },
+    });
     return updated;
   }
 
@@ -652,6 +660,12 @@ export class StartupService {
       .returning();
 
     this.logger.log(`Rejected startup ${id} by ${actorRole} ${actorId}`);
+    void this.dealEvents.record({
+      startupId: id,
+      actorUserId: actorId,
+      type: "startup.rejected",
+      payload: { actorRole, reason: rejectionReason },
+    });
     return updated;
   }
 

@@ -2,6 +2,7 @@ import { describe, expect, it, jest } from "bun:test";
 import { Test } from "@nestjs/testing";
 import { NotFoundException } from "@nestjs/common";
 import { DrizzleService } from "../../../database";
+import { DealEventService } from "../../startup/deal-event.service";
 import { DealDecisionService } from "../deal-decision.service";
 
 const INVESTOR_ID = "11111111-1111-4111-8111-111111111111";
@@ -38,6 +39,10 @@ async function build(db: MockDb): Promise<DealDecisionService> {
     providers: [
       DealDecisionService,
       { provide: DrizzleService, useValue: { db } },
+      {
+        provide: DealEventService,
+        useValue: { record: jest.fn().mockResolvedValue(null) },
+      },
     ],
   }).compile();
   return moduleRef.get(DealDecisionService);

@@ -2369,6 +2369,110 @@ export function useStartupControllerGetMeetings<TData = Awaited<ReturnType<typeo
 
 
 
+export type startupControllerGetEventsResponse200 = {
+  data: void
+  status: 200
+}
+    
+export type startupControllerGetEventsResponseSuccess = (startupControllerGetEventsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type startupControllerGetEventsResponse = (startupControllerGetEventsResponseSuccess)
+
+export const getStartupControllerGetEventsUrl = (id: string,) => {
+
+
+  
+
+  return `/startups/${id}/events`
+}
+
+export const startupControllerGetEvents = async (id: string, options?: RequestInit): Promise<startupControllerGetEventsResponse> => {
+  
+  return customFetch<startupControllerGetEventsResponse>(getStartupControllerGetEventsUrl(id),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getStartupControllerGetEventsQueryKey = (id: string,) => {
+    return [
+    `/startups/${id}/events`
+    ] as const;
+    }
+
+    
+export const getStartupControllerGetEventsQueryOptions = <TData = Awaited<ReturnType<typeof startupControllerGetEvents>>, TError = ErrorType<unknown>>(id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof startupControllerGetEvents>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getStartupControllerGetEventsQueryKey(id);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof startupControllerGetEvents>>> = ({ signal }) => startupControllerGetEvents(id, { signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof startupControllerGetEvents>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type StartupControllerGetEventsQueryResult = NonNullable<Awaited<ReturnType<typeof startupControllerGetEvents>>>
+export type StartupControllerGetEventsQueryError = ErrorType<unknown>
+
+
+export function useStartupControllerGetEvents<TData = Awaited<ReturnType<typeof startupControllerGetEvents>>, TError = ErrorType<unknown>>(
+ id: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof startupControllerGetEvents>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof startupControllerGetEvents>>,
+          TError,
+          Awaited<ReturnType<typeof startupControllerGetEvents>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useStartupControllerGetEvents<TData = Awaited<ReturnType<typeof startupControllerGetEvents>>, TError = ErrorType<unknown>>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof startupControllerGetEvents>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof startupControllerGetEvents>>,
+          TError,
+          Awaited<ReturnType<typeof startupControllerGetEvents>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useStartupControllerGetEvents<TData = Awaited<ReturnType<typeof startupControllerGetEvents>>, TError = ErrorType<unknown>>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof startupControllerGetEvents>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useStartupControllerGetEvents<TData = Awaited<ReturnType<typeof startupControllerGetEvents>>, TError = ErrorType<unknown>>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof startupControllerGetEvents>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getStartupControllerGetEventsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
 export type startupControllerFindApprovedResponse200 = {
   data: void
   status: 200

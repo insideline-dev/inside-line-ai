@@ -6,6 +6,11 @@ import {
   startupLensResult,
   type StartupLensResult,
 } from "../../entities/lens-result.schema";
+import { startup } from "../../../startup/entities/startup.schema";
+import {
+  detectMissingMaterials,
+  type MaterialsInput,
+} from "./missing-materials";
 import type {
   ScreeningEvidence,
   ScreeningLensV1,
@@ -45,7 +50,13 @@ export class ScreeningOutputService {
   ): Promise<ScreeningOutputV1> {
     const rows = await this.fetchRows(startupId, pipelineRunId ?? null);
     const latestPerLens = this.pickLatestPerLens(rows);
-    return this.assemble(startupId, pipelineRunId ?? null, latestPerLens);
+    const materials = await this.fetchMaterialsInput(startupId);
+    return this.assemble(
+      startupId,
+      pipelineRunId ?? null,
+      latestPerLens,
+      materials,
+    );
   }
 
   /**
@@ -63,16 +74,49 @@ export class ScreeningOutputService {
     // Newest row wins; its pipelineRunId scopes the contract. Rows without a
     // run id (null) fall back to the cross-run "latest per lens" view.
     const newest = rows[0];
+    const materials = await this.fetchMaterialsInput(startupId);
     if (newest.pipelineRunId) {
       const scoped = rows.filter(
         (row) => row.pipelineRunId === newest.pipelineRunId,
       );
       const latestPerLens = this.pickLatestPerLens(scoped);
-      return this.assemble(startupId, newest.pipelineRunId, latestPerLens);
+      return this.assemble(
+        startupId,
+        newest.pipelineRunId,
+        latestPerLens,
+        materials,
+      );
     }
 
     const latestPerLens = this.pickLatestPerLens(rows);
-    return this.assemble(startupId, null, latestPerLens);
+    return this.assemble(startupId, null, latestPerLens, materials);
+  }
+
+  /**
+   * DS-E7-F4-S1 — fetch the minimal startup projection needed by the
+   * missing-materials checker. Returns null when the startup is missing
+   * (the contract still builds; missingMaterials surfaces "all" as missing
+   * at that point — the screening pipeline shouldn't run for a deleted
+   * startup but defensive default beats throwing).
+   */
+  private async fetchMaterialsInput(
+    startupId: string,
+  ): Promise<MaterialsInput | null> {
+    const [row] = await this.drizzle.db
+      .select({
+        pitchDeckUrl: startup.pitchDeckUrl,
+        productDescription: startup.productDescription,
+        description: startup.description,
+        teamMembers: startup.teamMembers,
+        fundingTarget: startup.fundingTarget,
+        valuation: startup.valuation,
+        raiseType: startup.raiseType,
+        website: startup.website,
+      })
+      .from(startup)
+      .where(eq(startup.id, startupId))
+      .limit(1);
+    return row ?? null;
   }
 
   private async fetchRows(
@@ -112,6 +156,7 @@ export class ScreeningOutputService {
     startupId: string,
     pipelineRunId: string | null,
     rows: StartupLensResult[],
+    materials: MaterialsInput | null,
   ): ScreeningOutputV1 {
     const lenses = rows.map((row) => this.toContractLens(row));
     return {
@@ -119,7 +164,7 @@ export class ScreeningOutputService {
       startupId,
       pipelineRunId,
       generatedAt: new Date().toISOString(),
-      overall: this.computeOverall(lenses),
+      overall: this.computeOverall(lenses, materials),
       lenses,
     };
   }
@@ -191,12 +236,19 @@ export class ScreeningOutputService {
    *     consumers can audit it.
    *   - signal: worst-of policy — any `reject` → reject; else any `review` →
    *     review; else `advance`. Empty lens array → `review` (no signal yet).
-   *   - missingMaterials: always [] in v1; DS-E7-F4 fills this in once the
-   *     missing-materials gate ships.
+   *   - missingMaterials: DS-E7-F4-S1 — populated from the startup row.
+   *     If the lenses would otherwise advance but materials are missing,
+   *     downgrade to `review` (the "REVIEW hold" the story calls for).
+   *     A reject lens still wins; missing materials don't reverse a reject.
    */
-  private computeOverall(lenses: ScreeningLensV1[]): ScreeningOverallV1 {
+  private computeOverall(
+    lenses: ScreeningLensV1[],
+    materials: MaterialsInput | null,
+  ): ScreeningOverallV1 {
+    const missingMaterials = materials ? detectMissingMaterials(materials) : [];
+
     if (lenses.length === 0) {
-      return { score: 0, signal: "review", missingMaterials: [] };
+      return { score: 0, signal: "review", missingMaterials };
     }
 
     const total = lenses.reduce((sum, l) => sum + l.score, 0);
@@ -213,6 +265,11 @@ export class ScreeningOutputService {
       }
     }
 
-    return { score, signal, missingMaterials: [] };
+    // REVIEW hold: lenses say advance but DD would start under-resourced.
+    if (signal === "advance" && missingMaterials.length > 0) {
+      signal = "review";
+    }
+
+    return { score, signal, missingMaterials };
   }
 }

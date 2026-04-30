@@ -28,23 +28,26 @@ function row(partial: Partial<Row> & Pick<Row, "lensKey" | "score" | "signal">):
 }
 
 /**
- * Mocks the Drizzle query chain `db.select().from().where().orderBy()`.
- * Returns whatever rows are passed in, regardless of the where clause —
- * tests exercise the service's filtering logic, not the SQL.
+ * Mocks the Drizzle query chain. Two queries land on the same mock:
+ *  - lens fetch: select().from().where().orderBy()  → returns `rows`
+ *  - materials fetch (DS-E7-F4-S1): select().from().where().limit(1)
+ *    → returns `materialsRows`
+ * Tests exercise service logic, not SQL.
  */
-function buildDrizzleMock(rows: Row[]) {
+function buildDrizzleMock(rows: Row[], materialsRows: unknown[] = []) {
   const orderBy = jest.fn().mockResolvedValue(rows);
-  const where = jest.fn().mockReturnValue({ orderBy });
+  const limit = jest.fn().mockResolvedValue(materialsRows);
+  const where = jest.fn().mockReturnValue({ orderBy, limit });
   const from = jest.fn().mockReturnValue({ where });
   const select = jest.fn().mockReturnValue({ from });
   return {
     db: { select },
-    _spies: { select, from, where, orderBy },
+    _spies: { select, from, where, orderBy, limit },
   };
 }
 
-async function buildService(rows: Row[]) {
-  const drizzleMock = buildDrizzleMock(rows);
+async function buildService(rows: Row[], materialsRows: unknown[] = []) {
+  const drizzleMock = buildDrizzleMock(rows, materialsRows);
   const moduleRef = await Test.createTestingModule({
     providers: [
       ScreeningOutputService,
@@ -177,5 +180,87 @@ describe("ScreeningOutputService", () => {
     expect(out.lenses).toHaveLength(1);
     expect(out.lenses[0].score).toBe(90);
     expect(out.overall.signal).toBe("advance");
+  });
+
+  // ─── DS-E7-F4-S1 — missing-materials checklist + REVIEW hold ──────
+  const FULLY_RESOURCED = {
+    pitchDeckUrl: "https://drive/deck.pdf",
+    productDescription:
+      "We build a vertical SaaS for clinics that automates billing reconciliation across 12 payer integrations.",
+    description: "Healthcare billing automation",
+    teamMembers: [
+      { name: "A", role: "CEO" },
+      { name: "B", role: "CTO" },
+    ],
+    fundingTarget: 2_000_000,
+    valuation: 12_000_000,
+    raiseType: "priced",
+    website: "https://example.com",
+  };
+
+  it("downgrades all-advance verdict to review when materials are missing", async () => {
+    const rows = [
+      row({ lensKey: "market", score: 80, signal: "advance" }),
+      row({ lensKey: "team", score: 75, signal: "advance" }),
+      row({ lensKey: "traction", score: 70, signal: "advance" }),
+    ];
+    // Material gap: no pitch deck, no team. Lenses unanimous advance,
+    // but the REVIEW hold prevents under-resourced DD.
+    const startupRow = {
+      ...FULLY_RESOURCED,
+      pitchDeckUrl: null,
+      teamMembers: [],
+    };
+    const { service } = await buildService(rows, [startupRow]);
+
+    const out = await service.buildForStartup(STARTUP_ID, RUN_ID);
+
+    expect(out.overall.signal).toBe("review");
+    expect(out.overall.missingMaterials.sort()).toEqual([
+      "deck",
+      "team",
+    ]);
+  });
+
+  it("keeps reject signal when materials are missing (reject still wins)", async () => {
+    const rows = [
+      row({ lensKey: "market", score: 80, signal: "advance" }),
+      row({ lensKey: "team", score: 20, signal: "reject" }),
+    ];
+    const startupRow = { ...FULLY_RESOURCED, pitchDeckUrl: null };
+    const { service } = await buildService(rows, [startupRow]);
+
+    const out = await service.buildForStartup(STARTUP_ID, RUN_ID);
+
+    expect(out.overall.signal).toBe("reject");
+    expect(out.overall.missingMaterials).toEqual(["deck"]);
+  });
+
+  it("emits empty missingMaterials when startup is fully resourced", async () => {
+    const rows = [
+      row({ lensKey: "market", score: 80, signal: "advance" }),
+      row({ lensKey: "team", score: 75, signal: "advance" }),
+      row({ lensKey: "traction", score: 70, signal: "advance" }),
+    ];
+    const { service } = await buildService(rows, [FULLY_RESOURCED]);
+
+    const out = await service.buildForStartup(STARTUP_ID, RUN_ID);
+
+    expect(out.overall.signal).toBe("advance");
+    expect(out.overall.missingMaterials).toEqual([]);
+  });
+
+  it("returns empty missingMaterials when startup row is not found", async () => {
+    const rows = [
+      row({ lensKey: "market", score: 80, signal: "advance" }),
+      row({ lensKey: "team", score: 75, signal: "advance" }),
+      row({ lensKey: "traction", score: 70, signal: "advance" }),
+    ];
+    const { service } = await buildService(rows, []); // no materials row
+
+    const out = await service.buildForStartup(STARTUP_ID, RUN_ID);
+
+    expect(out.overall.signal).toBe("advance");
+    expect(out.overall.missingMaterials).toEqual([]);
   });
 });

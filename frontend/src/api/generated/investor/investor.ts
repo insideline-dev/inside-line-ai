@@ -659,6 +659,110 @@ export function useInvestorControllerGetLatestDealDecision<TData = Awaited<Retur
 
 
 
+export type investorControllerGetCalibrationResponse200 = {
+  data: void
+  status: 200
+}
+    
+export type investorControllerGetCalibrationResponseSuccess = (investorControllerGetCalibrationResponse200) & {
+  headers: Headers;
+};
+;
+
+export type investorControllerGetCalibrationResponse = (investorControllerGetCalibrationResponseSuccess)
+
+export const getInvestorControllerGetCalibrationUrl = () => {
+
+
+  
+
+  return `/investor/calibration`
+}
+
+export const investorControllerGetCalibration = async ( options?: RequestInit): Promise<investorControllerGetCalibrationResponse> => {
+  
+  return customFetch<investorControllerGetCalibrationResponse>(getInvestorControllerGetCalibrationUrl(),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getInvestorControllerGetCalibrationQueryKey = () => {
+    return [
+    `/investor/calibration`
+    ] as const;
+    }
+
+    
+export const getInvestorControllerGetCalibrationQueryOptions = <TData = Awaited<ReturnType<typeof investorControllerGetCalibration>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetCalibration>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getInvestorControllerGetCalibrationQueryKey();
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof investorControllerGetCalibration>>> = ({ signal }) => investorControllerGetCalibration({ signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetCalibration>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type InvestorControllerGetCalibrationQueryResult = NonNullable<Awaited<ReturnType<typeof investorControllerGetCalibration>>>
+export type InvestorControllerGetCalibrationQueryError = ErrorType<unknown>
+
+
+export function useInvestorControllerGetCalibration<TData = Awaited<ReturnType<typeof investorControllerGetCalibration>>, TError = ErrorType<unknown>>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetCalibration>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof investorControllerGetCalibration>>,
+          TError,
+          Awaited<ReturnType<typeof investorControllerGetCalibration>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useInvestorControllerGetCalibration<TData = Awaited<ReturnType<typeof investorControllerGetCalibration>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetCalibration>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof investorControllerGetCalibration>>,
+          TError,
+          Awaited<ReturnType<typeof investorControllerGetCalibration>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useInvestorControllerGetCalibration<TData = Awaited<ReturnType<typeof investorControllerGetCalibration>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetCalibration>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useInvestorControllerGetCalibration<TData = Awaited<ReturnType<typeof investorControllerGetCalibration>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetCalibration>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getInvestorControllerGetCalibrationQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
 export type investorControllerGetMatchesResponse200 = {
   data: void
   status: 200

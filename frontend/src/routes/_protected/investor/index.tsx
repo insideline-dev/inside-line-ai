@@ -15,6 +15,7 @@ import {
   ThesisAxisFilter,
   matchesThesisAxis,
 } from "@/components/investor/ThesisAxisFilter";
+import { CalibrationCard } from "@/components/investor/CalibrationCard";
 import { useFilterStore } from "@/stores";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SearchAndFilters, defaultFilters, type FilterState, STAGES, REGIONS, SOURCE_OPTIONS } from "@/components/SearchAndFilters";
@@ -1640,6 +1641,11 @@ function InvestorDashboard() {
       {/* ─── Thesis-axis pill bar (DS-E6-F2-S1) ───
           Renders only when the investor's thesis declares industries. */}
       <ThesisAxisFilter className="px-1" />
+
+      {/* DS-E7-F3-S1 — calibration card. Auto-hides until the investor has
+          recorded a few decisions; surfaces aggregate mismatch counts. */}
+      <CalibrationCard />
+
 
       {/* ─── Content Area ───
           Small shortlists render as triage DealCards (one-screen, no-scroll).

@@ -71,6 +71,18 @@ function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+const MISSING_MATERIAL_LABELS: Record<string, string> = {
+  deck: "Pitch deck",
+  product_description: "Product description",
+  team: "Team info",
+  deal_terms: "Deal terms",
+  website: "Website",
+};
+
+function missingMaterialLabel(code: string): string {
+  return MISSING_MATERIAL_LABELS[code] ?? code;
+}
+
 function unwrap<T>(payload: unknown): T | undefined {
   if (payload && typeof payload === "object" && "data" in (payload as Record<string, unknown>)) {
     return (payload as { data: T }).data;
@@ -165,6 +177,8 @@ export function DealCard({ startupId, className, startup: startupProp }: DealCar
   const hasHardDealbreaker = hasHardViolation(dealbreakers);
   // DS-E4-F2-S1 — surface portfolio conflicts before the partner advances.
   const portfolioConflicts = findPortfolioConflicts(startup, thesis);
+  // DS-E7-F4-S1 — REVIEW hold visibility: show what DD would lack.
+  const missingMaterials = screeningOutput.data?.overall.missingMaterials ?? [];
   const why =
     decision && decision.reasonCodes.length > 0
       ? summarizeReasonCodes(decision.reasonCodes)
@@ -310,6 +324,35 @@ export function DealCard({ startupId, className, startup: startupProp }: DealCar
             );
           })}
         </div>
+
+        {/* Missing materials — DS-E7-F4-S1. Surfaces what's missing so DD
+            doesn't start under-resourced. The screening output already
+            downgraded the verdict to review when this list is non-empty
+            and the lenses would have advanced. */}
+        {missingMaterials.length > 0 && (
+          <div
+            className="space-y-1.5 rounded-md border border-sky-300/60 bg-sky-50 px-2.5 py-2 text-xs text-sky-900"
+            data-testid="deal-card-missing-materials"
+          >
+            <div className="flex items-center gap-1.5">
+              <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+              <span className="font-medium">
+                Materials needed before DD ({missingMaterials.length})
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-1 pl-5">
+              {missingMaterials.map((code) => (
+                <Badge
+                  key={code}
+                  variant="outline"
+                  className="border-sky-400 bg-white text-[10px]"
+                >
+                  {missingMaterialLabel(code)}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Portfolio conflicts — DS-E4-F2-S1. Flagged before any partner
             advances so we don't silently compete with our own portfolio. */}

@@ -11,6 +11,11 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScoreRing } from "@/components/analysis/ScoreRing";
 import { DealCard } from "@/components/deal-card";
+import {
+  ThesisAxisFilter,
+  matchesThesisAxis,
+} from "@/components/investor/ThesisAxisFilter";
+import { useFilterStore } from "@/stores";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SearchAndFilters, defaultFilters, type FilterState, STAGES, REGIONS, SOURCE_OPTIONS } from "@/components/SearchAndFilters";
 import {
@@ -1361,10 +1366,18 @@ function InvestorDashboard() {
     [pipeline, myStartups, statusOverrides],
   );
 
-  const filteredItems = useMemo(
-    () => filterPipelineItems(allItems, search, filters, activeTab),
-    [allItems, search, filters, activeTab],
-  );
+  const thesisAxis = useFilterStore((s) => s.thesisAxis);
+
+  const filteredItems = useMemo(() => {
+    const base = filterPipelineItems(allItems, search, filters, activeTab);
+    if (!thesisAxis) return base;
+    return base.filter((item) =>
+      matchesThesisAxis(
+        { industry: item.industry ?? undefined },
+        thesisAxis,
+      ),
+    );
+  }, [allItems, search, filters, activeTab, thesisAxis]);
 
   const filteredGrouped = useMemo(() => {
     if (filters.source === "matched" && pipelineItemsByStatus) {
@@ -1623,6 +1636,10 @@ function InvestorDashboard() {
           )}
         </div>
       )}
+
+      {/* ─── Thesis-axis pill bar (DS-E6-F2-S1) ───
+          Renders only when the investor's thesis declares industries. */}
+      <ThesisAxisFilter className="px-1" />
 
       {/* ─── Content Area ───
           Small shortlists render as triage DealCards (one-screen, no-scroll).

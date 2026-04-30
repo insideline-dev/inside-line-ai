@@ -126,9 +126,15 @@ export abstract class BaseLensAgent<TOutput extends LensOutput> {
       // a corrupt cached response cannot poison persistence.
       const validated = this.outputSchema.parse(output);
 
+      // DS-E9-F2-S1 — drop unlinked claims at persistence boundary so the
+      // evidence graph never accumulates source-less assertions. The lens
+      // schema permits optional `source` so the LLM doesn't fail-validate
+      // on a thin run, but anything we keep MUST be linkable.
+      const cleaned = this.dropUnlinkedEvidence(validated);
+
       return {
         key: this.key,
-        output: validated,
+        output: cleaned,
         modelId,
         promptKey: this.promptKey,
         latencyMs: Date.now() - startedAt,
@@ -149,6 +155,25 @@ export abstract class BaseLensAgent<TOutput extends LensOutput> {
         error: message,
       };
     }
+  }
+
+  /**
+   * Filters evidence items that lack a non-empty `source`. Logs at debug if
+   * any are dropped so unusually thin LLM outputs surface in dev without
+   * polluting prod logs. Pure: returns a new object; the input is unchanged.
+   */
+  private dropUnlinkedEvidence(out: TOutput): TOutput {
+    const original = out.evidence;
+    const linked = original.filter(
+      (e) => typeof e.source === "string" && e.source.trim().length > 0,
+    );
+    if (linked.length === original.length) return out;
+
+    const dropped = original.length - linked.length;
+    this.logger.debug(
+      `Lens '${this.key}' dropped ${dropped} unlinked evidence item(s) (kept ${linked.length}/${original.length})`,
+    );
+    return { ...out, evidence: linked };
   }
 
   protected resolveModelId(): string {

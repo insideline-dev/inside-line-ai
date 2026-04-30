@@ -69,7 +69,11 @@ describe("MarketLens", () => {
         signal: "advance",
         rationale: "TAM is large with credible expansion.",
         evidence: [
-          { claim: "Public IDC report cites $40B TAM", confidence: "medium" },
+          {
+            claim: "Public IDC report cites $40B TAM",
+            source: "https://idc.com/reports/market-2025",
+            confidence: "medium",
+          },
         ],
       },
     });
@@ -82,8 +86,58 @@ describe("MarketLens", () => {
     expect(result.promptKey).toBe("lens.market");
     expect(result.output.score).toBe(77);
     expect(result.output.evidence[0].confidence).toBe("medium");
+    expect(result.output.evidence[0].source).toBe(
+      "https://idc.com/reports/market-2025",
+    );
     expect(result.modelId).toBe("gpt-test");
     expect(result.latencyMs).toBeGreaterThanOrEqual(0);
+  });
+
+  // DS-E9-F2-S1 — unlinked claims must never reach persistence so the
+  // evidence graph stays clean.
+  it("drops evidence items missing a source (DS-E9-F2-S1)", async () => {
+    const generateText = jest.fn().mockResolvedValue({
+      output: {
+        score: 70,
+        signal: "advance",
+        rationale: "Strong signals.",
+        evidence: [
+          { claim: "Linked claim", source: "https://example.com/a", confidence: "high" },
+          { claim: "Unlinked claim", confidence: "medium" }, // no source
+          { claim: "Empty source", source: "   ", confidence: "low" }, // whitespace
+          { claim: "Another linked", source: "https://example.com/b", confidence: "medium" },
+        ],
+      },
+    });
+
+    const lens = await buildLens({ generateText });
+    const result = await lens.run(CTX);
+
+    expect(result.usedFallback).toBe(false);
+    expect(result.output.evidence).toHaveLength(2);
+    expect(result.output.evidence.map((e) => e.source)).toEqual([
+      "https://example.com/a",
+      "https://example.com/b",
+    ]);
+  });
+
+  it("preserves evidence array when every item has a source", async () => {
+    const generateText = jest.fn().mockResolvedValue({
+      output: {
+        score: 60,
+        signal: "review",
+        rationale: "Mixed.",
+        evidence: [
+          { claim: "A", source: "https://example.com/1", confidence: "high" },
+          { claim: "B", source: "deck:p3", confidence: "medium" },
+        ],
+      },
+    });
+
+    const lens = await buildLens({ generateText });
+    const result = await lens.run(CTX);
+
+    expect(result.output.evidence).toHaveLength(2);
   });
 
   it("falls back deterministically when the model throws", async () => {

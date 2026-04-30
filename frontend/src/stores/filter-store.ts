@@ -9,6 +9,13 @@ interface FilterState {
   scoreMax: number;
   sortBy: "createdAt" | "score" | "name";
   sortOrder: "asc" | "desc";
+  /**
+   * DS-E6-F2-S1 — single sub-thesis axis to focus the feed on (typically
+   * one industry/sector from the investor's thesis.industries[] array).
+   * `null` means "all axes". String compared case-insensitively against
+   * startup.industry / startup.sectorIndustry / startup.sectorIndustryGroup.
+   */
+  thesisAxis: string | null;
 
   // Actions
   setSearch: (search: string) => void;
@@ -17,6 +24,7 @@ interface FilterState {
   setScoreRange: (min: number, max: number) => void;
   setSortBy: (sortBy: FilterState["sortBy"]) => void;
   setSortOrder: (sortOrder: FilterState["sortOrder"]) => void;
+  setThesisAxis: (axis: string | null) => void;
   resetFilters: () => void;
 }
 
@@ -28,6 +36,7 @@ const defaultFilters = {
   scoreMax: 100,
   sortBy: "createdAt" as const,
   sortOrder: "desc" as const,
+  thesisAxis: null,
 };
 
 export const useFilterStore = create<FilterState>((set) => ({
@@ -39,5 +48,6 @@ export const useFilterStore = create<FilterState>((set) => ({
   setScoreRange: (scoreMin, scoreMax) => set({ scoreMin, scoreMax }),
   setSortBy: (sortBy) => set({ sortBy }),
   setSortOrder: (sortOrder) => set({ sortOrder }),
+  setThesisAxis: (thesisAxis) => set({ thesisAxis }),
   resetFilters: () => set(defaultFilters),
 }));

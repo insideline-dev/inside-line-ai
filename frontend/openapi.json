@@ -12668,6 +12668,10 @@
             "minimum": 0,
             "maximum": 100,
             "nullable": true
+          },
+          "thesisSummary": {
+            "type": "string",
+            "maxLength": 2000
           }
         }
       },

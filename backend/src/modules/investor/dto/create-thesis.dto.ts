@@ -33,6 +33,12 @@ export const CreateThesisSchema = z.object({
   fundSize: z.number().min(0).optional().nullable(),
   minThesisFitScore: z.number().int().min(0).max(100).optional().nullable(),
   minStartupScore: z.number().int().min(0).max(100).optional().nullable(),
+  // DS-E3-F1-S3 — investors can manually edit the AI-drafted summary.
+  // When this field is supplied AND differs from the current value, the
+  // service marks the thesis as manually edited and skips auto-regen on
+  // subsequent saves until the explicit "Regenerate from structured
+  // params" action is invoked.
+  thesisSummary: z.string().max(2000).optional(),
 }).refine(
   (data) => {
     if (data.checkSizeMin && data.checkSizeMax) {

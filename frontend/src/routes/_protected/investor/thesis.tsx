@@ -13,11 +13,9 @@ import {
   ChevronDown,
   ChevronRight,
   DollarSign,
-  FileText,
   Globe,
   Lightbulb,
   Loader2,
-  RefreshCw,
   Save,
   TrendingUp,
   Wallet,
@@ -49,6 +47,7 @@ import {
 } from "@/components/ui/dialog";
 import { OnboardingWebsiteForm } from "@/components/investor/OnboardingWebsiteForm";
 import { ThesisGeneratingBanner } from "@/components/investor/ThesisGeneratingBanner";
+import { ThesisSummaryCard } from "@/components/investor/ThesisSummaryCard";
 import { useSubmitOnboardingWebsite } from "@/lib/investor/useSubmitOnboardingWebsite";
 import { useInvestorOnboardingEvents } from "@/lib/auth/useSocket";
 
@@ -510,44 +509,13 @@ function InvestorThesisPage() {
       ) : (
         <>
       {thesis && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div className="space-y-1">
-                <CardTitle className="flex items-center gap-2">
-                  <FileText className="h-5 w-5" />
-                  Thesis Summary
-                </CardTitle>
-                <CardDescription>
-                  {thesis.thesisSummaryGeneratedAt
-                    ? `Last generated ${new Date(thesis.thesisSummaryGeneratedAt as string).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })}`
-                    : "Generate a readable summary of your investment thesis"}
-                </CardDescription>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-2"
-                onClick={handleGenerateSummary}
-                disabled={isGenerating}
-              >
-                {isGenerating ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-4 w-4" />
-                )}
-                {thesis.thesisSummary ? "Regenerate" : "Generate Summary"}
-              </Button>
-            </div>
-          </CardHeader>
-          {typeof thesis.thesisSummary === "string" && thesis.thesisSummary && (
-            <CardContent>
-              <p className="text-sm leading-relaxed text-muted-foreground">
-                {thesis.thesisSummary}
-              </p>
-            </CardContent>
-          )}
-        </Card>
+        <ThesisSummaryCard
+          thesis={thesis}
+          isGenerating={isGenerating}
+          onRegenerate={handleGenerateSummary}
+          onSaveEdit={(edited) => saveThesis({ data: { thesisSummary: edited } })}
+          isSaving={isSaving}
+        />
       )}
 
       <div className="grid gap-6 lg:grid-cols-2">

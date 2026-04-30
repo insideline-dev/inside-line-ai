@@ -1,0 +1,1 @@
+ALTER TABLE "investor_theses" ADD COLUMN "thesis_summary_manually_edited" boolean DEFAULT false NOT NULL;

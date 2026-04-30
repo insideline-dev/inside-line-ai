@@ -156,6 +156,13 @@ export const investorThesis = pgTable(
     thesisSummary: text('thesis_summary'),
     portfolioCompanies: jsonb('portfolio_companies'),
     thesisSummaryGeneratedAt: timestamp('thesis_summary_generated_at'),
+    // DS-E3-F1-S3 — set true when an investor manually edits `thesisSummary`
+    // through the editor. While true, upsert preserves the manual text and
+    // skips auto-regeneration. Cleared by the explicit "Regenerate from
+    // structured params" action (POST /investor/thesis/generate-summary).
+    thesisSummaryManuallyEdited: boolean('thesis_summary_manually_edited')
+      .default(false)
+      .notNull(),
     // Onboarding scrape lifecycle (DS-E3-F1-S2): set when website submitted/scraped, set after LLM portfolio extraction
     websiteScrapedAt: timestamp('website_scraped_at', { withTimezone: true }),
     portfolioGeneratedAt: timestamp('portfolio_generated_at', { withTimezone: true }),

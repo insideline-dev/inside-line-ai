@@ -56,4 +56,6 @@ export interface CreateThesisDto {
    * @nullable
    */
   minStartupScore?: number | null;
+  /** @maxLength 2000 */
+  thesisSummary?: string;
 }

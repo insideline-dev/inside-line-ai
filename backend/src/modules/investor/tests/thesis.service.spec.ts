@@ -127,6 +127,59 @@ describe('ThesisService', () => {
         expect.objectContaining(createDto),
       );
     });
+
+    // DS-E3-F1-S3 — manual edits to thesisSummary survive subsequent upserts
+    it('marks thesis as manually edited when caller supplies a new thesisSummary', async () => {
+      mockDb.limit.mockResolvedValue([
+        { ...mockThesis, thesisSummary: 'old AI summary' },
+      ]);
+      mockDb.returning.mockResolvedValue([mockThesis]);
+
+      await service.upsert(mockUserId, {
+        ...createDto,
+        thesisSummary: 'investor-authored narrative',
+      });
+
+      expect(mockDb.set).toHaveBeenCalledWith(
+        expect.objectContaining({
+          thesisSummary: 'investor-authored narrative',
+          thesisSummaryManuallyEdited: true,
+        }),
+      );
+    });
+
+    it('preserves manual summary on subsequent saves of unrelated fields', async () => {
+      mockDb.limit.mockResolvedValue([
+        {
+          ...mockThesis,
+          thesisSummary: 'investor-authored narrative',
+          thesisSummaryManuallyEdited: true,
+        },
+      ]);
+      mockDb.returning.mockResolvedValue([mockThesis]);
+
+      // Investor changes industries — summary must NOT auto-regen
+      await service.upsert(mockUserId, { industries: ['saas'] });
+
+      const setCall = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
+      expect(setCall).not.toHaveProperty('thesisSummary');
+      expect(setCall).not.toHaveProperty('thesisSummaryGeneratedAt');
+    });
+
+    it('does not flag as manual when the supplied summary matches existing', async () => {
+      mockDb.limit.mockResolvedValue([
+        { ...mockThesis, thesisSummary: 'unchanged' },
+      ]);
+      mockDb.returning.mockResolvedValue([mockThesis]);
+
+      await service.upsert(mockUserId, {
+        ...createDto,
+        thesisSummary: 'unchanged',
+      });
+
+      const setCall = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
+      expect(setCall).not.toHaveProperty('thesisSummaryManuallyEdited');
+    });
   });
 
   describe('delete', () => {

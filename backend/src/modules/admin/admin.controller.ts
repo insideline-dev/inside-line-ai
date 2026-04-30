@@ -41,6 +41,7 @@ import { IntegrationHealthService } from './integration-health.service';
 import { SystemConfigService } from './system-config.service';
 import { BulkDataService } from './bulk-data.service';
 import { AdminMatchingService } from './admin-matching.service';
+import { AdminScreeningService } from './admin-screening.service';
 import { AdminInvestorService } from './admin-investor.service';
 import { AiPromptService } from '../ai/services/ai-prompt.service';
 import { AiPromptRuntimeService } from '../ai/services/ai-prompt-runtime.service';
@@ -110,6 +111,7 @@ export class AdminController {
     private systemConfigService: SystemConfigService,
     private bulkDataService: BulkDataService,
     private adminMatchingService: AdminMatchingService,
+    private adminScreeningService: AdminScreeningService,
     private aiPromptService: AiPromptService,
     private aiPromptRuntimeService: AiPromptRuntimeService,
     private aiConfigService: AiConfigService,
@@ -286,6 +288,18 @@ export class AdminController {
     @Param('id', ParseUUIDPipe) id: string,
   ) {
     return this.adminMatchingService.triggerMatchForStartup(id, admin.id);
+  }
+
+  @Post('startups/:id/screen')
+  @ApiOperation({
+    summary:
+      'Re-trigger the SCREENING phase for an approved startup (lens-based first-pass triage)',
+  })
+  async screenStartup(
+    @CurrentUser() admin: User,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.adminScreeningService.triggerScreeningForStartup(id, admin.id);
   }
 
   @Get('startups/:id/matching/status')

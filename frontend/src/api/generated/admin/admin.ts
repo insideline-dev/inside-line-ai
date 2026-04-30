@@ -2233,6 +2233,87 @@ export const useAdminControllerMatchStartupInvestors = <TError = ErrorType<unkno
       return useMutation(getAdminControllerMatchStartupInvestorsMutationOptions(options), queryClient);
     }
     /**
+ * @summary Re-trigger the SCREENING phase for an approved startup (lens-based first-pass triage)
+ */
+export type adminControllerScreenStartupResponse201 = {
+  data: void
+  status: 201
+}
+    
+export type adminControllerScreenStartupResponseSuccess = (adminControllerScreenStartupResponse201) & {
+  headers: Headers;
+};
+;
+
+export type adminControllerScreenStartupResponse = (adminControllerScreenStartupResponseSuccess)
+
+export const getAdminControllerScreenStartupUrl = (id: string,) => {
+
+
+  
+
+  return `/admin/startups/${id}/screen`
+}
+
+export const adminControllerScreenStartup = async (id: string, options?: RequestInit): Promise<adminControllerScreenStartupResponse> => {
+  
+  return customFetch<adminControllerScreenStartupResponse>(getAdminControllerScreenStartupUrl(id),
+  {      
+    ...options,
+    method: 'POST'
+    
+    
+  }
+);}
+
+
+
+
+export const getAdminControllerScreenStartupMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerScreenStartup>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminControllerScreenStartup>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['adminControllerScreenStartup'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminControllerScreenStartup>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  adminControllerScreenStartup(id,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminControllerScreenStartupMutationResult = NonNullable<Awaited<ReturnType<typeof adminControllerScreenStartup>>>
+    
+    export type AdminControllerScreenStartupMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Re-trigger the SCREENING phase for an approved startup (lens-based first-pass triage)
+ */
+export const useAdminControllerScreenStartup = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminControllerScreenStartup>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof adminControllerScreenStartup>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getAdminControllerScreenStartupMutationOptions(options), queryClient);
+    }
+    /**
  * @summary Get latest investor matching status for startup
  */
 export type adminControllerGetStartupMatchingStatusResponse200 = {

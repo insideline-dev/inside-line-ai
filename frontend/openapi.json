@@ -3867,6 +3867,30 @@
         ]
       }
     },
+    "/admin/startups/{id}/screen": {
+      "post": {
+        "operationId": "AdminController_screenStartup",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Re-trigger the SCREENING phase for an approved startup (lens-based first-pass triage)",
+        "tags": [
+          "Admin"
+        ]
+      }
+    },
     "/admin/startups/{id}/matching/status": {
       "get": {
         "operationId": "AdminController_getStartupMatchingStatus",
@@ -12956,6 +12980,25 @@
                     "review",
                     "reject"
                   ]
+                },
+                "evidence": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "confidence": {
+                        "type": "string",
+                        "enum": [
+                          "low",
+                          "medium",
+                          "high"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "confidence"
+                    ]
+                  }
                 }
               },
               "required": [

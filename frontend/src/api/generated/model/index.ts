@@ -331,6 +331,8 @@ export * from './scoutTotalEarningsResponseDto';
 export * from './screeningDecisionResponseDto';
 export * from './screeningDecisionResponseDtoClassification';
 export * from './screeningDecisionResponseDtoLensSnapshotItem';
+export * from './screeningDecisionResponseDtoLensSnapshotItemEvidenceItem';
+export * from './screeningDecisionResponseDtoLensSnapshotItemEvidenceItemConfidence';
 export * from './screeningDecisionResponseDtoLensSnapshotItemSignal';
 export * from './selectRoleDto';
 export * from './selectRoleDtoRole';

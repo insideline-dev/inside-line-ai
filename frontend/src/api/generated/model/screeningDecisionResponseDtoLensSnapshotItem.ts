@@ -5,6 +5,7 @@
  * Inside Line API Documentation
  * OpenAPI spec version: 2.0
  */
+import type { ScreeningDecisionResponseDtoLensSnapshotItemEvidenceItem } from './screeningDecisionResponseDtoLensSnapshotItemEvidenceItem';
 import type { ScreeningDecisionResponseDtoLensSnapshotItemSignal } from './screeningDecisionResponseDtoLensSnapshotItemSignal';
 
 export type ScreeningDecisionResponseDtoLensSnapshotItem = {
@@ -16,4 +17,5 @@ export type ScreeningDecisionResponseDtoLensSnapshotItem = {
    */
   score: number;
   signal: ScreeningDecisionResponseDtoLensSnapshotItemSignal;
+  evidence?: ScreeningDecisionResponseDtoLensSnapshotItemEvidenceItem[];
 };

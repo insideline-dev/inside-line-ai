@@ -65,6 +65,7 @@ import {
   useAdminControllerRejectStartup,
   useAdminControllerGetAllScoringWeights,
   useAdminControllerMatchStartupInvestors,
+  useAdminControllerScreenStartup,
   useAdminControllerCancelStartupPipeline,
   getAdminControllerGetStatsQueryKey,
   getAdminControllerGetAllStartupsQueryKey,
@@ -509,6 +510,20 @@ function AdminReviewPage() {
     },
   });
 
+  const screenMutation = useAdminControllerScreenStartup({
+    mutation: {
+      onSuccess: () => {
+        toast.success("Screening queued", {
+          description:
+            "Lens triage will run in the background. Refresh in ~30s to see results.",
+        });
+      },
+      onError: (error: Error) => {
+        toast.error("Failed to queue screening", { description: error.message });
+      },
+    },
+  });
+
   const cancelPipelineMutation = useAdminControllerCancelStartupPipeline({
     mutation: {
       onSuccess: () => {
@@ -926,10 +941,12 @@ function AdminReviewPage() {
           onReject={() => setShowRejectDialog(true)}
           onDeleteSubmission={() => setShowDeleteDialog(true)}
           onMatchInvestors={() => setShowMatchDialog(true)}
+          onRunScreening={() => screenMutation.mutate({ id })}
           approveDisabled={approveMutation.isPending || rejectMutation.isPending}
           rejectDisabled={approveMutation.isPending || rejectMutation.isPending}
           deleteDisabled={deleteMutation.isPending}
           matchDisabled={matchMutation.isPending}
+          screenDisabled={screenMutation.isPending}
           canApproveReject={canApproveReject}
         />
       </div>

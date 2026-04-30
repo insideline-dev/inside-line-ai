@@ -18,6 +18,8 @@ export interface ThesisFormData {
   antiPortfolio: string;
   website: string;
   fundSize: number | null;
+  /** DS-E4-F4-S1 — structured exclusion rules. */
+  dealBreakers: string[];
 }
 
 export function extractResponseData<T>(payload: unknown): T | null {
@@ -113,5 +115,7 @@ export function buildThesisSavePayload(formData: ThesisFormData) {
     antiPortfolio: formData.antiPortfolio || undefined,
     website: formData.website || undefined,
     fundSize: formData.fundSize,
+    dealBreakers:
+      formData.dealBreakers.length > 0 ? formData.dealBreakers : undefined,
   };
 }

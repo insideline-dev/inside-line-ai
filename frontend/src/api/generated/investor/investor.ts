@@ -30,6 +30,7 @@ import type {
   CreateTeamInviteDto,
   CreateThesisDto,
   InvestorControllerGetMatchesParams,
+  RecordDealDecisionDto,
   UpdateMatchStatusDto,
   UpdateNoteDto,
   UpdateScoringPreferencesDto
@@ -477,7 +478,188 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getInvestorControllerGenerateThesisSummaryMutationOptions(options), queryClient);
     }
-    export type investorControllerGetMatchesResponse200 = {
+    export type investorControllerRecordDealDecisionResponse201 = {
+  data: void
+  status: 201
+}
+    
+export type investorControllerRecordDealDecisionResponseSuccess = (investorControllerRecordDealDecisionResponse201) & {
+  headers: Headers;
+};
+;
+
+export type investorControllerRecordDealDecisionResponse = (investorControllerRecordDealDecisionResponseSuccess)
+
+export const getInvestorControllerRecordDealDecisionUrl = (startupId: string,) => {
+
+
+  
+
+  return `/investor/deals/${startupId}/decision`
+}
+
+export const investorControllerRecordDealDecision = async (startupId: string,
+    recordDealDecisionDto: RecordDealDecisionDto, options?: RequestInit): Promise<investorControllerRecordDealDecisionResponse> => {
+  
+  return customFetch<investorControllerRecordDealDecisionResponse>(getInvestorControllerRecordDealDecisionUrl(startupId),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      recordDealDecisionDto,)
+  }
+);}
+
+
+
+
+export const getInvestorControllerRecordDealDecisionMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof investorControllerRecordDealDecision>>, TError,{startupId: string;data: BodyType<RecordDealDecisionDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof investorControllerRecordDealDecision>>, TError,{startupId: string;data: BodyType<RecordDealDecisionDto>}, TContext> => {
+
+const mutationKey = ['investorControllerRecordDealDecision'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof investorControllerRecordDealDecision>>, {startupId: string;data: BodyType<RecordDealDecisionDto>}> = (props) => {
+          const {startupId,data} = props ?? {};
+
+          return  investorControllerRecordDealDecision(startupId,data,requestOptions)
+        }
+
+
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type InvestorControllerRecordDealDecisionMutationResult = NonNullable<Awaited<ReturnType<typeof investorControllerRecordDealDecision>>>
+    export type InvestorControllerRecordDealDecisionMutationBody = BodyType<RecordDealDecisionDto>
+    export type InvestorControllerRecordDealDecisionMutationError = ErrorType<unknown>
+
+    export const useInvestorControllerRecordDealDecision = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof investorControllerRecordDealDecision>>, TError,{startupId: string;data: BodyType<RecordDealDecisionDto>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof investorControllerRecordDealDecision>>,
+        TError,
+        {startupId: string;data: BodyType<RecordDealDecisionDto>},
+        TContext
+      > => {
+      return useMutation(getInvestorControllerRecordDealDecisionMutationOptions(options), queryClient);
+    }
+    export type investorControllerGetLatestDealDecisionResponse200 = {
+  data: void
+  status: 200
+}
+    
+export type investorControllerGetLatestDealDecisionResponseSuccess = (investorControllerGetLatestDealDecisionResponse200) & {
+  headers: Headers;
+};
+;
+
+export type investorControllerGetLatestDealDecisionResponse = (investorControllerGetLatestDealDecisionResponseSuccess)
+
+export const getInvestorControllerGetLatestDealDecisionUrl = (startupId: string,) => {
+
+
+  
+
+  return `/investor/deals/${startupId}/decision`
+}
+
+export const investorControllerGetLatestDealDecision = async (startupId: string, options?: RequestInit): Promise<investorControllerGetLatestDealDecisionResponse> => {
+  
+  return customFetch<investorControllerGetLatestDealDecisionResponse>(getInvestorControllerGetLatestDealDecisionUrl(startupId),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getInvestorControllerGetLatestDealDecisionQueryKey = (startupId: string,) => {
+    return [
+    `/investor/deals/${startupId}/decision`
+    ] as const;
+    }
+
+    
+export const getInvestorControllerGetLatestDealDecisionQueryOptions = <TData = Awaited<ReturnType<typeof investorControllerGetLatestDealDecision>>, TError = ErrorType<unknown>>(startupId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetLatestDealDecision>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getInvestorControllerGetLatestDealDecisionQueryKey(startupId);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof investorControllerGetLatestDealDecision>>> = ({ signal }) => investorControllerGetLatestDealDecision(startupId, { signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(startupId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetLatestDealDecision>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type InvestorControllerGetLatestDealDecisionQueryResult = NonNullable<Awaited<ReturnType<typeof investorControllerGetLatestDealDecision>>>
+export type InvestorControllerGetLatestDealDecisionQueryError = ErrorType<unknown>
+
+
+export function useInvestorControllerGetLatestDealDecision<TData = Awaited<ReturnType<typeof investorControllerGetLatestDealDecision>>, TError = ErrorType<unknown>>(
+ startupId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetLatestDealDecision>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof investorControllerGetLatestDealDecision>>,
+          TError,
+          Awaited<ReturnType<typeof investorControllerGetLatestDealDecision>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useInvestorControllerGetLatestDealDecision<TData = Awaited<ReturnType<typeof investorControllerGetLatestDealDecision>>, TError = ErrorType<unknown>>(
+ startupId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetLatestDealDecision>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof investorControllerGetLatestDealDecision>>,
+          TError,
+          Awaited<ReturnType<typeof investorControllerGetLatestDealDecision>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useInvestorControllerGetLatestDealDecision<TData = Awaited<ReturnType<typeof investorControllerGetLatestDealDecision>>, TError = ErrorType<unknown>>(
+ startupId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetLatestDealDecision>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useInvestorControllerGetLatestDealDecision<TData = Awaited<ReturnType<typeof investorControllerGetLatestDealDecision>>, TError = ErrorType<unknown>>(
+ startupId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof investorControllerGetLatestDealDecision>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getInvestorControllerGetLatestDealDecisionQueryOptions(startupId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+export type investorControllerGetMatchesResponse200 = {
   data: void
   status: 200
 }

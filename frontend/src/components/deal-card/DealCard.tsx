@@ -19,6 +19,14 @@ import {
 import { useScreeningOutput } from "@/lib/screening/useScreeningOutput";
 import { ClassificationBadge } from "./ClassificationBadge";
 import { LensEvidencePopover } from "./LensEvidencePopover";
+import { CloseDealDialog, type DealVerdict } from "./CloseDealDialog";
+import {
+  useInvestorControllerGetLatestDealDecision,
+  useInvestorControllerRecordDealDecision,
+  getInvestorControllerGetLatestDealDecisionQueryKey,
+} from "@/api/generated/investor/investor";
+import { useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { summarizeReasonCodes } from "@/lib/screening/reason-codes";
 import {
   evaluateDealbreakers,
@@ -53,6 +61,10 @@ const PLACEHOLDER_LENS_KEYS = ["market", "team", "traction"] as const;
 
 function lensLabel(key: string): string {
   return LENS_LABELS[key] ?? key.charAt(0).toUpperCase() + key.slice(1);
+}
+
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 function unwrap<T>(payload: unknown): T | undefined {
@@ -158,12 +170,40 @@ export function DealCard({ startupId, className, startup: startupProp }: DealCar
     void navigate({ to: "/investor/startup/$id", params: { id: startupId } });
   };
 
-  const handleMarkReviewed = () => {
-    // TODO(DS-E7-F4): wire to PATCH /screening/:startupId/decision { reviewed: true }
-    // (or the future investor-pipeline review-ack endpoint). For now this is a
-    // no-op + optimistic toast so the action is discoverable in the UI.
-    toast.success("Marked as reviewed");
-  };
+  // DS-E11-F1-S1 — 30-second close/pass capture. The investor's verdict
+  // becomes the seed data for the calibration loop.
+  const queryClient = useQueryClient();
+  const [closeOpen, setCloseOpen] = useState(false);
+  const dealDecisionRes = useInvestorControllerGetLatestDealDecision(
+    startupId,
+    {
+      query: {
+        retry: false,
+        staleTime: 60_000,
+        refetchOnWindowFocus: false,
+        enabled: Boolean(startupId),
+      },
+    },
+  );
+  const latestDecision = unwrap<{
+    verdict: DealVerdict;
+    decidedAt: string;
+  } | null>(dealDecisionRes.data) ?? null;
+
+  const recordDecision = useInvestorControllerRecordDealDecision({
+    mutation: {
+      onSuccess: () => {
+        toast.success("Decision saved");
+        setCloseOpen(false);
+        queryClient.invalidateQueries({
+          queryKey: getInvestorControllerGetLatestDealDecisionQueryKey(startupId),
+        });
+      },
+      onError: (err: Error) => {
+        toast.error("Couldn't save decision", { description: err.message });
+      },
+    },
+  });
 
   return (
     <Card
@@ -308,13 +348,13 @@ export function DealCard({ startupId, className, startup: startupProp }: DealCar
         {/* Actions */}
         <div className="flex flex-wrap items-center justify-end gap-2 border-t pt-3">
           <Button
-            variant="outline"
+            variant={latestDecision ? "secondary" : "outline"}
             size="sm"
-            onClick={handleMarkReviewed}
-            data-testid="deal-card-mark-reviewed"
+            onClick={() => setCloseOpen(true)}
+            data-testid="deal-card-close-deal"
           >
             <CheckCheck className="mr-1.5 h-4 w-4" />
-            Mark reviewed
+            {latestDecision ? `${capitalize(latestDecision.verdict)}d` : "Close out"}
           </Button>
           <Button
             size="sm"
@@ -326,6 +366,17 @@ export function DealCard({ startupId, className, startup: startupProp }: DealCar
           </Button>
         </div>
       </CardContent>
+
+      <CloseDealDialog
+        open={closeOpen}
+        onOpenChange={setCloseOpen}
+        startupName={startup.name}
+        triageClassification={decision?.classification}
+        isSubmitting={recordDecision.isPending}
+        onSubmit={(input) =>
+          recordDecision.mutate({ startupId, data: input })
+        }
+      />
     </Card>
   );
 }

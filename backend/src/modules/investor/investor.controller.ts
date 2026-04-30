@@ -7,6 +7,7 @@ import {
   Patch,
   Body,
   Param,
+  ParseUUIDPipe,
   Query,
   UseGuards,
   NotFoundException,
@@ -25,6 +26,8 @@ import { PortfolioService } from './portfolio.service';
 import { DealPipelineService } from './deal-pipeline.service';
 import { MessagingService } from './messaging.service';
 import { ScoringPreferencesService } from './scoring-preferences.service';
+import { DealDecisionService } from './deal-decision.service';
+import { RecordDealDecisionDto } from './dto/record-deal-decision.dto';
 import { ScoringConfigService } from '../admin/scoring-config.service';
 import { StartupMatchingPipelineService } from '../ai/services/startup-matching-pipeline.service';
 import {
@@ -60,6 +63,7 @@ export class InvestorController {
     private pipelineService: DealPipelineService,
     private messagingService: MessagingService,
     private scoringPreferencesService: ScoringPreferencesService,
+    private dealDecisionService: DealDecisionService,
     private scoringConfigService: ScoringConfigService,
     private startupMatching: StartupMatchingPipelineService,
   ) {}
@@ -95,6 +99,25 @@ export class InvestorController {
   async deleteThesis(@CurrentUser() user: User) {
     await this.thesisService.delete(user.id);
     return { success: true, message: 'Thesis deleted' };
+  }
+
+  // ============ DEAL DECISIONS (DS-E11-F1-S1) ============
+
+  @Post('deals/:startupId/decision')
+  async recordDealDecision(
+    @CurrentUser() user: User,
+    @Param('startupId', new ParseUUIDPipe()) startupId: string,
+    @Body() body: RecordDealDecisionDto,
+  ) {
+    return this.dealDecisionService.record(user.id, startupId, body);
+  }
+
+  @Get('deals/:startupId/decision')
+  async getLatestDealDecision(
+    @CurrentUser() user: User,
+    @Param('startupId', new ParseUUIDPipe()) startupId: string,
+  ) {
+    return this.dealDecisionService.latest(user.id, startupId);
   }
 
   // ============ MATCHES ENDPOINTS ============

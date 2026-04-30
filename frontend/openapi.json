@@ -5411,6 +5411,60 @@
         ]
       }
     },
+    "/investor/deals/{startupId}/decision": {
+      "post": {
+        "operationId": "InvestorController_recordDealDecision",
+        "parameters": [
+          {
+            "name": "startupId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordDealDecisionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Investor"
+        ]
+      },
+      "get": {
+        "operationId": "InvestorController_getLatestDealDecision",
+        "parameters": [
+          {
+            "name": "startupId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Investor"
+        ]
+      }
+    },
     "/investor/matches": {
       "get": {
         "operationId": "InvestorController_getMatches",
@@ -12674,6 +12728,44 @@
             "maxLength": 2000
           }
         }
+      },
+      "RecordDealDecisionDto": {
+        "type": "object",
+        "properties": {
+          "verdict": {
+            "type": "string",
+            "enum": [
+              "advance",
+              "pass",
+              "hold"
+            ]
+          },
+          "reasonTags": {
+            "default": [],
+            "maxItems": 8,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 40
+            }
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "triageClassificationAtDecision": {
+            "type": "string",
+            "enum": [
+              "advance",
+              "review",
+              "reject"
+            ]
+          }
+        },
+        "required": [
+          "verdict"
+        ]
       },
       "UpdateMatchStatusDto": {
         "type": "object",

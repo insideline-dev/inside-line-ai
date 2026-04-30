@@ -48,6 +48,7 @@ import {
 import { OnboardingWebsiteForm } from "@/components/investor/OnboardingWebsiteForm";
 import { ThesisGeneratingBanner } from "@/components/investor/ThesisGeneratingBanner";
 import { ThesisSummaryCard } from "@/components/investor/ThesisSummaryCard";
+import { DealbreakersEditor } from "@/components/investor/DealbreakersEditor";
 import { useSubmitOnboardingWebsite } from "@/lib/investor/useSubmitOnboardingWebsite";
 import { useInvestorOnboardingEvents } from "@/lib/auth/useSocket";
 
@@ -156,6 +157,7 @@ function InvestorThesisPage() {
     antiPortfolio: "",
     website: "",
     fundSize: null,
+    dealBreakers: [],
   });
   const [expandedGeographyNodes, setExpandedGeographyNodes] = useState<string[]>([]);
   const parentNodeMap = useMemo(() => buildParentNodeMap(taxonomyNodes), [taxonomyNodes]);
@@ -201,6 +203,9 @@ function InvestorThesisPage() {
         antiPortfolio: typeof t.antiPortfolio === "string" ? t.antiPortfolio : "",
         website: typeof t.website === "string" ? t.website : "",
         fundSize: typeof t.fundSize === "number" ? t.fundSize : null,
+        dealBreakers: Array.isArray(t.dealBreakers)
+          ? t.dealBreakers.filter((v): v is string => typeof v === "string")
+          : [],
       });
     }
   }, [thesis, taxonomyNodes]);
@@ -809,7 +814,7 @@ function InvestorThesisPage() {
             <div className="space-y-2">
               <p className="font-medium">What would you NOT invest in?</p>
               <Textarea
-                placeholder="We avoid companies that..."
+                placeholder="e.g. SaaS, Vertical AI, Nuclear, F&B, Non Tech"
                 className="min-h-[120px] resize-none"
                 value={formData.antiPortfolio}
                 onChange={(e) =>
@@ -817,6 +822,17 @@ function InvestorThesisPage() {
                 }
               />
             </div>
+
+            {/* DS-E4-F4-S1 — structured dealbreaker rules with auto-suggestions
+                parsed from the anti-portfolio narrative above. */}
+            <DealbreakersEditor
+              value={formData.dealBreakers}
+              onChange={(next) =>
+                setFormData((prev) => ({ ...prev, dealBreakers: next }))
+              }
+              exclusionNarrative={formData.antiPortfolio}
+            />
+
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={handleCancelNarrative}>
                 Cancel

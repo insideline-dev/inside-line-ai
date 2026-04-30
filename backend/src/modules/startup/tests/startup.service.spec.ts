@@ -159,6 +159,14 @@ describe("StartupService", () => {
       pipelineService,
       pipelineFeedbackService,
       startupMatchingService,
+      // dataRoomService — not exercised by these specs, satisfy DI
+      {} as never,
+      // DS-E8-F1-S1 — DealEventService stub. record() is fire-and-forget
+      // throughout the service, so a noop resolves to null.
+      {
+        record: jest.fn().mockResolvedValue(null),
+        forStartup: jest.fn().mockResolvedValue([]),
+      } as never,
     );
   });
 

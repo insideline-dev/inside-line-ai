@@ -38,6 +38,7 @@ import { PdfRenderService } from './pdf/pdf-render.service';
 import { DataRoomService } from './data-room.service';
 import { InvestorInterestService } from './investor-interest.service';
 import { MeetingService } from './meeting.service';
+import { DealEventService } from './deal-event.service';
 import { RolesGuard } from './guards';
 import { Roles } from './decorators/roles.decorator';
 import {
@@ -76,6 +77,7 @@ export class StartupController {
     private dataRoomService: DataRoomService,
     private interestService: InvestorInterestService,
     private meetingService: MeetingService,
+    private dealEvents: DealEventService,
   ) {}
 
   // ============ OWNER ENDPOINTS (FOUNDER/INVESTOR) ============
@@ -357,6 +359,15 @@ export class StartupController {
   @Roles(UserRole.FOUNDER, UserRole.ADMIN)
   async getMeetings(@Param('id') startupId: string) {
     return this.meetingService.getMeetings(startupId);
+  }
+
+  // DS-E8-F1-S2 — partner-facing activity timeline. Append-only events
+  // recorded throughout the deal's lifecycle (intake, screening, triage,
+  // investor verdicts). Newest first; capped at 200 by default service-side.
+  @Get(':id/events')
+  @Roles(UserRole.FOUNDER, UserRole.INVESTOR, UserRole.ADMIN)
+  async getEvents(@Param('id') startupId: string) {
+    return this.dealEvents.forStartup(startupId);
   }
 
   // ============ INVESTOR ENDPOINTS ============

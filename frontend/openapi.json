@@ -1713,6 +1713,34 @@
         ]
       }
     },
+    "/startups/{id}/events": {
+      "get": {
+        "operationId": "StartupController_getEvents",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "tags": [
+          "Startups"
+        ]
+      }
+    },
     "/startups/approved/list": {
       "get": {
         "operationId": "StartupController_findApproved",

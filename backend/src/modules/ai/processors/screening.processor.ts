@@ -19,6 +19,7 @@ import {
 import { DrizzleService } from "../../../database";
 import { NotificationGateway } from "../../../notification/notification.gateway";
 import { startup } from "../../startup/entities";
+import { DealEventService } from "../../startup/deal-event.service";
 import { startupMatch } from "../../investor/entities/investor.schema";
 import { startupLensResult } from "../entities";
 import { PipelinePhase } from "../interfaces/pipeline.interface";
@@ -62,6 +63,7 @@ export class ScreeningProcessor
     private notificationGateway: NotificationGateway,
     private screeningOutput: ScreeningOutputService,
     private screeningTriage: ScreeningTriageService,
+    private dealEvents: DealEventService,
   ) {
     const redisUrl = config.get<string>("REDIS_URL", "redis://localhost:6379");
     const queuePrefix = config.get<string>("QUEUE_PREFIX");
@@ -241,6 +243,17 @@ export class ScreeningProcessor
       this.logger.log(
         `[ScreeningProcessor] Triage v${decision.policyVersion} for ${startupId}: ${decision.classification}@${decision.overallScore} (thesisFit=${thesisFitScore ?? "null"})`,
       );
+      // DS-E8-F1-S1 — append-only audit event for the timeline UI.
+      void this.dealEvents.record({
+        startupId,
+        type: "triage.decided",
+        payload: {
+          classification: decision.classification,
+          overallScore: decision.overallScore,
+          reasonCodes: decision.reasonCodes,
+          policyVersion: decision.policyVersion,
+        },
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.logger.warn(
@@ -264,6 +277,18 @@ export class ScreeningProcessor
         `[ScreeningProcessor] ScreeningOutput build failed for ${startupId}: ${message}`,
       );
     }
+
+    // DS-E8-F1-S1 — phase-completion audit event. Recorded last so the
+    // timeline reflects the order: lens persistence → triage → "screening
+    // completed" milestone.
+    void this.dealEvents.record({
+      startupId,
+      type: failedKeys.length > 0 ? "screening.failed" : "screening.completed",
+      payload: {
+        lensCount: lenses.length,
+        failedKeys,
+      },
+    });
 
     return { lenses, failedKeys };
   }

@@ -13,6 +13,7 @@ import { MeetingService } from './meeting.service';
 import { StartupIntakeService } from './startup-intake.service';
 import { PdfRenderService } from './pdf/pdf-render.service';
 import { PrintTokenService } from './pdf/print-token.service';
+import { DealEventService } from './deal-event.service';
 
 @Module({
   imports: [DatabaseModule, QueueModule, StorageModule, NotificationModule],
@@ -27,6 +28,7 @@ import { PrintTokenService } from './pdf/print-token.service';
     InvestorInterestService,
     MeetingService,
     StartupIntakeService,
+    DealEventService,
   ],
   exports: [
     StartupService,
@@ -38,6 +40,7 @@ import { PrintTokenService } from './pdf/print-token.service';
     InvestorInterestService,
     MeetingService,
     StartupIntakeService,
+    DealEventService,
   ],
 })
 export class StartupModule {}

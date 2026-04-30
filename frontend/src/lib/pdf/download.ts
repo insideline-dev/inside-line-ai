@@ -27,7 +27,10 @@ function triggerBlobDownload(blob: Blob, filename: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-async function fetchPdf(startupId: string, kind: "memo" | "report"): Promise<Blob> {
+async function fetchPdf(
+  startupId: string,
+  kind: "memo" | "report" | "screening",
+): Promise<Blob> {
   const res = await fetch(`${API_BASE_URL}/startups/${startupId}/${kind}.pdf`, {
     method: "GET",
     credentials: "include",
@@ -58,4 +61,16 @@ export async function downloadMemo(data: PdfDownloadTarget): Promise<void> {
 export async function downloadReport(data: PdfDownloadTarget): Promise<void> {
   const blob = await fetchPdf(data.startup.id, "report");
   triggerBlobDownload(blob, `${sanitizeFilename(data.startup.name)}-Startup-Report.pdf`);
+}
+
+/**
+ * DS-E10-F4-S1 — 1-page screening report safe to share with a partner /
+ * LP / scout. NO DD content — only ScreeningOutput v1 fields.
+ */
+export async function downloadScreening(data: PdfDownloadTarget): Promise<void> {
+  const blob = await fetchPdf(data.startup.id, "screening");
+  triggerBlobDownload(
+    blob,
+    `${sanitizeFilename(data.startup.name)}-Screening-Report.pdf`,
+  );
 }

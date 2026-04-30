@@ -6,7 +6,7 @@ export interface PrintTokenPayload {
   sub: string;
   startupId: string;
   scope: "print";
-  kind: "memo" | "report";
+  kind: "memo" | "report" | "screening";
 }
 
 @Injectable()
@@ -21,7 +21,7 @@ export class PrintTokenService {
   mint(
     userId: string,
     startupId: string,
-    kind: "memo" | "report",
+    kind: "memo" | "report" | "screening",
   ): { token: string; ttlSeconds: number } {
     const payload: PrintTokenPayload = {
       sub: userId,

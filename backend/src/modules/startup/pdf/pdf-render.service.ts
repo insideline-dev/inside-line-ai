@@ -10,7 +10,7 @@ import chromium from "@sparticuz/chromium";
 import { JWT_COOKIE_NAME } from "../../../auth/auth.constants";
 import { PrintTokenService } from "./print-token.service";
 
-type PrintKind = "memo" | "report";
+type PrintKind = "memo" | "report" | "screening";
 
 @Injectable()
 export class PdfRenderService implements OnModuleDestroy {
@@ -30,6 +30,14 @@ export class PdfRenderService implements OnModuleDestroy {
 
   async renderReport(startupId: string, userId: string): Promise<Buffer> {
     return this.render("report", startupId, userId);
+  }
+
+  /**
+   * DS-E10-F4-S1 — 1-page screening report. Same headed-Chrome path as
+   * memo/report; the frontend `/print/screening/:id` route owns layout.
+   */
+  async renderScreening(startupId: string, userId: string): Promise<Buffer> {
+    return this.render("screening", startupId, userId);
   }
 
   async onModuleDestroy(): Promise<void> {

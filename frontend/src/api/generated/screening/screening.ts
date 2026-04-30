@@ -21,7 +21,8 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
-  ScreeningDecisionResponseDto
+  ScreeningDecisionResponseDto,
+  ScreeningOutputResponseDto
 } from '.././model';
 
 import { customFetch } from '../../client';
@@ -140,6 +141,123 @@ export function useScreeningTriageControllerGetLatest<TData = Awaited<ReturnType
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getScreeningTriageControllerGetLatestQueryOptions(startupId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+/**
+ * @summary Get the latest ScreeningOutput v1 contract for a startup
+ */
+export type screeningTriageControllerGetOutputResponse200 = {
+  data: ScreeningOutputResponseDto
+  status: 200
+}
+
+export type screeningTriageControllerGetOutputResponse404 = {
+  data: void
+  status: 404
+}
+    
+export type screeningTriageControllerGetOutputResponseSuccess = (screeningTriageControllerGetOutputResponse200) & {
+  headers: Headers;
+};
+export type screeningTriageControllerGetOutputResponseError = (screeningTriageControllerGetOutputResponse404) & {
+  headers: Headers;
+};
+
+export type screeningTriageControllerGetOutputResponse = (screeningTriageControllerGetOutputResponseSuccess | screeningTriageControllerGetOutputResponseError)
+
+export const getScreeningTriageControllerGetOutputUrl = (startupId: string,) => {
+
+
+  
+
+  return `/screening/${startupId}/output`
+}
+
+export const screeningTriageControllerGetOutput = async (startupId: string, options?: RequestInit): Promise<screeningTriageControllerGetOutputResponse> => {
+  
+  return customFetch<screeningTriageControllerGetOutputResponse>(getScreeningTriageControllerGetOutputUrl(startupId),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+
+
+export const getScreeningTriageControllerGetOutputQueryKey = (startupId: string,) => {
+    return [
+    `/screening/${startupId}/output`
+    ] as const;
+    }
+
+    
+export const getScreeningTriageControllerGetOutputQueryOptions = <TData = Awaited<ReturnType<typeof screeningTriageControllerGetOutput>>, TError = ErrorType<void>>(startupId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof screeningTriageControllerGetOutput>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getScreeningTriageControllerGetOutputQueryKey(startupId);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof screeningTriageControllerGetOutput>>> = ({ signal }) => screeningTriageControllerGetOutput(startupId, { signal, ...requestOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(startupId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof screeningTriageControllerGetOutput>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ScreeningTriageControllerGetOutputQueryResult = NonNullable<Awaited<ReturnType<typeof screeningTriageControllerGetOutput>>>
+export type ScreeningTriageControllerGetOutputQueryError = ErrorType<void>
+
+
+export function useScreeningTriageControllerGetOutput<TData = Awaited<ReturnType<typeof screeningTriageControllerGetOutput>>, TError = ErrorType<void>>(
+ startupId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof screeningTriageControllerGetOutput>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof screeningTriageControllerGetOutput>>,
+          TError,
+          Awaited<ReturnType<typeof screeningTriageControllerGetOutput>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useScreeningTriageControllerGetOutput<TData = Awaited<ReturnType<typeof screeningTriageControllerGetOutput>>, TError = ErrorType<void>>(
+ startupId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof screeningTriageControllerGetOutput>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof screeningTriageControllerGetOutput>>,
+          TError,
+          Awaited<ReturnType<typeof screeningTriageControllerGetOutput>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useScreeningTriageControllerGetOutput<TData = Awaited<ReturnType<typeof screeningTriageControllerGetOutput>>, TError = ErrorType<void>>(
+ startupId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof screeningTriageControllerGetOutput>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get the latest ScreeningOutput v1 contract for a startup
+ */
+
+export function useScreeningTriageControllerGetOutput<TData = Awaited<ReturnType<typeof screeningTriageControllerGetOutput>>, TError = ErrorType<void>>(
+ startupId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof screeningTriageControllerGetOutput>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getScreeningTriageControllerGetOutputQueryOptions(startupId,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

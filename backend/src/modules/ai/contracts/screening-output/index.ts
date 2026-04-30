@@ -33,3 +33,4 @@ export const ScreeningOutputLatestSchema = ScreeningOutputV1Schema;
 export type ScreeningOutput = ScreeningOutputV1;
 
 export { ScreeningOutputService } from "./screening-output.service";
+export { ScreeningOutputResponseDto } from "./screening-output.dto";

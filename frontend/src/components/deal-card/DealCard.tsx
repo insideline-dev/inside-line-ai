@@ -4,12 +4,6 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { ScoreRing } from "@/components/analysis/ScoreRing";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowRight, AlertCircle, CheckCheck } from "lucide-react";
@@ -22,7 +16,9 @@ import {
   type TriageDecision,
   type TriageLensSnapshot,
 } from "@/lib/screening/useTriageDecision";
+import { useScreeningOutput } from "@/lib/screening/useScreeningOutput";
 import { ClassificationBadge } from "./ClassificationBadge";
+import { LensEvidencePopover } from "./LensEvidencePopover";
 import { summarizeReasonCodes } from "@/lib/screening/reason-codes";
 import {
   evaluateDealbreakers,
@@ -103,6 +99,15 @@ export function DealCard({ startupId, className, startup: startupProp }: DealCar
 
   const triage = useTriageDecision(startupId);
   const decision: TriageDecision | null | undefined = triage.data;
+
+  // DS-E9-F1-S1 — lens evidence (claims + sources) for the popover that
+  // opens when an analyst clicks any lens chip. Lazy-loaded; degrades to
+  // null on 404 (no screening yet) so chips still render with the
+  // existing "no data yet" state.
+  const screeningOutput = useScreeningOutput(startupId);
+  const lensesByKey = new Map(
+    (screeningOutput.data?.lenses ?? []).map((l) => [l.key, l]),
+  );
 
   // DS-E4-F3-S1 — deterministic dealbreaker check against the current
   // investor's thesis. Cheap, runs client-side, no LLM round-trip.
@@ -216,50 +221,49 @@ export function DealCard({ startupId, className, startup: startupProp }: DealCar
         </div>
 
         {/* Lens scores — driven by decision.lensSnapshot when present so we
-            stay in sync with the backend lens registry without code changes. */}
-        <TooltipProvider delayDuration={150}>
-          <div
-            className="grid gap-2 rounded-lg border bg-muted/20 p-3"
-            style={{ gridTemplateColumns: `repeat(${Math.max(lensTiles.length, 1)}, minmax(0, 1fr))` }}
-          >
-            {lensTiles.map(({ key, lens }) => {
-              const label = lensLabel(key);
-              return (
-                <Tooltip key={key}>
-                  <TooltipTrigger asChild>
-                    <div
-                      className="flex flex-col items-center gap-1 rounded-md p-1 transition-colors hover:bg-muted/40"
-                      data-testid={`deal-card-lens-${key}`}
-                    >
-                      {lens ? (
-                        <ScoreRing
-                          score={lens.score}
-                          size="sm"
-                          showLabel={false}
-                        />
-                      ) : (
-                        <div className="flex h-12 w-12 items-center justify-center rounded-full border-2 border-dashed border-muted-foreground/30 text-[10px] text-muted-foreground">
-                          —
-                        </div>
-                      )}
-                      <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                        {label}
-                      </span>
+            stay in sync with the backend lens registry without code changes.
+            Click a chip to open the evidence popover (DS-E9-F1-S1). */}
+        <div
+          className="grid gap-2 rounded-lg border bg-muted/20 p-3"
+          style={{ gridTemplateColumns: `repeat(${Math.max(lensTiles.length, 1)}, minmax(0, 1fr))` }}
+        >
+          {lensTiles.map(({ key, lens }) => {
+            const label = lensLabel(key);
+            const fullLens = lensesByKey.get(key);
+            const scoreLabel = lens
+              ? `${lens.score} • ${lens.signal}`
+              : decision
+                ? "no signal in this run"
+                : "not screened yet";
+            return (
+              <LensEvidencePopover
+                key={key}
+                lensLabel={label}
+                scoreLabel={scoreLabel}
+                lens={fullLens}
+                isLoading={screeningOutput.isLoading}
+              >
+                <button
+                  type="button"
+                  className="flex flex-col items-center gap-1 rounded-md p-1 transition-colors hover:bg-muted/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  data-testid={`deal-card-lens-${key}`}
+                  aria-label={`${label} lens — view evidence`}
+                >
+                  {lens ? (
+                    <ScoreRing score={lens.score} size="sm" showLabel={false} />
+                  ) : (
+                    <div className="flex h-12 w-12 items-center justify-center rounded-full border-2 border-dashed border-muted-foreground/30 text-[10px] text-muted-foreground">
+                      —
                     </div>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" className="max-w-xs text-xs">
-                    {lens?.rationale ||
-                      (lens
-                        ? `${label}: ${lens.signal}`
-                        : decision
-                          ? `${label}: no signal in this run`
-                          : "No screening data yet — run the pipeline to populate")}
-                  </TooltipContent>
-                </Tooltip>
-              );
-            })}
-          </div>
-        </TooltipProvider>
+                  )}
+                  <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    {label}
+                  </span>
+                </button>
+              </LensEvidencePopover>
+            );
+          })}
+        </div>
 
         {/* Dealbreakers — DS-E4-F3-S1. Deterministic per-investor checks
             against thesis fields. Hard violations show first as a clear

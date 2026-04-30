@@ -13,6 +13,10 @@ import {
   ApiTags,
 } from "@nestjs/swagger";
 import { JwtAuthGuard } from "../../../../auth/guards";
+import {
+  ScreeningOutputResponseDto,
+  ScreeningOutputService,
+} from "../../contracts/screening-output";
 import { ScreeningDecisionResponseDto } from "./dto/screening-decision-response.dto";
 import { ScreeningTriageService } from "./screening-triage.service";
 
@@ -29,7 +33,10 @@ import { ScreeningTriageService } from "./screening-triage.service";
 @UseGuards(JwtAuthGuard)
 @Controller("screening")
 export class ScreeningTriageController {
-  constructor(private readonly triage: ScreeningTriageService) {}
+  constructor(
+    private readonly triage: ScreeningTriageService,
+    private readonly screeningOutput: ScreeningOutputService,
+  ) {}
 
   @Get(":startupId/decision")
   @ApiOperation({ summary: "Get the latest triage decision for a startup" })
@@ -45,5 +52,28 @@ export class ScreeningTriageController {
       );
     }
     return decision;
+  }
+
+  /**
+   * DS-E9-F1-S1 — analyst clicks any claim on the deal card and jumps to
+   * its source. The deal card consumes this endpoint to render evidence
+   * with clickable URLs per lens. Same v1 contract DD will consume.
+   */
+  @Get(":startupId/output")
+  @ApiOperation({
+    summary: "Get the latest ScreeningOutput v1 contract for a startup",
+  })
+  @ApiResponse({ status: 200, type: ScreeningOutputResponseDto })
+  @ApiResponse({ status: 404, description: "No screening output yet" })
+  async getOutput(
+    @Param("startupId", new ParseUUIDPipe()) startupId: string,
+  ): Promise<ScreeningOutputResponseDto> {
+    const output = await this.screeningOutput.latestForStartup(startupId);
+    if (!output) {
+      throw new NotFoundException(
+        `No screening output found for startup ${startupId}`,
+      );
+    }
+    return output;
   }
 }

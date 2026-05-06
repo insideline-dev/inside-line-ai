@@ -14,7 +14,7 @@ export type LensConfidence = z.infer<typeof LensConfidenceSchema>;
 
 export const LensEvidenceSchema = z.object({
   claim: z.string().min(1),
-  source: z.string().optional(),
+  source: z.string().optional().nullable(),
   confidence: LensConfidenceSchema,
 });
 export type LensEvidenceItem = z.infer<typeof LensEvidenceSchema>;

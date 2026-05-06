@@ -17,15 +17,6 @@ export const RecordDealDecisionSchema = z.object({
     .optional()
     .default([]),
   notes: z.string().max(500).optional(),
-  /**
-   * Optional client-supplied snapshot of the system's triage classification
-   * at the moment the investor recorded their decision. The calibration
-   * loop will later use this to compare model-verdict vs investor-verdict
-   * without re-querying historical screening rows.
-   */
-  triageClassificationAtDecision: z
-    .enum(["advance", "review", "reject"])
-    .optional(),
 });
 
 export type RecordDealDecision = z.infer<typeof RecordDealDecisionSchema>;

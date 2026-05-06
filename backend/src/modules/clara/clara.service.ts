@@ -3,6 +3,7 @@ import { ConfigService } from "@nestjs/config";
 import { eq } from "drizzle-orm";
 import { marked } from "marked";
 import { RedisFallbackClient } from "../ai/services/redis-fallback.service";
+import { detectMissingMaterials } from "../ai/contracts/screening-output/missing-materials";
 import type { AgentMail } from "agentmail";
 import { DrizzleService } from "../../database";
 import { user } from "../../auth/entities/auth.schema";
@@ -31,6 +32,7 @@ import {
   type ClassifiedDocumentSummary,
   type IntentClassification,
   type MessageContext,
+  type ScreeningFollowUpState,
 } from "./interfaces/clara.interface";
 
 @Injectable()
@@ -283,6 +285,16 @@ export class ClaraService {
         Boolean(conversation.startupId) &&
         (conversation.status === ConversationStatus.AWAITING_INFO ||
           unresolvedCriticalFields.length > 0);
+      const screeningFollowUp = this.readScreeningFollowUpFromMemory(
+        ctx.conversationMemory,
+      );
+      const screeningFollowUpByContent =
+        Boolean(conversation.startupId) &&
+        this.submissionService.hasScreeningFollowUpSignals(ctx);
+      const shouldResolveScreeningFollowUp =
+        Boolean(conversation.startupId) &&
+        (screeningFollowUp?.type === "screening_missing_materials" ||
+          screeningFollowUpByContent);
       const hasSubmissionAttachment = attachments.some((attachment) =>
         Boolean(attachment.isPitchDeck),
       );
@@ -294,16 +306,18 @@ export class ClaraService {
       const shouldPreferMissingInfoResolution =
         shouldResolveMissingInfo &&
         Boolean(conversation.startupId) &&
-        !hasSubmissionAttachment;
+        !hasSubmissionAttachment &&
+        !shouldResolveScreeningFollowUp;
       const submissionAllowedByContext =
         !conversation.startupId || hasSubmissionAttachment;
       const shouldProcessAsSubmission =
         isSubmissionIntent &&
         submissionAllowedByContext &&
-        !shouldPreferMissingInfoResolution;
+        !shouldPreferMissingInfoResolution &&
+        !shouldResolveScreeningFollowUp;
 
       this.logger.debug(
-        `[Clara] Intent routing for thread ${threadId}: intent=${intentClassification.intent} submissionIntent=${isSubmissionIntent} hasDeckAttachment=${hasSubmissionAttachment} shouldResolveMissing=${shouldResolveMissingInfo} startupLinked=${Boolean(conversation.startupId)} route=${shouldProcessAsSubmission ? "submission" : "missing-info/follow-up"}`,
+        `[Clara] Intent routing for thread ${threadId}: intent=${intentClassification.intent} submissionIntent=${isSubmissionIntent} hasDeckAttachment=${hasSubmissionAttachment} shouldResolveMissing=${shouldResolveMissingInfo} shouldResolveScreening=${shouldResolveScreeningFollowUp} startupLinked=${Boolean(conversation.startupId)} route=${shouldProcessAsSubmission ? "submission" : "missing-info/follow-up"}`,
       );
 
       if (shouldProcessAsSubmission) {
@@ -467,11 +481,15 @@ export class ClaraService {
       } else {
         // Role gate: only investors and admins can use the agent loop.
         // Unknown users (no account) are allowed through for submission discovery.
-        // Founders and scouts get a polite rejection.
+        // Founders and scouts get a polite rejection unless we're
+        // resolving a Clara follow-up for this startup.
+        const isAllowedFollowUp =
+          shouldResolveScreeningFollowUp || shouldResolveMissingInfo;
         if (
           actorRole &&
           actorRole !== "investor" &&
-          actorRole !== "admin"
+          actorRole !== "admin" &&
+          !isAllowedFollowUp
         ) {
           intent = intentClassification.intent;
           replyText = [
@@ -513,7 +531,89 @@ export class ClaraService {
 
         await this.conversationService.updateLastIntent(conversation.id, intent);
 
-        if (shouldResolveMissingInfo && conversation.startupId) {
+        let handledScreeningFollowUp = false;
+
+        if (shouldResolveScreeningFollowUp && conversation.startupId) {
+          const resolution = await this.submissionService.resolveScreeningFollowUpFromReply(
+            conversation.startupId,
+            ctx,
+            investorUserId ?? this.adminUserId!,
+          );
+          if (resolution) {
+            if (conversation.startupId !== resolution.startupId) {
+              await this.conversationService.linkStartup(
+                conversation.id,
+                resolution.startupId,
+              );
+            }
+            finalStartupId = resolution.startupId;
+            finalStartupExtra = {
+              ...finalStartupExtra,
+              startupName: resolution.startupName,
+            };
+            this.logger.log(
+              `[Clara] Screening follow-up reply for thread ${threadId} -> startup=${resolution.startupId} updated=${resolution.updatedMaterials.join(",") || "none"} remaining=${resolution.remainingMissing.join(",") || "none"} pipelineStarted=${resolution.pipelineStarted}`,
+            );
+
+            const missingLabels = this.formatMissingMaterialLabels(
+              resolution.remainingMissing,
+            );
+            if (resolution.pipelineStarted) {
+              const rerunPhaseLabel =
+                resolution.rerunPhase === "extraction"
+                  ? "from the extraction phase"
+                  : "from screening";
+              replyText = [
+                `Thanks ${fromName ?? "there"} — I’ve updated ${resolution.startupName} with the missing materials and restarted the analysis ${rerunPhaseLabel}.`,
+                "",
+                "I’ll email you again as soon as the analysis is complete.",
+              ].join("\n");
+              conversation = {
+                ...conversation,
+                context: this.mergeConversationContext(
+                  conversation.context as Record<string, unknown> | null | undefined,
+                  {
+                    screeningFollowUp: null,
+                  },
+                ),
+              };
+              await this.conversationService.updateStatus(
+                conversation.id,
+                ConversationStatus.PROCESSING,
+              );
+            } else if (missingLabels.length > 0) {
+              const acknowledgement =
+                resolution.updatedMaterials.length > 0
+                  ? `Thanks — I captured ${this.formatMaterialAcknowledgement(resolution.updatedMaterials)}.`
+                  : "Thanks for the follow-up.";
+              replyText = [
+                acknowledgement,
+                "",
+                "I still need:",
+                ...missingLabels.map((label) => `- ${label}`),
+                "",
+                "Reply with the missing details or attachments and I’ll continue immediately.",
+              ].join("\n");
+              await this.conversationService.updateStatus(
+                conversation.id,
+                ConversationStatus.AWAITING_INFO,
+              );
+            } else {
+              replyText = [
+                `Thanks ${fromName ?? "there"} — I updated ${resolution.startupName} with the materials you sent.`,
+                "",
+                "I wasn’t able to restart the analysis automatically yet, but I’m keeping this thread open.",
+              ].join("\n");
+              await this.conversationService.updateStatus(
+                conversation.id,
+                ConversationStatus.AWAITING_INFO,
+              );
+            }
+            handledScreeningFollowUp = true;
+          }
+        }
+
+        if (!handledScreeningFollowUp && shouldResolveMissingInfo && conversation.startupId) {
           const replyContent = [ctx.subject, ctx.bodyText]
             .filter((value): value is string => Boolean(value && value.trim()))
             .join("\n\n");
@@ -615,7 +715,7 @@ export class ClaraService {
               ? null
               : copilotResult.pendingAction;
           }
-        } else {
+        } else if (!handledScreeningFollowUp) {
           const copilotResult = await this.copilotService.handleTurn({
             ctx: {
               bodyText: ctx.bodyText,
@@ -992,6 +1092,19 @@ export class ClaraService {
     }
   }
 
+  private hasActiveScreeningFollowUp(
+    conversation: { context?: unknown } | null | undefined,
+    startupId: string,
+  ): boolean {
+    const screeningFollowUp = this.readScreeningFollowUpFromMemory(
+      this.coerceConversationContext(conversation?.context),
+    );
+
+    return Boolean(
+      screeningFollowUp && screeningFollowUp.type === "screening_missing_materials" && screeningFollowUp.startupId === startupId,
+    );
+  }
+
   async notifyPipelineComplete(
     startupId: string,
     overallScore?: number,
@@ -1010,6 +1123,16 @@ export class ClaraService {
         "whatsapp",
       );
     if (!conversation && !whatsappConversation) return;
+
+    const hasScreeningHold =
+      this.hasActiveScreeningFollowUp(conversation, startupId) ||
+      this.hasActiveScreeningFollowUp(whatsappConversation, startupId);
+    if (hasScreeningHold) {
+      this.logger.log(
+        `Skipping pipeline completion notification for startup ${startupId} because Clara is waiting on screening materials`,
+      );
+      return;
+    }
 
     const [startupRecord] = await this.drizzle.db
       .select({
@@ -1296,6 +1419,153 @@ export class ClaraService {
     );
   }
 
+  async notifyScreeningMissingMaterials(
+    startupId: string,
+    missingMaterials: Array<"deck" | "product_description" | "team" | "deal_terms" | "website">,
+    options?: {
+      pipelineRunId?: string | null;
+    },
+  ): Promise<void> {
+    if (!this.claraInboxId) return;
+
+    const normalizedMissing = Array.from(
+      new Set(
+        missingMaterials.filter(
+          (material): material is "deck" | "product_description" | "team" | "deal_terms" | "website" =>
+            material === "deck" ||
+            material === "product_description" ||
+            material === "team" ||
+            material === "deal_terms" ||
+            material === "website",
+        ),
+      ),
+    );
+    if (normalizedMissing.length === 0) return;
+
+    const [startupRecord] = await this.drizzle.db
+      .select({
+        id: startup.id,
+        userId: startup.userId,
+        name: startup.name,
+        pitchDeckUrl: startup.pitchDeckUrl,
+        pitchDeckPath: startup.pitchDeckPath,
+        productDescription: startup.productDescription,
+        description: startup.description,
+        teamMembers: startup.teamMembers,
+        fundingTarget: startup.fundingTarget,
+        valuation: startup.valuation,
+        raiseType: startup.raiseType,
+        website: startup.website,
+        contactEmail: startup.contactEmail,
+        contactName: startup.contactName,
+        contactPhone: startup.contactPhone,
+      })
+      .from(startup)
+      .where(eq(startup.id, startupId))
+      .limit(1);
+    if (!startupRecord) return;
+
+    const unresolvedMissing = detectMissingMaterials(startupRecord).filter((field) =>
+      normalizedMissing.includes(field),
+    );
+    if (unresolvedMissing.length === 0) return;
+
+    const recipient = await this.resolveMissingInfoRecipient({
+      userId: startupRecord.userId,
+      contactEmail: startupRecord.contactEmail,
+      contactName: startupRecord.contactName,
+    });
+    if (!recipient) {
+      this.logger.warn(
+        `Unable to send Clara screening follow-up for startup ${startupId}: no valid recipient`,
+      );
+      return;
+    }
+
+    const conversation = await this.conversationService.findByStartupId(startupId);
+    const dedupeScope =
+      options?.pipelineRunId?.trim() || `screening-${new Date().toISOString().slice(0, 10)}`;
+    const messageId = `screening-followup-${startupId}-${dedupeScope}-${unresolvedMissing.join("-")}`;
+    let conv = conversation;
+    if (conv) {
+      const alreadySent = await this.conversationService.hasMessage(
+        conv.id,
+        messageId,
+        MessageDirection.OUTBOUND,
+      );
+      if (alreadySent) {
+        this.logger.debug(
+          `Skipping duplicate Clara screening follow-up for startup ${startupId} (scope=${dedupeScope}, materials=${unresolvedMissing.join(",")})`,
+        );
+        return;
+      }
+    }
+
+    const labels = this.formatMissingMaterialLabels(unresolvedMissing);
+    const greetingName = recipient.name ?? "there";
+    const replyText = [
+      `Hi ${greetingName},`,
+      "",
+      `I'm reviewing ${startupRecord.name} and need a few missing materials before I can continue:`,
+      ...labels.map((label) => `- ${label}`),
+      "",
+      "Please reply in this thread with the missing details or attach the files directly, and I’ll pick up right where I left off.",
+      "",
+      "Best,",
+      "Clara",
+    ].join("\n");
+
+    await this.sendConversationEmail({
+      conversation,
+      recipientEmail: recipient.email,
+      subject: `Action Needed: Missing materials for ${startupRecord.name}`,
+      text: replyText,
+    });
+
+    this.logger.log(
+      `Sent Clara screening follow-up for startup ${startupId} to ${recipient.email} (materials=${unresolvedMissing.join(",")}, scope=${dedupeScope})`,
+    );
+
+    if (!conv) {
+      conv = await this.conversationService.findOrCreate(
+        `screening-followup-outbound-${startupId}`,
+        recipient.email,
+        recipient.name,
+        null,
+      );
+      await this.conversationService.linkStartup(conv.id, startupId);
+    }
+
+    await this.conversationService.logMessage({
+      conversationId: conv.id,
+      messageId,
+      direction: MessageDirection.OUTBOUND,
+      fromEmail: "clara@agentmail.to",
+      subject: `Action Needed: Missing materials for ${startupRecord.name}`,
+      bodyText: replyText,
+      processed: true,
+    });
+    await this.conversationService.updateStatus(
+      conv.id,
+      ConversationStatus.AWAITING_INFO,
+    );
+    await this.conversationService.updateContext(
+      conv.id,
+      this.mergeConversationContext(
+        conv.context as Record<string, unknown> | null | undefined,
+        {
+          screeningFollowUp: {
+            type: "screening_missing_materials",
+            startupId,
+            pipelineRunId: options?.pipelineRunId ?? null,
+            missingMaterials: unresolvedMissing,
+            createdAt: new Date().toISOString(),
+          },
+        },
+      ),
+    );
+  }
+
   private normalizeMissingStartupFields(
     fields: string[],
   ): Array<"website" | "stage"> {
@@ -1320,6 +1590,53 @@ export class ClaraService {
         ? "Company website URL"
         : "Current funding stage (pre-seed, seed, series A, etc.)",
     );
+  }
+
+  private formatMissingMaterialLabels(
+    fields: Array<"deck" | "product_description" | "team" | "deal_terms" | "website">,
+  ): string[] {
+    const labels: Record<"deck" | "product_description" | "team" | "deal_terms" | "website", string> = {
+      deck: "pitch deck / presentation",
+      product_description: "product description",
+      team: "team members and roles",
+      deal_terms: "deal terms (funding target, valuation, or raise type)",
+      website: "company website URL",
+    };
+    return fields
+      .map((field) => labels[field])
+      .filter((label): label is string => Boolean(label));
+  }
+
+  private formatMaterialAcknowledgement(
+    fields: Array<"deck" | "product_description" | "team" | "deal_terms" | "website">,
+  ): string {
+    const labels = this.formatMissingMaterialLabels(fields);
+    if (labels.length === 0) {
+      return "the details";
+    }
+    if (labels.length === 1) {
+      return `the ${labels[0]}`;
+    }
+    return `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}`;
+  }
+
+  private readScreeningFollowUpFromMemory(
+    memory: Record<string, unknown> | null | undefined,
+  ): ScreeningFollowUpState | null {
+    const followUp = memory?.screeningFollowUp;
+    if (!followUp || typeof followUp !== "object" || Array.isArray(followUp)) {
+      return null;
+    }
+
+    const candidate = followUp as Partial<ScreeningFollowUpState>;
+    if (
+      candidate.type !== "screening_missing_materials" ||
+      !Array.isArray(candidate.missingMaterials)
+    ) {
+      return null;
+    }
+
+    return candidate as ScreeningFollowUpState;
   }
 
   private formatClassifiedDocumentsList(
@@ -1689,13 +2006,23 @@ export class ClaraService {
   private async sendConversationEmail(params: {
     conversation: {
       context?: unknown;
+      investorEmail?: string | null;
     } | null;
     recipientEmail: string;
     subject: string;
     text: string;
     attachments?: AgentMail.SendAttachment[];
   }): Promise<void> {
-    const replyTarget = this.getConversationReplyTarget(params.conversation);
+    const normalizedRecipientEmail = this.normalizeEmailAddress(params.recipientEmail);
+    const normalizedConversationEmail = this.normalizeEmailAddress(
+      params.conversation?.investorEmail ?? null,
+    );
+    const replyTarget =
+      normalizedRecipientEmail.length > 0 &&
+      normalizedRecipientEmail === normalizedConversationEmail
+        ? this.getConversationReplyTarget(params.conversation)
+        : null;
+
     if (replyTarget) {
       await this.claraChannel.reply({
         channel: "email",
@@ -1788,6 +2115,10 @@ export class ClaraService {
       this.readConversationContextString(context, "lastInboundInboxId") ??
       this.claraInboxId
     );
+  }
+
+  private normalizeEmailAddress(value: string | null | undefined): string {
+    return value?.trim().toLowerCase() ?? "";
   }
 
   private coerceConversationContext(

@@ -29,14 +29,17 @@ interface InsertCapture {
 }
 
 /**
- * Mocks `db.insert(table).values(v).returning()` and `db.select().from()
- * .where().orderBy().limit()`. The select chain returns whatever rows are
- * pre-loaded; the insert chain captures the values the service passed in
- * and emits a synthetic row built from them.
+ * Mocks `db.insert(table).values(v).returning()` and both select shapes used by
+ * the triage service:
+ *  - decision fetch: select().from().where().orderBy().limit() → `selectRows`
+ *  - materials fetch: select({ pitchDeckUrl, ... }).from().where().limit(1)
+ *    → `materialsRows`
+ * The mock is intentionally tiny; tests exercise service logic, not SQL.
  */
 function buildDrizzleMock(opts: {
   insertRow?: ScreeningDecisionRow | null;
   selectRows?: ScreeningDecisionRow[];
+  materialsRows?: unknown[];
 } = {}) {
   const capture: InsertCapture = {};
   const returning = jest.fn().mockImplementation(async () => {
@@ -50,6 +53,7 @@ function buildDrizzleMock(opts: {
       startupId: (v.startupId as string) ?? STARTUP_ID,
       pipelineRunId: (v.pipelineRunId as string | null) ?? null,
       classification: (v.classification as string) ?? "review",
+      nextAction: (v.nextAction as string) ?? "manual_review",
       overallScore: (v.overallScore as number) ?? 0,
       reasonCodes: (v.reasonCodes as string[]) ?? [],
       lensSnapshot:
@@ -65,16 +69,20 @@ function buildDrizzleMock(opts: {
   });
   const insert = jest.fn().mockReturnValue({ values });
 
-  const limit = jest.fn().mockResolvedValue(opts.selectRows ?? []);
-  const orderBy = jest.fn().mockReturnValue({ limit });
-  const where = jest.fn().mockReturnValue({ orderBy });
-  const from = jest.fn().mockReturnValue({ where });
-  const select = jest.fn().mockReturnValue({ from });
+  const select = jest.fn().mockImplementation((projection?: Record<string, unknown>) => {
+    const isMaterials = Boolean(projection && "pitchDeckUrl" in projection);
+    const rows = isMaterials ? opts.materialsRows ?? [] : opts.selectRows ?? [];
+    const limit = jest.fn().mockResolvedValue(rows);
+    const orderBy = jest.fn().mockReturnValue({ limit });
+    const where = jest.fn().mockReturnValue({ orderBy, limit });
+    const from = jest.fn().mockReturnValue({ where });
+    return { from };
+  });
 
   return {
     db: { insert, select },
     _capture: capture,
-    _spies: { insert, values, returning, select, from, where, orderBy, limit },
+    _spies: { insert, values, returning, select },
   };
 }
 
@@ -428,6 +436,33 @@ describe("ScreeningTriageService", () => {
       "score",
       "signal",
     ]);
+  });
+
+  it("decide() downgrades advance to review when materials are missing", async () => {
+    const { service, drizzle } = await buildService({
+      materialsRows: [
+        {
+          pitchDeckUrl: null,
+          productDescription: null,
+          description: null,
+          teamMembers: [],
+          fundingTarget: null,
+          valuation: null,
+          raiseType: null,
+          website: null,
+        },
+      ],
+    });
+
+    const decision = await service.decide({
+      startupId: STARTUP_ID,
+      lensResults: [lens("market", 80, "advance")],
+    });
+
+    expect(drizzle._capture.values?.classification).toBe("review");
+    expect(drizzle._capture.values?.reasonCodes).toContain("missing_materials");
+    expect(decision.classification).toBe("review");
+    expect(decision.nextAction).toBe("request_materials");
   });
 
   it("decide() persists null pipelineRunId when not supplied", async () => {

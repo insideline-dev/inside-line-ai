@@ -98,6 +98,7 @@ describe("ClaraSubmissionService.resolveMissingInfoFromReply", () => {
     } as unknown as jest.Mocked<PipelineService>;
 
     const drizzle = { db: mockDb } as unknown as jest.Mocked<DrizzleService>;
+    const queue = {};
     const storage = {} as unknown as jest.Mocked<StorageService>;
     const agentMailClient = {} as unknown as jest.Mocked<AgentMailClientService>;
     const notifications = {
@@ -109,11 +110,14 @@ describe("ClaraSubmissionService.resolveMissingInfoFromReply", () => {
 
     service = new ClaraSubmissionService(
       drizzle,
+      queue as never,
       storage,
+      {} as never,
       agentMailClient,
       pipeline,
       notifications,
       claraAi,
+      {} as never,
     );
   });
 

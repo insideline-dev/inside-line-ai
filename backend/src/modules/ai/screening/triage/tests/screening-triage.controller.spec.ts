@@ -2,6 +2,8 @@ import { describe, expect, it, jest } from "bun:test";
 import { Test } from "@nestjs/testing";
 import { NotFoundException } from "@nestjs/common";
 import { ScreeningOutputService } from "../../../contracts/screening-output";
+import { PdfService } from "../../../../startup/pdf.service";
+import { UserRole } from "../../../../../auth/entities/auth.schema";
 import { ScreeningTriageController } from "../screening-triage.controller";
 import {
   POLICY_VERSION,
@@ -17,6 +19,7 @@ function buildDecision(): ScreeningDecision {
     startupId: STARTUP_ID,
     pipelineRunId: null,
     classification: "advance",
+    nextAction: "continue_evaluation",
     overallScore: 82,
     reasonCodes: [],
     lensSnapshot: [{ key: "market", score: 82, signal: "advance" }],
@@ -28,7 +31,11 @@ function buildDecision(): ScreeningDecision {
 async function buildController(
   latestForStartup: jest.Mock,
   latestOutputForStartup: jest.Mock = jest.fn().mockResolvedValue(null),
-): Promise<ScreeningTriageController> {
+): Promise<{
+  controller: ScreeningTriageController;
+  verifyAccess: jest.Mock;
+}> {
+  const verifyAccess = jest.fn().mockResolvedValue(undefined);
   const moduleRef = await Test.createTestingModule({
     controllers: [ScreeningTriageController],
     providers: [
@@ -40,30 +47,44 @@ async function buildController(
         provide: ScreeningOutputService,
         useValue: { latestForStartup: latestOutputForStartup },
       },
+      {
+        provide: PdfService,
+        useValue: { verifyAccess },
+      },
     ],
   }).compile();
-  return moduleRef.get(ScreeningTriageController);
+  return {
+    controller: moduleRef.get(ScreeningTriageController),
+    verifyAccess,
+  };
 }
 
 describe("ScreeningTriageController", () => {
   it("GET :startupId/decision returns the latest decision", async () => {
     const decision = buildDecision();
     const latestForStartup = jest.fn().mockResolvedValue(decision);
-    const controller = await buildController(latestForStartup);
+    const { controller, verifyAccess } = await buildController(latestForStartup);
 
-    const out = await controller.getLatest(STARTUP_ID);
+    const out = await controller.getLatest(
+      { id: "user-1", role: UserRole.INVESTOR },
+      STARTUP_ID,
+    );
 
+    expect(verifyAccess).toHaveBeenCalledWith(STARTUP_ID, "user-1");
     expect(latestForStartup).toHaveBeenCalledWith(STARTUP_ID);
     expect(out).toEqual(decision);
   });
 
   it("GET :startupId/decision throws 404 when no decision exists", async () => {
     const latestForStartup = jest.fn().mockResolvedValue(null);
-    const controller = await buildController(latestForStartup);
+    const { controller } = await buildController(latestForStartup);
 
-    await expect(controller.getLatest(STARTUP_ID)).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
+    await expect(
+      controller.getLatest(
+        { id: "user-1", role: UserRole.INVESTOR },
+        STARTUP_ID,
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 
   // DS-E9-F1-S1 — ScreeningOutput v1 endpoint feeds the deal-card
@@ -74,7 +95,12 @@ describe("ScreeningTriageController", () => {
       startupId: STARTUP_ID,
       pipelineRunId: null,
       generatedAt: "2026-04-30T10:00:00.000Z",
-      overall: { score: 82, signal: "advance" as const, missingMaterials: [] },
+      overall: {
+        score: 82,
+        signal: "advance" as const,
+        nextAction: "continue_evaluation" as const,
+        missingMaterials: [],
+      },
       lenses: [
         {
           key: "market",
@@ -96,20 +122,30 @@ describe("ScreeningTriageController", () => {
       ],
     };
     const latestOutput = jest.fn().mockResolvedValue(output);
-    const controller = await buildController(jest.fn(), latestOutput);
+    const { controller, verifyAccess } = await buildController(
+      jest.fn(),
+      latestOutput,
+    );
 
-    const out = await controller.getOutput(STARTUP_ID);
+    const out = await controller.getOutput(
+      { id: "user-1", role: UserRole.ADMIN },
+      STARTUP_ID,
+    );
 
+    expect(verifyAccess).toHaveBeenCalledWith(STARTUP_ID, "user-1");
     expect(latestOutput).toHaveBeenCalledWith(STARTUP_ID);
     expect(out).toEqual(output);
   });
 
   it("GET :startupId/output throws 404 when no output exists", async () => {
     const latestOutput = jest.fn().mockResolvedValue(null);
-    const controller = await buildController(jest.fn(), latestOutput);
+    const { controller } = await buildController(jest.fn(), latestOutput);
 
-    await expect(controller.getOutput(STARTUP_ID)).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
+    await expect(
+      controller.getOutput(
+        { id: "user-1", role: UserRole.INVESTOR },
+        STARTUP_ID,
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 });

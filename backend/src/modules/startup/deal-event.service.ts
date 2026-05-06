@@ -1,6 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { desc, eq } from "drizzle-orm";
 import { DrizzleService } from "../../database";
+import { UserRole } from "../../auth/entities/auth.schema";
 import {
   dealEvent,
   type DealEventRow,
@@ -56,14 +57,20 @@ export class DealEventService {
    */
   async forStartup(
     startupId: string,
-    options: { limit?: number } = {},
+    options: { limit?: number; viewerRole?: UserRole } = {},
   ): Promise<DealEventRow[]> {
     const limit = Math.min(Math.max(options.limit ?? 200, 1), 500);
-    return this.drizzle.db
+    const rows = await this.drizzle.db
       .select()
       .from(dealEvent)
       .where(eq(dealEvent.startupId, startupId))
       .orderBy(desc(dealEvent.occurredAt))
       .limit(limit);
+
+    if (options.viewerRole !== UserRole.FOUNDER) {
+      return rows;
+    }
+
+    return rows.filter((row) => row.type !== "decision.recorded");
   }
 }

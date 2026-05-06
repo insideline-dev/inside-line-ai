@@ -34,10 +34,16 @@ import {
   buildThesisSavePayload,
   extractResponseData,
   mapLegacyLabelsToNodeIds,
+  shouldShowThesisGeneratingBanner,
   toggleGeographyNodeSelection,
   type GeographyNode,
   type ThesisFormData,
 } from "./-thesis.helpers";
+import {
+  clearPendingOnboardingWebsiteState,
+  readPendingOnboardingWebsiteState,
+  type PendingOnboardingWebsiteState,
+} from "@/lib/investor/useSubmitOnboardingWebsite";
 import {
   Dialog,
   DialogContent,
@@ -254,23 +260,44 @@ function InvestorThesisPage() {
     typeof thesis?.thesisSummaryGeneratedAt === "string" ? thesis.thesisSummaryGeneratedAt : null;
   const persistedWebsite = typeof thesis?.website === "string" ? thesis.website : "";
 
+  const [queuedWebsiteState, setQueuedWebsiteState] = useState<PendingOnboardingWebsiteState | null>(
+    () => readPendingOnboardingWebsiteState(),
+  );
+
   // Tracks whether the most recent in-flight scrape failed. Backend never
   // clears `websiteScrapedAt` on failure (we want to preserve "we did try"
   // for audit), so without this flag a failed run leaves the banner stuck
-  // on forever. Cleared whenever a fresh re-scan is queued or the thesis
-  // populates successfully.
+  // on forever.
   const [hasRecentFailure, setHasRecentFailure] = useState(false);
 
-  // Generating banner shows when a scrape was queued but the LLM hasn't written
-  // a thesis newer than that scrape yet. Covers first-run AND re-scan-in-flight.
-  // Suppressed once the WS reports a failure for the in-flight run; the user
-  // is shown the failure toast and the Re-scan button re-enables.
-  const isThesisGenerating = useMemo(() => {
-    if (hasRecentFailure) return false;
-    if (!websiteScrapedAt) return false;
-    if (!thesisSummaryGeneratedAt) return true;
-    return new Date(thesisSummaryGeneratedAt).getTime() < new Date(websiteScrapedAt).getTime();
-  }, [websiteScrapedAt, thesisSummaryGeneratedAt, hasRecentFailure]);
+  const queuedWebsiteAt = queuedWebsiteState?.queuedAt ?? null;
+  const queuedWebsite = queuedWebsiteState?.website ?? null;
+
+  const isThesisGenerating = shouldShowThesisGeneratingBanner({
+    queuedWebsiteAt,
+    websiteScrapedAt,
+    thesisSummaryGeneratedAt,
+    hasRecentFailure,
+  });
+
+  useEffect(() => {
+    if (!queuedWebsiteState) {
+      return;
+    }
+
+    if (!websiteScrapedAt || !thesisSummaryGeneratedAt) {
+      return;
+    }
+
+    const queuedAtMs = new Date(queuedWebsiteState.queuedAt).getTime();
+    const scrapedAtMs = new Date(websiteScrapedAt).getTime();
+    const summaryAtMs = new Date(thesisSummaryGeneratedAt).getTime();
+
+    if (scrapedAtMs >= queuedAtMs && summaryAtMs >= scrapedAtMs) {
+      clearPendingOnboardingWebsiteState();
+      setQueuedWebsiteState(null);
+    }
+  }, [queuedWebsiteState, websiteScrapedAt, thesisSummaryGeneratedAt]);
 
   const [isRescanOpen, setIsRescanOpen] = useState(false);
   const { mutate: submitOnboardingWebsite, isPending: isSubmittingWebsite } =
@@ -278,19 +305,25 @@ function InvestorThesisPage() {
 
   const handleRescanSubmit = useCallback(
     (website: string) => {
+      const pendingState: PendingOnboardingWebsiteState = {
+        website,
+        queuedAt: new Date().toISOString(),
+      };
+      setHasRecentFailure(false);
+      setQueuedWebsiteState(pendingState);
+
       submitOnboardingWebsite(
         { website },
         {
           onSuccess: () => {
-            // Fresh attempt — clear any stale failure marker so the banner
-            // shows again for the new run.
-            setHasRecentFailure(false);
             toast.success("Re-scanning your website…", {
               description: "We'll refresh your thesis once the draft is ready.",
             });
             setIsRescanOpen(false);
           },
           onError: (error: Error) => {
+            clearPendingOnboardingWebsiteState();
+            setQueuedWebsiteState(null);
             toast.error("Couldn't queue a re-scan", { description: error.message });
           },
         },
@@ -301,12 +334,16 @@ function InvestorThesisPage() {
 
   useInvestorOnboardingEvents({
     onCompleted: () => {
+      clearPendingOnboardingWebsiteState();
+      setQueuedWebsiteState(null);
       setHasRecentFailure(false);
       toast.success("Your thesis is ready");
       queryClient.invalidateQueries({ queryKey: getInvestorControllerGetThesisQueryKey() });
     },
     onFailed: (event) => {
+      clearPendingOnboardingWebsiteState();
       setHasRecentFailure(true);
+      setQueuedWebsiteState(null);
       toast.error("Couldn't draft your thesis", {
         description: event.error || "Please try again from Re-scan my website.",
       });
@@ -486,7 +523,9 @@ function InvestorThesisPage() {
         </div>
       </div>
 
-      {isThesisGenerating ? <ThesisGeneratingBanner website={persistedWebsite} /> : null}
+      {isThesisGenerating ? (
+        <ThesisGeneratingBanner website={queuedWebsite ?? persistedWebsite} />
+      ) : null}
 
       <Dialog open={isRescanOpen} onOpenChange={setIsRescanOpen}>
         <DialogContent>

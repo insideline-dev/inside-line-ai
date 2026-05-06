@@ -1,6 +1,5 @@
 import { describe, expect, it, jest } from "bun:test";
-import { Test } from "@nestjs/testing";
-import { DrizzleService } from "../../../database";
+import { UserRole } from "../../../auth/entities/auth.schema";
 import { DealEventService } from "../deal-event.service";
 
 const STARTUP_ID = "11111111-1111-4111-8111-111111111111";
@@ -31,13 +30,7 @@ function makeMockDb(overrides: Partial<MockDb> = {}): MockDb {
 }
 
 async function build(db: MockDb): Promise<DealEventService> {
-  const moduleRef = await Test.createTestingModule({
-    providers: [
-      DealEventService,
-      { provide: DrizzleService, useValue: { db } },
-    ],
-  }).compile();
-  return moduleRef.get(DealEventService);
+  return new DealEventService({ db } as never);
 }
 
 describe("DealEventService", () => {
@@ -113,6 +106,23 @@ describe("DealEventService", () => {
     expect(out).toEqual(rows);
     expect(db.orderBy).toHaveBeenCalled();
     expect(db.limit).toHaveBeenCalledWith(200);
+  });
+
+  it("forStartup() hides decision.recorded events from founders", async () => {
+    const rows = [
+      { id: "a", type: "decision.recorded" },
+      { id: "b", type: "screening.completed" },
+    ];
+    const db = makeMockDb({
+      limit: jest.fn().mockResolvedValueOnce(rows),
+    });
+    const svc = await build(db);
+
+    const out = await svc.forStartup(STARTUP_ID, {
+      viewerRole: UserRole.FOUNDER,
+    });
+
+    expect(out).toEqual([{ id: "b", type: "screening.completed" }]);
   });
 
   it("forStartup() clamps limit to [1, 500]", async () => {

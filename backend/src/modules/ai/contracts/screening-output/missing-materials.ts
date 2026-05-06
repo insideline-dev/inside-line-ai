@@ -21,9 +21,10 @@ export type MissingMaterialCode =
  */
 export interface MaterialsInput {
   pitchDeckUrl?: string | null;
+  pitchDeckPath?: string | null;
   productDescription?: string | null;
   description?: string | null;
-  teamMembers?: ReadonlyArray<{ name: string; role: string }> | null;
+  teamMembers?: ReadonlyArray<{ name: string; role: string; linkedinUrl?: string }> | null;
   fundingTarget?: number | null;
   valuation?: number | null;
   raiseType?: string | null;
@@ -46,7 +47,7 @@ export function detectMissingMaterials(
   const missing: MissingMaterialCode[] = [];
 
   // 1. Pitch deck — the foundational artifact.
-  if (isEmptyString(input.pitchDeckUrl)) {
+  if (isEmptyString(input.pitchDeckUrl) && isEmptyString(input.pitchDeckPath)) {
     missing.push("deck");
   }
 

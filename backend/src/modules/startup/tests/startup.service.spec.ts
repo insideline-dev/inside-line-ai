@@ -1189,8 +1189,41 @@ describe("StartupService", () => {
       expect(pipelineService.rerunFromPhase).toHaveBeenCalledWith(
         mockStartupId,
         "research",
+        { skipDownstream: undefined },
       );
       expect(pipelineService.retryPhase).not.toHaveBeenCalled();
+    });
+
+    it("should allow rerunning from classification", async () => {
+      mockDb.limit.mockResolvedValueOnce([mockStartup]);
+
+      const result = await service.adminRetryPhase(mockStartupId, mockUserId, {
+        phase: "classification" as unknown as PipelinePhase,
+        forceRerun: true,
+      });
+
+      expect(result.accepted).toBe(true);
+      expect(pipelineService.rerunFromPhase).toHaveBeenCalledWith(
+        mockStartupId,
+        "classification",
+        { skipDownstream: undefined },
+      );
+    });
+
+    it("should allow rerunning from screening", async () => {
+      mockDb.limit.mockResolvedValueOnce([mockStartup]);
+
+      const result = await service.adminRetryPhase(mockStartupId, mockUserId, {
+        phase: "screening" as unknown as PipelinePhase,
+        forceRerun: true,
+      });
+
+      expect(result.accepted).toBe(true);
+      expect(pipelineService.rerunFromPhase).toHaveBeenCalledWith(
+        mockStartupId,
+        "screening",
+        { skipDownstream: undefined },
+      );
     });
 
     it("should throw when startup is missing", async () => {
@@ -1274,6 +1307,8 @@ describe("StartupService", () => {
         {
           phase: "evaluation",
           agentKey: "market",
+          agentKeys: ["market"],
+          skipDownstream: undefined,
         },
       );
       expect(result.mode).toBe("agent_retry");
@@ -1346,6 +1381,8 @@ describe("StartupService", () => {
         {
           phase: "research",
           agentKey: "competitor",
+          agentKeys: ["competitor"],
+          skipDownstream: undefined,
         },
       );
     });

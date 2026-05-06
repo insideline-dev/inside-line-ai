@@ -1,8 +1,5 @@
 import { describe, expect, it, jest } from "bun:test";
-import { Test } from "@nestjs/testing";
 import { NotFoundException } from "@nestjs/common";
-import { DrizzleService } from "../../../database";
-import { DealEventService } from "../../startup/deal-event.service";
 import { DealDecisionService } from "../deal-decision.service";
 
 const INVESTOR_ID = "11111111-1111-4111-8111-111111111111";
@@ -34,18 +31,24 @@ function makeMockDb(overrides: Partial<MockDb> = {}): MockDb {
   return mock;
 }
 
-async function build(db: MockDb): Promise<DealDecisionService> {
-  const moduleRef = await Test.createTestingModule({
-    providers: [
-      DealDecisionService,
-      { provide: DrizzleService, useValue: { db } },
-      {
-        provide: DealEventService,
-        useValue: { record: jest.fn().mockResolvedValue(null) },
-      },
-    ],
-  }).compile();
-  return moduleRef.get(DealDecisionService);
+async function build(db: MockDb): Promise<{
+  service: DealDecisionService;
+  dealEvents: { record: jest.Mock };
+  screeningTriage: { latestForStartup: jest.Mock };
+}> {
+  const dealEvents = { record: jest.fn().mockResolvedValue(null) };
+  const screeningTriage = {
+    latestForStartup: jest.fn().mockResolvedValue(null),
+  };
+  return {
+    service: new DealDecisionService(
+      { db } as never,
+      dealEvents as never,
+      screeningTriage as never,
+    ),
+    dealEvents,
+    screeningTriage,
+  };
 }
 
 const STARTUP_FOUND_ROW = [{ id: STARTUP_ID }];
@@ -56,7 +59,7 @@ const PERSISTED_ROW = {
   verdict: "pass" as const,
   reasonTags: ["pricing"],
   notes: null,
-  triageClassificationAtDecision: "review",
+  triageClassificationAtDecision: "advance",
   decidedAt: new Date("2026-04-30T12:00:00Z"),
 };
 
@@ -66,14 +69,16 @@ describe("DealDecisionService", () => {
       limit: jest.fn().mockResolvedValueOnce(STARTUP_FOUND_ROW),
       returning: jest.fn().mockResolvedValueOnce([PERSISTED_ROW]),
     });
-    const service = await build(db);
+    const { service, screeningTriage } = await build(db);
+    screeningTriage.latestForStartup.mockResolvedValueOnce({ classification: "advance" });
 
     const out = await service.record(INVESTOR_ID, STARTUP_ID, {
       verdict: "pass",
       reasonTags: ["pricing"],
-      triageClassificationAtDecision: "review",
-    });
+      triageClassificationAtDecision: "reject" as never,
+    } as never);
 
+    expect(screeningTriage.latestForStartup).toHaveBeenCalledWith(STARTUP_ID);
     expect(db.insert).toHaveBeenCalled();
     expect(db.values).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -81,7 +86,7 @@ describe("DealDecisionService", () => {
         startupId: STARTUP_ID,
         verdict: "pass",
         reasonTags: ["pricing"],
-        triageClassificationAtDecision: "review",
+        triageClassificationAtDecision: "advance",
         notes: null,
       }),
     );
@@ -95,7 +100,7 @@ describe("DealDecisionService", () => {
         { ...PERSISTED_ROW, reasonTags: [] },
       ]),
     });
-    const service = await build(db);
+    const { service } = await build(db);
 
     await service.record(INVESTOR_ID, STARTUP_ID, { verdict: "advance" });
 
@@ -108,7 +113,7 @@ describe("DealDecisionService", () => {
     const db = makeMockDb({
       limit: jest.fn().mockResolvedValueOnce([]),
     });
-    const service = await build(db);
+    const { service } = await build(db);
 
     await expect(
       service.record(INVESTOR_ID, STARTUP_ID, { verdict: "pass" }),
@@ -121,7 +126,7 @@ describe("DealDecisionService", () => {
       limit: jest.fn().mockResolvedValueOnce(STARTUP_FOUND_ROW),
       returning: jest.fn().mockResolvedValueOnce([]),
     });
-    const service = await build(db);
+    const { service } = await build(db);
 
     await expect(
       service.record(INVESTOR_ID, STARTUP_ID, { verdict: "pass" }),
@@ -132,7 +137,7 @@ describe("DealDecisionService", () => {
     const db = makeMockDb({
       limit: jest.fn().mockResolvedValueOnce([]),
     });
-    const service = await build(db);
+    const { service } = await build(db);
 
     const out = await service.latest(INVESTOR_ID, STARTUP_ID);
     expect(out).toBeNull();
@@ -142,7 +147,7 @@ describe("DealDecisionService", () => {
     const db = makeMockDb({
       limit: jest.fn().mockResolvedValueOnce([PERSISTED_ROW]),
     });
-    const service = await build(db);
+    const { service } = await build(db);
 
     const out = await service.latest(INVESTOR_ID, STARTUP_ID);
     expect(out).toEqual(PERSISTED_ROW);

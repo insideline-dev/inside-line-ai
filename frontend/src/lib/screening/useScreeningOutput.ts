@@ -33,6 +33,11 @@ export interface ScreeningLensV1 {
 export interface ScreeningOverallV1 {
   score: number;
   signal: ScreeningSignal;
+  nextAction:
+    | "continue_evaluation"
+    | "manual_review"
+    | "request_materials"
+    | "stop";
   missingMaterials: string[];
 }
 

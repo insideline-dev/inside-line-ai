@@ -22,6 +22,31 @@ export interface ThesisFormData {
   dealBreakers: string[];
 }
 
+export interface ThesisGenerationProgressInput {
+  queuedWebsiteAt?: string | null;
+  websiteScrapedAt?: string | null;
+  thesisSummaryGeneratedAt?: string | null;
+  hasRecentFailure?: boolean;
+}
+
+export function shouldShowThesisGeneratingBanner({
+  queuedWebsiteAt,
+  websiteScrapedAt,
+  thesisSummaryGeneratedAt,
+  hasRecentFailure = false,
+}: ThesisGenerationProgressInput): boolean {
+  if (hasRecentFailure) return false;
+
+  if (queuedWebsiteAt) return true;
+
+  if (!websiteScrapedAt) return false;
+  if (!thesisSummaryGeneratedAt) return true;
+
+  return (
+    new Date(thesisSummaryGeneratedAt).getTime() < new Date(websiteScrapedAt).getTime()
+  );
+}
+
 export function extractResponseData<T>(payload: unknown): T | null {
   if (payload === null || payload === undefined) {
     return null;

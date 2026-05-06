@@ -4,23 +4,18 @@ import {
   Logger,
   NotFoundException,
 } from "@nestjs/common";
-import { desc, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { DrizzleService } from "../../database";
-import { QUEUE_NAMES, QueueService } from "../../queue";
-import type { AiScreeningJobData } from "../../queue/interfaces";
-import { startup } from "../startup/entities/startup.schema";
-import { StartupStatus } from "../startup/entities/startup.schema";
-import { pipelineRun } from "../ai/entities/pipeline.schema";
+import { PipelinePhase } from "../ai/interfaces/pipeline.interface";
+import { PipelineService } from "../ai/services/pipeline.service";
+import { startup, StartupStatus } from "../startup/entities/startup.schema";
 
 /**
  * Lets admins re-trigger the SCREENING phase for an already-approved
- * startup without re-running the entire pipeline. Useful for:
- *  - Validating the deal-card surface against real lens data
- *  - Re-running screening after a lens prompt update
- *  - Re-running screening after an investor's thesis update so the
- *    out-of-thesis-scope gate can fire (DS-E4-F1-S1 known limitation)
- *
- * Mirrors the AdminMatchingService pattern.
+ * startup without re-uploading the pitch deck. The rerun uses the latest
+ * reusable pipeline state, clears downstream evaluation/synthesis state,
+ * and lets the normal phase transitions re-queue evaluation once screening
+ * completes.
  */
 @Injectable()
 export class AdminScreeningService {
@@ -28,7 +23,7 @@ export class AdminScreeningService {
 
   constructor(
     private readonly drizzle: DrizzleService,
-    private readonly queue: QueueService,
+    private readonly pipelineService: PipelineService,
   ) {}
 
   async triggerScreeningForStartup(startupId: string, requestedBy: string) {
@@ -48,39 +43,33 @@ export class AdminScreeningService {
       );
     }
 
-    // Reuse the latest pipeline run so screening output attaches to a real
-    // run and the contract builder can include it. Re-screen without a
-    // prior run would orphan the lens rows from any pipeline context.
-    const [latestRun] = await this.drizzle.db
-      .select({ pipelineRunId: pipelineRun.pipelineRunId })
-      .from(pipelineRun)
-      .where(eq(pipelineRun.startupId, startupId))
-      .orderBy(desc(pipelineRun.startedAt))
-      .limit(1);
+    let mode: "force_rerun" | "full_reanalysis_fallback" = "force_rerun";
 
-    if (!latestRun) {
-      throw new BadRequestException(
-        `Startup ${startupId} has no prior pipeline run. Run the full pipeline first.`,
+    try {
+      await this.pipelineService.rerunFromPhase(startupId, PipelinePhase.SCREENING);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!message.includes(`Pipeline state for startup ${startupId} not found`)) {
+        throw error;
+      }
+
+      mode = "full_reanalysis_fallback";
+      await this.pipelineService.startPipeline(startupId, requestedBy);
+      this.logger.warn(
+        `No reusable pipeline state for startup=${startupId}; falling back to full pipeline restart`,
       );
     }
 
-    const jobData: AiScreeningJobData = {
-      type: "ai_screening",
-      userId: requestedBy,
-      startupId,
-      pipelineRunId: latestRun.pipelineRunId,
-    };
-
-    const jobId = await this.queue.addJob(QUEUE_NAMES.AI_SCREENING, jobData);
     this.logger.log(
-      `Enqueued screening rerun for startup=${startupId} run=${latestRun.pipelineRunId} job=${jobId}`,
+      `Queued screening rerun for startup=${startupId} requestedBy=${requestedBy} mode=${mode}`,
     );
 
     return {
       status: "queued" as const,
-      jobId,
-      pipelineRunId: latestRun.pipelineRunId,
       startupId,
+      phase: PipelinePhase.SCREENING,
+      requestedBy,
+      mode,
     };
   }
 }

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ScreeningSummaryCard } from "./ScreeningSummaryCard";
 import { ConfidenceBadge } from "@/components/ConfidenceBadge";
 import { MarkdownText } from "@/components/MarkdownText";
 import { ScoreRing } from "@/components/analysis/ScoreRing";
@@ -611,6 +612,8 @@ export function AdminSummaryTab({
             </div>
           </div>
         )}
+
+        <ScreeningSummaryCard startupId={startup.id} />
 
         <Card className="bg-primary/[0.04] border-primary/15">
           <CardHeader className="pb-2">

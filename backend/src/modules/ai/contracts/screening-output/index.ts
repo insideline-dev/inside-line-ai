@@ -13,13 +13,19 @@ export {
   ScreeningLensV1Schema,
   ScreeningOutputV1Schema,
   ScreeningOverallV1Schema,
-  ScreeningSignalSchema,
 } from "./v1.schema";
+
+export {
+  ScreeningNextActionSchema,
+  ScreeningSignalSchema,
+  resolveCanonicalScreeningOutcome,
+} from "./screening-outcome";
 
 export type {
   ScreeningEvidence,
   ScreeningEvidenceConfidence,
   ScreeningLensV1,
+  ScreeningNextAction,
   ScreeningOutputV1,
   ScreeningOverallV1,
   ScreeningSignal,

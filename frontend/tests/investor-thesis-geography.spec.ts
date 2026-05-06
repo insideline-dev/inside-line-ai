@@ -1,13 +1,18 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it } from "bun:test";
 import {
   buildThesisSavePayload,
   extractResponseData,
   mapLegacyLabelsToNodeIds,
+  shouldShowThesisGeneratingBanner,
   toggleGeographyNodeSelection,
   type ThesisFormData,
 } from "../src/routes/_protected/investor/-thesis.helpers";
+import { useFilterStore } from "../src/stores/filter-store";
 
 describe("Investor thesis geography helpers", () => {
+  afterEach(() => {
+    useFilterStore.getState().resetFilters();
+  });
   it("maps legacy labels to canonical node ids", () => {
     const taxonomy = [
       {
@@ -39,6 +44,7 @@ describe("Investor thesis geography helpers", () => {
       checkSizeMin: 100000,
       checkSizeMax: 2000000,
       notes: "MENA thesis",
+      dealBreakers: [],
     };
 
     const payload = buildThesisSavePayload(formData);
@@ -50,6 +56,7 @@ describe("Investor thesis geography helpers", () => {
       checkSizeMax: 2000000,
       geographicFocusNodes: ["l1:mena", "l2:gcc", "l3:ae"],
       notes: "MENA thesis",
+      dealBreakers: undefined,
     });
     expect((payload as Record<string, unknown>).geographicFocus).toBeUndefined();
   });
@@ -79,5 +86,40 @@ describe("Investor thesis geography helpers", () => {
 
     expect(parsed?.nodes).toHaveLength(1);
     expect(parsed?.nodes[0]?.id).toBe("l1:mena");
+  });
+
+  it("keeps the thesis generating banner visible during in-flight runs", () => {
+    expect(
+      shouldShowThesisGeneratingBanner({
+        queuedWebsiteAt: new Date().toISOString(),
+        websiteScrapedAt: null,
+        thesisSummaryGeneratedAt: null,
+      }),
+    ).toBe(true);
+
+    expect(
+      shouldShowThesisGeneratingBanner({
+        queuedWebsiteAt: null,
+        websiteScrapedAt: "2026-05-05T10:00:00.000Z",
+        thesisSummaryGeneratedAt: "2026-05-05T10:05:00.000Z",
+      }),
+    ).toBe(false);
+
+    expect(
+      shouldShowThesisGeneratingBanner({
+        queuedWebsiteAt: null,
+        websiteScrapedAt: "2026-05-05T10:00:00.000Z",
+        thesisSummaryGeneratedAt: "2026-05-05T09:59:59.000Z",
+      }),
+    ).toBe(true);
+  });
+
+  it("resets the thesis axis filter back to null", () => {
+    useFilterStore.setState({ thesisAxis: "fintech", search: "seed" });
+
+    useFilterStore.getState().resetFilters();
+
+    expect(useFilterStore.getState().thesisAxis).toBeNull();
+    expect(useFilterStore.getState().search).toBe("");
   });
 });

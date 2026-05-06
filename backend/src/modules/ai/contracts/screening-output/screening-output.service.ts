@@ -6,11 +6,13 @@ import {
   startupLensResult,
   type StartupLensResult,
 } from "../../entities/lens-result.schema";
+import { screeningDecision } from "../../entities/screening-decision.schema";
 import { startup } from "../../../startup/entities/startup.schema";
 import {
   detectMissingMaterials,
   type MaterialsInput,
 } from "./missing-materials";
+import { resolveCanonicalScreeningOutcome } from "./screening-outcome";
 import type {
   ScreeningEvidence,
   ScreeningLensV1,
@@ -48,14 +50,17 @@ export class ScreeningOutputService {
     startupId: string,
     pipelineRunId?: string | null,
   ): Promise<ScreeningOutputV1> {
-    const rows = await this.fetchRows(startupId, pipelineRunId ?? null);
+    const runId = pipelineRunId ?? null;
+    const rows = await this.fetchRows(startupId, runId);
     const latestPerLens = this.pickLatestPerLens(rows);
     const materials = await this.fetchMaterialsInput(startupId);
+    const decision = await this.fetchDecisionSnapshot(startupId, runId);
     return this.assemble(
       startupId,
-      pipelineRunId ?? null,
+      runId,
       latestPerLens,
       materials,
+      decision,
     );
   }
 
@@ -80,16 +85,22 @@ export class ScreeningOutputService {
         (row) => row.pipelineRunId === newest.pipelineRunId,
       );
       const latestPerLens = this.pickLatestPerLens(scoped);
+      const decision = await this.fetchDecisionSnapshot(
+        startupId,
+        newest.pipelineRunId,
+      );
       return this.assemble(
         startupId,
         newest.pipelineRunId,
         latestPerLens,
         materials,
+        decision,
       );
     }
 
     const latestPerLens = this.pickLatestPerLens(rows);
-    return this.assemble(startupId, null, latestPerLens, materials);
+    const decision = await this.fetchDecisionSnapshot(startupId, null);
+    return this.assemble(startupId, null, latestPerLens, materials, decision);
   }
 
   /**
@@ -105,6 +116,7 @@ export class ScreeningOutputService {
     const [row] = await this.drizzle.db
       .select({
         pitchDeckUrl: startup.pitchDeckUrl,
+        pitchDeckPath: startup.pitchDeckPath,
         productDescription: startup.productDescription,
         description: startup.description,
         teamMembers: startup.teamMembers,
@@ -117,6 +129,45 @@ export class ScreeningOutputService {
       .where(eq(startup.id, startupId))
       .limit(1);
     return row ?? null;
+  }
+
+  private async fetchDecisionSnapshot(
+    startupId: string,
+    pipelineRunId: string | null,
+  ): Promise<
+    | {
+        signal: ScreeningSignal;
+        score: number;
+        reasonCodes: string[];
+      }
+    | null
+  > {
+    const where =
+      pipelineRunId === null
+        ? eq(screeningDecision.startupId, startupId)
+        : and(
+            eq(screeningDecision.startupId, startupId),
+            eq(screeningDecision.pipelineRunId, pipelineRunId),
+          );
+
+    const [row] = await this.drizzle.db
+      .select({
+        classification: screeningDecision.classification,
+        overallScore: screeningDecision.overallScore,
+        reasonCodes: screeningDecision.reasonCodes,
+      })
+      .from(screeningDecision)
+      .where(where)
+      .orderBy(desc(screeningDecision.createdAt))
+      .limit(1);
+
+    if (!row) return null;
+
+    return {
+      signal: row.classification as ScreeningSignal,
+      score: row.overallScore,
+      reasonCodes: row.reasonCodes,
+    };
   }
 
   private async fetchRows(
@@ -157,6 +208,7 @@ export class ScreeningOutputService {
     pipelineRunId: string | null,
     rows: StartupLensResult[],
     materials: MaterialsInput | null,
+    decision: { signal: ScreeningSignal; score: number; reasonCodes: string[] } | null,
   ): ScreeningOutputV1 {
     const lenses = rows.map((row) => this.toContractLens(row));
     return {
@@ -164,7 +216,7 @@ export class ScreeningOutputService {
       startupId,
       pipelineRunId,
       generatedAt: new Date().toISOString(),
-      overall: this.computeOverall(lenses, materials),
+      overall: this.computeOverall(lenses, materials, decision),
       lenses,
     };
   }
@@ -231,27 +283,42 @@ export class ScreeningOutputService {
 
   /**
    * v1 aggregation policy:
-   *   - score: simple unweighted average of lens scores, rounded to int.
-   *     Weights are deferred to a later story; v1 keeps the math obvious so
-   *     consumers can audit it.
-   *   - signal: worst-of policy — any `reject` → reject; else any `review` →
-   *     review; else `advance`. Empty lens array → `review` (no signal yet).
-   *   - missingMaterials: DS-E7-F4-S1 — populated from the startup row.
-   *     If the lenses would otherwise advance but materials are missing,
-   *     downgrade to `review` (the "REVIEW hold" the story calls for).
-   *     A reject lens still wins; missing materials don't reverse a reject.
+   *   - score: use the persisted triage score when available; otherwise fall
+   *     back to the simple unweighted average of lens scores.
+   *   - signal: canonicalize the triage classification with the missing
+   *     materials gate so the contract mirrors the decision and the UI gate.
+   *   - nextAction: shared user-facing action derived from the same canonical
+   *     state.
    */
   private computeOverall(
     lenses: ScreeningLensV1[],
     materials: MaterialsInput | null,
+    decision: { signal: ScreeningSignal; score: number; reasonCodes: string[] } | null,
   ): ScreeningOverallV1 {
     const missingMaterials = materials ? detectMissingMaterials(materials) : [];
+    const canonicalBase = decision ?? this.computeFallbackDecision(lenses);
+    const canonical = resolveCanonicalScreeningOutcome({
+      signal: canonicalBase.signal,
+      reasonCodes: canonicalBase.reasonCodes,
+      missingMaterials,
+    });
 
+    return {
+      score: canonicalBase.score,
+      signal: canonical.signal,
+      nextAction: canonical.nextAction,
+      missingMaterials: canonical.missingMaterials,
+    };
+  }
+
+  private computeFallbackDecision(
+    lenses: ScreeningLensV1[],
+  ): { signal: ScreeningSignal; score: number; reasonCodes: string[] } {
     if (lenses.length === 0) {
-      return { score: 0, signal: "review", missingMaterials };
+      return { signal: "review", score: 0, reasonCodes: ["no_lens_signals"] };
     }
 
-    const total = lenses.reduce((sum, l) => sum + l.score, 0);
+    const total = lenses.reduce((sum, lens) => sum + lens.score, 0);
     const score = Math.round(total / lenses.length);
 
     let signal: ScreeningSignal = "advance";
@@ -265,11 +332,11 @@ export class ScreeningOutputService {
       }
     }
 
-    // REVIEW hold: lenses say advance but DD would start under-resourced.
-    if (signal === "advance" && missingMaterials.length > 0) {
-      signal = "review";
+    const reasonCodes: string[] = [];
+    if (signal === "review" && score < 60) {
+      reasonCodes.push("borderline_overall_score");
     }
 
-    return { score, signal, missingMaterials };
+    return { signal, score, reasonCodes };
   }
 }

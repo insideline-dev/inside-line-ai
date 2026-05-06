@@ -7,6 +7,19 @@ import {
   type ScreeningDecisionLensSnapshot,
   type ScreeningDecisionRow,
 } from "../../entities/screening-decision.schema";
+import { startup } from "../../../startup/entities/startup.schema";
+import {
+  ScreeningNextActionSchema,
+  ScreeningSignalSchema,
+  resolveCanonicalScreeningOutcome,
+  type ScreeningNextAction,
+  type ScreeningSignal,
+} from "../../contracts/screening-output/screening-outcome";
+import {
+  detectMissingMaterials,
+  type MaterialsInput,
+  type MissingMaterialCode,
+} from "../../contracts/screening-output/missing-materials";
 
 /**
  * Triage policy v2 — deliberately simple, transparent, and pluggable.
@@ -35,8 +48,9 @@ import {
  *
  * Edge cases:
  *  - Empty lens list → 'review' with reason `no_lens_signals`.
- *  - DS-E7-F4 will inject `missing_materials` reason codes; this service
- *    accepts none today but leaves the array open-ended in the schema.
+ *  - DS-E7-F4 will inject `missing_materials` reason codes; this service now
+ *    canonicalizes that hold as a subtype of `review` so the decision and the
+ *    contract stay aligned.
  *
  * This file is the SINGLE place to change the formula. Keep it pure and
  * obvious — investors should be able to read the docstring above and predict
@@ -69,8 +83,11 @@ const {
   MIN_ADVANCE_EVIDENCE_COUNT,
 } = POLICY_SNAPSHOT;
 
-export const TriageLensSignalSchema = z.enum(["advance", "review", "reject"]);
-export type TriageLensSignal = z.infer<typeof TriageLensSignalSchema>;
+export const TriageLensSignalSchema = ScreeningSignalSchema;
+export type TriageLensSignal = ScreeningSignal;
+
+export const TriageNextActionSchema = ScreeningNextActionSchema;
+export type TriageNextAction = ScreeningNextAction;
 
 /**
  * Lightweight evidence shape — mirrors a *projection* of `LensEvidence` so
@@ -116,6 +133,7 @@ export const ScreeningDecisionSchema = z.object({
   startupId: z.string().uuid(),
   pipelineRunId: z.string().nullable(),
   classification: TriageLensSignalSchema,
+  nextAction: TriageNextActionSchema,
   overallScore: z.number().int().min(0).max(100),
   reasonCodes: z.array(z.string()),
   lensSnapshot: z.array(TriageLensInputSchema),
@@ -127,6 +145,12 @@ export type ScreeningDecision = z.infer<typeof ScreeningDecisionSchema>;
 interface TriageOutcome {
   classification: TriageLensSignal;
   overallScore: number;
+  reasonCodes: string[];
+}
+
+interface CanonicalTriageOutcome {
+  classification: TriageLensSignal;
+  nextAction: TriageNextAction;
   reasonCodes: string[];
 }
 
@@ -254,6 +278,29 @@ export function applyTriagePolicy(
   };
 }
 
+function canonicalizeDecision(
+  outcome: TriageOutcome,
+  missingMaterials: MissingMaterialCode[],
+): CanonicalTriageOutcome {
+  const canonical = resolveCanonicalScreeningOutcome({
+    signal: outcome.classification,
+    reasonCodes: outcome.reasonCodes,
+    missingMaterials,
+  });
+
+  return {
+    classification: canonical.signal,
+    nextAction: canonical.nextAction,
+    reasonCodes: canonical.reasonCodes,
+  };
+}
+
+function buildMissingMaterials(
+  input: MaterialsInput | null,
+): MissingMaterialCode[] {
+  return input ? detectMissingMaterials(input) : [];
+}
+
 @Injectable()
 export class ScreeningTriageService {
   private readonly logger = new Logger(ScreeningTriageService.name);
@@ -267,6 +314,10 @@ export class ScreeningTriageService {
     const outcome = applyTriagePolicy(parsed.lensResults, {
       thesisFitScore: parsed.thesisFitScore ?? null,
     });
+    const materials = buildMissingMaterials(
+      await this.fetchMaterialsInput(parsed.startupId),
+    );
+    const canonical = canonicalizeDecision(outcome, materials);
     const snapshot: ScreeningDecisionLensSnapshot[] = parsed.lensResults.map(
       ({ key, score, signal }) => ({ key, score, signal }),
     );
@@ -276,9 +327,9 @@ export class ScreeningTriageService {
       .values({
         startupId: parsed.startupId,
         pipelineRunId: parsed.pipelineRunId ?? null,
-        classification: outcome.classification,
+        classification: canonical.classification,
         overallScore: outcome.overallScore,
-        reasonCodes: outcome.reasonCodes,
+        reasonCodes: canonical.reasonCodes,
         lensSnapshot: snapshot,
         policyVersion: POLICY_VERSION,
       })
@@ -289,10 +340,10 @@ export class ScreeningTriageService {
     }
 
     this.logger.log(
-      `Triage v${POLICY_VERSION} startup=${parsed.startupId} → ${outcome.classification} (score=${outcome.overallScore}, reasons=${outcome.reasonCodes.join(",") || "-"})`,
+      `Triage v${POLICY_VERSION} startup=${parsed.startupId} → ${canonical.classification} (score=${outcome.overallScore}, reasons=${canonical.reasonCodes.join(",") || "-"}, next=${canonical.nextAction})`,
     );
 
-    return this.toDecision(row);
+    return this.toDecision(row, materials);
   }
 
   async latestForStartup(startupId: string): Promise<ScreeningDecision | null> {
@@ -303,17 +354,56 @@ export class ScreeningTriageService {
       .orderBy(desc(screeningDecision.createdAt))
       .limit(1);
 
-    return row ? this.toDecision(row) : null;
+    if (!row) return null;
+
+    const materials = buildMissingMaterials(
+      await this.fetchMaterialsInput(startupId),
+    );
+    return this.toDecision(row, materials);
   }
 
-  private toDecision(row: ScreeningDecisionRow): ScreeningDecision {
+  private async fetchMaterialsInput(
+    startupId: string,
+  ): Promise<MaterialsInput | null> {
+    const [row] = await this.drizzle.db
+      .select({
+        pitchDeckUrl: startup.pitchDeckUrl,
+        pitchDeckPath: startup.pitchDeckPath,
+        productDescription: startup.productDescription,
+        description: startup.description,
+        teamMembers: startup.teamMembers,
+        fundingTarget: startup.fundingTarget,
+        valuation: startup.valuation,
+        raiseType: startup.raiseType,
+        website: startup.website,
+      })
+      .from(startup)
+      .where(eq(startup.id, startupId))
+      .limit(1);
+    return row ?? null;
+  }
+
+  private toDecision(
+    row: ScreeningDecisionRow,
+    missingMaterials: MissingMaterialCode[],
+  ): ScreeningDecision {
+    const canonical = canonicalizeDecision(
+      {
+        classification: row.classification as TriageLensSignal,
+        overallScore: row.overallScore,
+        reasonCodes: row.reasonCodes,
+      },
+      missingMaterials,
+    );
+
     return {
       id: row.id,
       startupId: row.startupId,
       pipelineRunId: row.pipelineRunId,
-      classification: row.classification as TriageLensSignal,
+      classification: canonical.classification,
+      nextAction: canonical.nextAction,
       overallScore: row.overallScore,
-      reasonCodes: row.reasonCodes,
+      reasonCodes: canonical.reasonCodes,
       lensSnapshot: row.lensSnapshot,
       policyVersion: row.policyVersion,
       createdAt: row.createdAt.toISOString(),

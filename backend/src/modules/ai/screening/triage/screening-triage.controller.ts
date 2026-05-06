@@ -12,7 +12,12 @@ import {
   ApiResponse,
   ApiTags,
 } from "@nestjs/swagger";
+import { CurrentUser } from "../../../../auth/decorators";
+import { UserRole } from "../../../../auth/entities/auth.schema";
 import { JwtAuthGuard } from "../../../../auth/guards";
+import { PdfService } from "../../../startup/pdf.service";
+import { Roles } from "../../../startup/decorators/roles.decorator";
+import { RolesGuard } from "../../../startup/guards";
 import {
   ScreeningOutputResponseDto,
   ScreeningOutputService,
@@ -30,12 +35,14 @@ import { ScreeningTriageService } from "./screening-triage.service";
  */
 @ApiTags("Screening")
 @ApiBearerAuth("JWT")
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(UserRole.INVESTOR, UserRole.ADMIN)
 @Controller("screening")
 export class ScreeningTriageController {
   constructor(
     private readonly triage: ScreeningTriageService,
     private readonly screeningOutput: ScreeningOutputService,
+    private readonly pdfService: PdfService,
   ) {}
 
   @Get(":startupId/decision")
@@ -43,8 +50,10 @@ export class ScreeningTriageController {
   @ApiResponse({ status: 200, type: ScreeningDecisionResponseDto })
   @ApiResponse({ status: 404, description: "No decision recorded yet" })
   async getLatest(
+    @CurrentUser() user: { id: string; role: UserRole },
     @Param("startupId", new ParseUUIDPipe()) startupId: string,
   ): Promise<ScreeningDecisionResponseDto> {
+    await this.pdfService.verifyAccess(startupId, user.id);
     const decision = await this.triage.latestForStartup(startupId);
     if (!decision) {
       throw new NotFoundException(
@@ -66,8 +75,10 @@ export class ScreeningTriageController {
   @ApiResponse({ status: 200, type: ScreeningOutputResponseDto })
   @ApiResponse({ status: 404, description: "No screening output yet" })
   async getOutput(
+    @CurrentUser() user: { id: string; role: UserRole },
     @Param("startupId", new ParseUUIDPipe()) startupId: string,
   ): Promise<ScreeningOutputResponseDto> {
+    await this.pdfService.verifyAccess(startupId, user.id);
     const output = await this.screeningOutput.latestForStartup(startupId);
     if (!output) {
       throw new NotFoundException(

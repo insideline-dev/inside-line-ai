@@ -1,7 +1,11 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { useSubmitOnboardingWebsite } from "@/lib/investor/useSubmitOnboardingWebsite";
+import {
+  clearPendingOnboardingWebsiteState,
+  useSubmitOnboardingWebsite,
+} from "@/lib/investor/useSubmitOnboardingWebsite";
+import { useInvestorOnboardingEvents } from "@/lib/auth/useSocket";
 import { OnboardingWebsiteForm } from "@/components/investor/OnboardingWebsiteForm";
 import insideLineLogo from "@/assets/icon-insideline.svg";
 
@@ -21,6 +25,15 @@ function InvestorOnboardingWebsitePage() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { mutate: submitWebsite, isPending } = useSubmitOnboardingWebsite();
+
+  useInvestorOnboardingEvents({
+    onCompleted: () => {
+      clearPendingOnboardingWebsiteState();
+    },
+    onFailed: () => {
+      clearPendingOnboardingWebsiteState();
+    },
+  });
 
   const handleSubmit = (website: string) => {
     submitWebsite(

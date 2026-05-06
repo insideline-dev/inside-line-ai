@@ -27,7 +27,8 @@ const PHASE_WEIGHTS: Record<string, number> = {
   enrichment: 0.07,
   scraping: 0.10,
   research: 0.24,
-  evaluation: 0.34,
+  screening: 0.05,
+  evaluation: 0.29,
   synthesis: 0.15,
 };
 
@@ -37,6 +38,7 @@ const EXPECTED_AGENT_RUNTIME_MS: Record<string, number> = {
   enrichment: 2 * 60_000,
   scraping: 5 * 60_000,
   research: 8 * 60_000,
+  screening: 3 * 60_000,
   evaluation: 6 * 60_000,
   synthesis: 4 * 60_000,
 };

@@ -232,7 +232,7 @@ export class StartupController {
   // to share with a partner / LP / scout without exposing memo or
   // evaluation internals.
   @Get(':id/screening.pdf')
-  @Roles(UserRole.FOUNDER, UserRole.INVESTOR, UserRole.ADMIN)
+  @Roles(UserRole.INVESTOR, UserRole.ADMIN)
   @Header('Content-Type', 'application/pdf')
   async downloadScreening(
     @Param('id') id: string,
@@ -384,11 +384,13 @@ export class StartupController {
 
   // DS-E8-F1-S2 — partner-facing activity timeline. Append-only events
   // recorded throughout the deal's lifecycle (intake, screening, triage,
-  // investor verdicts). Newest first; capped at 200 by default service-side.
+  // investor verdicts). Founder views are filtered server-side so investor
+  // decision records do not leak back to the company timeline. Newest first;
+  // capped at 200 by default service-side.
   @Get(':id/events')
   @Roles(UserRole.FOUNDER, UserRole.INVESTOR, UserRole.ADMIN)
-  async getEvents(@Param('id') startupId: string) {
-    return this.dealEvents.forStartup(startupId);
+  async getEvents(@CurrentUser() user: User, @Param('id') startupId: string) {
+    return this.dealEvents.forStartup(startupId, { viewerRole: user.role });
   }
 
   // ============ INVESTOR ENDPOINTS ============

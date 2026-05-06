@@ -15,6 +15,7 @@ import type {
 } from "../schemas";
 import type { InvestorMemo, FounderReport } from "../schemas/synthesis.schema";
 import type { ExitScenario } from "../schemas/evaluations/exit-potential.schema";
+import type { MissingMaterialCode } from "../contracts/screening-output/missing-materials";
 
 export interface ClassifiedDocumentTrace {
   dataRoomId: string;
@@ -247,6 +248,10 @@ export interface ScreeningLensSummary {
 export interface ScreeningResult {
   lenses: ScreeningLensSummary[];
   failedKeys: string[];
+  classification?: "advance" | "review" | "reject";
+  overallScore?: number;
+  reasonCodes?: string[];
+  missingMaterials?: MissingMaterialCode[];
 }
 
 export interface EvaluationSummary {

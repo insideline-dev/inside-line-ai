@@ -9,6 +9,12 @@ const RUN_ID = "22222222-2222-2222-2222-222222222222";
 
 type Row = StartupLensResult;
 
+type DecisionRow = {
+  classification: string;
+  overallScore: number;
+  reasonCodes: string[];
+};
+
 function row(partial: Partial<Row> & Pick<Row, "lensKey" | "score" | "signal">): Row {
   const now = new Date();
   return {
@@ -28,26 +34,57 @@ function row(partial: Partial<Row> & Pick<Row, "lensKey" | "score" | "signal">):
 }
 
 /**
- * Mocks the Drizzle query chain. Two queries land on the same mock:
- *  - lens fetch: select().from().where().orderBy()  → returns `rows`
- *  - materials fetch (DS-E7-F4-S1): select().from().where().limit(1)
+ * Mocks the Drizzle query chain. Three query shapes land on the same mock:
+ *  - lens fetch: select().from().where().orderBy()  → returns `lensRows`
+ *  - decision fetch: select({ classification, ... }).from().where().orderBy()
+ *    → returns `decisionRows`
+ *  - materials fetch: select({ pitchDeckUrl, ... }).from().where().limit(1)
  *    → returns `materialsRows`
  * Tests exercise service logic, not SQL.
  */
-function buildDrizzleMock(rows: Row[], materialsRows: unknown[] = []) {
-  const orderBy = jest.fn().mockResolvedValue(rows);
-  const limit = jest.fn().mockResolvedValue(materialsRows);
-  const where = jest.fn().mockReturnValue({ orderBy, limit });
-  const from = jest.fn().mockReturnValue({ where });
-  const select = jest.fn().mockReturnValue({ from });
+function buildDrizzleMock(
+  lensRows: Row[],
+  materialsRows: unknown[] = [],
+  decisionRows: DecisionRow[] = [],
+) {
+  const select = jest.fn().mockImplementation((projection?: Record<string, unknown>) => {
+    const isDecision = Boolean(projection && "classification" in projection);
+    const isMaterials = Boolean(projection && "pitchDeckUrl" in projection);
+
+    if (isDecision) {
+      const final = { limit: jest.fn().mockResolvedValue(decisionRows) };
+      const orderBy = jest.fn().mockReturnValue(final);
+      const where = jest.fn().mockReturnValue({ orderBy, limit: final.limit });
+      const from = jest.fn().mockReturnValue({ where });
+      return { from };
+    }
+
+    if (isMaterials) {
+      const limit = jest.fn().mockResolvedValue(materialsRows);
+      const orderBy = jest.fn().mockReturnValue({ limit });
+      const where = jest.fn().mockReturnValue({ orderBy, limit });
+      const from = jest.fn().mockReturnValue({ where });
+      return { from };
+    }
+
+    const orderBy = jest.fn().mockResolvedValue(lensRows);
+    const limit = jest.fn().mockResolvedValue(lensRows);
+    const where = jest.fn().mockReturnValue({ orderBy, limit });
+    const from = jest.fn().mockReturnValue({ where });
+    return { from };
+  });
   return {
     db: { select },
-    _spies: { select, from, where, orderBy, limit },
+    _spies: { select },
   };
 }
 
-async function buildService(rows: Row[], materialsRows: unknown[] = []) {
-  const drizzleMock = buildDrizzleMock(rows, materialsRows);
+async function buildService(
+  lensRows: Row[],
+  materialsRows: unknown[] = [],
+  decisionRows: DecisionRow[] = [],
+) {
+  const drizzleMock = buildDrizzleMock(lensRows, materialsRows, decisionRows);
   const moduleRef = await Test.createTestingModule({
     providers: [
       ScreeningOutputService,
@@ -82,6 +119,7 @@ describe("ScreeningOutputService", () => {
     ]);
     expect(out.overall.score).toBe(70); // (80+70+60)/3
     expect(out.overall.signal).toBe("advance");
+    expect(out.overall.nextAction).toBe("continue_evaluation");
     expect(out.overall.missingMaterials).toEqual([]);
     // generatedAt parses as a valid ISO datetime
     expect(Number.isNaN(Date.parse(out.generatedAt))).toBe(false);
@@ -98,6 +136,7 @@ describe("ScreeningOutputService", () => {
     const out = await service.buildForStartup(STARTUP_ID, RUN_ID);
 
     expect(out.overall.signal).toBe("reject");
+    expect(out.overall.nextAction).toBe("stop");
   });
 
   it("overall.signal = review when no reject but any review", async () => {
@@ -111,6 +150,7 @@ describe("ScreeningOutputService", () => {
     const out = await service.buildForStartup(STARTUP_ID, RUN_ID);
 
     expect(out.overall.signal).toBe("review");
+    expect(out.overall.nextAction).toBe("manual_review");
   });
 
   it("overall.signal = advance when all lenses advance", async () => {
@@ -123,7 +163,29 @@ describe("ScreeningOutputService", () => {
     const out = await service.buildForStartup(STARTUP_ID, RUN_ID);
 
     expect(out.overall.signal).toBe("advance");
+    expect(out.overall.nextAction).toBe("continue_evaluation");
     expect(out.overall.score).toBe(88); // round((90+85)/2)
+  });
+
+  it("uses the persisted triage decision when present", async () => {
+    const rows = [
+      row({ lensKey: "market", score: 90, signal: "advance" }),
+      row({ lensKey: "team", score: 85, signal: "advance" }),
+    ];
+    const decisionRows = [
+      {
+        classification: "reject",
+        overallScore: 88,
+        reasonCodes: ["out_of_thesis_scope"],
+      },
+    ];
+    const { service } = await buildService(rows, [], decisionRows);
+
+    const out = await service.buildForStartup(STARTUP_ID, RUN_ID);
+
+    expect(out.overall.signal).toBe("reject");
+    expect(out.overall.nextAction).toBe("stop");
+    expect(out.overall.score).toBe(88);
   });
 
   it("latestForStartup returns null when no rows exist", async () => {
@@ -216,10 +278,29 @@ describe("ScreeningOutputService", () => {
     const out = await service.buildForStartup(STARTUP_ID, RUN_ID);
 
     expect(out.overall.signal).toBe("review");
+    expect(out.overall.nextAction).toBe("request_materials");
     expect(out.overall.missingMaterials.sort()).toEqual([
       "deck",
       "team",
     ]);
+  });
+
+  it("treats pitchDeckPath as satisfying the deck requirement", async () => {
+    const rows = [
+      row({ lensKey: "market", score: 80, signal: "advance" }),
+      row({ lensKey: "team", score: 75, signal: "advance" }),
+    ];
+    const startupRow = {
+      ...FULLY_RESOURCED,
+      pitchDeckUrl: null,
+      pitchDeckPath: "startups/demo/deck.pdf",
+    };
+    const { service } = await buildService(rows, [startupRow]);
+
+    const out = await service.buildForStartup(STARTUP_ID, RUN_ID);
+
+    expect(out.overall.signal).toBe("advance");
+    expect(out.overall.missingMaterials).not.toContain("deck");
   });
 
   it("keeps reject signal when materials are missing (reject still wins)", async () => {
@@ -233,6 +314,7 @@ describe("ScreeningOutputService", () => {
     const out = await service.buildForStartup(STARTUP_ID, RUN_ID);
 
     expect(out.overall.signal).toBe("reject");
+    expect(out.overall.nextAction).toBe("stop");
     expect(out.overall.missingMaterials).toEqual(["deck"]);
   });
 

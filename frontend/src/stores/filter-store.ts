@@ -49,5 +49,5 @@ export const useFilterStore = create<FilterState>((set) => ({
   setSortBy: (sortBy) => set({ sortBy }),
   setSortOrder: (sortOrder) => set({ sortOrder }),
   setThesisAxis: (thesisAxis) => set({ thesisAxis }),
-  resetFilters: () => set(defaultFilters),
+  resetFilters: () => set(() => ({ ...defaultFilters })),
 }));

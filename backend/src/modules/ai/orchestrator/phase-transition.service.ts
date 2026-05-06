@@ -79,7 +79,7 @@ export class PhaseTransitionService implements OnModuleInit {
       state.quality === "degraded";
 
     const pipelineComplete =
-      state.phases[PipelinePhase.SYNTHESIS].status === PhaseStatus.COMPLETED ||
+      this.hasAllPhasesTerminal(state) ||
       (blockedByRequiredFailure &&
         queue.length === 0 &&
         this.hasNoActiveWork(state));
@@ -131,6 +131,12 @@ export class PhaseTransitionService implements OnModuleInit {
       (phase) =>
         phase.status !== PhaseStatus.RUNNING &&
         phase.status !== PhaseStatus.WAITING,
+    );
+  }
+
+  private hasAllPhasesTerminal(state: PipelineState): boolean {
+    return Object.values(state.phases).every((phase) =>
+      isPhaseTerminal(phase.status),
     );
   }
 }

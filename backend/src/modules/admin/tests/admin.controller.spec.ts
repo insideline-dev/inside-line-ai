@@ -12,6 +12,7 @@ import { IntegrationHealthService } from '../integration-health.service';
 import { SystemConfigService } from '../system-config.service';
 import { BulkDataService } from '../bulk-data.service';
 import { AdminMatchingService } from '../admin-matching.service';
+import { AdminScreeningService } from '../admin-screening.service';
 import { AiPromptService } from '../../ai/services/ai-prompt.service';
 import { AiPromptRuntimeService } from '../../ai/services/ai-prompt-runtime.service';
 import { PipelineFlowConfigService } from '../../ai/services/pipeline-flow-config.service';
@@ -36,6 +37,7 @@ describe('AdminController', () => {
   let startupService: jest.Mocked<StartupService>;
   let _startupIntakeService: jest.Mocked<StartupIntakeService>;
   let adminMatchingService: jest.Mocked<AdminMatchingService>;
+  let adminScreeningService: jest.Mocked<AdminScreeningService>;
   let aiPromptService: jest.Mocked<AiPromptService>;
   let aiPromptRuntimeService: jest.Mocked<AiPromptRuntimeService>;
   let agentConfigService: jest.Mocked<AgentConfigService>;
@@ -152,6 +154,12 @@ describe('AdminController', () => {
           },
         },
         {
+          provide: AdminScreeningService,
+          useValue: {
+            triggerScreeningForStartup: jest.fn(),
+          },
+        },
+        {
           provide: AiPromptService,
           useValue: {
             listPromptDefinitions: jest.fn(),
@@ -241,6 +249,7 @@ describe('AdminController', () => {
     startupService = module.get(StartupService);
     _startupIntakeService = module.get(StartupIntakeService);
     adminMatchingService = module.get(AdminMatchingService);
+    adminScreeningService = module.get(AdminScreeningService);
     aiPromptService = module.get(AiPromptService);
     aiPromptRuntimeService = module.get(AiPromptRuntimeService);
     agentConfigService = module.get(AgentConfigService);
@@ -472,6 +481,27 @@ describe('AdminController', () => {
 
         expect(result).toEqual(payload);
         expect(adminMatchingService.triggerMatchForStartup).toHaveBeenCalledWith(
+          'startup-1',
+          mockAdmin.id,
+        );
+      });
+
+      it('should rerun screening from the screening phase', async () => {
+        const payload = {
+          status: 'queued',
+          startupId: 'startup-1',
+          phase: PipelinePhase.SCREENING,
+          requestedBy: mockAdmin.id,
+          mode: 'force_rerun',
+        };
+        adminScreeningService.triggerScreeningForStartup.mockResolvedValueOnce(
+          payload as never,
+        );
+
+        const result = await controller.screenStartup(mockAdmin, 'startup-1');
+
+        expect(result).toEqual(payload);
+        expect(adminScreeningService.triggerScreeningForStartup).toHaveBeenCalledWith(
           'startup-1',
           mockAdmin.id,
         );

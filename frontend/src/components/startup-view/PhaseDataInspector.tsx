@@ -22,6 +22,7 @@ const PHASE_LABELS: Record<string, string> = {
   enrichment: "Gap Fill",
   scraping: "Scraping",
   research: "Research",
+  screening: "Screening",
   evaluation: "Evaluation",
   synthesis: "Synthesis",
 };

@@ -27,6 +27,8 @@ describe('ClaraService', () => {
     handleSubmission: jest.Mock;
     getMissingCriticalFieldsForStartup: jest.Mock;
     resolveMissingInfoFromReply: jest.Mock;
+    resolveScreeningFollowUpFromReply: jest.Mock;
+    hasScreeningFollowUpSignals: jest.Mock;
     hasMissingCriticalFields: jest.Mock;
   };
   let toolsService: { buildTools: jest.Mock };
@@ -159,6 +161,8 @@ describe('ClaraService', () => {
       }),
       getMissingCriticalFieldsForStartup: jest.fn().mockResolvedValue([]),
       resolveMissingInfoFromReply: jest.fn().mockResolvedValue(null),
+      resolveScreeningFollowUpFromReply: jest.fn().mockResolvedValue(null),
+      hasScreeningFollowUpSignals: jest.fn().mockReturnValue(false),
       hasMissingCriticalFields: jest.fn().mockResolvedValue(false),
     };
     toolsService = {
@@ -359,6 +363,116 @@ describe('ClaraService', () => {
     });
   });
 
+  it('should route awaiting-info screening follow-ups through the replay helper even for founder replies', async () => {
+    const screeningFollowUpConversation = {
+      ...mockConversation,
+      startupId: 'startup-1',
+      status: ConversationStatus.ACTIVE,
+      context: {
+        screeningFollowUp: {
+          type: 'screening_missing_materials',
+          startupId: 'startup-1',
+          missingMaterials: ['deck'],
+          createdAt: new Date().toISOString(),
+        },
+      },
+    };
+    conversationService.findOrCreate.mockResolvedValueOnce(screeningFollowUpConversation);
+    drizzleService.db.limit.mockResolvedValueOnce([
+      { id: 'user-1', role: 'founder' },
+    ]);
+    submissionService.resolveScreeningFollowUpFromReply.mockResolvedValueOnce({
+      startupId: 'startup-1',
+      startupName: 'TestCo',
+      updatedMaterials: ['deck'],
+      remainingMissing: [],
+      pipelineStarted: true,
+      rerunPhase: 'extraction',
+    });
+
+    await service.handleIncomingMessage('inbox-1', 'thread-123', 'msg-123');
+
+    expect(submissionService.resolveScreeningFollowUpFromReply).toHaveBeenCalledWith(
+      'startup-1',
+      expect.objectContaining({
+        threadId: 'thread-123',
+        messageId: 'msg-123',
+        conversationMemory: expect.objectContaining({
+          screeningFollowUp: expect.objectContaining({
+            type: 'screening_missing_materials',
+          }),
+        }),
+      }),
+      'admin-user-1',
+    );
+    expect(conversationService.updateStatus).toHaveBeenCalledWith(
+      'conv-1',
+      ConversationStatus.PROCESSING,
+    );
+    expect(conversationService.updateContext).toHaveBeenCalledWith(
+      'conv-1',
+      expect.objectContaining({
+        screeningFollowUp: null,
+      }),
+    );
+    expect(claraChannel.reply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        channel: 'email',
+        text: expect.stringContaining('restarted the analysis from the extraction phase'),
+      }),
+    );
+  });
+
+  it('should fall back to screening follow-up routing when the reply body lists team members', async () => {
+    const teamReplyConversation = {
+      ...mockConversation,
+      startupId: 'startup-1',
+      status: ConversationStatus.AWAITING_INFO,
+      context: {},
+    };
+    conversationService.findOrCreate.mockResolvedValueOnce(teamReplyConversation);
+    claraChannel.getEmailMessage.mockResolvedValueOnce({
+      ...mockMessage,
+      subject: 'Re: missing screening materials',
+      text: 'The team is:\n- Alice Chen — CEO\n- Bob Smith — CTO',
+    });
+    drizzleService.db.limit.mockResolvedValueOnce([
+      { id: 'user-1', role: 'founder' },
+    ]);
+    submissionService.hasScreeningFollowUpSignals.mockReturnValueOnce(true);
+    submissionService.resolveScreeningFollowUpFromReply.mockResolvedValueOnce({
+      startupId: 'startup-1',
+      startupName: 'Path Robotics',
+      updatedMaterials: ['team'],
+      remainingMissing: [],
+      pipelineStarted: true,
+      rerunPhase: 'screening',
+    });
+
+    await service.handleIncomingMessage('inbox-1', 'thread-123', 'msg-123');
+
+    expect(submissionService.hasScreeningFollowUpSignals).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bodyText:
+          'The team is:\n- Alice Chen — CEO\n- Bob Smith — CTO',
+      }),
+    );
+    expect(submissionService.resolveScreeningFollowUpFromReply).toHaveBeenCalledWith(
+      'startup-1',
+      expect.objectContaining({
+        bodyText:
+          'The team is:\n- Alice Chen — CEO\n- Bob Smith — CTO',
+      }),
+      'admin-user-1',
+    );
+    expect(claraChannel.reply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        channel: 'email',
+        text: expect.stringContaining('restarted the analysis from screening'),
+      }),
+    );
+  });
+
   describe('handleIncomingMessage - not configured', () => {
     it('should skip processing when not configured', async () => {
       configService = createConfigService(null, null);
@@ -467,6 +581,30 @@ describe('ClaraService', () => {
       );
     });
 
+    it('should skip completion emails while Clara is waiting on screening materials', async () => {
+      const screeningHoldConversation = {
+        ...mockConversation,
+        context: {
+          screeningFollowUp: {
+            type: 'screening_missing_materials',
+            startupId: 'startup-1',
+            pipelineRunId: 'run-1',
+            missingMaterials: ['deck'],
+            createdAt: new Date().toISOString(),
+          },
+        },
+      };
+      conversationService.findByStartupId.mockResolvedValueOnce(screeningHoldConversation as never);
+      conversationService.findByStartupIdAndChannel.mockResolvedValueOnce(null);
+      drizzleService.db.limit.mockResolvedValueOnce([mockStartup]);
+
+      await service.notifyPipelineComplete('startup-1', 85.5);
+
+      expect(claraChannel.send).not.toHaveBeenCalled();
+      expect(conversationService.logMessage).not.toHaveBeenCalled();
+      expect(conversationService.updateStatus).not.toHaveBeenCalled();
+    });
+
     it('should no-op when no conversation found', async () => {
       conversationService.findByStartupId.mockResolvedValueOnce(null);
 
@@ -497,6 +635,123 @@ describe('ClaraService', () => {
       await testService.notifyPipelineComplete('startup-1', 85.5);
 
       expect(conversationService.findByStartupId).not.toHaveBeenCalled();
+    });
+  });
+
+  // ============ notifyScreeningMissingMaterials ============
+
+  describe('notifyScreeningMissingMaterials', () => {
+    it('should send the follow-up email, persist context, and mark the conversation awaiting info', async () => {
+      conversationService.findByStartupId.mockResolvedValueOnce(null);
+      conversationService.findOrCreate.mockResolvedValueOnce({
+        ...mockConversation,
+        context: {},
+      });
+      drizzleService.db.limit.mockResolvedValueOnce([
+        {
+          id: 'startup-1',
+          userId: 'owner-1',
+          name: 'TestCo',
+          pitchDeckUrl: null,
+          pitchDeckPath: null,
+          productDescription: null,
+          description: null,
+          teamMembers: [],
+          fundingTarget: null,
+          valuation: null,
+          raiseType: null,
+          website: null,
+          contactEmail: 'founder@testco.com',
+          contactName: 'Taylor Founder',
+          contactPhone: null,
+        },
+      ]);
+
+      await (service as unknown as {
+        notifyScreeningMissingMaterials: (
+          startupId: string,
+          missingMaterials: Array<'deck' | 'product_description' | 'team' | 'deal_terms' | 'website'>,
+          options?: { pipelineRunId?: string | null },
+        ) => Promise<void>;
+      }).notifyScreeningMissingMaterials('startup-1', ['deck', 'team'], {
+        pipelineRunId: 'run-1',
+      });
+
+      expect(claraChannel.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          channel: 'email',
+          email: expect.objectContaining({
+            to: ['founder@testco.com'],
+          }),
+          text: expect.stringContaining('pitch deck / presentation'),
+        }),
+      );
+      expect(conversationService.updateContext).toHaveBeenCalledWith(
+        'conv-1',
+        expect.objectContaining({
+          screeningFollowUp: expect.objectContaining({
+            type: 'screening_missing_materials',
+            startupId: 'startup-1',
+            pipelineRunId: 'run-1',
+            missingMaterials: ['deck', 'team'],
+          }),
+        }),
+      );
+      expect(conversationService.updateStatus).toHaveBeenCalledWith(
+        'conv-1',
+        ConversationStatus.AWAITING_INFO,
+      );
+    });
+
+    it('should send a fresh message when the startup contact differs from the investor thread recipient', async () => {
+      conversationService.findByStartupId.mockResolvedValueOnce({
+        ...mockConversation,
+        startupId: 'startup-1',
+        context: {
+          lastInboundInboxId: 'inbox-1',
+          lastInboundMessageId: 'msg-original',
+        },
+      });
+      drizzleService.db.limit.mockResolvedValueOnce([
+        {
+          id: 'startup-1',
+          userId: 'owner-1',
+          name: 'TestCo',
+          pitchDeckUrl: null,
+          pitchDeckPath: null,
+          productDescription: null,
+          description: null,
+          teamMembers: [],
+          fundingTarget: null,
+          valuation: null,
+          raiseType: null,
+          website: null,
+          contactEmail: 'founder@testco.com',
+          contactName: 'Taylor Founder',
+          contactPhone: null,
+        },
+      ]);
+
+      await (service as unknown as {
+        notifyScreeningMissingMaterials: (
+          startupId: string,
+          missingMaterials: Array<'deck' | 'product_description' | 'team' | 'deal_terms' | 'website'>,
+          options?: { pipelineRunId?: string | null },
+        ) => Promise<void>;
+      }).notifyScreeningMissingMaterials('startup-1', ['deck'], {
+        pipelineRunId: 'run-2',
+      });
+
+      expect(claraChannel.reply).not.toHaveBeenCalled();
+      expect(claraChannel.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          channel: 'email',
+          email: expect.objectContaining({
+            to: ['founder@testco.com'],
+          }),
+          text: expect.stringContaining('missing materials'),
+        }),
+      );
     });
   });
 

@@ -87,22 +87,21 @@ export const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
       queue: QUEUE_NAMES.AI_RESEARCH,
     },
     {
-      // First-pass screening lenses (market/team/traction). Runs in parallel
-      // with EVALUATION — both depend only on RESEARCH so they fan out on
-      // completion. SCREENING is intentionally not required and never gates
-      // EVALUATION (gating is DS-E7-F1-S1's concern).
+      // First-pass screening lenses (market/team/traction). SCREENING must
+      // finish before EVALUATION so the thesis gate can short-circuit or
+      // qualify a deal before the deep-dive agents run.
       phase: PipelinePhase.SCREENING,
       dependsOn: [PipelinePhase.RESEARCH],
-      canRunParallelWith: [PipelinePhase.EVALUATION],
+      canRunParallelWith: [],
       timeoutMs: 3 * 60 * 1000,
       maxRetries: 2,
-      required: false,
+      required: true,
       queue: QUEUE_NAMES.AI_SCREENING,
     },
     {
       phase: PipelinePhase.EVALUATION,
-      dependsOn: [PipelinePhase.RESEARCH],
-      canRunParallelWith: [PipelinePhase.SCREENING],
+      dependsOn: [PipelinePhase.RESEARCH, PipelinePhase.SCREENING],
+      canRunParallelWith: [],
       timeoutMs: 150 * 60 * 1000, // 2.5 hours — server-side polling, let agents finish
       maxRetries: 2,
       required: true,

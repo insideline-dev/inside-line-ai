@@ -11,6 +11,7 @@ import { ClaraSubmissionService } from "../clara-submission.service";
 import { StartupStatus } from "../../startup/entities/startup.schema";
 import { STARTUP_DESCRIPTION_PLACEHOLDER } from "../../startup/startup.constants";
 import { PipelinePhase } from "../../ai/interfaces/pipeline.interface";
+import { ConversationStatus } from "../interfaces/clara.interface";
 import type { MessageContext, AttachmentMeta } from "../interfaces/clara.interface";
 
 const createMessageContext = (
@@ -38,6 +39,7 @@ const createAttachment = (
 describe("ClaraSubmissionService", () => {
   let service: ClaraSubmissionService;
   let drizzle: jest.Mocked<DrizzleService>;
+  let queue: object;
   let storage: jest.Mocked<StorageService>;
   let assetService: jest.Mocked<AssetService>;
   let dataRoomService: jest.Mocked<DataRoomService>;
@@ -100,6 +102,7 @@ describe("ClaraSubmissionService", () => {
     mockDbChain.limit.mockResolvedValue([]); // No duplicates by default
 
     drizzle = { db: mockDb } as unknown as jest.Mocked<DrizzleService>;
+    queue = {};
 
     storage = {
       uploadGeneratedContent: jest.fn().mockResolvedValue({
@@ -156,13 +159,14 @@ describe("ClaraSubmissionService", () => {
 
     service = new ClaraSubmissionService(
       drizzle,
+      queue as never,
       storage,
       assetService,
-      dataRoomService,
       agentMailClient,
       pipeline,
       notifications,
       claraAi,
+      dataRoomService,
     );
   });
 
@@ -369,6 +373,193 @@ describe("ClaraSubmissionService", () => {
       PipelinePhase.ENRICHMENT,
     );
     expect(pipeline.startPipeline).not.toHaveBeenCalled();
+  });
+
+  it("restarts screening from the screening phase when text-only follow-up fills all missing materials", async () => {
+    mockDb.limit
+      .mockResolvedValueOnce([
+        {
+          id: "existing-startup",
+          userId: "admin-1",
+          name: "Acme Corp",
+          pitchDeckUrl: "https://drive/deck.pdf",
+          pitchDeckPath: null,
+          productDescription: null,
+          description: null,
+          teamMembers: [],
+          fundingTarget: 0,
+          valuation: null,
+          raiseType: null,
+          website: null,
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: "existing-startup",
+          userId: "admin-1",
+          name: "Acme Corp",
+          pitchDeckUrl: "https://drive/deck.pdf",
+          pitchDeckPath: null,
+          productDescription:
+            "We build billing software for clinics that automates claims reconciliation.",
+          description:
+            "We build billing software for clinics that automates claims reconciliation.",
+          teamMembers: [
+            { name: "Jane Doe", role: "CEO", linkedinUrl: "" },
+            { name: "John Smith", role: "CTO", linkedinUrl: "" },
+          ],
+          fundingTarget: 500000,
+          valuation: null,
+          raiseType: "safe",
+          website: "https://acme.com",
+        },
+      ]);
+
+    const resolution = await service.resolveScreeningFollowUpFromReply(
+      "existing-startup",
+      {
+        inboxId: "inbox-1",
+        messageId: "msg-123",
+        fromEmail: "founder@acme.com",
+        fromName: "Jane Doe",
+        subject: "Re: missing materials",
+        bodyText:
+          "Website: https://acme.com\n\nProduct: We build billing software for clinics that automates claims reconciliation.\n\nTeam:\nJane Doe - CEO\nJohn Smith - CTO\n\nWe are raising a SAFE round for $500k.",
+        attachments: [],
+        conversationHistory: [],
+        actorUserId: null,
+        actorRole: null,
+        investorUserId: null,
+        startupId: "existing-startup",
+        startupStage: null,
+        conversationStatus: ConversationStatus.AWAITING_INFO,
+        conversationMemory: null,
+      },
+      "admin-1",
+    );
+
+    expect(resolution).toEqual({
+      startupId: "existing-startup",
+      startupName: "Acme Corp",
+      updatedMaterials: expect.arrayContaining([
+        "website",
+        "product_description",
+        "team",
+        "deal_terms",
+      ]),
+      remainingMissing: [],
+      pipelineStarted: true,
+      rerunPhase: PipelinePhase.SCREENING,
+    });
+    expect(pipeline.prepareFreshAnalysis).not.toHaveBeenCalled();
+    expect(pipeline.rerunFromPhase).toHaveBeenCalledWith(
+      "existing-startup",
+      PipelinePhase.SCREENING,
+    );
+  });
+
+  it("parses team members from a reply and persists a screening-ready team row", async () => {
+    mockDb.limit
+      .mockResolvedValueOnce([
+        {
+          id: "existing-startup",
+          userId: "admin-1",
+          name: "Path Robotics",
+          pitchDeckUrl: null,
+          pitchDeckPath: "startups/admin-1/deck.pdf",
+          productDescription:
+            "Path Robotics builds autonomous warehouse robots for mid-market logistics operators.",
+          description:
+            "Path Robotics builds autonomous warehouse robots for mid-market logistics operators.",
+          teamMembers: [],
+          teamSize: 1,
+          fundingTarget: 2500000,
+          valuation: null,
+          raiseType: "safe",
+          website: "https://pathrobotics.com",
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: "existing-startup",
+          userId: "admin-1",
+          name: "Path Robotics",
+          pitchDeckUrl: null,
+          pitchDeckPath: "startups/admin-1/deck.pdf",
+          productDescription:
+            "Path Robotics builds autonomous warehouse robots for mid-market logistics operators.",
+          description:
+            "Path Robotics builds autonomous warehouse robots for mid-market logistics operators.",
+          teamMembers: [
+            { name: "Alice Chen", role: "CEO", linkedinUrl: "" },
+            { name: "Bob Smith", role: "CTO", linkedinUrl: "" },
+          ],
+          teamSize: 2,
+          fundingTarget: 2500000,
+          valuation: null,
+          raiseType: "safe",
+          website: "https://pathrobotics.com",
+        },
+      ]);
+
+    const resolution = await service.resolveScreeningFollowUpFromReply(
+      "existing-startup",
+      {
+        inboxId: "inbox-1",
+        messageId: "msg-456",
+        fromEmail: "founder@pathrobotics.com",
+        fromName: "Alice Chen",
+        subject: "Re: missing screening materials",
+        bodyText:
+          "Team members and roles:\n- Alice Chen — CEO\n- Bob Smith — CTO",
+        attachments: [],
+        conversationHistory: [],
+        actorUserId: null,
+        actorRole: null,
+        investorUserId: null,
+        startupId: "existing-startup",
+        startupStage: null,
+        conversationStatus: ConversationStatus.AWAITING_INFO,
+        conversationMemory: null,
+      },
+      "admin-1",
+    );
+
+    expect(mockDb.update).toHaveBeenCalledTimes(1);
+    expect(mockDb.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        teamMembers: [
+          { name: "Alice Chen", role: "CEO", linkedinUrl: "" },
+          { name: "Bob Smith", role: "CTO", linkedinUrl: "" },
+        ],
+        teamSize: 2,
+      }),
+    );
+    expect(resolution).toEqual({
+      startupId: "existing-startup",
+      startupName: "Path Robotics",
+      updatedMaterials: ["team"],
+      remainingMissing: [],
+      pipelineStarted: true,
+      rerunPhase: PipelinePhase.SCREENING,
+    });
+    expect(pipeline.rerunFromPhase).toHaveBeenCalledWith(
+      "existing-startup",
+      PipelinePhase.SCREENING,
+    );
+    expect(pipeline.prepareFreshAnalysis).not.toHaveBeenCalled();
+  });
+
+  it("detects a live-shaped screening reply that lists team members", () => {
+    expect(
+      service.hasScreeningFollowUpSignals(
+        createMessageContext({
+          bodyText:
+            "The team is:\n- Alice Chen — CEO\n- Bob Smith — CTO",
+          attachments: [],
+        }),
+      ),
+    ).toBe(true);
   });
 
 

@@ -1,4 +1,5 @@
 import type { CopilotPendingAction } from "../../copilot/interfaces/copilot.interface";
+import type { MissingMaterialCode } from "../../ai/contracts/screening-output/missing-materials";
 
 export enum ClaraIntent {
   SUBMISSION = "submission",
@@ -36,6 +37,14 @@ export interface AttachmentMeta {
   assetId?: string;
   isPitchDeck: boolean;
   status: "pending" | "downloaded" | "uploaded" | "failed";
+}
+
+export interface ScreeningFollowUpState {
+  type: "screening_missing_materials";
+  startupId: string;
+  pipelineRunId?: string | null;
+  missingMaterials: MissingMaterialCode[];
+  createdAt: string;
 }
 
 export interface MessageContext {

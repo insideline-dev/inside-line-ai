@@ -199,7 +199,10 @@ export class ScreeningProcessor
           score: result.output.score,
           signal: result.output.signal,
           rationale: result.output.rationale,
-          evidence: result.output.evidence,
+          evidence: result.output.evidence.map((item) => ({
+            ...item,
+            source: item.source ?? undefined,
+          })),
           modelId: result.modelId,
           promptKey: result.promptKey,
           latencyMs: result.latencyMs,
@@ -211,6 +214,14 @@ export class ScreeningProcessor
         );
       }
     }
+
+    let triageDecision:
+      | {
+          classification: "advance" | "review" | "reject";
+          overallScore: number;
+          reasonCodes: string[];
+        }
+      | null = null;
 
     // Deal-level triage (DS-E7-F1-S1 + DS-E7-F2-S1 + DS-E4-F1-S1).
     // Combine the lens signals into a single ADVANCE / REVIEW / REJECT
@@ -240,6 +251,11 @@ export class ScreeningProcessor
         })),
         thesisFitScore,
       });
+      triageDecision = {
+        classification: decision.classification,
+        overallScore: decision.overallScore,
+        reasonCodes: decision.reasonCodes,
+      };
       this.logger.log(
         `[ScreeningProcessor] Triage v${decision.policyVersion} for ${startupId}: ${decision.classification}@${decision.overallScore} (thesisFit=${thesisFitScore ?? "null"})`,
       );
@@ -263,13 +279,16 @@ export class ScreeningProcessor
 
     // Smoke-test the public ScreeningOutput contract on every run. Failures
     // here must never break screening — DD has its own failure surface.
+    let screeningContract:
+      | Awaited<ReturnType<ScreeningOutputService["buildForStartup"]>>
+      | null = null;
     try {
-      const contract = await this.screeningOutput.buildForStartup(
+      screeningContract = await this.screeningOutput.buildForStartup(
         startupId,
         pipelineRunId,
       );
       this.logger.debug(
-        `[ScreeningProcessor] ScreeningOutput v${contract.version} for ${startupId} run=${pipelineRunId}: overall=${contract.overall.signal}@${contract.overall.score} lenses=${contract.lenses.length}`,
+        `[ScreeningProcessor] ScreeningOutput v${screeningContract.version} for ${startupId} run=${pipelineRunId}: overall=${screeningContract.overall.signal}@${screeningContract.overall.score} lenses=${screeningContract.lenses.length}`,
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -290,30 +309,26 @@ export class ScreeningProcessor
       },
     });
 
-    return { lenses, failedKeys };
+    return {
+      lenses,
+      failedKeys,
+      classification: triageDecision?.classification,
+      overallScore: triageDecision?.overallScore,
+      reasonCodes: triageDecision?.reasonCodes,
+      missingMaterials:
+        (screeningContract?.overall.missingMaterials as ScreeningResult["missingMaterials"]) ?? [],
+    };
   }
 
   /**
    * Returns the highest `thesisFitScore` recorded across all investors for
-   * this startup, or null if no matches exist yet. The triage policy
-   * treats null as "skip the out-of-scope check" — never reject for lack
-   * of data.
+   * this startup, or null if no matches exist yet. The triage policy treats
+   * null as "skip the out-of-scope check" — never reject for lack of data.
    *
    * Aggregation choice: MAX. If even one investor's thesis loosely matches,
-   * the deal isn't out-of-scope platform-wide. This errs on the side of
-   * keeping deals alive at the cost of never auto-rejecting deals that
-   * SOME investor wants to see.
-   *
-   * KNOWN LIMITATION (DS-E4-F1-S1): SCREENING runs as a pipeline phase
-   * (after RESEARCH, parallel with EVALUATION — see pipeline.config.ts).
-   * `startupMatch` rows are produced by post-pipeline `analysis/` work,
-   * not before screening. So on a FIRST run for a new startup this method
-   * always returns null and the out-of-thesis-scope gate never fires.
-   * The gate only kicks in on RE-SCREENS — when an investor updates their
-   * thesis (which calls MatchService.regenerateMatches and then the next
-   * screening run sees populated rows). Path forward: either move match
-   * computation into the pipeline before SCREENING, or add a post-matching
-   * hook that re-decides triage. Tracked separately.
+   * the deal isn't out-of-scope platform-wide. That keeps reruns useful in
+   * dev because once matches exist, a SCREENING rerun can apply the thesis
+   * gate against the persisted investor pool without re-uploading.
    */
   private async maxThesisFitScore(
     startupId: string,

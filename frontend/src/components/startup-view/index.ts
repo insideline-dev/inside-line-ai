@@ -12,3 +12,4 @@ export { FounderRecommendationsTab } from "./FounderRecommendationsTab";
 export { FinancialsTabContent } from "./FinancialsTabContent";
 export { AdminSummaryTab } from "./AdminSummaryTab";
 export { DataRoomPanel } from "./DataRoomPanel";
+export { ScreeningSummaryCard } from "./ScreeningSummaryCard";

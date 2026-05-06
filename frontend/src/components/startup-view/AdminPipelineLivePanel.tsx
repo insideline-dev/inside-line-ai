@@ -22,6 +22,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useStartupRealtimeProgress } from "@/lib/startup/useStartupRealtimeProgress";
 import { PhaseDataInspector } from "./PhaseDataInspector";
 import { ScrapeLogTable } from "./ScrapeLogTable";
+import { ScreeningSummaryCard } from "./ScreeningSummaryCard";
 import {
   PIPELINE_PHASE_ORDER,
   type PipelineAgentEvent,
@@ -87,6 +88,7 @@ const PHASE_LABELS: Record<string, string> = {
   enrichment: "Gap Fill",
   scraping: "Scraping",
   research: "Research",
+  screening: "Screening",
   evaluation: "Evaluation",
   synthesis: "Synthesis",
 };
@@ -1571,6 +1573,8 @@ export function AdminPipelineLivePanel({
             </p>
           </div>
         )}
+
+        <ScreeningSummaryCard startupId={startupId} progress={progress} />
 
         <div className="space-y-1.5">
           <h3 className="text-sm font-semibold">Stages</h3>

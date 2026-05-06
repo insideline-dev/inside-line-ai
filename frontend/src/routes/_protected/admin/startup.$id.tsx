@@ -146,41 +146,56 @@ interface RetryTrackingState {
   requestedAt: string;
 }
 
-const PHASE_RERUN_OPTIONS: Array<{
-  value: RetryPhaseValue;
-  label: string;
-  description: string;
-}> = [
+const PHASE_RERUN_META: Record<
+  RetryPhaseValue,
   {
-    value: RetryPhaseDtoPhase.extraction,
+    label: string;
+    description: string;
+  }
+> = {
+  [RetryPhaseDtoPhase.classification]: {
+    label: "From Classification",
+    description: "Re-run document classification and downstream stages",
+  },
+  [RetryPhaseDtoPhase.extraction]: {
     label: "From Extraction",
     description: "Re-run the full pipeline from extraction",
   },
-  {
-    value: RetryPhaseDtoPhase.enrichment,
+  [RetryPhaseDtoPhase.enrichment]: {
     label: "From Enrichment",
     description: "Reuse extraction, re-run enrichment onward",
   },
-  {
-    value: RetryPhaseDtoPhase.scraping,
+  [RetryPhaseDtoPhase.scraping]: {
     label: "From Scraping",
     description: "Reuse extraction, re-run scraping onward",
   },
-  {
-    value: RetryPhaseDtoPhase.research,
+  [RetryPhaseDtoPhase.research]: {
     label: "From Research",
     description: "Reuse extraction/enrichment/scraping, re-run research onward",
   },
-  {
-    value: RetryPhaseDtoPhase.evaluation,
-    label: "From Evaluation",
-    description: "Reuse prior stages, re-run evaluation + synthesis",
+  [RetryPhaseDtoPhase.screening]: {
+    label: "From Screening",
+    description: "Reuse research output, re-run screening onward",
   },
-  {
-    value: RetryPhaseDtoPhase.synthesis,
+  [RetryPhaseDtoPhase.evaluation]: {
+    label: "From Evaluation",
+    description: "Reuse screening and earlier stages, re-run evaluation + synthesis",
+  },
+  [RetryPhaseDtoPhase.synthesis]: {
     label: "From Synthesis",
     description: "Reuse all prior stages, re-run synthesis only",
   },
+};
+
+const PHASE_RERUN_ORDER: RetryPhaseValue[] = [
+  RetryPhaseDtoPhase.classification,
+  RetryPhaseDtoPhase.extraction,
+  RetryPhaseDtoPhase.enrichment,
+  RetryPhaseDtoPhase.scraping,
+  RetryPhaseDtoPhase.research,
+  RetryPhaseDtoPhase.screening,
+  RetryPhaseDtoPhase.evaluation,
+  RetryPhaseDtoPhase.synthesis,
 ];
 
 const EVAL_AGENT_OPTIONS = [
@@ -512,10 +527,18 @@ function AdminReviewPage() {
 
   const screenMutation = useAdminControllerScreenStartup({
     mutation: {
-      onSuccess: () => {
+      onSuccess: (result) => {
+        queryClient.invalidateQueries({ queryKey: getStartupControllerFindOneQueryKey(id) });
+        queryClient.invalidateQueries({ queryKey: getStartupControllerGetProgressQueryKey(id) });
+        queryClient.invalidateQueries({ queryKey: getAdminControllerGetAllStartupsQueryKey() });
+        setActiveTab("pipeline-live");
+        const payload = unwrapApiResponse<Record<string, unknown>>(result);
+        const mode = typeof payload?.mode === "string" ? payload.mode : "force_rerun";
         toast.success("Screening queued", {
           description:
-            "Lens triage will run in the background. Refresh in ~30s to see results.",
+            mode === "full_reanalysis_fallback"
+              ? "No reusable pipeline state was found, so a full pipeline restart was queued for this existing startup."
+              : "Lens triage will run in the background. Open Pipeline Live to watch it progress.",
         });
       },
       onError: (error: Error) => {
@@ -723,30 +746,33 @@ function AdminReviewPage() {
                     </span>
                   </DropdownMenuItem>
                 )}
-                {PHASE_RERUN_OPTIONS.map((option) => (
-                  <DropdownMenuItem
-                    key={option.value}
-                    disabled={
-                      !canRerunFromPhase ||
-                      retryPhaseMutation.isPending ||
-                      reanalyzeMutation.isPending
-                    }
-                    onClick={() => {
-                      if (option.value === RetryPhaseDtoPhase.evaluation) {
-                        setShowEvalRerunDialog(true);
-                        return;
+                {PHASE_RERUN_ORDER.map((phase) => {
+                  const option = PHASE_RERUN_META[phase];
+                  return (
+                    <DropdownMenuItem
+                      key={phase}
+                      disabled={
+                        !canRerunFromPhase ||
+                        retryPhaseMutation.isPending ||
+                        reanalyzeMutation.isPending
                       }
-                      handlePhaseRerun(option.value);
-                    }}
-                    className="flex flex-col items-start gap-0.5 py-2"
-                  >
-                    <span>{option.label}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {option.description}
-                      {rerunPhase === option.value ? " (starting…)" : ""}
-                    </span>
-                  </DropdownMenuItem>
-                ))}
+                      onClick={() => {
+                        if (phase === RetryPhaseDtoPhase.evaluation) {
+                          setShowEvalRerunDialog(true);
+                          return;
+                        }
+                        handlePhaseRerun(phase);
+                      }}
+                      className="flex flex-col items-start gap-0.5 py-2"
+                    >
+                      <span>{option.label}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {option.description}
+                        {rerunPhase === phase ? " (starting…)" : ""}
+                      </span>
+                    </DropdownMenuItem>
+                  );
+                })}
                 <DropdownMenuItem
                   disabled={retryPhaseMutation.isPending || reanalyzeMutation.isPending}
                   onClick={() => reanalyzeMutation.mutate({ id })}

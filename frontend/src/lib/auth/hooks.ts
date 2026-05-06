@@ -1,6 +1,8 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { authApi } from "./api";
+import { useFilterStore } from "@/stores";
+import { clearPendingOnboardingWebsiteState } from "@/lib/investor/useSubmitOnboardingWebsite";
 import type {
   LoginRequest,
   RegisterRequest,
@@ -39,6 +41,7 @@ export function useLogin() {
   return useMutation({
     mutationFn: (data: LoginRequest) => authApi.login(data),
     onSuccess: (data) => {
+      resetAuthScopedState(queryClient);
       queryClient.setQueryData(authKeys.user, data.user);
       if (data.user.onboardingCompleted) {
         const redirect = consumeRedirect();
@@ -58,6 +61,7 @@ export function useRegister() {
   return useMutation({
     mutationFn: (data: RegisterRequest) => authApi.register(data),
     onSuccess: (data) => {
+      resetAuthScopedState(queryClient);
       queryClient.setQueryData(authKeys.user, data.user);
       if (data.user.onboardingCompleted) {
         const redirect = consumeRedirect();
@@ -95,6 +99,7 @@ export function useVerifyMagicLink() {
   return useMutation({
     mutationFn: (token: string) => authApi.verifyMagicLink(token),
     onSuccess: (data) => {
+      resetAuthScopedState(queryClient);
       queryClient.setQueryData(authKeys.user, data.user);
       if (data.user.onboardingCompleted) {
         const redirect = consumeRedirect();
@@ -124,6 +129,12 @@ export function useResendVerification() {
   });
 }
 
+function resetAuthScopedState(queryClient: QueryClient) {
+  queryClient.removeQueries();
+  useFilterStore.getState().resetFilters();
+  clearPendingOnboardingWebsiteState();
+}
+
 // Logout mutation
 export function useLogout() {
   const queryClient = useQueryClient();
@@ -132,7 +143,7 @@ export function useLogout() {
   return useMutation({
     mutationFn: () => authApi.logout(),
     onSuccess: () => {
-      queryClient.removeQueries({ queryKey: authKeys.user });
+      resetAuthScopedState(queryClient);
       navigate({ to: "/login" });
     },
   });
@@ -146,7 +157,7 @@ export function useLogoutAll() {
   return useMutation({
     mutationFn: () => authApi.logoutAll(),
     onSuccess: () => {
-      queryClient.removeQueries({ queryKey: authKeys.user });
+      resetAuthScopedState(queryClient);
       navigate({ to: "/login" });
     },
   });

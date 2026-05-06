@@ -3,6 +3,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { DrizzleService } from "../../database";
 import { startup } from "../startup/entities/startup.schema";
 import { DealEventService } from "../startup/deal-event.service";
+import { ScreeningTriageService } from "../ai/screening/triage";
 import {
   investorDealDecision,
   type InvestorDealDecisionRow,
@@ -26,6 +27,7 @@ export class DealDecisionService {
   constructor(
     private readonly drizzle: DrizzleService,
     private readonly dealEvents: DealEventService,
+    private readonly screeningTriage: ScreeningTriageService,
   ) {}
 
   async record(
@@ -43,6 +45,9 @@ export class DealDecisionService {
       throw new NotFoundException(`Startup ${startupId} not found`);
     }
 
+    const latestTriage = await this.screeningTriage.latestForStartup(startupId);
+    const triageClassificationAtDecision = latestTriage?.classification ?? null;
+
     const [row] = await this.drizzle.db
       .insert(investorDealDecision)
       .values({
@@ -51,8 +56,7 @@ export class DealDecisionService {
         verdict: input.verdict,
         reasonTags: input.reasonTags ?? [],
         notes: input.notes ?? null,
-        triageClassificationAtDecision:
-          input.triageClassificationAtDecision ?? null,
+        triageClassificationAtDecision,
       })
       .returning();
 
@@ -73,8 +77,7 @@ export class DealDecisionService {
         verdict: input.verdict,
         reasonTags: input.reasonTags ?? [],
         hasNotes: Boolean(input.notes && input.notes.trim().length > 0),
-        triageClassificationAtDecision:
-          input.triageClassificationAtDecision ?? null,
+        triageClassificationAtDecision,
       },
     });
 

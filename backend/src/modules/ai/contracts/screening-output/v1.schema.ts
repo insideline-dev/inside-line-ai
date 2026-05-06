@@ -1,4 +1,9 @@
 import { z } from "zod";
+import type { MissingMaterialCode } from "./missing-materials";
+import {
+  ScreeningNextActionSchema,
+  ScreeningSignalSchema,
+} from "./screening-outcome";
 
 /**
  * v1 of the public ScreeningOutput contract consumed by Due Diligence.
@@ -10,8 +15,8 @@ import { z } from "zod";
  * and v1 stays untouched so older callers keep working.
  */
 
-export const ScreeningSignalSchema = z.enum(["advance", "review", "reject"]);
 export type ScreeningSignal = z.infer<typeof ScreeningSignalSchema>;
+export type ScreeningNextAction = z.infer<typeof ScreeningNextActionSchema>;
 
 export const ScreeningEvidenceConfidenceSchema = z.enum([
   "low",
@@ -45,6 +50,7 @@ export type ScreeningLensV1 = z.infer<typeof ScreeningLensV1Schema>;
 export const ScreeningOverallV1Schema = z.object({
   score: z.number().int().min(0).max(100),
   signal: ScreeningSignalSchema,
+  nextAction: ScreeningNextActionSchema,
   /**
    * Hold-list populated by DS-E7-F4 (missing-materials gate). v1 always
    * defaults to []; the contract is stable so the gate can fill this without
@@ -52,7 +58,12 @@ export const ScreeningOverallV1Schema = z.object({
    */
   missingMaterials: z.array(z.string()),
 });
-export type ScreeningOverallV1 = z.infer<typeof ScreeningOverallV1Schema>;
+export type ScreeningOverallV1 = Omit<
+  z.infer<typeof ScreeningOverallV1Schema>,
+  "missingMaterials"
+> & {
+  missingMaterials: MissingMaterialCode[];
+};
 
 export const ScreeningOutputV1Schema = z.object({
   version: z.literal(1),

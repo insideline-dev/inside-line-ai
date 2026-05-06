@@ -1,10 +1,12 @@
 import { describe, expect, it, jest } from "bun:test";
+import { zodResponseFormat } from "openai/helpers/zod";
 import { Test } from "@nestjs/testing";
 import { ConfigService } from "@nestjs/config";
 import { MarketLens } from "../market.lens";
 import { AiModelExecutionService } from "../../services/ai-model-execution.service";
 import { AiPromptService } from "../../services/ai-prompt.service";
 import { AiProviderService } from "../../providers/ai-provider.service";
+import { LensOutputSchema } from "../../schemas/lens";
 import type { LensInput } from "../../schemas/lens";
 
 const CTX: LensInput = {
@@ -62,6 +64,10 @@ async function buildLens(opts: {
 }
 
 describe("MarketLens", () => {
+  it("emits a strict structured-output schema for evidence items", () => {
+    expect(() => zodResponseFormat(LensOutputSchema, "response")).not.toThrow();
+  });
+
   it("returns valid LensOutput when the model responds correctly", async () => {
     const generateText = jest.fn().mockResolvedValue({
       output: {

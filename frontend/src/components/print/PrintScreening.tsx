@@ -50,6 +50,13 @@ const MISSING_LABELS: Record<string, string> = {
   website: "Website",
 };
 
+const NEXT_ACTION_LABELS: Record<string, string> = {
+  continue_evaluation: "Continue evaluation",
+  manual_review: "Manual review",
+  request_materials: "Request materials",
+  stop: "Stop",
+};
+
 function lensName(key: string): string {
   if (key.length === 0) return key;
   return key.charAt(0).toUpperCase() + key.slice(1);
@@ -61,6 +68,10 @@ function formatDate(iso: string): string {
     month: "long",
     day: "numeric",
   });
+}
+
+function nextActionLabel(action: string): string {
+  return NEXT_ACTION_LABELS[action] ?? action;
 }
 
 export function PrintScreening({
@@ -215,6 +226,9 @@ export function PrintScreening({
             </div>
             <span style={{ fontSize: "10px", color: "#64748B" }}>
               Overall screening score
+            </span>
+            <span style={{ fontSize: "10px", color: "#64748B" }}>
+              Next action: {nextActionLabel(output.overall.nextAction)}
             </span>
           </div>
         </div>

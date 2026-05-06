@@ -2256,10 +2256,12 @@ export class StartupService {
 
   private isValidPipelinePhase(phase: unknown): phase is PipelinePhase {
     return (
+      phase === PipelinePhase.CLASSIFICATION ||
       phase === PipelinePhase.ENRICHMENT ||
       phase === PipelinePhase.EXTRACTION ||
       phase === PipelinePhase.SCRAPING ||
       phase === PipelinePhase.RESEARCH ||
+      phase === PipelinePhase.SCREENING ||
       phase === PipelinePhase.EVALUATION ||
       phase === PipelinePhase.SYNTHESIS
     );

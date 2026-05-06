@@ -10,6 +10,21 @@ describe("pipeline.config", () => {
     expect(() => validatePipelineConfig(DEFAULT_PIPELINE_CONFIG)).not.toThrow();
   });
 
+  it("requires screening before evaluation", () => {
+    const screening = DEFAULT_PIPELINE_CONFIG.phases.find(
+      (phase) => phase.phase === PipelinePhase.SCREENING,
+    );
+    const evaluation = DEFAULT_PIPELINE_CONFIG.phases.find(
+      (phase) => phase.phase === PipelinePhase.EVALUATION,
+    );
+
+    expect(screening?.canRunParallelWith).toEqual([]);
+    expect(evaluation?.dependsOn).toEqual([
+      PipelinePhase.RESEARCH,
+      PipelinePhase.SCREENING,
+    ]);
+  });
+
   it("rejects duplicate phases", () => {
     const duplicated = {
       ...DEFAULT_PIPELINE_CONFIG,
@@ -20,7 +35,7 @@ describe("pipeline.config", () => {
     };
 
     expect(() => validatePipelineConfig(duplicated)).toThrow(
-      'Duplicate pipeline phase "extraction"',
+      'Duplicate pipeline phase "classification"',
     );
   });
 

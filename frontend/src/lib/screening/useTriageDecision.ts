@@ -17,6 +17,7 @@ export interface TriageLensSnapshot {
 
 export interface TriageDecision {
   classification: TriageClassification;
+  nextAction: "continue_evaluation" | "manual_review" | "request_materials" | "stop";
   overallScore: number;
   reasonCodes: string[];
   lensSnapshot: TriageLensSnapshot[];

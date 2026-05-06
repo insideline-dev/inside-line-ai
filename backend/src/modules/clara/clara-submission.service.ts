@@ -8,10 +8,14 @@ import { ASSET_TYPES } from "../../storage/storage.config";
 import { DataRoomService } from "../startup/data-room.service";
 import { UserRole } from "../../auth/entities/auth.schema";
 import { AgentMailClientService } from "../integrations/agentmail/agentmail-client.service";
-import { startup, StartupStatus, StartupStage } from "../startup/entities/startup.schema";
+import { RaiseType, startup, StartupStatus, StartupStage } from "../startup/entities/startup.schema";
 import { STARTUP_DESCRIPTION_PLACEHOLDER } from "../startup/startup.constants";
 import { PipelineService } from "../ai/services/pipeline.service";
 import { PipelinePhase } from "../ai/interfaces/pipeline.interface";
+import {
+  detectMissingMaterials,
+  type MissingMaterialCode,
+} from "../ai/contracts/screening-output/missing-materials";
 import {
   extractWebsiteFromText,
   extractStageFromText,
@@ -56,6 +60,15 @@ type CriticalStartupSnapshot = {
   teamSize: number;
   status: StartupStatus;
 };
+
+interface ScreeningFollowUpResolution {
+  startupId: string;
+  startupName: string;
+  updatedMaterials: MissingMaterialCode[];
+  remainingMissing: MissingMaterialCode[];
+  pipelineStarted: boolean;
+  rerunPhase: PipelinePhase.SCREENING | PipelinePhase.EXTRACTION;
+}
 
 @Injectable()
 export class ClaraSubmissionService {
@@ -645,6 +658,172 @@ export class ClaraSubmissionService {
     };
   }
 
+  hasScreeningFollowUpSignals(
+    ctx: Pick<MessageContext, "bodyText" | "attachments">,
+  ): boolean {
+    if ((ctx.attachments ?? []).some((attachment) => attachment.isPitchDeck)) {
+      return true;
+    }
+
+    const textContent = [ctx.bodyText]
+      .filter((value): value is string => Boolean(value && value.trim()))
+      .join("\n\n");
+    if (!textContent) {
+      return false;
+    }
+
+    if (this.extractTeamMembersFromReply(textContent).length > 0) {
+      return true;
+    }
+
+    if (this.extractProductDescriptionFromReply(textContent)) {
+      return true;
+    }
+
+    const dealTerms = this.extractDealTermsFromReply(textContent);
+    return Boolean(
+      typeof dealTerms.fundingTarget === "number" ||
+        typeof dealTerms.valuation === "number" ||
+        dealTerms.raiseType,
+    );
+  }
+
+  async resolveScreeningFollowUpFromReply(
+    startupId: string,
+    ctx: MessageContext,
+    fallbackUserId?: string | null,
+  ): Promise<ScreeningFollowUpResolution | null> {
+    const current = await this.loadScreeningFollowUpSnapshot(startupId);
+    if (!current) {
+      return null;
+    }
+
+    const missingBefore = detectMissingMaterials(current);
+    const ownerUserId = current.userId || fallbackUserId || current.userId;
+    const textContent = [ctx.subject, ctx.bodyText]
+      .filter((value): value is string => Boolean(value && value.trim()))
+      .join("\n\n");
+
+    const processedAttachments = await this.processAttachments(
+      ctx.inboxId,
+      ctx.messageId,
+      ctx.attachments,
+      ownerUserId,
+    );
+    const uploadedFiles = this.toStartupFiles(processedAttachments);
+    const deckAttachment = this.selectPrimaryDeckAttachment(processedAttachments);
+    const hasUploadedAttachments = uploadedFiles.length > 0;
+
+    if (hasUploadedAttachments) {
+      await this.mergeUploadedFilesIntoStartup(startupId, uploadedFiles);
+    }
+    await this.registerAttachmentsToDataRoom(
+      startupId,
+      ownerUserId,
+      processedAttachments,
+    );
+
+    const updates: Partial<typeof startup.$inferInsert> = {};
+    const updatedMaterials = new Set<MissingMaterialCode>();
+
+    if (missingBefore.includes("deck") && deckAttachment?.storagePath) {
+      updates.pitchDeckPath = deckAttachment.storagePath;
+      updatedMaterials.add("deck");
+    }
+
+    if (missingBefore.includes("website")) {
+      const websiteCandidate = extractWebsiteFromText(textContent);
+      if (websiteCandidate) {
+        updates.website = websiteCandidate;
+        updatedMaterials.add("website");
+      }
+    }
+
+    if (missingBefore.includes("product_description")) {
+      const productDescription = this.extractProductDescriptionFromReply(textContent);
+      if (productDescription) {
+        updates.productDescription = productDescription;
+        if (typeof updates.description !== "string" || updates.description.trim().length === 0) {
+          updates.description = productDescription;
+        }
+        updatedMaterials.add("product_description");
+      }
+    }
+
+    if (missingBefore.includes("team")) {
+      const teamMembers = this.extractTeamMembersFromReply(textContent);
+      if (teamMembers.length > 0) {
+        updates.teamMembers = teamMembers;
+        updates.teamSize = Math.max(current.teamSize ?? 0, teamMembers.length);
+        updatedMaterials.add("team");
+      }
+    }
+
+    if (missingBefore.includes("deal_terms")) {
+      const dealTerms = this.extractDealTermsFromReply(textContent);
+      if (typeof dealTerms.fundingTarget === "number") {
+        updates.fundingTarget = dealTerms.fundingTarget;
+        updatedMaterials.add("deal_terms");
+      }
+      if (typeof dealTerms.valuation === "number") {
+        updates.valuation = dealTerms.valuation;
+        updatedMaterials.add("deal_terms");
+      }
+      if (dealTerms.raiseType) {
+        updates.raiseType = dealTerms.raiseType;
+        updatedMaterials.add("deal_terms");
+      }
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await this.drizzle.db
+        .update(startup)
+        .set({
+          ...updates,
+          updatedAt: new Date(),
+        })
+        .where(eq(startup.id, startupId));
+    }
+
+    const refreshed = await this.loadScreeningFollowUpSnapshot(startupId);
+    if (!refreshed) {
+      return null;
+    }
+
+    const remainingMissing = detectMissingMaterials(refreshed);
+    const rerunPhase = hasUploadedAttachments || Boolean(deckAttachment)
+      ? PipelinePhase.EXTRACTION
+      : PipelinePhase.SCREENING;
+
+    let pipelineStarted = false;
+    if (remainingMissing.length === 0) {
+      try {
+        if (rerunPhase === PipelinePhase.EXTRACTION) {
+          await this.pipeline.prepareFreshAnalysis(startupId);
+        }
+        await this.pipeline.rerunFromPhase(startupId, rerunPhase);
+        pipelineStarted = true;
+        this.logger.log(
+          `[ClaraSubmission] Restarted startup ${startupId} from ${rerunPhase} after screening follow-up reply`,
+        );
+      } catch (error) {
+        const message = this.asMessage(error);
+        this.logger.warn(
+          `[ClaraSubmission] Unable to rerun startup ${startupId} from ${rerunPhase} after screening follow-up (${message})`,
+        );
+      }
+    }
+
+    return {
+      startupId,
+      startupName: refreshed.name,
+      updatedMaterials: Array.from(updatedMaterials),
+      remainingMissing,
+      pipelineStarted,
+      rerunPhase,
+    };
+  }
+
   async getMissingCriticalFieldsForStartup(
     startupId: string,
   ): Promise<Array<"website" | "stage">> {
@@ -868,6 +1047,196 @@ export class ClaraSubmissionService {
       .limit(1);
 
     return record ?? null;
+  }
+
+  private async loadScreeningFollowUpSnapshot(
+    startupId: string,
+  ): Promise<{
+    id: string;
+    userId: string;
+    name: string;
+    pitchDeckUrl: string | null;
+    pitchDeckPath: string | null;
+    productDescription: string | null;
+    description: string | null;
+    teamMembers: Array<{ name: string; role: string; linkedinUrl: string }> | null;
+    teamSize: number | null;
+    fundingTarget: number | null;
+    valuation: number | null;
+    raiseType: string | null;
+    website: string | null;
+  } | null> {
+    const [record] = await this.drizzle.db
+      .select({
+        id: startup.id,
+        userId: startup.userId,
+        name: startup.name,
+        pitchDeckUrl: startup.pitchDeckUrl,
+        pitchDeckPath: startup.pitchDeckPath,
+        productDescription: startup.productDescription,
+        description: startup.description,
+        teamMembers: startup.teamMembers,
+        teamSize: startup.teamSize,
+        fundingTarget: startup.fundingTarget,
+        valuation: startup.valuation,
+        raiseType: startup.raiseType,
+        website: startup.website,
+      })
+      .from(startup)
+      .where(eq(startup.id, startupId))
+      .limit(1);
+
+    return record ?? null;
+  }
+
+  private extractProductDescriptionFromReply(
+    text: string | null,
+  ): string | null {
+    if (!text) {
+      return null;
+    }
+
+    const stripped = text.trim();
+    if (stripped.length < 60) {
+      return null;
+    }
+
+    if (!/(?:\bproduct\b|\bplatform\b|\bsolution\b|\bwe build\b|\bwe're building\b|\bwhat we do\b|\babout\b)/i.test(stripped)) {
+      return null;
+    }
+
+    return stripped;
+  }
+
+  private normalizeReplyLine(line: string): string {
+    let cleaned = line.trim();
+    let previous = "";
+
+    do {
+      previous = cleaned;
+      cleaned = cleaned
+        .replace(/^>+\s*/, "")
+        .replace(/^\|\s*/, "")
+        .replace(/^(?:[-*•–—]|\d+[.)])\s+/, "")
+        .trim();
+    } while (cleaned !== previous);
+
+    return cleaned;
+  }
+
+  private extractTeamMembersFromReply(
+    text: string | null,
+  ): Array<{ name: string; role: string; linkedinUrl: string }> {
+    if (!text) {
+      return [];
+    }
+
+    const lines = text
+      .split(/\r?\n/)
+      .map((line) => this.normalizeReplyLine(line))
+      .filter((line) => line.length > 0);
+    if (lines.length === 0) {
+      return [];
+    }
+
+    const teamStart = lines.findIndex((line) =>
+      /^(?:team(?:\s+members?)?|founding team|leadership team|our team|core team)\b/i.test(
+        line,
+      ),
+    );
+    const candidateLines = teamStart >= 0 ? lines.slice(teamStart + 1) : lines;
+    const members: Array<{ name: string; role: string; linkedinUrl: string }> = [];
+
+    for (const line of candidateLines) {
+      if (/^(?:thanks|best|regards|cheers|sent from|--\s*|\w+\s+sent from)/i.test(line)) {
+        break;
+      }
+
+      const match = line.match(
+        /^([A-Za-z][A-Za-z0-9.'’&-]*(?:\s+[A-Za-z][A-Za-z0-9.'’&-]*){0,4})\s*(?:[:|,–—-]\s*|\s+as\s+)([A-Za-z][A-Za-z0-9/'’&+.-]*(?:\s+[A-Za-z][A-Za-z0-9/'’&+.-]*){0,4})$/,
+      );
+      if (!match) {
+        continue;
+      }
+
+      const name = match[1].trim();
+      const role = match[2].trim();
+      if (name.length < 2 || role.length < 2) {
+        continue;
+      }
+
+      members.push({ name, role, linkedinUrl: "" });
+      if (members.length >= 6) {
+        break;
+      }
+    }
+
+    return members;
+  }
+
+  private extractDealTermsFromReply(text: string | null): {
+    fundingTarget?: number;
+    valuation?: number;
+    raiseType?: RaiseType;
+  } {
+    if (!text) {
+      return {};
+    }
+
+    const normalized = text.replace(/,/g, "");
+    const fundingMatch = normalized.match(
+      /(?:funding|raise|seeking|raising|target|ask)[^\d$€£]{0,20}(?:[$€£]?\s*)(\d+(?:\.\d+)?)(\s*[kKmMbB])?/i,
+    );
+    const valuationMatch = normalized.match(
+      /(?:valuation|post-money|post money|pre-money|pre money)[^\d$€£]{0,20}(?:[$€£]?\s*)(\d+(?:\.\d+)?)(\s*[kKmMbB])?/i,
+    );
+    const raiseTypeMatch = normalized.match(
+      /\b(safe[-\s]?equity|safe|convertible note|equity|undecided)\b/i,
+    );
+
+    const parseAmount = (
+      match?: RegExpMatchArray | null,
+    ): number | undefined => {
+      if (!match) {
+        return undefined;
+      }
+      const base = Number(match[1]);
+      if (!Number.isFinite(base)) {
+        return undefined;
+      }
+      const suffix = match[2]?.trim().toLowerCase() ?? "";
+      const multiplier = suffix.startsWith("b")
+        ? 1_000_000_000
+        : suffix.startsWith("m")
+          ? 1_000_000
+          : suffix.startsWith("k")
+            ? 1_000
+            : 1;
+      return Math.round(base * multiplier);
+    };
+
+    return {
+      fundingTarget: parseAmount(fundingMatch),
+      valuation: parseAmount(valuationMatch),
+      raiseType: (() => {
+        const matched = raiseTypeMatch?.[1]?.trim().toLowerCase().replace(/\s+/g, " ");
+        switch (matched) {
+          case "safe equity":
+          case "safe-equity":
+            return RaiseType.SAFE_EQUITY;
+          case "safe":
+            return RaiseType.SAFE;
+          case "convertible note":
+            return RaiseType.CONVERTIBLE_NOTE;
+          case "equity":
+            return RaiseType.EQUITY;
+          case "undecided":
+            return RaiseType.UNDECIDED;
+          default:
+            return undefined;
+        }
+      })(),
+    };
   }
 
   private asMessage(error: unknown): string {

@@ -17,6 +17,7 @@ import type {
   EvaluationResult,
   ExtractionResult,
   ScrapingResult,
+  ScreeningResult,
 } from "../interfaces/phase-results.interface";
 import type {
   EvaluationAgentKey,
@@ -291,6 +292,95 @@ export class PipelineService {
       this.logger.warn(
         `Unable to send Clara missing-info request for startup ${startupId}: ${message}`,
       );
+    }
+  }
+
+  private async notifyClaraMissingMaterialsForScreening(
+    startupId: string,
+    missingMaterials: Array<"deck" | "product_description" | "team" | "deal_terms" | "website">,
+    options?: {
+      pipelineRunId?: string | null;
+    },
+  ): Promise<void> {
+    const clara = this.getClaraService();
+    if (!clara?.isEnabled()) {
+      this.logger.warn(
+        `[Pipeline] Clara screening follow-up notification skipped for startup ${startupId}: Clara is unavailable or disabled`,
+      );
+      return;
+    }
+
+    let startupLabel = `Startup ${startupId}`;
+    let startupOwnerUserId: string | null = null;
+    try {
+      const [startupRecord] = await this.drizzle.db
+        .select({
+          name: startup.name,
+          userId: startup.userId,
+        })
+        .from(startup)
+        .where(eq(startup.id, startupId))
+        .limit(1);
+      if (startupRecord) {
+        startupLabel = startupRecord.name ?? startupLabel;
+        startupOwnerUserId = startupRecord.userId ?? null;
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `[Pipeline] Failed to load startup owner for screening follow-up notification on ${startupId}: ${message}`,
+      );
+    }
+
+    try {
+      await clara.notifyScreeningMissingMaterials(startupId, missingMaterials, {
+        pipelineRunId: options?.pipelineRunId ?? null,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `Unable to send Clara screening follow-up for startup ${startupId}: ${message}`,
+      );
+      return;
+    }
+
+    if (!startupOwnerUserId) {
+      return;
+    }
+
+    const missingLabels = missingMaterials
+      .map((material) => this.humanizeScreeningMissingMaterial(material))
+      .filter((label): label is string => Boolean(label));
+    try {
+      await this.notifications.createAndBroadcast(
+        startupOwnerUserId,
+        `Clara needs missing materials: ${startupLabel}`,
+        `Clara emailed the startup contact and is waiting on: ${missingLabels.join(", ")}`,
+        NotificationType.WARNING,
+        `/admin/startup/${startupId}`,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `Unable to send in-app screening follow-up notification for startup ${startupId}: ${message}`,
+      );
+    }
+  }
+
+  private humanizeScreeningMissingMaterial(
+    material: "deck" | "product_description" | "team" | "deal_terms" | "website",
+  ): string {
+    switch (material) {
+      case "deck":
+        return "pitch deck / presentation";
+      case "product_description":
+        return "product description";
+      case "team":
+        return "team members and roles";
+      case "deal_terms":
+        return "deal terms";
+      case "website":
+        return "company website URL";
     }
   }
 
@@ -1345,6 +1435,10 @@ export class PipelineService {
       }
     }
 
+    if (phase === PipelinePhase.SCREENING) {
+      await this.applyScreeningGate(state);
+    }
+
     if (phase === PipelinePhase.EVALUATION) {
       await this.updatePipelineQualityFromEvaluation(state.startupId);
       await this.persistEvaluationSectionData(state.startupId);
@@ -1866,6 +1960,79 @@ export class PipelineService {
       .where(eq(pipelineRun.pipelineRunId, pipelineRunId));
   }
 
+  private normalizeScreeningMissingMaterials(
+    missingMaterials: ScreeningResult["missingMaterials"] | null | undefined,
+  ): Array<"deck" | "product_description" | "team" | "deal_terms" | "website"> {
+    return (
+      missingMaterials?.filter(
+        (material): material is
+          | "deck"
+          | "product_description"
+          | "team"
+          | "deal_terms"
+          | "website" =>
+          material === "deck" ||
+          material === "product_description" ||
+          material === "team" ||
+          material === "deal_terms" ||
+          material === "website",
+      ) ?? []
+    );
+  }
+
+  private async applyScreeningGate(state: PipelineState): Promise<void> {
+    const screening = (await this.pipelineState.getPhaseResult(
+      state.startupId,
+      PipelinePhase.SCREENING,
+    )) as ScreeningResult | null;
+
+    if (!screening?.classification || screening.classification === "advance") {
+      return;
+    }
+
+    const reasonCodes = screening.reasonCodes?.join(", ") || "screening_gate";
+    const reason = `Screening classified this deal as ${screening.classification}; downstream evaluation stopped (${reasonCodes}).`;
+
+    for (const downstreamPhase of [PipelinePhase.EVALUATION, PipelinePhase.SYNTHESIS]) {
+      const currentStatus = (await this.pipelineState.get(state.startupId))?.phases[
+        downstreamPhase
+      ]?.status;
+      if (!currentStatus || this.isPhaseStatusTerminal(currentStatus)) {
+        continue;
+      }
+
+      this.errorRecovery.clearPhaseTimeout(state.startupId, downstreamPhase);
+      await this.pipelineState.updatePhase(
+        state.startupId,
+        downstreamPhase,
+        PhaseStatus.SKIPPED,
+        reason,
+      );
+      await this.pipelineState.resetRetryCount(state.startupId, downstreamPhase);
+      await this.progressTracker.updatePhaseProgress({
+        startupId: state.startupId,
+        userId: state.userId,
+        pipelineRunId: state.pipelineRunId,
+        phase: downstreamPhase,
+        status: PhaseStatus.SKIPPED,
+        error: reason,
+      });
+    }
+
+    const missingMaterials = this.normalizeScreeningMissingMaterials(
+      screening.missingMaterials,
+    );
+    if (screening.classification === "review" && missingMaterials.length > 0) {
+      await this.notifyClaraMissingMaterialsForScreening(
+        state.startupId,
+        missingMaterials,
+        {
+          pipelineRunId: state.pipelineRunId,
+        },
+      );
+    }
+  }
+
   private async updatePipelineQualityFromEvaluation(
     startupId: string,
   ): Promise<void> {
@@ -2060,6 +2227,10 @@ export class PipelineService {
       return;
     }
 
+    const screeningHold = await this.resolveScreeningTerminalNotification(
+      startupId,
+    );
+
     const degradedCompletionReason =
       decision.degraded && !decision.blockedByRequiredFailure
         ? await this.resolveDegradedCompletionReason(startupId, lastError)
@@ -2096,10 +2267,16 @@ export class PipelineService {
           message: degradedReason,
         });
       }
-      this.notifyClaraSafely(startupId, {
-        pipelineRunId: refreshed.pipelineRunId,
-        warningMessage: degradedReason,
-      });
+      if (!screeningHold.shouldSkipClaraCompletionEmail) {
+        this.notifyClaraSafely(startupId, {
+          pipelineRunId: refreshed.pipelineRunId,
+          warningMessage: degradedReason,
+        });
+      } else {
+        this.logger.log(
+          `[Pipeline] Skipping Clara completion email for ${startupId} because screening requires follow-up (${screeningHold.missingMaterials.length > 0 ? `missing materials: ${screeningHold.missingMaterials.join(", ")}` : "manual review"})`,
+        );
+      }
       return;
     }
 
@@ -2137,11 +2314,17 @@ export class PipelineService {
           message: degradedCompletionReason,
         });
       }
-      this.notifyClaraSafely(startupId, {
-        overallScore: synthesisResult?.overallScore,
-        pipelineRunId: refreshed.pipelineRunId,
-        warningMessage: degradedCompletionReason,
-      });
+      if (!screeningHold.shouldSkipClaraCompletionEmail) {
+        this.notifyClaraSafely(startupId, {
+          overallScore: synthesisResult?.overallScore,
+          pipelineRunId: refreshed.pipelineRunId,
+          warningMessage: degradedCompletionReason,
+        });
+      } else {
+        this.logger.log(
+          `[Pipeline] Skipping Clara completion email for ${startupId} because screening requires follow-up (${screeningHold.missingMaterials.length > 0 ? `missing materials: ${screeningHold.missingMaterials.join(", ")}` : "manual review"})`,
+        );
+      }
       return;
     }
 
@@ -2165,20 +2348,36 @@ export class PipelineService {
     );
     await this.finalizeStartupAfterPipelineCompletion(startupId, refreshed.userId);
     if (shouldNotifyTerminal) {
-      await this.notifyPipelineLifecycle({
-        userId: refreshed.userId,
-        startupId,
-        type: NotificationType.SUCCESS,
-        title: "Analysis completed",
-        message: "AI pipeline analysis completed successfully.",
-      });
+      if (screeningHold.shouldSkipClaraCompletionEmail) {
+        if (screeningHold.actionNeededNotification) {
+          await this.notifyPipelineLifecycle({
+            userId: refreshed.userId,
+            startupId,
+            ...screeningHold.actionNeededNotification,
+          });
+        }
+      } else {
+        await this.notifyPipelineLifecycle({
+          userId: refreshed.userId,
+          startupId,
+          type: NotificationType.SUCCESS,
+          title: "Analysis completed",
+          message: "AI pipeline analysis completed successfully.",
+        });
+      }
     }
 
     // Notify Clara conversation if exists
-    this.notifyClaraSafely(startupId, {
-      overallScore: synthesisResult?.overallScore,
-      pipelineRunId: refreshed.pipelineRunId,
-    });
+    if (!screeningHold.shouldSkipClaraCompletionEmail) {
+      this.notifyClaraSafely(startupId, {
+        overallScore: synthesisResult?.overallScore,
+        pipelineRunId: refreshed.pipelineRunId,
+      });
+    } else {
+      this.logger.log(
+        `[Pipeline] Skipping Clara completion email for ${startupId} because screening requires follow-up (${screeningHold.missingMaterials.length > 0 ? `missing materials: ${screeningHold.missingMaterials.join(", ")}` : "manual review"})`,
+      );
+    }
   }
 
   private async resolveDegradedCompletionReason(
@@ -2243,6 +2442,70 @@ export class PipelineService {
     }
 
     return `Startup ${startupId}`;
+  }
+
+  private async resolveScreeningTerminalNotification(
+    startupId: string,
+  ): Promise<{
+    shouldSkipClaraCompletionEmail: boolean;
+    missingMaterials: Array<
+      "deck" | "product_description" | "team" | "deal_terms" | "website"
+    >;
+    actionNeededNotification?: {
+      type: NotificationType;
+      title: string;
+      message: string;
+    };
+  }> {
+    try {
+      const screening = (await this.pipelineState.getPhaseResult(
+        startupId,
+        PipelinePhase.SCREENING,
+      )) as ScreeningResult | null;
+      const missingMaterials = this.normalizeScreeningMissingMaterials(
+        screening?.missingMaterials,
+      );
+
+      if (screening?.classification !== "review") {
+        return {
+          shouldSkipClaraCompletionEmail: false,
+          missingMaterials,
+        };
+      }
+
+      if (missingMaterials.length > 0) {
+        return {
+          shouldSkipClaraCompletionEmail: true,
+          missingMaterials,
+          actionNeededNotification: {
+            type: NotificationType.WARNING,
+            title: "Analysis needs materials",
+            message:
+              "Screening paused the analysis because required materials are still missing.",
+          },
+        };
+      }
+
+      return {
+        shouldSkipClaraCompletionEmail: true,
+        missingMaterials,
+        actionNeededNotification: {
+          type: NotificationType.WARNING,
+          title: "Analysis needs manual review",
+          message:
+            "Screening paused the analysis for manual review before evaluation could complete.",
+        },
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `[Pipeline] Unable to inspect screening result before notifying Clara for startup ${startupId}: ${message}`,
+      );
+      return {
+        shouldSkipClaraCompletionEmail: false,
+        missingMaterials: [],
+      };
+    }
   }
 
   private notifyClaraSafely(

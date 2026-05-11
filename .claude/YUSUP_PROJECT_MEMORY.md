@@ -319,3 +319,56 @@ Two-layer:
 - Orval regen against a live backend — replace the interim manual hook in `frontend/src/lib/memo/` once `bun generate:api` is run, then delete the manual file.
 - Section history / diff view — out of scope (issue calls it explicitly out of scope).
 - Inline claim editing (DG-E1-F3-S1) will hook into the same `regenerateSection` AlertDialog confirm path — the `overwroteOperatorEdits` flag and the confirm-when-prior-regen check were designed with that successor story in mind.
+
+## 2026-05-11 — DG-E1-F3-S1: Inline claim edit with AI-suggested rewrite
+
+### What changed (issue #15, branch `feat/dg-e1-f3-s1-inline-claim-edit`, stacked on PR #19)
+
+Operators can now edit a memo section's narrative inline. The dialog opens with the current text, lets the partner type freely or hit "Suggest rewrite" to get up to 3 AI candidates that preserve the existing source set, and persists the accepted edit through the same JSON-merge path PR #19 introduced. No new tables, no new migrations.
+
+### Backend surface
+
+- `POST /startups/:startupId/memo/claims/rewrite` — pure suggestion endpoint. Body: `{ sectionKey, originalText, instruction?, sourceIds? }`. Response: `{ rewrites: { text, diff }[] }` (≤3). Does NOT persist. Lives on `MemoController`, same auth path as the regenerate endpoint (`PdfService.verifyAccess` + `RolesGuard{INVESTOR, ADMIN}`).
+- `POST /startups/:startupId/memo/sections/:sectionKey/apply-rewrite` — accept-flow endpoint. Body: `{ newContent, sources? }`. Persists through `MemoSectionRegenerationService.applyOperatorRewrite()`, which reuses the same `mergeSection()` logic the regenerate path already drives — other sections, executive summary, and DDAs survive untouched.
+
+### Reuse vs new code (the load-bearing part)
+
+- **`MemoSectionRegenerationService.applyOperatorRewrite()`** is the central reuse seam: it bypasses the model call but goes through the exact same merge + persistence pipeline as `regenerate()`. Same in-memory mutex map (now typed `Map<string, Promise<unknown>>` so it can track both flavors of in-flight work), same `overwroteOperatorEdits` semantics. Operator-curated `highlights` / `concerns` on the section survive the call by default — only the narrative `content` is replaced.
+- **Citation linkage**: when `options.sources` is omitted, the previous section's `sources` array is copied forward verbatim. This is the load-bearing invariant for DG-E1-F3-S1 — accept-rewrite is the operator-edit path for this sprint per the issue's "if no such path exists yet, scope an in-section narrative replace via the section regeneration endpoint" note.
+- New prompt key `memo.claim.rewrite` in `AI_PROMPT_KEYS` with system prompt anchored on "preserve cited sources; do not introduce uncited facts; tighten or rephrase only". Variables: `originalText`, `instruction`, `sourcesBlock`, `sectionTitle`.
+- Output budget: small Zod schema `{ rewrites: z.array({ text }).max(10) }` (we ask for up to 10, cap at 3 after filter). Configurable max output tokens via `AI_MEMO_CLAIM_REWRITE_MAX_OUTPUT_TOKENS` env (default 1000) — keeps P95 well under the issue's 8s target.
+
+### Source-preservation guard (server-side, best-effort)
+
+`preservesFactualMarkers(original, candidate)` in `memo-claim-rewrite.service.ts` filters out any rewrite whose factual markers (numbers, percentages, currency amounts, years, all-caps acronyms, multi-word proper nouns) include a marker not present in the original. Single-word capitalized tokens are forgiven against the original's case-insensitive word vocabulary so "in 2024" vs "In 2024" doesn't trip the filter. Stopword list covers common sentence-leading prepositions/connectives. Tested explicitly with named-entity injection ("Microsoft") and percentage injection ("140% NRR").
+
+### Frontend surface
+
+- `frontend/src/lib/memo/useClaimRewrite.ts` — paired hooks for the suggest + accept flows. Same `customFetch` mutator + invalidation pattern as `useRegenerateMemoSection.ts`. `useApplyClaimRewrite` invalidates `getStartupControllerGetEvaluationByIdQueryKey(startupId)` on success.
+- `frontend/src/components/startup-view/MemoClaimRewritePopover.tsx` — `Dialog` that opens with current section narrative pre-loaded, exposes an optional instruction input, renders up to 3 rewrite candidates with per-candidate "Use" and "Copy" actions, and a single "Save" that persists through the apply endpoint.
+- `frontend/src/components/MemoSection.tsx` — gained an optional `inlineEdit` prop (button + state-driven highlight). Coexists with existing `regenerateSection` and `adminFeedback` props.
+- `frontend/src/components/startup-view/MemoTabContent.tsx` — wires the edit dialog per section. State is owned at the tab level so opening one section's editor closes any other.
+
+### What's NOT in this PR
+
+- The selection-based floating toolbar from the issue spec — v1 ships a section-level edit affordance instead. Inline word-level selection capture is deferred; the spec's "AI suggest" trigger is fulfilled via the explicit "Suggest rewrite" button in the dialog.
+- Server-side `diff` computation — we return a minimal `diff` marker ("edit" / "") and let the frontend compute the visual diff if it ever surfaces one.
+- Per-rewrite copy + paste-into-textarea infrastructure — handled via `navigator.clipboard.writeText` and `setDraft` directly. No diff lib added.
+
+### Tests
+
+- `backend/src/modules/ai/tests/services/memo-claim-rewrite.service.spec.ts` — 15 cases including the issue's required 4: 3-candidate structure, 5-candidate cap-to-3, percentage-injection filter drop, empty-input `BadRequestException`. Plus: named-entity injection rejection, model-throws fallback, raw-text JSON parse fallback, verbatim-original dedupe, instruction propagation, all-candidates-fail-filter, and 5 direct `preservesFactualMarkers` cases.
+- `backend/src/modules/ai/tests/services/memo-section-regeneration.service.spec.ts` — 8 new cases under `describe("applyOperatorRewrite")`: persists without agent call, default source preservation, operator-curated highlights/concerns survive, explicit source override, no-touch other sections, `overwroteOperatorEdits` flag, 404 on unknown section, 404 on missing evaluation row, mutex blocks across regen + apply.
+- `backend/src/modules/ai/tests/memo.controller.spec.ts` — refactored to a shared `buildController` helper; 4 new tests covering both new endpoints' success paths and the 404 behavior on bad section keys.
+- `frontend/src/lib/memo/useClaimRewrite.test.ts` — 4 cases: suggest POST URL/body shape, suggest HTTP error propagation, apply POST URL/body shape (sectionKey routed to URL, NOT body), explicit sources override forwarded verbatim.
+
+Backend: 1879 pass / 101 fail vs baseline 1866 pass / 101 fail — net +13 passing tests, zero regressions. Frontend: 46 pass / 3 fail vs baseline 42 pass / 3 fail — net +4, zero regressions.
+
+### Stacked-on note
+
+This branch is stacked on PR #19 (`feat/dg-e1-f1-s2-memo-section-regen`). Open against `base=feat/dg-e1-f1-s2-memo-section-regen`. Once #19 merges, rebase / retarget to `dev`.
+
+### Follow-ups
+
+- Replace both manual hooks (`useRegenerateMemoSection.ts` and `useClaimRewrite.ts`) with Orval-generated versions after `bun generate:api` runs against a live backend with the new endpoints.
+- The selection-based floating toolbar can layer on top of the existing popover when there's appetite — `MemoClaimRewritePopover` already accepts `initialText` so a future selection-driven trigger just passes the highlighted substring instead of the full section content.

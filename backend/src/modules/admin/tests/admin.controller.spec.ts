@@ -246,6 +246,7 @@ describe('AdminController', () => {
             getMonitorList: jest.fn(),
             getMonitorDetail: jest.fn(),
             getCalibrationSummary: jest.fn(),
+            recomputeCalibrationSummary: jest.fn(),
           },
         },
       ],
@@ -329,49 +330,82 @@ describe('AdminController', () => {
   });
 
   describe('Investor Calibration Endpoints', () => {
-    const mockCalibration = {
-      totalDecisions: 4,
-      decisionsWithTriage: 3,
-      aligned: 1,
-      falsePositive: 1,
-      falseNegative: 1,
-      softMismatch: 0,
-      alignmentRate: 1 / 3,
-      topOverrideReasons: [
-        { reasonTag: 'pricing', count: 2 },
-        { reasonTag: 'team', count: 1 },
-      ],
-      recentMismatches: [
-        {
-          startupId: 'startup-1',
-          decidedAt: '2026-04-30T12:00:00.000Z',
-          mismatchType: 'false_positive',
-          modelVerdict: 'advance',
-          investorVerdict: 'pass',
-          reasonTags: ['pricing'],
-        },
-      ],
+    const mockSnapshotResponse = {
+      investorId: 'user-1',
+      status: 'completed' as const,
+      summary: {
+        totalDecisions: 4,
+        decisionsWithTriage: 3,
+        aligned: 1,
+        falsePositive: 1,
+        falseNegative: 1,
+        softMismatch: 0,
+        alignmentRate: 1 / 3,
+        topOverrideReasons: [
+          { reasonTag: 'pricing', count: 2 },
+          { reasonTag: 'team', count: 1 },
+        ],
+        recentMismatches: [
+          {
+            startupId: 'startup-1',
+            decidedAt: '2026-04-30T12:00:00.000Z',
+            mismatchType: 'false_positive',
+            modelVerdict: 'advance',
+            investorVerdict: 'pass',
+            reasonTags: ['pricing'],
+          },
+        ],
+      },
+      computedAt: '2026-05-01T12:00:00.000Z',
+      lastJobId: 'job-1',
+      lastError: null,
+      enqueuedAt: null,
     };
 
     describe('GET /admin/investors/:userId/calibration', () => {
-      it('should return the investor calibration summary', async () => {
-        adminInvestorService.getCalibrationSummary.mockResolvedValueOnce(mockCalibration as never);
+      it('should return the investor calibration snapshot', async () => {
+        adminInvestorService.getCalibrationSummary.mockResolvedValueOnce(mockSnapshotResponse as never);
 
         const result = await controller.getInvestorCalibrationSummary('user-1');
 
-        expect(result).toEqual(mockCalibration);
+        expect(result).toEqual(mockSnapshotResponse);
         expect(adminInvestorService.getCalibrationSummary).toHaveBeenCalledWith('user-1');
       });
     });
 
     describe('POST /admin/investors/:userId/calibration/recompute', () => {
-      it('should manually recompute the investor calibration summary', async () => {
-        adminInvestorService.getCalibrationSummary.mockResolvedValueOnce(mockCalibration as never);
+      it('should enqueue a recompute job and return job state', async () => {
+        const recomputePayload = {
+          investorId: 'user-1',
+          jobId: 'calibration-recompute:user-1:123',
+          status: 'queued' as const,
+          dedupedToExistingJob: false,
+        };
+        adminInvestorService.recomputeCalibrationSummary.mockResolvedValueOnce(
+          recomputePayload as never,
+        );
 
         const result = await controller.recomputeInvestorCalibrationSummary('user-1');
 
-        expect(result).toEqual(mockCalibration);
-        expect(adminInvestorService.getCalibrationSummary).toHaveBeenCalledWith('user-1');
+        expect(result).toEqual(recomputePayload);
+        expect(adminInvestorService.recomputeCalibrationSummary).toHaveBeenCalledWith('user-1');
+      });
+
+      it('returns the in-flight job id when a recompute is deduped', async () => {
+        const recomputePayload = {
+          investorId: 'user-1',
+          jobId: 'calibration-recompute:user-1:123',
+          status: 'in_progress' as const,
+          dedupedToExistingJob: true,
+        };
+        adminInvestorService.recomputeCalibrationSummary.mockResolvedValueOnce(
+          recomputePayload as never,
+        );
+
+        const result = await controller.recomputeInvestorCalibrationSummary('user-1');
+
+        expect(result.dedupedToExistingJob).toBe(true);
+        expect(result.status).toBe('in_progress');
       });
     });
   });

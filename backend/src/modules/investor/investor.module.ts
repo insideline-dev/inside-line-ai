@@ -1,6 +1,7 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { DatabaseModule } from '../../database';
 import { QueueModule } from '../../queue';
+import { NotificationModule } from '../../notification/notification.module';
 import { AdminModule } from '../admin';
 import { AiModule } from '../ai';
 import { StartupModule } from '../startup/startup.module';
@@ -15,6 +16,8 @@ import { MessagingService } from './messaging.service';
 import { ScoringPreferencesService } from './scoring-preferences.service';
 import { DealDecisionService } from './deal-decision.service';
 import { CalibrationService } from './calibration.service';
+import { CalibrationRecomputeService } from './calibration-recompute.service';
+import { CalibrationRecomputeProcessor } from './calibration-recompute.processor';
 import {
   InvestorController,
   InvestorTeamPublicController,
@@ -24,7 +27,8 @@ import {
   imports: [
     DatabaseModule,
     QueueModule,
-    AdminModule,
+    NotificationModule,
+    forwardRef(() => AdminModule),
     AiModule,
     StartupModule,
     forwardRef(() => InvestorOnboardingModule),
@@ -41,6 +45,8 @@ import {
     ScoringPreferencesService,
     DealDecisionService,
     CalibrationService,
+    CalibrationRecomputeService,
+    CalibrationRecomputeProcessor,
   ],
   exports: [
     ThesisService,
@@ -52,6 +58,7 @@ import {
     MessagingService,
     ScoringPreferencesService,
     DealDecisionService,
+    CalibrationRecomputeService,
   ],
 })
 export class InvestorModule {}

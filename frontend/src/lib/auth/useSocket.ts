@@ -120,7 +120,7 @@ export interface AgentProgressEvent {
 
 // ── Hooks ────────────────────────────────────────────────────────────
 
-function useSocket(): Socket | null {
+export function useSocket(): Socket | null {
   const [socket, setSocket] = useState<Socket | null>(null);
   const { data: user } = useCurrentUser();
 

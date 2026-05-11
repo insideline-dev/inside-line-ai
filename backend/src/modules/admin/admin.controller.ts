@@ -81,6 +81,8 @@ import {
   UpdatePipelineFlowConfigDto,
   PipelineFlowConfigResponseDto,
   PipelineFlowConfigListResponseDto,
+  CalibrationSnapshotResponseDto,
+  RecomputeCalibrationResponseDto,
 } from './dto';
 import { GetStartupsQueryDto } from '../startup/dto';
 
@@ -154,15 +156,20 @@ export class AdminController {
   }
 
   @Get('investors/:userId/calibration')
-  @ApiOperation({ summary: 'Get investor calibration summary (screening vs. verdict deltas)' })
+  @ApiOperation({ summary: 'Get investor calibration snapshot (cached summary + last job state)' })
+  @ApiResponse({ status: 200, type: CalibrationSnapshotResponseDto })
   async getInvestorCalibrationSummary(@Param('userId', ParseUUIDPipe) userId: string) {
     return this.adminInvestorService.getCalibrationSummary(userId);
   }
 
   @Post('investors/:userId/calibration/recompute')
-  @ApiOperation({ summary: 'Manually recompute an investor calibration summary' })
+  @ApiOperation({
+    summary:
+      'Enqueue a BullMQ job to recompute an investor calibration snapshot (in-flight requests within 10s are deduped)',
+  })
+  @ApiResponse({ status: 201, type: RecomputeCalibrationResponseDto })
   async recomputeInvestorCalibrationSummary(@Param('userId', ParseUUIDPipe) userId: string) {
-    return this.adminInvestorService.getCalibrationSummary(userId);
+    return this.adminInvestorService.recomputeCalibrationSummary(userId);
   }
 
   // ============ INTEGRATIONS & CONFIG ENDPOINTS ============

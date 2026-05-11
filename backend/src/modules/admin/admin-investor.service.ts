@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException, forwardRef } from '@nestjs/common';
 import { eq, desc, sql } from 'drizzle-orm';
 import { DrizzleService } from '../../database';
 import { user, UserRole } from '../../auth/entities/auth.schema';
@@ -9,12 +9,19 @@ import {
   investorScoringPreference,
 } from '../investor/entities/investor.schema';
 import { startup } from '../startup/entities/startup.schema';
-import { summarizeCalibrationRows, type CalibrationSummary } from '../investor/calibration.service';
-import { investorDealDecision } from '../investor/entities/investor-deal-decision.schema';
+import {
+  CalibrationRecomputeService,
+  type CalibrationSnapshotResponse,
+  type RecomputeCalibrationResponse,
+} from '../investor/calibration-recompute.service';
 
 @Injectable()
 export class AdminInvestorService {
-  constructor(private drizzle: DrizzleService) {}
+  constructor(
+    private drizzle: DrizzleService,
+    @Inject(forwardRef(() => CalibrationRecomputeService))
+    private readonly calibrationRecompute: CalibrationRecomputeService,
+  ) {}
 
   async listInvestors() {
     const investors = await this.drizzle.db
@@ -119,18 +126,15 @@ export class AdminInvestorService {
     };
   }
 
-  async getCalibrationSummary(userId: string): Promise<CalibrationSummary> {
-    const rows = await this.drizzle.db
-      .select({
-        verdict: investorDealDecision.verdict,
-        triage: investorDealDecision.triageClassificationAtDecision,
-        reasonTags: investorDealDecision.reasonTags,
-        startupId: investorDealDecision.startupId,
-        decidedAt: investorDealDecision.decidedAt,
-      })
-      .from(investorDealDecision)
-      .where(eq(investorDealDecision.investorId, userId));
+  async getCalibrationSummary(
+    userId: string,
+  ): Promise<CalibrationSnapshotResponse> {
+    return this.calibrationRecompute.getSnapshot(userId);
+  }
 
-    return summarizeCalibrationRows(rows);
+  async recomputeCalibrationSummary(
+    userId: string,
+  ): Promise<RecomputeCalibrationResponse> {
+    return this.calibrationRecompute.enqueueRecompute(userId);
   }
 }

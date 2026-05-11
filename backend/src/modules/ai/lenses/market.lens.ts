@@ -12,6 +12,7 @@ import { BaseLensAgent } from "./base-lens.agent";
 @Injectable()
 export class MarketLens extends BaseLensAgent<MarketLensOutput> {
   readonly key = "market" as const;
+  readonly version = "1" as const;
   readonly description =
     "Fast first-pass screen on whether a startup is operating in a venture-scale market.";
   readonly promptKey = "lens.market" as const;

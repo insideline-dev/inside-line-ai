@@ -12,6 +12,7 @@ import { BaseLensAgent } from "./base-lens.agent";
 @Injectable()
 export class TractionLens extends BaseLensAgent<TractionLensOutput> {
   readonly key = "traction" as const;
+  readonly version = "1" as const;
   readonly description =
     "Fast first-pass screen on demand signal, momentum, and traction quality.";
   readonly promptKey = "lens.traction" as const;

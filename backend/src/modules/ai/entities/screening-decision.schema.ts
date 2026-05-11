@@ -33,6 +33,17 @@ export interface ScreeningDecisionLensSnapshot {
  * a DB migration; bump it in the service when the rule set changes so old
  * decisions remain interpretable.
  */
+/**
+ * Active lens versions at the time a decision was made (DS-E2-F1-S2).
+ * Persisted as JSONB so historical decisions are replayable on the exact
+ * lens versions that produced them — flipping `LENS_ACTIVE_VERSION_TEAM`
+ * later doesn't rewrite history.
+ *
+ * Shape: `{ market: '1', team: '1', traction: '1' }` — keys are logical
+ * lens keys, values are the lens-class version string.
+ */
+export type ScreeningDecisionLensVersions = Record<string, string>;
+
 export const screeningDecision = pgTable(
   "screening_decision",
   {
@@ -54,6 +65,14 @@ export const screeningDecision = pgTable(
       .$type<ScreeningDecisionLensSnapshot[]>()
       .notNull()
       .default([]),
+    /**
+     * Active lens versions at decision time. DS-E2-F1-S2 — empty object on
+     * pre-S2 rows; new rows always include every active lens key.
+     */
+    lensVersions: jsonb("lens_versions")
+      .$type<ScreeningDecisionLensVersions>()
+      .notNull()
+      .default({}),
     policyVersion: integer("policy_version").notNull().default(1),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()

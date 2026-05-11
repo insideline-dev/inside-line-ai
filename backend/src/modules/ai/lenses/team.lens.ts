@@ -12,6 +12,7 @@ import { BaseLensAgent } from "./base-lens.agent";
 @Injectable()
 export class TeamLens extends BaseLensAgent<TeamLensOutput> {
   readonly key = "team" as const;
+  readonly version = "1" as const;
   readonly description =
     "Fast first-pass screen on founder/operator quality and team coverage.";
   readonly promptKey = "lens.team" as const;

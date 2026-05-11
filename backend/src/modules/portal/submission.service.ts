@@ -3,6 +3,9 @@ import {
   Logger,
   NotFoundException,
   ForbiddenException,
+  ConflictException,
+  HttpException,
+  HttpStatus,
 } from '@nestjs/common';
 import { eq, and, desc, sql } from 'drizzle-orm';
 import { DrizzleService } from '../../database';
@@ -14,11 +17,15 @@ import {
   PortalSubmission,
   PortalSubmissionStatus,
   portal,
+  portalSubmissionAudit,
+  PortalSubmissionAuditOutcome,
+  PortalLinkIntegrity,
 } from './entities';
 import { startup, StartupStatus } from '../startup/entities/startup.schema';
 import { deriveStartupGeography } from '../geography';
 import {
   findCanonicalStartupDuplicate,
+  normalizeScreeningCompanyNameForDuplicateMatching,
   normalizeScreeningIntakeCandidate,
 } from '../startup/screening-intake-normalization';
 import { SubmitToPortal, GetSubmissionsQuery } from './dto';
@@ -26,6 +33,25 @@ import { NotificationType } from '../../notification/entities';
 import { PipelineService } from '../ai/services/pipeline.service';
 import { AiConfigService } from '../ai/services/ai-config.service';
 import { StartupMatchingPipelineService } from '../ai/services/startup-matching-pipeline.service';
+import { SubmissionRateLimitService } from './submission-rate-limit.service';
+import { hashFounderEmail } from './utils/submission-canonical';
+
+export interface PublicSubmissionContext {
+  /**
+   * Client IP harvested from `@Ip()` / `X-Forwarded-For`. `null` when called
+   * from a context with no HTTP request (e.g. Clara, admin import, tests).
+   */
+  ipAddress: string | null;
+}
+
+export interface PublicSubmissionResult {
+  outcome: PortalSubmissionAuditOutcome;
+  submission: PortalSubmission | null;
+  /** Audit row id so admins / future client can cross-reference. */
+  auditId: string | null;
+  /** Human-readable explanation for blocked outcomes. */
+  message?: string;
+}
 
 @Injectable()
 export class SubmissionService {
@@ -39,6 +65,7 @@ export class SubmissionService {
     private aiPipeline: PipelineService,
     private aiConfig: AiConfigService,
     private startupMatching: StartupMatchingPipelineService,
+    private rateLimit: SubmissionRateLimitService,
   ) {}
 
   private generateSlug(name: string): string {
@@ -48,10 +75,24 @@ export class SubmissionService {
       .replace(/^-+|-+$/g, '');
   }
 
+  /**
+   * Public-portal submission entry point. Order of operations:
+   *
+   *   1. Resolve the portal row (404 if missing, 403 if disabled).
+   *   2. Run abuse-prevention checks (per-IP burst, per-email rate limit,
+   *      canonical-name dedupe window). Each check writes an audit row.
+   *   3. On allow: create startup + portal submission, fire the AI pipeline,
+   *      record an `accepted` audit row.
+   *
+   * Returns a `PublicSubmissionResult` so the controller / future clients can
+   * see the outcome enum even on the happy path (useful for admin debugging
+   * and Orval-generated typings).
+   */
   async create(
     portalId: string,
     dto: SubmitToPortal,
-  ): Promise<PortalSubmission> {
+    context: PublicSubmissionContext = { ipAddress: null },
+  ): Promise<PublicSubmissionResult> {
     const [portalData] = await this.drizzle.db
       .select()
       .from(portal)
@@ -66,19 +107,79 @@ export class SubmissionService {
       throw new ForbiddenException('Portal is not accepting submissions');
     }
 
-    let foundUser;
-    if (dto.founderEmail) {
-      foundUser = await this.userAuth.findUserByEmail(dto.founderEmail);
-      if (!foundUser) {
-        foundUser = await this.userAuth.createUser({
-          email: dto.founderEmail,
-          name: dto.founderName || dto.founderEmail.split('@')[0],
-          emailVerified: false,
-        });
-        this.logger.log(`Created new user for founder ${dto.founderEmail}`);
-      }
-    } else {
+    if (!dto.founderEmail) {
       throw new ForbiddenException('Founder email is required');
+    }
+
+    const founderEmail = dto.founderEmail;
+    const founderEmailHash = hashFounderEmail(founderEmail);
+    const normalizedCompanyName = normalizeScreeningCompanyNameForDuplicateMatching(
+      dto.name,
+    );
+
+    // Abuse-prevention gate runs BEFORE normalization/dedupe so we never
+    // create a user or hit the canonical lookup for a rate-limited attempt.
+    // Failures still get an audit row written so we can investigate later.
+    const decision = await this.rateLimit.checkAttempt({
+      portalId,
+      linkIntegrity: portalData.linkIntegrity as PortalLinkIntegrity,
+      founderEmailHash,
+      ipAddress: context.ipAddress,
+      normalizedCompanyName,
+    });
+
+    if (decision.kind === 'rate_limited') {
+      const audit = await this.rateLimit.recordOutcome({
+        portalId,
+        founderEmail,
+        founderEmailHash,
+        ipAddress: context.ipAddress,
+        submittedCompanyName: dto.name,
+        normalizedCompanyName,
+        outcome: PortalSubmissionAuditOutcome.RATE_LIMITED,
+        startupId: null,
+      });
+      throw new HttpException(
+        {
+          statusCode: HttpStatus.TOO_MANY_REQUESTS,
+          message: decision.message,
+          outcome: PortalSubmissionAuditOutcome.RATE_LIMITED,
+          auditId: audit?.id ?? null,
+          retryAfterSeconds: decision.retryAfterSeconds,
+        },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    if (decision.kind === 'duplicate_within_window') {
+      const audit = await this.rateLimit.recordOutcome({
+        portalId,
+        founderEmail,
+        founderEmailHash,
+        ipAddress: context.ipAddress,
+        submittedCompanyName: dto.name,
+        normalizedCompanyName,
+        outcome: PortalSubmissionAuditOutcome.DUPLICATE_WITHIN_WINDOW,
+        startupId: decision.matchedStartupId,
+      });
+      throw new ConflictException({
+        statusCode: HttpStatus.CONFLICT,
+        message: decision.message,
+        outcome: PortalSubmissionAuditOutcome.DUPLICATE_WITHIN_WINDOW,
+        auditId: audit?.id ?? null,
+        matchedStartupId: decision.matchedStartupId,
+      });
+    }
+
+    // Allow path — proceed with dev's canonical normalization + dedupe.
+    let foundUser = await this.userAuth.findUserByEmail(founderEmail);
+    if (!foundUser) {
+      foundUser = await this.userAuth.createUser({
+        email: founderEmail,
+        name: dto.founderName || founderEmail.split('@')[0],
+        emailVerified: false,
+      });
+      this.logger.log(`Created new user for founder ${founderEmail}`);
     }
 
     const normalizedStartup = normalizeScreeningIntakeCandidate(dto);
@@ -154,6 +255,19 @@ export class SubmissionService {
       };
     });
 
+    const audit = await this.rateLimit.recordOutcome({
+      portalId,
+      founderEmail,
+      founderEmailHash,
+      ipAddress: context.ipAddress,
+      submittedCompanyName: dto.name,
+      normalizedCompanyName,
+      outcome: PortalSubmissionAuditOutcome.ACCEPTED,
+      startupId: result.startupId,
+    });
+
+    // Only kick off the pipeline for genuinely new startups. Reused-duplicate
+    // links should not re-trigger a full analysis on the canonical record.
     if (!result.reusedDuplicate) {
       if (this.aiConfig.isPipelineEnabled()) {
         await this.aiPipeline.startPipeline(result.startupId, result.startupUserId);
@@ -175,7 +289,12 @@ export class SubmissionService {
     this.logger.log(
       `Created submission ${result.submission.id} to portal ${portalId} from ${foundUser.email}${result.reusedDuplicate ? ' (linked existing startup)' : ' and started analysis'}`,
     );
-    return result.submission;
+
+    return {
+      outcome: PortalSubmissionAuditOutcome.ACCEPTED,
+      submission: result.submission,
+      auditId: audit?.id ?? null,
+    };
   }
 
   async findAll(portalId: string, userId: string, query: GetSubmissionsQuery) {
@@ -328,5 +447,50 @@ export class SubmissionService {
       this.logger.log(`Rejected submission ${submissionId}`);
       return updated;
     });
+  }
+
+  /**
+   * Admin read-only view of the public portal abuse audit log. Filtered to
+   * one portal so an admin investigating a specific portal sees only its
+   * attempts.
+   */
+  async listAudit(
+    portalId: string,
+    options: { since?: Date; limit?: number } = {},
+  ): Promise<
+    {
+      id: string;
+      portalId: string;
+      founderEmail: string | null;
+      ipAddress: string | null;
+      submittedCompanyName: string | null;
+      normalizedCompanyName: string | null;
+      outcome: string;
+      startupId: string | null;
+      createdAt: Date;
+    }[]
+  > {
+    const { since, limit = 100 } = options;
+    const conditions = [eq(portalSubmissionAudit.portalId, portalId)];
+    if (since) {
+      conditions.push(sql`${portalSubmissionAudit.createdAt} >= ${since}`);
+    }
+    const rows = await this.drizzle.db
+      .select({
+        id: portalSubmissionAudit.id,
+        portalId: portalSubmissionAudit.portalId,
+        founderEmail: portalSubmissionAudit.founderEmail,
+        ipAddress: portalSubmissionAudit.ipAddress,
+        submittedCompanyName: portalSubmissionAudit.submittedCompanyName,
+        normalizedCompanyName: portalSubmissionAudit.normalizedCompanyName,
+        outcome: portalSubmissionAudit.outcome,
+        startupId: portalSubmissionAudit.startupId,
+        createdAt: portalSubmissionAudit.createdAt,
+      })
+      .from(portalSubmissionAudit)
+      .where(and(...conditions))
+      .orderBy(desc(portalSubmissionAudit.createdAt))
+      .limit(limit);
+    return rows;
   }
 }

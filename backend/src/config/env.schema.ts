@@ -215,6 +215,22 @@ export const envSchema = z.object({
   AI_SYNTHESIS_AGENT_HARD_TIMEOUT_MS: z.coerce.number().default(10800000),
   AI_EXTRACTION_MAX_TEXT_CHARS: z.coerce.number().default(180000),
   AI_EXTRACTION_MAX_PDF_BYTES: z.coerce.number().default(104857600),
+
+  // Public portal abuse-prevention thresholds (DS-E1-F7-S1)
+  // Per-IP burst limit on the public apply endpoint. Trips a 429 with
+  // Retry-After.
+  PORTAL_RATE_LIMIT_IP_PER_5MIN: z.coerce.number().int().positive().default(10),
+  // Per-portal-per-founder-email cap inside the dedupe window. Only enforced
+  // when `linkIntegrity = 'strict'`.
+  PORTAL_RATE_LIMIT_EMAIL_PER_30D: z.coerce.number().int().positive().default(5),
+  // Dedupe window for canonical-name + per-email checks (days).
+  PORTAL_DEDUPE_WINDOW_DAYS: z.coerce.number().int().positive().default(30),
+  // IP burst window (seconds). Default 300s == 5 minutes.
+  PORTAL_RATE_LIMIT_IP_WINDOW_SECONDS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(300),
 }).superRefine((env, ctx) => {
   if (env.NODE_ENV === "production" && !env.QUEUE_PREFIX) {
     ctx.addIssue({

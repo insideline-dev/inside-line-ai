@@ -3,7 +3,13 @@ import { PortalController } from '../portal.controller';
 import { PortalService } from '../portal.service';
 import { SubmissionService } from '../submission.service';
 import { UserRole } from '../../../auth/entities/auth.schema';
-import { PortalSubmissionStatus } from '../entities';
+import {
+  PortalLinkIntegrity,
+  PortalSubmissionAuditOutcome,
+  PortalSubmissionStatus,
+} from '../entities';
+import { HttpException, HttpStatus } from '@nestjs/common';
+import type { Request, Response } from 'express';
 import { StartupStage } from '../../startup/entities/startup.schema';
 
 type User = {
@@ -38,8 +44,18 @@ describe('PortalController', () => {
     logoUrl: 'https://example.com/logo.png',
     brandColor: '#FF0000',
     isActive: true,
+    linkIntegrity: PortalLinkIntegrity.STANDARD,
     createdAt: new Date(),
     updatedAt: new Date(),
+  };
+
+  const buildExpressMocks = (xff?: string) => {
+    const req = {
+      headers: xff ? { 'x-forwarded-for': xff } : {},
+    } as unknown as Request;
+    const setHeader = jest.fn();
+    const res = { setHeader } as unknown as Response;
+    return { req, res, setHeader };
   };
 
   const mockSubmission = {
@@ -72,6 +88,7 @@ describe('PortalController', () => {
             findAll: jest.fn(),
             approve: jest.fn(),
             reject: jest.fn(),
+            listAudit: jest.fn(),
           },
         },
       ],
@@ -246,31 +263,88 @@ describe('PortalController', () => {
   });
 
   describe('submitToPortal (public)', () => {
-    it('should submit startup to portal', async () => {
+    const dto = {
+      name: 'Test Startup',
+      tagline: 'A revolutionary startup',
+      description:
+        'This is a test startup description that is long enough to pass validation requirements.',
+      website: 'https://startup.com',
+      location: 'San Francisco',
+      industry: 'SaaS',
+      stage: StartupStage.SEED,
+      fundingTarget: 1000000,
+      teamSize: 5,
+      founderEmail: 'founder@startup.com',
+    };
+
+    it('should submit startup to portal and forward client IP', async () => {
       portalService.findBySlug.mockResolvedValue(mockPortal);
-      submissionService.create.mockResolvedValue(mockSubmission);
-
-      const dto = {
-        name: 'Test Startup',
-        tagline: 'A revolutionary startup',
-        description: 'This is a test startup description that is long enough to pass validation requirements.',
-        website: 'https://startup.com',
-        location: 'San Francisco',
-        industry: 'SaaS',
-        stage: StartupStage.SEED,
-        fundingTarget: 1000000,
-        teamSize: 5,
-        founderEmail: 'founder@startup.com',
+      const result = {
+        outcome: PortalSubmissionAuditOutcome.ACCEPTED,
+        submission: mockSubmission,
+        auditId: 'audit-1',
       };
+      submissionService.create.mockResolvedValue(result);
 
-      const result = await controller.submitToPortal('acme-ventures', dto);
+      const { req, res } = buildExpressMocks('203.0.113.5, 10.0.0.1');
+      const got = await controller.submitToPortal(
+        'acme-ventures',
+        dto,
+        '10.0.0.1',
+        req,
+        res,
+      );
 
-      expect(result).toEqual(mockSubmission);
+      expect(got).toEqual(result);
       expect(portalService.findBySlug).toHaveBeenCalledWith('acme-ventures');
       expect(submissionService.create).toHaveBeenCalledWith(
         mockPortal.id,
         dto,
+        { ipAddress: '203.0.113.5' },
       );
+    });
+
+    it('sets Retry-After on 429 responses', async () => {
+      portalService.findBySlug.mockResolvedValue(mockPortal);
+      submissionService.create.mockRejectedValue(
+        new HttpException(
+          {
+            statusCode: HttpStatus.TOO_MANY_REQUESTS,
+            message: 'slow down',
+            retryAfterSeconds: 300,
+          },
+          HttpStatus.TOO_MANY_REQUESTS,
+        ),
+      );
+
+      const { req, res, setHeader } = buildExpressMocks();
+      await expect(
+        controller.submitToPortal('acme-ventures', dto, '1.1.1.1', req, res),
+      ).rejects.toBeInstanceOf(HttpException);
+      expect(setHeader).toHaveBeenCalledWith('Retry-After', '300');
+    });
+  });
+
+  describe('listSubmissionAudit', () => {
+    it('returns audit rows when caller owns the portal', async () => {
+      portalService.findOne.mockResolvedValue(mockPortal);
+      submissionService.listAudit.mockResolvedValue([]);
+      const result = await controller.listSubmissionAudit(
+        mockUser,
+        mockPortal.id,
+      );
+      expect(result).toEqual([]);
+      expect(portalService.findOne).toHaveBeenCalledWith(
+        mockPortal.id,
+        mockUser.id,
+      );
+    });
+
+    it('rejects malformed since', async () => {
+      portalService.findOne.mockResolvedValue(mockPortal);
+      await expect(
+        controller.listSubmissionAudit(mockUser, mockPortal.id, 'not-a-date'),
+      ).rejects.toBeInstanceOf(HttpException);
     });
   });
 });

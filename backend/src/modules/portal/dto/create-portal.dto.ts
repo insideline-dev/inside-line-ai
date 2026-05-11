@@ -1,5 +1,6 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
+import { PortalLinkIntegrity } from '../entities';
 
 export const slugSchema = z
   .string()
@@ -17,6 +18,10 @@ export const CreatePortalSchema = z.object({
   description: z.string().min(1).max(1000),
   logoUrl: z.string().url().optional(),
   brandColor: brandColorSchema,
+  /**
+   * Abuse-prevention posture. Defaults to `standard` server-side if omitted.
+   */
+  linkIntegrity: z.nativeEnum(PortalLinkIntegrity).optional(),
 });
 
 export type CreatePortal = z.infer<typeof CreatePortalSchema>;

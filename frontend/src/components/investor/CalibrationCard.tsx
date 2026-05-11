@@ -8,11 +8,28 @@
 // Hidden when the investor has fewer than MIN_DECISIONS verdicts on
 // file — small samples are too noisy to surface as a stat.
 
+import { useState } from "react";
 import { useInvestorControllerGetCalibration } from "@/api/generated/investor/investor";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { GaugeCircle, AlertCircle, ThumbsUp, TrendingDown, TrendingUp } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  GaugeCircle,
+  AlertCircle,
+  ThumbsUp,
+  TrendingDown,
+  TrendingUp,
+  Lightbulb,
+  Check,
+  X,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  useCalibrationProposals,
+  useApproveCalibrationProposal,
+  useRejectCalibrationProposal,
+  type CalibrationProposal,
+} from "@/lib/calibration/useCalibration";
 
 interface CalibrationStats {
   totalDecisions: number;
@@ -82,6 +99,10 @@ export function CalibrationCard({ className }: CalibrationCardProps) {
   const stats = unwrap<CalibrationStats>(data) ?? null;
 
   // Hide entirely while loading OR until we have meaningful sample size.
+  // The proposals panel renders on the same card surface; if the parent
+  // card is hidden the panel hides with it (a proposal is only ever
+  // emitted after the same sample threshold is crossed by the recompute,
+  // so this stays self-consistent).
   if (isLoading || !stats || stats.decisionsWithTriage < MIN_DECISIONS) {
     return null;
   }
@@ -156,8 +177,137 @@ export function CalibrationCard({ className }: CalibrationCardProps) {
               : ""}
           </p>
         )}
+
+        <CalibrationProposalsPanel />
       </CardContent>
     </Card>
+  );
+}
+
+// DS-E11-F3-S1 — proposal review surface. Surfaces the latest pending
+// proposals emitted by the recompute job and lets the investor accept
+// or reject them. Approve/reject are HTTP-only round-trips; the WS
+// event re-invalidates the list on creation so newly emitted proposals
+// appear without a refresh.
+function CalibrationProposalsPanel() {
+  const { data: proposals, isLoading } = useCalibrationProposals("pending");
+  const approve = useApproveCalibrationProposal();
+  const reject = useRejectCalibrationProposal();
+  const [reasonByProposal, setReasonByProposal] = useState<
+    Record<string, string>
+  >({});
+
+  if (isLoading) return null;
+  const pending = proposals ?? [];
+  if (pending.length === 0) return null;
+
+  return (
+    <div className="mt-4 rounded-md border border-amber-300/60 bg-amber-50/50 p-3" data-testid="calibration-suggestions">
+      <div className="mb-2 flex items-center gap-2 text-xs font-medium text-amber-900">
+        <Lightbulb className="h-3.5 w-3.5" />
+        Calibration suggestions ({pending.length})
+      </div>
+      <ul className="flex flex-col gap-3">
+        {pending.map((proposal) => (
+          <ProposalRow
+            key={proposal.id}
+            proposal={proposal}
+            isBusy={approve.isPending || reject.isPending}
+            reason={reasonByProposal[proposal.id] ?? ""}
+            onReasonChange={(value) =>
+              setReasonByProposal((prev) => ({ ...prev, [proposal.id]: value }))
+            }
+            onApprove={() => approve.mutate(proposal.id)}
+            onReject={() =>
+              reject.mutate({
+                proposalId: proposal.id,
+                reason:
+                  reasonByProposal[proposal.id]?.trim() || undefined,
+              })
+            }
+          />
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function ProposalRow({
+  proposal,
+  isBusy,
+  reason,
+  onReasonChange,
+  onApprove,
+  onReject,
+}: {
+  proposal: CalibrationProposal;
+  isBusy: boolean;
+  reason: string;
+  onReasonChange: (next: string) => void;
+  onApprove: () => void;
+  onReject: () => void;
+}) {
+  const { suggestedDelta, evidence } = proposal;
+  return (
+    <li className="rounded-md border bg-white/60 p-3 text-xs" data-testid={`calibration-proposal-${proposal.id}`}>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="flex-1 min-w-0">
+          {suggestedDelta.lensAdjustments.length > 0 && (
+            <p className="font-medium text-foreground">
+              Lens nudges:&nbsp;
+              {suggestedDelta.lensAdjustments
+                .map((a) => `${a.lensKey} ${a.adjustment > 0 ? "+" : ""}${a.adjustment}`)
+                .join(", ")}
+            </p>
+          )}
+          {suggestedDelta.overrideTagFocus.length > 0 && (
+            <p className="mt-1 text-muted-foreground">
+              Focus reasons:&nbsp;
+              {suggestedDelta.overrideTagFocus.map((tag) => (
+                <Badge key={tag} variant="outline" className="ml-1 capitalize text-[10px]">
+                  {tag}
+                </Badge>
+              ))}
+            </p>
+          )}
+          {evidence.lensDeltaSummary.length > 0 && (
+            <p className="mt-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+              Evidence: {evidence.lensDeltaSummary.length} lens delta{evidence.lensDeltaSummary.length === 1 ? "" : "s"} · {evidence.topOverrideReasons.length} override reason{evidence.topOverrideReasons.length === 1 ? "" : "s"}
+            </p>
+          )}
+        </div>
+        <div className="flex flex-shrink-0 gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="default"
+            disabled={isBusy}
+            onClick={onApprove}
+            data-testid={`approve-${proposal.id}`}
+          >
+            <Check className="mr-1 h-3.5 w-3.5" /> Approve
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={isBusy}
+            onClick={onReject}
+            data-testid={`reject-${proposal.id}`}
+          >
+            <X className="mr-1 h-3.5 w-3.5" /> Reject
+          </Button>
+        </div>
+      </div>
+      <input
+        type="text"
+        value={reason}
+        onChange={(e) => onReasonChange(e.target.value)}
+        placeholder="Optional: why are you rejecting?"
+        className="mt-2 w-full rounded border bg-white px-2 py-1 text-[11px]"
+        data-testid={`reject-reason-${proposal.id}`}
+      />
+    </li>
   );
 }
 

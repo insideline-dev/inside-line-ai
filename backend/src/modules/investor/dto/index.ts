@@ -7,3 +7,4 @@ export * from './update-note.dto';
 export * from './add-portfolio.dto';
 export * from './update-match-status.dto';
 export * from './update-scoring-preferences.dto';
+export * from './calibration-proposal.dto';

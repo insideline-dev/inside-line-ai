@@ -10,12 +10,17 @@ import { DealPipelineService } from '../deal-pipeline.service';
 import { MessagingService } from '../messaging.service';
 import { ScoringPreferencesService } from '../scoring-preferences.service';
 import { ScoringConfigService } from '../../admin/scoring-config.service';
+import { CalibrationService } from '../calibration.service';
+import { CalibrationProposalService } from '../calibration-proposal.service';
+import { DealDecisionService } from '../deal-decision.service';
+import { StartupMatchingPipelineService } from '../../ai/services/startup-matching-pipeline.service';
 import { UserRole } from '../../../auth/entities/auth.schema';
 
 describe('InvestorController', () => {
   let controller: InvestorController;
   let thesisService: jest.Mocked<ThesisService>;
   let matchService: jest.Mocked<MatchService>;
+  let calibrationProposalService: jest.Mocked<CalibrationProposalService>;
 
   const mockUser = {
     id: '123e4567-e89b-12d3-a456-426614174000',
@@ -163,12 +168,36 @@ describe('InvestorController', () => {
             upsert: jest.fn(),
           },
         },
+        {
+          provide: DealDecisionService,
+          useValue: { record: jest.fn(), latest: jest.fn() },
+        },
+        {
+          provide: CalibrationService,
+          useValue: { getStatsForInvestor: jest.fn() },
+        },
+        {
+          provide: CalibrationProposalService,
+          useValue: {
+            listForInvestor: jest.fn(),
+            approve: jest.fn(),
+            reject: jest.fn(),
+          },
+        },
+        {
+          provide: StartupMatchingPipelineService,
+          useValue: {
+            queueStartupMatching: jest.fn(),
+            getLatestMatchingStatus: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
     controller = module.get<InvestorController>(InvestorController);
     thesisService = module.get(ThesisService);
     matchService = module.get(MatchService);
+    calibrationProposalService = module.get(CalibrationProposalService);
   });
 
   afterEach(() => {
@@ -384,6 +413,109 @@ describe('InvestorController', () => {
           mockMatch.startupId,
         );
       });
+    });
+  });
+
+  // DS-E11-F3-S1 — investor's review/approve/reject calibration proposals
+  describe('Calibration proposal endpoints', () => {
+    const proposalId = '123e4567-e89b-12d3-a456-426614174900';
+    const proposalRow = {
+      id: proposalId,
+      investorUserId: mockUser.id,
+      status: 'pending' as const,
+      createdAt: '2026-05-11T10:00:00.000Z',
+      decidedAt: null,
+      suggestedDelta: {
+        lensAdjustments: [{ lensKey: 'team' as const, adjustment: 12 }],
+        overrideTagFocus: ['team'],
+      },
+      evidence: { topOverrideReasons: [], lensDeltaSummary: [] },
+      rejectionReason: null,
+      idempotencyKey: 'k',
+      snapshotHash: 'h',
+    };
+
+    it('GET /investor/calibration/proposals → lists pending by default', async () => {
+      calibrationProposalService.listForInvestor.mockResolvedValue([proposalRow]);
+      const result = await controller.listCalibrationProposals(mockUser, {
+        status: 'pending',
+      });
+      expect(result).toEqual([proposalRow]);
+      expect(calibrationProposalService.listForInvestor).toHaveBeenCalledWith(
+        mockUser.id,
+        'pending',
+      );
+    });
+
+    it('GET /investor/calibration/proposals supports status filter', async () => {
+      calibrationProposalService.listForInvestor.mockResolvedValue([]);
+      await controller.listCalibrationProposals(mockUser, {
+        status: 'approved',
+      });
+      expect(calibrationProposalService.listForInvestor).toHaveBeenCalledWith(
+        mockUser.id,
+        'approved',
+      );
+    });
+
+    it('POST /investor/calibration/proposals/:id/approve → delegates to service', async () => {
+      calibrationProposalService.approve.mockResolvedValue({
+        ...proposalRow,
+        status: 'approved',
+        decidedAt: '2026-05-11T11:00:00.000Z',
+      });
+      const result = await controller.approveCalibrationProposal(
+        mockUser,
+        proposalId,
+      );
+      expect(result.status).toBe('approved');
+      expect(calibrationProposalService.approve).toHaveBeenCalledWith(
+        mockUser.id,
+        proposalId,
+      );
+    });
+
+    it('POST /investor/calibration/proposals/:id/reject → forwards optional reason', async () => {
+      calibrationProposalService.reject.mockResolvedValue({
+        ...proposalRow,
+        status: 'rejected',
+        decidedAt: '2026-05-11T11:00:00.000Z',
+        rejectionReason: 'noisy',
+      });
+      const result = await controller.rejectCalibrationProposal(
+        mockUser,
+        proposalId,
+        { reason: 'noisy' },
+      );
+      expect(result.status).toBe('rejected');
+      expect(calibrationProposalService.reject).toHaveBeenCalledWith(
+        mockUser.id,
+        proposalId,
+        'noisy',
+      );
+    });
+
+    it('POST /investor/calibration/proposals/:id/reject → reason optional', async () => {
+      calibrationProposalService.reject.mockResolvedValue({
+        ...proposalRow,
+        status: 'rejected',
+        decidedAt: '2026-05-11T11:00:00.000Z',
+      });
+      await controller.rejectCalibrationProposal(mockUser, proposalId, {});
+      expect(calibrationProposalService.reject).toHaveBeenCalledWith(
+        mockUser.id,
+        proposalId,
+        undefined,
+      );
+    });
+
+    it('POST /investor/calibration/proposals/:id/approve → bubbles NotFound from service', async () => {
+      calibrationProposalService.approve.mockRejectedValue(
+        new NotFoundException('Calibration proposal not found'),
+      );
+      await expect(
+        controller.approveCalibrationProposal(mockUser, proposalId),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 });

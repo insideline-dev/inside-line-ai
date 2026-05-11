@@ -11,23 +11,28 @@ export const REASON_CODE_LABELS: Record<string, string> = {
   "lens.market.reject": "Market red flag",
   "lens.market.review": "Market unclear",
   "lens.market.low_evidence": "Market needs more evidence",
+  "lens.market.low_confidence_evidence": "Market evidence too weak",
   "lens.team.reject": "Team red flag",
   "lens.team.review": "Team unclear",
   "lens.team.low_evidence": "Team needs more evidence",
+  "lens.team.low_confidence_evidence": "Team evidence too weak",
   "lens.traction.reject": "Traction red flag",
   "lens.traction.review": "Traction unclear",
   "lens.traction.low_evidence": "Traction needs more evidence",
+  "lens.traction.low_confidence_evidence": "Traction evidence too weak",
 };
 
 // Pattern matches for lens-keyed codes (`lens.<key>.<suffix>`) — keeps the
 // surface forward-compatible when new lenses are registered (e.g. gtm,
 // product) without code changes here.
-const LENS_CODE_PATTERN = /^lens\.([^.]+)\.(reject|review|low_evidence)$/;
+const LENS_CODE_PATTERN =
+  /^lens\.([^.]+)\.(reject|review|low_evidence|low_confidence_evidence)$/;
 const DEALBREAKER_CODE_PATTERN = /^dealbreaker:(.+)$/i;
 const LENS_SUFFIX_LABELS: Record<string, string> = {
   reject: "red flag",
   review: "unclear",
   low_evidence: "needs more evidence",
+  low_confidence_evidence: "evidence too weak",
 };
 
 export function labelForReasonCode(code: string): string {

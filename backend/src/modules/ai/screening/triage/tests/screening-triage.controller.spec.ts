@@ -23,6 +23,9 @@ function buildDecision(): ScreeningDecision {
     overallScore: 82,
     reasonCodes: [],
     lensSnapshot: [{ key: "market", score: 82, signal: "advance" }],
+    // DS-E2-F1-S2 — the active lens versions at decision time. The
+    // controller fixture mirrors a fresh policy-v4 row.
+    lensVersions: { market: "1" },
     policyVersion: POLICY_VERSION,
     createdAt: "2026-04-28T10:00:00.000Z",
   };

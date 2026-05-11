@@ -1,11 +1,14 @@
 import { describe, expect, it, jest } from "bun:test";
 import { Test } from "@nestjs/testing";
+import { ConfigService } from "@nestjs/config";
 import { DrizzleService } from "../../../../../database";
 import {
+  EVIDENCE_CONFIDENCE_WEIGHTS,
   POLICY_SNAPSHOT,
   POLICY_VERSION,
   ScreeningTriageService,
   applyTriagePolicy,
+  computeEvidenceConfidenceScore,
   type TriageLensInput,
 } from "../screening-triage.service";
 import {
@@ -54,11 +57,12 @@ function buildDrizzleMock(opts: {
       startupId: (v.startupId as string) ?? STARTUP_ID,
       pipelineRunId: (v.pipelineRunId as string | null) ?? null,
       classification: (v.classification as string) ?? "review",
-      nextAction: (v.nextAction as string) ?? "manual_review",
       overallScore: (v.overallScore as number) ?? 0,
       reasonCodes: (v.reasonCodes as string[]) ?? [],
       lensSnapshot:
         (v.lensSnapshot as ScreeningDecisionRow["lensSnapshot"]) ?? [],
+      lensVersions:
+        (v.lensVersions as ScreeningDecisionRow["lensVersions"]) ?? {},
       policyVersion: (v.policyVersion as number) ?? POLICY_VERSION,
       createdAt: new Date(),
     };
@@ -92,30 +96,50 @@ function buildDrizzleMock(opts: {
   };
 }
 
+function buildConfigMock(env: Record<string, unknown> = {}) {
+  return {
+    get: jest.fn((key: string) => env[key]),
+  } as unknown as ConfigService;
+}
+
 async function buildService(
   drizzleOpts?: Parameters<typeof buildDrizzleMock>[0],
+  configEnv: Record<string, unknown> = {},
 ) {
   const drizzleMock = buildDrizzleMock(drizzleOpts);
+  const configMock = buildConfigMock(configEnv);
   const moduleRef = await Test.createTestingModule({
     providers: [
       ScreeningTriageService,
       { provide: DrizzleService, useValue: drizzleMock },
+      { provide: ConfigService, useValue: configMock },
     ],
   }).compile();
   return {
     service: moduleRef.get(ScreeningTriageService),
     drizzle: drizzleMock,
+    config: configMock,
   };
 }
 
 describe("policy snapshot", () => {
   it("locks the (version, thresholds) tuple — bump POLICY_VERSION when changing any threshold", () => {
     expect(POLICY_SNAPSHOT).toStrictEqual({
-      POLICY_VERSION: 3,
+      POLICY_VERSION: 4,
       LOW_SCORE_THRESHOLD: 40,
       ADVANCE_SCORE_THRESHOLD: 60,
       OUT_OF_SCOPE_THESIS_THRESHOLD: 30,
       MIN_ADVANCE_EVIDENCE_COUNT: 2,
+      ADVANCE_CONFIDENCE_FLOOR: 0.6,
+      EVIDENCE_CONFIDENCE_WEIGHTS: { high: 1.0, medium: 0.5, low: 0.2 },
+    });
+  });
+
+  it("EVIDENCE_CONFIDENCE_WEIGHTS export matches the snapshot", () => {
+    expect(EVIDENCE_CONFIDENCE_WEIGHTS).toStrictEqual({
+      high: 1.0,
+      medium: 0.5,
+      low: 0.2,
     });
   });
 });
@@ -357,7 +381,10 @@ describe("applyTriagePolicy (pure)", () => {
     expect(out.reasonCodes).not.toContain("lens.team.low_evidence");
   });
 
-  it("advance with no high-confidence evidence → downgrades to review(low_evidence)", () => {
+  it("advance with no high-confidence evidence → downgrades to review (count rule + v4 floor both trip)", () => {
+    // [low, medium] has no `high` (count rule fires) AND its weighted score
+    // 0.35 < 0.6 (floor rule fires). Policy v4 surfaces BOTH codes —
+    // they're separate guards by design.
     const out = applyTriagePolicy([
       {
         key: "market",
@@ -388,7 +415,10 @@ describe("applyTriagePolicy (pure)", () => {
       },
     ]);
     expect(out.classification).toBe("review");
-    expect(out.reasonCodes).toEqual(["lens.market.low_evidence"]);
+    expect(out.reasonCodes).toEqual([
+      "lens.market.low_evidence",
+      "lens.market.low_confidence_evidence",
+    ]);
   });
 
   it("advance with sufficient strong evidence → stays advance", () => {
@@ -411,9 +441,11 @@ describe("applyTriagePolicy (pure)", () => {
     expect(out.classification).toBe("advance");
   });
 
-  it("low_evidence + borderline score stack reason codes", () => {
-    // One advance lens with thin evidence is downgraded; remaining lenses
-    // produce a borderline overall score. Both reasons must surface.
+  it("low_evidence + low_confidence_evidence + borderline score stack reason codes", () => {
+    // One advance lens with a single low-confidence item trips BOTH the
+    // count rule (< 2 items) AND the confidence floor (0.2 < 0.6). The
+    // remaining lenses produce a borderline overall score. All three
+    // reasons must surface.
     const out = applyTriagePolicy([
       {
         key: "market",
@@ -444,6 +476,7 @@ describe("applyTriagePolicy (pure)", () => {
     expect(out.overallScore).toBe(50);
     expect(out.reasonCodes).toEqual([
       "lens.market.low_evidence",
+      "lens.market.low_confidence_evidence",
       "borderline_overall_score",
     ]);
   });
@@ -478,6 +511,196 @@ describe("applyTriagePolicy (pure)", () => {
     expect(out.classification).toBe("review");
     expect(out.overallScore).toBe(0);
     expect(out.reasonCodes).toEqual(["no_lens_signals"]);
+  });
+
+  // ─── DS-E7-F2-S1 v4 — tunable evidence-confidence floor ──────────────
+  it("computeEvidenceConfidenceScore: weighted mean by tier", () => {
+    expect(
+      computeEvidenceConfidenceScore({
+        key: "x",
+        score: 80,
+        signal: "advance",
+        evidence: [
+          { confidence: "high" },
+          { confidence: "medium" },
+          { confidence: "low" },
+        ],
+      }),
+    ).toBeCloseTo((1.0 + 0.5 + 0.2) / 3, 5);
+    // No evidence array → null (gate skips the check).
+    expect(
+      computeEvidenceConfidenceScore({
+        key: "x",
+        score: 80,
+        signal: "advance",
+      }),
+    ).toBeNull();
+    // Empty evidence array → 0 (gate downgrades on any non-zero floor).
+    expect(
+      computeEvidenceConfidenceScore({
+        key: "x",
+        score: 80,
+        signal: "advance",
+        evidence: [],
+      }),
+    ).toBe(0);
+  });
+
+  it("advance with two low-confidence evidence items → review(low_confidence_evidence)", () => {
+    // Count rule passes (2 items), but weighted score = 0.2 < default 0.6
+    // floor — and there's no high-confidence item, so the count rule ALSO
+    // trips. Both reason codes must surface (dual-trigger behavior).
+    const out = applyTriagePolicy([
+      {
+        key: "market",
+        score: 90,
+        signal: "advance",
+        evidence: [{ confidence: "low" }, { confidence: "low" }],
+      },
+      {
+        key: "team",
+        score: 85,
+        signal: "advance",
+        evidence: [{ confidence: "high" }, { confidence: "high" }],
+      },
+      {
+        key: "traction",
+        score: 80,
+        signal: "advance",
+        evidence: [{ confidence: "high" }, { confidence: "high" }],
+      },
+    ]);
+    expect(out.classification).toBe("review");
+    expect(out.reasonCodes).toContain("lens.market.low_evidence");
+    expect(out.reasonCodes).toContain("lens.market.low_confidence_evidence");
+    expect(out.reasonCodes).not.toContain("lens.team.low_confidence_evidence");
+  });
+
+  it("advance with confidence above floor + 2 evidence items → stays advance", () => {
+    // (1.0 + 0.5) / 2 = 0.75 > 0.6 floor; count rule passes (>=2 items and
+    // at least one `high`). Should stay advance with no reason codes.
+    const out = applyTriagePolicy([
+      {
+        key: "market",
+        score: 80,
+        signal: "advance",
+        evidence: [{ confidence: "high" }, { confidence: "medium" }],
+      },
+      {
+        key: "team",
+        score: 85,
+        signal: "advance",
+        evidence: [{ confidence: "high" }, { confidence: "medium" }],
+      },
+      {
+        key: "traction",
+        score: 75,
+        signal: "advance",
+        evidence: [{ confidence: "high" }, { confidence: "medium" }],
+      },
+    ]);
+    expect(out.classification).toBe("advance");
+    expect(out.reasonCodes).toEqual([]);
+  });
+
+  it("dual-trigger: low evidence count AND low confidence → BOTH reason codes", () => {
+    // Single low-confidence item. Trips:
+    //   - count rule (< MIN_ADVANCE_EVIDENCE_COUNT) → low_evidence
+    //   - confidence rule (0.2 < 0.6) → low_confidence_evidence
+    // Both must land in reasonCodes — they're separate guards by design.
+    const out = applyTriagePolicy([
+      {
+        key: "market",
+        score: 80,
+        signal: "advance",
+        evidence: [{ confidence: "low" }],
+      },
+      {
+        key: "team",
+        score: 85,
+        signal: "advance",
+        evidence: [{ confidence: "high" }, { confidence: "high" }],
+      },
+      {
+        key: "traction",
+        score: 80,
+        signal: "advance",
+        evidence: [{ confidence: "high" }, { confidence: "high" }],
+      },
+    ]);
+    expect(out.classification).toBe("review");
+    expect(out.reasonCodes).toEqual([
+      "lens.market.low_evidence",
+      "lens.market.low_confidence_evidence",
+    ]);
+  });
+
+  it("raised floor downgrades a lens that would have advanced under the default", () => {
+    // Score 0.75 with default floor 0.6 → advance; with floor 0.9 the same
+    // lens drops to review(low_confidence_evidence). Proves the knob.
+    const lens: TriageLensInput = {
+      key: "market",
+      score: 80,
+      signal: "advance",
+      evidence: [{ confidence: "high" }, { confidence: "medium" }],
+    };
+    const others: TriageLensInput[] = [
+      {
+        key: "team",
+        score: 85,
+        signal: "advance",
+        evidence: [{ confidence: "high" }, { confidence: "high" }],
+      },
+      {
+        key: "traction",
+        score: 80,
+        signal: "advance",
+        evidence: [{ confidence: "high" }, { confidence: "high" }],
+      },
+    ];
+    const baseline = applyTriagePolicy([lens, ...others]);
+    expect(baseline.classification).toBe("advance");
+
+    const strict = applyTriagePolicy([lens, ...others], {
+      advanceConfidenceFloor: 0.9,
+    });
+    expect(strict.classification).toBe("review");
+    expect(strict.reasonCodes).toEqual([
+      "lens.market.low_confidence_evidence",
+    ]);
+  });
+
+  it("confidence floor never downgrades a lens that already says review/reject", () => {
+    // A review-signalled lens with thin/low-confidence evidence stays
+    // review (it was never an "advance" candidate) — pre-pass only
+    // touches advances.
+    const out = applyTriagePolicy([
+      {
+        key: "market",
+        score: 70,
+        signal: "review",
+        evidence: [{ confidence: "low" }],
+      },
+      {
+        key: "team",
+        score: 85,
+        signal: "advance",
+        evidence: [{ confidence: "high" }, { confidence: "high" }],
+      },
+      {
+        key: "traction",
+        score: 80,
+        signal: "advance",
+        evidence: [{ confidence: "high" }, { confidence: "high" }],
+      },
+    ]);
+    expect(out.classification).toBe("review");
+    expect(out.reasonCodes).toEqual(["lens.market.review"]);
+    expect(
+      out.reasonCodes.some((code) =>
+        code.endsWith("low_confidence_evidence"),
+      ),
+    ).toBe(false);
   });
 });
 
@@ -574,6 +797,103 @@ describe("ScreeningTriageService", () => {
     expect(decision).toBeNull();
   });
 
+  it("decide() persists lens_versions onto the screening_decision row (DS-E2-F1-S2)", async () => {
+    const { service, drizzle } = await buildService();
+
+    const decision = await service.decide({
+      startupId: STARTUP_ID,
+      pipelineRunId: RUN_ID,
+      lensResults: [
+        lens("market", 80, "advance"),
+        lens("team", 75, "advance"),
+        lens("traction", 70, "advance"),
+      ],
+      lensVersions: { market: "1", team: "2", traction: "1" },
+    });
+
+    expect(drizzle._capture.values?.lensVersions).toEqual({
+      market: "1",
+      team: "2",
+      traction: "1",
+    });
+    expect(drizzle._capture.values?.policyVersion).toBe(4);
+    expect(decision.policyVersion).toBe(4);
+  });
+
+  it("decide() honors SCREENING_ADVANCE_CONFIDENCE_FLOOR env override", async () => {
+    // Default floor 0.6: a 0.75 lens would stay `advance`. Override to 0.9
+    // and the same lens drops to `review` with low_confidence_evidence —
+    // proving the env knob is wired through the service.
+    const { service, drizzle } = await buildService(undefined, {
+      SCREENING_ADVANCE_CONFIDENCE_FLOOR: 0.9,
+    });
+
+    const decision = await service.decide({
+      startupId: STARTUP_ID,
+      pipelineRunId: RUN_ID,
+      lensResults: [
+        {
+          key: "market",
+          score: 80,
+          signal: "advance",
+          evidence: [{ confidence: "high" }, { confidence: "medium" }],
+        },
+        {
+          key: "team",
+          score: 85,
+          signal: "advance",
+          evidence: [{ confidence: "high" }, { confidence: "high" }],
+        },
+        {
+          key: "traction",
+          score: 80,
+          signal: "advance",
+          evidence: [{ confidence: "high" }, { confidence: "high" }],
+        },
+      ],
+    });
+
+    expect(decision.classification).toBe("review");
+    expect(decision.reasonCodes).toContain(
+      "lens.market.low_confidence_evidence",
+    );
+    expect(drizzle._capture.values?.classification).toBe("review");
+  });
+
+  it("decide() falls back to the default floor when env var is missing", async () => {
+    // No SCREENING_ADVANCE_CONFIDENCE_FLOOR supplied → uses default 0.6 →
+    // 0.75 lens stays `advance`.
+    const { service } = await buildService();
+
+    const decision = await service.decide({
+      startupId: STARTUP_ID,
+      pipelineRunId: RUN_ID,
+      lensResults: [
+        {
+          key: "market",
+          score: 80,
+          signal: "advance",
+          evidence: [{ confidence: "high" }, { confidence: "medium" }],
+        },
+        {
+          key: "team",
+          score: 85,
+          signal: "advance",
+          evidence: [{ confidence: "high" }, { confidence: "high" }],
+        },
+        {
+          key: "traction",
+          score: 80,
+          signal: "advance",
+          evidence: [{ confidence: "high" }, { confidence: "high" }],
+        },
+      ],
+    });
+
+    expect(decision.classification).toBe("advance");
+    expect(decision.reasonCodes).toEqual([]);
+  });
+
   it("latestForStartup hydrates the most recent row", async () => {
     const row: ScreeningDecisionRow = {
       id: "decision-1",
@@ -583,6 +903,7 @@ describe("ScreeningTriageService", () => {
       overallScore: 55,
       reasonCodes: ["borderline_overall_score"],
       lensSnapshot: [{ key: "market", score: 55, signal: "advance" }],
+      lensVersions: { market: "1" },
       policyVersion: POLICY_VERSION,
       createdAt: new Date("2026-04-28T10:00:00Z"),
     };

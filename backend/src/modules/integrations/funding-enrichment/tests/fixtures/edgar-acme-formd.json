@@ -1,0 +1,15 @@
+{
+  "company": "Acme Robotics",
+  "rounds": [
+    {
+      "roundType": "series_a",
+      "announcedAt": "2024-03-20",
+      "amount": 18500000,
+      "currency": "USD",
+      "valuationPostMoney": null,
+      "leadInvestor": null,
+      "investors": ["Sequoia Capital", "Founders Fund", "Y Combinator"],
+      "sourceUrl": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001999999&type=D"
+    }
+  ]
+}

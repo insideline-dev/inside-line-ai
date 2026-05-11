@@ -17,6 +17,7 @@ import { TwilioModule } from "./modules/integrations/twilio/twilio.module";
 import { AgentMailModule } from "./modules/integrations/agentmail/agentmail.module";
 import { EvolutionModule } from "./modules/integrations/evolution/evolution.module";
 import { UnipileModule } from "./modules/integrations/unipile/unipile.module";
+import { FundingEnrichmentModule } from "./modules/integrations/funding-enrichment/funding-enrichment.module";
 import { AiModule } from "./modules/ai";
 import { ClaraModule } from "./modules/clara/clara.module";
 
@@ -41,6 +42,7 @@ import { ClaraModule } from "./modules/clara/clara.module";
     EvolutionModule,
     ClaraModule,
     UnipileModule,
+    FundingEnrichmentModule,
     HealthModule,
   ],
   controllers: [],

@@ -454,7 +454,9 @@ export class ScreeningOutputService {
   }
 
   private buildReasonCodeFollowUpLabel(code: string): string {
-    const lensMatch = code.match(/^lens\.([^.]+)\.(reject|review|low_evidence)$/);
+    const lensMatch = code.match(
+      /^lens\.([^.]+)\.(reject|review|low_evidence|low_confidence_evidence)$/,
+    );
     if (lensMatch) {
       const lensLabel = this.formatLensLabel(lensMatch[1]);
       const suffix =
@@ -462,7 +464,9 @@ export class ScreeningOutputService {
           ? "blocker"
           : lensMatch[2] === "review"
             ? "needs follow-up"
-            : "needs more evidence";
+            : lensMatch[2] === "low_evidence"
+              ? "needs more evidence"
+              : "needs stronger evidence";
       return `${lensLabel} ${suffix}`;
     }
 
@@ -475,7 +479,9 @@ export class ScreeningOutputService {
   }
 
   private buildReasonCodeFollowUpSummary(code: string): string {
-    const lensMatch = code.match(/^lens\.([^.]+)\.(reject|review|low_evidence)$/);
+    const lensMatch = code.match(
+      /^lens\.([^.]+)\.(reject|review|low_evidence|low_confidence_evidence)$/,
+    );
     if (lensMatch) {
       const lensLabel = this.formatLensLabel(lensMatch[1]);
       switch (lensMatch[2]) {
@@ -485,6 +491,8 @@ export class ScreeningOutputService {
           return `${lensLabel} still needs follow-up before DD can rely on it.`;
         case "low_evidence":
           return `${lensLabel} needs more evidence before DD can rely on it.`;
+        case "low_confidence_evidence":
+          return `${lensLabel} evidence is below the confidence floor — DD needs stronger-sourced claims before this advances.`;
       }
     }
 

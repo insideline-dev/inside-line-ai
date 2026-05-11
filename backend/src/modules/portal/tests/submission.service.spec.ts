@@ -406,9 +406,13 @@ describe('SubmissionService', () => {
 
     it('passes linkIntegrity from portal row into the rate-limit decision', async () => {
       primeAllowPathDbForAccept();
-      mockDb.limit.mockResolvedValueOnce([
-        { ...mockPortal, linkIntegrity: PortalLinkIntegrity.STRICT },
-      ]);
+      // portal lookup + 2 canonical dedupe lookups (name, website) -> none match
+      mockDb.limit
+        .mockResolvedValueOnce([
+          { ...mockPortal, linkIntegrity: PortalLinkIntegrity.STRICT },
+        ])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
       userAuthService.findUserByEmail.mockResolvedValue(mockFounder);
 
       await service.create(mockPortalId, validDto, { ipAddress: '7.7.7.7' });

@@ -29,6 +29,8 @@ import {
   collectScreeningFollowUpSeeds,
   getScreeningEvidencePreview,
 } from "@/lib/screening/screening-evidence";
+import { FundingHistoryBlock } from "@/components/startup-view/FundingHistoryBlock";
+import { useFundingHistory } from "@/lib/startup/useFundingHistory";
 
 interface InvestorMemo {
   dealHighlights?: string[];
@@ -60,6 +62,8 @@ interface SummaryCardProps {
   showRecommendation?: boolean;
   weights?: ScoringWeights | null;
   showStrengthsAndRisks?: boolean;
+  /** DG-E11-F1-S1: render the canonical funding-history block under the summary. */
+  showFundingHistory?: boolean;
 }
 
 
@@ -71,7 +75,12 @@ export function SummaryCard({
   showSectionScores = true,
   weights,
   showStrengthsAndRisks = true,
+  showFundingHistory = true,
 }: SummaryCardProps) {
+  const fundingHistoryQuery = useFundingHistory(
+    startup.id,
+    showFundingHistory && Boolean(startup.id),
+  );
   const [animateBars, setAnimateBars] = useState(false);
   const screeningOutput = useScreeningOutput(startup.id);
   const screeningEvidence = useMemo(
@@ -318,6 +327,14 @@ export function SummaryCard({
             </ul>
           </CardContent>
         </Card>
+      )}
+
+      {showFundingHistory && (
+        <FundingHistoryBlock
+          startupId={startup.id}
+          rows={fundingHistoryQuery.data?.rows ?? null}
+          loading={fundingHistoryQuery.isLoading}
+        />
       )}
 
       {investorMemo?.dueDiligenceAreas && investorMemo.dueDiligenceAreas.length > 0 && (

@@ -56,10 +56,15 @@ export interface Startup {
   contactEmail?: string;
   contactPhone?: string;
   contactPhoneCountryCode?: string;
+  /** @deprecated DG-E11-F1-S1: use FundingHistoryRow[] from the funding-history endpoint */
   hasPreviousFunding?: boolean;
+  /** @deprecated DG-E11-F1-S1: use FundingHistoryRow.amount */
   previousFundingAmount?: number;
+  /** @deprecated DG-E11-F1-S1: use FundingHistoryRow.currency */
   previousFundingCurrency?: string;
+  /** @deprecated DG-E11-F1-S1: use FundingHistoryRow.investors */
   previousInvestors?: string;
+  /** @deprecated DG-E11-F1-S1: use FundingHistoryRow.roundType */
   previousRoundType?: string;
   status: StartupStatus;
   privateInvestorPipelineStatus?: PrivateInvestorPipelineStatus | null;
@@ -76,6 +81,54 @@ export interface Startup {
   demoUrl?: string;
   createdAt: string;
   updatedAt?: string;
+}
+
+/**
+ * Provenance entry for a single funding-history source. Mirrors
+ * `FundingHistorySourceEntry` in the backend Drizzle schema. Each row in
+ * `FundingHistoryRow.sources` represents one provider that reported the
+ * round; if its values disagreed with the canonical merged values, the
+ * disagreeing fields appear in `conflictsWith`.
+ */
+export interface FundingHistorySource {
+  provider: "crunchbase" | "public_filing" | "press_release";
+  sourceUrl: string;
+  fetchedAt: string;
+  reportedAmount?: number | null;
+  reportedCurrency?: string | null;
+  reportedAnnouncedAt?: string | null;
+  reportedLeadInvestor?: string | null;
+  conflictsWith?: string[];
+}
+
+/**
+ * One canonical funding round persisted for a startup. Powered by the
+ * `startup_funding_history` table — see DG-E11-F1-S1. Replaces the
+ * deprecated flat `previousFunding*` fields on `Startup`.
+ */
+export interface FundingHistoryRow {
+  id: string;
+  startupId: string;
+  roundType: string;
+  announcedAt: string | null;
+  /** Numeric values are returned as strings by Drizzle (numeric type). */
+  amount: string | null;
+  currency: string | null;
+  valuationPostMoney: string | null;
+  leadInvestor: string | null;
+  investors: string[] | null;
+  sources: FundingHistorySource[];
+  evidenceConfidence: string | null;
+  lastReconciledAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FundingHistoryListResponse {
+  startupId: string;
+  rows: FundingHistoryRow[];
+  /** True when the backend found no canonical match — drives empty UI. */
+  empty: boolean;
 }
 
 export interface StartupDraft {

@@ -123,6 +123,25 @@ export const envSchema = z.object({
   UNIPILE_DSN: z.string().optional(),
   UNIPILE_API_KEY: z.string().optional(),
   UNIPILE_ACCOUNT_ID: z.string().optional(),
+
+  // Funding Enrichment (DG-E11-F1-S1)
+  //
+  // CRUNCHBASE_API_KEY is optional. When unset, the Crunchbase provider
+  // reports unconfigured and the service falls back to whatever other
+  // providers (EDGAR / press-release stub) are configured.
+  //
+  // EDGAR_USER_AGENT is required by the SEC for politeness when scraping
+  // public filings; absent it, the EDGAR provider reports unconfigured.
+  CRUNCHBASE_API_KEY: z.string().optional(),
+  CRUNCHBASE_API_BASE_URL: z
+    .string()
+    .url()
+    .default("https://api.crunchbase.com/api/v4"),
+  EDGAR_USER_AGENT: z.string().optional(),
+  EDGAR_API_BASE_URL: z
+    .string()
+    .url()
+    .default("https://data.sec.gov"),
   WEBSITE_SCRAPE_TIMEOUT_MS: z.coerce.number().default(30000),
   LINKEDIN_BATCH_SIZE: z.coerce.number().default(10),
   LINKEDIN_COMPANY_DISCOVERY_MAX: z.coerce.number().default(6),

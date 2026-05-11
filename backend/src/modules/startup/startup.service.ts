@@ -60,6 +60,7 @@ import {
   findCanonicalStartupDuplicate,
   normalizeScreeningIntakeCandidate,
 } from "./screening-intake-normalization";
+import { FundingEnrichmentService } from "../integrations/funding-enrichment";
 
 const GPT_5_4_INPUT_COST_PER_MILLION = 2.5;
 const GPT_5_4_OUTPUT_COST_PER_MILLION = 15;
@@ -229,6 +230,7 @@ export class StartupService {
     private dataRoomService: DataRoomService,
     private dealEvents: DealEventService,
     @Optional() private pipelineState?: PipelineStateService,
+    @Optional() private fundingEnrichmentService?: FundingEnrichmentService,
   ) {}
 
   private async cleanupStartupRuntimeState(startupId: string): Promise<void> {
@@ -632,6 +634,23 @@ export class StartupService {
       this.logger.error(
         `Approval succeeded but matching queue failed for startup ${id}: ${message}`,
       );
+    }
+
+    // DG-E11-F1-S1: trigger funding-history enrichment on the
+    // screening->DD handoff (approval). Invoked as fire-and-forget so the
+    // approve response never blocks on canonical-source round trips. A
+    // proper BullMQ worker on AI_RESEARCH with job name `enrich-funding`
+    // is a follow-up — the direct invocation here keeps the feature
+    // functional immediately without orphaning queue jobs that have no
+    // worker yet.
+    if (this.fundingEnrichmentService?.isConfigured()) {
+      const enrichmentService = this.fundingEnrichmentService;
+      void enrichmentService.enrichStartup(id).catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.warn(
+          `Funding enrichment failed for ${id}: ${message}`,
+        );
+      });
     }
 
     this.logger.log(`Approved startup ${id} by ${actorRole} ${actorId}`);

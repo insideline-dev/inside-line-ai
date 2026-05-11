@@ -67,6 +67,7 @@ import { ScrapingCacheService } from "./services/scraping-cache.service";
 import { ScrapingService } from "./services/scraping.service";
 import { MemoSynthesisAgent } from "./agents/synthesis/memo-synthesis.agent";
 import { ReportSynthesisAgent } from "./agents/synthesis/report-synthesis.agent";
+import { MemoClaimRewriteService } from "./services/memo-claim-rewrite.service";
 import { MemoSectionRegenerationService } from "./services/memo-section-regeneration.service";
 import { MemoController } from "./memo.controller";
 import { SynthesisService } from "./services/synthesis.service";
@@ -150,6 +151,7 @@ import { OpenAiTextGenerationService } from "./services/openai-text-generation.s
     MemoSynthesisAgent,
     ReportSynthesisAgent,
     MemoSectionRegenerationService,
+    MemoClaimRewriteService,
     ScoreComputationService,
     LocationNormalizerService,
     InvestorMatchingService,

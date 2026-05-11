@@ -67,6 +67,7 @@ describe("CalibrationService.getStatsForInvestor", () => {
       alignmentRate: null,
       topOverrideReasons: [],
       recentMismatches: [],
+      lensDeltas: [],
     });
   });
 

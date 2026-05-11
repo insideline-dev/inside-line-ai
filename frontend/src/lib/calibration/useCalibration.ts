@@ -30,6 +30,13 @@ export type CalibrationSnapshotStatus =
   | "completed"
   | "failed";
 
+export interface InvestorCalibrationLensDelta {
+  lensKey: "team" | "market" | "traction";
+  count: number;
+  meanDelta: number;
+  meanAbsDelta: number;
+}
+
 export interface InvestorCalibrationSummary {
   totalDecisions: number;
   decisionsWithTriage: number;
@@ -47,6 +54,13 @@ export interface InvestorCalibrationSummary {
     investorVerdict: "advance" | "pass" | "hold";
     reasonTags: string[];
   }>;
+  /**
+   * DS-E11-F2-S1 — DD-vs-screening lens deltas per overlapping lens
+   * (`team`, `market`, `traction`). Empty when no evaluation has yet
+   * completed for a previously-screened deal under this investor's
+   * matches.
+   */
+  lensDeltas: InvestorCalibrationLensDelta[];
 }
 
 export interface InvestorCalibrationSnapshot {

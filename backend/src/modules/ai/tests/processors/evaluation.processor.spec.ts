@@ -12,6 +12,7 @@ import type { PipelineService } from "../../services/pipeline.service";
 import type { EvaluationService } from "../../services/evaluation.service";
 import type { NotificationGateway } from "../../../../notification/notification.gateway";
 import type { AiEvaluationJobData } from "../../../../queue/interfaces";
+import type { LensDeltaService } from "../../../investor/lens-delta.service";
 
 describe("EvaluationProcessor", () => {
   let processor: EvaluationProcessor;
@@ -20,6 +21,7 @@ describe("EvaluationProcessor", () => {
   let pipelineState: jest.Mocked<PipelineStateService>;
   let pipelineService: jest.Mocked<PipelineService>;
   let notificationGateway: jest.Mocked<NotificationGateway>;
+  let lensDeltaService: jest.Mocked<LensDeltaService>;
 
   const evaluationResult = {
     team: { score: 80 },
@@ -155,12 +157,17 @@ describe("EvaluationProcessor", () => {
       sendJobStatus: jest.fn(),
     } as unknown as jest.Mocked<NotificationGateway>;
 
+    lensDeltaService = {
+      computeAndPersistForEvaluation: jest.fn().mockResolvedValue([]),
+    } as unknown as jest.Mocked<LensDeltaService>;
+
     processor = new EvaluationProcessor(
       config as unknown as ConfigService,
       evaluationService as unknown as EvaluationService,
       pipelineState as unknown as PipelineStateService,
       pipelineService as unknown as PipelineService,
       notificationGateway as unknown as NotificationGateway,
+      lensDeltaService as unknown as LensDeltaService,
     );
   });
 
@@ -296,6 +303,58 @@ describe("EvaluationProcessor", () => {
         usedFallback: true,
         lifecycleEvent: "fallback",
       }),
+    );
+  });
+
+  // DS-E11-F2-S1 — DD → screening calibration feedback hook.
+  it("calls LensDeltaService.computeAndPersistForEvaluation after a successful evaluation run", async () => {
+    const job = {
+      id: "job-delta",
+      data: {
+        type: "ai_evaluation",
+        startupId: "startup-1",
+        pipelineRunId: "run-1",
+        userId: "user-1",
+      } satisfies AiEvaluationJobData,
+    } as unknown as Job<AiEvaluationJobData>;
+
+    await (processor as unknown as { process: (job: Job<AiEvaluationJobData>) => Promise<{ type: string }> }).process(job);
+
+    expect(lensDeltaService.computeAndPersistForEvaluation).toHaveBeenCalledTimes(1);
+    const call = lensDeltaService.computeAndPersistForEvaluation.mock.calls[0]?.[0];
+    expect(call).toBeDefined();
+    expect(call!.startupId).toBe("startup-1");
+    expect(call!.pipelineRunId).toBe("run-1");
+    // Only the three overlapping lenses (`team`, `market`, `traction`)
+    // should be relayed — `product` and friends are not part of the
+    // screening surface.
+    expect(call!.evaluation.team).toEqual({ score: 80 });
+    expect(call!.evaluation.market).toEqual({ score: 78 });
+    expect(call!.evaluation.traction).toEqual({ score: 69 });
+  });
+
+  it("swallows lens-delta persistence errors so the evaluation phase still completes", async () => {
+    lensDeltaService.computeAndPersistForEvaluation.mockRejectedValueOnce(
+      new Error("simulated db hiccup"),
+    );
+
+    const job = {
+      id: "job-delta-err",
+      data: {
+        type: "ai_evaluation",
+        startupId: "startup-1",
+        pipelineRunId: "run-1",
+        userId: "user-1",
+      } satisfies AiEvaluationJobData,
+    } as unknown as Job<AiEvaluationJobData>;
+
+    const result = await (processor as unknown as { process: (job: Job<AiEvaluationJobData>) => Promise<{ type: string }> }).process(job);
+
+    expect(result.type).toBe("ai_evaluation");
+    // The phase still gets marked completed despite the lens-delta error.
+    expect(pipelineService.onPhaseCompleted).toHaveBeenCalledWith(
+      "startup-1",
+      PipelinePhase.EVALUATION,
     );
   });
 

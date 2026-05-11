@@ -5,6 +5,7 @@ import { DrizzleService } from "../../../database";
 import { QueueService } from "../../../queue/queue.service";
 import { UserRole } from "../../../auth/entities/auth.schema";
 import { CalibrationRecomputeService } from "../calibration-recompute.service";
+import { LensDeltaService } from "../lens-delta.service";
 import {
   CALIBRATION_RECOMPUTE_DEDUPE_WINDOW_MS,
   CALIBRATION_RECOMPUTE_JOB,
@@ -154,12 +155,29 @@ function buildQueueMock(jobId = "queue-job-id") {
   return { add, getQueue, mock: { getQueue } };
 }
 
-async function buildService(drizzleMock: ReturnType<typeof buildDrizzleMock>, queue: { getQueue: jest.Mock }) {
+function buildLensDeltaMock(rows: Array<{
+  startupId: string;
+  lensKey: string;
+  delta: number;
+  computedAt: Date | string;
+}> = []) {
+  return {
+    getLatestDeltasForInvestor: jest.fn().mockResolvedValue(rows),
+    computeAndPersistForEvaluation: jest.fn().mockResolvedValue([]),
+  };
+}
+
+async function buildService(
+  drizzleMock: ReturnType<typeof buildDrizzleMock>,
+  queue: { getQueue: jest.Mock },
+  lensDelta: ReturnType<typeof buildLensDeltaMock> = buildLensDeltaMock(),
+) {
   const moduleRef = await Test.createTestingModule({
     providers: [
       CalibrationRecomputeService,
       { provide: DrizzleService, useValue: drizzleMock },
       { provide: QueueService, useValue: queue },
+      { provide: LensDeltaService, useValue: lensDelta },
     ],
   }).compile();
   return moduleRef.get(CalibrationRecomputeService);
@@ -224,6 +242,7 @@ describe("CalibrationRecomputeService", () => {
         alignmentRate: 0.6,
         topOverrideReasons: [{ reasonTag: "team", count: 2 }],
         recentMismatches: [],
+        lensDeltas: [],
       };
       const drizzle = buildDrizzleMock({
         existingSnapshot: {
@@ -344,6 +363,58 @@ describe("CalibrationRecomputeService", () => {
   });
 
   describe("runJob", () => {
+    it("folds lens deltas from LensDeltaService into the snapshot summary", async () => {
+      const drizzle = buildDrizzleMock({
+        selectsToSkip: 2,
+        decisionRows: [
+          {
+            verdict: "advance",
+            triage: "advance",
+            reasonTags: [],
+            startupId: "s-1",
+            decidedAt: new Date("2026-04-29T12:00:00Z"),
+          },
+        ],
+      });
+      const queue = buildQueueMock();
+      const lensDelta = buildLensDeltaMock([
+        // Two startups across the three overlapping lenses — exercising
+        // the per-(startup,lens) latest-row collapse and the per-lens
+        // averaging that summarizeLensDeltas does inline.
+        { startupId: "s-1", lensKey: "team", delta: 10, computedAt: new Date("2026-05-01T12:00:00Z") },
+        { startupId: "s-1", lensKey: "market", delta: -5, computedAt: new Date("2026-05-01T12:00:00Z") },
+        { startupId: "s-2", lensKey: "team", delta: 20, computedAt: new Date("2026-05-01T13:00:00Z") },
+        { startupId: "s-2", lensKey: "traction", delta: 0, computedAt: new Date("2026-05-01T13:00:00Z") },
+      ]);
+      const svc = await buildService(drizzle, queue.mock, lensDelta);
+
+      const { summary } = await svc.runJob(INVESTOR_ID, "test-job-deltas");
+
+      expect(lensDelta.getLatestDeltasForInvestor).toHaveBeenCalledWith(
+        INVESTOR_ID,
+      );
+      expect(summary.lensDeltas).toHaveLength(3);
+      const byLens = Object.fromEntries(
+        summary.lensDeltas.map((d) => [d.lensKey, d]),
+      );
+      expect(byLens.team).toMatchObject({
+        count: 2,
+        meanDelta: 15,
+        meanAbsDelta: 15,
+      });
+      expect(byLens.market).toMatchObject({
+        count: 1,
+        meanDelta: -5,
+        meanAbsDelta: 5,
+      });
+      expect(byLens.traction).toMatchObject({
+        count: 1,
+        meanDelta: 0,
+        meanAbsDelta: 0,
+      });
+      expect(drizzle.db._insertedRow?.status).toBe("completed");
+    });
+
     it("marks running, recomputes, and upserts a completed snapshot", async () => {
       const drizzle = buildDrizzleMock({
         selectsToSkip: 2,

@@ -18,6 +18,7 @@ import { DealDecisionService } from './deal-decision.service';
 import { CalibrationService } from './calibration.service';
 import { CalibrationRecomputeService } from './calibration-recompute.service';
 import { CalibrationRecomputeProcessor } from './calibration-recompute.processor';
+import { LensDeltaService } from './lens-delta.service';
 import {
   InvestorController,
   InvestorTeamPublicController,
@@ -29,7 +30,7 @@ import {
     QueueModule,
     NotificationModule,
     forwardRef(() => AdminModule),
-    AiModule,
+    forwardRef(() => AiModule),
     StartupModule,
     forwardRef(() => InvestorOnboardingModule),
   ],
@@ -47,6 +48,7 @@ import {
     CalibrationService,
     CalibrationRecomputeService,
     CalibrationRecomputeProcessor,
+    LensDeltaService,
   ],
   exports: [
     ThesisService,
@@ -59,6 +61,7 @@ import {
     ScoringPreferencesService,
     DealDecisionService,
     CalibrationRecomputeService,
+    LensDeltaService,
   ],
 })
 export class InvestorModule {}

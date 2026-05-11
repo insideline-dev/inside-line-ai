@@ -805,6 +805,55 @@ function AdminInvestorsPage() {
                           </CardContent>
                         </Card>
 
+                        {/* DS-E11-F2-S1 — DD vs Screening lens deltas */}
+                        <Card data-testid="dd-vs-screening-panel">
+                          <CardContent className="space-y-3 pt-4">
+                            <div>
+                              <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                                DD vs Screening
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                How DD's final lens score compares to screening's prediction on the three overlapping lenses.
+                              </p>
+                            </div>
+                            {calibration.lensDeltas && calibration.lensDeltas.length > 0 ? (
+                              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                                {calibration.lensDeltas.map((delta) => (
+                                  <div
+                                    key={delta.lensKey}
+                                    className="rounded-md border bg-muted/40 px-3 py-2 text-sm"
+                                    data-testid={`lens-delta-${delta.lensKey}`}
+                                  >
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                        {delta.lensKey}
+                                      </span>
+                                      <Badge variant="outline" className="text-[10px]">
+                                        n={delta.count}
+                                      </Badge>
+                                    </div>
+                                    <div className="mt-1 flex items-baseline gap-2">
+                                      <span className={`text-lg font-semibold ${delta.meanDelta > 0 ? "text-emerald-700" : delta.meanDelta < 0 ? "text-rose-700" : ""}`}>
+                                        {delta.meanDelta > 0 ? "+" : ""}{delta.meanDelta}
+                                      </span>
+                                      <span className="text-xs text-muted-foreground">
+                                        mean Δ
+                                      </span>
+                                    </div>
+                                    <div className="text-xs text-muted-foreground">
+                                      |Δ| {delta.meanAbsDelta}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-sm text-muted-foreground">
+                                No DD lens scores compared yet. Runs that complete evaluation after screening will populate this panel.
+                              </p>
+                            )}
+                          </CardContent>
+                        </Card>
+
                         <Card>
                           <CardContent className="space-y-3 pt-4">
                             <div>

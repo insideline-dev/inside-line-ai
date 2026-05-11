@@ -18,6 +18,7 @@ import { DealDecisionService } from './deal-decision.service';
 import { CalibrationService } from './calibration.service';
 import { CalibrationRecomputeService } from './calibration-recompute.service';
 import { CalibrationRecomputeProcessor } from './calibration-recompute.processor';
+import { CalibrationProposalService } from './calibration-proposal.service';
 import { LensDeltaService } from './lens-delta.service';
 import {
   InvestorController,
@@ -48,6 +49,7 @@ import {
     CalibrationService,
     CalibrationRecomputeService,
     CalibrationRecomputeProcessor,
+    CalibrationProposalService,
     LensDeltaService,
   ],
   exports: [
@@ -61,6 +63,7 @@ import {
     ScoringPreferencesService,
     DealDecisionService,
     CalibrationRecomputeService,
+    CalibrationProposalService,
     LensDeltaService,
   ],
 })

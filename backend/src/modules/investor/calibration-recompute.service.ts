@@ -6,6 +6,7 @@ import { QUEUE_NAMES } from "../../queue/queue.config";
 import { user, UserRole } from "../../auth/entities/auth.schema";
 import { summarizeCalibrationRows, type CalibrationSummary } from "./calibration.service";
 import { LensDeltaService, summarizeLensDeltas } from "./lens-delta.service";
+import { CalibrationProposalService } from "./calibration-proposal.service";
 import { investorDealDecision } from "./entities/investor-deal-decision.schema";
 import {
   investorCalibrationSnapshot,
@@ -51,6 +52,7 @@ export class CalibrationRecomputeService {
     private readonly drizzle: DrizzleService,
     private readonly queue: QueueService,
     private readonly lensDelta: LensDeltaService,
+    private readonly proposals: CalibrationProposalService,
   ) {}
 
   /**
@@ -186,9 +188,17 @@ export class CalibrationRecomputeService {
     await this.markRunning(investorId, jobId);
 
     try {
+      // Strict ordering — see DS-E11-F3-S1 architectural notes:
+      //   1. compute summary (decision aggregate)
+      //   2. fold lens deltas (#10 — DS-E11-F2-S1) into summary
+      //   3. write snapshot
+      //   4. generate calibration proposals (this story)
+      // (1) + (2) happen inside computeSummary.
       const summary = await this.computeSummary(investorId);
       const computedAt = new Date();
 
+      // (3) snapshot persistence — must complete before proposal hook so
+      // the audit row references state the UI can read back.
       await this.upsertSnapshot({
         investorId,
         summary,
@@ -197,6 +207,23 @@ export class CalibrationRecomputeService {
         computedAt,
         lastError: null,
       });
+
+      // (4) proposal hook — DS-E11-F3-S1. Skipped silently when the
+      // heuristic doesn't trip OR the idempotency window suppresses a
+      // duplicate. Failures here are logged but do NOT fail the
+      // recompute job — the snapshot is already persisted and the
+      // investor-visible recompute completed successfully.
+      try {
+        await this.proposals.maybeGenerateProposal(investorId, summary);
+      } catch (proposalError) {
+        const msg =
+          proposalError instanceof Error
+            ? proposalError.message
+            : String(proposalError);
+        this.logger.error(
+          `Calibration proposal hook failed for investor ${investorId} (job ${jobId}): ${msg}`,
+        );
+      }
 
       return { summary, computedAt };
     } catch (error) {

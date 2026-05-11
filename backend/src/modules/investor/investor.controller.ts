@@ -29,6 +29,11 @@ import { ScoringPreferencesService } from './scoring-preferences.service';
 import { DealDecisionService } from './deal-decision.service';
 import { RecordDealDecisionDto } from './dto/record-deal-decision.dto';
 import { CalibrationService } from './calibration.service';
+import { CalibrationProposalService } from './calibration-proposal.service';
+import {
+  ListCalibrationProposalsQueryDto,
+  RejectCalibrationProposalDto,
+} from './dto/calibration-proposal.dto';
 import { ScoringConfigService } from '../admin/scoring-config.service';
 import { StartupMatchingPipelineService } from '../ai/services/startup-matching-pipeline.service';
 import {
@@ -66,6 +71,7 @@ export class InvestorController {
     private scoringPreferencesService: ScoringPreferencesService,
     private dealDecisionService: DealDecisionService,
     private calibrationService: CalibrationService,
+    private calibrationProposalService: CalibrationProposalService,
     private scoringConfigService: ScoringConfigService,
     private startupMatching: StartupMatchingPipelineService,
   ) {}
@@ -129,6 +135,36 @@ export class InvestorController {
   @Get('calibration')
   async getCalibration(@CurrentUser() user: User) {
     return this.calibrationService.getStatsForInvestor(user.id);
+  }
+
+  // ============ CALIBRATION PROPOSALS (DS-E11-F3-S1) ============
+
+  // Lists proposals the recompute job emitted for this investor. v1 only
+  // surfaces `status=pending` in the UI; the query param defaults to
+  // `pending` so the typical hit `?` query is the right one.
+  @Get('calibration/proposals')
+  async listCalibrationProposals(
+    @CurrentUser() user: User,
+    @Query() query: ListCalibrationProposalsQueryDto,
+  ) {
+    return this.calibrationProposalService.listForInvestor(user.id, query.status);
+  }
+
+  @Post('calibration/proposals/:id/approve')
+  async approveCalibrationProposal(
+    @CurrentUser() user: User,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ) {
+    return this.calibrationProposalService.approve(user.id, id);
+  }
+
+  @Post('calibration/proposals/:id/reject')
+  async rejectCalibrationProposal(
+    @CurrentUser() user: User,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() body: RejectCalibrationProposalDto,
+  ) {
+    return this.calibrationProposalService.reject(user.id, id, body.reason);
   }
 
   // ============ MATCHES ENDPOINTS ============

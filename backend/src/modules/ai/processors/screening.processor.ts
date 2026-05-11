@@ -209,6 +209,11 @@ export class ScreeningProcessor
           })),
           modelId: result.modelId,
           promptKey: result.promptKey,
+          // DS-E2-F1-S2 — persist the version pair that produced this row so
+          // historical decisions remain replayable when the active version
+          // flips.
+          lensVersion: result.lensVersion,
+          promptVersion: result.promptVersion,
           latencyMs: result.latencyMs,
         });
       } catch (err) {
@@ -217,6 +222,16 @@ export class ScreeningProcessor
           `[ScreeningProcessor] Persist failed for lens '${result.key}' on ${startupId}: ${message}`,
         );
       }
+    }
+
+    // DS-E2-F1-S2 — capture the active lens versions for this run so the
+    // screening_decision row stays replayable independent of future env
+    // flips. Built from the runResults (not registry.getActiveVersion) so
+    // it reflects whatever version actually executed, even when run('team@2')
+    // was explicitly targeted.
+    const lensVersions: Record<string, string> = {};
+    for (const result of Object.values(results)) {
+      lensVersions[result.key] = result.lensVersion;
     }
 
     let triageDecision:
@@ -254,6 +269,9 @@ export class ScreeningProcessor
           evidence: evidenceByKey.get(key),
         })),
         thesisFitScore,
+        // DS-E2-F1-S2 — persist the active lens versions alongside the
+        // decision so historical replays know which lens code paths ran.
+        lensVersions,
       });
       triageDecision = {
         classification: decision.classification,

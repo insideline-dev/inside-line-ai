@@ -24,10 +24,10 @@ export interface LensEvidence {
 
 /**
  * One row per (startupId, lensKey, pipelineRunId). The screening processor
- * upserts these on every pipeline run; future lens versions can layer on top
- * without breaking existing rows because `modelId` + `promptKey` capture the
- * minimal versioning hook. DS-E2-F1-S2 will replace this with a real version
- * registry.
+ * upserts these on every pipeline run. `lens_version` and `prompt_version`
+ * (DS-E2-F1-S2) capture the version pair that produced each row so historical
+ * decisions stay replayable when the active lens version flips. Defaults to
+ * `'1'` so existing rows roll forward without backfill.
  */
 export const startupLensResult = pgTable(
   "startup_lens_result",
@@ -50,6 +50,8 @@ export const startupLensResult = pgTable(
       .default([]),
     modelId: text("model_id").notNull(),
     promptKey: text("prompt_key").notNull(),
+    lensVersion: text("lens_version").notNull().default("1"),
+    promptVersion: text("prompt_version").notNull().default("1"),
     latencyMs: integer("latency_ms").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()

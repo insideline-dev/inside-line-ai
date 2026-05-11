@@ -117,6 +117,16 @@ export const TriageLensInputSchema = z.object({
 });
 export type TriageLensInput = z.infer<typeof TriageLensInputSchema>;
 
+/**
+ * Lens-version map persisted onto the `screening_decision` row (DS-E2-F1-S2).
+ * Shape: `{ market: '1', team: '1', traction: '1' }`.
+ */
+export const TriageLensVersionsSchema = z.record(
+  z.string().min(1),
+  z.string().min(1),
+);
+export type TriageLensVersions = z.infer<typeof TriageLensVersionsSchema>;
+
 export const TriageDecideInputSchema = z.object({
   startupId: z.string().uuid(),
   pipelineRunId: z.string().nullable().optional(),
@@ -129,6 +139,12 @@ export const TriageDecideInputSchema = z.object({
    * burning DD attention on the deal.
    */
   thesisFitScore: z.number().int().min(0).max(100).nullable().optional(),
+  /**
+   * Active lens versions at decision time (DS-E2-F1-S2). Empty object means
+   * the caller didn't supply versions; the decision row falls back to `{}`
+   * and looks like a pre-S2 row. Provide one entry per logical lens key.
+   */
+  lensVersions: TriageLensVersionsSchema.optional(),
 });
 export type TriageDecideInput = z.infer<typeof TriageDecideInputSchema>;
 
@@ -210,6 +226,11 @@ export const ScreeningDecisionSchema = z.object({
   overallScore: z.number().int().min(0).max(100),
   reasonCodes: z.array(z.string()),
   lensSnapshot: z.array(TriageLensInputSchema),
+  /**
+   * Active lens versions at decision time (DS-E2-F1-S2). Empty object on
+   * pre-S2 rows; one entry per logical lens key otherwise.
+   */
+  lensVersions: TriageLensVersionsSchema,
   policyVersion: z.number().int().min(1),
   createdAt: z.string().datetime(),
 });
@@ -413,6 +434,7 @@ export class ScreeningTriageService {
         overallScore: outcome.overallScore,
         reasonCodes: canonical.reasonCodes,
         lensSnapshot: snapshot,
+        lensVersions: parsed.lensVersions ?? {},
         policyVersion: POLICY_VERSION,
       })
       .returning();
@@ -505,6 +527,7 @@ export class ScreeningTriageService {
       overallScore: row.overallScore,
       reasonCodes: canonical.reasonCodes,
       lensSnapshot: row.lensSnapshot,
+      lensVersions: row.lensVersions,
       policyVersion: row.policyVersion,
       createdAt: row.createdAt.toISOString(),
     };

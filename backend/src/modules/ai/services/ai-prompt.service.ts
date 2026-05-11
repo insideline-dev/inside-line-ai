@@ -25,6 +25,14 @@ export interface ResolvedPrompt {
   userPrompt: string;
   source: "code";
   revisionId: string | null;
+  /**
+   * Catalog version that produced this prompt body (DS-E2-F1-S2). `null` for
+   * entries that do not declare a `versions` map; otherwise the resolved
+   * version key (e.g. `"1"`). Persisted onto `startup_lens_result.prompt_version`
+   * by the screening processor so replay-time can fetch the exact body that
+   * produced a historical decision.
+   */
+  version: string | null;
 }
 
 @Injectable()
@@ -48,9 +56,20 @@ export class AiPromptService {
 
   constructor(@Optional() private config?: ConfigService) {}
 
-  async resolve(params: { key: string; stage?: string | null }): Promise<ResolvedPrompt> {
+  async resolve(params: {
+    key: string;
+    stage?: string | null;
+    /**
+     * Optional version (DS-E2-F1-S2). Routes to the version-keyed body in the
+     * catalog's `versions` map. When omitted, falls back to the entry's
+     * `activeVersion` (if any), else the legacy `defaultSystemPrompt` /
+     * `defaultUserPrompt` pair.
+     */
+    version?: string | null;
+  }): Promise<ResolvedPrompt> {
     const normalizedStage = this.normalizeStage(params.stage);
-    const cacheKey = `${params.key}::${normalizedStage ?? "global"}`;
+    const requestedVersion = params.version ?? null;
+    const cacheKey = `${params.key}::${normalizedStage ?? "global"}::${requestedVersion ?? "active"}`;
     const cached = this.cache.get(cacheKey);
 
     if (cached && cached.expiresAt > Date.now()) {
@@ -66,12 +85,13 @@ export class AiPromptService {
         userPrompt: "",
         source: "code",
         revisionId: null,
+        version: requestedVersion,
       };
       this.setCache(cacheKey, empty);
       return empty;
     }
 
-    const prompt = this.resolvePromptFromFiles(params.key, normalizedStage);
+    const prompt = this.resolvePromptFromFiles(params.key, normalizedStage, requestedVersion);
     const resolved: ResolvedPrompt = {
       key: params.key,
       stage: normalizedStage,
@@ -79,6 +99,7 @@ export class AiPromptService {
       userPrompt: prompt.userPrompt,
       source: "code",
       revisionId: null,
+      version: prompt.version,
     };
 
     const guardedResolved = this.injectNarrativeGuardrails(resolved);
@@ -273,20 +294,34 @@ export class AiPromptService {
   private resolvePromptFromFiles(
     key: AiPromptKey,
     stage: StartupStage | null,
-  ): { systemPrompt: string; userPrompt: string; effectiveStage: StartupStage | null } {
+    requestedVersion: string | null = null,
+  ): {
+    systemPrompt: string;
+    userPrompt: string;
+    effectiveStage: StartupStage | null;
+    /** Resolved version, or null for entries without a `versions` map. */
+    version: string | null;
+  } {
     const catalog = AI_PROMPT_CATALOG[key];
+
+    // DS-E2-F1-S2 — versioned bodies. When the entry declares a `versions`
+    // map, prefer it over the legacy `defaultSystemPrompt` / `defaultUserPrompt`
+    // pair. Falls back to defaults if the requested version is unknown.
+    const versionedBody = this.resolveVersionedBody(catalog, requestedVersion);
+
     const globalSystem =
       this.readPromptFile(this.buildPromptFilePath(key, "system", null)) ??
-      catalog.defaultSystemPrompt;
+      versionedBody.systemPrompt;
     const globalUser =
       this.readPromptFile(this.buildPromptFilePath(key, "user", null)) ??
-      catalog.defaultUserPrompt;
+      versionedBody.userPrompt;
 
     if (!stage) {
       return {
         systemPrompt: globalSystem,
         userPrompt: globalUser,
         effectiveStage: null,
+        version: versionedBody.version,
       };
     }
 
@@ -298,6 +333,55 @@ export class AiPromptService {
       systemPrompt: stageSystem ?? globalSystem,
       userPrompt: stageUser ?? globalUser,
       effectiveStage: hasStageOverride ? stage : null,
+      version: versionedBody.version,
+    };
+  }
+
+  /**
+   * Pick the right body from a catalog entry given an optional version
+   * request. Three cases:
+   *  - Entry has no `versions` map → return defaults, `version = null`.
+   *  - Caller didn't supply a version → use `activeVersion`. Falls back to
+   *    defaults if `activeVersion` isn't in the map (shouldn't happen for a
+   *    well-formed catalog, but stays defensive).
+   *  - Caller supplied a version → use that exact version. Falls back to
+   *    `activeVersion` (then defaults) with a warning if unknown.
+   */
+  private resolveVersionedBody(
+    catalog: { defaultSystemPrompt: string; defaultUserPrompt: string; versions?: Record<string, { systemPrompt: string; userPrompt: string }>; activeVersion?: string },
+    requestedVersion: string | null,
+  ): { systemPrompt: string; userPrompt: string; version: string | null } {
+    const versions = catalog.versions;
+    if (!versions) {
+      return {
+        systemPrompt: catalog.defaultSystemPrompt,
+        userPrompt: catalog.defaultUserPrompt,
+        version: null,
+      };
+    }
+
+    if (requestedVersion !== null) {
+      const body = versions[requestedVersion];
+      if (body) {
+        return { ...body, version: requestedVersion };
+      }
+      this.logger.warn(
+        `Requested prompt version ${requestedVersion} not in catalog versions [${Object.keys(versions).join(", ")}]; falling back to active.`,
+      );
+    }
+
+    const activeVersion = catalog.activeVersion;
+    if (activeVersion) {
+      const body = versions[activeVersion];
+      if (body) {
+        return { ...body, version: activeVersion };
+      }
+    }
+
+    return {
+      systemPrompt: catalog.defaultSystemPrompt,
+      userPrompt: catalog.defaultUserPrompt,
+      version: null,
     };
   }
 

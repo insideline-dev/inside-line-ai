@@ -22,6 +22,19 @@ export const LENS_FALLBACK_RATIONALE_PREFIX = "Lens unavailable";
 /** Result wrapper returned by `BaseLensAgent.run()`. */
 export interface LensRunResult<TOutput extends LensOutput> {
   key: string;
+  /**
+   * Lens-class version (DS-E2-F1-S2). Always a stringified positive integer
+   * (e.g. `"1"`, `"2"`). Persisted on `startup_lens_result.lens_version` so
+   * historical decisions stay replayable when the active version flips.
+   */
+  lensVersion: string;
+  /**
+   * Prompt revision that produced this output (DS-E2-F1-S2). Mirrors the
+   * `version` carried on the resolved prompt catalog entry. Persisted on
+   * `startup_lens_result.prompt_version` so prompt rewrites can ship behind
+   * a config flip without losing historical traceability.
+   */
+  promptVersion: string;
   output: TOutput;
   modelId: string;
   promptKey: AiPromptKey;
@@ -52,6 +65,13 @@ export abstract class BaseLensAgent<TOutput extends LensOutput> {
   abstract readonly description: string;
   abstract readonly promptKey: AiPromptKey;
   abstract readonly outputSchema: z.ZodType<TOutput>;
+  /**
+   * Lens-class version. Stringified positive integer ("1", "2", ...). Bumped
+   * by spinning up a new lens class (e.g. `TeamLensV2`) — never edit a
+   * deployed lens's `version` in place, as that would invalidate replay of
+   * historical decisions persisted at the old version (DS-E2-F1-S2).
+   */
+  readonly version: string = "1";
   /** Argument shape for the Vercel AI SDK tool wrapper. */
   readonly inputSchema = LensInputSchema;
 
@@ -96,9 +116,17 @@ export abstract class BaseLensAgent<TOutput extends LensOutput> {
     const ctx = this.inputSchema.parse(rawCtx);
     const startedAt = Date.now();
     const modelId = this.resolveModelId();
+    const lensVersion = this.version;
+    // DS-E2-F1-S2 — capture the prompt revision used for this run so the
+    // result row stays traceable even if the catalog's active version flips
+    // between this lens completing and the persistence write. Resolved lazily
+    // inside the try block; default to lensVersion for the fallback path so
+    // the persisted row is never missing a value.
+    let promptVersion = lensVersion;
 
     try {
       const resolved = await this.prompts.resolve({ key: this.promptKey });
+      promptVersion = resolved.version ?? lensVersion;
       const variables = this.buildVariables(ctx);
       const system = this.prompts.renderTemplate(
         resolved.systemPrompt,
@@ -134,6 +162,8 @@ export abstract class BaseLensAgent<TOutput extends LensOutput> {
 
       return {
         key: this.key,
+        lensVersion,
+        promptVersion,
         output: cleaned,
         modelId,
         promptKey: this.promptKey,
@@ -147,6 +177,8 @@ export abstract class BaseLensAgent<TOutput extends LensOutput> {
       );
       return {
         key: this.key,
+        lensVersion,
+        promptVersion,
         output: this.fallback(ctx, message),
         modelId,
         promptKey: this.promptKey,

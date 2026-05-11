@@ -1,10 +1,25 @@
-import { useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 import { MarkdownText } from "@/components/MarkdownText";
 import { MemoSection } from "@/components/MemoSection";
+import {
+  useRegenerateMemoSection,
+  type MemoSectionKey,
+} from "@/lib/memo/useRegenerateMemoSection";
 import {
   FileText,
   Users,
@@ -42,6 +57,11 @@ interface InvestorMemoSection {
   highlights?: string[];
   concerns?: string[];
   sources?: MemoSectionSource[];
+  // DG-E1-F1-S2: stable identifier + audit timestamp populated by the
+  // section-scoped regenerate endpoint. Legacy memos pre-DG-E1-F1-S2 lack
+  // both fields; readers must tolerate `undefined`.
+  sectionKey?: MemoSectionKey;
+  regeneratedAt?: string;
 }
 
 interface InvestorMemo {
@@ -306,6 +326,27 @@ function toEvaluationSourceArray(value: unknown): MemoSectionSource[] {
     });
 }
 
+const VALID_SECTION_KEYS: ReadonlySet<MemoSectionKey> = new Set<MemoSectionKey>([
+  "team",
+  "market",
+  "product",
+  "traction",
+  "businessModel",
+  "gtm",
+  "financials",
+  "competitiveAdvantage",
+  "legal",
+  "dealTerms",
+  "exitPotential",
+]);
+
+function toMemoSectionKey(value: unknown): MemoSectionKey | undefined {
+  if (typeof value !== "string") return undefined;
+  return VALID_SECTION_KEYS.has(value as MemoSectionKey)
+    ? (value as MemoSectionKey)
+    : undefined;
+}
+
 function toMemoSections(value: unknown): InvestorMemoSection[] {
   if (!Array.isArray(value)) return [];
   return value
@@ -321,6 +362,11 @@ function toMemoSections(value: unknown): InvestorMemoSection[] {
         highlights: toStringArray(record.highlights),
         concerns: toStringArray(record.concerns),
         sources: toSourceArray(record.sources),
+        sectionKey: toMemoSectionKey(record.sectionKey),
+        regeneratedAt:
+          typeof record.regeneratedAt === "string" && record.regeneratedAt.length > 0
+            ? record.regeneratedAt
+            : undefined,
       };
     })
     .filter((item): item is InvestorMemoSection => item !== null);
@@ -351,6 +397,59 @@ export function MemoTabContent({
       sectionByKey.set(key, section);
     }
   }
+
+  const regenerateMutation = useRegenerateMemoSection(startup.id);
+  const [pendingRegen, setPendingRegen] = useState<MemoSectionKey | null>(null);
+
+  const triggerRegenerate = useCallback(
+    (sectionKey: MemoSectionKey) => {
+      regenerateMutation.mutate(sectionKey, {
+        onSuccess: (result) => {
+          toast.success(`Regenerated the ${result.section.title} section.`, {
+            description: result.usedFallback
+              ? "Returned a safe fallback — re-run again to refresh."
+              : undefined,
+          });
+        },
+        onError: (error) => {
+          toast.error("Failed to regenerate section", {
+            description: error instanceof Error ? error.message : String(error),
+          });
+        },
+      });
+    },
+    [regenerateMutation],
+  );
+
+  const handleRegenerateClick = useCallback(
+    (sectionKey: string) => {
+      if (forcePrint) return;
+      const normalized = toMemoSectionKey(sectionKey);
+      if (!normalized) return;
+      const section = sectionByKey.get(normalized);
+      // Confirm before overwrite when the section was previously regenerated
+      // (signal of operator-driven changes). Always confirm for sections with
+      // explicit edits — there's no inline edit affordance yet, but this hook
+      // lets the same flow handle that case once it lands (DG-E1-F3-S1).
+      if (section?.regeneratedAt) {
+        setPendingRegen(normalized);
+        return;
+      }
+      triggerRegenerate(normalized);
+    },
+    [forcePrint, sectionByKey, triggerRegenerate],
+  );
+
+  const confirmRegenerate = useCallback(() => {
+    if (!pendingRegen) return;
+    triggerRegenerate(pendingRegen);
+    setPendingRegen(null);
+  }, [pendingRegen, triggerRegenerate]);
+
+  const inFlightSectionKey: MemoSectionKey | null =
+    regenerateMutation.isPending && regenerateMutation.variables
+      ? regenerateMutation.variables
+      : null;
 
   const dueDiligenceAreas = toStringArray(memo?.keyDueDiligenceAreas);
   const getAdminFeedbackProps = (sectionKey: string) => {
@@ -495,6 +594,7 @@ export function MemoTabContent({
           const section = sectionByKey.get(config.key);
           const sectionSources = section?.sources ?? [];
           const sectionDetails = undefined;
+          const isRegenerating = inFlightSectionKey === config.key;
 
           return (
             <MemoSection
@@ -509,10 +609,49 @@ export function MemoTabContent({
               details={sectionDetails}
               evaluationNote={config.evaluationNote}
               adminFeedback={forcePrint ? undefined : getAdminFeedbackProps(config.key)}
+              regenerateSection={
+                forcePrint
+                  ? undefined
+                  : {
+                      sectionKey: config.key,
+                      onRegenerate: handleRegenerateClick,
+                      isRegenerating,
+                      lastRegeneratedAt: section?.regeneratedAt,
+                    }
+              }
               forcePrint={forcePrint}
             />
           );
         })}
+
+        <AlertDialog
+          open={pendingRegen !== null}
+          onOpenChange={(open) => {
+            if (!open) setPendingRegen(null);
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Regenerate this section?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This section has been regenerated before. Re-running synthesis will
+                replace its narrative, highlights, concerns, and sources. Other
+                memo sections are not affected.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel data-testid="button-regenerate-cancel">
+                Keep current
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={confirmRegenerate}
+                data-testid="button-regenerate-confirm"
+              >
+                Regenerate
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         <div className="mt-6 pt-6 border-t" data-testid="section-due-diligence">
           <div className="flex items-center gap-2 mb-4">

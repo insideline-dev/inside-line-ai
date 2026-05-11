@@ -17,6 +17,24 @@ interface AdminFeedbackProps {
   isReanalyzing?: boolean;
 }
 
+/**
+ * DG-E1-F1-S2 — section-scoped memo regenerate handler. When provided, the
+ * section header renders a Regenerate button that triggers a single-section
+ * synthesis re-run. Confirmation behavior lives in the caller (parent
+ * decides whether to prompt before invoking — required when operator edits
+ * exist for the section).
+ */
+interface RegenerateSectionProps {
+  sectionKey: string;
+  onRegenerate: (sectionKey: string) => void;
+  isRegenerating?: boolean;
+  /**
+   * Set when this section was previously regenerated via the section-scoped
+   * endpoint — surfaced as a "Last regenerated" indicator on the header.
+   */
+  lastRegeneratedAt?: string;
+}
+
 interface MemoSectionProps {
   title: string;
   icon: LucideIcon;
@@ -29,6 +47,7 @@ interface MemoSectionProps {
   trend?: "up" | "down" | "neutral";
   defaultExpanded?: boolean;
   adminFeedback?: AdminFeedbackProps;
+  regenerateSection?: RegenerateSectionProps;
   animateOnChange?: boolean;
   animateOnMount?: boolean;
   forcePrint?: boolean;
@@ -45,6 +64,7 @@ export function MemoSection({
   evaluationNote,
   trend,
   adminFeedback,
+  regenerateSection,
   animateOnChange = true,
   animateOnMount = false,
   forcePrint = false,
@@ -148,11 +168,37 @@ export function MemoSection({
               </TooltipContent>
             </Tooltip>
           )}
+          {regenerateSection && !forcePrint && (
+            <div className="ml-auto flex items-center gap-1">
+              {regenerateSection.lastRegeneratedAt && (
+                <span
+                  className="text-[10px] text-muted-foreground"
+                  data-testid={`memo-section-last-regenerated-${regenerateSection.sectionKey}`}
+                >
+                  Regenerated
+                </span>
+              )}
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-6 px-2"
+                onClick={() => regenerateSection.onRegenerate(regenerateSection.sectionKey)}
+                disabled={regenerateSection.isRegenerating}
+                data-testid={`button-regenerate-${regenerateSection.sectionKey}`}
+                aria-label={`Regenerate ${title} section`}
+              >
+                <RefreshCw
+                  className={`w-3 h-3 mr-1 ${regenerateSection.isRegenerating ? "animate-spin" : ""}`}
+                />
+                {regenerateSection.isRegenerating ? "Regenerating…" : "Regenerate"}
+              </Button>
+            </div>
+          )}
           {adminFeedback && (
             <Button
               size="sm"
               variant="ghost"
-              className="h-6 px-2 ml-auto"
+              className={regenerateSection ? "h-6 px-2" : "h-6 px-2 ml-auto"}
               onClick={() => setShowFeedback(!showFeedback)}
               data-testid={`button-feedback-${adminFeedback.sectionKey}`}
             >

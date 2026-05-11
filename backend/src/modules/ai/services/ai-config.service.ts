@@ -157,6 +157,12 @@ export class AiConfigService {
     return this.toPositiveInt(configured, DEFAULT_SYNTHESIS_AGENT_HARD_TIMEOUT_MS);
   }
 
+  // Per-section regeneration is single-section, single-call — much smaller
+  // output budget than the 11-section memo prompt. Keeps P95 < 30s feasible.
+  getSectionRegenMaxOutputTokens(): number {
+    return this.config.get<number>("AI_MEMO_SECTION_REGEN_MAX_OUTPUT_TOKENS", 8000);
+  }
+
   getDynamicAgentAttemptTimeoutMs(): number {
     const configured = this.config.get<number>("AI_DYNAMIC_AGENT_ATTEMPT_TIMEOUT_MS");
     return this.toPositiveInt(configured, 600_000); // 10 min

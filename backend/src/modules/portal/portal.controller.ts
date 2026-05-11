@@ -7,8 +7,14 @@ import {
   Body,
   Param,
   Query,
+  Req,
+  Res,
+  Ip,
   UseGuards,
+  HttpException,
+  HttpStatus,
 } from '@nestjs/common';
+import type { Request, Response } from 'express';
 import { JwtAuthGuard } from '../../auth/guards';
 import { CurrentUser } from '../../auth/decorators';
 import { Public } from '../../auth/decorators';
@@ -24,6 +30,7 @@ import {
   GetSubmissionsQueryDto,
   SubmitToPortalDto,
 } from './dto';
+import { extractClientIp } from './utils/submission-canonical';
 
 type User = {
   id: string;
@@ -109,6 +116,36 @@ export class PortalController {
     return this.submissionService.reject(submissionId, user.id);
   }
 
+  // ============ ADMIN ABUSE-AUDIT (DS-E1-F7-S1) ============
+
+  /**
+   * Read-only view of the public-portal submission audit log. Useful when
+   * investigating "is someone spraying our apply link?". `since` accepts an
+   * ISO timestamp; defaults to "all time" so an admin can just hit it.
+   */
+  @Get(':id/submission-audit')
+  @Roles(UserRole.INVESTOR, UserRole.ADMIN)
+  async listSubmissionAudit(
+    @CurrentUser() user: User,
+    @Param('id') portalId: string,
+    @Query('since') sinceRaw?: string,
+    @Query('limit') limitRaw?: string,
+  ) {
+    // Ensure the caller actually owns this portal (or is admin).
+    await this.portalService.findOne(portalId, user.id);
+    const since = sinceRaw ? new Date(sinceRaw) : undefined;
+    if (since && Number.isNaN(since.getTime())) {
+      throw new HttpException(
+        '`since` must be an ISO-8601 timestamp',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const limit = limitRaw
+      ? Math.min(Math.max(parseInt(limitRaw, 10) || 100, 1), 500)
+      : 100;
+    return this.submissionService.listAudit(portalId, { since, limit });
+  }
+
   // ============ PUBLIC ENDPOINTS ============
 
   @Public()
@@ -122,8 +159,34 @@ export class PortalController {
   async submitToPortal(
     @Param('slug') slug: string,
     @Body() dto: SubmitToPortalDto,
+    @Ip() ip: string,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
   ) {
     const portalData = await this.portalService.findBySlug(slug);
-    return this.submissionService.create(portalData.id, dto);
+    const clientIp = extractClientIp({
+      ip,
+      forwardedFor: req.headers['x-forwarded-for'] ?? null,
+    });
+    try {
+      return await this.submissionService.create(portalData.id, dto, {
+        ipAddress: clientIp,
+      });
+    } catch (error) {
+      if (
+        error instanceof HttpException &&
+        error.getStatus() === HttpStatus.TOO_MANY_REQUESTS
+      ) {
+        const payload = error.getResponse();
+        const retryAfter =
+          typeof payload === 'object' && payload !== null
+            ? (payload as { retryAfterSeconds?: number }).retryAfterSeconds
+            : undefined;
+        if (retryAfter && Number.isFinite(retryAfter)) {
+          res.setHeader('Retry-After', String(retryAfter));
+        }
+      }
+      throw error;
+    }
   }
 }

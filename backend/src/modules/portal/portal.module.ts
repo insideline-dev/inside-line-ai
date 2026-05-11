@@ -5,11 +5,12 @@ import { AuthModule } from '../../auth';
 import { PortalController } from './portal.controller';
 import { PortalService } from './portal.service';
 import { SubmissionService } from './submission.service';
+import { SubmissionRateLimitService } from './submission-rate-limit.service';
 
 @Module({
   imports: [DatabaseModule, NotificationModule, AuthModule],
   controllers: [PortalController],
-  providers: [PortalService, SubmissionService],
-  exports: [PortalService, SubmissionService],
+  providers: [PortalService, SubmissionService, SubmissionRateLimitService],
+  exports: [PortalService, SubmissionService, SubmissionRateLimitService],
 })
 export class PortalModule {}

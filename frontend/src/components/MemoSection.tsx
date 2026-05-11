@@ -4,7 +4,17 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { TrendingUp, TrendingDown, Minus, Info, RefreshCw, MessageSquare, ChevronDown, ChevronUp } from "lucide-react";
+import {
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  Info,
+  RefreshCw,
+  MessageSquare,
+  ChevronDown,
+  ChevronUp,
+  Pencil,
+} from "lucide-react";
 import { CitedText } from "./CitedText";
 import { toast } from "sonner";
 import type { LucideIcon } from "lucide-react";
@@ -35,6 +45,22 @@ interface RegenerateSectionProps {
   lastRegeneratedAt?: string;
 }
 
+/**
+ * DG-E1-F3-S1 — inline claim edit affordance. When provided, the section
+ * header renders an "Edit" button that opens a dialog where the operator
+ * can rewrite the section's narrative directly, optionally asking the AI
+ * for up to 3 polished candidates that preserve the section's citations.
+ */
+interface InlineEditProps {
+  sectionKey: string;
+  onEdit: (sectionKey: string) => void;
+  /**
+   * Display-only flag — set when an edit dialog is currently open for
+   * this section so the parent can grey the button.
+   */
+  isEditing?: boolean;
+}
+
 interface MemoSectionProps {
   title: string;
   icon: LucideIcon;
@@ -48,6 +74,7 @@ interface MemoSectionProps {
   defaultExpanded?: boolean;
   adminFeedback?: AdminFeedbackProps;
   regenerateSection?: RegenerateSectionProps;
+  inlineEdit?: InlineEditProps;
   animateOnChange?: boolean;
   animateOnMount?: boolean;
   forcePrint?: boolean;
@@ -65,6 +92,7 @@ export function MemoSection({
   trend,
   adminFeedback,
   regenerateSection,
+  inlineEdit,
   animateOnChange = true,
   animateOnMount = false,
   forcePrint = false,
@@ -168,9 +196,9 @@ export function MemoSection({
               </TooltipContent>
             </Tooltip>
           )}
-          {regenerateSection && !forcePrint && (
+          {(regenerateSection || inlineEdit) && !forcePrint && (
             <div className="ml-auto flex items-center gap-1">
-              {regenerateSection.lastRegeneratedAt && (
+              {regenerateSection?.lastRegeneratedAt && (
                 <span
                   className="text-[10px] text-muted-foreground"
                   data-testid={`memo-section-last-regenerated-${regenerateSection.sectionKey}`}
@@ -178,27 +206,43 @@ export function MemoSection({
                   Regenerated
                 </span>
               )}
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-6 px-2"
-                onClick={() => regenerateSection.onRegenerate(regenerateSection.sectionKey)}
-                disabled={regenerateSection.isRegenerating}
-                data-testid={`button-regenerate-${regenerateSection.sectionKey}`}
-                aria-label={`Regenerate ${title} section`}
-              >
-                <RefreshCw
-                  className={`w-3 h-3 mr-1 ${regenerateSection.isRegenerating ? "animate-spin" : ""}`}
-                />
-                {regenerateSection.isRegenerating ? "Regenerating…" : "Regenerate"}
-              </Button>
+              {inlineEdit && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 px-2"
+                  onClick={() => inlineEdit.onEdit(inlineEdit.sectionKey)}
+                  disabled={inlineEdit.isEditing}
+                  data-testid={`button-edit-${inlineEdit.sectionKey}`}
+                  aria-label={`Edit ${title} section`}
+                >
+                  <Pencil className="w-3 h-3 mr-1" />
+                  Edit
+                </Button>
+              )}
+              {regenerateSection && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 px-2"
+                  onClick={() => regenerateSection.onRegenerate(regenerateSection.sectionKey)}
+                  disabled={regenerateSection.isRegenerating}
+                  data-testid={`button-regenerate-${regenerateSection.sectionKey}`}
+                  aria-label={`Regenerate ${title} section`}
+                >
+                  <RefreshCw
+                    className={`w-3 h-3 mr-1 ${regenerateSection.isRegenerating ? "animate-spin" : ""}`}
+                  />
+                  {regenerateSection.isRegenerating ? "Regenerating…" : "Regenerate"}
+                </Button>
+              )}
             </div>
           )}
           {adminFeedback && (
             <Button
               size="sm"
               variant="ghost"
-              className={regenerateSection ? "h-6 px-2" : "h-6 px-2 ml-auto"}
+              className={regenerateSection || inlineEdit ? "h-6 px-2" : "h-6 px-2 ml-auto"}
               onClick={() => setShowFeedback(!showFeedback)}
               data-testid={`button-feedback-${adminFeedback.sectionKey}`}
             >

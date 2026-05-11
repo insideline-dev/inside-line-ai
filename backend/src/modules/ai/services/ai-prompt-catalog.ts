@@ -51,6 +51,7 @@ export const AI_PROMPT_KEYS = [
   "synthesis.memo-chunk",
   "synthesis.memo-summary",
   "synthesis.report",
+  "memo.claim.rewrite",
   "matching.thesis",
   "pipeline.orchestrator",
   "extraction.linkedin",
@@ -273,6 +274,22 @@ export const AI_PROMPT_VARIABLE_DEFINITIONS: Record<string, PromptVariableDefini
   intentInstructions: {
     description: "Intent-specific instruction block appended to Clara response prompt.",
     source: "ClaraAiService.generateResponse()",
+  },
+  originalText: {
+    description: "Verbatim operator-selected claim text from a memo paragraph (DG-E1-F3-S1).",
+    source: "MemoClaimRewriteService.buildPromptVariables()",
+  },
+  instruction: {
+    description: "Optional partner-supplied steering for the rewrite (e.g. 'shorter', 'more cautious').",
+    source: "MemoClaimRewriteService.buildPromptVariables()",
+  },
+  sourcesBlock: {
+    description: "Bullet-formatted list of cited sources (label + url) that constrain the rewrite.",
+    source: "MemoClaimRewriteService.buildPromptVariables()",
+  },
+  sectionTitle: {
+    description: "Display title of the memo section the rewrite belongs to, for prompt context only.",
+    source: "MemoClaimRewriteService.buildPromptVariables()",
   },
 };
 
@@ -1328,6 +1345,42 @@ export const AI_PROMPT_CATALOG: Record<AiPromptKey, PromptCatalogEntry> = {
     ].join("\n"),
     allowedVariables: ["companyName", "stage", "sector", "location", "website", "executiveSummary", "memoSectionsSummary", "keyDueDiligenceAreas", "evaluationBrief", "evaluationRecommendations", "stageWeights"],
     requiredVariables: ["companyName", "evaluationBrief"],
+  },
+  "memo.claim.rewrite": {
+    key: "memo.claim.rewrite",
+    displayName: "Memo Claim Rewrite",
+    description:
+      "Suggest up to 3 polished rewrites of an operator-selected memo claim. Must preserve the existing source set and never introduce new uncited facts (DG-E1-F3-S1).",
+    surface: "pipeline",
+    defaultSystemPrompt: [
+      "You are a senior VC analyst polishing a single sentence or paragraph from an investment memo.",
+      "",
+      "## Hard rules",
+      "- Preserve cited sources: every rewrite must remain truthful to the existing source set; do NOT introduce new facts, named entities, numbers, dates, percentages, currency amounts, or quotes that are absent from the original claim.",
+      "- Tighten or rephrase ONLY — never expand scope, add new analysis, or invent supporting evidence.",
+      "- Keep the same overall meaning. If the operator-supplied instruction is incompatible with preserving meaning, prefer preserving meaning.",
+      "- Maintain inline citation markers (e.g. [1], [2]) exactly as they appear in the original claim; do not add or remove them.",
+      "- Output between 1 and 3 candidate rewrites. Fewer is better when alternatives would be near-duplicates.",
+      "- Each candidate must be standalone prose — do not include leading numbering, bullet markers, headings, or commentary about the rewrite.",
+      "",
+      "## Optional steering",
+      "If `instruction` is provided (e.g. 'shorter', 'more cautious', 'tighten the hedging'), follow it as best you can within the hard rules above.",
+    ].join("\n"),
+    defaultUserPrompt: [
+      "Original claim:",
+      "\"\"\"",
+      "{{originalText}}",
+      "\"\"\"",
+      "",
+      "Operator instruction (optional): {{instruction}}",
+      "",
+      "Cited sources (label · url):",
+      "{{sourcesBlock}}",
+      "",
+      "Return up to 3 distinct rewrites that preserve the cited source set and the original meaning. Do not invent new facts.",
+    ].join("\n"),
+    allowedVariables: ["originalText", "instruction", "sourcesBlock", "sectionTitle"],
+    requiredVariables: ["originalText"],
   },
   "matching.thesis": {
     key: "matching.thesis",

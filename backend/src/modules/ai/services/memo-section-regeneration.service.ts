@@ -65,6 +65,27 @@ export interface RegenerateMemoSectionResult {
   overwroteOperatorEdits: boolean;
 }
 
+export interface ApplyOperatorRewriteOptions {
+  /** Verbatim operator-edited section narrative. */
+  newContent: string;
+  /**
+   * Optional source override. When omitted, the existing section's
+   * `sources` array is preserved unchanged — load-bearing for the
+   * inline-edit acceptance flow (DG-E1-F3-S1) where citation linkage
+   * must survive the rewrite. Pass [] only to deliberately strip
+   * sources.
+   */
+  sources?: PersistedMemoSectionSource[];
+}
+
+export interface ApplyOperatorRewriteResult {
+  startupId: string;
+  sectionKey: EvaluationAgentKey;
+  section: PersistedMemoSection;
+  regeneratedAt: string;
+  overwroteOperatorEdits: boolean;
+}
+
 /**
  * Section-scoped memo regeneration (DG-E1-F1-S2).
  *
@@ -81,7 +102,11 @@ export interface RegenerateMemoSectionResult {
 @Injectable()
 export class MemoSectionRegenerationService {
   private readonly logger = new Logger(MemoSectionRegenerationService.name);
-  private readonly inFlight = new Map<string, Promise<RegenerateMemoSectionResult>>();
+  // The mutex guards both `regenerate` and `applyOperatorRewrite` for the
+  // same (startupId, sectionKey). Stored as unknown-typed promises so the
+  // single map can track both flavors of in-flight work — only the
+  // membership check matters for race protection.
+  private readonly inFlight = new Map<string, Promise<unknown>>();
 
   constructor(
     private readonly drizzle: DrizzleService,
@@ -118,6 +143,130 @@ export class MemoSectionRegenerationService {
       });
     this.inFlight.set(key, promise);
     return promise;
+  }
+
+  /**
+   * DG-E1-F3-S1 — persist an operator-accepted rewrite for a single memo
+   * section. Skips the model call but reuses every guarantee
+   * `regenerate()` provides: same in-flight mutex, same JSON-merge so
+   * other sections / executive summary / DDAs survive, same
+   * `overwroteOperatorEdits` semantics for downstream UI confirms.
+   *
+   * Citation linkage is preserved by default — when `options.sources` is
+   * omitted we copy the existing section's `sources` forward verbatim.
+   * The new `regeneratedAt` timestamp bumps so a subsequent regenerate
+   * will surface the overwrite warning.
+   */
+  async applyOperatorRewrite(
+    startupId: string,
+    sectionKey: EvaluationAgentKey,
+    options: ApplyOperatorRewriteOptions,
+  ): Promise<ApplyOperatorRewriteResult> {
+    const sectionMeta = MEMO_SECTION_ORDER.find((s) => s.key === sectionKey);
+    if (!sectionMeta) {
+      throw new NotFoundException(`Unknown memo section: ${sectionKey}`);
+    }
+
+    const trimmed = options.newContent.trim();
+    if (trimmed.length === 0) {
+      throw new NotFoundException(
+        `Cannot apply rewrite for section "${sectionKey}" — newContent is empty.`,
+      );
+    }
+
+    const key = this.flightKey(startupId, sectionKey);
+    if (this.inFlight.has(key)) {
+      throw new ConflictException(
+        `A memo write for section "${sectionKey}" is already in progress for this startup. Wait for it to finish before retrying.`,
+      );
+    }
+
+    const promise = this.runApplyOperatorRewrite(
+      startupId,
+      sectionKey,
+      sectionMeta.title,
+      trimmed,
+      options.sources,
+    ).finally(() => {
+      this.inFlight.delete(key);
+    });
+    this.inFlight.set(key, promise);
+    return promise;
+  }
+
+  private async runApplyOperatorRewrite(
+    startupId: string,
+    sectionKey: EvaluationAgentKey,
+    sectionTitle: string,
+    newContent: string,
+    sourcesOverride: PersistedMemoSectionSource[] | undefined,
+  ): Promise<ApplyOperatorRewriteResult> {
+    const existing = await this.loadEvaluationRow(startupId);
+    if (!existing) {
+      throw new NotFoundException(
+        `Cannot apply rewrite for section "${sectionKey}" — startup evaluation row not found.`,
+      );
+    }
+
+    const existingMemo =
+      (existing.investorMemo as PersistedInvestorMemo | null) ?? null;
+    const previousSection = this.findSectionInMemo(
+      existingMemo,
+      sectionKey,
+      sectionTitle,
+    );
+
+    const sanitizedOverride = sourcesOverride?.filter(
+      (s) => typeof s.url === "string" && s.url.trim().length > 0,
+    );
+    const preservedSources: PersistedMemoSectionSource[] =
+      sanitizedOverride ?? previousSection?.sources ?? [];
+
+    const regeneratedAt = new Date().toISOString();
+    const nextSection: PersistedMemoSection = {
+      title: previousSection?.title || sectionTitle,
+      content: newContent,
+      // Preserve operator-curated structural fields. Inline claim rewrite
+      // changes prose only — highlights / concerns survive untouched
+      // unless the operator-edit pipeline later supplies replacements.
+      highlights: previousSection?.highlights ?? [],
+      concerns: previousSection?.concerns ?? [],
+      sources: preservedSources.map((s) => ({
+        label: s.label && s.label.trim().length > 0 ? s.label : s.url,
+        url: s.url,
+      })),
+      sectionKey,
+      regeneratedAt,
+    };
+
+    const merged = this.mergeSection(
+      existingMemo,
+      sectionKey,
+      sectionTitle,
+      nextSection,
+    );
+
+    const overwroteOperatorEdits = Boolean(previousSection?.regeneratedAt);
+
+    await this.drizzle.db
+      .update(startupEvaluation)
+      .set({
+        investorMemo: merged as unknown as Record<string, unknown>,
+        updatedAt: new Date(),
+      })
+      .where(eq(startupEvaluation.startupId, startupId));
+
+    this.logger.log(
+      `[MemoSectionRegen] Operator rewrite persisted | Startup: ${startupId} | Section: ${sectionKey} | Overwrote prior edits: ${overwroteOperatorEdits}`,
+    );
+
+    return {
+      startupId,
+      sectionKey,
+      section: nextSection,
+      regeneratedAt,
+      overwroteOperatorEdits,
+    };
   }
 
   private async runRegeneration(

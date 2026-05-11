@@ -513,6 +513,16 @@ const RUNTIME_SCHEMA_BY_KEY: Record<AiPromptKey, PromptRuntimeSchema> = {
     ],
     notes: ["Produces UI-facing report fields: deal snapshot, strengths, risks, founder report, confidence notes."],
   },
+  "memo.claim.rewrite": {
+    requiredPhases: [PipelinePhase.SYNTHESIS],
+    fields: [
+      { path: "originalText", label: "Original Claim", type: "string", sourceVariable: "originalText" },
+      { path: "instruction", label: "Operator Instruction", type: "string", sourceVariable: "instruction" },
+      { path: "sourcesBlock", label: "Cited Sources Block", type: "string", sourceVariable: "sourcesBlock" },
+      { path: "sectionTitle", label: "Memo Section Title", type: "string", sourceVariable: "sectionTitle" },
+    ],
+    notes: ["Operator-triggered single-claim rewrite (DG-E1-F3-S1). Must preserve cited sources and original meaning."],
+  },
   "matching.thesis": {
     requiredPhases: [PipelinePhase.EXTRACTION, PipelinePhase.SYNTHESIS],
     fields: [

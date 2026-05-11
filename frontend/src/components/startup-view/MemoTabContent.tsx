@@ -16,6 +16,7 @@ import {
 
 import { MarkdownText } from "@/components/MarkdownText";
 import { MemoSection } from "@/components/MemoSection";
+import { MemoClaimRewritePopover } from "@/components/startup-view/MemoClaimRewritePopover";
 import {
   useRegenerateMemoSection,
   type MemoSectionKey,
@@ -400,6 +401,12 @@ export function MemoTabContent({
 
   const regenerateMutation = useRegenerateMemoSection(startup.id);
   const [pendingRegen, setPendingRegen] = useState<MemoSectionKey | null>(null);
+  // DG-E1-F3-S1 — track which section currently has the inline-edit
+  // dialog open so the parent (which owns the section data) can pass
+  // the live narrative + sources into the popover.
+  const [editingSection, setEditingSection] = useState<MemoSectionKey | null>(
+    null,
+  );
 
   const triggerRegenerate = useCallback(
     (sectionKey: MemoSectionKey) => {
@@ -445,6 +452,25 @@ export function MemoTabContent({
     triggerRegenerate(pendingRegen);
     setPendingRegen(null);
   }, [pendingRegen, triggerRegenerate]);
+
+  const handleEditClick = useCallback(
+    (sectionKey: string) => {
+      if (forcePrint) return;
+      const normalized = toMemoSectionKey(sectionKey);
+      if (!normalized) return;
+      setEditingSection(normalized);
+    },
+    [forcePrint],
+  );
+
+  const closeEditDialog = useCallback(() => setEditingSection(null), []);
+
+  const editingSectionData =
+    editingSection !== null ? sectionByKey.get(editingSection) ?? null : null;
+  const editingSectionConfig =
+    editingSection !== null
+      ? SECTION_CONFIG.find((c) => c.key === editingSection) ?? null
+      : null;
 
   const inFlightSectionKey: MemoSectionKey | null =
     regenerateMutation.isPending && regenerateMutation.variables
@@ -619,10 +645,34 @@ export function MemoTabContent({
                       lastRegeneratedAt: section?.regeneratedAt,
                     }
               }
+              inlineEdit={
+                forcePrint
+                  ? undefined
+                  : {
+                      sectionKey: config.key,
+                      onEdit: handleEditClick,
+                      isEditing: editingSection === config.key,
+                    }
+              }
               forcePrint={forcePrint}
             />
           );
         })}
+
+        {editingSection && editingSectionConfig && (
+          <MemoClaimRewritePopover
+            open={editingSection !== null}
+            onOpenChange={(next) => {
+              if (!next) closeEditDialog();
+            }}
+            startupId={startup.id}
+            sectionKey={editingSection}
+            sectionTitle={editingSectionConfig.title}
+            initialText={editingSectionData?.content ?? ""}
+            sources={editingSectionData?.sources ?? []}
+            onApplied={closeEditDialog}
+          />
+        )}
 
         <AlertDialog
           open={pendingRegen !== null}

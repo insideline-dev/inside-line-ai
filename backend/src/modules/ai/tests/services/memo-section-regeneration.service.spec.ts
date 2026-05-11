@@ -321,4 +321,145 @@ describe("MemoSectionRegenerationService", () => {
       NotFoundException,
     );
   });
+
+  describe("applyOperatorRewrite", () => {
+    it("persists operator-edited content without calling the agent", async () => {
+      const result = await service.applyOperatorRewrite(STARTUP_ID, "team", {
+        newContent: "Operator-edited team narrative.",
+      });
+
+      expect(memoAgent.regenerateSection).not.toHaveBeenCalled();
+      expect(result.section.content).toBe("Operator-edited team narrative.");
+      expect(result.section.sectionKey).toBe("team");
+      expect(result.regeneratedAt).toBeTruthy();
+
+      expect(updateCalls).toHaveLength(1);
+      const persistedMemo = updateCalls[0]?.investorMemo as PersistedInvestorMemo;
+      const team = persistedMemo.sections?.find((s) => s.title === "Team");
+      expect(team?.content).toBe("Operator-edited team narrative.");
+      expect(team?.sectionKey).toBe("team");
+      expect(team?.regeneratedAt).toBeTruthy();
+    });
+
+    it("preserves the section's existing sources by default", async () => {
+      const result = await service.applyOperatorRewrite(STARTUP_ID, "team", {
+        newContent: "Edited.",
+      });
+
+      expect(result.section.sources).toEqual([
+        { label: "deck", url: "deck://" },
+      ]);
+    });
+
+    it("preserves operator-curated highlights and concerns from a previously edited market section", async () => {
+      const result = await service.applyOperatorRewrite(STARTUP_ID, "market", {
+        newContent: "Edited market narrative.",
+      });
+
+      const persistedMemo = updateCalls[0]?.investorMemo as PersistedInvestorMemo;
+      const market = persistedMemo.sections?.find(
+        (s) => s.title === "Market Opportunity",
+      );
+      expect(market?.highlights).toEqual(["Operator-curated market highlight"]);
+      expect(market?.concerns).toEqual(["Operator-curated market concern"]);
+      expect(market?.sources).toEqual([
+        { label: "https://research.test", url: "https://research.test" },
+      ]);
+      expect(result.section.content).toBe("Edited market narrative.");
+    });
+
+    it("uses an explicit sources override when one is provided", async () => {
+      const result = await service.applyOperatorRewrite(STARTUP_ID, "team", {
+        newContent: "Edited team narrative.",
+        sources: [
+          { label: "Custom", url: "https://custom.test" },
+          { label: "Ignored", url: "   " },
+        ],
+      });
+
+      expect(result.section.sources).toEqual([
+        { label: "Custom", url: "https://custom.test" },
+      ]);
+    });
+
+    it("does not touch other sections or executive summary on apply", async () => {
+      await service.applyOperatorRewrite(STARTUP_ID, "team", {
+        newContent: "New team narrative.",
+      });
+
+      const persistedMemo = updateCalls[0]?.investorMemo as PersistedInvestorMemo;
+      expect(persistedMemo.executiveSummary).toBe(
+        "Existing executive summary that operators should keep.",
+      );
+      const market = persistedMemo.sections?.find(
+        (s) => s.title === "Market Opportunity",
+      );
+      expect(market?.content).toBe(MARKET_NARRATIVE);
+    });
+
+    it("flags overwroteOperatorEdits when the section was previously regenerated", async () => {
+      existingMemo.sections = existingMemo.sections?.map((s) =>
+        s.title === "Team"
+          ? {
+              ...s,
+              sectionKey: "team",
+              regeneratedAt: "2026-05-01T00:00:00.000Z",
+            }
+          : s,
+      );
+
+      const result = await service.applyOperatorRewrite(STARTUP_ID, "team", {
+        newContent: "Edited.",
+      });
+      expect(result.overwroteOperatorEdits).toBe(true);
+    });
+
+    it("throws NotFoundException for an unknown section key", async () => {
+      await expect(
+        service.applyOperatorRewrite(
+          STARTUP_ID,
+          "not-a-section" as never,
+          { newContent: "Edited." },
+        ),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it("throws NotFoundException when the evaluation row is missing", async () => {
+      drizzle.db.select = jest.fn(() => ({
+        from: jest.fn(() => ({
+          where: jest.fn(() => ({
+            limit: jest.fn(() => Promise.resolve([])),
+          })),
+        })),
+      })) as unknown as DrizzleService["db"]["select"];
+
+      await expect(
+        service.applyOperatorRewrite(STARTUP_ID, "team", {
+          newContent: "Edited.",
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it("blocks an apply while a regeneration for the same section is in flight", async () => {
+      let resolveAgent: (value: MemoSectionRegenerationResult) => void = () => {};
+      memoAgent.regenerateSection.mockReturnValueOnce(
+        new Promise<MemoSectionRegenerationResult>((resolve) => {
+          resolveAgent = resolve;
+        }),
+      );
+
+      const regenPromise = service.regenerate(STARTUP_ID, "team");
+      expect(service.isInFlight(STARTUP_ID, "team")).toBe(true);
+
+      await expect(
+        service.applyOperatorRewrite(STARTUP_ID, "team", {
+          newContent: "Edited.",
+        }),
+      ).rejects.toBeInstanceOf(ConflictException);
+
+      resolveAgent(buildAgentResult());
+      await regenPromise;
+      expect(service.isInFlight(STARTUP_ID, "team")).toBe(false);
+    });
+  });
 });

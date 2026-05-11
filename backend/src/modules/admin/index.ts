@@ -6,4 +6,5 @@ export * from './scoring-config.service';
 export * from './data-import.service';
 export * from './queue-management.service';
 export * from './cache.service';
+export * from './bulk-startup-intake.service';
 export * from './dto';

@@ -329,3 +329,50 @@ Baseline `bun test`: 1839 pass / 101 fail (pre-existing). After this change: **1
 - `bun db:push` against Neon to actually create the table — Yusuf to run.
 - Orval regen against a live backend — Yusuf to run once #9 merges.
 - Out of scope for this story: the ML retune that *consumes* the snapshot (DS-E11-F3-S1).
+
+## 2026-05-11 — DS-E11-F2-S1: DD lens scores feed back to screening calibration (#10)
+
+### What shipped
+
+Closes the **machine-vs-machine** half of the calibration loop. Until this story the
+loop only learned from `investor_deal_decision` rows — the cheap "did DD's eight-lens
+deep-dive validate the three-lens screening?" signal was unused.
+
+### Backend
+
+- New table `screening_dd_lens_delta` at `backend/src/modules/investor/entities/screening-dd-lens-delta.schema.ts`. Columns: `(id, startupId, pipelineRunId, investorId?, lensKey, screeningScore, ddScore, delta, screeningLensVersion?, ddAgentVersion?, computedAt)`. Unique on `(startupId, pipelineRunId, lensKey)` — re-runs upsert. `investorId` is denormalized from `startup_matches` at compute time so the per-investor summary stays O(1).
+- Migration `backend/drizzle/0018_jittery_moon_knight.sql` (generate-only — Yusuf to `bun db:push`).
+- New `LensDeltaService` (`backend/src/modules/investor/lens-delta.service.ts`) with:
+  - Pure `summarizeLensDeltas(rows, dealWindow=50)` — collapses to latest row per `(startupId, lensKey)`, caps to N most recent deals, returns per-lens `{count, meanDelta, meanAbsDelta}`. Only the three overlapping lenses (`team`, `market`, `traction`).
+  - `computeAndPersistForEvaluation({startupId, pipelineRunId, evaluation})` — reads `startup_lens_result` for the same pipeline run, computes signed `dd - screening` per lens, upserts. Skips silently when no pipeline-run anchor, no screening data, or no DD-comparable score (per AC).
+  - `getLatestDeltasForInvestor(investorId)` — reads rows that feed the snapshot.
+- `CalibrationSummary` extended with `lensDeltas: CalibrationLensDelta[]` (in `calibration.service.ts`). Field rides the existing `summary jsonb` column on `investor_calibration_snapshots` — no migration needed for the summary itself.
+- `CalibrationRecomputeService.computeSummary` now calls `lensDelta.getLatestDeltasForInvestor` after `summarizeCalibrationRows`, merges via `summarizeLensDeltas`. Ordering per pre-stage: compute summary → write lens deltas (via the eval hook) → write snapshot. Sibling story #11's proposal-generation hook is untouched.
+- Hook point (per pre-stage): `EvaluationProcessor.process` in `backend/src/modules/ai/processors/evaluation.processor.ts:300+`. After `runPipelinePhase()` returns, we make a best-effort side-call to `LensDeltaService.computeAndPersistForEvaluation` with the team/market/traction scores from the eval result. Errors are logged and swallowed — never fails the evaluation phase. (NOT in synthesis.processor.ts as the original issue body suggested.)
+- Cycle resolution: `AiModule` now `forwardRef(() => InvestorModule)`; `InvestorModule` already imported AI and now uses `forwardRef(() => AiModule)`. `EvaluationProcessor` injects `LensDeltaService` via `@Inject(forwardRef(() => LensDeltaService))`.
+
+### Windowing choice
+
+Rolling-N over startups (default `LENS_DELTA_DEAL_WINDOW = 50`), evaluated AFTER the "latest-per-(startup, lensKey)" collapse. Reasoning: the AC mandates "latest pipeline run per startup", and a 50-deal cap keeps the summary O(1) at scale for high-volume investors while preserving more than a quarter's worth of signal. Old rows stay in the table for audit (the issue explicitly calls this out).
+
+### Frontend
+
+- `InvestorCalibrationSummary` widened with `lensDeltas: InvestorCalibrationLensDelta[]` in `frontend/src/lib/calibration/useCalibration.ts`. Same interim hook layer as #18 (Orval regen pending).
+- Admin Investors page (`frontend/src/routes/_protected/admin/investors.tsx`) gets a new "DD vs Screening" card between the calibration summary and the override-reasons card — three tiles (team / market / traction), each showing signed mean delta with sign-colored text and `|Δ|` underneath. Hidden gracefully when `lensDeltas` is empty.
+- No new WS event — the existing `investor.calibration.recompute.completed` refresh triggers the panel update (per pre-stage "do not add a new WS event").
+
+### Tests
+
+- New: `backend/src/modules/investor/tests/lens-delta.service.spec.ts` — 12 tests across pure `summarizeLensDeltas` (empty, sign, latest-per-startup collapse, unknown-lens defense, window cap) and `computeAndPersistForEvaluation` (no run id, no DD scores, no screening rows, full persist with versions, no-match-investor-null, missing-lens-skip).
+- New evaluation-processor hook tests: `backend/src/modules/ai/tests/processors/evaluation.processor.spec.ts` adds 2 tests (delta-hook called after success; persistence errors swallowed without failing the phase).
+- Updated: `calibration-recompute.service.spec.ts` (1 new test that proves lens deltas land in the snapshot summary; existing tests adjusted for the new `LensDeltaService` dependency injection and the `lensDeltas: []` field on default snapshots).
+- Updated: `calibration.service.spec.ts` adjusted for the new default field.
+- Frontend: `frontend/tests/lens-delta-types.spec.ts` — type contract test (2 tests) for the new `lensDeltas` shape.
+
+Baseline pre-#19: 1854 pass / 101 fail (carried from #18). After this change: **1867 pass / 101 fail** — no regressions, +13 net new tests.
+
+### What is still missing
+
+- `bun db:push` against Neon — Yusuf to run.
+- Orval regen — Yusuf to run once stack is up.
+- The ML retune that *consumes* the lens deltas (out of scope, sibling DS-E11-F3-S1).

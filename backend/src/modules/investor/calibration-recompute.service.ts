@@ -5,6 +5,7 @@ import { QueueService } from "../../queue/queue.service";
 import { QUEUE_NAMES } from "../../queue/queue.config";
 import { user, UserRole } from "../../auth/entities/auth.schema";
 import { summarizeCalibrationRows, type CalibrationSummary } from "./calibration.service";
+import { LensDeltaService, summarizeLensDeltas } from "./lens-delta.service";
 import { investorDealDecision } from "./entities/investor-deal-decision.schema";
 import {
   investorCalibrationSnapshot,
@@ -49,6 +50,7 @@ export class CalibrationRecomputeService {
   constructor(
     private readonly drizzle: DrizzleService,
     private readonly queue: QueueService,
+    private readonly lensDelta: LensDeltaService,
   ) {}
 
   /**
@@ -226,6 +228,8 @@ export class CalibrationRecomputeService {
   }
 
   private async computeSummary(investorId: string): Promise<CalibrationSummary> {
+    // 1. Decision-based calibration aggregate (investor verdict vs
+    //    model triage). Unchanged from #18.
     const rows = await this.drizzle.db
       .select({
         verdict: investorDealDecision.verdict,
@@ -237,7 +241,18 @@ export class CalibrationRecomputeService {
       .from(investorDealDecision)
       .where(eq(investorDealDecision.investorId, investorId));
 
-    return summarizeCalibrationRows(rows);
+    const summary = summarizeCalibrationRows(rows);
+
+    // 2. DS-E11-F2-S1 — DD-vs-screening lens deltas. Folded into the
+    //    same summary so reads stay O(1) and the existing
+    //    `investor.calibration.recompute.completed` WS event still
+    //    triggers the UI refresh that surfaces them.
+    const deltaRows = await this.lensDelta.getLatestDeltasForInvestor(
+      investorId,
+    );
+    summary.lensDeltas = summarizeLensDeltas(deltaRows);
+
+    return summary;
   }
 
   private async cachedOrFreshSummary(
@@ -245,7 +260,14 @@ export class CalibrationRecomputeService {
     investorId: string,
   ): Promise<CalibrationSummary> {
     if (snapshot.summary) {
-      return snapshot.summary as unknown as CalibrationSummary;
+      const cached = snapshot.summary as unknown as CalibrationSummary;
+      // Back-compat: pre-DS-E11-F2-S1 snapshots predate the
+      // `lensDeltas` field. Default it so consumers always see an
+      // array (even an empty one) without a re-aggregation.
+      return {
+        ...cached,
+        lensDeltas: Array.isArray(cached.lensDeltas) ? cached.lensDeltas : [],
+      };
     }
     // Snapshot row exists but summary is null (e.g. failed first run).
     // Fall back to a live compute so the tab still renders.
@@ -268,6 +290,7 @@ export class CalibrationRecomputeService {
       alignmentRate: null,
       topOverrideReasons: [],
       recentMismatches: [],
+      lensDeltas: [],
     };
   }
 

@@ -127,6 +127,13 @@
       "when": 1778500513163,
       "tag": "0017_supreme_queen_noir",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1778529793374,
+      "tag": "0018_jittery_moon_knight",
+      "breakpoints": true
     }
   ]
 }

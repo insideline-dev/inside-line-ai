@@ -32,6 +32,19 @@ export interface CalibrationRecentMismatch {
   reasonTags: string[];
 }
 
+/**
+ * DS-E11-F2-S1 — DD-vs-Screening lens-delta aggregate. Surfaced
+ * separately from `topOverrideReasons` so the investor-decision deltas
+ * (calibration loop v1) stay interpretable independent of the
+ * machine-vs-machine signal this field adds.
+ */
+export interface CalibrationLensDelta {
+  lensKey: "team" | "market" | "traction";
+  count: number;
+  meanDelta: number;
+  meanAbsDelta: number;
+}
+
 export interface CalibrationSummary {
   totalDecisions: number;
   /** Decisions where triageClassificationAtDecision was captured. */
@@ -47,6 +60,13 @@ export interface CalibrationSummary {
   alignmentRate: number | null;
   topOverrideReasons: CalibrationReasonCount[];
   recentMismatches: CalibrationRecentMismatch[];
+  /**
+   * Per-lens mean delta between DD's final lens score and screening's
+   * predicted lens score for the same pipeline run. Empty until the
+   * first evaluation completes for a previously-screened deal under
+   * this investor's matches.
+   */
+  lensDeltas: CalibrationLensDelta[];
 }
 
 interface CalibrationRow {
@@ -71,6 +91,7 @@ function makeEmptySummary(): CalibrationSummary {
     alignmentRate: null,
     topOverrideReasons: [],
     recentMismatches: [],
+    lensDeltas: [],
   };
 }
 

@@ -134,6 +134,13 @@
       "when": 1778532582021,
       "tag": "0018_tranquil_ultron",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1778532682107,
+      "tag": "0019_closed_sprite",
+      "breakpoints": true
     }
   ]
 }

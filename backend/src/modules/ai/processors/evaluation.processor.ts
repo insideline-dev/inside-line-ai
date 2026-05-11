@@ -1,8 +1,10 @@
 import {
+  Inject,
   Injectable,
   Logger,
   OnModuleDestroy,
   OnModuleInit,
+  forwardRef,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Job } from "bullmq";
@@ -21,6 +23,7 @@ import { PipelinePhase } from "../interfaces/pipeline.interface";
 import { EvaluationService } from "../services/evaluation.service";
 import { PipelineStateService } from "../services/pipeline-state.service";
 import { PipelineService } from "../services/pipeline.service";
+import { LensDeltaService } from "../../investor/lens-delta.service";
 import { runPipelinePhase } from "./run-phase.util";
 
 @Injectable()
@@ -36,6 +39,8 @@ export class EvaluationProcessor
     private pipelineState: PipelineStateService,
     private pipelineService: PipelineService,
     private notificationGateway: NotificationGateway,
+    @Inject(forwardRef(() => LensDeltaService))
+    private lensDeltaService: LensDeltaService,
   ) {
     const redisUrl = config.get<string>("REDIS_URL", "redis://localhost:6379");
     const queuePrefix = config.get<string>("QUEUE_PREFIX");
@@ -298,6 +303,45 @@ export class EvaluationProcessor
     });
     } finally {
       clearInterval(heartbeat);
+    }
+
+    // DS-E11-F2-S1 — feed DD final lens scores back into the calibration
+    // loop as a truth signal. Best-effort side-call: we never want a
+    // delta-persistence failure to fail the evaluation phase, so errors
+    // are logged and swallowed. The math is tiny (3 lens scores × 1
+    // upsert each) so we run it inline rather than enqueueing.
+    if (runResult.result && typeof runResult.result === "object") {
+      const evaluationResult = runResult.result as {
+        team?: { score?: number };
+        market?: { score?: number };
+        traction?: { score?: number };
+      };
+      try {
+        await this.lensDeltaService.computeAndPersistForEvaluation({
+          startupId: runResult.startupId,
+          pipelineRunId: runResult.pipelineRunId,
+          evaluation: {
+            team:
+              typeof evaluationResult.team?.score === "number"
+                ? { score: evaluationResult.team.score }
+                : null,
+            market:
+              typeof evaluationResult.market?.score === "number"
+                ? { score: evaluationResult.market.score }
+                : null,
+            traction:
+              typeof evaluationResult.traction?.score === "number"
+                ? { score: evaluationResult.traction.score }
+                : null,
+            ddAgentVersion:
+              process.env.AI_MODEL_EVALUATION ?? null,
+          },
+        });
+      } catch (err) {
+        this.logger.warn(
+          `[EvalProcessor] LensDelta persistence failed for startup=${runResult.startupId}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
     }
 
     return {

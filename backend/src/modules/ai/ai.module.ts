@@ -1,9 +1,10 @@
-import { Global, Module } from "@nestjs/common";
+import { Global, Module, forwardRef } from "@nestjs/common";
 import { DatabaseModule } from "../../database";
 import { NotificationModule } from "../../notification/notification.module";
 import { QueueModule } from "../../queue";
 import { UnipileModule } from "../integrations/unipile/unipile.module";
 import { StartupModule } from "../startup";
+import { InvestorModule } from "../investor/investor.module";
 import { OrchestratorModule } from "./orchestrator";
 import { LensesModule } from "./lenses";
 import { ContractsModule } from "./contracts/contracts.module";
@@ -96,6 +97,10 @@ import { OpenAiTextGenerationService } from "./services/openai-text-generation.s
     LensesModule,
     ContractsModule,
     ScreeningTriageModule,
+    // DS-E11-F2-S1 — EvaluationProcessor injects LensDeltaService (in
+    // InvestorModule) to persist DD-vs-screening deltas. forwardRef
+    // because InvestorModule already depends on AiModule.
+    forwardRef(() => InvestorModule),
   ],
   providers: [
     AiProviderService,

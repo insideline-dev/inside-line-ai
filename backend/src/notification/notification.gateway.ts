@@ -244,4 +244,13 @@ export interface InvestorEventPayloads {
     jobId: string;
     error: string;
   };
+  // DS-E11-F3-S1 — fires the moment a NEW calibration proposal lands so
+  // the investor's CalibrationCard surfaces it without a page refresh.
+  // Approve/reject events stay HTTP-only (the click already round-trips
+  // through the API, so the optimistic mutation handles the UI update).
+  'investor.calibration.proposal.created': {
+    investorId: string;
+    proposalId: string;
+    createdAt: string;
+  };
 }

@@ -189,11 +189,24 @@ export const startup = pgTable(
     contactPhone: text('contact_phone'),
     contactPhoneCountryCode: text('contact_phone_country_code'),
 
-    // Previous funding
+    // Previous funding (DEPRECATED — use `startup_funding_history` table instead).
+    //
+    // Kept for backward compatibility with older readers (memo summaries, PDF
+    // generators, founder intake forms). New code should query the structured
+    // `startup_funding_history` rows for per-round amounts, dates, lead
+    // investor and investor lists. These flat fields only carry the most
+    // recent aggregate previously-collected from founders/manual entry and
+    // are NOT updated by canonical-source enrichment.
+    //
+    // @deprecated DG-E11-F1-S1: superseded by `startupFundingHistory` rows.
     hasPreviousFunding: boolean('has_previous_funding'),
+    /** @deprecated use `startup_funding_history.amount` */
     previousFundingAmount: doublePrecision('previous_funding_amount'),
+    /** @deprecated use `startup_funding_history.currency` */
     previousFundingCurrency: text('previous_funding_currency'),
+    /** @deprecated use `startup_funding_history.investors` */
     previousInvestors: text('previous_investors'),
+    /** @deprecated use `startup_funding_history.round_type` */
     previousRoundType: text('previous_round_type'),
 
     // Scores

@@ -3,6 +3,7 @@ import { DatabaseModule } from '../../database';
 import { QueueModule } from '../../queue';
 import { StorageModule } from '../../storage';
 import { NotificationModule } from '../../notification/notification.module';
+import { FundingEnrichmentModule } from '../integrations/funding-enrichment';
 import { StartupController } from './startup.controller';
 import { StartupService } from './startup.service';
 import { DraftService } from './draft.service';
@@ -16,7 +17,13 @@ import { PrintTokenService } from './pdf/print-token.service';
 import { DealEventService } from './deal-event.service';
 
 @Module({
-  imports: [DatabaseModule, QueueModule, StorageModule, NotificationModule],
+  imports: [
+    DatabaseModule,
+    QueueModule,
+    StorageModule,
+    NotificationModule,
+    FundingEnrichmentModule,
+  ],
   controllers: [StartupController],
   providers: [
     StartupService,
